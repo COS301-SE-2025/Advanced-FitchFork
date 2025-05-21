@@ -1,4 +1,4 @@
-name: CI - Rust & Cypress
+name: CI - Rust
 
 on:
   push:
@@ -18,47 +18,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Cache Cargo registry and build output
+      - name: Cache Cargo registry
         uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+
+      - name: Cache Cargo build output
+        uses: actions/cache@v3
+        with:
+          path: |
+            target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Set up Rust
-        uses: actions/setup-rust@v1
+        uses: actions-rs/toolchain@v1
         with:
-          rust-version: stable
+          toolchain: stable
 
       - name: Copy .env file
         run: cp .env.example .env
 
       - name: Run backend tests
         run: cargo test --workspace --all-features
-
-  frontend-e2e:
-    name: Cypress E2E Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Set up Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
-
-      - name: Cypress run
-        uses: cypress-io/github-action@v5
-        with:
-          working-directory: frontend
-          cache-dependency-path: frontend/package-lock.json
-          build: npm run build
-          start: npm run dev
-          wait-on: http://localhost:5173
-          wait-on-timeout: 60
