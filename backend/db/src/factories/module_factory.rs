@@ -1,4 +1,4 @@
-use crate::db::models::module::Module;
+use crate::models::module::Module;
 
 pub fn make_module(name: &str, description: Option<&str>) -> Module {
     Module {

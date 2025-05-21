@@ -1,6 +1,5 @@
 mod api;
 mod config;
-mod db;
 
 use common::logger;
 use config::ApiConfig;

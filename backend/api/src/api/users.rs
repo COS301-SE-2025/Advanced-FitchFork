@@ -1,6 +1,6 @@
-use crate::db::models::user::User;
-use crate::db::pool;
 use axum::{Json, Router, response::IntoResponse, routing::get};
+use db::models::user::User;
+use db::pool;
 
 pub fn routes() -> Router {
     Router::new().route("/users", get(get_users))
