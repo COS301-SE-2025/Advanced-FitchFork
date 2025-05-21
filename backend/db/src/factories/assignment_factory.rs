@@ -1,4 +1,4 @@
-use crate::db::models::assignment::Assignment;
+use crate::models::assignment::Assignment;
 
 pub fn make_assignment(module_id: i64, name: &str, due_date: Option<&str>) -> Assignment {
     Assignment {

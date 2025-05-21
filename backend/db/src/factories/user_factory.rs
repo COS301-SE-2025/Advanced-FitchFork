@@ -1,4 +1,4 @@
-use crate::db::models::user::User;
+use crate::models::user::User;
 use fake::{Fake, faker::internet::en::FreeEmail, faker::lorem::en::Word};
 use rand::seq::SliceRandom;
 use sqlx::SqlitePool;

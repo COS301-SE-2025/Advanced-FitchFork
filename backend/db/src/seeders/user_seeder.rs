@@ -1,4 +1,4 @@
-use crate::db::factories::user_factory;
+use crate::factories::user_factory;
 use sqlx::SqlitePool;
 
 pub async fn seed(pool: &SqlitePool) {

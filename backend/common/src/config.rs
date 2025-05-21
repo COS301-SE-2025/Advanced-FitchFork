@@ -3,18 +3,19 @@ use serde::Deserialize;
 use std::{env, fs};
 
 #[derive(Debug, Deserialize)]
-pub struct ApiConfig {
+pub struct Config {
     pub project_name: String,
     pub log_level: String,
     pub log_file: String,
     pub database_url: String,
     pub host: String,
     pub port: u16,
+    pub jwt_secret: String, 
 }
 
-static CONFIG: OnceCell<ApiConfig> = OnceCell::new();
+static CONFIG: OnceCell<Config> = OnceCell::new();
 
-impl ApiConfig {
+impl Config {
     pub fn init(env_path: &str) -> &'static Self {
         dotenvy::from_filename(env_path).ok();
 
@@ -32,14 +33,16 @@ impl ApiConfig {
             if let Some(parent) = std::path::Path::new(&log_file).parent() {
                 fs::create_dir_all(parent).expect("Failed to create log directory");
             }
+            let jwt_secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
-            ApiConfig {
+            Config {
                 project_name,
                 log_level,
                 log_file,
                 database_url,
                 host,
                 port,
+                jwt_secret,
             }
         })
     }

@@ -7,7 +7,7 @@ use sqlx::{SqlitePool, migrate::Migrator, sqlite::SqlitePoolOptions};
 use std::fs;
 use std::path::Path;
 
-static MIGRATOR: Migrator = sqlx::migrate!("./src/db/migrations");
+static MIGRATOR: Migrator = sqlx::migrate!("./src/migrations");
 
 /// Public init function that connects, stores pool globally, and seeds DB
 pub async fn init(database_url: &str) {
