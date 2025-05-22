@@ -1,6 +1,6 @@
-use axum::{Router};
-use common::{config::Config, logger::init_logger};
 use api::routes::routes;
+use axum::Router;
+use common::{config::Config, logger::init_logger};
 use log::info;
 
 #[tokio::main]
@@ -12,7 +12,8 @@ async fn main() {
     init_logger(&config.log_level, &config.log_file);
 
     // Initialize the database
-    db::init(&config.database_url).await;
+    db::init(&config.database_url, true).await;
+    db::seed_db().await;
 
     info!(
         "Starting {} on http://{}:{}",
@@ -20,8 +21,7 @@ async fn main() {
     );
 
     // Compose routes and apply middleware
-    let app = Router::new()
-        .nest("/", routes());
+    let app = Router::new().nest("/api", routes());
 
     // Bind TCP listener
     let addr = format!("{}:{}", config.host, config.port);
@@ -30,7 +30,5 @@ async fn main() {
         .expect("Failed to bind");
 
     // Serve the app
-    axum::serve(listener, app)
-        .await
-        .expect("Server crashed");
+    axum::serve(listener, app).await.expect("Server crashed");
 }

@@ -10,7 +10,7 @@ pub struct Config {
     pub database_url: String,
     pub host: String,
     pub port: u16,
-    pub jwt_secret: String, 
+    pub jwt_secret: String,
 }
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
@@ -33,7 +33,8 @@ impl Config {
             if let Some(parent) = std::path::Path::new(&log_file).parent() {
                 fs::create_dir_all(parent).expect("Failed to create log directory");
             }
-            let jwt_secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+            // let jwt_secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+            let jwt_secret = String::new();
 
             Config {
                 project_name,
