@@ -1,34 +1,34 @@
-mod api;
-mod config;
-
-use common::logger;
-use config::ApiConfig;
-
-use std::net::SocketAddr;
-use tokio::net::TcpListener;
+use api::routes::routes;
+use axum::Router;
+use common::{config::Config, logger::init_logger};
+use log::info;
 
 #[tokio::main]
 async fn main() {
-    // Initialize config (singleton)
-    ApiConfig::init(".env");
-    let config = ApiConfig::get();
+    // Load config from .env
+    let config = Config::init(".env");
 
-    // Setup logging (logs to terminal + file)
-    logger::init_logger(&config.log_level, &config.log_file);
+    // Initialize logger with values from config
+    init_logger(&config.log_level, &config.log_file);
 
-    log::info!("Starting {} backend...", config.project_name);
-
+    // Initialize the database
     db::init(&config.database_url, true).await;
     db::seed_db().await;
 
-    // Build our application
-    let app = api::routes();
+    info!(
+        "Starting {} on http://{}:{}",
+        config.project_name, config.host, config.port
+    );
 
-    let addr = SocketAddr::new(config.host.parse().expect("Invalid HOST"), config.port);
-    let listener = TcpListener::bind(addr).await.unwrap();
+    // Compose routes and apply middleware
+    let app = Router::new().nest("/api", routes());
 
-    log::info!("{}-api running at http://{}", config.project_name, addr);
+    // Bind TCP listener
+    let addr = format!("{}:{}", config.host, config.port);
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .expect("Failed to bind");
 
-    // Serve the application
-    axum::serve(listener, app).await.unwrap();
+    // Serve the app
+    axum::serve(listener, app).await.expect("Server crashed");
 }
