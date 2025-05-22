@@ -1,6 +1,6 @@
-use rtest::{test, assert_status_ok, TestServer};
-use axum::Router;
 use api::api::users;
+use axum::Router;
+use rtest::{TestServer, assert_status_ok, test};
 
 #[test]
 async fn test_get_users_returns_200() {
