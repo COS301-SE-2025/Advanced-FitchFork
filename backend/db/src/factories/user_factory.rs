@@ -11,7 +11,7 @@ pub async fn make_random(pool: &SqlitePool) -> User {
     let password_hash: String = Word().fake();
     let admin = rand::random::<bool>();
 
-    User::create(pool, &student_number, &email, &password_hash, admin)
+    User::create(Some(&pool), &student_number, &email, &password_hash, admin)
         .await
         .expect("Failed to create user")
 }

@@ -20,3 +20,4 @@ once_cell = "1.18"
 axum = "0.7"
 tower = "0.4"
 dotenvy = "0.15"
+uuid = { version = "1.3", features = ["v4"] }

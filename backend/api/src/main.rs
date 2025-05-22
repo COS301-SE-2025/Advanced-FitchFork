@@ -18,7 +18,8 @@ async fn main() {
 
     log::info!("Starting {} backend...", config.project_name);
 
-    db::init(&config.database_url).await;
+    db::init(&config.database_url, true).await;
+    db::seed_db().await;
 
     // Build our application
     let app = api::routes();
