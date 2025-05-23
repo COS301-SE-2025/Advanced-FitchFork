@@ -3,6 +3,7 @@ use sqlx::FromRow;
 use sqlx::Row;
 use sqlx::SqlitePool;
 
+//TODO -> Make sure a user can only have one role per module
 /// Represents a user in the system.
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct User {

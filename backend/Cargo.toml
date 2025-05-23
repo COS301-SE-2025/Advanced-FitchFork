@@ -3,5 +3,5 @@ resolver = "3"
 members = [
     "api", 
     "db",
-    "common",
+    "common", "docker_example",
 ]
