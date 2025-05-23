@@ -1,16 +1,34 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
+/// Represents a university module.
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Module {
     pub id: i64,
     pub code: String,
     pub year: i32,
     pub description: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 impl Module {
-    //create new module
+    /// Creates a new module record in the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to a `SqlitePool`. If `None`, the default pool is used.
+    /// * `code` - The module code (e.g., "COS301").
+    /// * `year` - The year the module is offered.
+    /// * `description` - An optional description of the module.
+    ///
+    /// # Returns
+    ///
+    /// Returns the newly created `Module` instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the insert fails.
     pub async fn create(
         pool: Option<&SqlitePool>,
         code: &str,
@@ -22,7 +40,7 @@ impl Module {
             r#"
             INSERT INTO modules (code, year, description)
             VALUES (?, ?, ?)
-            RETURNING id, code, year, description
+            RETURNING id, code, year, description, created_at, updated_at
             "#,
         )
         .bind(code)
@@ -34,7 +52,20 @@ impl Module {
         Ok(record)
     }
 
-    //Delete module by id
+    /// Deletes a module by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to a `SqlitePool`. If `None`, the default pool is used.
+    /// * `id` - The ID of the module to delete.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the deletion was successful.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the deletion fails.
     pub async fn delete_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<()> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         sqlx::query("DELETE FROM modules WHERE id = ?")
@@ -44,19 +75,45 @@ impl Module {
         Ok(())
     }
 
-    //get module by id
+    /// Retrieves a module by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to a `SqlitePool`. If `None`, the default pool is used.
+    /// * `id` - The ID of the module to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// An `Option<Module>` if found, or `None` if no matching module exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the query fails.
     pub async fn get_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<Option<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        sqlx::query_as::<_, Module>("SELECT id, code, year, description FROM modules WHERE id = ?")
+        sqlx::query_as::<_, Module>("SELECT * FROM modules WHERE id = ?")
             .bind(id)
             .fetch_optional(pool)
             .await
     }
 
-    //get all modules
+    /// Retrieves a module by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to a `SqlitePool`. If `None`, the default pool is used.
+    /// * `id` - The ID of the module to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// An `Option<Module>` if found, or `None` if no matching module exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the query fails.
     pub async fn get_all(pool: Option<&SqlitePool>) -> sqlx::Result<Vec<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        sqlx::query_as::<_, Module>("SELECT id, code, year, description FROM modules")
+        sqlx::query_as::<_, Module>("SELECT * FROM modules")
             .fetch_all(pool)
             .await
     }

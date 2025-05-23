@@ -3,6 +3,7 @@ use sqlx::FromRow;
 use sqlx::Row;
 use sqlx::SqlitePool;
 
+/// Represents a user in the system.
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: i64,
@@ -10,6 +11,8 @@ pub struct User {
     pub email: String,
     pub password_hash: String,
     pub admin: bool, //if admin is false, your role (student/tutor/lecturer) is linked to whatever module you are in
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 //This is only used when you return all the modules a user has -> it needs to know what their role is per module depending on:
@@ -26,7 +29,19 @@ pub struct UserModuleRole {
 }
 
 impl User {
-    //Creates a new User in the users table
+    /// Creates a new user in the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional database connection pool.
+    /// * `student_number` - The student's university ID.
+    /// * `email` - The user's email.
+    /// * `password_hash` - The hashed password.
+    /// * `admin` - Whether the user is an admin.
+    ///
+    /// # Returns
+    ///
+    /// Returns the newly created `User` record.
     pub async fn create(
         pool: Option<&SqlitePool>,
         student_number: &str,
@@ -38,7 +53,7 @@ impl User {
         let record: User = sqlx::query_as::<_, User>(
             "INSERT INTO users (student_number, email, password_hash, admin)
              VALUES (?, ?, ?, ?)
-             RETURNING id, student_number, email, password_hash, admin",
+             RETURNING id, student_number, email, password_hash, admin, created_at, updated_at",
         )
         .bind(student_number)
         .bind(email)
@@ -50,7 +65,12 @@ impl User {
         Ok(record)
     }
 
-    //Deletes a user by id
+    /// Deletes a user by their ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional database connection pool.
+    /// * `id` - The ID of the user to delete.
     pub async fn delete_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<()> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         sqlx::query("DELETE FROM users WHERE id = ?")
@@ -60,34 +80,63 @@ impl User {
         Ok(())
     }
 
-    //Returns a user by ID
+    /// Fetches a user by their ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional database connection pool.
+    /// * `id` - The ID of the user.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(User)` if found, or `None` otherwise.
     pub async fn get_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<Option<User>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        sqlx::query_as::<_, User>(
-            "SELECT id, student_number, email, password_hash, admin FROM users WHERE id = ?",
-        )
-        .bind(id)
-        .fetch_optional(pool)
-        .await
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
     }
 
-    //Returns a user by student number
+    /// Fetches a user by their student number.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional database connection pool.
+    /// * `student_number` - The student number to search for.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(User)` if found, or `None` otherwise.
     pub async fn get_by_student_number(
         pool: Option<&SqlitePool>,
         student_number: &str,
     ) -> sqlx::Result<Option<User>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        sqlx::query_as::<_, User>(
-            "SELECT id, student_number, email, password_hash, admin FROM users WHERE student_number = ?",
-        )
-        .bind(student_number)
-        .fetch_optional(pool)
-        .await
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE student_number = ?")
+            .bind(student_number)
+            .fetch_optional(pool)
+            .await
     }
 
     //Okay this one is confusing -> It returns the modules that a user is in and what roles he has in each module
     //Note this is not tested yet
     //It returns multiple UserModuleRole
+
+    /// Retrieves all modules a user is involved in and their corresponding role in each.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional database connection pool.
+    /// * `user_id` - The ID of the user.
+    ///
+    /// # Returns
+    ///
+    /// A vector of `UserModuleRole` entries representing each module and the role the user has in it.
+    ///
+    /// # Notes
+    ///
+    /// This method checks the `module_lecturers`, `module_tutors`, and `module_students` tables.
     pub async fn get_module_roles(
         pool: Option<&SqlitePool>,
         user_id: i64,

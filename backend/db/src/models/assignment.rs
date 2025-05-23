@@ -3,6 +3,8 @@ use sqlx::FromRow;
 use sqlx::SqlitePool;
 
 //ENUM
+
+/// Represents the type of an assignment, either a normal assignment or a practical.
 #[derive(Debug, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "TEXT")]
 pub enum AssignmentType {
@@ -10,6 +12,7 @@ pub enum AssignmentType {
     Practical,
 }
 
+/// Represents an assignment entity with metadata.
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Assignment {
     pub id: i64,
@@ -24,7 +27,21 @@ pub struct Assignment {
 }
 
 impl Assignment {
-    //Create Assignment
+    /// Create a new assignment in the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to an SQLite connection pool.
+    /// * `module_id` - The ID of the module this assignment belongs to.
+    /// * `name` - The name/title of the assignment.
+    /// * `description` - Optional detailed description of the assignment.
+    /// * `assignment_type` - The type of assignment (Assignment or Practical).
+    /// * `available_from` - Start datetime string when the assignment is available.
+    /// * `due_date` - Due datetime string for the assignment.
+    ///
+    /// # Returns
+    ///
+    /// Returns the created `Assignment` record on success.
     pub async fn create(
         pool: Option<&SqlitePool>,
         module_id: i64,
@@ -58,7 +75,12 @@ impl Assignment {
         Ok(record)
     }
 
-    //delete assignment by id
+    /// Delete an assignment from the database by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to an SQLite connection pool.
+    /// * `id` - The ID of the assignment to delete.
     pub async fn delete_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<()> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         sqlx::query("DELETE FROM assignments WHERE id = ?")
@@ -68,7 +90,15 @@ impl Assignment {
         Ok(())
     }
 
-    //get all assignments
+    /// Retrieve all assignments from the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to an SQLite connection pool.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of all `Assignment` records.
     pub async fn get_all(pool: Option<&SqlitePool>) -> sqlx::Result<Vec<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         sqlx::query_as::<_, Assignment>("SELECT * FROM assignments")
@@ -76,7 +106,16 @@ impl Assignment {
             .await
     }
 
-    //get assignment by id
+    /// Retrieve a specific assignment by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to an SQLite connection pool.
+    /// * `id` - The ID of the assignment to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// Returns an `Option<Assignment>` which is `Some` if found or `None` if not.
     pub async fn get_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<Option<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         sqlx::query_as::<_, Assignment>("SELECT * FROM assignments WHERE id = ?")

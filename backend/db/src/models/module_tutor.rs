@@ -2,13 +2,29 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
+
+/// Represents the relationship between a module and a tutor.
 pub struct ModuleTutor {
     pub module_id: i64,
     pub user_id: i64,
 }
 
 impl ModuleTutor {
-    //Inset new tutor
+    /// Creates a new tutor-module association in the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to a `SqlitePool`. If `None`, the default pool is used.
+    /// * `module_id` - The ID of the module to associate with.
+    /// * `user_id` - The ID of the user to associate as a tutor.
+    ///
+    /// # Returns
+    ///
+    /// Returns the newly created `ModuleTutor` instance on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the insertion fails.
     pub async fn create(
         pool: Option<&SqlitePool>,
         module_id: i64,
@@ -24,7 +40,23 @@ impl ModuleTutor {
         Ok(Self { module_id, user_id })
     }
 
-    //Delete tutor relationship (not User themselves)
+    /// Deletes a tutor-module association from the database.
+    ///
+    /// This does not delete the user or the module themselves, only their association.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to a `SqlitePool`. If `None`, the default pool is used.
+    /// * `module_id` - The ID of the module to disassociate.
+    /// * `user_id` - The ID of the tutor to disassociate.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if deletion succeeds.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the deletion fails.
     pub async fn delete(
         pool: Option<&SqlitePool>,
         module_id: i64,
@@ -40,7 +72,19 @@ impl ModuleTutor {
         Ok(())
     }
 
-    //Get all tutors (idk might be useful)
+    /// Retrieves all tutor-module associations from the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to a `SqlitePool`. If `None`, the default pool is used.
+    ///
+    /// # Returns
+    ///
+    /// A vector of all `ModuleTutor` records.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the query fails.
     pub async fn get_all(pool: Option<&SqlitePool>) -> sqlx::Result<Vec<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         let records =
@@ -51,7 +95,20 @@ impl ModuleTutor {
         Ok(records)
     }
 
-    //Get all tutors for a specific module
+    /// Retrieves all tutors associated with a specific module.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to a `SqlitePool`. If `None`, the default pool is used.
+    /// * `module_id` - The ID of the module for which tutors should be fetched.
+    ///
+    /// # Returns
+    ///
+    /// A vector of `ModuleTutor` records associated with the specified module.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the query fails.
     pub async fn get_by_id(pool: Option<&SqlitePool>, module_id: i64) -> sqlx::Result<Vec<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         let records = sqlx::query_as::<_, ModuleTutor>(
