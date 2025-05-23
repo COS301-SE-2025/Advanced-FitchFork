@@ -38,7 +38,10 @@ where
     T: Serialize,
 {
     pub success: bool,
-    pub data: T,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<T>,
+
     pub message: String,
 }
 
@@ -52,27 +55,21 @@ where
     /// - `data`: The result payload.
     /// - `message`: A descriptive message to accompany the success.
     pub fn success(data: T, message: impl Into<String>) -> Self {
-        Self {
+        ApiResponse {
             success: true,
-            data,
+            data: Some(data),
             message: message.into(),
         }
     }
 
-    /// Constructs an error response with a message and default `data`.
+    /// Constructs an error response with a message and no `data`.
     ///
     /// # Arguments
     /// - `message`: A description of the error.
-    ///
-    /// # Requires
-    /// - `T` must implement `Default`, since error responses do not include useful data.
-    pub fn error(message: impl Into<String>) -> Self
-    where
-        T: Default,
-    {
-        Self {
+    pub fn error(message: impl Into<String>) -> Self {
+        ApiResponse {
             success: false,
-            data: T::default(),
+            data: None,
             message: message.into(),
         }
     }

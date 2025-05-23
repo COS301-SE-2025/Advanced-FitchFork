@@ -162,6 +162,7 @@ mod tests {
         assert_eq!(module_tutors.len(), 1);
         assert_eq!(module_tutors[0].user_id, user.id);
 
+        pool.close().await;
         delete_database("test_module_tutor_create_and_get.db");
     }
 
@@ -199,6 +200,7 @@ mod tests {
             .unwrap();
         assert!(after.is_empty());
 
+        pool.close().await;
         delete_database("test_module_tutor_delete.db");
     }
 }

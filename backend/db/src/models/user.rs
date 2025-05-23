@@ -49,9 +49,10 @@ impl User {
         pool: Option<&SqlitePool>,
         student_number: &str,
         email: &str,
-        password_hash: &str,
+        password: &str,
         admin: bool,
     ) -> sqlx::Result<Self> {
+        let password_hash = User::hash(password);
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         let record: User = sqlx::query_as::<_, User>(
             "INSERT INTO users (student_number, email, password_hash, admin)
@@ -93,11 +94,38 @@ impl User {
         password_hash
     }
 
-    pub fn verify(password: &str, hash: &str) -> bool {
-        let hash = PasswordHash::new(hash).expect("Failed to parse password hash");
-        Argon2::default()
-            .verify_password(password.as_bytes(), &hash)
+    pub async fn verify(
+        pool: Option<&SqlitePool>,
+        student_number: &str,
+        password: &str,
+    ) -> sqlx::Result<Self> {
+        // Grab the pool
+        let pool = pool.unwrap_or_else(|| crate::pool::get());
+
+        // Fetch the full user record (or Err if not found / on DB error)
+        let user: User = sqlx::query_as::<_, User>(
+            "SELECT id, student_number, email, password_hash, admin, created_at, updated_at
+            FROM users
+            WHERE student_number = ?",
+        )
+        .bind(student_number)
+        .fetch_one(pool)
+        .await?;
+
+        // Parse the stored hash
+        let parsed_hash = PasswordHash::new(&user.password_hash)
+            .map_err(|e| sqlx::Error::Protocol(format!("Invalid stored password hash: {}", e)))?;
+
+        // Verify the password
+        if Argon2::default()
+            .verify_password(password.as_bytes(), &parsed_hash)
             .is_ok()
+        {
+            Ok(user)
+        } else {
+            // Wrong password → treat as a protocol error
+            Err(sqlx::Error::Protocol("Invalid credentials".into()))
+        }
     }
 
     /// Fetches a user by their ID.
@@ -260,6 +288,8 @@ mod tests {
         assert!(found_user.is_some());
         let found_user = found_user.unwrap();
         assert_eq!(found_user.email, email);
+
+        pool.close().await;
         crate::delete_database("test_user_create_and_find.db");
     }
 
@@ -279,6 +309,8 @@ mod tests {
 
         let found_after_delete = User::get_by_id(Some(&pool), user_id).await.unwrap();
         assert!(found_after_delete.is_none());
+
+        pool.close().await;
         crate::delete_database("test_user_deletion.db");
     }
 
@@ -293,16 +325,36 @@ mod tests {
         let found = User::get_by_student_number(Some(&pool), sn).await.unwrap();
         assert!(found.is_some());
         assert_eq!(found.unwrap().student_number, sn);
+
+        pool.close().await;
         crate::delete_database("test_get_by_student_number.db");
     }
 
     #[tokio::test]
     async fn test_hash_and_verify() {
-        let password = "password12";
-        let hash = User::hash(password);
-        println!("Hash: {}", hash);
-        assert!(User::verify(password, &hash));
-        assert!(!User::verify("wrong_password", &hash));
+        let pool = crate::create_test_db(Some("test_hash_and_verify.db")).await;
+        let user = User::create(Some(&pool), "u12345678", "delete@test.com", "hash", false)
+            .await
+            .unwrap();
+
+        let user_id = user.id;
+
+        let found = User::get_by_id(Some(&pool), user_id).await.unwrap();
+        assert!(found.is_some());
+
+        let student_number = "u12345678";
+        let password = "hash";
+
+        let verified_user = User::verify(Some(&pool), student_number, password).await.unwrap();
+        assert_eq!(verified_user.student_number, student_number);
+
+        let unverified_user = User::verify(Some(&pool), "u99999999", "password").await;
+        assert!(unverified_user.is_err(), "Expected Err but got {:?}", unverified_user);
+
+        User::delete_by_id(Some(&pool), user_id).await.unwrap();
+
+        pool.close().await;
+        crate::delete_database("test_hash_and_verify.db");
     }
 
     #[tokio::test]
@@ -359,6 +411,7 @@ mod tests {
         assert_eq!(roles_map.get("COS701").map(String::as_str), Some("tutor"));
         assert_eq!(roles_map.get("COS702").map(String::as_str), Some("student"));
 
+        pool.close().await;
         crate::delete_database("test_get_module_roles.db");
     }
 }

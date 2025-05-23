@@ -146,6 +146,7 @@ mod tests {
         assert_eq!(found.code, code);
         assert_eq!(found.year, year);
 
+        pool.close().await;
         delete_database("test_module_create_and_find.db");
     }
 
@@ -166,6 +167,7 @@ mod tests {
         let after_delete = Module::get_by_id(Some(&pool), id).await.unwrap();
         assert!(after_delete.is_none());
 
+        pool.close().await;
         delete_database("test_module_deletion.db");
     }
 
@@ -187,6 +189,7 @@ mod tests {
         assert!(codes.contains(&m2.code));
         assert!(all.len() >= 2);
 
+        pool.close().await;
         delete_database("test_module_get_all.db");
     }
 }
