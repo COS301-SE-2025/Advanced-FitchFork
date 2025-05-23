@@ -171,13 +171,7 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct LoginRequest {
-    #[validate(regex(
-        path = "STUDENT_NUMBER_REGEX",
-        message = "Student number must be in format u12345678"
-    ))]
     pub student_number: String,
-
-    #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
     pub password: String,
 }
 
@@ -211,19 +205,11 @@ pub struct LoginRequest {
 /// }
 /// ```
 ///
-/// - `400 Bad Request` (validation failure)  
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Password must be at least 8 characters"
-/// }
-/// ```
-///
 /// - `401 Unauthorized` (invalid credentials)  
 /// ```json
 /// {
 ///   "success": false,
-///   "message": "Invalid student number or password"
+///   "message": "Invalid password"
 /// }
 /// ```
 ///
@@ -269,7 +255,7 @@ pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
 
                 sqlx::Error::Protocol(msg) if msg == "Invalid credentials" => (
                     StatusCode::UNAUTHORIZED,
-                    "Invalid student number or password".to_string(),
+                    "Invalid password".to_string(),
                 ),
 
                 _ => (
