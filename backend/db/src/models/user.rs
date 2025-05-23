@@ -1,3 +1,7 @@
+use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    Argon2,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use sqlx::Row;
@@ -79,6 +83,23 @@ impl User {
             .execute(pool)
             .await?;
         Ok(())
+    }
+
+    pub fn hash(password: &str) -> String {
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+        let password_hash = argon2
+            .hash_password(password.as_bytes(), &salt)
+            .expect("Failed to hash password")
+            .to_string();
+        password_hash
+    }
+
+    pub fn verify(password: &str, hash: &str) -> bool {
+        let hash = PasswordHash::new(hash).expect("Failed to parse password hash");
+        Argon2::default()
+            .verify_password(password.as_bytes(), &hash)
+            .is_ok()
     }
 
     /// Fetches a user by their ID.
@@ -275,6 +296,15 @@ mod tests {
         assert!(found.is_some());
         assert_eq!(found.unwrap().student_number, sn);
         crate::delete_database("test_get_by_student_number.db");
+    }
+
+    #[tokio::test]
+    async fn test_hash_and_verify() {
+        let password = "password12";
+        let hash = User::hash(password);
+        println!("Hash: {}", hash);
+        assert!(User::verify(password, &hash));
+        assert!(!User::verify("wrong_password", &hash));
     }
 
     #[tokio::test]
