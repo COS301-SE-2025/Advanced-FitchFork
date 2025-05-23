@@ -14,6 +14,7 @@ async fn main() {
     // Initialize the database
     db::init(&config.database_url, true).await;
     db::seed_db().await;
+    // docker_example::run_assignment_code(None).await;
 
     info!(
         "Starting {} on http://{}:{}",
