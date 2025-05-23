@@ -168,6 +168,7 @@ mod tests {
         let found = found.unwrap();
         assert_eq!(found.name, "Assignment 1");
 
+        pool.close().await;
         delete_database("test_assignment_create_and_find.db");
     }
 
@@ -203,6 +204,7 @@ mod tests {
             .unwrap();
         assert!(found.is_none());
 
+        pool.close().await;
         delete_database("test_assignment_deletion.db");
     }
 
@@ -241,6 +243,7 @@ mod tests {
         let all = Assignment::get_all(Some(&pool)).await.unwrap();
         assert_eq!(all.len(), 2);
 
+        pool.close().await;
         delete_database("test_assignment_get_all.db");
     }
 }

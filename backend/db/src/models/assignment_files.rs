@@ -217,6 +217,7 @@ mod tests {
         assert!(file_path.exists());
 
         //clean up
+        pool.close().await;
         let _ = fs::remove_file(&file_path);
         delete_database(db_name);
     }
@@ -275,6 +276,7 @@ mod tests {
             .unwrap();
         assert!(record.is_none());
 
+        pool.close().await;
         delete_database(db_name);
     }
 }

@@ -163,6 +163,7 @@ mod tests {
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].user_id, user.id);
 
+        pool.close().await;
         delete_database("test_module_lecturer_create_and_get.db");
     }
 
@@ -200,6 +201,7 @@ mod tests {
             .unwrap();
         assert!(after.is_empty());
 
+        pool.close().await;
         delete_database("test_module_lecturer_delete.db");
     }
 }
