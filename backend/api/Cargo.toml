@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+docker_example = { path = "../docker_example" }
 common = { path = "../common" }
 db = { path = "../db" }
 axum = "0.7"
