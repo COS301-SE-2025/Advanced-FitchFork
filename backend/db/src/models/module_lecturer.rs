@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
+/// Represents the relationship between a module and a lecturer (user).
+///
+/// This struct maps to a row in the `module_lecturers` table, which associates
+/// a user (assumed to be a lecturer) with a specific module.
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct ModuleLecturer {
     pub module_id: i64,
@@ -8,7 +12,21 @@ pub struct ModuleLecturer {
 }
 
 impl ModuleLecturer {
-    //Inset new Lecturer
+    /// Inserts a new lecturer-module association into the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional database connection pool. If `None`, a default pool is retrieved.
+    /// * `module_id` - The ID of the module.
+    /// * `user_id` - The ID of the user to be added as a lecturer to the module.
+    ///
+    /// # Returns
+    ///
+    /// Returns the newly created `ModuleLecturer` object.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the insertion fails.
     pub async fn create(
         pool: Option<&SqlitePool>,
         module_id: i64,
@@ -24,7 +42,23 @@ impl ModuleLecturer {
         Ok(Self { module_id, user_id })
     }
 
-    //Delete Lecturer relationship (not User themselves)
+    /// Deletes a specific lecturer-module association.
+    ///
+    /// This does not delete the user or module themselves, only the association.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional database connection pool. If `None`, a default pool is used.
+    /// * `module_id` - The module ID to disassociate.
+    /// * `user_id` - The user ID to disassociate.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the deletion is successful.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the deletion fails.
     pub async fn delete(
         pool: Option<&SqlitePool>,
         module_id: i64,
@@ -40,7 +74,19 @@ impl ModuleLecturer {
         Ok(())
     }
 
-    //Get all lecturers (idk might be useful)
+    /// Retrieves all module-lecturer associations in the system.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional database connection pool. If `None`, a default pool is used.
+    ///
+    /// # Returns
+    ///
+    /// A vector of all `ModuleLecturer` records in the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the query fails.
     pub async fn get_all(pool: Option<&SqlitePool>) -> sqlx::Result<Vec<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         let records =
@@ -51,7 +97,20 @@ impl ModuleLecturer {
         Ok(records)
     }
 
-    //Get all lecturers for a specific module
+    /// Retrieves all lecturers associated with a specific module.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional database connection pool. If `None`, a default pool is used.
+    /// * `module_id` - The ID of the module to look up.
+    ///
+    /// # Returns
+    ///
+    /// A vector of `ModuleLecturer` records associated with the given module.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if the query fails.
     pub async fn get_by_id(pool: Option<&SqlitePool>, module_id: i64) -> sqlx::Result<Vec<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         let records = sqlx::query_as::<_, ModuleLecturer>(

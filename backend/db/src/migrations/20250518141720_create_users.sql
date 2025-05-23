@@ -4,5 +4,7 @@ CREATE TABLE users (
     student_number TEXT NOT NULL UNIQUE CHECK(student_number GLOB 'u[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'),
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    admin BOOLEAN NOT NULL
+    admin BOOLEAN NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at DATETIME NOT NULL DEFAULT (datetime('now'))
 );

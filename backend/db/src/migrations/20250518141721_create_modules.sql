@@ -6,6 +6,8 @@ CREATE TABLE modules (
     code TEXT NOT NULL,
     year INTEGER NOT NULL,
     description TEXT,
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
     UNIQUE (code, year)
 );
 

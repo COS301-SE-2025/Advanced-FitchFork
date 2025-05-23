@@ -5,7 +5,7 @@ pub async fn make(code: &str, year: i64, description: Option<&str>, pool: &Sqlit
     let record: Module = sqlx::query_as::<_, Module>(
         "INSERT INTO modules (code, year, description)
          VALUES (?, ?, ?)
-         RETURNING id, code, year, description",
+         RETURNING id, code, year, description, created_at, updated_at",
     )
     .bind(code)
     .bind(year)
