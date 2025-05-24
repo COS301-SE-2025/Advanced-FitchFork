@@ -62,6 +62,18 @@ where
         }
     }
 
+    /// Constructs a success response with no data, only a message.
+    ///
+    /// # Arguments
+    /// - `message`: A descriptive message to accompany the success.
+    pub fn success_without_data(message: impl Into<String>) -> Self {
+        ApiResponse {
+            success: true,
+            data: None,
+            message: message.into(),
+        }
+    }
+
     /// Constructs an error response with a message and no `data`.
     ///
     /// # Arguments
