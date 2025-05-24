@@ -268,3 +268,420 @@ pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use db::models::user::User;
+    use sqlx::SqlitePool;
+    use db::{create_test_db, delete_database};
+    use jsonwebtoken::{decode, DecodingKey, Validation};
+    use crate::auth::claims::Claims;
+    use common::config::Config;
+
+    // Helper function to create test users with unique emails
+    async fn create_test_users(pool: &SqlitePool, test_name: &str) -> (User, User) {
+        let admin_user = User::create(
+            Some(pool),
+            "u12345678",
+            &format!("admin_{}@example.com", test_name),
+            "password1",
+            true
+        )
+        .await
+        .unwrap();
+
+        let regular_user = User::create(
+            Some(pool),
+            "u87654321",
+            &format!("user_{}@example.com", test_name),
+            "password2",
+            false
+        )
+        .await
+        .unwrap();
+
+        (admin_user, regular_user)
+    }
+
+    // Helper function to initialize test configuration
+    fn init_test_config() {
+        // Set required environment variables for Config::init
+        std::env::set_var("DATABASE_URL", "sqlite::memory:");
+        std::env::set_var("JWT_SECRET", "test_secret_key_for_jwt_generation_and_validation");
+        std::env::set_var("JWT_DURATION_MINUTES", "1440"); // 24 hours in minutes
+        
+        // Initialize config with test values
+        Config::init(".env.test");
+    }
+
+    #[tokio::test]
+    async fn test_register_success() {
+        let pool = create_test_db(Some("test_register_success.db")).await;
+        
+        let register_req = RegisterRequest {
+            student_number: "u99999999".to_string(),
+            email: "new@example.com".to_string(),
+            password: "strongpassword".to_string(),
+        };
+
+        // Verify validation passes
+        assert!(register_req.validate().is_ok());
+
+        // Test the registration logic
+        let result = User::create(
+            Some(&pool),
+            &register_req.student_number,
+            &register_req.email,
+            &register_req.password,
+            false
+        ).await;
+
+        assert!(result.is_ok());
+        let user = result.unwrap();
+        assert_eq!(user.student_number, "u99999999");
+        assert_eq!(user.email, "new@example.com");
+        assert!(!user.admin);
+
+        pool.close().await;
+        delete_database("test_register_success.db");
+    }
+
+    #[tokio::test]
+    async fn test_register_validation() {
+        // Test invalid student number format
+        let invalid_sn = RegisterRequest {
+            student_number: "invalid".to_string(),
+            email: "valid@example.com".to_string(),
+            password: "strongpassword".to_string(),
+        };
+        assert!(invalid_sn.validate().is_err());
+
+        // Test invalid email format
+        let invalid_email = RegisterRequest {
+            student_number: "u12345678".to_string(),
+            email: "not-an-email".to_string(),
+            password: "strongpassword".to_string(),
+        };
+        assert!(invalid_email.validate().is_err());
+
+        // Test short password
+        let short_password = RegisterRequest {
+            student_number: "u12345678".to_string(),
+            email: "valid@example.com".to_string(),
+            password: "short".to_string(),
+        };
+        assert!(short_password.validate().is_err());
+
+        // Test valid registration
+        let valid_register = RegisterRequest {
+            student_number: "u12345678".to_string(),
+            email: "valid@example.com".to_string(),
+            password: "strongpassword".to_string(),
+        };
+        assert!(valid_register.validate().is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_register_duplicate_email() {
+        let pool = create_test_db(Some("test_register_duplicate_email.db")).await;
+        
+        let (existing_user, _) = create_test_users(&pool, "duplicate_email").await;
+
+        // Try to register with existing email
+        let register_req = RegisterRequest {
+            student_number: "u99999999".to_string(),
+            email: existing_user.email.clone(),
+            password: "strongpassword".to_string(),
+        };
+
+        // Verify validation passes
+        assert!(register_req.validate().is_ok());
+
+        // Test the registration logic
+        let result = User::create(
+            Some(&pool),
+            &register_req.student_number,
+            &register_req.email,
+            &register_req.password,
+            false
+        ).await;
+
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("UNIQUE constraint failed"));
+        }
+
+        pool.close().await;
+        delete_database("test_register_duplicate_email.db");
+    }
+
+    #[tokio::test]
+    async fn test_register_duplicate_student_number() {
+        let pool = create_test_db(Some("test_register_duplicate_sn.db")).await;
+        
+        let (existing_user, _) = create_test_users(&pool, "duplicate_sn").await;
+
+        // Try to register with existing student number
+        let register_req = RegisterRequest {
+            student_number: existing_user.student_number.clone(),
+            email: "new@example.com".to_string(),
+            password: "strongpassword".to_string(),
+        };
+
+        // Verify validation passes
+        assert!(register_req.validate().is_ok());
+
+        // Test the registration logic
+        let result = User::create(
+            Some(&pool),
+            &register_req.student_number,
+            &register_req.email,
+            &register_req.password,
+            false
+        ).await;
+
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("UNIQUE constraint failed"));
+        }
+
+        pool.close().await;
+        delete_database("test_register_duplicate_sn.db");
+    }
+
+    #[tokio::test]
+    async fn test_login_success() {
+        let pool = create_test_db(Some("test_login_success.db")).await;
+        
+        let (user, _) = create_test_users(&pool, "login_success").await;
+
+        let login_req = LoginRequest {
+            student_number: user.student_number.clone(),
+            password: "password1".to_string(),
+        };
+
+        // Test the login logic
+        let result = User::verify(Some(&pool), &login_req.student_number, &login_req.password).await;
+
+        assert!(result.is_ok());
+        let logged_in_user = result.unwrap();
+        assert_eq!(logged_in_user.id, user.id);
+        assert_eq!(logged_in_user.student_number, user.student_number);
+        assert_eq!(logged_in_user.email, user.email);
+        assert_eq!(logged_in_user.admin, user.admin);
+
+        pool.close().await;
+        delete_database("test_login_success.db");
+    }
+
+    #[tokio::test]
+    async fn test_login_invalid_password() {
+        let pool = create_test_db(Some("test_login_invalid_password.db")).await;
+        
+        let (user, _) = create_test_users(&pool, "invalid_password").await;
+
+        let login_req = LoginRequest {
+            student_number: user.student_number.clone(),
+            password: "wrongpassword".to_string(),
+        };
+
+        // Test the login logic
+        let result = User::verify(Some(&pool), &login_req.student_number, &login_req.password).await;
+
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("Invalid credentials"));
+        }
+
+        pool.close().await;
+        delete_database("test_login_invalid_password.db");
+    }
+
+    #[tokio::test]
+    async fn test_login_nonexistent_user() {
+        let pool = create_test_db(Some("test_login_nonexistent.db")).await;
+        
+        let login_req = LoginRequest {
+            student_number: "u99999999".to_string(),
+            password: "password".to_string(),
+        };
+
+        // Test the login logic
+        let result = User::verify(Some(&pool), &login_req.student_number, &login_req.password).await;
+
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(matches!(e, sqlx::Error::RowNotFound));
+        }
+
+        pool.close().await;
+        delete_database("test_login_nonexistent.db");
+    }
+
+    #[tokio::test]
+    async fn test_jwt_generation() {
+        // Initialize test configuration
+        init_test_config();
+
+        let pool = create_test_db(Some("test_jwt_generation.db")).await;
+        
+        let (user, _) = create_test_users(&pool, "jwt_generation").await;
+
+        // Test JWT generation
+        let (token, expiry) = generate_jwt(user.id, user.admin);
+
+        // Verify token is not empty
+        assert!(!token.is_empty());
+        assert!(!expiry.is_empty());
+
+        // Verify token can be decoded
+        let decoding_key = DecodingKey::from_secret(Config::get().jwt_secret.as_bytes());
+        let validation = Validation::default();
+        let decoded = decode::<Claims>(&token, &decoding_key, &validation);
+
+        assert!(decoded.is_ok());
+        let claims = decoded.unwrap().claims;
+        assert_eq!(claims.sub, user.id);
+        assert_eq!(claims.admin, user.admin);
+
+        pool.close().await;
+        delete_database("test_jwt_generation.db");
+    }
+
+    #[tokio::test]
+    async fn test_jwt_expiration() {
+        // Initialize test configuration with short expiry
+        std::env::set_var("JWT_DURATION_MINUTES", "1");
+        init_test_config();
+
+        let pool = create_test_db(Some("test_jwt_expiration.db")).await;
+        
+        let (user, _) = create_test_users(&pool, "jwt_expiration").await;
+
+        // Generate token
+        let (token, expiry) = generate_jwt(user.id, user.admin);
+
+        // Verify token can be decoded
+        let decoding_key = DecodingKey::from_secret(Config::get().jwt_secret.as_bytes());
+        let mut validation = Validation::default();
+        validation.validate_exp = true;
+        
+        let decoded = decode::<Claims>(&token, &decoding_key, &validation);
+        assert!(decoded.is_ok());
+
+        // Verify expiry time is in the future
+        let expiry_time = chrono::DateTime::parse_from_rfc3339(&expiry).unwrap();
+        assert!(expiry_time > chrono::Utc::now());
+
+        pool.close().await;
+        delete_database("test_jwt_expiration.db");
+    }
+
+    #[tokio::test]
+    async fn test_jwt_signature_validation() {
+        // Initialize test configuration
+        init_test_config();
+
+        let pool = create_test_db(Some("test_jwt_signature.db")).await;
+        
+        let (user, _) = create_test_users(&pool, "jwt_signature").await;
+
+        // Generate token
+        let (token, _) = generate_jwt(user.id, user.admin);
+
+        // Try to decode with wrong secret
+        let wrong_key = DecodingKey::from_secret(b"wrong_secret_key");
+        let validation = Validation::default();
+        let decoded = decode::<Claims>(&token, &wrong_key, &validation);
+
+        assert!(decoded.is_err());
+        if let Err(e) = decoded {
+            let error_msg = e.to_string().to_lowercase();
+            assert!(
+                error_msg.contains("signature") || 
+                error_msg.contains("invalid") || 
+                error_msg.contains("verification"),
+                "Error message should indicate signature verification failure"
+            );
+        }
+
+        pool.close().await;
+        delete_database("test_jwt_signature.db");
+    }
+
+    #[tokio::test]
+    async fn test_jwt_format() {
+        // Initialize test configuration
+        init_test_config();
+
+        let pool = create_test_db(Some("test_jwt_format.db")).await;
+        
+        let (user, _) = create_test_users(&pool, "jwt_format").await;
+
+        // Generate token
+        let (token, _) = generate_jwt(user.id, user.admin);
+
+        // Verify token format (should be three base64-encoded parts separated by dots)
+        let parts: Vec<&str> = token.split('.').collect();
+        assert_eq!(parts.len(), 3, "JWT should have three parts");
+
+        pool.close().await;
+        delete_database("test_jwt_format.db");
+    }
+
+    #[tokio::test]
+    async fn test_jwt_invalid_tokens() {
+        // Initialize test configuration
+        init_test_config();
+
+        let invalid_tokens = vec![
+            "invalid.token.format",  // Wrong format
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ",  // Missing signature
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",  // Wrong signature
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjF9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",  // Expired token
+        ];
+
+        let decoding_key = DecodingKey::from_secret(Config::get().jwt_secret.as_bytes());
+        let validation = Validation::default();
+
+        for token in invalid_tokens {
+            let decoded = decode::<Claims>(token, &decoding_key, &validation);
+            assert!(decoded.is_err(), "Invalid token should not decode successfully");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_user_response_format() {
+        // Initialize test configuration
+        init_test_config();
+
+        let pool = create_test_db(Some("test_user_response.db")).await;
+        
+        let (user, _) = create_test_users(&pool, "response_format").await;
+
+        // Generate JWT
+        let (token, expiry) = generate_jwt(user.id, user.admin);
+
+        // Create response
+        let response = UserResponse {
+            id: user.id,
+            student_number: user.student_number.clone(),
+            email: user.email.clone(),
+            admin: user.admin,
+            token: token.clone(),
+            expires_at: expiry.clone(),
+        };
+
+        // Verify response format
+        assert_eq!(response.id, user.id);
+        assert_eq!(response.student_number, user.student_number);
+        assert_eq!(response.email, user.email);
+        assert_eq!(response.admin, user.admin);
+        assert_eq!(response.token, token);
+        assert_eq!(response.expires_at, expiry);
+
+        pool.close().await;
+        delete_database("test_user_response.db");
+    }
+}
