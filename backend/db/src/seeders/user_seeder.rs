@@ -1,18 +1,12 @@
 use crate::factories::user_factory;
 use sqlx::SqlitePool;
+use crate::models::user::User;
 
 pub async fn seed(pool: &SqlitePool) {
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
-        .fetch_one(pool)
-        .await
-        .unwrap();
-
-    if count.0 > 0 {
-        log::info!("Skipping user seeder.");
-        return;
-    }
-
     log::info!("Seeding users...");
+
+    // Test Admin User
+    let _  = User::create(Some(pool), "u99999999", "u9999999@tuks.co.za", "test1234", true).await;
 
     //Create 5 users without roles (admin and not admin)
     for _ in 0..5 {

@@ -1,90 +1,99 @@
-# Example Routes Documentation
+# Authentication Routes Documentation
 
-**Base Path:** `/example`
-
----
-
-## GET `/example`
-
-**Description:**
-Returns a simple confirmation message for the example route.
-
-**Response:**
-
-```json
-{
-	"success": true,
-	"data": "Example index",
-	"message": "Fetched list"
-}
-```
-
-**Status Codes:**
-
-- `200 OK`: Request succeeded
+**Base Path:** `/auth`
 
 ---
 
-## POST `/example`
+## POST `/auth/register`
 
 **Description:**
-Creates a new example resource (dummy route for demonstration).
+Register a new user account.
 
 **Request Body:**
 
 ```json
 {
-	"name": "string",
-	"value": "any"
+	"student_number": "u12345678",
+	"email": "user@example.com",
+	"password": "strongpassword"
 }
 ```
+
+**Validation Rules:**
+- Student number must be in format `u12345678`
+- Email must be a valid email format
+- Password must be at least 8 characters
 
 **Response:**
 
 ```json
 {
 	"success": true,
-	"data": "Created",
-	"message": "Resource created"
+	"data": {
+		"id": 1,
+		"student_number": "u12345678",
+		"email": "user@example.com",
+		"admin": false,
+		"token": "jwt_token_here",
+		"expires_at": "2025-05-23T11:00:00Z"
+	},
+	"message": "User registered successfully"
 }
 ```
 
 **Status Codes:**
 
-- `201 Created`: Resource successfully created
-- `400 Bad Request`: Invalid input
+- `201 Created`: Registration successful
+- `400 Bad Request`: Validation failure
+- `409 Conflict`: User with email or student number already exists
+- `500 Internal Server Error`: Database error
 
 ---
 
-## DELETE `/example/:id`
+## POST `/auth/login`
 
 **Description:**
-Deletes an example resource by ID. This route is protected and requires authentication.
+Authenticate an existing user and issue a JWT token.
 
-**Path Parameter:**
+**Request Body:**
 
-- `id` (integer): The ID of the resource to delete.
+```json
+{
+	"student_number": "u12345678",
+	"password": "strongpassword"
+}
+```
 
 **Response:**
 
 ```json
 {
 	"success": true,
-	"data": "Deleted item 42",
-	"message": "Resource deleted"
+	"data": {
+		"id": 1,
+		"student_number": "u12345678",
+		"email": "user@example.com",
+		"admin": false,
+		"token": "jwt_token_here",
+		"expires_at": "2025-05-23T12:00:00Z"
+	},
+	"message": "Login successful"
 }
 ```
 
 **Status Codes:**
 
-- `200 OK`: Deletion successful
-- `401 Unauthorized`: If authentication fails
+- `200 OK`: Login successful
+- `401 Unauthorized`: Invalid credentials
+- `500 Internal Server Error`: Database error
 
 ---
 
-## Authentication
+## Authentication Notes
 
-- `GET /example` and `POST /example` do **not** require authentication.
-- `DELETE /example/:id` **requires authentication** via middleware (`dummy_auth`).
-
-Update this section if additional access control or JWT validation is added in the future.
+- Both endpoints return a JWT token upon successful authentication
+- The token includes user ID and admin status
+- Student numbers must follow the format `u12345678`
+- Email addresses must be unique
+- Student numbers must be unique
+- Passwords are validated for minimum length of 8 characters

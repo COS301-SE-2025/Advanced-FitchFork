@@ -8,6 +8,8 @@
 //! ## Structure
 //! - `health.rs`: Contains the `/health` route for basic uptime checks.
 //! - `example/`: A folder containing `get.rs`, `post.rs`, `delete.rs`, etc. for the `/example` API group.
+//! - `auth/`: A folder containing `post.rs` for the `/auth` API group.
+//! - `users/`: A folder containing `get.rs` for the `/users` API group.
 //!
 //! ## Usage
 //! Call `routes()` from your main application to initialize all top-level routes.
@@ -15,15 +17,18 @@
 pub mod health;
 pub mod example;
 pub mod auth;
+pub mod users;
 
 use axum::Router;
-use crate::routes::{health::health_routes, example::example_routes, auth::auth_routes};
+use crate::routes::{health::health_routes, example::example_routes, auth::auth_routes, users::users_routes};
 
 /// Builds the complete application router.
 ///
 /// This nests sub-routes under the appropriate base paths:
 /// - `/health` → health check endpoint
-/// - `/example` → example feature endpoints
+/// - `/example` → example feature endpoints 
+/// - `/auth` → authentication endpoints
+/// - `/users` → user management endpoints
 ///
 /// # Returns
 /// An Axum `Router` ready to be passed into the main app.
@@ -32,4 +37,5 @@ pub fn routes() -> Router {
         .nest("/health", health_routes())
         .nest("/example", example_routes())
         .nest("/auth", auth_routes())
+        .nest("/users", users_routes())
 }
