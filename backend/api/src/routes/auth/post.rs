@@ -7,7 +7,6 @@ use db::models::user::User;
 use db::pool;
 use crate::auth::generate_jwt;
 use crate::response::ApiResponse;
-use common::format_validation_errors;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -98,7 +97,7 @@ lazy_static::lazy_static! {
 /// ```
 pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
-        let error_message = format_validation_errors(&validation_errors);
+        let error_message = common::format_validation_errors(&validation_errors);
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<UserResponse>::error(error_message)),
@@ -138,6 +137,7 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
                 token,
                 expires_at: expiry,
             };
+
             return (
                 StatusCode::CREATED,
                 Json(ApiResponse::success(user_response, "User registered successfully")),
@@ -153,6 +153,7 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
                         Json(ApiResponse::<UserResponse>::error("A user with this email already exists")),
                     );
                 }
+                
                 if msg.contains("users.student_number") {
                     return (
                         StatusCode::CONFLICT,
@@ -222,7 +223,7 @@ pub struct LoginRequest {
 /// ```
 pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
-        let error_message = format_validation_errors(&validation_errors);
+        let error_message = common::format_validation_errors(&validation_errors);
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<UserResponse>::error(error_message)),
