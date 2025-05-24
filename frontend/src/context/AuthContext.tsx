@@ -1,41 +1,24 @@
+import { AuthService } from '@/services/auth';
+import type { LoginRequest, RegisterRequest, LoginResponse, RegisterResponse } from '@/types/auth';
+import type { User } from '@/types/users';
+import type { ApiResponse } from '@/utils/api';
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { User, UserRole } from '../types/auth';
 
-/**
- * Describes the shape of the authentication context.
- * - `user`: The current authenticated user or `null`.
- * - `login`: Function to set the user and persist it in localStorage.
- * - `logout`: Clears the user state and removes it from localStorage.
- * - `hasRole`: Utility function to check if the user has a given role.
- */
 interface AuthContextType {
   user: User | null;
-  login: (user: User) => void;
+  login: (credentials: LoginRequest) => Promise<ApiResponse<LoginResponse>>;
+  register: (details: RegisterRequest) => Promise<ApiResponse<RegisterResponse>>;
   logout: () => void;
-  hasRole: (role: UserRole) => boolean;
+  isAdmin: () => boolean;
+  // getModuleRole: (moduleId: number) => ModuleRole | null;
+  // hasModuleRole: (moduleId: number, role: ModuleRole) => boolean;
 }
 
-/**
- * Create the context with an initial value of `undefined`.
- * It will be checked inside the `useAuth` hook to ensure it is used properly.
- */
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/**
- * Provides authentication state and logic to the app.
- *
- * Wrap your application in `AuthProvider` (typically in `main.tsx`) to:
- * - Track the current user
- * - Persist user info across page reloads
- * - Provide login/logout and role checking
- */
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
 
-  /**
-   * On initial load, restore auth state from localStorage (if present).
-   * This enables persistent login without a server session.
-   */
   useEffect(() => {
     const stored = localStorage.getItem('auth');
     if (stored) {
@@ -43,46 +26,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  /**
-   * Log in a user by storing their data in state and localStorage.
-   * @param userData - The user object (must include token and roles)
-   */
-  const login = (userData: User) => {
-    localStorage.setItem('auth', JSON.stringify(userData));
-    setUser(userData);
+  const login = async (credentials: LoginRequest): Promise<ApiResponse<LoginResponse>> => {
+    try {
+      const res = await AuthService.login(credentials);
+      if (res.success && res.data) {
+        localStorage.setItem('auth', JSON.stringify(res.data));
+        setUser(res.data);
+      }
+      return res;
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'Unexpected error during login',
+      } as ApiResponse<LoginResponse>;
+    }
   };
 
-  /**
-   * Logs out the user by clearing state and removing localStorage entry.
-   */
+  const register = async (details: RegisterRequest): Promise<ApiResponse<RegisterResponse>> => {
+    try {
+      const res = await AuthService.register(details);
+      if (res.success && res.data) {
+        localStorage.setItem('auth', JSON.stringify(res.data));
+        setUser(res.data);
+      }
+      return res;
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'Unexpected error during registration',
+      } as ApiResponse<RegisterResponse>;
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('auth');
     setUser(null);
   };
 
-  /**
-   * Check if the current user has a specific role.
-   * @param role - A string like "admin", "tutor", "student"
-   * @returns `true` if the user has the role, else `false`
-   */
-  const hasRole = (role: UserRole): boolean => {
-    return !!user?.roles.includes(role);
-  };
+  const isAdmin = () => !!user?.admin;
 
-  /**
-   * Provide the auth state and functions to all children components.
-   */
+  // const getModuleRole = (moduleId: number): ModuleRole | null => null;
+  // const hasModuleRole = (moduleId: number, role: ModuleRole) => false;
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, hasRole }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, login, register, logout, isAdmin }}>
+      {children}
+    </AuthContext.Provider>
   );
 };
 
-/**
- * Custom hook to access auth context from any component.
- * Throws an error if used outside an `AuthProvider`.
- *
- * @returns The authentication context (`user`, `login`, `logout`, `hasRole`)
- */
 export const useAuth = (): AuthContextType => {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');

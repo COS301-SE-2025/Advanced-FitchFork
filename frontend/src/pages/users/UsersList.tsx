@@ -1,217 +1,382 @@
-import { Table, Form, Input, Select, Button, Tag, Space } from 'antd';
-import { EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined } from '@ant-design/icons';
+import {
+  Table,
+  Tag,
+  Space,
+  Button,
+  Input,
+  Popconfirm,
+  message,
+  Select,
+  Dropdown,
+  Card,
+  Statistic,
+  Empty,
+} from 'antd';
+import type { MenuProps, TableColumnsType, TablePaginationConfig, TableProps } from 'antd';
+import { ReloadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useState } from 'react';
-import DashboardLayout from '@layouts/DashboardLayout';
-import { useNavigate } from 'react-router-dom';
+import type { FilterValue } from 'antd/es/table/interface';
+import AppLayout from '@/layouts/AppLayout';
+import { mockUsers } from '@/mocks/users';
+import type { User } from '@/types/users';
+import TableTagSummary from '@/components/TableTagSummary';
 
-const { Option } = Select;
+const { Search } = Input;
 
-const initialData = [
-  { id: '1', name: 'Alice Johnson', email: 'alice@example.com', role: 'Admin' },
-  { id: '2', name: 'Bob Smith', email: 'bob@example.com', role: 'User' },
-  { id: '3', name: 'Charlie Rose', email: 'charlie@example.com', role: 'Moderator' },
-  { id: '4', name: 'Diana Prince', email: 'diana@example.com', role: 'Admin' },
-  { id: '5', name: 'Ethan Hunt', email: 'ethan@example.com', role: 'User' },
-  { id: '6', name: 'Fiona Glenanne', email: 'fiona@example.com', role: 'Moderator' },
-  { id: '7', name: 'George Clooney', email: 'george@example.com', role: 'User' },
-  { id: '8', name: 'Hannah Baker', email: 'hannah@example.com', role: 'Moderator' },
-  { id: '9', name: 'Ian Fleming', email: 'ian@example.com', role: 'Admin' },
-  { id: '10', name: 'Julia Child', email: 'julia@example.com', role: 'User' },
-  { id: '11', name: 'Kevin Durant', email: 'kevin@example.com', role: 'Moderator' },
-  { id: '12', name: 'Lara Croft', email: 'lara@example.com', role: 'Admin' },
-];
+const UsersList: React.FC = () => {
+  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredUsers, setFilteredUsers] = useState<User[]>(mockUsers);
+  const [editingRowId, setEditingRowId] = useState<number | null>(null);
+  const [editCache, setEditCache] = useState<Partial<User>>({});
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [filterState, setFilterState] = useState<Record<string, FilterValue | null>>({});
+  const [sorterState, setSorterState] = useState<any[]>([]);
+  const [pagination, setPagination] = useState<TablePaginationConfig>({
+    current: 1,
+    pageSize: 5,
+    pageSizeOptions: ['5', '10', '20', '50', '100'],
+    showSizeChanger: true,
+    showQuickJumper: true,
+    showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} users`,
+    style: {
+      paddingRight: '20px',
+    },
+  });
 
-export default function UsersList() {
-  const [form] = Form.useForm();
-  const [data, setData] = useState(initialData);
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  const navigate = useNavigate();
-
-  const isEditing = (record: any) => record.id === editingKey;
-
-  const edit = (record: any) => {
-    form.setFieldsValue({ name: '', email: '', role: '', ...record });
-    setEditingKey(record.id);
+  const handleSearch = (value: string) => {
+    setSearchTerm(value);
+    const lower = value.toLowerCase();
+    const filtered = users.filter(
+      (user) =>
+        user.email.toLowerCase().includes(lower) ||
+        user.student_number.toLowerCase().includes(lower),
+    );
+    setFilteredUsers(filtered);
+    setPagination((prev) => ({ ...prev, current: 1 }));
   };
 
-  const cancel = () => setEditingKey(null);
+  const clearFilters = () => {
+    setFilterState({});
+    setFilteredUsers(users);
+  };
 
-  const save = async (id: string) => {
-    const row = await form.validateFields();
-    const newData = [...data];
-    const idx = newData.findIndex((item) => item.id === id);
-    if (idx > -1) {
-      newData[idx] = { ...newData[idx], ...row };
-      setData(newData);
-      setEditingKey(null);
+  const clearSorts = () => {
+    setSorterState([]);
+  };
+
+  const handleEdit = (record: User) => {
+    setEditingRowId(record.id);
+    setEditCache({ ...record });
+  };
+
+  const handleEditSave = () => {
+    if (!editCache.student_number || !editCache.email) {
+      message.error('All fields must be filled');
+      return;
     }
+    const updatedUsers = users.map((user) =>
+      user.id === editingRowId ? { ...user, ...editCache } : user,
+    );
+    setUsers(updatedUsers);
+    setFilteredUsers(updatedUsers);
+    setEditingRowId(null);
+    setEditCache({});
+    message.success('User updated');
   };
 
-  const remove = (id: string) => {
-    setData((prev) => prev.filter((item) => item.id !== id));
+  const handleDelete = (id: number) => {
+    const updated = users.filter((u) => u.id !== id);
+    setUsers(updated);
+    setFilteredUsers(updated);
+    message.success('User deleted');
   };
 
-  const columns = [
+  const handleBulkDelete = () => {
+    const updated = users.filter((u) => !selectedRowKeys.includes(u.id));
+    setUsers(updated);
+    setFilteredUsers(updated);
+    setSelectedRowKeys([]);
+    message.success('Selected users deleted');
+  };
+
+  const columns: TableColumnsType<User> = [
     {
-      title: 'Name',
-      dataIndex: 'name',
-      key: 'name',
-      onCell: (record: any) => ({
-        record,
-        inputType: 'text',
-        dataIndex: 'name',
-        title: 'Name',
-        editing: isEditing(record),
-      }),
+      title: 'Student Number',
+      dataIndex: 'student_number',
+      sorter: {
+        compare: (a, b) => a.student_number.localeCompare(b.student_number),
+        multiple: 2,
+      },
+      sortOrder: sorterState.find((s) => s.columnKey === 'student_number')?.order || null,
+      key: 'student_number',
+      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
+        <div className="flex flex-col gap-2 p-2 space-y-2 w-56">
+          <Input
+            placeholder="Search student number"
+            value={selectedKeys[0]}
+            onChange={(e) => setSelectedKeys([e.target.value])}
+            onPressEnter={() => confirm()}
+            className=""
+          />
+          <div className="flex justify-between gap-2">
+            <Button type="primary" onClick={() => confirm()} size="small">
+              Filter
+            </Button>
+            <Button onClick={() => clearFilters?.()} size="small">
+              Reset
+            </Button>
+          </div>
+        </div>
+      ),
+      onFilter: (value, record) =>
+        typeof value === 'string' &&
+        record.student_number.toLowerCase().includes(value.toLowerCase()),
+      filteredValue: filterState?.student_number || null,
+
+      render: (_, record) =>
+        editingRowId === record.id ? (
+          <Input
+            value={editCache.student_number}
+            onChange={(e) => setEditCache({ ...editCache, student_number: e.target.value })}
+          />
+        ) : (
+          record.student_number
+        ),
     },
     {
       title: 'Email',
       dataIndex: 'email',
+      sorter: {
+        compare: (a, b) => a.email.localeCompare(b.email),
+        multiple: 1,
+      },
+      sortOrder: sorterState.find((s) => s.columnKey === 'email')?.order || null,
       key: 'email',
-      onCell: (record: any) => ({
-        record,
-        inputType: 'text',
-        dataIndex: 'email',
-        title: 'Email',
-        editing: isEditing(record),
-      }),
+      render: (_, record) =>
+        editingRowId === record.id ? (
+          <Input
+            value={editCache.email}
+            onChange={(e) => setEditCache({ ...editCache, email: e.target.value })}
+          />
+        ) : (
+          <a href={`mailto:${record.email}`} className="text-blue-600 hover:underline">
+            {record.email}
+          </a>
+        ),
     },
     {
-      title: 'Role',
-      dataIndex: 'role',
-      key: 'role',
-      onCell: (record: any) => ({
-        record,
-        inputType: 'select',
-        dataIndex: 'role',
-        title: 'Role',
-        editing: isEditing(record),
-      }),
-      render: (role: string, record: any) =>
-        isEditing(record) ? null : (
-          <Tag color={role === 'Admin' ? 'volcano' : role === 'Moderator' ? 'geekblue' : 'green'}>
-            {role}
+      title: 'Admin',
+      dataIndex: 'is_admin',
+      key: 'is_admin',
+      render: (_, record) =>
+        editingRowId === record.id ? (
+          <Select
+            value={editCache.is_admin ? 'admin' : 'regular'}
+            onChange={(value) => setEditCache({ ...editCache, is_admin: value === 'admin' })}
+            style={{ width: 120 }}
+          >
+            <Select.Option value="admin">Admin</Select.Option>
+            <Select.Option value="regular">Regular</Select.Option>
+          </Select>
+        ) : (
+          <Tag color={record.is_admin ? 'green' : undefined}>
+            {record.is_admin ? 'Admin' : 'Regular'}
           </Tag>
         ),
+      filters: [
+        { text: 'Admin', value: true },
+        { text: 'Regular', value: false },
+      ],
+      filteredValue: filterState?.is_admin || null,
+      onFilter: (value, record) => record.is_admin === value,
+      sorter: {
+        compare: (a, b) => Number(a.is_admin) - Number(b.is_admin),
+        multiple: 3,
+      },
+      sortOrder: sorterState.find((s) => s.columnKey === 'is_admin')?.order || null,
     },
     {
       title: 'Actions',
       key: 'actions',
-      render: (_: any, record: any) => {
-        const editable = isEditing(record);
-        return editable ? (
+      render: (_, record) =>
+        editingRowId === record.id ? (
           <Space>
-            <Button
-              icon={<SaveOutlined />}
-              size="small"
-              type="primary"
-              onClick={(e) => {
-                e.stopPropagation();
-                save(record.id);
-              }}
-            />
-            <Button
-              icon={<CloseOutlined />}
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                cancel();
-              }}
-            />
+            <Button type="primary" size="small" onClick={handleEditSave}>
+              Save
+            </Button>
+            <Button size="small" onClick={() => setEditingRowId(null)}>
+              Cancel
+            </Button>
           </Space>
         ) : (
           <Space>
-            <Button
-              icon={<EditOutlined />}
-              onClick={(e) => {
-                e.stopPropagation(); // prevent row click
-                edit(record);
-              }}
-              size="small"
-            />
-
-            <Button
-              icon={<DeleteOutlined />}
-              danger
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                remove(record.id);
-              }}
-            />
+            <Button icon={<EditOutlined />} size="small" onClick={() => handleEdit(record)} />
+            <Popconfirm
+              title="Delete this user?"
+              onConfirm={() => handleDelete(record.id)}
+              okText="Yes"
+              cancelText="No"
+            >
+              <Button icon={<DeleteOutlined />} danger size="small" />
+            </Popconfirm>
           </Space>
-        );
-      },
+        ),
     },
   ];
 
-  const mergedColumns = columns.map((col) => ({
-    ...col,
-    onCell: col.onCell
-      ? (record: any) => ({
-          ...col.onCell!(record),
-          editing: isEditing(record),
-        })
-      : undefined,
-  }));
-
-  const EditableCell: React.FC<any> = ({
-    editing,
-    dataIndex,
-    title,
-    inputType,
-    record,
-    children,
-    ...restProps
-  }) => {
-    const inputNode =
-      inputType === 'select' ? (
-        <Select>
-          <Option value="Admin">Admin</Option>
-          <Option value="User">User</Option>
-          <Option value="Moderator">Moderator</Option>
-        </Select>
-      ) : (
-        <Input />
-      );
-
-    return (
-      <td {...restProps}>
-        {editing ? (
-          <Form.Item
-            name={dataIndex}
-            style={{ margin: 0 }}
-            rules={[{ required: true, message: `Please enter ${title}` }]}
-          >
-            {inputNode}
-          </Form.Item>
-        ) : (
-          children
-        )}
-      </td>
-    );
+  const onChange: TableProps<User>['onChange'] = (pagination, filters, sorter) => {
+    setPagination(pagination);
+    setFilterState(filters);
+    const sorterArray = Array.isArray(sorter)
+      ? sorter
+      : sorter && sorter.columnKey && sorter.order
+        ? [sorter]
+        : [];
+    setSorterState(sorterArray);
   };
 
+  const handleAddUser = () => {
+    const newUser: User = {
+      id: Date.now(), // temporary unique ID
+      student_number: 'u00000000',
+      email: 'new.user@up.ac.za',
+      is_admin: false,
+      module_roles: [],
+    };
+    setUsers([newUser, ...users]);
+    setFilteredUsers([newUser, ...filteredUsers]);
+    setEditingRowId(newUser.id);
+    setEditCache({ ...newUser });
+  };
+
+  const clearAllFilters = () => {
+    setFilterState({});
+    setSorterState([]);
+    setSearchTerm('');
+    setFilteredUsers(users);
+    setPagination((prev) => ({ ...prev, current: 1 }));
+  };
+
+  const rowSelection: TableProps<User>['rowSelection'] = {
+    selectedRowKeys,
+    onChange: (selectedKeys) => setSelectedRowKeys(selectedKeys),
+  };
+
+  const clearMenuItems: MenuProps['items'] = [
+    {
+      key: 'clear-column-filters',
+      label: 'Clear Column Filters',
+      onClick: clearFilters,
+    },
+    {
+      key: 'clear-all',
+      label: 'Clear All Filters',
+      onClick: clearAllFilters,
+    },
+    {
+      key: 'clear-sorts',
+      label: 'Clear Sorts',
+      onClick: clearSorts,
+    },
+  ];
+
   return (
-    <DashboardLayout title="Users" description="A list of all the users.">
-      <Form form={form} component={false}>
-        <Table
-          components={{ body: { cell: EditableCell as any } }}
-          dataSource={data}
-          columns={mergedColumns}
-          rowKey="id"
-          pagination={{ pageSize: 5 }}
-          bordered
-          onRow={(record) => ({
-            onClick: () => {
-              if (!isEditing(record)) {
-                navigate(`/users/${record.id}`);
-              }
-            },
-            style: { cursor: 'pointer' },
-          })}
+    <AppLayout title="Users" description="A list of all the users.">
+      {/* User Summary Stats */}
+      <div className="mb-6 flex flex-wrap gap-4">
+        <Card className="flex-1 min-w-[200px]">
+          <Statistic title="Total Users" value={128} />
+        </Card>
+        <Card className="flex-1 min-w-[200px]">
+          <Statistic title="Admins" value={12} />
+        </Card>
+        <Card className="flex-1 min-w-[200px]">
+          <Statistic title="Regular Users" value={116} />
+        </Card>
+      </div>
+      {/* Control Bar */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <Search
+          placeholder="Search student number or email"
+          allowClear
+          onChange={(e) => handleSearch(e.target.value)}
+          value={searchTerm}
+          style={{ maxWidth: 320 }}
+          className="w-full sm:w-auto"
         />
-      </Form>
-    </DashboardLayout>
+        <div className="flex flex-wrap gap-2 items-center">
+          <Button type="primary" onClick={handleAddUser}>
+            Add User
+          </Button>
+
+          <Dropdown menu={{ items: clearMenuItems }} placement="bottomRight" trigger={['click']}>
+            <Button icon={<ReloadOutlined />}>Clear Options</Button>
+          </Dropdown>
+
+          {selectedRowKeys.length > 0 && (
+            <Popconfirm
+              title="Delete selected users?"
+              onConfirm={handleBulkDelete}
+              okText="Yes"
+              cancelText="No"
+            >
+              <Button danger icon={<DeleteOutlined />}>
+                Delete Selected
+              </Button>
+            </Popconfirm>
+          )}
+        </div>
+      </div>
+
+      <TableTagSummary
+        searchTerm={searchTerm}
+        onClearSearch={() => {
+          setSearchTerm('');
+          setFilteredUsers(users);
+        }}
+        filters={filterState}
+        onClearFilter={(key) =>
+          setFilterState((prev) => {
+            const updated = { ...prev };
+            delete updated[key];
+            return updated;
+          })
+        }
+        sorters={sorterState}
+        onClearSorter={(key) =>
+          setSorterState((prev) =>
+            Array.isArray(prev) ? prev.filter((s) => s.columnKey !== key) : [],
+          )
+        }
+      />
+
+      {/* Table */}
+      <Table<User>
+        rowKey="id"
+        columns={columns}
+        dataSource={filteredUsers}
+        rowSelection={rowSelection}
+        pagination={pagination}
+        onChange={onChange}
+        locale={{
+          emptyText: (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No users found.">
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => {
+                  clearAllFilters();
+                }}
+              >
+                Clear All Filters
+              </Button>
+            </Empty>
+          ),
+        }}
+        className="border-1 border-gray-100 dark:border-gray-800 rounded-lg"
+      />
+    </AppLayout>
   );
-}
+};
+
+export default UsersList;

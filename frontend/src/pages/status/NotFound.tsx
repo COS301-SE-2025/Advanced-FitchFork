@@ -1,21 +1,32 @@
-import { Result, Button } from 'antd';
+import Logo from '@/components/Logo';
+import { Result, Button, Typography } from 'antd';
 import { Link } from 'react-router-dom';
-import Logo from '@components/Logo';
+
+const { Title, Text } = Typography;
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-12">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-950 px-4 py-12">
       <div className="mb-8">
-        <Logo size="md" />
+        <Logo />
       </div>
+
       <Result
         status="404"
-        title="Page Not Found"
-        subTitle="The page you’re looking for doesn’t exist or has been moved."
+        title={
+          <Title level={2} className="!text-gray-800 dark:!text-gray-100">
+            Page Not Found
+          </Title>
+        }
+        subTitle={
+          <Text className="!text-gray-600 dark:!text-gray-300">
+            The page you’re looking for doesn’t exist or has been moved.
+          </Text>
+        }
         extra={
-          <Link to="/dashboard">
+          <Link to="/home">
             <Button type="primary" size="large">
-              Back to Dashboard
+              Back to Home
             </Button>
           </Link>
         }

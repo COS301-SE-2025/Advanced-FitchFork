@@ -1,20 +1,28 @@
-import { Result, Button } from 'antd';
+import Logo from '@/components/Logo';
+import { Result, Button, Typography } from 'antd';
 import { Link } from 'react-router-dom';
-import Logo from '@components/Logo';
+
+const { Title, Text } = Typography;
 
 export default function Unauthorized() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-12">
-      {/* Centered Logo */}
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-950 px-4 py-12">
       <div className="mb-8">
-        <Logo size="md" />
+        <Logo />
       </div>
 
-      {/* 403 Result */}
       <Result
         status="403"
-        title="Unauthorized"
-        subTitle="You don’t have permission to access this page."
+        title={
+          <Title level={2} className="!text-gray-800 dark:!text-gray-100">
+            Unauthorized
+          </Title>
+        }
+        subTitle={
+          <Text className="!text-gray-600 dark:!text-gray-300">
+            You don’t have permission to access this page.
+          </Text>
+        }
         extra={
           <Link to="/login">
             <Button type="primary" size="large">

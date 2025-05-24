@@ -1,0 +1,172 @@
+import type {
+  Module,
+  ModulePayload,
+  ListModulesRequest,
+  ListModulesResponse,
+  ModuleDetailsResponse,
+  MyModulesResponse,
+  AssignLecturersRequest,
+  RemoveLecturersRequest,
+  AssignTutorsRequest,
+  RemoveTutorsRequest,
+  EnrollStudentsRequest,
+  RemoveStudentsRequest,
+  ListLecturersResponse,
+  ListTutorsResponse,
+  ListStudentsResponse,
+  UserModuleRole,
+} from "@/types/modules";
+import type { User } from "@/types/users";
+import type { ApiResponse } from "@/utils/api";
+
+const now = new Date().toISOString();
+
+const mockUsers: User[] = [
+  { id: 1, student_number: "20230001", email: "alice@up.ac.za", admin: true, created_at: now, updated_at: now },
+  { id: 2, student_number: "20230002", email: "bob@up.ac.za", admin: false, created_at: now, updated_at: now },
+  { id: 3, student_number: "20230003", email: "carol@up.ac.za", admin: false, created_at: now, updated_at: now },
+  { id: 4, student_number: "20230004", email: "daniel@up.ac.za", admin: false, created_at: now, updated_at: now },
+  { id: 5, student_number: "20230005", email: "eve@up.ac.za", admin: true, created_at: now, updated_at: now },
+  { id: 6, student_number: "20230006", email: "frank@up.ac.za", admin: false, created_at: now, updated_at: now },
+];
+
+const mockModules: Module[] = [
+  { id: 101, code: "COS332", year: 2025, description: "Networks and Security", credits: 16, created_at: now, updated_at: now },
+  { id: 102, code: "COS344", year: 2025, description: "Computer Graphics", credits: 16, created_at: now, updated_at: now },
+  { id: 103, code: "COS333", year: 2025, description: "Programming Languages", credits: 16, created_at: now, updated_at: now },
+  { id: 104, code: "INF214", year: 2025, description: "Information Systems", credits: 12, created_at: now, updated_at: now },
+  { id: 105, code: "MIT301", year: 2024, description: "Advanced Software Engineering", credits: 24, created_at: now, updated_at: now },
+  { id: 106, code: "PHY101", year: 2023, description: "Introductory Physics", credits: 12, created_at: now, updated_at: now },
+  { id: 107, code: "STK120", year: 2024, description: "Statistics", credits: 8, created_at: now, updated_at: now },
+  { id: 108, code: "ECS150", year: 2023, description: "Microeconomics", credits: 8, created_at: now, updated_at: now },
+  { id: 109, code: "WTW285", year: 2025, description: "Differential Equations", credits: 16, created_at: now, updated_at: now },
+  { id: 110, code: "COS730", year: 2025, description: "Machine Learning", credits: 32, created_at: now, updated_at: now },
+];
+
+export const ModulesService = {
+  listModules: async (_: ListModulesRequest): Promise<ApiResponse<ListModulesResponse>> => ({
+    success: true,
+    data: {
+      modules: mockModules,
+      page: 1,
+      per_page: 10,
+      total: mockModules.length,
+    },
+    message: "Mocked module list",
+  }),
+
+  getModuleDetails: async (moduleId: number): Promise<ApiResponse<ModuleDetailsResponse>> => ({
+    success: true,
+    data: {
+      ...mockModules.find((m) => m.id === moduleId)!,
+      lecturers: [mockUsers[0]],
+      tutors: [],
+      students: [mockUsers[1]],
+    },
+    message: "Mocked module details",
+  }),
+
+  createModule: async (payload: ModulePayload): Promise<ApiResponse<Module>> => {
+    const newModule: Module = {
+      id: Math.floor(Math.random() * 1000 + 200),
+      ...payload,
+      created_at: now,
+      updated_at: now,
+    };
+    mockModules.push(newModule);
+    return {
+      success: true,
+      data: newModule,
+      message: "Mocked module created",
+    };
+  },
+
+  editModule: async (id: number, payload: ModulePayload): Promise<ApiResponse<Module>> => {
+    const mod = mockModules.find((m) => m.id === id)!;
+    Object.assign(mod, payload, { updated_at: now });
+    return {
+      success: true,
+      data: mod,
+      message: "Mocked module edited",
+    };
+  },
+
+  deleteModule: async (_: number): Promise<ApiResponse<null>> => ({
+    success: true,
+    data: null,
+    message: "Mocked module deleted",
+  }),
+
+  getMyModules: async (): Promise<ApiResponse<MyModulesResponse>> => ({
+    success: true,
+    data: {
+      as_student: [mockModules[1]],
+      as_tutor: [],
+      as_lecturer: [mockModules[0]],
+    },
+    message: "Mocked my modules",
+  }),
+
+  assignLecturers: async (_: number, __: AssignLecturersRequest): Promise<ApiResponse<null>> => ({
+    success: true,
+    data: null,
+    message: "Mocked assign lecturers",
+  }),
+
+  removeLecturers: async (_: number, __: RemoveLecturersRequest): Promise<ApiResponse<null>> => ({
+    success: true,
+    data: null,
+    message: "Mocked remove lecturers",
+  }),
+
+  assignTutors: async (_: number, __: AssignTutorsRequest): Promise<ApiResponse<null>> => ({
+    success: true,
+    data: null,
+    message: "Mocked assign tutors",
+  }),
+
+  removeTutors: async (_: number, __: RemoveTutorsRequest): Promise<ApiResponse<null>> => ({
+    success: true,
+    data: null,
+    message: "Mocked remove tutors",
+  }),
+
+  enrollStudents: async (_: number, __: EnrollStudentsRequest): Promise<ApiResponse<null>> => ({
+    success: true,
+    data: null,
+    message: "Mocked enroll students",
+  }),
+
+  removeStudents: async (_: number, __: RemoveStudentsRequest): Promise<ApiResponse<null>> => ({
+    success: true,
+    data: null,
+    message: "Mocked remove students",
+  }),
+
+  getLecturers: async (_: number): Promise<ApiResponse<ListLecturersResponse>> => ({
+    success: true,
+    data: { users: [mockUsers[0]] },
+    message: "Mocked lecturers list",
+  }),
+
+  getTutors: async (_: number): Promise<ApiResponse<ListTutorsResponse>> => ({
+    success: true,
+    data: { users: [] },
+    message: "Mocked tutors list",
+  }),
+
+  getStudents: async (_: number): Promise<ApiResponse<ListStudentsResponse>> => ({
+    success: true,
+    data: { users: [mockUsers[1]] },
+    message: "Mocked students list",
+  }),
+
+  getModulesForUser: async (userId: number): Promise<ApiResponse<UserModuleRole[]>> => ({
+    success: true,
+    data: mockModules.map((m, i) => ({
+      ...m,
+      role: i % 2 === 0 ? "Lecturer" : "Student",
+    })),
+    message: `Mocked modules for user ${userId}`,
+  }),
+};

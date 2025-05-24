@@ -1,4 +1,5 @@
 use crate::factories::user_factory;
+use crate::models::user::User;
 use sqlx::SqlitePool;
 
 pub async fn seed(pool: &SqlitePool) {
@@ -13,6 +14,29 @@ pub async fn seed(pool: &SqlitePool) {
     }
 
     log::info!("Seeding users...");
+
+    // Explicit admin user
+    log::info!("Creating explicit admin user...");
+    User::create(
+        Some(pool),
+        "u00000001",
+        "admin@example.com",
+        "password123",
+        true,
+    )
+    .await
+    .expect("Failed to create admin user");
+
+    // Explicit non-admin user
+    log::info!("Creating explicit non-admin user...");
+    User::create(
+        Some(pool),
+        "u00000002",
+        "user@example.com",
+        "password123",
+        false,
+    ).await
+    .expect("Failed to create regular user");
 
     //Create 5 users without roles (admin and not admin)
     for _ in 0..5 {
