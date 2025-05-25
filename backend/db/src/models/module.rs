@@ -8,6 +8,7 @@ pub struct Module {
     pub code: String,
     pub year: i32,
     pub description: Option<String>,
+    pub credits: i32,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -21,6 +22,7 @@ impl Module {
     /// * `code` - The module code (e.g., "COS301").
     /// * `year` - The year the module is offered.
     /// * `description` - An optional description of the module.
+    /// * `credits` - The number of credits for the module.
     ///
     /// # Returns
     ///
@@ -34,18 +36,20 @@ impl Module {
         code: &str,
         year: i32,
         description: Option<&str>,
+        credits: i32,
     ) -> sqlx::Result<Self> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         let record = sqlx::query_as::<_, Module>(
             r#"
-            INSERT INTO modules (code, year, description)
-            VALUES (?, ?, ?)
-            RETURNING id, code, year, description, created_at, updated_at
+            INSERT INTO modules (code, year, description, credits)
+            VALUES (?, ?, ?, ?)
+            RETURNING id, code, year, description, credits, created_at, updated_at
             "#,
         )
         .bind(code)
         .bind(year)
         .bind(description)
+        .bind(credits)
         .fetch_one(pool)
         .await?;
 
@@ -97,16 +101,15 @@ impl Module {
             .await
     }
 
-    /// Retrieves a module by its ID.
+    /// Retrieves all modules from the database.
     ///
     /// # Arguments
     ///
     /// * `pool` - Optional reference to a `SqlitePool`. If `None`, the default pool is used.
-    /// * `id` - The ID of the module to retrieve.
     ///
     /// # Returns
     ///
-    /// An `Option<Module>` if found, or `None` if no matching module exists.
+    /// A `Vec<Module>` containing all modules in the database.
     ///
     /// # Errors
     ///
@@ -132,7 +135,7 @@ mod tests {
         let year = 2025;
         let description = Some("Software Engineering");
 
-        let created = Module::create(Some(&pool), code, year, description)
+        let created = Module::create(Some(&pool), code, year, description, 4)
             .await
             .unwrap();
 
@@ -154,7 +157,7 @@ mod tests {
     async fn test_module_deletion() {
         let pool = create_test_db(Some("test_module_deletion.db")).await;
 
-        let module = Module::create(Some(&pool), "COS110", 2025, Some("Intro to CS"))
+        let module = Module::create(Some(&pool), "COS110", 2025, Some("Intro to CS"), 3)
             .await
             .unwrap();
         let id = module.id;
@@ -175,10 +178,10 @@ mod tests {
     async fn test_module_get_all() {
         let pool = create_test_db(Some("test_module_get_all.db")).await;
 
-        let m1 = Module::create(Some(&pool), "COS132", 2024, Some("Programming"))
+        let m1 = Module::create(Some(&pool), "COS132", 2024, Some("Programming"), 4)
             .await
             .unwrap();
-        let m2 = Module::create(Some(&pool), "COS212", 2024, None)
+        let m2 = Module::create(Some(&pool), "COS212", 2024, None, 3)
             .await
             .unwrap();
 

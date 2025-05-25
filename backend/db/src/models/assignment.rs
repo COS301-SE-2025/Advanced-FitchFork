@@ -137,7 +137,7 @@ mod tests {
         let pool = create_test_db(Some("test_assignment_create_and_find.db")).await;
 
         // Create a module for the assignment to belong to
-        let module = Module::create(Some(&pool), "COS333", 2025, Some("Software Engineering"))
+        let module = Module::create(Some(&pool), "COS333", 2025, Some("Software Engineering"), 16)
             .await
             .unwrap();
 
@@ -177,7 +177,7 @@ mod tests {
         let pool = create_test_db(Some("test_assignment_deletion.db")).await;
 
         // Create module and assignment
-        let module = Module::create(Some(&pool), "COS221", 2025, Some("Databases"))
+        let module = Module::create(Some(&pool), "COS221", 2025, Some("Databases"), 16)
             .await
             .unwrap();
 
@@ -212,7 +212,7 @@ mod tests {
     async fn test_assignment_get_all() {
         let pool = create_test_db(Some("test_assignment_get_all.db")).await;
 
-        let module = Module::create(Some(&pool), "COS212", 2025, Some("Data Structures"))
+        let module = Module::create(Some(&pool), "COS212", 2025, Some("Data Structures"), 16)
             .await
             .unwrap();
 

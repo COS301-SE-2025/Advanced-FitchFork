@@ -256,6 +256,136 @@ fn build_order_clause(sort_param: &str) -> String {
     }
 }
 
+#[derive(Debug, Serialize)]
+pub struct UserModule {
+    pub id: i64,
+    pub code: String,
+    pub year: i32,
+    pub description: String,
+    pub credits: i32,
+    pub role: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// GET /api/users/:id/modules
+///
+/// Retrieve all modules that a specific user is involved in, including their role in each module.
+/// Requires admin privileges.
+///
+/// ### Path Parameters
+/// - `id`: The ID of the user to fetch modules for
+///
+/// ### Responses
+///
+/// - `200 OK`
+/// ```json
+/// {
+///   "success": true,
+///   "data": [
+///     {
+///       "id": 1,
+///       "code": "COS301",
+///       "year": 2025,
+///       "description": "Advanced Software Engineering",
+///       "credits": 16,
+///       "role": "Lecturer",
+///       "created_at": "2025-05-01T08:00:00Z",
+///       "updated_at": "2025-05-01T08:00:00Z"
+///     }
+///   ],
+///   "message": "Modules for user retrieved successfully"
+/// }
+/// ```
+///
+/// - `400 Bad Request` (invalid ID format)
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Invalid user ID format"
+/// }
+/// ```
+///
+/// - `403 Forbidden` - Not an admin user
+/// - `404 Not Found` - User not found
+/// ```json
+/// {
+///   "success": false,
+///   "message": "User not found"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error` - Database error
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Database error: detailed error here"
+/// }
+/// ```
+pub async fn get_user_modules(
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let user_id = match id.parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<Vec<UserModule>>::error("Invalid user ID format")),
+            );
+        }
+    };
+
+    let pool = pool::get();
+
+    let user = match User::get_by_id(Some(pool), user_id).await {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<Vec<UserModule>>::error("User not found")),
+            );
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<Vec<UserModule>>::error(format!("Database error: {}", e))),
+            );
+        }
+    };
+
+    let module_roles = match User::get_module_roles(Some(pool), user.id).await {
+        Ok(roles) => roles,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<Vec<UserModule>>::error(format!("Database error: {}", e))),
+            );
+        }
+    };
+
+    let modules = module_roles
+        .into_iter()
+        .map(|role| UserModule {
+            id: role.module_id,
+            code: role.module_code,
+            year: role.module_year,
+            description: role.module_description.unwrap_or_default(),
+            credits: role.module_credits.unwrap_or(0),
+            role: role.role,
+            created_at: role.module_created_at.unwrap_or_default(),
+            updated_at: role.module_updated_at.unwrap_or_default(),
+        })
+        .collect::<Vec<UserModule>>();
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::<Vec<UserModule>>::success(
+            modules,
+            "Modules for user retrieved successfully",
+        )),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
