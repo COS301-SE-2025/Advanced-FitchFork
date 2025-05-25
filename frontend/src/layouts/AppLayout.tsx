@@ -93,7 +93,7 @@ export default function AppLayout({ title, description, children }: AppLayoutPro
   );
 
   return (
-    <Layout className="h-screen overflow-hidden bg-white dark:bg-gray-950">
+    <Layout className="h-screen overflow-hidden bg-gray-500 dark:bg-gray-950">
       <Sider
         width={240}
         collapsedWidth={80}
@@ -101,7 +101,7 @@ export default function AppLayout({ title, description, children }: AppLayoutPro
         collapsed={collapsed}
         onCollapse={setCollapsed}
         trigger={null}
-        className="!bg-transparent !p-0 !m-0"
+        className="!bg-transparent !p-0 !m-0 border-r-1 border-gray-200 dark:border-gray-800"
       >
         <div className="bg-white dark:bg-gray-950 h-full flex flex-col justify-between">
           <div>
@@ -155,33 +155,33 @@ export default function AppLayout({ title, description, children }: AppLayoutPro
 
       <Layout className="flex flex-col w-full h-screen overflow-hidden !bg-white dark:!bg-gray-950">
         <Header
-          className="!bg-transparent !px-0"
+          className="!bg-transparent !px-0 border-b border-gray-200 dark:border-gray-800"
           style={{
             backgroundColor: 'transparent',
           }}
         >
           <div className="bg-white dark:bg-gray-950 px-6 flex items-center justify-between w-full h-full">
-            <Breadcrumb separator=">">
-              {location.pathname
+            <Breadcrumb
+              separator=">"
+              items={location.pathname
                 .split('/')
                 .filter(Boolean)
                 .map((part, index, arr) => {
                   const path = '/' + arr.slice(0, index + 1).join('/');
                   const isLast = index === arr.length - 1;
                   const label = part.charAt(0).toUpperCase() + part.slice(1);
-                  return (
-                    <Breadcrumb.Item key={path}>
-                      {!isLast ? (
-                        <a onClick={() => navigate(path)} className="text-blue-600 hover:underline">
-                          {label}
-                        </a>
-                      ) : (
-                        label
-                      )}
-                    </Breadcrumb.Item>
-                  );
+
+                  return {
+                    title: isLast ? (
+                      label
+                    ) : (
+                      <a onClick={() => navigate(path)} className="text-blue-600 hover:underline">
+                        {label}
+                      </a>
+                    ),
+                  };
                 })}
-            </Breadcrumb>
+            />
 
             <Dropdown overlay={profileMenu} trigger={['click']} placement="bottomRight">
               <div className="cursor-pointer flex items-center gap-2">
@@ -194,8 +194,8 @@ export default function AppLayout({ title, description, children }: AppLayoutPro
           </div>
         </Header>
 
-        <Content className="flex-1 min-h-0 overflow-hidden px-6 py-6 bg-gray-100 dark:bg-black rounded-tl-2xl">
-          <div className="bg-white dark:bg-gray-900 h-full rounded-xl shadow-sm p-6 flex flex-col min-h-0">
+        <Content className="flex-1 min-h-0 overflow-hidden bg-white dark:bg-gray-950">
+          <div className="bg-white dark:bg-gray-950 h-full shadow-sm p-6 flex flex-col min-h-0">
             <div className="mb-4">
               <Title className="!text-gray-800 dark:!text-gray-100">{title}</Title>
               {description && (

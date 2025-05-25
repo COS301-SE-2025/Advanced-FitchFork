@@ -4,8 +4,12 @@ import { Tabs } from 'antd';
 import GeneralInfoSection from './GeneralInfoSection';
 import PersonnelSection from './PersonnelSection';
 import AssignmentsSection from './AssignmentsSection';
+import { useParams } from 'react-router-dom';
 
 export default function ModuleView() {
+  const { id } = useParams();
+  const moduleId = parseInt(id!, 10);
+
   return (
     <AppLayout
       title="Module View"
@@ -24,13 +28,13 @@ export default function ModuleView() {
             key: 'personnel',
             label: 'Personnel',
             icon: <TeamOutlined />,
-            children: <PersonnelSection />,
+            children: <PersonnelSection moduleId={moduleId} />,
           },
           {
             key: 'assignments',
             label: 'Assignments',
             icon: <BookOutlined />,
-            children: <AssignmentsSection />,
+            children: <AssignmentsSection moduleId={moduleId} />,
           },
         ]}
       />
