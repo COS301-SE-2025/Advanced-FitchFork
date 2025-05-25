@@ -42,7 +42,7 @@ impl AssignmentMemoFiles {
         filename: &str,
         file_bytes: &[u8],
     ) -> sqlx::Result<Self> {
-        let full_dir = Path::new(Self::STORAGE_DIR);
+        let full_dir = Path::new(Self::STORAGE_DIR_MEMO);
         fs::create_dir_all(&full_dir).expect("Failed to create storage directory");
 
         let full_path = full_dir.join(filename);
@@ -53,7 +53,7 @@ impl AssignmentMemoFiles {
             .expect("Failed to write zip data");
 
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        let record = sqlx::query_as::<_, AssignmentMemo>(
+        let record = sqlx::query_as::<_, AssignmentMemoFiles>(
             r#"
             INSERT INTO assignment_memo_files (
                 assignment_id, filename, path
@@ -64,7 +64,7 @@ impl AssignmentMemoFiles {
         )
         .bind(assignment_id)
         .bind(filename)
-        .bind(Self::STORAGE_DIR)
+        .bind(Self::STORAGE_DIR_MEMO)
         .fetch_one(pool)
         .await?;
 
@@ -84,7 +84,7 @@ impl AssignmentMemoFiles {
     pub async fn delete_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<()> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
 
-        if let Some(record) = AssignmentMemo::get_by_id(pool.into(), id).await? {
+        if let Some(record) = AssignmentMemoFiles::get_by_id(pool.into(), id).await? {
             let full_path = Path::new(&record.path).join(&record.filename);
             let _ = fs::remove_file(full_path);
         }
@@ -111,7 +111,7 @@ impl AssignmentMemoFiles {
         pool: Option<&SqlitePool>,
         id: i64,
     ) -> sqlx::Result<Option<Vec<u8>>> {
-        let record = AssignmentMemo::get_by_id(pool, id).await?;
+        let record = AssignmentMemoFiles::get_by_id(pool, id).await?;
 
         if let Some(file) = record {
             let full_path = Path::new(&file.path).join(&file.filename);
@@ -132,10 +132,10 @@ impl AssignmentMemoFiles {
     ///
     /// # Returns
     ///
-    /// Returns a vector of all `AssignmentMemo` records.
+    /// Returns a vector of all `AssignmentMemoFiles` records.
     pub async fn get_all(pool: Option<&SqlitePool>) -> sqlx::Result<Vec<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        sqlx::query_as::<_, AssignmentMemo>("SELECT * FROM assignment_memo_files")
+        sqlx::query_as::<_, AssignmentMemoFiles>("SELECT * FROM assignment_memo_files")
             .fetch_all(pool)
             .await
     }
@@ -152,7 +152,7 @@ impl AssignmentMemoFiles {
     /// Returns `Some(record)` if found, `None` if not, or an error.
     pub async fn get_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<Option<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        sqlx::query_as::<_, AssignmentMemo>("SELECT * FROM assignment_memo_files WHERE id = ?")
+        sqlx::query_as::<_, AssignmentMemoFiles>("SELECT * FROM assignment_memo_files WHERE id = ?")
             .bind(id)
             .fetch_optional(pool)
             .await
@@ -167,34 +167,34 @@ mod tests {
     use std::path::Path;
 
     fn create_fake_zip_bytes() -> Vec<u8> {
-        vec![0x50, 0x4B, 0x03, 0x04, 0x14, 0x00]
+        vec![0x50, 0x4B, 0x03, 0x04, 0x14, 0x00] //this is apparently a minimal zip header. Cool
     }
 
     #[tokio::test]
-    async fn test_create_and_store_file() {
-        let db_name = "test_assignment_memo_create.db";
+    async fn test_create_and_store_memo_file() {
+        let db_name = "test_assignment_memo_file_create.db";
         let pool = create_test_db(Some(db_name)).await;
 
-        // Required: Create fake module
+        //Required: Create fake module
         let module =
-            crate::models::module::Module::create(Some(&pool), "COS333", 2025, Some("Memo Test"))
+            crate::models::module::Module::create(Some(&pool), "COS300", 2025, Some("SQA"))
                 .await
                 .unwrap();
 
-        // Required: Create fake assignment
+        //Required: Create fake assignment
         let assignment = crate::models::assignment::Assignment::create(
             Some(&pool),
             module.id,
-            "Memo Assignment",
-            Some("Memo Description"),
+            "Dummy Assignment",
+            Some("desc"),
             crate::models::assignment::AssignmentType::Assignment,
-            "2025-02-01T00:00:00Z",
-            "2025-02-28T23:59:59Z",
+            "2025-01-01T00:00:00Z",
+            "2025-01-31T23:59:59Z",
         )
         .await
         .unwrap();
 
-        let filename = "memo_test.zip";
+        let filename = "test_assignment.zip";
         let zip_data = create_fake_zip_bytes();
 
         let record = AssignmentMemoFiles::create_and_store_file(
@@ -209,39 +209,40 @@ mod tests {
         assert_eq!(record.filename, filename);
         assert_eq!(record.assignment_id, assignment.id);
 
-        let file_path = Path::new(AssignmentMemoFiles::STORAGE_DIR).join(filename);
+        let file_path = Path::new(AssignmentMemoFiles::STORAGE_DIR_MEMO).join(filename);
         assert!(file_path.exists());
 
+        //clean up
         pool.close().await;
         let _ = fs::remove_file(&file_path);
         delete_database(db_name);
     }
 
     #[tokio::test]
-    async fn test_get_file_bytes_and_delete() {
-        let db_name = "test_assignment_memo_read_delete.db";
+    async fn test_get_file_bytes_and_delete_memo() {
+        let db_name = "test_assignment_file_read_delete_memo.db";
         let pool = create_test_db(Some(db_name)).await;
 
-        // Required: Create fake module
+        //Required: Create fake module
         let module =
-            crate::models::module::Module::create(Some(&pool), "COS334", 2025, Some("Memo Test 2"))
+            crate::models::module::Module::create(Some(&pool), "COS301", 2024, Some("SQA"))
                 .await
                 .unwrap();
 
-        // Required: Create fake assignment
+        //Required: Create fake assignment
         let assignment = crate::models::assignment::Assignment::create(
             Some(&pool),
             module.id,
-            "Memo Assignment 2",
-            Some("Another Description"),
-            crate::models::assignment::AssignmentType::Practical,
-            "2025-03-01T00:00:00Z",
-            "2025-03-31T23:59:59Z",
+            "Dummy Assignment",
+            Some("desc"),
+            crate::models::assignment::AssignmentType::Assignment,
+            "2025-01-01T00:00:00Z",
+            "2025-01-31T23:59:59Z",
         )
         .await
         .unwrap();
 
-        let filename = "memo_delete_test.zip";
+        let filename = "delete_me.zip";
         let zip_data = create_fake_zip_bytes();
 
         let record = AssignmentMemoFiles::create_and_store_file(
@@ -253,29 +254,30 @@ mod tests {
         .await
         .unwrap();
 
-        // Get bytes
+        //get file bytes
         let retrieved = AssignmentMemoFiles::get_file_bytes(Some(&pool), record.id)
             .await
             .unwrap();
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap(), zip_data);
 
-        // Delete
+        //delete file
         AssignmentMemoFiles::delete_by_id(Some(&pool), record.id)
             .await
             .unwrap();
 
-        // File should be gone
-        let file_path = Path::new(AssignmentMemoFiles::STORAGE_DIR).join(filename);
+        //make sure file is gone
+        let file_path = Path::new(AssignmentMemoFiles::STORAGE_DIR_MEMO).join(filename);
         assert!(!file_path.exists());
 
-        // DB record should be gone
-        let gone = AssignmentMemoFiles::get_by_id(Some(&pool), record.id)
+        //ensure db record is gone
+        let record = AssignmentMemoFiles::get_by_id(Some(&pool), record.id)
             .await
             .unwrap();
-        assert!(gone.is_none());
+        assert!(record.is_none());
 
         pool.close().await;
+        let _ = fs::remove_file(&file_path);
         delete_database(db_name);
     }
 }
