@@ -9,7 +9,8 @@
 //! The `modules_routes()` function returns a `Router` which is nested under `/modules` in the main application.
 
 pub mod post;
-
+pub mod assignments;
+use assignments::assignment_routes;
 use axum::{
     Router,
     routing::post,
@@ -26,5 +27,6 @@ use post::create;
 pub fn modules_routes() -> Router {
     Router::new()
         .route("/", post(create))
+        .nest("/:module_id/assignments", assignment_routes())
         .route_layer(axum::middleware::from_fn(require_admin))
 }
