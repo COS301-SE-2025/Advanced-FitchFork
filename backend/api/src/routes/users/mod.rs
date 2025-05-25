@@ -23,12 +23,14 @@ use axum::{
 };
 use crate::auth::guards::require_admin;
 use get::list_users;
+use get::get_user_modules;
 use put::update_user;
 use delete::delete_user;
 
 /// Builds the `/users` route group, mapping HTTP methods to handlers.
 ///
 /// - `GET /users` → `list_users` (admin only)
+/// - `GET /users/:id/modules` → `get_user_modules` (admin only)
 /// - `PUT /users/:id` → `update_user` (admin only)
 /// - `DELETE /users/:id` → `delete_user` (admin only)
 ///
@@ -37,6 +39,7 @@ use delete::delete_user;
 pub fn users_routes() -> Router {
     Router::new()
         .route("/", get(list_users))
+        .route("/:id/modules", get(get_user_modules))
         .route("/:id", put(update_user))
         .route("/:id", delete(delete_user))
         .route_layer(axum::middleware::from_fn(require_admin))

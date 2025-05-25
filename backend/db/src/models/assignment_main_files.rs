@@ -6,7 +6,7 @@ use std::path::Path;
 
 /// Represents a stored `.zip` file for an assignment.
 #[derive(Debug, Serialize, Deserialize, FromRow)]
-pub struct AssignmentFiles {
+pub struct AssignmentMainFiles {
     pub id: i64,
     pub assignment_id: i64,
     pub filename: String,
@@ -15,15 +15,15 @@ pub struct AssignmentFiles {
     pub updated_at: String,
 }
 
-impl AssignmentFiles {
+impl AssignmentMainFiles {
     /// Directory where assignment files are stored.
     ///
-    /// Defaults to `"../data/assignment_files"`, relative to the executable.
+    /// Defaults to `"../data/assignment_main_files"`, relative to the executable.
     /// This can be changed if necessary.
 
     //This is where I think the files should be stored -> We can change this later
     //TODO - Move to .env
-    pub const STORAGE_DIR: &'static str = "../data/assignment_files";
+    pub const STORAGE_DIR_MAIN: &'static str = "../data/assignment_main_files";
 
     /// Create and store an assignment file.
     ///
@@ -36,7 +36,7 @@ impl AssignmentFiles {
     ///
     /// # Returns
     ///
-    /// Returns the saved `AssignmentFiles` record.
+    /// Returns the saved `AssignmentMainFiles` record.
 
     pub async fn create_and_store_file(
         pool: Option<&SqlitePool>,
@@ -44,7 +44,7 @@ impl AssignmentFiles {
         filename: &str,
         file_bytes: &[u8], //.zip file
     ) -> sqlx::Result<Self> {
-        let full_dir = Path::new(Self::STORAGE_DIR);
+        let full_dir = Path::new(Self::STORAGE_DIR_MAIN);
         fs::create_dir_all(&full_dir).expect("Failed to create storage directory");
 
         let full_path = full_dir.join(filename);
@@ -56,9 +56,9 @@ impl AssignmentFiles {
 
         //Save metadata to db
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        let record = sqlx::query_as::<_, AssignmentFiles>(
+        let record = sqlx::query_as::<_, AssignmentMainFiles>(
             r#"
-            INSERT INTO assignment_files (
+            INSERT INTO assignment_main_files (
                 assignment_id, filename, path
             )
             VALUES (?, ?, ?)
@@ -67,7 +67,7 @@ impl AssignmentFiles {
         )
         .bind(assignment_id)
         .bind(filename)
-        .bind(Self::STORAGE_DIR)
+        .bind(Self::STORAGE_DIR_MAIN)
         .fetch_one(pool)
         .await?;
 
@@ -88,12 +88,12 @@ impl AssignmentFiles {
     pub async fn delete_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<()> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
 
-        if let Some(record) = AssignmentFiles::get_by_id(pool.into(), id).await? {
+        if let Some(record) = AssignmentMainFiles::get_by_id(pool.into(), id).await? {
             let full_path = Path::new(&record.path).join(&record.filename);
             let _ = fs::remove_file(full_path); //ignore if file doesn't exist
         }
 
-        sqlx::query("DELETE FROM assignment_files WHERE id = ?")
+        sqlx::query("DELETE FROM assignment_main_files WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?;
@@ -116,7 +116,7 @@ impl AssignmentFiles {
         pool: Option<&SqlitePool>,
         id: i64,
     ) -> sqlx::Result<Option<Vec<u8>>> {
-        let record = AssignmentFiles::get_by_id(pool, id).await?;
+        let record = AssignmentMainFiles::get_by_id(pool, id).await?;
 
         if let Some(file) = record {
             let full_path = Path::new(&file.path).join(&file.filename);
@@ -137,11 +137,11 @@ impl AssignmentFiles {
     ///
     /// # Returns
     ///
-    /// Returns a vector of all `AssignmentFiles` records.
+    /// Returns a vector of all `AssignmentMainFiles` records.
 
     pub async fn get_all(pool: Option<&SqlitePool>) -> sqlx::Result<Vec<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        sqlx::query_as::<_, AssignmentFiles>("SELECT * FROM assignment_files")
+        sqlx::query_as::<_, AssignmentMainFiles>("SELECT * FROM assignment_main_files")
             .fetch_all(pool)
             .await
     }
@@ -159,7 +159,7 @@ impl AssignmentFiles {
 
     pub async fn get_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<Option<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        sqlx::query_as::<_, AssignmentFiles>("SELECT * FROM assignment_files WHERE id = ?")
+        sqlx::query_as::<_, AssignmentMainFiles>("SELECT * FROM assignment_main_files WHERE id = ?")
             .bind(id)
             .fetch_optional(pool)
             .await
@@ -179,7 +179,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_and_store_file() {
-        let db_name = "test_assignment_file_create.db";
+        let db_name = "test_assignment_file_create_main.db";
         let pool = create_test_db(Some(db_name)).await;
 
         //Required: Create fake module
@@ -204,15 +204,19 @@ mod tests {
         let filename = "test_assignment.zip";
         let zip_data = create_fake_zip_bytes();
 
-        let record =
-            AssignmentFiles::create_and_store_file(Some(&pool), assignment.id, filename, &zip_data)
-                .await
-                .unwrap();
+        let record = AssignmentMainFiles::create_and_store_file(
+            Some(&pool),
+            assignment.id,
+            filename,
+            &zip_data,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(record.filename, filename);
         assert_eq!(record.assignment_id, assignment.id);
 
-        let file_path = Path::new(AssignmentFiles::STORAGE_DIR).join(filename);
+        let file_path = Path::new(AssignmentMainFiles::STORAGE_DIR_MAIN).join(filename);
         assert!(file_path.exists());
 
         //clean up
@@ -223,7 +227,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_file_bytes_and_delete() {
-        let db_name = "test_assignment_file_read_delete.db";
+        let db_name = "test_assignment_file_read_delete_main.db";
         let pool = create_test_db(Some(db_name)).await;
 
         //Required: Create fake module
@@ -248,29 +252,33 @@ mod tests {
         let filename = "delete_me.zip";
         let zip_data = create_fake_zip_bytes();
 
-        let record =
-            AssignmentFiles::create_and_store_file(Some(&pool), assignment.id, filename, &zip_data)
-                .await
-                .unwrap();
+        let record = AssignmentMainFiles::create_and_store_file(
+            Some(&pool),
+            assignment.id,
+            filename,
+            &zip_data,
+        )
+        .await
+        .unwrap();
 
         //get file bytes
-        let retrieved = AssignmentFiles::get_file_bytes(Some(&pool), record.id)
+        let retrieved = AssignmentMainFiles::get_file_bytes(Some(&pool), record.id)
             .await
             .unwrap();
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap(), zip_data);
 
         //delete file
-        AssignmentFiles::delete_by_id(Some(&pool), record.id)
+        AssignmentMainFiles::delete_by_id(Some(&pool), record.id)
             .await
             .unwrap();
 
         //make sure file is gone
-        let file_path = Path::new(AssignmentFiles::STORAGE_DIR).join(filename);
+        let file_path = Path::new(AssignmentMainFiles::STORAGE_DIR_MAIN).join(filename);
         assert!(!file_path.exists());
 
         //ensure db record is gone
-        let record = AssignmentFiles::get_by_id(Some(&pool), record.id)
+        let record = AssignmentMainFiles::get_by_id(Some(&pool), record.id)
             .await
             .unwrap();
         assert!(record.is_none());

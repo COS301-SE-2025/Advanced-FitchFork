@@ -9,24 +9,122 @@ use tokio::{
 };
 use zip::ZipArchive;
 
-pub async fn run_assignment_code(zip_path: Option<&str>) {
+/// Configuration for supported programming languages.
+///
+/// Contains language name, file extensions, Docker image to use,
+/// and the command to compile/run code inside the container.
+pub struct LanguageConfig {
+    /// Human-readable language name.
+    pub name: &'static str,
+    /// Valid file extensions for source files of this language.
+    pub file_extensions: &'static [&'static str],
+    /// Docker image name for running the language environment.
+    pub docker_image: &'static str,
+    /// Shell command to compile and/or run code inside the container.
+    pub run_command: &'static str,
+}
+
+/// Returns the configuration for a given language code.
+///
+/// # Arguments
+///
+/// * `lang` - The language identifier (e.g. "java", "cpp", "python").
+///
+/// # Returns
+///
+/// Returns `Some(LanguageConfig)` if the language is supported,
+/// otherwise returns `None`.
+fn get_language_config(lang: &str) -> Option<LanguageConfig> {
+    match lang {
+        "java" => Some(LanguageConfig {
+            name: "Java",
+            file_extensions: &[".java"],
+            docker_image: "openjdk:17-slim",
+            run_command: "javac -d /output /code/*.java && java -cp /output Main",
+        }),
+        "cpp" => Some(LanguageConfig {
+            name: "C++",
+            file_extensions: &[".cpp", ".h"],
+            docker_image: "gcc:13",
+            run_command: "find /code -name '*.cpp' -exec g++ -o /output/app {} + && /output/app",
+        }),
+        "python" => Some(LanguageConfig {
+            name: "Python",
+            file_extensions: &[".py"],
+            docker_image: "python:3.11-slim",
+            run_command: "python3 /code/main.py",
+        }),
+        _ => None,
+    }
+}
+
+/// Runs code from a zip archive file on disk, for a given language.
+///
+/// # Arguments
+///
+/// * `zip_path` - The path to the zip archive containing the assignment code.
+/// * `lang` - The language identifier to determine how to run the code.
+///
+/// # Behavior
+///
+/// Reads the zip file from disk, extracts the source code safely, runs the code
+/// in a Docker container with security restrictions, and prints the program output or errors.
+///
+/// This function is asynchronous.
+pub async fn run_assignment_code(zip_path: &str, lang: &str) {
     //read zip into memory
-    let zip_path = zip_path.unwrap_or_else(|| "docker_example/src/files/good_java_example.zip");
     println!(
         "Current working dir: {}",
         std::env::current_dir().unwrap().display()
     );
-
     let zip_bytes = std::fs::read(zip_path).expect("Failed to read zip file");
 
     //run code
-    match run_assignment_zip(&zip_bytes).await {
+    match run_assignment_zip(&zip_bytes, lang).await {
         Ok(output) => println!("Program output:\n{}", output),
         Err(e) => eprintln!("Error: {}", e),
     }
 }
 
-async fn run_assignment_zip(zip_bytes: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+/// Runs code contained in a zip archive byte slice for a specified language.
+///
+/// # Arguments
+///
+/// * `zip_bytes` - Byte slice of the zip archive containing source code files.
+/// * `lang` - The language identifier (e.g. "java", "cpp", "python").
+///
+/// # Returns
+///
+/// On success, returns `Ok(String)` containing the program's standard output.
+///
+/// On failure, returns `Err` with a boxed error describing the failure.
+///
+/// # Security
+///
+/// This function unpacks the zip safely with:
+/// - Zip slip protection (no `..` in paths)
+/// - Max uncompressed size limit to prevent zip bombs
+/// - Only allows files with supported extensions for the language
+///
+/// It runs the code inside a restricted Docker container with:
+/// - No network access
+/// - Memory and CPU limits
+/// - Process count limits
+/// - No privilege escalation
+/// - Read-only volume for source code
+/// - Writable volume for output
+///
+/// # Notes
+///
+/// This is a proof of concept designed to mitigate common security risks
+/// when running untrusted code submitted as zip archives.
+async fn run_assignment_zip(
+    zip_bytes: &[u8],
+    lang: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    //Accepted languages
+    let config = get_language_config(lang).ok_or("Unsupported language")?;
+
     //I get to explain my super genius solution for security issues lets goooooooooooooooo
     //======================================================================================
     //Okay here is the basic problem
@@ -81,9 +179,12 @@ async fn run_assignment_zip(zip_bytes: &[u8]) -> Result<String, Box<dyn std::err
             return Err(format!("Invalid file path in zip: {}", raw_name).into());
         }
 
-        //This is definatly going to have to change, but I'm keeping this here as a proof of concept
-        //Basically only allows .java files and folders
-        if !(raw_name.ends_with('/') || raw_name.ends_with(".java")) {
+        let is_valid = config
+            .file_extensions
+            .iter()
+            .any(|ext| raw_name.ends_with(ext) || raw_name.ends_with('/'));
+
+        if !is_valid {
             return Err(format!("Unsupported file type in zip: {}", raw_name).into());
         }
 
@@ -102,7 +203,11 @@ async fn run_assignment_zip(zip_bytes: &[u8]) -> Result<String, Box<dyn std::err
     }
 
     //Maybe remove this
-    println!("Zip file extracted safely to: {}", temp_code_path.display());
+    println!(
+        "Zip file for language '{}' extracted safely to: {}",
+        config.name,
+        temp_code_path.display()
+    );
 
     //Now comes the fun part - running a docker enviroment
 
@@ -119,16 +224,16 @@ async fn run_assignment_zip(zip_bytes: &[u8]) -> Result<String, Box<dyn std::err
         .arg(format!("{}:/code:ro", temp_code_path.display())) //read-only for sources
         .arg("-v") //adds another volume mount
         .arg(format!("{}:/output", temp_output_path.display())) //writable for build output
-        .arg("openjdk:17-slim") //specifies to use java
+        .arg(config.docker_image) //language
         .arg("sh") //run shell inside container
         .arg("-c")
-        .arg("javac -d /output /code/*.java && java -cp /output Main") //run the java code
+        .arg(config.run_command) //run the code
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?; //spawn for timeout control
 
     //Specify timeout
-    let timeout_seconds = 10;
+    let timeout_seconds = 60;
     let output = timeout(
         Duration::from_secs(timeout_seconds),
         docker_command.wait_with_output(),
@@ -148,84 +253,107 @@ async fn run_assignment_zip(zip_bytes: &[u8]) -> Result<String, Box<dyn std::err
 //     use super::run_assignment_zip;
 //     use std::fs;
 
-//     async fn run_test_zip(path: &str) {
+//     async fn run_test_zip(path: &str, lang: &str) {
 //         let zip_bytes = fs::read(&path).expect(&format!("Failed to read test zip file: {}", path));
 
-//         match run_assignment_zip(&zip_bytes).await {
+//         match run_assignment_zip(&zip_bytes, lang).await {
 //             Ok(output) => panic!("{} unexpectedly succeeded with output:\n{}", path, output),
 //             Err(e) => println!("{} correctly failed with error: {}", path, e),
 //         }
 //     }
 
-//     #[tokio::test]
-//     async fn test_infinite_loop_rejected() {
-//         run_test_zip("src/files/infinite_loop_java_example.zip").await;
-//     }
-
-//     #[tokio::test]
-//     async fn test_memory_overflow_rejected() {
-//         run_test_zip("src/files/memory_overflow_java_example.zip").await;
-//     }
-
-//     #[tokio::test]
-//     async fn test_fork_bomb_rejected() {
-//         run_test_zip("src/files/fork_bomb_java_example.zip").await;
-//     }
-
-//     #[tokio::test]
-//     async fn test_edit_code_rejected() {
-//         let zip_path = "src/files/edit_code_java_example.zip";
-//         let zip_bytes = std::fs::read(zip_path).expect("Failed to read zip");
-//         let result = run_assignment_zip(&zip_bytes).await;
-
-//         match result {
-//             Ok(output) => {
-//                 if output.contains("failed") {
-//                     //success
-//                 } else {
-//                     panic!("succeeded with output:\n{}", output);
-//                 }
-//             }
-//             Err(_) => {
-//                 //good if error
-//             }
+//     async fn run_success_zip(path: &str, lang: &str) {
+//         let zip_bytes = fs::read(path).expect(&format!("Failed to read {}", path));
+//         match super::run_assignment_zip(&zip_bytes, lang).await {
+//             Ok(output) => println!("{} succeeded with output:\n{}", path, output),
+//             Err(e) => panic!("{} failed unexpectedly with error: {}", path, e),
 //         }
 //     }
 
 //     #[tokio::test]
-//     async fn test_priviledge_escalation_rejected() {
-//         let path = "src/files/priviledge_escalation_java_example.zip";
-//         let zip_bytes = std::fs::read(path).expect("Failed to read test zip");
-
-//         match run_assignment_zip(&zip_bytes).await {
-//             Ok(output) => {
-//                 assert!(
-//                     output.contains("uid=1000"),
-//                     "Unexpected user privileges:\n{}",
-//                     output
-//                 );
-//             }
-//             Err(e) => panic!("Program failed unexpectedly: {}", e),
-//         }
+//     async fn test_good_java_example_succeeds() {
+//         run_success_zip("src/files/good_java_example.zip", "java").await;
 //     }
 
 //     #[tokio::test]
-//     async fn test_network_access_rejected() {
-//         let zip_path = "src/files/access_network_java_example.zip";
-//         let zip_bytes = std::fs::read(zip_path).expect("Failed to read zip");
-//         let result = run_assignment_zip(&zip_bytes).await;
+//     async fn test_good_cpp_example_succeeds() {
+//         run_success_zip("src/files/good_cpp_example.zip", "cpp").await;
+//     }
 
-//         match result {
-//             Ok(output) => {
-//                 if output.contains("Network access blocked") {
-//                     //success
-//                 } else {
-//                     panic!("succeeded with output:\n{}", output);
-//                 }
-//             }
-//             Err(_) => {
-//                 //good if error
+//     #[tokio::test]
+//     async fn test_good_python_example_succeeds() {
+//         run_success_zip("src/files/good_python_example.zip", "python").await;
+//     }
+
+// #[tokio::test]
+// async fn test_infinite_loop_rejected() {
+//     run_test_zip("src/files/infinite_loop_java_example.zip", "java").await;
+// }
+
+// #[tokio::test]
+// async fn test_memory_overflow_rejected() {
+//     run_test_zip("src/files/memory_overflow_java_example.zip", "java").await;
+// }
+
+// #[tokio::test]
+// async fn test_fork_bomb_rejected() {
+//     run_test_zip("src/files/fork_bomb_java_example.zip", "java").await;
+// }
+
+// #[tokio::test]
+// async fn test_edit_code_rejected() {
+//     let zip_path = "src/files/edit_code_java_example.zip";
+//     let zip_bytes = std::fs::read(zip_path).expect("Failed to read zip");
+//     let result = run_assignment_zip(&zip_bytes, "java").await;
+
+//     match result {
+//         Ok(output) => {
+//             if output.contains("failed") {
+//                 //success
+//             } else {
+//                 panic!("succeeded with output:\n{}", output);
 //             }
 //         }
+//         Err(_) => {
+//             //good if error
+//         }
 //     }
+// }
+
+// #[tokio::test]
+// async fn test_priviledge_escalation_rejected() {
+//     let path = "src/files/priviledge_escalation_java_example.zip";
+//     let zip_bytes = std::fs::read(path).expect("Failed to read test zip");
+
+//     match run_assignment_zip(&zip_bytes, "java").await {
+//         Ok(output) => {
+//             assert!(
+//                 output.contains("uid=1000"),
+//                 "Unexpected user privileges:\n{}",
+//                 output
+//             );
+//         }
+//         Err(e) => panic!("Program failed unexpectedly: {}", e),
+//     }
+// }
+
+// #[tokio::test]
+// async fn test_network_access_rejected() {
+//     let zip_path = "src/files/access_network_java_example.zip";
+//     let zip_bytes = std::fs::read(zip_path).expect("Failed to read zip");
+//     let result = run_assignment_zip(&zip_bytes, "java").await;
+
+//     match result {
+//         Ok(output) => {
+//             if output.contains("Network access blocked") {
+//                 //success
+//             } else {
+//                 panic!("succeeded with output:\n{}", output);
+//             }
+//         }
+//         Err(_) => {
+//             //good if error
+//         }
+//     }
+// }
 // }
