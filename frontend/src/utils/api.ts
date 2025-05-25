@@ -35,16 +35,34 @@ export async function apiFetch<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, {
+  const finalOptions: RequestInit = {
     ...options,
     headers,
-  });
+  };
 
-  const data = await res.json();
+  // console.log('[apiFetch] →', {
+  //   url,
+  //   method: finalOptions.method || 'GET',
+  //   headers: finalOptions.headers,
+  //   body: finalOptions.body,
+  // });
 
-  if (!res.ok) {
-    throw new Error(data.message || 'Unknown error');
+  const res = await fetch(url, finalOptions);
+
+  let data: ApiResponse<T>;
+
+  try {
+    data = await res.json();
+  } catch (err) {
+    console.error('[apiFetch] Failed to parse JSON response', err);
+    throw new Error('Failed to parse response from server.');
   }
+
+  // console.log('[apiFetch] ←', {
+  //   status: res.status,
+  //   ok: res.ok,
+  //   data,
+  // });
 
   return data;
 }

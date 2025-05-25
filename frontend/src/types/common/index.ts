@@ -1,6 +1,8 @@
+export type SortOrder = 'ascend' | 'descend';
+
 export interface SortOption {
     field: string,
-    order: 'asc' | 'desc'
+    order: SortOrder;
 }
 
 export interface Timestamp {

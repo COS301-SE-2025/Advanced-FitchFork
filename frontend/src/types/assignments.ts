@@ -28,12 +28,12 @@ export interface AssignmentPayload {
  * Assignment entity including metadata and scheduling.
  */
 export interface Assignment extends Timestamp {
-  id: string;
-  module_id: string;
+  id: number;
+  module_id: number;
   name: string;
   description: string;
   assignment_type: AssignmentType;
-  available_from: string;
+  available_from: string; // ISO
   due_date: string;
 }
 
@@ -42,7 +42,7 @@ export interface Assignment extends Timestamp {
  */
 export interface AssignmentFile extends Timestamp {
   id: string;
-  assignment_id: string;
+  assignment_id: number;
   filename: string;
   path: string;
 }
@@ -53,6 +53,7 @@ export interface AssignmentFile extends Timestamp {
 
 export type CreateAssignmentRequest = AssignmentPayload;
 export type EditAssignmentRequest = Partial<AssignmentPayload>;
+
 export interface DeleteAssignmentFilesRequest {
   file_ids: string[];
 }
@@ -60,6 +61,7 @@ export interface DeleteAssignmentFilesRequest {
 export interface ListAssignmentsRequest {
   page: number;
   per_page: number;
+  query?: string,
   sort?: SortOption[];
   name?: string;
   assignment_type?: AssignmentType;

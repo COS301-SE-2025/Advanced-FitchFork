@@ -52,89 +52,73 @@ const mockModules: ModuleSummary[] = [
   },
 ];
 
+// Helper to simulate delay
+function delay(ms = 200 + Math.random() * 400): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export const UsersService = {
-  listUsers: async (request: ListUsersRequest): Promise<ApiResponse<ListUsersResponse>> => {
-    let results = [...mockUsers];
-
-    if (request.query) {
-      const query = request.query.toLowerCase();
-      results = results.filter(
-        u =>
-          u.email.toLowerCase().includes(query) ||
-          u.student_number.includes(query)
-      );
-    }
-
-    if (request.email) {
-      results = results.filter(u => u.email === request.email);
-    }
-
-    if (request.student_number) {
-      results = results.filter(u => u.student_number === request.student_number);
-    }
-
-    if (typeof request.admin === "boolean") {
-      results = results.filter(u => u.admin === request.admin);
-    }
-
-    if (request.sort) {
-      for (const { field, order } of [...request.sort].reverse()) {
-        results.sort((a, b) => {
-          const aVal = (a as any)[field];
-          const bVal = (b as any)[field];
-          if (aVal < bVal) return order === "asc" ? -1 : 1;
-          if (aVal > bVal) return order === "asc" ? 1 : -1;
-          return 0;
-        });
-      }
-    }
-
-    const page = request.page;
-    const perPage = request.per_page;
-    const start = (page - 1) * perPage;
-    const paginated = results.slice(start, start + perPage);
-
+  listUsers: async (_: ListUsersRequest): Promise<ApiResponse<ListUsersResponse>> => {
+    await delay();
     return {
       success: true,
       data: {
-        users: paginated,
-        page,
-        per_page: perPage,
-        total: results.length,
+        users: mockUsers,
+        page: 1,
+        per_page: mockUsers.length,
+        total: mockUsers.length,
       },
-      message: "Mocked user list",
+      message: "Mocked user list (ignoring filters and sorting)",
     };
   },
 
-  editUser: async (userId: number, payload: UserEditableFields): Promise<ApiResponse<UserEditableFields>> => {
-    const userIndex = mockUsers.findIndex(u => u.id === userId);
-    if (userIndex === -1) throw new Error("User not found");
-    mockUsers[userIndex] = {
-      ...mockUsers[userIndex],
-      ...payload,
-      updated_at: now,
+  editUser: async (userId: number, user: User): Promise<ApiResponse<User>> => {
+    await delay();
+
+    const index = mockUsers.findIndex(u => u.id === userId);
+    if (index === -1) {
+      return {
+        success: false,
+        message: `User with id ${userId} not found`,
+        data: undefined as any,
+      };
+    }
+
+    const updatedUser: User = {
+      ...mockUsers[index],
+      student_number: user.student_number,
+      email: user.email,
+      admin: user.admin,
+      updated_at: new Date().toISOString(),
     };
+
+    mockUsers[index] = updatedUser;
+
     return {
       success: true,
-      data: payload,
-      message: "Mocked user updated",
+      data: updatedUser,
+      message: "Mocked user updated successfully",
     };
   },
 
-  deleteUser: async (userId: number): Promise<ApiResponse<null>> => {
-    mockUsers = mockUsers.filter(u => u.id !== userId);
+  deleteUser: async (_: number): Promise<ApiResponse<null>> => {
+    await delay();
+    mockUsers.pop();
     return {
       success: true,
       data: null,
-      message: "Mocked user deleted",
+      message: "Mocked user deleted (last one removed)",
     };
   },
 
-  getModulesForUser: async (_userId: number): Promise<ApiResponse<UserModulesResponse>> => {
+  getModulesForUser: async (_: number): Promise<ApiResponse<UserModulesResponse>> => {
+    await delay();
     return {
       success: true,
-      data: { modules: mockModules },
-      message: "Mocked user modules",
+      data: {
+        modules: mockModules,
+      },
+      message: "Mocked modules for any user",
     };
   },
 };

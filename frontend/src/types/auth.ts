@@ -33,10 +33,6 @@ export interface LoginRequest {
 // RESPONSE - API Response Structures
 // ─────────────────────────────────────────────────────────────
 
-export interface RegisterResponse extends AuthUser {}
-
-export interface LoginResponse extends AuthUser {}
-
 export interface UserModule extends Module {
   role: 'Lecturer' | 'Tutor' | 'Student';
 }

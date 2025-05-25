@@ -1,8 +1,6 @@
 import type {
   LoginRequest,
   RegisterRequest,
-  LoginResponse,
-  RegisterResponse,
   MeResponse,
   AuthUser,
   UserModule,
@@ -11,6 +9,10 @@ import type { ApiResponse } from '@/utils/api';
 
 const now = new Date().toISOString();
 const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour from now
+
+function delay(ms = 200 + Math.random() * 400) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 const mockModules: UserModule[] = [
   {
@@ -76,21 +78,30 @@ const mockMe: MeResponse = {
 };
 
 export const AuthService = {
-  login: async (_: LoginRequest): Promise<ApiResponse<LoginResponse>> => ({
-    success: true,
-    data: mockAuthUser,
-    message: 'Logged in (mock)',
-  }),
+  login: async (_: LoginRequest): Promise<ApiResponse<AuthUser | null>> => {
+    await delay();
+    return {
+      success: true,
+      data: mockAuthUser,
+      message: 'Logged in (mock)',
+    };
+  },
 
-  register: async (_: RegisterRequest): Promise<ApiResponse<RegisterResponse>> => ({
-    success: true,
-    data: mockAuthUser,
-    message: 'Registered (mock)',
-  }),
+  register: async (_: RegisterRequest): Promise<ApiResponse<AuthUser | null>> => {
+    await delay();
+    return {
+      success: true,
+      data: mockAuthUser,
+      message: 'Registered (mock)',
+    };
+  },
 
-  me: async (): Promise<ApiResponse<MeResponse>> => ({
-    success: true,
-    data: mockMe,
-    message: 'Fetched user data (mock)',
-  }),
+  me: async (): Promise<ApiResponse<MeResponse>> => {
+    await delay();
+    return {
+      success: true,
+      data: mockMe,
+      message: 'Fetched user data (mock)',
+    };
+  },
 };

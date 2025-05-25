@@ -1,4 +1,5 @@
 import type { SortOption, Timestamp } from "./common";
+import type { ModuleRole } from "./modules";
 
 /**
  * Core user entity with basic public fields and admin flag.
@@ -9,6 +10,12 @@ export interface User extends Timestamp {
   email: string;
   admin: boolean;
 }
+
+export interface ModuleUser extends User {
+  role: ModuleRole
+}
+
+export type UserPayload = Omit<User, "id" | "created_at" | "updated_at">;
 
 /**
  * Only editable fields of a User (used in PUT request payloads).
@@ -47,8 +54,4 @@ export interface ModuleSummary {
   role: "Lecturer" | "Tutor" | "Student";
   created_at: string;
   updated_at: string;
-}
-
-export interface UserModulesResponse {
-  modules: ModuleSummary[];
 }

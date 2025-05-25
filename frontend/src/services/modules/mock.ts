@@ -5,21 +5,20 @@ import type {
   ListModulesResponse,
   ModuleDetailsResponse,
   MyModulesResponse,
-  AssignLecturersRequest,
-  RemoveLecturersRequest,
-  AssignTutorsRequest,
-  RemoveTutorsRequest,
-  EnrollStudentsRequest,
-  RemoveStudentsRequest,
   ListLecturersResponse,
   ListTutorsResponse,
   ListStudentsResponse,
   UserModuleRole,
+  EnrollStudentsRequest,
 } from "@/types/modules";
 import type { User } from "@/types/users";
 import type { ApiResponse } from "@/utils/api";
 
 const now = new Date().toISOString();
+
+function delay(ms = 200 + Math.random() * 400) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 const mockUsers: User[] = [
   { id: 1, student_number: "20230001", email: "alice@up.ac.za", admin: true, created_at: now, updated_at: now },
@@ -44,32 +43,42 @@ const mockModules: Module[] = [
 ];
 
 export const ModulesService = {
-  listModules: async (_: ListModulesRequest): Promise<ApiResponse<ListModulesResponse>> => ({
-    success: true,
-    data: {
-      modules: mockModules,
-      page: 1,
-      per_page: 10,
-      total: mockModules.length,
-    },
-    message: "Mocked module list",
-  }),
+  listModules: async (_: ListModulesRequest): Promise<ApiResponse<ListModulesResponse>> => {
+    await delay();
+    return {
+      success: true,
+      data: {
+        modules: mockModules,
+        page: 1,
+        per_page: mockModules.length,
+        total: mockModules.length,
+      },
+      message: "Mocked module list",
+    };
+  },
 
-  getModuleDetails: async (moduleId: number): Promise<ApiResponse<ModuleDetailsResponse>> => ({
-    success: true,
-    data: {
-      ...mockModules.find((m) => m.id === moduleId)!,
-      lecturers: [mockUsers[0]],
-      tutors: [],
-      students: [mockUsers[1]],
-    },
-    message: "Mocked module details",
-  }),
+  getModuleDetails: async (_: number): Promise<ApiResponse<ModuleDetailsResponse>> => {
+    await delay();
+    return {
+      success: true,
+      data: {
+        ...mockModules[0],
+        lecturers: [mockUsers[0]],
+        tutors: [mockUsers[2]],
+        students: [mockUsers[1], mockUsers[3]],
+      },
+      message: "Mocked module details (first module)",
+    };
+  },
 
-  createModule: async (payload: ModulePayload): Promise<ApiResponse<Module>> => {
+  createModule: async (_: ModulePayload): Promise<ApiResponse<Module>> => {
+    await delay();
     const newModule: Module = {
       id: Math.floor(Math.random() * 1000 + 200),
-      ...payload,
+      code: "NEW123",
+      year: 2025,
+      description: "Mock Created Module",
+      credits: 10,
       created_at: now,
       updated_at: now,
     };
@@ -81,92 +90,129 @@ export const ModulesService = {
     };
   },
 
-  editModule: async (id: number, payload: ModulePayload): Promise<ApiResponse<Module>> => {
-    const mod = mockModules.find((m) => m.id === id)!;
-    Object.assign(mod, payload, { updated_at: now });
+  editModule: async (_: number, __: ModulePayload): Promise<ApiResponse<Module>> => {
+    await delay();
+    const edited = { ...mockModules[0], description: "Edited Description", updated_at: now };
+    mockModules[0] = edited;
     return {
       success: true,
-      data: mod,
+      data: edited,
       message: "Mocked module edited",
     };
   },
 
-  deleteModule: async (_: number): Promise<ApiResponse<null>> => ({
-    success: true,
-    data: null,
-    message: "Mocked module deleted",
-  }),
+  deleteModule: async (_: number): Promise<ApiResponse<null>> => {
+    await delay();
+    return {
+      success: true,
+      data: null,
+      message: "Mocked module deleted",
+    };
+  },
 
-  getMyModules: async (): Promise<ApiResponse<MyModulesResponse>> => ({
-    success: true,
-    data: {
-      as_student: [mockModules[1]],
-      as_tutor: [],
-      as_lecturer: [mockModules[0]],
-    },
-    message: "Mocked my modules",
-  }),
+  getMyModules: async (): Promise<ApiResponse<MyModulesResponse>> => {
+    await delay();
+    return {
+      success: true,
+      data: {
+        as_student: [mockModules[2], mockModules[3]],
+        as_tutor: [mockModules[4]],
+        as_lecturer: [mockModules[0]],
+      },
+      message: "Mocked my modules",
+    };
+  },
 
-  assignLecturers: async (_: number, __: AssignLecturersRequest): Promise<ApiResponse<null>> => ({
-    success: true,
-    data: null,
-    message: "Mocked assign lecturers",
-  }),
+  assignLecturers: async (): Promise<ApiResponse<null>> => {
+    await delay();
+    return {
+      success: true,
+      data: null,
+      message: "Mocked assign lecturers",
+    };
+  },
 
-  removeLecturers: async (_: number, __: RemoveLecturersRequest): Promise<ApiResponse<null>> => ({
-    success: true,
-    data: null,
-    message: "Mocked remove lecturers",
-  }),
+  removeLecturers: async (): Promise<ApiResponse<null>> => {
+    await delay();
+    return {
+      success: true,
+      data: null,
+      message: "Mocked remove lecturers",
+    };
+  },
 
-  assignTutors: async (_: number, __: AssignTutorsRequest): Promise<ApiResponse<null>> => ({
-    success: true,
-    data: null,
-    message: "Mocked assign tutors",
-  }),
+  assignTutors: async (): Promise<ApiResponse<null>> => {
+    await delay();
+    return {
+      success: true,
+      data: null,
+      message: "Mocked assign tutors",
+    };
+  },
 
-  removeTutors: async (_: number, __: RemoveTutorsRequest): Promise<ApiResponse<null>> => ({
-    success: true,
-    data: null,
-    message: "Mocked remove tutors",
-  }),
+  removeTutors: async (): Promise<ApiResponse<null>> => {
+    await delay();
+    return {
+      success: true,
+      data: null,
+      message: "Mocked remove tutors",
+    };
+  },
 
-  enrollStudents: async (_: number, __: EnrollStudentsRequest): Promise<ApiResponse<null>> => ({
-    success: true,
-    data: null,
-    message: "Mocked enroll students",
-  }),
+  enrollStudents: async (_moduleId: number, _payload : EnrollStudentsRequest): Promise<ApiResponse<null>> => {
+    await delay();
+    return {
+      success: true,
+      data: null,
+      message: "Mocked enroll students",
+    };
+  },
 
-  removeStudents: async (_: number, __: RemoveStudentsRequest): Promise<ApiResponse<null>> => ({
-    success: true,
-    data: null,
-    message: "Mocked remove students",
-  }),
+  removeStudents: async (): Promise<ApiResponse<null>> => {
+    await delay();
+    return {
+      success: true,
+      data: null,
+      message: "Mocked remove students",
+    };
+  },
 
-  getLecturers: async (_: number): Promise<ApiResponse<ListLecturersResponse>> => ({
-    success: true,
-    data: { users: [mockUsers[0]] },
-    message: "Mocked lecturers list",
-  }),
+  getLecturers: async (_: number): Promise<ApiResponse<{users: User[]}>> => {
+    await delay();
+    return {
+      success: true,
+      data: { users: [mockUsers[0]] },
+      message: "Mocked lecturers list",
+    };
+  },
 
-  getTutors: async (_: number): Promise<ApiResponse<ListTutorsResponse>> => ({
-    success: true,
-    data: { users: [] },
-    message: "Mocked tutors list",
-  }),
+  getTutors: async (_: number): Promise<ApiResponse<{users: User[]}>> => {
+    await delay();
+    return {
+      success: true,
+      data: { users: [mockUsers[2]] },
+      message: "Mocked tutors list",
+    };
+  },
 
-  getStudents: async (_: number): Promise<ApiResponse<ListStudentsResponse>> => ({
-    success: true,
-    data: { users: [mockUsers[1]] },
-    message: "Mocked students list",
-  }),
+  getStudents: async (_: number): Promise<ApiResponse<{users: User[]}>> => {
+    await delay();
+    return {
+      success: true,
+      data: { users: [mockUsers[1], mockUsers[3]] },
+      message: "Mocked students list",
+    };
+  },
 
-  getModulesForUser: async (userId: number): Promise<ApiResponse<UserModuleRole[]>> => ({
-    success: true,
-    data: mockModules.map((m, i) => ({
-      ...m,
-      role: i % 2 === 0 ? "Lecturer" : "Student",
-    })),
-    message: `Mocked modules for user ${userId}`,
-  }),
+  getModulesForUser: async (): Promise<ApiResponse<UserModuleRole[]>> => {
+    await delay();
+    return {
+      success: true,
+      data: mockModules.map((m, i) => ({
+        ...m,
+        role: i % 3 === 0 ? "Lecturer" : i % 3 === 1 ? "Tutor" : "Student",
+      })),
+      message: "Mocked modules for user",
+    };
+  },
 };
