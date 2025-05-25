@@ -1,15 +1,16 @@
 use crate::models::module::Module;
 use sqlx::SqlitePool;
 
-pub async fn make(code: &str, year: i64, description: Option<&str>, pool: &SqlitePool) -> Module {
+pub async fn make(code: &str, year: i64, description: Option<&str>, credits: i32, pool: &SqlitePool) -> Module {
     let record: Module = sqlx::query_as::<_, Module>(
-        "INSERT INTO modules (code, year, description)
-         VALUES (?, ?, ?)
-         RETURNING id, code, year, description, created_at, updated_at",
+        "INSERT INTO modules (code, year, description, credits)
+         VALUES (?, ?, ?, ?)
+         RETURNING id, code, year, description, credits, created_at, updated_at",
     )
     .bind(code)
     .bind(year)
     .bind(&description)
+    .bind(credits)
     .fetch_one(pool)
     .await
     .expect("Failed to create module");
