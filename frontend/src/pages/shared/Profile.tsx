@@ -32,12 +32,12 @@ const mockActivity = [
 export default function ProfilePage() {
   return (
     <AppLayout title="Profile" description="Manage your account, roles, and settings.">
-      <div className="p-6 w-full max-w-6xl">
+      <div className=" w-full max-w-6xl">
         <Row gutter={24}>
           {/* Left Panel */}
           <Col xs={24} md={8}>
             {/* Profile Card */}
-            <Card bordered className="rounded-lg mb-6 border border-gray-300">
+            <Card className="rounded-lg mb-6 border border-gray-300">
               <div className="flex flex-col gap-4">
                 <Avatar size={80} icon={<UserOutlined />} />
                 <div>
@@ -66,7 +66,7 @@ export default function ProfilePage() {
 
             {/* Activity Card */}
             <div className="mt-6">
-              <Card bordered className="rounded-lg border border-gray-300" title="Recent Activity">
+              <Card className="rounded-lg border border-gray-300" title="Recent Activity">
                 <List
                   size="small"
                   dataSource={mockActivity}
@@ -85,11 +85,7 @@ export default function ProfilePage() {
 
           {/* Right Panel */}
           <Col xs={24} md={16}>
-            <Card
-              bordered
-              className="rounded-lg border border-gray-300"
-              title="Account Information"
-            >
+            <Card className="rounded-lg border border-gray-300" title="Account Information">
               <Descriptions
                 column={1}
                 labelStyle={{ fontWeight: 500, minWidth: 150 }}

@@ -88,6 +88,12 @@ export default function Login() {
                 <Input.Password placeholder="••••••••" />
               </Form.Item>
 
+              <div className="text-right -mt-2 mb-4">
+                <Link href="#" className="text-sm text-blue-600">
+                  Forgot password?
+                </Link>
+              </div>
+
               <Form.Item className="mt-8">
                 <Button type="primary" htmlType="submit" block size="large">
                   Sign In
@@ -121,7 +127,7 @@ export default function Login() {
             </Divider>
 
             <Text className="block text-center text-xs sm:text-sm md:text-base text-gray-600">
-              Don’t have an account?{' '}
+              Don&apos;t have an account?{' '}
               <Link href="/signup" className="text-blue-600">
                 Sign up
               </Link>

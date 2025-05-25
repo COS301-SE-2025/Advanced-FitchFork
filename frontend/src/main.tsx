@@ -5,12 +5,15 @@ import React from 'react';
 import 'antd/dist/reset.css';
 import { AuthProvider } from './context/AuthContext.tsx';
 import { ThemeProvider } from './context/ThemeContext.tsx';
+import { App as AntApp } from 'antd';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeProvider>
       <AuthProvider>
-        <App />
+        <AntApp>
+          <App />
+        </AntApp>
       </AuthProvider>
     </ThemeProvider>
   </React.StrictMode>,

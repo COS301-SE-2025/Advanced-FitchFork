@@ -1,7 +1,6 @@
 use crate::factories::user_factory;
 use crate::models::user::User;
 use sqlx::SqlitePool;
-use crate::models::user::User;
 
 pub async fn seed(pool: &SqlitePool) {
     log::info!("Seeding users...");
