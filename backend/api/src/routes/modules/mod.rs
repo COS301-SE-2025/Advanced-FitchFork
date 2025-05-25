@@ -16,8 +16,10 @@ use axum::{
     routing::{post, delete},
 };
 use crate::auth::guards::require_admin;
-use post::{create, assign_lecturers, assign_students};
-use delete::{remove_lecturers};
+use post::{create, assign_lecturers, assign_students, assign_tutors};
+use delete::{remove_lecturers, remove_tutors, remove_students};
+
+
 /// Builds the `/modules` route group, mapping HTTP methods to handlers.
 ///
 /// - `POST /` → `create` (admin only)
@@ -30,6 +32,9 @@ pub fn modules_routes() -> Router {
         .route("/", post(create))
         .route("/:module_id/lecturers", post(assign_lecturers))
         .route("/:module_id/students", post(assign_students))
+        .route("/:module_id/tutors", post(assign_tutors))
         .route("/:module_id/lecturers", delete(remove_lecturers))
+        .route("/:module_id/students", delete(remove_students))
+        .route("/:module_id/tutors", delete(remove_tutors))
         .route_layer(axum::middleware::from_fn(require_admin))
 }
