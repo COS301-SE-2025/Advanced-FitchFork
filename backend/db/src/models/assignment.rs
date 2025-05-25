@@ -81,13 +81,16 @@ impl Assignment {
     ///
     /// * `pool` - Optional reference to an SQLite connection pool.
     /// * `id` - The ID of the assignment to delete.
-    pub async fn delete_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<()> {
+    /// * `mid` - The ID of the module the assignment is related to
+    pub async fn delete_by_id(pool: Option<&SqlitePool>, id: i64, mid: i64) -> sqlx::Result<bool> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        sqlx::query("DELETE FROM assignments WHERE id = ?")
+        let result = sqlx::query("DELETE FROM assignments WHERE id = ? AND module_id = ?;")
             .bind(id)
+            .bind(mid)
             .execute(pool)
             .await?;
-        Ok(())
+
+        Ok(result.rows_affected() > 0)
     }
 
     /// Retrieve all assignments from the database.
@@ -137,9 +140,15 @@ mod tests {
         let pool = create_test_db(Some("test_assignment_create_and_find.db")).await;
 
         // Create a module for the assignment to belong to
-        let module = Module::create(Some(&pool), "COS333", 2025, Some("Software Engineering"), 16)
-            .await
-            .unwrap();
+        let module = Module::create(
+            Some(&pool),
+            "COS333",
+            2025,
+            Some("Software Engineering"),
+            16,
+        )
+        .await
+        .unwrap();
 
         // Create an assignment
         let assignment = Assignment::create(
@@ -194,7 +203,7 @@ mod tests {
         .unwrap();
 
         // Delete it
-        Assignment::delete_by_id(Some(&pool), assignment.id)
+        Assignment::delete_by_id(Some(&pool), assignment.id, module.id)
             .await
             .unwrap();
 

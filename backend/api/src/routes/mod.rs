@@ -20,7 +20,6 @@ pub mod example;
 pub mod auth;
 pub mod users;
 pub mod modules;
-pub mod assignments;
 
 use axum::Router;
 use crate::routes::{
@@ -29,7 +28,6 @@ use crate::routes::{
     auth::auth_routes,
     users::users_routes,
     modules::modules_routes,
-    assignments::assignment_routes,
 };
 
 /// Builds the complete application router.
@@ -51,5 +49,4 @@ pub fn routes() -> Router {
         .nest("/auth", auth_routes())
         .nest("/users", users_routes())
         .nest("/modules", modules_routes())
-        .nest("/assignments", assignment_routes())
 }

@@ -15,7 +15,7 @@
 /// # Errors
 /// Returns an error response if any of the required fields are missing or invalid.
 /// Handles the deletion of an assignment.
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use db::{
     models::assignment::{Assignment, AssignmentType},
     pool,
@@ -52,8 +52,10 @@ impl From<Assignment> for AssignmentResponse {
     }
 }
 
-pub async fn create(Json(req): Json<serde_json::Value>) -> impl IntoResponse {
-    let module_id = req.get("module_id").and_then(|v| v.as_i64());
+pub async fn create(
+    Path(module_id): Path<i64>,
+    Json(req): Json<serde_json::Value>,
+) -> impl IntoResponse {
     let name = req.get("name").and_then(|v| v.as_str());
     let description = req.get("description").and_then(|v| v.as_str());
     let available_from = req.get("available_from").and_then(|v| v.as_str());
@@ -62,16 +64,6 @@ pub async fn create(Json(req): Json<serde_json::Value>) -> impl IntoResponse {
         Some("A") => db::models::assignment::AssignmentType::Assignment,
         _ => db::models::assignment::AssignmentType::Practical,
     };
-
-    if module_id.is_none() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<AssignmentResponse>::error(
-                "Module Id is expected",
-            )),
-        );
-    }
-
     if name.is_none() {
         return (
             StatusCode::BAD_REQUEST,
@@ -99,7 +91,6 @@ pub async fn create(Json(req): Json<serde_json::Value>) -> impl IntoResponse {
         );
     }
 
-    let module_id = module_id.unwrap();
     let name = name.unwrap();
     let available_from = available_from.unwrap();
     let due_date = due_date.unwrap();
