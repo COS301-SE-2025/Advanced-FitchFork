@@ -21,3 +21,4 @@ validator = { version = "0.16", features = ["derive"] }
 lazy_static = "1.4"
 regex = "1.10"
 sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-native-tls", "macros"] }
+uuid = { version = "1.16.0", features = ["v4", "serde"] }
