@@ -18,9 +18,10 @@ pub mod health;
 pub mod example;
 pub mod auth;
 pub mod users;
+pub mod assignments;
 
 use axum::Router;
-use crate::routes::{health::health_routes, example::example_routes, auth::auth_routes, users::users_routes};
+use crate::routes::{health::health_routes, example::example_routes, auth::auth_routes, users::users_routes, assignments::assignment_routes};
 
 /// Builds the complete application router.
 ///
@@ -38,4 +39,5 @@ pub fn routes() -> Router {
         .nest("/example", example_routes())
         .nest("/auth", auth_routes())
         .nest("/users", users_routes())
+        .nest("/assignment", assignment_routes())
 }
