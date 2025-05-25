@@ -2,7 +2,7 @@ use crate::models::user::User;
 use fake::{faker::internet::en::FreeEmail, faker::lorem::en::Word, Fake};
 use rand::seq::SliceRandom;
 use rand::{distributions::Uniform, Rng};
-use sqlx::SqlitePool;
+use sqlx::{Sqlite, SqlitePool, Transaction};
 
 //Inserts randomly made user into database and returns them
 pub async fn make_random(pool: &SqlitePool) -> User {
@@ -16,69 +16,72 @@ pub async fn make_random(pool: &SqlitePool) -> User {
         .expect("Failed to create user")
 }
 
-//Creates a randomly made user and assigns it as a lecturer to a module
-pub async fn make_random_lecturer(pool: &SqlitePool) -> (User, i64) {
-    let user = make_random(pool).await;
-    let module_id = random_module_id(pool).await;
+//Assigns user to a random number of modules in the specified role table using a transaction
+async fn assign_to_random_modules(
+    tx: &mut Transaction<'_, Sqlite>,
+    user_id: i64,
+    table: &str,
+    module_ids: &[i64],
+) {
+    let mut rng = rand::thread_rng();
+    let num_modules = rng.gen_range(1..=module_ids.len().min(3));
+    let chosen_ids = module_ids
+        .choose_multiple(&mut rng, num_modules)
+        .cloned()
+        .collect::<Vec<_>>();
 
-    sqlx::query("INSERT INTO module_lecturers (module_id, user_id) VALUES (?, ?)")
-        .bind(module_id)
-        .bind(user.id)
-        .execute(pool)
-        .await
-        .expect("Failed to assign lecturer");
-
-    (user, module_id)
+    for module_id in chosen_ids {
+        let query = format!("INSERT INTO {} (module_id, user_id) VALUES (?, ?)", table);
+        sqlx::query(&query)
+            .bind(module_id)
+            .bind(user_id)
+            .execute(&mut **tx)
+            .await
+            .unwrap_or_else(|_| panic!("Failed to assign user to {}", table));
+    }
 }
 
-//Creates a randomly made user and assigns it as a tutor to a module
-pub async fn make_random_tutor(pool: &SqlitePool) -> (User, i64) {
+//Creates a randomly made user and assigns it as a lecturer to multiple modules
+pub async fn make_random_lecturer(pool: &SqlitePool, module_ids: &[i64]) -> User {
+    let mut tx = pool.begin().await.unwrap();
     let user = make_random(pool).await;
-    let module_id = random_module_id(pool).await;
-
-    sqlx::query("INSERT INTO module_tutors (module_id, user_id) VALUES (?, ?)")
-        .bind(module_id)
-        .bind(user.id)
-        .execute(pool)
-        .await
-        .expect("Failed to assign tutor");
-
-    (user, module_id)
+    assign_to_random_modules(&mut tx, user.id, "module_lecturers", module_ids).await;
+    tx.commit().await.unwrap();
+    user
 }
 
-//Creates a randomly made user and assigns it as a student to a module
-pub async fn make_random_student(pool: &SqlitePool) -> (User, i64) {
+//Creates a randomly made user and assigns it as a tutor to multiple modules
+pub async fn make_random_tutor(pool: &SqlitePool, module_ids: &[i64]) -> User {
+    let mut tx = pool.begin().await.unwrap();
     let user = make_random(pool).await;
-    let module_id = random_module_id(pool).await;
+    assign_to_random_modules(&mut tx, user.id, "module_tutors", module_ids).await;
+    tx.commit().await.unwrap();
+    user
+}
 
-    sqlx::query("INSERT INTO module_students (module_id, user_id) VALUES (?, ?)")
-        .bind(module_id)
-        .bind(user.id)
-        .execute(pool)
-        .await
-        .expect("Failed to assign student");
-
-    (user, module_id)
+//Creates a randomly made user and assigns it as a student to multiple modules
+pub async fn make_random_student(pool: &SqlitePool, module_ids: &[i64]) -> User {
+    let mut tx = pool.begin().await.unwrap();
+    let user = make_random(pool).await;
+    assign_to_random_modules(&mut tx, user.id, "module_students", module_ids).await;
+    tx.commit().await.unwrap();
+    user
 }
 
 //=====PRIVATE HELPER FUNCTIONS=====
 
-//Generates random student number that conforms to Regex
 fn generate_student_number() -> String {
     let mut rng = rand::thread_rng();
-    //Low is 10000000 and since it has to be 8 digits (regex in database) -> 00000000 will cause student numbers like 172
     let number: u32 = rng.sample(Uniform::new_inclusive(10000000, 99999999));
     format!("u{}", number)
 }
 
-//Pick a random module id from the database
-async fn random_module_id(pool: &SqlitePool) -> i64 {
+//Fetch all module IDs from the database once
+pub async fn all_module_ids(pool: &SqlitePool) -> Vec<i64> {
     let ids: Vec<(i64,)> = sqlx::query_as("SELECT id FROM modules")
         .fetch_all(pool)
         .await
         .expect("Failed to fetch modules");
 
-    let mut rng = rand::thread_rng();
-    let (random_id,) = ids.choose(&mut rng).expect("No modules found");
-    *random_id
+    ids.into_iter().map(|(id,)| id).collect()
 }

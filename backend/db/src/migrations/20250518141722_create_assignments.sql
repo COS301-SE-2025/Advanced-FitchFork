@@ -21,3 +21,25 @@ CREATE TABLE assignment_files (
     FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
     UNIQUE (assignment_id, filename)
 );
+
+CREATE TABLE assignment_memo_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    assignment_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    path TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+    UNIQUE (assignment_id, filename)
+);
+
+CREATE TABLE assignment_student_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    assignment_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    path TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+    UNIQUE (assignment_id, filename)
+);
