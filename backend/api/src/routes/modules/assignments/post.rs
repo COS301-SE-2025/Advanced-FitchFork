@@ -15,14 +15,25 @@
 /// # Errors
 /// Returns an error response if any of the required fields are missing or invalid.
 /// Handles the deletion of an assignment.
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{http::StatusCode, response::IntoResponse, extract::{Multipart, Path}, Json};
 use db::{
     models::assignment::{Assignment, AssignmentType},
     pool,
 };
 use serde::Serialize;
 
-use crate::response::ApiResponse;
+use crate::{
+    auth::claims::AuthUser,
+    response::ApiResponse,
+};
+
+use std::{
+    fs,
+    io::Write,
+    path::PathBuf,
+};
+use chrono::Utc;
+
 #[derive(Debug, Serialize)]
 
 pub struct AssignmentResponse {
@@ -51,6 +62,117 @@ impl From<Assignment> for AssignmentResponse {
         }
     }
 }
+
+#[derive(Debug, Serialize)]
+pub struct UploadedFileMetadata {
+    pub id: i64,
+    pub assignment_id: i64,
+    pub filename: String,
+    pub path: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+
+
+/// POST /api/modules/:module_id/assignments/:assignment_id/files
+///
+/// Upload one or more files for a given assignment (Admin or Lecturer only).
+///
+/// ### Multipart Body (form-data)
+/// - files[] (one or more)
+///
+/// ### Example curl
+/// ```bash
+/// curl -X POST http://localhost:3000/api/modules/1/assignments/2/files \
+///   -H "Authorization: Bearer <token>" \
+///   -F "files[]=@brief.pdf" \
+///   -F "files[]=@rubric.xlsx"
+/// ```
+///
+/// ### Responses
+/// - `201 Created`
+/// - `400 Bad Request` (no files or invalid format)
+/// - `403 Forbidden` (unauthorized)
+/// - `404 Not Found` (assignment/module not found)
+
+pub async fn upload_files(Path((module_id, assignment_id)): Path<(i64, i64)>, AuthUser(claims): AuthUser, mut multipart: Multipart, ) -> impl IntoResponse {
+    if !claims.admin {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
+                "You do not have permission to upload files for this assignment",
+            )),
+        );
+    }
+
+    let pool = pool::get();
+
+    let assignment_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM assignments WHERE id = ? AND module_id = ?)",
+    ).bind(assignment_id).bind(module_id).fetch_one(pool).await.unwrap_or(false);
+
+    if !assignment_exists {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error("Assignment not found")),
+        );
+    }
+
+    let mut saved_files = vec![];
+
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        let file_name = match field.file_name().map(|s| s.to_string()) {
+            Some(name) => name,
+            None => continue,
+        };
+
+        let file_bytes = field.bytes().await.unwrap_or_default();
+        if file_bytes.is_empty() {
+            continue;
+        }
+
+        let saved_path = format!("uploads/assignments/{}/{}", assignment_id, file_name);
+        let fs_path = PathBuf::from(&saved_path);
+
+        if let Some(parent) = fs_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        if let Ok(mut file) = fs::File::create(&fs_path) {
+            if file.write_all(&file_bytes).is_ok() {
+                let now = Utc::now().to_rfc3339();
+
+                let _ = sqlx::query(
+                    "INSERT INTO assignment_files (assignment_id, filename, path, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?)",
+                ).bind(assignment_id).bind(&file_name).bind(&saved_path).bind(&now).bind(&now).execute(pool).await;
+
+                saved_files.push(UploadedFileMetadata {
+                    id: 0,
+                    assignment_id,
+                    filename: file_name.clone(),
+                    path: saved_path,
+                    created_at: now.clone(),
+                    updated_at: now.clone(),
+                });
+            }
+        }
+    }
+
+    if saved_files.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error("No files were uploaded or invalid file format", )),
+        );
+    }
+
+    (
+        StatusCode::CREATED,
+        Json(ApiResponse::success(saved_files, "Files uploaded successfully", )),
+    )
+}
+
 
 pub async fn create(
     Path(module_id): Path<i64>,
@@ -122,6 +244,8 @@ pub async fn create(
         ),
     }
 }
+
+
 
 #[cfg(test)]
 mod tests {
