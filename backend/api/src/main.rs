@@ -1,17 +1,14 @@
 use api::routes::routes;
-use axum::Router;
+use axum::{Router};
 use common::{config::Config, logger::init_logger};
 use log::info;
+use tower_http::cors::{Any, CorsLayer};
+use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() {
-    // Load config from .env
     let config = Config::init(".env");
-
-    // Initialize logger with values from config
     init_logger(&config.log_level, &config.log_file);
-
-    // Initialize the database
     db::init(&config.database_url, true).await;
     db::seed_db().await;
     docker_example::run_assignment_code("docker_example/src/files/good_java_example.zip", "java")
@@ -22,15 +19,24 @@ async fn main() {
         config.project_name, config.host, config.port
     );
 
-    // Compose routes and apply middleware
-    let app = Router::new().nest("/api", routes());
+    // CORS setup (allow frontend origin)
+    let cors = CorsLayer::new()
+        .allow_origin(axum::http::HeaderValue::from_static("http://localhost:5173"))
+        .allow_methods(Any)
+        .allow_headers(Any);
 
-    // Bind TCP listener
-    let addr = format!("{}:{}", config.host, config.port);
+    // Compose routes and apply middleware
+    let app = Router::new()
+        .nest("/api", routes())
+        .layer(cors);
+
+    // Bind and serve
+    let addr: SocketAddr = format!("{}:{}", config.host, config.port)
+        .parse()
+        .expect("Invalid address");
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .expect("Failed to bind");
 
-    // Serve the app
     axum::serve(listener, app).await.expect("Server crashed");
 }

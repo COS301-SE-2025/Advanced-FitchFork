@@ -3,12 +3,6 @@ import clsx from 'clsx';
 
 const { Title } = Typography;
 
-interface LogoProps {
-  size?: 'sm' | 'md' | 'lg';
-  className?: string;
-  showText?: boolean;
-}
-
 const sizeMap = {
   sm: {
     img: 'h-8',
@@ -24,18 +18,78 @@ const sizeMap = {
   },
 };
 
-export default function Logo({ size = 'md', className = '', showText = true }: LogoProps) {
-  const { img, text } = sizeMap[size];
+interface LogoProps {
+  collapsed?: boolean;
+  className?: string;
+  showText?: boolean;
+  size?: keyof typeof sizeMap;
+  variant?: 'auto' | 'light' | 'dark'; // NEW
+}
+
+export default function Logo({
+  collapsed = false,
+  className = '',
+  showText = true,
+  size = 'md',
+  variant = 'auto',
+}: LogoProps) {
+  const { img: imgSize, text: textSize } = sizeMap[size];
+
+  const renderLogo = () => {
+    if (variant === 'light') {
+      return (
+        <img
+          src="/ff_logo_light.svg"
+          alt="FitchFork Logo (Light)"
+          className={clsx(imgSize, 'w-auto object-contain rounded-lg')}
+        />
+      );
+    }
+    if (variant === 'dark') {
+      return (
+        <img
+          src="/ff_logo_dark.svg"
+          alt="FitchFork Logo (Dark)"
+          className={clsx(imgSize, 'w-auto object-contain rounded-lg')}
+        />
+      );
+    }
+
+    // auto: light by default, dark when `.dark` class is active
+    return (
+      <>
+        <img
+          src="/ff_logo_light.svg"
+          alt="FitchFork Logo (Light)"
+          className={clsx(imgSize, 'w-auto object-contain rounded-lg block dark:hidden')}
+        />
+        <img
+          src="/ff_logo_dark.svg"
+          alt="FitchFork Logo (Dark)"
+          className={clsx(imgSize, 'w-auto object-contain rounded-lg hidden dark:block')}
+        />
+      </>
+    );
+  };
 
   return (
-    <div className={clsx('flex items-center gap-4', className)}>
-      <img
-        src="/ff_logo.svg"
-        alt="FitchFork Logo"
-        className={clsx(img, 'w-auto object-contain rounded-lg shadow-md')}
-      />
-      {showText && (
-        <Title level={2} className={clsx('!mb-0 font-semibold leading-tight', text)}>
+    <div
+      className={clsx(
+        'flex items-center gap-4 transition-all duration-300 ease-in-out',
+        collapsed ? 'scale-90' : 'scale-100',
+        className,
+      )}
+    >
+      {renderLogo()}
+
+      {!collapsed && showText && (
+        <Title
+          level={2}
+          className={clsx(
+            '!mb-0 font-semibold leading-tight whitespace-nowrap transition-all duration-300 ease-in-out',
+            textSize,
+          )}
+        >
           FitchFork
         </Title>
       )}
