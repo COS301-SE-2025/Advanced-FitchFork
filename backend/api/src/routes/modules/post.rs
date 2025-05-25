@@ -234,12 +234,54 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
 /// }
 /// ```
 ///
+/// ### Validation Rules
+/// - `user_ids`: must be a non-empty list of valid user IDs.
+/// - All users must exist.
+/// - Each user must not already be assigned as a lecturer.
+///
 /// ### Responses
-/// - `200 OK`
-/// - `400 Bad Request` (empty list)
-/// - `403 Forbidden` (non-admin)
-/// - `404 Not Found` (module or user not found)
-/// - `409 Conflict` (some users already assigned)
+///
+/// - `200 OK`  
+/// ```json
+/// {
+///   "success": true,
+///   "data": {},
+///   "message": "Lecturers assigned to module successfully"
+/// }
+/// ```
+///
+/// - `400 Bad Request`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Request must include a non-empty list of user_ids"
+/// }
+/// ```
+///
+/// - `403 Forbidden`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "You do not have permission to perform this action"
+/// }
+/// ```
+///
+/// - `404 Not Found`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "User with ID 3 does not exist"
+/// }
+/// ```
+///
+/// - `409 Conflict`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Some users are already lecturers for this module"
+/// }
+/// ```
+
 pub async fn assign_lecturers(axum::extract::Path(module_id): axum::extract::Path<i64>, AuthUser(claims): AuthUser, Json(body): Json<ModifyUsersModuleRequest>, ) -> impl IntoResponse {
     if !claims.admin {
         return (
@@ -359,12 +401,54 @@ pub async fn assign_lecturers(axum::extract::Path(module_id): axum::extract::Pat
 /// }
 /// ```
 ///
+/// ### Validation Rules
+/// - `user_ids`: must be a non-empty list.
+/// - All users must exist.
+/// - No user may already be assigned as a student.
+///
 /// ### Responses
-/// - `200 OK`
-/// - `400 Bad Request` (empty list)
-/// - `403 Forbidden` (non-admin)
-/// - `404 Not Found` (module or user not found)
-/// - `409 Conflict` (some users already assigned)
+///
+/// - `200 OK`  
+/// ```json
+/// {
+///   "success": true,
+///   "data": {},
+///   "message": "Students assigned to module successfully"
+/// }
+/// ```
+///
+/// - `400 Bad Request`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Request must include a non-empty list of user_ids"
+/// }
+/// ```
+///
+/// - `403 Forbidden`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "You do not have permission to perform this action"
+/// }
+/// ```
+///
+/// - `404 Not Found`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "User with ID 3 does not exist"
+/// }
+/// ```
+///
+/// - `409 Conflict`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Some users are already students for this module"
+/// }
+/// ```
+
 pub async fn assign_students(axum::extract::Path(module_id): axum::extract::Path<i64>, AuthUser(claims): AuthUser, Json(body): Json<ModifyUsersModuleRequest>, ) -> impl IntoResponse {
     if !claims.admin {
         return (
@@ -476,12 +560,54 @@ pub async fn assign_students(axum::extract::Path(module_id): axum::extract::Path
 /// }
 /// ```
 ///
+/// ### Validation Rules
+/// - `user_ids`: must be a non-empty list.
+/// - All users must exist.
+/// - Each user must not already be a tutor in this module.
+///
 /// ### Responses
+///
 /// - `200 OK`  
-/// - `400 Bad Request` (empty list)  
-/// - `403 Forbidden` (non-admin)  
-/// - `404 Not Found` (module or user not found)  
-/// - `409 Conflict` (some users already assigned)
+/// ```json
+/// {
+///   "success": true,
+///   "data": {},
+///   "message": "Tutors assigned to module successfully"
+/// }
+/// ```
+///
+/// - `400 Bad Request`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Request must include a non-empty list of user_ids"
+/// }
+/// ```
+///
+/// - `403 Forbidden`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "You do not have permission to perform this action"
+/// }
+/// ```
+///
+/// - `404 Not Found`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "User with ID 3 does not exist"
+/// }
+/// ```
+///
+/// - `409 Conflict`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Some users are already tutors for this module"
+/// }
+/// ```
+
 pub async fn assign_tutors(axum::extract::Path(module_id): axum::extract::Path<i64>, AuthUser(claims): AuthUser, Json(body): Json<ModifyUsersModuleRequest>, ) -> impl axum::response::IntoResponse {
     if !claims.admin {
         return (
