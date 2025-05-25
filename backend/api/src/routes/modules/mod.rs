@@ -10,14 +10,16 @@
 
 pub mod post;
 pub mod delete;
+mod get;
 
 use axum::{
     Router,
-    routing::{post, delete},
+    routing::{post, delete, get},
 };
 use crate::auth::guards::require_admin;
 use post::{create, assign_lecturers, assign_students, assign_tutors};
 use delete::{remove_lecturers, remove_tutors, remove_students};
+use get::{get_lecturers, get_students, get_tutors};
 
 
 /// Builds the `/modules` route group, mapping HTTP methods to handlers.
@@ -36,5 +38,8 @@ pub fn modules_routes() -> Router {
         .route("/:module_id/lecturers", delete(remove_lecturers))
         .route("/:module_id/students", delete(remove_students))
         .route("/:module_id/tutors", delete(remove_tutors))
+        .route("/:module_id/lecturers", get(get_lecturers))
+        .route("/:module_id/students", get(get_students))
+        .route("/:module_id/tutors", get(get_tutors))
         .route_layer(axum::middleware::from_fn(require_admin))
 }

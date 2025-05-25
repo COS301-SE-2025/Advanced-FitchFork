@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 use chrono::{Utc, Datelike};
 use crate::response::ApiResponse;
-
 use crate::auth::claims::AuthUser;
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateModuleRequest {
@@ -38,6 +37,28 @@ pub struct ConflictData {
     pub already_assigned: Vec<i64>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct PersonnelResponse {
+    pub id: i64,
+    pub student_number: String,
+    pub email: String,
+    pub admin: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<db::models::user::User> for PersonnelResponse {
+    fn from(user: db::models::user::User) -> Self {
+        Self {
+            id: user.id,
+            student_number: user.student_number,
+            email: user.email,
+            admin: user.admin,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
+        }
+    }
+}
 
 #[derive(Debug, Serialize)]
 pub struct ModuleResponse {
