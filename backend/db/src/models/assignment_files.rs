@@ -184,7 +184,7 @@ mod tests {
 
         //Required: Create fake module
         let module =
-            crate::models::module::Module::create(Some(&pool), "COS300", 2025, Some("SQA"))
+            crate::models::module::Module::create(Some(&pool), "COS300", 2025, Some("SQA"), 16)
                 .await
                 .unwrap();
 
@@ -228,7 +228,7 @@ mod tests {
 
         //Required: Create fake module
         let module =
-            crate::models::module::Module::create(Some(&pool), "COS301", 2024, Some("SQA"))
+            crate::models::module::Module::create(Some(&pool), "COS301", 2024, Some("SQA"), 16)
                 .await
                 .unwrap();
 

@@ -30,6 +30,9 @@ pub struct UserModuleRole {
     pub module_code: String,
     pub module_year: i32,
     pub module_description: Option<String>,
+    pub module_credits: Option<i32>,
+    pub module_created_at: Option<String>,
+    pub module_updated_at: Option<String>,
     pub role: String, // "lecturer", "tutor", or "student"
 }
 
@@ -86,6 +89,15 @@ impl User {
         Ok(())
     }
 
+    /// Hashes a password using Argon2 with a randomly generated salt.
+    ///
+    /// # Arguments
+    ///
+    /// * `password` - The plain text password to hash.
+    ///
+    /// # Returns
+    ///
+    /// Returns the hashed password as a string.
     pub fn hash(password: &str) -> String {
         let salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::default();
@@ -96,15 +108,31 @@ impl User {
         password_hash
     }
 
+    /// Verifies a user's credentials by checking their student number and password.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional database connection pool.
+    /// * `student_number` - The student number to verify.
+    /// * `password` - The plain text password to verify.
+    ///
+    /// # Returns
+    ///
+    /// Returns the `User` if credentials are valid.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `sqlx::Error` if:
+    /// * The user is not found
+    /// * The stored password hash is invalid
+    /// * The provided password is incorrect
     pub async fn verify(
         pool: Option<&SqlitePool>,
         student_number: &str,
         password: &str,
     ) -> sqlx::Result<Self> {
-        // Grab the pool
         let pool = pool.unwrap_or_else(|| crate::pool::get());
 
-        // Fetch the full user record (or Err if not found / on DB error)
         let user: User = sqlx::query_as::<_, User>(
             "SELECT id, student_number, email, password_hash, admin, created_at, updated_at
             FROM users
@@ -114,18 +142,15 @@ impl User {
         .fetch_one(pool)
         .await?;
 
-        // Parse the stored hash
         let parsed_hash = PasswordHash::new(&user.password_hash)
             .map_err(|e| sqlx::Error::Protocol(format!("Invalid stored password hash: {}", e)))?;
 
-        // Verify the password
         if Argon2::default()
             .verify_password(password.as_bytes(), &parsed_hash)
             .is_ok()
         {
             Ok(user)
         } else {
-            // Wrong password → treat as a protocol error
             Err(sqlx::Error::Protocol("Invalid credentials".into()))
         }
     }
@@ -197,7 +222,9 @@ impl User {
         // Lecturer roles
         let rows = sqlx::query(
             r#"
-            SELECT m.id as module_id, m.code as module_code, m.year as module_year, m.description as module_description
+            SELECT m.id as module_id, m.code as module_code, m.year as module_year, 
+                   m.description as module_description, m.credits as module_credits,
+                   m.created_at as module_created_at, m.updated_at as module_updated_at
             FROM modules m
             INNER JOIN module_lecturers ml ON m.id = ml.module_id
             WHERE ml.user_id = ?
@@ -213,6 +240,9 @@ impl User {
                 module_code: row.get("module_code"),
                 module_year: row.get("module_year"),
                 module_description: row.get("module_description"),
+                module_credits: row.get("module_credits"),
+                module_created_at: row.get("module_created_at"),
+                module_updated_at: row.get("module_updated_at"),
                 role: "lecturer".to_string(),
             });
         }
@@ -220,7 +250,9 @@ impl User {
         // Tutor roles
         let rows = sqlx::query(
             r#"
-            SELECT m.id as module_id, m.code as module_code, m.year as module_year, m.description as module_description
+            SELECT m.id as module_id, m.code as module_code, m.year as module_year, 
+                   m.description as module_description, m.credits as module_credits,
+                   m.created_at as module_created_at, m.updated_at as module_updated_at
             FROM modules m
             INNER JOIN module_tutors mt ON m.id = mt.module_id
             WHERE mt.user_id = ?
@@ -236,6 +268,9 @@ impl User {
                 module_code: row.get("module_code"),
                 module_year: row.get("module_year"),
                 module_description: row.get("module_description"),
+                module_credits: row.get("module_credits"),
+                module_created_at: row.get("module_created_at"),
+                module_updated_at: row.get("module_updated_at"),
                 role: "tutor".to_string(),
             });
         }
@@ -243,7 +278,9 @@ impl User {
         // Student roles
         let rows = sqlx::query(
             r#"
-            SELECT m.id as module_id, m.code as module_code, m.year as module_year, m.description as module_description
+            SELECT m.id as module_id, m.code as module_code, m.year as module_year, 
+                   m.description as module_description, m.credits as module_credits,
+                   m.created_at as module_created_at, m.updated_at as module_updated_at
             FROM modules m
             INNER JOIN module_students ms ON m.id = ms.module_id
             WHERE ms.user_id = ?
@@ -259,6 +296,9 @@ impl User {
                 module_code: row.get("module_code"),
                 module_year: row.get("module_year"),
                 module_description: row.get("module_description"),
+                module_credits: row.get("module_credits"),
+                module_created_at: row.get("module_created_at"),
+                module_updated_at: row.get("module_updated_at"),
                 role: "student".to_string(),
             });
         }
@@ -374,13 +414,13 @@ mod tests {
             .unwrap();
 
         // Create 3 modules
-        let lecturer_mod = Module::create(Some(&pool), "COS700", 2025, Some("Advanced Topics"))
+        let lecturer_mod = Module::create(Some(&pool), "COS700", 2025, Some("Advanced Topics"), 16)
             .await
             .unwrap();
-        let tutor_mod = Module::create(Some(&pool), "COS701", 2025, Some("AI Practicals"))
+        let tutor_mod = Module::create(Some(&pool), "COS701", 2025, Some("AI Practicals"), 16)
             .await
             .unwrap();
-        let student_mod = Module::create(Some(&pool), "COS702", 2025, Some("Seminar"))
+        let student_mod = Module::create(Some(&pool), "COS702", 2025, Some("Seminar"), 16)
             .await
             .unwrap();
 

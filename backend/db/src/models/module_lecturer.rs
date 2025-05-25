@@ -136,7 +136,7 @@ mod tests {
         let pool = create_test_db(Some("test_module_lecturer_create_and_get.db")).await;
 
         // Create module and user
-        let module = Module::create(Some(&pool), "COS341", 2025, Some("Theory of Computation"))
+        let module = Module::create(Some(&pool), "COS341", 2025, Some("Theory of Computation"), 16)
             .await
             .unwrap();
         let user = User::create(Some(&pool), "u22222222", "lecturer1@test.com", "hash", true)
@@ -172,7 +172,7 @@ mod tests {
         let pool = create_test_db(Some("test_module_lecturer_delete.db")).await;
 
         // Create module and user
-        let module = Module::create(Some(&pool), "COS110", 2025, Some("Intro to Programming"))
+        let module = Module::create(Some(&pool), "COS110", 2025, Some("Intro to Programming"), 16)
             .await
             .unwrap();
         let user = User::create(Some(&pool), "u33333333", "lecturer2@test.com", "hash", true)

@@ -138,6 +138,44 @@ Delete a user by their ID. Users cannot delete their own account.
 
 ---
 
+## GET `/users/:id/modules`
+
+**Description:**
+Retrieve all modules that a specific user is involved in, including their role in each module.
+
+**Path Parameters:**
+- `id`: The ID of the user to fetch modules for
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "code": "COS301",
+      "year": 2025,
+      "description": "Advanced Software Engineering",
+      "credits": 16,
+      "role": "Lecturer",
+      "created_at": "2025-05-01T08:00:00Z",
+      "updated_at": "2025-05-01T08:00:00Z"
+    }
+  ],
+  "message": "Modules for user retrieved successfully"
+}
+```
+
+**Status Codes:**
+- `200 OK`: Success
+- `400 Bad Request`: Invalid user ID format
+- `401 Unauthorized`: Missing or invalid JWT
+- `403 Forbidden`: Authenticated but not admin user
+- `404 Not Found`: User doesn't exist
+- `500 Internal Server Error`: Database error
+
+---
+
 ## Notes
 
 - All routes require admin privileges

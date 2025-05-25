@@ -183,6 +183,7 @@ mod tests {
             "COS333",
             2025,
             Some("student Test"),
+            16,
         )
         .await
         .unwrap();
@@ -234,6 +235,7 @@ mod tests {
             "COS334",
             2025,
             Some("student Test 2"),
+            16,
         )
         .await
         .unwrap();
