@@ -4,7 +4,7 @@ use axum::response::IntoResponse;
 use db::pool;
 use crate::auth::AuthUser;
 use crate::response::ApiResponse;
-use crate::routes::modules::post::AssignLecturersRequest;
+use crate::routes::modules::post::ModifyUsersModuleRequest;
 
 
 
@@ -26,7 +26,7 @@ use crate::routes::modules::post::AssignLecturersRequest;
 /// - `403 Forbidden` (non-admin)
 /// - `404 Not Found` (module or user not found)
 /// - `409 Conflict` (some users not assigned)
-pub async fn remove_lecturers(axum::extract::Path(module_id): axum::extract::Path<i64>, AuthUser(claims): AuthUser, Json(body): Json<AssignLecturersRequest>, )-> impl IntoResponse {
+pub async fn remove_lecturers(axum::extract::Path(module_id): axum::extract::Path<i64>, AuthUser(claims): AuthUser, Json(body): Json<ModifyUsersModuleRequest>, )-> impl IntoResponse {
     if !claims.admin {
         return (
             StatusCode::FORBIDDEN,
@@ -120,6 +120,97 @@ pub async fn remove_lecturers(axum::extract::Path(module_id): axum::extract::Pat
                 success: false,
                 data: None,
                 message: "Some users are not lecturers for this module!".into(),
+            })
+        )
+    }
+}
+
+
+/// DELETE /api/modules/:module_id/students
+///
+/// Remove one or more users from a module's student list. Admin only.
+///
+/// ### Request Body
+/// ```json
+/// {
+///   "user_ids": [1, 2]
+/// }
+/// ```
+///
+/// ### Responses
+/// - `200 OK`  
+/// - `400 Bad Request` (empty list)  
+/// - `403 Forbidden` (non-admin)  
+/// - `404 Not Found` (module not found or users not assigned)
+pub async fn remove_students(axum::extract::Path(module_id): axum::extract::Path<i64>, AuthUser(claims): AuthUser, Json(body): Json<ModifyUsersModuleRequest>, ) -> impl IntoResponse {
+    if !claims.admin {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("You do not have permission to perform this action")),
+        );
+    }
+
+    if body.user_ids.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error("Request must include a non-empty list of user_ids")),
+        );
+    }
+
+    let pool = pool::get();
+
+    let module_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)"
+    )
+        .bind(module_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(false);
+
+    if !module_exists {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("Module not found")),
+        );
+    }
+
+    let mut not_assigned = Vec::new();
+
+    for &user_id in &body.user_ids {
+        let assigned: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM module_students WHERE module_id = ? AND user_id = ?)"
+        )
+            .bind(module_id)
+            .bind(user_id)
+            .fetch_one(pool)
+            .await
+            .unwrap_or(false);
+
+        if assigned {
+            let _ = sqlx::query(
+                "DELETE FROM module_students WHERE module_id = ? AND user_id = ?"
+            )
+                .bind(module_id)
+                .bind(user_id)
+                .execute(pool)
+                .await;
+        } else {
+            not_assigned.push(user_id);
+        }
+    }
+
+    if not_assigned.is_empty() {
+        (
+            StatusCode::OK,
+            Json(ApiResponse::<()>::success((), "Students removed from module successfully")),
+        )
+    } else {
+        (
+            StatusCode::CONFLICT,
+            Json(ApiResponse::<()> {
+                success: false,
+                data: None,
+                message: "Some users are not students for this module!".into(),
             })
         )
     }
