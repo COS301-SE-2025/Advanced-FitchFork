@@ -2,16 +2,6 @@ use crate::factories::assignment_factory;
 use sqlx::SqlitePool;
 
 pub async fn seed(pool: &SqlitePool) {
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM assignments")
-        .fetch_one(pool)
-        .await
-        .unwrap();
-
-    if count.0 > 0 {
-        log::info!("Skipping assignment seeder.");
-        return;
-    }
-
     log::info!("Seeding assignments...");
 
     let assignments = vec![
