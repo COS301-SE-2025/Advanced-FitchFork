@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
-import DashboardLayout from '@layouts/DashboardLayout';
 import { Descriptions, Tag } from 'antd';
+import AppLayout from '@/layouts/AppLayout';
 
 const mockUserData: Record<string, { name: string; email: string; role: string }> = {
   '1': { name: 'Alice Johnson', email: 'alice@example.com', role: 'Admin' },
@@ -23,14 +23,14 @@ export default function UserView() {
 
   if (!user) {
     return (
-      <DashboardLayout title="User Not Found">
+      <AppLayout title="User Not Found">
         <p>No user with ID {id} found.</p>
-      </DashboardLayout>
+      </AppLayout>
     );
   }
 
   return (
-    <DashboardLayout title={`User ${id} View`} description="Specific users details.">
+    <AppLayout title={`User ${id} View`} description="Specific users details.">
       <Descriptions bordered column={1}>
         <Descriptions.Item label="Name">{user.name}</Descriptions.Item>
         <Descriptions.Item label="Email">{user.email}</Descriptions.Item>
@@ -44,6 +44,6 @@ export default function UserView() {
           </Tag>
         </Descriptions.Item>
       </Descriptions>
-    </DashboardLayout>
+    </AppLayout>
   );
 }

@@ -13,16 +13,8 @@ export default defineConfig({
     react(),   
     tailwindcss(),],
    resolve: {
-   alias: {
-      '@pages': resolve(__dirname, 'src/pages'),
-      '@layouts': resolve(__dirname, 'src/layouts'),
-      '@context': resolve(__dirname, 'src/context'),
-      '@models': resolve(__dirname, 'src/types'),
-      '@components': resolve(__dirname, 'src/components'),
-      '@hooks': resolve(__dirname, 'src/hooks'),
-      '@routes': resolve(__dirname, 'src/routes'),
-      '@services': resolve(__dirname, 'src/services'),
-      '@utils': resolve(__dirname, 'src/utils'),
+    alias: {
+      '@': resolve(__dirname, 'src'),
     },
   },
 })

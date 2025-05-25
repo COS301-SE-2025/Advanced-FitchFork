@@ -5,18 +5,30 @@ use sqlx::SqlitePool;
 pub async fn seed(pool: &SqlitePool) {
     log::info!("Seeding users...");
 
-    // Test Admin User
-    let _ = User::create(
-        Some(pool),
-        "u99999999",
-        "u9999999@tuks.co.za",
-        "test1234",
-        true,
-    )
-    .await;
-
     // Fetch all module IDs once for reuse
     let module_ids = user_factory::all_module_ids(pool).await;
+    // Explicit admin user
+    log::info!("Creating explicit admin user...");
+    User::create(
+        Some(pool),
+        "u00000001",
+        "admin@example.com",
+        "password123",
+        true,
+    )
+    .await
+    .expect("Failed to create admin user");
+
+    // Explicit non-admin user
+    log::info!("Creating explicit non-admin user...");
+    User::create(
+        Some(pool),
+        "u00000002",
+        "user@example.com",
+        "password123",
+        false,
+    ).await
+    .expect("Failed to create regular user");
 
     // Create 5 users without roles (admin and non-admin)
     for _ in 0..5 {

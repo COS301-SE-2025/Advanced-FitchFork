@@ -12,6 +12,8 @@ pub mod post;
 pub mod delete;
 pub mod get;
 
+pub mod assignments;
+use assignments::assignment_routes;
 use axum::{
     Router,
     routing::{post, delete, get},
@@ -41,5 +43,6 @@ pub fn modules_routes() -> Router {
         .route("/:module_id/lecturers", get(get_lecturers))
         .route("/:module_id/students", get(get_students))
         .route("/:module_id/tutors", get(get_tutors))
+        .nest("/:module_id/assignments", assignment_routes())
         .route_layer(axum::middleware::from_fn(require_admin))
 }

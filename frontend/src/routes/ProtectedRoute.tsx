@@ -1,21 +1,31 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import type { UserRole } from '../types/auth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRoles?: UserRole[]; // updated to be strongly typed
+  requiredAdmin?: boolean;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRoles }) => {
-  const { user, hasRole } = useAuth();
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  children,
+  requiredAdmin = false,
+}) => {
+  const { user, isAdmin } = useAuth();
 
-  if (!user) return <Navigate to="/login" />;
+  // Not logged in
+  if (!user) return <Navigate to="/login" replace />;
 
-  if (requiredRoles && !requiredRoles.some(hasRole)) {
-    return <Navigate to="/unauthorized" />;
-  }
+  // Admin access required
+  if (requiredAdmin && !isAdmin()) return <Navigate to="/unauthorized" replace />;
 
-  return children;
+  // Membership check
+  // if (requiredMemberships.length > 0) {
+  //   const hasAccess = requiredMemberships.some(({ moduleId, role }) =>
+  //     hasModuleRole(moduleId, role),
+  //   );
+  //   if (!hasAccess) return <Navigate to="/unauthorized" replace />;
+  // }
+
+  return <>{children}</>;
 };

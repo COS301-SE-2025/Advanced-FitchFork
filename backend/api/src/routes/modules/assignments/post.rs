@@ -149,7 +149,7 @@ pub async fn upload_files(Path((module_id, assignment_id)): Path<(i64, i64)>, Au
                 ).bind(assignment_id).bind(&file_name).bind(&saved_path).bind(&now).bind(&now).execute(pool).await;
 
                 saved_files.push(UploadedFileMetadata {
-                    id: 0, 
+                    id: 0,
                     assignment_id,
                     filename: file_name.clone(),
                     path: saved_path,
@@ -173,8 +173,11 @@ pub async fn upload_files(Path((module_id, assignment_id)): Path<(i64, i64)>, Au
     )
 }
 
-pub async fn create(Json(req): Json<serde_json::Value>) -> impl IntoResponse {
-    let module_id = req.get("module_id").and_then(|v| v.as_i64());
+
+pub async fn create(
+    Path(module_id): Path<i64>,
+    Json(req): Json<serde_json::Value>,
+) -> impl IntoResponse {
     let name = req.get("name").and_then(|v| v.as_str());
     let description = req.get("description").and_then(|v| v.as_str());
     let available_from = req.get("available_from").and_then(|v| v.as_str());
@@ -183,16 +186,6 @@ pub async fn create(Json(req): Json<serde_json::Value>) -> impl IntoResponse {
         Some("A") => db::models::assignment::AssignmentType::Assignment,
         _ => db::models::assignment::AssignmentType::Practical,
     };
-
-    if module_id.is_none() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<AssignmentResponse>::error(
-                "Module Id is expected",
-            )),
-        );
-    }
-
     if name.is_none() {
         return (
             StatusCode::BAD_REQUEST,
@@ -220,7 +213,6 @@ pub async fn create(Json(req): Json<serde_json::Value>) -> impl IntoResponse {
         );
     }
 
-    let module_id = module_id.unwrap();
     let name = name.unwrap();
     let available_from = available_from.unwrap();
     let due_date = due_date.unwrap();
