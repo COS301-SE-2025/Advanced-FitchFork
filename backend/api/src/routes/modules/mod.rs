@@ -10,7 +10,7 @@
 
 pub mod post;
 pub mod delete;
-mod get;
+pub mod get;
 
 use axum::{
     Router,

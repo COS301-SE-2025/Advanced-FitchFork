@@ -642,11 +642,8 @@ pub async fn assign_tutors(axum::extract::Path(module_id): axum::extract::Path<i
 
     for &user_id in &body.user_ids {
         let user_exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)")
-                .bind(user_id)
-                .fetch_one(pool)
-                .await
-                .unwrap_or(false);
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)").bind(user_id).fetch_one(pool)
+.await.unwrap_or(false);
 
         if !user_exists {
             return (
@@ -669,11 +666,7 @@ pub async fn assign_tutors(axum::extract::Path(module_id): axum::extract::Path<i
         } else {
             let _ = sqlx::query(
                 "INSERT OR IGNORE INTO module_tutors (module_id, user_id) VALUES (?, ?)",
-            )
-                .bind(module_id)
-                .bind(user_id)
-                .execute(pool)
-                .await;
+            ).bind(module_id).bind(user_id).execute(pool).await;
         }
     }
 
