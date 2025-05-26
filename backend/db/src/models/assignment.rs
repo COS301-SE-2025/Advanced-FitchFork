@@ -126,6 +126,44 @@ impl Assignment {
             .fetch_optional(pool)
             .await
     }
+
+    pub async fn edit(
+        pool: Option<&SqlitePool>,
+        id: i64,
+        module_id: i64,
+        name: &str,
+        description: Option<&str>,
+        assignment_type: AssignmentType,
+        available_from: &str,
+        due_date: &str,
+    ) -> sqlx::Result<Self> {
+        let pool = pool.unwrap_or_else(|| crate::pool::get());
+        println!(
+            "Editing assignment {} in module {}",
+            id, module_id
+        );
+        let record = sqlx::query_as::<_, Assignment>(
+            "
+            UPDATE assignments
+            SET name = ?, description = ?, assignment_type = ?, 
+                available_from = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND module_id = ?
+            RETURNING id, module_id, name, description, assignment_type, 
+                      available_from, due_date, created_at, updated_at
+            ",
+        )
+        .bind(name)
+        .bind(description)
+        .bind(assignment_type)
+        .bind(available_from)
+        .bind(due_date)
+        .bind(id)
+        .bind(module_id)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(record)
+    }
 }
 
 #[cfg(test)]
@@ -134,6 +172,43 @@ mod tests {
     use crate::delete_database;
     use crate::models::assignment::{Assignment, AssignmentType};
     use crate::models::module::Module;
+
+    #[tokio::test]
+    async fn test_asignment_update(){
+         let pool = create_test_db(Some("test_assignment_update.db")).await;
+        let assignment = Assignment::create(
+            Some(&pool),
+            1,
+            "Initial Assignment",
+            Some("Basic programming tasks"),
+            AssignmentType::Assignment,
+            "2025-01-01T00:00:00Z",
+            "2025-01-15T23:59:59Z",
+        )
+        .await
+        .unwrap();
+        assert_eq!(assignment.name, "Initial Assignment");
+         
+        let updated_assignment = Assignment::edit(
+            Some(&pool),
+            1,
+            1,
+            "Updated Assignment",
+            Some("Updated description"),
+            AssignmentType::Practical,
+            "2025-01-02T00:00:00Z",
+            "2025-01-16T23:59:59Z",
+        )
+        .await
+        .unwrap();
+        assert_eq!(updated_assignment.name, "Updated Assignment");
+        assert_eq!(updated_assignment.description, Some("Updated description".to_string()));
+        assert_eq!(updated_assignment.assignment_type, AssignmentType::Practical);
+        assert_eq!(updated_assignment.available_from, "2025-01-02T00:00:00Z");
+        assert_eq!(updated_assignment.due_date, "2025-01-16T23:59:59Z");
+        pool.close().await;
+        delete_database("test_assignment_update.db");
+    }
 
     #[tokio::test]
     async fn test_assignment_create_and_find() {
