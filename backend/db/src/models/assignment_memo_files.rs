@@ -22,7 +22,7 @@ impl AssignmentMemoFiles {
     /// This can be changed if necessary.
     ///
     /// TODO - Move to .env
-    pub const STORAGE_DIR_MEMO: &'static str = "../data/assignment_memo_files";
+    pub const STORAGE_DIR_MEMO: &'static str = "data/assignment_memo_files";
 
     /// Create and store an assignment memo file.
     ///

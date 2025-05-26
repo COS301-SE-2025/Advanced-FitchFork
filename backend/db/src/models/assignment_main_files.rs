@@ -23,7 +23,7 @@ impl AssignmentMainFiles {
 
     //This is where I think the files should be stored -> We can change this later
     //TODO - Move to .env
-    pub const STORAGE_DIR_MAIN: &'static str = "../data/assignment_main_files";
+    pub const STORAGE_DIR_MAIN: &'static str = "data/assignment_main_files";
 
     /// Create and store an assignment file.
     ///

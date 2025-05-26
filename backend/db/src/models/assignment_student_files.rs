@@ -22,7 +22,7 @@ impl AssignmentStudentFiles {
     /// This can be changed if necessary.
     ///
     /// TODO - Move to .env
-    pub const STORAGE_DIR_STUDENT: &'static str = "../data/assignment_student_files";
+    pub const STORAGE_DIR_STUDENT: &'static str = "data/assignment_student_files";
 
     /// Create and store an assignment student file.
     ///
