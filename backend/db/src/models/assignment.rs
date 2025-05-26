@@ -84,7 +84,7 @@ impl Assignment {
     /// * `mid` - The ID of the module the assignment is related to
     pub async fn delete_by_id(pool: Option<&SqlitePool>, id: i64, mid: i64) -> sqlx::Result<bool> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        let result = sqlx::query("DELETE FROM assignments WHERE id = ? AND module_id = ?;")
+        let result = sqlx::query("DELETE FROM assignments WHERE id = ? AND module_id = ?")
             .bind(id)
             .bind(mid)
             .execute(pool)
@@ -115,14 +115,20 @@ impl Assignment {
     ///
     /// * `pool` - Optional reference to an SQLite connection pool.
     /// * `id` - The ID of the assignment to retrieve.
+    /// * `mid` - The ID of the module the assignment is related to
     ///
     /// # Returns
     ///
     /// Returns an `Option<Assignment>` which is `Some` if found or `None` if not.
-    pub async fn get_by_id(pool: Option<&SqlitePool>, id: i64) -> sqlx::Result<Option<Self>> {
+    pub async fn get_by_id(
+        pool: Option<&SqlitePool>,
+        id: i64,
+        mid: i64,
+    ) -> sqlx::Result<Option<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
-        sqlx::query_as::<_, Assignment>("SELECT * FROM assignments WHERE id = ?")
+        sqlx::query_as::<_, Assignment>("SELECT * FROM assignments WHERE id = ? AND module_id = ?")
             .bind(id)
+            .bind(mid)
             .fetch_optional(pool)
             .await
     }
@@ -260,7 +266,7 @@ mod tests {
         assert_eq!(assignment.due_date, "2025-04-15T23:59:59Z");
 
         // Fetch it again by ID
-        let found = Assignment::get_by_id(Some(&pool), assignment.id)
+        let found = Assignment::get_by_id(Some(&pool), assignment.id, module.id)
             .await
             .unwrap();
         assert!(found.is_some());
@@ -298,7 +304,7 @@ mod tests {
             .unwrap();
 
         // Confirm it's gone
-        let found = Assignment::get_by_id(Some(&pool), assignment.id)
+        let found = Assignment::get_by_id(Some(&pool), assignment.id, module.id)
             .await
             .unwrap();
         assert!(found.is_none());

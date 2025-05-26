@@ -164,6 +164,29 @@ impl AssignmentFiles {
             .fetch_optional(pool)
             .await
     }
+
+    /// Get a file record by its assignment ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Optional reference to a SQLite pool.
+    /// * `id` - The assignment ID.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of records for the assignment, or an error.
+    pub async fn get_by_assignment_id(
+        pool: Option<&SqlitePool>,
+        id: i64,
+    ) -> sqlx::Result<Vec<Self>> {
+        let pool = pool.unwrap_or_else(|| crate::pool::get());
+        sqlx::query_as::<_, AssignmentFiles>(
+            "SELECT * FROM assignment_files WHERE assignment_id = ?",
+        )
+        .bind(id)
+        .fetch_all(pool)
+        .await
+    }
 }
 
 #[cfg(test)]

@@ -235,11 +235,10 @@ pub async fn create(
                 Json(ApiResponse::success(res, "Assignment successfully created")),
             )
         }
-        Err(e) => (
+        Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<AssignmentResponse>::error(format!(
-                "Database error: {}",
-                e
+                "An error occurred in the database"
             ))),
         ),
     }
