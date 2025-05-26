@@ -52,25 +52,53 @@ pub struct File {
 pub async fn get_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let assignment_res: Result<Option<Assignment>, sqlx::Error> =
-        Assignment::get_by_id(Some(pool::get()), assignment_id, module_id).await;
+    let assignment_res = Assignment::get_by_id(Some(pool::get()), assignment_id, module_id).await;
+
     match assignment_res {
-        Ok(assignment) => {
-            let file_res =
-                AssignmentFiles::get_by_assignment_id(Some(pool::get()), assignment_id).await;
-            let file_res = file_res.unwrap()
-            return (
-                StatusCode::OK,
-                Json(ApiResponse::<AssignmentResponse>::error(format!(
-                    "An error occurred in the database"
-                ))),
-            );
+        Ok(Some(assignment)) => {
+            let files_res = AssignmentFiles::get_by_assignment_id(Some(pool::get()), assignment_id).await;
+
+            match files_res {
+                Ok(files) => {
+                    // Convert AssignmentFiles to your File struct
+                    let converted_files: Vec<File> = files
+                        .into_iter()
+                        .map(|f| File {
+                            id: f.id.to_string(), // Or keep as i64 if your `File` uses that
+                            filename: f.filename,
+                            path: f.path,
+                            created_at: f.created_at,
+                            updated_at: f.updated_at,
+                        })
+                        .collect();
+
+                    let mut response = AssignmentResponse::from(assignment);
+                    response.files = converted_files;
+
+                    (
+                        StatusCode::OK,
+                        Json(ApiResponse::success(response, "Assignment retrieved successfully")),
+                    )
+                }
+                Err(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Failed to retrieve files".to_string(),
+                    )),
+                ),
+            }
         }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<AssignmentResponse>::error(
+                "Assignment not found".to_string(),
+            )),
+        ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<AssignmentResponse>::error(format!(
-                "An error occurred in the database"
-            ))),
+            Json(ApiResponse::<AssignmentResponse>::error(
+                "An error occurred in the database".to_string(),
+            )),
         ),
     }
 }

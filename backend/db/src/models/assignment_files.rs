@@ -174,17 +174,17 @@ impl AssignmentFiles {
     ///
     /// # Returns
     ///
-    /// Returns `Some(record)` if found, `None` if not, or an error.
+    /// Returns a vector of records for the assignment, or an error.
     pub async fn get_by_assignment_id(
         pool: Option<&SqlitePool>,
         id: i64,
-    ) -> sqlx::Result<Option<Self>> {
+    ) -> sqlx::Result<Vec<Self>> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         sqlx::query_as::<_, AssignmentFiles>(
             "SELECT * FROM assignment_files WHERE assignment_id = ?",
         )
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_all(pool)
         .await
     }
 }
