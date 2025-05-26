@@ -48,7 +48,7 @@ pub struct File {
     pub created_at: String,
     pub updated_at: String,
 }
-//TODO Extract an array of files from file_res and send that with assignment response
+
 pub async fn get_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
@@ -60,11 +60,11 @@ pub async fn get_assignment(
 
             match files_res {
                 Ok(files) => {
-                    // Convert AssignmentFiles to your File struct
+
                     let converted_files: Vec<File> = files
                         .into_iter()
                         .map(|f| File {
-                            id: f.id.to_string(), // Or keep as i64 if your `File` uses that
+                            id: f.id.to_string(), 
                             filename: f.filename,
                             path: f.path,
                             created_at: f.created_at,
