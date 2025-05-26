@@ -1,7 +1,11 @@
 use crate::factories::user_factory;
+use crate::models::module_lecturer::ModuleLecturer;
+use crate::models::module_student::ModuleStudent;
+use crate::models::module_tutor::ModuleTutor;
 use crate::models::user::User;
 use sqlx::SqlitePool;
 
+//TODO -> make the first use (2) be a student, lecturer and tutor in different modules
 pub async fn seed(pool: &SqlitePool) {
     log::info!("Seeding users...");
 
@@ -27,8 +31,17 @@ pub async fn seed(pool: &SqlitePool) {
         "user@example.com",
         "password123",
         false,
-    ).await
+    )
+    .await
     .expect("Failed to create regular user");
+
+    ModuleLecturer::create(Some(pool), 1, 2)
+        .await
+        .expect("Failed");
+    ModuleStudent::create(Some(pool), 2, 2)
+        .await
+        .expect("Failed");
+    ModuleTutor::create(Some(pool), 3, 2).await.expect("Failed");
 
     // Create 5 users without roles (admin and non-admin)
     for _ in 0..5 {

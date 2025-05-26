@@ -1,9 +1,9 @@
 use api::routes::routes;
-use axum::{Router};
+use axum::Router;
 use common::{config::Config, logger::init_logger};
 use log::info;
-use tower_http::cors::{Any, CorsLayer};
 use std::net::SocketAddr;
+use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
 async fn main() {
@@ -11,8 +11,7 @@ async fn main() {
     init_logger(&config.log_level, &config.log_file);
     db::init(&config.database_url, true).await;
     db::seed_db().await;
-    docker_example::run_assignment_code("docker_example/src/files/good_java_example.zip", "java")
-        .await;
+    // docker_example::run_assignment_code("docker_example/src/files/good_java_example.zip", "java").await;
 
     info!(
         "Starting {} on http://{}:{}",
@@ -21,14 +20,14 @@ async fn main() {
 
     // CORS setup (allow frontend origin)
     let cors = CorsLayer::new()
-        .allow_origin(axum::http::HeaderValue::from_static("http://localhost:5173"))
+        .allow_origin(axum::http::HeaderValue::from_static(
+            "http://localhost:5173",
+        ))
         .allow_methods(Any)
         .allow_headers(Any);
 
     // Compose routes and apply middleware
-    let app = Router::new()
-        .nest("/api", routes())
-        .layer(cors);
+    let app = Router::new().nest("/api", routes()).layer(cors);
 
     // Bind and serve
     let addr: SocketAddr = format!("{}:{}", config.host, config.port)
