@@ -26,25 +26,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem('auth');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
+    const loadUser = async () => {
+      const stored = localStorage.getItem('auth');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          const { token, expires_at } = parsed;
 
-        // Check expiry
-        if (parsed.expires_at && new Date(parsed.expires_at) < new Date()) {
-          logout(); // token expired
-          return;
+          if (!token || (expires_at && new Date(expires_at) < new Date())) {
+            logout();
+            return;
+          }
+
+          const res = await AuthService.me();
+          if (res.success && res.data) {
+            const { modules: userModules, ...userData } = res.data;
+            setUser(userData);
+            setModules(userModules);
+            localStorage.setItem(
+              'auth',
+              JSON.stringify({
+                ...parsed,
+                user: userData,
+                modules: userModules,
+              }),
+            );
+          } else {
+            logout();
+          }
+        } catch {
+          logout();
         }
-
-        if (parsed.user) setUser(parsed.user);
-        if (parsed.modules) setModules(parsed.modules);
-      } catch {
-        // Corrupt data or parsing failed
-        logout();
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    };
+
+    loadUser();
   }, []);
 
   const login = async (credentials: LoginRequest): Promise<ApiResponse<AuthUser | null>> => {
@@ -53,9 +70,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.success && res.data) {
         const { token, expires_at, ...user } = res.data;
 
-        setUser(user);
-        setModules([]); // You can update this later with `me`
-
+        // Save token first
         localStorage.setItem(
           'auth',
           JSON.stringify({
@@ -65,6 +80,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             expires_at,
           }),
         );
+
+        // Then call /me using the saved token
+        const meRes = await AuthService.me();
+        if (meRes.success && meRes.data) {
+          const { modules: userModules, ...userData } = meRes.data;
+          setUser(userData);
+          setModules(userModules);
+
+          // Save updated info again
+          localStorage.setItem(
+            'auth',
+            JSON.stringify({
+              user: userData,
+              modules: userModules,
+              token,
+              expires_at,
+            }),
+          );
+        }
+
+        return res;
       }
       return res;
     } catch (err: any) {
