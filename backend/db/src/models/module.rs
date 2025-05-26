@@ -120,12 +120,87 @@ impl Module {
             .fetch_all(pool)
             .await
     }
+
+    pub async fn edit(
+        pool: Option<&SqlitePool>,
+        id: i64,
+        code: &str,
+        year: i32,
+        description: &str,
+        credits: i32,
+    ) -> sqlx::Result<Self> {
+        let pool = pool.unwrap_or_else(|| crate::pool::get());
+
+        let record = sqlx::query_as::<_, Module>(
+            "
+        UPDATE modules
+        SET code = ?, year = ?, description = ?, credits = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        RETURNING *",
+        )
+        .bind(code)
+        .bind(year)
+        .bind(description)
+        .bind(credits)
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(record)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::models::module::Module;
     use crate::{create_test_db, delete_database};
+
+    #[tokio::test]
+    async fn test_module_update() {
+        let pool = create_test_db(Some("test_module_update.db")).await;
+
+        let code = "COS117";
+        let year = 2025;
+        let description = Some("Intro to CS");
+        let credits = 3;
+
+        let created = Module::create(Some(&pool), code, year, description, credits)
+            .await
+            .unwrap();
+
+        assert_eq!(created.code, code);
+        assert_eq!(created.year, year);
+        assert_eq!(created.description.as_deref(), description);
+        assert_eq!(created.credits, credits);
+
+        let updated_code = "COS112";
+        let updated_year = 2026;
+        let updated_description = "Opyy";
+        let updated_credits = 4;
+        println!("Updating module with ID: {}", created.id);
+
+        let updated_module = Module::edit(
+            Some(&pool),
+            created.id,
+            updated_code,
+            updated_year,
+            updated_description,
+            updated_credits,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(updated_module.code, updated_code);
+        assert_eq!(updated_module.year, updated_year);
+        assert_eq!(
+            updated_module.description.as_deref(),
+            Some(updated_description)
+        );
+        assert_eq!(updated_module.credits, updated_credits);
+
+        pool.close().await;
+        delete_database("test_module_update.db");
+    }
 
     #[tokio::test]
     async fn test_module_create_and_find() {

@@ -11,17 +11,20 @@
 pub mod post;
 pub mod delete;
 pub mod get;
-
+pub mod put;
 pub mod assignments;
+
 use assignments::assignment_routes;
 use axum::{
     Router,
-    routing::{post, delete, get},
+    routing::{post, delete, get, put},
 };
+use put::edit_module;
 use crate::auth::guards::require_admin;
 use post::{create, assign_lecturers, assign_students, assign_tutors};
 use delete::{remove_lecturers, remove_tutors, remove_students};
 use get::{get_lecturers, get_students, get_tutors};
+
 
 
 /// Builds the `/modules` route group, mapping HTTP methods to handlers.
@@ -43,6 +46,7 @@ pub fn modules_routes() -> Router {
         .route("/:module_id/lecturers", get(get_lecturers))
         .route("/:module_id/students", get(get_students))
         .route("/:module_id/tutors", get(get_tutors))
+        .route("/:module_id", put(edit_module))
         .nest("/:module_id/assignments", assignment_routes())
         .route_layer(axum::middleware::from_fn(require_admin))
 }
