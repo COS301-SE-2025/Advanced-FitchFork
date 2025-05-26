@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
+use super::user::User;
+
 /// Represents the relationship between a module and a lecturer (user).
 ///
 /// This struct maps to a row in the `module_lecturers` table, which associates
@@ -122,6 +124,25 @@ impl ModuleLecturer {
 
         Ok(records)
     }
+
+    pub async fn get_details_by_id(
+        pool: Option<&SqlitePool>,
+        module_id: i64,
+    ) -> sqlx::Result<Vec<User>> {
+        let pool = pool.unwrap_or_else(|| crate::pool::get());
+        let records = sqlx::query_as::<_, User>(
+            "SELECT users.*
+            FROM users
+            INNER JOIN module_lecturers ON users.id = module_lecturers.user_id
+            WHERE module_lecturers.module_id = ?;
+        ",
+        )
+        .bind(module_id)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(records)
+    }
 }
 
 #[cfg(test)]
@@ -136,9 +157,15 @@ mod tests {
         let pool = create_test_db(Some("test_module_lecturer_create_and_get.db")).await;
 
         // Create module and user
-        let module = Module::create(Some(&pool), "COS341", 2025, Some("Theory of Computation"), 16)
-            .await
-            .unwrap();
+        let module = Module::create(
+            Some(&pool),
+            "COS341",
+            2025,
+            Some("Theory of Computation"),
+            16,
+        )
+        .await
+        .unwrap();
         let user = User::create(Some(&pool), "u22222222", "lecturer1@test.com", "hash", true)
             .await
             .unwrap();
@@ -172,9 +199,15 @@ mod tests {
         let pool = create_test_db(Some("test_module_lecturer_delete.db")).await;
 
         // Create module and user
-        let module = Module::create(Some(&pool), "COS110", 2025, Some("Intro to Programming"), 16)
-            .await
-            .unwrap();
+        let module = Module::create(
+            Some(&pool),
+            "COS110",
+            2025,
+            Some("Intro to Programming"),
+            16,
+        )
+        .await
+        .unwrap();
         let user = User::create(Some(&pool), "u33333333", "lecturer2@test.com", "hash", true)
             .await
             .unwrap();
