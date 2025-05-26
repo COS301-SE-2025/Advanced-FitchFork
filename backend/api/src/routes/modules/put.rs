@@ -23,9 +23,32 @@ impl From<Module> for ModuleResponse {
             credits: module.credits,
         }
     }
-    
 }
 
+/// Updates the details of a specific module by its ID.
+///
+/// # Arguments
+///
+/// Arguments are extracted from:
+/// - `Path(module_id)`: The ID of the module to be updated (from the URL path).
+/// - `Json(req)`: A JSON payload containing the updated fields:
+///   - `code` (string, required): The new module code.
+///   - `year` (integer, required): The academic year for the module.
+///   - `description` (string, required): The updated module description.
+///   - `credits` (integer, required): The number of credits for the module.
+///
+/// # Returns
+///
+/// Returns an HTTP response indicating the result:
+/// - `200 OK`: If the module was successfully updated. Returns the updated module data.
+/// - `400 BAD REQUEST`: If any required field (`code`, `year`, `description`, or `credits`) is missing or invalid.
+/// - `404 NOT FOUND`: If no module exists with the given ID.
+/// - `409 CONFLICT`: If the new module code already exists (violating a unique constraint).
+/// - `500 INTERNAL SERVER ERROR`: If an unexpected database error occurs.
+///
+/// # Response Format
+///
+/// All responses use the `ApiResponse<ModuleResponse>` structure for consistency.
 
 pub async fn edit_module(
     Path(module_id): Path<i64>,
@@ -39,25 +62,33 @@ pub async fn edit_module(
     if code.is_none() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<ModuleResponse>::error("Module code is expected")),
+            Json(ApiResponse::<ModuleResponse>::error(
+                "Module code is expected",
+            )),
         );
     }
     if year.is_none() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<ModuleResponse>::error("Module year is expected")),
+            Json(ApiResponse::<ModuleResponse>::error(
+                "Module year is expected",
+            )),
         );
     }
     if description.is_none() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<ModuleResponse>::error("Module description is expected")),
+            Json(ApiResponse::<ModuleResponse>::error(
+                "Module description is expected",
+            )),
         );
     }
     if credits.is_none() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<ModuleResponse>::error("Module credits is expected")),
+            Json(ApiResponse::<ModuleResponse>::error(
+                "Module credits is expected",
+            )),
         );
     }
 
@@ -93,7 +124,9 @@ pub async fn edit_module(
             if e.to_string().contains("constraint failed") {
                 return (
                     StatusCode::CONFLICT,
-                    Json(ApiResponse::<ModuleResponse>::error("Module code already exists")),
+                    Json(ApiResponse::<ModuleResponse>::error(
+                        "Module code already exists",
+                    )),
                 );
             }
             return (

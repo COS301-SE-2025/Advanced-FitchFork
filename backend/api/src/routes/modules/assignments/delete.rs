@@ -1,6 +1,14 @@
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use db::{models::assignment::Assignment, pool};
 use serde_json::json;
+///   Deletes a specific assignment and its associated files.
+/// 
+/// #Arguements are passed in based on method route automatically
+/// 
+/// Returns an HTTP response indicating the result:
+/// - `200 OK` with a success message if the assignment was found and deleted.
+/// - `404 NOT FOUND` if no assignment was found for the given `module_id` and `assignment_id`.
+/// - `500 INTERNAL SERVER ERROR` if a database or internal error occurred, including the error message.
 
 pub async fn delete_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
