@@ -174,11 +174,20 @@ mod tests {
     use crate::models::module::Module;
 
     #[tokio::test]
-    async fn test_asignment_update(){
-         let pool = create_test_db(Some("test_assignment_update.db")).await;
+    async fn test_asignment_update() {
+        let pool = create_test_db(Some("test_assignment_update.db")).await;
+        let module = Module::create(
+            Some(&pool),
+            "COS333",
+            2025,
+            Some("Software Engineering"),
+            16,
+        )
+        .await
+        .unwrap();
         let assignment = Assignment::create(
             Some(&pool),
-            1,
+            module.id,
             "Initial Assignment",
             Some("Basic programming tasks"),
             AssignmentType::Assignment,
@@ -188,7 +197,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(assignment.name, "Initial Assignment");
-         
+
         let updated_assignment = Assignment::edit(
             Some(&pool),
             1,
@@ -202,14 +211,20 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(updated_assignment.name, "Updated Assignment");
-        assert_eq!(updated_assignment.description, Some("Updated description".to_string()));
-        assert_eq!(updated_assignment.assignment_type, AssignmentType::Practical);
+        assert_eq!(
+            updated_assignment.description,
+            Some("Updated description".to_string())
+        );
+        assert_eq!(
+            updated_assignment.assignment_type,
+            AssignmentType::Practical
+        );
         assert_eq!(updated_assignment.available_from, "2025-01-02T00:00:00Z");
         assert_eq!(updated_assignment.due_date, "2025-01-16T23:59:59Z");
         pool.close().await;
         delete_database("test_assignment_update.db");
     }
-
+    
     #[tokio::test]
     async fn test_assignment_create_and_find() {
         let pool = create_test_db(Some("test_assignment_create_and_find.db")).await;
