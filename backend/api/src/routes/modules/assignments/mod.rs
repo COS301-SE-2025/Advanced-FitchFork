@@ -1,5 +1,5 @@
 use axum::{
-    Router, routing::{post, delete, get}
+    Router, routing::{post, delete, get, put}
 };
 
 pub mod post;
