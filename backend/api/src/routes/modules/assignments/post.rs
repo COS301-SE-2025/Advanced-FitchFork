@@ -132,7 +132,7 @@ pub async fn upload_files(Path((module_id, assignment_id)): Path<(i64, i64)>, Au
             continue;
         }
 
-        let saved_path = format!("uploads/assignments/{}/{}", assignment_id, file_name);
+        let saved_path = format!("uploads/modules/{}/assignments/{}/{}", module_id, assignment_id, file_name);
         let fs_path = PathBuf::from(&saved_path);
 
         if let Some(parent) = fs_path.parent() {

@@ -9,15 +9,19 @@ pub mod put;
 use post::create;
 use delete::delete_assignment;
 use put::edit_assignment;
-use get::get_assignment;
+use get::{get_assignment, download_file};
+use crate::routes::modules::assignments::post::upload_files;
+
 /// Expects a module ID
 /// If an assignment ID is included it will be deleted
 /// - `POST /` → `create` 
-/// - `DELTE /:assignment_id` → `delete_assignment`
+/// - `DELETE /:assignment_id` → `delete_assignment`
 pub fn assignment_routes() -> Router {
     Router::new()
         .route("/", post(create))
         .route("/:assignment_id", delete(delete_assignment))
         .route("/:assignment_id", get(get_assignment))
         .route("/:assignment_id", put(edit_assignment))
+        .route("/:assignment_id/files", post(upload_files))
+        .route("/:assignment_id/file/:file_id", get(download_file))
 }
