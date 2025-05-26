@@ -1,23 +1,33 @@
 use axum::{
-    Router, routing::{post, delete, get, put}
+    routing::{delete, get, post, put},
+    Router,
 };
 
-pub mod post;
 pub mod delete;
 pub mod get;
+pub mod post;
 pub mod put;
-use post::create;
+
 use delete::delete_assignment;
+use get::{get_assignment, get_assignments};
+use post::create;
 use put::edit_assignment;
-use get::get_assignment;
-/// Expects a module ID
-/// If an assignment ID is included it will be deleted
-/// - `POST /` → `create` 
-/// - `DELTE /:assignment_id` → `delete_assignment`
+
+/// Builds and returns the `/assignments` route group.
+///
+/// Routes:
+/// - `POST /assignments`               → Create a new assignment
+/// - `GET  /assignments`               → List assignments (with optional filters)
+/// - `GET  /assignments/:assignment_id` → Get details of a specific assignment
+/// - `PUT  /assignments/:assignment_id` → Edit an existing assignment
+/// - `DELETE /assignments/:assignment_id` → Delete an assignment
+///
+/// Note: Expects a module ID to be part of the parent route, i.e., nested under `/modules/:module_id/assignments`.
 pub fn assignment_routes() -> Router {
     Router::new()
         .route("/", post(create))
-        .route("/:assignment_id", delete(delete_assignment))
+        .route("/", get(get_assignments))
         .route("/:assignment_id", get(get_assignment))
         .route("/:assignment_id", put(edit_assignment))
+        .route("/:assignment_id", delete(delete_assignment))
 }
