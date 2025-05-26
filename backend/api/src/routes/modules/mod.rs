@@ -23,7 +23,7 @@ use put::edit_module;
 use crate::auth::guards::require_admin;
 use post::{create, assign_lecturers, assign_students, assign_tutors};
 use delete::{remove_lecturers, remove_tutors, remove_students};
-use get::{get_lecturers, get_students, get_tutors};
+use get::{get_lecturers, get_students, get_tutors, get_module};
 
 
 
@@ -47,6 +47,7 @@ pub fn modules_routes() -> Router {
         .route("/:module_id/students", get(get_students))
         .route("/:module_id/tutors", get(get_tutors))
         .route("/:module_id", put(edit_module))
+        .route("/:module_id", get(get_module))
         .nest("/:module_id/assignments", assignment_routes())
         .route_layer(axum::middleware::from_fn(require_admin))
 }

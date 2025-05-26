@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
+use super::user::User;
+
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 
 /// Represents the relationship between a module and a tutor.
@@ -113,6 +115,25 @@ impl ModuleTutor {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
         let records = sqlx::query_as::<_, ModuleTutor>(
             "SELECT module_id, user_id FROM module_tutors WHERE module_id = ?",
+        )
+        .bind(module_id)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(records)
+    }
+
+    pub async fn get_details_by_id(
+        pool: Option<&SqlitePool>,
+        module_id: i64,
+    ) -> sqlx::Result<Vec<User>> {
+        let pool = pool.unwrap_or_else(|| crate::pool::get());
+        let records = sqlx::query_as::<_, User>(
+            "SELECT users.*
+            FROM users
+            INNER JOIN module_tutors ON users.id = module_tutors.user_id
+            WHERE module_tutors.module_id = ?;
+        ",
         )
         .bind(module_id)
         .fetch_all(pool)
