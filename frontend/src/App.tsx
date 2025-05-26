@@ -1,60 +1,72 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import Login from '@pages/auth/Login';
-import Signup from '@pages/auth/Signup';
-import Dashboard from '@pages/Dashboard';
-import Unauthorized from '@pages/status/Unauthorized';
-import NotFound from '@pages/status/NotFound';
-import ServerError from '@pages/status/ServerError';
-import DashboardLayout from '@layouts/DashboardLayout';
-import UserView from '@pages/users/UserView';
-import UserEdit from '@pages/users/UserEdit';
-import UsersList from '@pages/users/UsersList';
-
-function AppRoutes() {
-  const { user } = useAuth();
-
-  return (
-    <Routes>
-      {/* Default redirect */}
-      <Route path="/" element={<Navigate to={user ? '/dashboard' : '/login'} />} />
-
-      {/* Public routes */}
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/unauthorized" element={<Unauthorized />} />
-
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route
-        path="/dashboard/settings"
-        element={
-          <DashboardLayout title="Settings">
-            <div>Settings Page</div>
-          </DashboardLayout>
-        }
-      />
-      <Route
-        path="/dashboard/submission-history"
-        element={
-          <DashboardLayout title="Submissions">
-            <div>Submissions</div>
-          </DashboardLayout>
-        }
-      />
-      <Route path="/users" element={<UsersList />} />
-      <Route path="/users/:id" element={<UserView />} />
-      <Route path="/users/:id/edit" element={<UserEdit />} />
-
-      <Route path="internal-error" element={<ServerError />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  );
-}
+import Login from './pages/auth/Login';
+import Signup from './pages/auth/Signup';
+import Forbidden from './pages/shared/status/Forbidden';
+import Unauthorized from './pages/shared/status/Unauthorized';
+import Home from './pages/Home';
+import UsersList from './pages/users/UsersList';
+import ModuleList from './pages/modules/admin/ModuleList';
+import ModuleView from './pages/modules/admin/view/ModuleView';
+import NotFound from './pages/shared/status/NotFound';
+import UnderConstruction from './pages/shared/status/UnderConstruction';
+import ProfilePage from './pages/shared/Profile';
 
 export default function App() {
+  const { user, isAdmin, loading } = useAuth();
+
+  if (loading) return null;
+
+  const requireAuth = (element: JSX.Element) => (user ? element : <Navigate to="/login" replace />);
+
+  const requireAdmin = (element: JSX.Element) =>
+    user ? (
+      isAdmin() ? (
+        element
+      ) : (
+        <Navigate to="/unauthorized" replace />
+      )
+    ) : (
+      <Navigate to="/forbidden" replace />
+    );
+
   return (
     <Router>
-      <AppRoutes />
+      <Routes>
+        {/* Public Auth Routes */}
+        <Route path="/" element={<Navigate to={user ? '/home' : '/login'} />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+
+        {/* Admin-only User Routes */}
+        <Route path="/users" element={requireAdmin(<UsersList />)} />
+        <Route path="/users/:id" element={requireAdmin(<Unauthorized />)} />
+        <Route path="/users/:id/modules" element={requireAdmin(<Unauthorized />)} />
+
+        <Route path="/home" element={requireAuth(<Home />)} />
+        <Route path="/settings" element={requireAuth(<UnderConstruction />)} />
+        <Route path="/profile" element={requireAuth(<ProfilePage />)} />
+
+        {/* Modules */}
+        <Route path="/modules" element={requireAuth(<ModuleList />)} />
+        <Route path="/modules/my" element={requireAuth(<Unauthorized />)} />
+        <Route path="/modules/:id" element={requireAuth(<ModuleView />)} />
+        <Route path="/modules/:id/edit" element={requireAuth(<Unauthorized />)} />
+
+        {/* Assignments */}
+        <Route path="/modules/:module_id/assignments" element={requireAuth(<Unauthorized />)} />
+        <Route
+          path="/modules/:module_id/assignments/:assignment_id"
+          element={requireAuth(<Unauthorized />)}
+        />
+
+        <Route path="/reports" element={<UnderConstruction />} />
+
+        <Route path="/unauthorized" element={<Unauthorized />} />
+        <Route path="/forbidden" element={<Forbidden />} />
+        {/* Fallback */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
     </Router>
   );
 }

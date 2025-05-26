@@ -6,6 +6,7 @@ pub async fn seed(pool: &SqlitePool) {
 
     module_factory::make("COS314", 2025, Some("Artificial Intelligence"), 16, pool).await;
     module_factory::make("COS333", 2025, Some("Software Engineering"), 16, pool).await;
+    module_factory::make("COS301", 2025, Some("Something"), 16, pool).await;
 
     log::info!("Modules seeded.");
 }

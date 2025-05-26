@@ -40,7 +40,6 @@ impl Config {
                 .and_then(|m| m.parse().ok())
                 .unwrap_or(60);
 
-
             Config {
                 project_name,
                 log_level,
