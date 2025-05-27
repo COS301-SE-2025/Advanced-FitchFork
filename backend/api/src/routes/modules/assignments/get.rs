@@ -1,14 +1,19 @@
+use std::path::PathBuf;
+use axum::response::{Json, Response};
 use axum::extract::Query;
-use axum::response::Json;
 use axum::{extract::Path, http::StatusCode, response::IntoResponse};
+use axum::http::{header, HeaderMap, HeaderValue};
 use db::{
     models::assignment::{Assignment, AssignmentType},
     models::assignment_files::AssignmentFiles,
     pool,
 };
 use serde::{Deserialize, Serialize};
-
+use sqlx::FromRow;
+use crate::auth::AuthUser;
 use crate::response::ApiResponse;
+use tokio::fs::File as FsFile;
+use tokio::io::AsyncReadExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AssignmentResponse {
@@ -105,7 +110,8 @@ pub async fn get_assignment(
                     let converted_files: Vec<File> = files
                         .into_iter()
                         .map(|f| File {
-                            id: f.id.to_string(),
+                            id: f.id.to_string(), 
+
                             filename: f.filename,
                             path: f.path,
                             created_at: f.created_at,
@@ -144,6 +150,211 @@ pub async fn get_assignment(
                 "An error occurred in the database".to_string(),
             )),
         ),
+    }
+} // test
+
+
+
+
+/// Represents a file associated with an assignment.
+///
+/// This struct is used in both upload and download operations, allowing
+/// file metadata to be returned in a consistent API structure.
+///
+/// - `mime_type` allows distinguishing between file formats.
+/// - Timestamps are ISO 8601 formatted.
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct AssignmentFile {
+    pub id: i64,
+    pub assignment_id: i64,
+    pub filename: String,
+    pub path: String,
+}
+/// GET /api/modules/:module_id/assignments/:assignment_id/files/:file_id
+///
+/// Download a file from an assignment. Accessible to admins or users assigned to the module.
+///
+/// ### Response
+/// - `200 OK`: Returns file with correct headers
+/// - `403 Forbidden`: User not authorized
+/// - `404 Not Found`: File or assignment not found
+pub async fn download_file(Path((module_id, assignment_id, file_id)): Path<(i64, i64, i64)>, AuthUser(claims): AuthUser, ) -> Response {
+    let pool = pool::get();
+
+    let is_authorized = claims.admin || {
+        let query = r#"
+            SELECT EXISTS(
+                SELECT 1 FROM module_lecturers WHERE module_id = ? AND user_id = ?
+                UNION
+                SELECT 1 FROM module_tutors    WHERE module_id = ? AND user_id = ?
+                UNION
+                SELECT 1 FROM module_students  WHERE module_id = ? AND user_id = ?
+            )
+        "#;
+        sqlx::query_scalar(query)
+            .bind(module_id).bind(claims.sub)
+            .bind(module_id).bind(claims.sub)
+            .bind(module_id).bind(claims.sub)
+            .fetch_one(pool)
+            .await
+            .unwrap_or(false)
+    };
+
+    if !is_authorized {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<AssignmentFile>::error("You do not have permission to access this file")),
+        )
+            .into_response();
+    }
+
+    let file_res = sqlx::query_as::<_, AssignmentFile>(
+        r#"
+        SELECT id, assignment_id, filename, path
+          FROM assignment_files
+         WHERE id = ? AND assignment_id = ?
+        "#,
+    )
+        .bind(file_id)
+        .bind(assignment_id)
+        .fetch_optional(pool)
+        .await;
+
+    let file = match file_res {
+        Ok(Some(f)) => f,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<AssignmentFile>::error("File not found")),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            eprintln!("DB error fetching file: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<AssignmentFile>::error("Database error")),
+            )
+                .into_response();
+        }
+    };
+
+    let fs_path = PathBuf::from(&file.path);
+    if !fs_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<AssignmentFile>::error("File missing on disk")),
+        )
+            .into_response();
+    }
+    
+    let mut f = match FsFile::open(&fs_path).await {
+        Ok(f) => f,
+        Err(err) => {
+            eprintln!("File open error: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<AssignmentFile>::error("Could not open file")),
+            )
+                .into_response();
+        }
+    };
+    let mut buf = Vec::new();
+    if let Err(err) = f.read_to_end(&mut buf).await {
+        eprintln!("File read error: {:?}", err);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<AssignmentFile>::error("Failed to read file")),
+        )
+            .into_response();
+    }
+
+    
+    let mut headers = HeaderMap::new();
+    let disposition = HeaderValue::from_str(&format!("attachment; filename=\"{}\"", file.filename))
+        .unwrap_or_else(|_| HeaderValue::from_static("attachment"));
+    headers.insert(header::CONTENT_DISPOSITION, disposition);
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+
+    (StatusCode::OK, headers, buf).into_response()
+}
+
+
+pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)>, AuthUser(claims): AuthUser, ) -> Response {
+    match Assignment::get_by_id(Some(pool::get()), assignment_id, module_id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<Vec<File>>::error(
+                    "Assignment not found".to_string(),
+                )),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            eprintln!("DB error checking assignment: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<Vec<File>>::error(
+                    "Database error".to_string(),
+                )),
+            ).into_response();
+        }
+    }
+
+    let is_authorized = claims.admin
+        || {
+        let q = r#"
+                SELECT EXISTS(
+                  SELECT 1 FROM module_lecturers WHERE module_id = ? AND user_id = ?
+                  UNION
+                  SELECT 1 FROM module_tutors    WHERE module_id = ? AND user_id = ?
+                  UNION
+                  SELECT 1 FROM module_students  WHERE module_id = ? AND user_id = ?
+                )
+            "#;
+        sqlx::query_scalar(q).bind(module_id).bind(claims.sub).bind(module_id).bind(claims.sub).bind(module_id).bind(claims.sub).fetch_one(pool::get()).await.unwrap_or(false)
+    };
+    if !is_authorized {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<Vec<File>>::error(
+                "You do not have permission to view files for this assignment".to_string(),
+            )),
+        ).into_response();
+    }
+
+    match AssignmentFiles::get_by_assignment_id(Some(pool::get()), assignment_id).await {
+        Ok(files) => {
+            let file_list: Vec<File> = files
+                .into_iter()
+                .map(|f| File {
+                    id: f.id.to_string(),
+                    filename: f.filename,
+                    path: f.path,
+                    created_at: f.created_at,
+                    updated_at: f.updated_at,
+                })
+                .collect();
+
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    file_list,
+                    "Assignment files retrieved successfully",
+                )),
+            ).into_response()
+        }
+        Err(err) => {
+            eprintln!("DB error fetching files: {:?}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<Vec<File>>::error(
+                    "Failed to retrieve files".to_string(),
+                )),
+            ).into_response()
+        }
     }
 }
 
