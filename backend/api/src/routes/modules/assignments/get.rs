@@ -18,7 +18,7 @@ use tokio::io::AsyncReadExt;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AssignmentResponse {
     pub assignment: AssignmentDetailResponse,
-    pub files: Vec<File>,
+    pub files: Vec<File2>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AssignmentDetailResponse {
@@ -31,8 +31,6 @@ pub struct AssignmentDetailResponse {
     pub due_date: String,
     pub created_at: String,
     pub updated_at: String,
-    pub files: Vec<File2>,
-
 }
 
 impl From<Assignment> for AssignmentDetailResponse {

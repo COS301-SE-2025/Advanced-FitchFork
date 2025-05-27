@@ -9,10 +9,9 @@ pub mod post;
 pub mod put;
 
 use delete::delete_assignment;
-use get::{get_assignment, get_assignments};
+use get::{get_assignment, get_assignments,download_file};
 use post::create;
 use put::edit_assignment;
-use get::{get_assignment, download_file};
 use crate::routes::modules::assignments::get::list_files;
 use crate::routes::modules::assignments::post::upload_files;
 
