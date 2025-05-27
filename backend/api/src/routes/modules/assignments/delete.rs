@@ -99,6 +99,7 @@ pub async fn delete_files(
         .and_then(|v| v.as_array())
         .map(|arr| arr.iter().filter_map(|val| val.as_i64()).collect())
         .unwrap_or_default();
+
     if files.len() == 0 {
         return (
             StatusCode::BAD_REQUEST,

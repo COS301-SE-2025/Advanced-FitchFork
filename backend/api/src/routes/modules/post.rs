@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 use chrono::{Utc, Datelike};
 use crate::response::ApiResponse;
-use crate::auth::claims::AuthUser;
+
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateModuleRequest {
     #[validate(regex(
@@ -286,16 +286,8 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
 
 pub async fn assign_lecturers(
     axum::extract::Path(module_id): axum::extract::Path<i64>,
-    AuthUser(claims): AuthUser,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
-    if !claims.admin {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("You do not have permission to perform this action")),
-        );
-    }
-
     if body.user_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
@@ -438,16 +430,8 @@ pub async fn assign_lecturers(
 
 pub async fn assign_students(
     axum::extract::Path(module_id): axum::extract::Path<i64>,
-    AuthUser(claims): AuthUser,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
-    if !claims.admin {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("You do not have permission to perform this action")),
-        );
-    }
-
     if body.user_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
@@ -589,15 +573,8 @@ pub async fn assign_students(
 
 pub async fn assign_tutors(
     axum::extract::Path(module_id): axum::extract::Path<i64>,
-    AuthUser(claims): AuthUser,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl axum::response::IntoResponse {
-    if !claims.admin {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("You do not have permission to perform this action")),
-        );
-    }
 
     if body.user_ids.is_empty() {
         return (

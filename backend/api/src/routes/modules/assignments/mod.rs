@@ -1,19 +1,22 @@
-use axum::{
-    routing::{delete, get, post, put},
-    Router,
-};
-
 pub mod delete;
 pub mod get;
 pub mod post;
 pub mod put;
 
-use delete::{delete_assignment, delete_files};
+use axum::{
+    Router,
+    extract::Path,
+    routing::{get, post, put, delete},
+    middleware::from_fn,
+};
 
-use crate::routes::modules::assignments::get::list_files;
+use delete::{delete_assignment, delete_files};
 use get::{download_file, get_assignment, get_assignments};
 use post::{create, upload_files};
 use put::edit_assignment;
+
+use crate::auth::guards::{require_assigned_to_module, require_lecturer};
+use crate::routes::modules::assignments::get::list_files;
 
 /// Expects a module ID
 /// If an assignment ID is included it will be deleted
@@ -22,23 +25,45 @@ use put::edit_assignment;
 /// Builds and returns the `/assignments` route group.
 ///
 /// Routes:
-/// - `POST /assignments`               → Create a new assignment
-/// - `GET  /assignments`               → List assignments (with optional filters)
-/// - `GET  /assignments/:assignment_id` → Get details of a specific assignment
-/// - `PUT  /assignments/:assignment_id` → Edit an existing assignment
-/// - `POST /assignments/:assignment_id/files` → Upload files for an assignment
-/// - `DELETE /assignments/:assignment_id` → Delete an assignment
-/// - `DELETE /assignments/:assignment_id/files` → Delete one or more files from the assignment
-/// Note: Expects a module ID to be part of the parent route, i.e., nested under `/modules/:module_id/assignments`.
+/// - `POST /assignments`                         → Create a new assignment
+/// - `GET  /assignments`                         → List assignments
+/// - `GET  /assignments/:assignment_id`          → Get assignment details
+/// - `PUT  /assignments/:assignment_id`          → Edit assignment
+/// - `POST /assignments/:assignment_id/files`    → Upload files
+/// - `GET  /assignments/:assignment_id/files`    → List files
+/// - `GET  /assignments/:assignment_id/file/:file_id` → Download a file
+/// - `DELETE /assignments/:assignment_id/files`  → Delete files
+/// - `DELETE /assignments/:assignment_id`        → Delete assignment
 pub fn assignment_routes() -> Router {
     Router::new()
         .route("/", post(create))
         .route("/", get(get_assignments))
         .route("/:assignment_id", get(get_assignment))
         .route("/:assignment_id", put(edit_assignment))
-        .route("/:assignment_id/files", post(upload_files))
-        .route("/:assignment_id/file/:file_id", get(download_file))
-        .route("/:assignment_id/files", get(list_files))
-        .route("/:assignment_id/files", delete(delete_files))
+        .route(
+            "/:assignment_id/files",
+            post(upload_files).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer(Path(params), req, next)
+            })),
+        )
+        .route(
+            "/:assignment_id/files",
+            get(list_files).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_assigned_to_module(Path(params), req, next)
+            })),
+        )
+        .route(
+            "/:assignment_id/files",
+            delete(delete_files).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer(Path(params), req, next)
+            })),
+        )
+        .route(
+            "/:assignment_id/file/:file_id",
+            get(download_file).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_assigned_to_module(Path(params), req, next)
+            })),
+        )
         .route("/:assignment_id", delete(delete_assignment))
 }
+

@@ -27,7 +27,7 @@ use db::{
 };
 use serde::Serialize;
 
-use crate::{auth::claims::AuthUser, response::ApiResponse};
+use crate::{response::ApiResponse};
 
 use chrono::{DateTime, Utc};
 use std::{fs, io::Write, path::PathBuf};
@@ -94,18 +94,8 @@ pub struct UploadedFileMetadata {
 
 pub async fn upload_files(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
-    AuthUser(claims): AuthUser,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    if !claims.admin {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
-                "You do not have permission to upload files for this assignment",
-            )),
-        );
-    }
-
     let pool = pool::get();
 
     let assignment_exists: bool = sqlx::query_scalar(
@@ -195,7 +185,7 @@ pub async fn upload_files(
 /// - JSON body with the following fields:
 ///   - `name` (string, required): The name of the assignment.
 ///   - `description` (string, optional): A description of the assignment.
-///   - `assignment_type` (string, optional): The type of assignment (`"A"` for Assignment, anything else defaults to Practical).
+///   - `assignment_type` (string, required): The type of assignment. Must be either `"Assignment"` or `"Practical"`.
 ///   - `available_from` (string, required): The release date in ISO 8601 format.
 ///   - `due_date` (string, required): The due date in ISO 8601 format.
 ///
@@ -203,7 +193,7 @@ pub async fn upload_files(
 ///
 /// Returns an HTTP response indicating the result:
 /// - `200 OK` with the created assignment data if successful.
-/// - `400 BAD REQUEST` if required fields (`name`, `available_from`, or `due_date`) are missing or malformed.
+/// - `400 BAD REQUEST` if required fields are missing or if `assignment_type` is invalid.
 /// - `500 INTERNAL SERVER ERROR` if the database operation fails.
 ///
 /// The response body is a JSON object using a standardized API response format.
@@ -217,8 +207,16 @@ pub async fn create(
     let available_from = req.get("available_from").and_then(|v| v.as_str());
     let due_date = req.get("due_date").and_then(|v| v.as_str());
     let assignment_type = match req.get("assignment_type").and_then(|v| v.as_str()) {
-        Some("A") => db::models::assignment::AssignmentType::Assignment,
-        _ => db::models::assignment::AssignmentType::Practical,
+        Some("Assignment") => db::models::assignment::AssignmentType::Assignment,
+        Some("Practical") => db::models::assignment::AssignmentType::Practical,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error(
+                    "Invalid assignment_type. Expected 'Assignment' or 'Practical'.",
+                )),
+            );
+        }
     };
 
     fn validate_and_format(date_str: &str) -> Option<String> {

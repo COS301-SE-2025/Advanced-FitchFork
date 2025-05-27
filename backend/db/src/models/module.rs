@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use sqlx::Arguments;
 use sqlx::{FromRow, SqlitePool};
 
 /// Represents a university module.
@@ -164,88 +163,6 @@ impl Module {
         .await?;
 
         Ok(record)
-    }
-
-    /// Filters and paginates modules based on optional search criteria.
-    ///
-    /// This function retrieves a list of modules from the database that match the specified filter criteria.
-    ///
-    /// # Arguments
-    ///
-    /// * `pool` - Optional reference to an SQLite connection pool. If `None`, the default pool is used.
-    /// * `page` - The page number used for pagination.
-    /// * `length` - The number of results per page.
-    /// * `query` - Optional search query that matches against `code` or `description` fields (case-insensitive).
-    /// * `code` - Optional module code filter (partial match, case-insensitive).
-    /// * `year` - Optional academic year filter.
-    /// * `sort` - Optional comma-separated list of fields to sort by. Prefix with `-` for descending order.
-    ///
-    /// # Returns
-    ///
-    /// Returns a `Result` containing a `Vec<Module>` that matches the filter criteria, or a `sqlx::Error` if the query fails.
-    pub async fn filter(
-        pool: Option<&SqlitePool>,
-        page: i32,
-        length: i32,
-        query: Option<String>,
-        code: Option<String>,
-        year: Option<i32>,
-        sort: Option<String>,
-    ) -> sqlx::Result<Vec<Self>> {
-        let pool = pool.unwrap_or_else(|| crate::pool::get());
-
-        let offset = (page - 1) * length;
-
-        let mut sql = String::from("SELECT * FROM modules WHERE 1=1");
-        let mut args = sqlx::sqlite::SqliteArguments::default();
-
-        if let Some(ref q) = query {
-            sql.push_str(" AND (LOWER(code) LIKE ? OR LOWER(description) LIKE ?)");
-            let q_like = format!("%{}%", q.to_lowercase());
-            args.add(q_like.clone());
-            args.add(q_like);
-        }
-
-        if let Some(ref c) = code {
-            sql.push_str(" AND LOWER(code) LIKE ?");
-            args.add(format!("%{}%", c.to_lowercase()));
-        }
-
-        if let Some(y) = year {
-            sql.push_str(" AND year = ?");
-            args.add(y);
-        }
-
-        if let Some(sort_str) = sort {
-            let mut order_clauses = Vec::new();
-
-            for field in sort_str.split(',') {
-                let trimmed = field.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                let (field_name, direction) = if trimmed.starts_with('-') {
-                    (&trimmed[1..], "DESC")
-                } else {
-                    (trimmed, "ASC")
-                };
-
-                order_clauses.push(format!("{} {}", field_name, direction));
-            }
-
-            if !order_clauses.is_empty() {
-                sql.push_str(" ORDER BY ");
-                sql.push_str(&order_clauses.join(", "));
-            }
-        }
-
-        sql.push_str(" LIMIT ? OFFSET ?");
-        args.add(length);
-        args.add(offset);
-
-        sqlx::query_as_with::<_, Self, _>(&sql, args)
-            .fetch_all(pool)
-            .await
     }
 }
 

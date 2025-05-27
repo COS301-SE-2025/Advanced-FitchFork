@@ -305,6 +305,60 @@ impl User {
 
         Ok(roles)
     }
+
+    /// Checks if the user is a lecturer in the given module.
+    pub async fn is_lecturer_in(
+        pool: Option<&SqlitePool>,
+        user_id: i64,
+        module_id: i64,
+    ) -> sqlx::Result<bool> {
+        let pool = pool.unwrap_or_else(|| crate::pool::get());
+        let exists: Option<(i64,)> = sqlx::query_as(
+            "SELECT 1 FROM module_lecturers WHERE user_id = ? AND module_id = ? LIMIT 1",
+        )
+        .bind(user_id)
+        .bind(module_id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(exists.is_some())
+    }
+
+    /// Checks if the user is a tutor in the given module.
+    pub async fn is_tutor_in(
+        pool: Option<&SqlitePool>,
+        user_id: i64,
+        module_id: i64,
+    ) -> sqlx::Result<bool> {
+        let pool = pool.unwrap_or_else(|| crate::pool::get());
+        let exists: Option<(i64,)> = sqlx::query_as(
+            "SELECT 1 FROM module_tutors WHERE user_id = ? AND module_id = ? LIMIT 1",
+        )
+        .bind(user_id)
+        .bind(module_id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(exists.is_some())
+    }
+
+    /// Checks if the user is a student in the given module.
+    pub async fn is_student_in(
+        pool: Option<&SqlitePool>,
+        user_id: i64,
+        module_id: i64,
+    ) -> sqlx::Result<bool> {
+        let pool = pool.unwrap_or_else(|| crate::pool::get());
+        let exists: Option<(i64,)> = sqlx::query_as(
+            "SELECT 1 FROM module_students WHERE user_id = ? AND module_id = ? LIMIT 1",
+        )
+        .bind(user_id)
+        .bind(module_id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(exists.is_some())
+    }
 }
 
 #[cfg(test)]
