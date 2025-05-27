@@ -25,7 +25,7 @@ use axum::{
     Router,
 };
 use delete::{remove_lecturers, remove_students, remove_tutors};
-use get::{get_lecturers, get_module, get_modules, get_students, get_tutors};
+use get::{get_lecturers, get_module, get_modules, get_students, get_tutors, get_my_details};
 use post::{assign_lecturers, assign_students, assign_tutors, create};
 use put::edit_module;
 
@@ -56,6 +56,7 @@ pub fn modules_routes() -> Router {
     Router::new()
         .route("/", get(get_modules))        // Public: list modules
         .route("/", post(create))             // Admin: create module
+        .route("/me", get(get_my_details))
         .route("/:module_id/lecturers", post(assign_lecturers))
         .route("/:module_id/students", post(assign_students))
         .route("/:module_id/tutors", post(assign_tutors))
