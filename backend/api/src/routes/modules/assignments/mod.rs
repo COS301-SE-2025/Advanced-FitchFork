@@ -8,16 +8,16 @@ pub mod get;
 pub mod post;
 pub mod put;
 
-use delete::delete_assignment;
+use delete::{delete_assignment, delete_files};
 
-use get::{get_assignment, get_assignments,download_file};
+use crate::routes::modules::assignments::get::list_files;
+use get::{download_file, get_assignment, get_assignments};
 use post::{create, upload_files};
 use put::edit_assignment;
-use crate::routes::modules::assignments::get::list_files;
 
 /// Expects a module ID
 /// If an assignment ID is included it will be deleted
-/// - `POST /` → `create` 
+/// - `POST /` → `create`
 /// - `DELETE /:assignment_id` → `delete_assignment`
 /// Builds and returns the `/assignments` route group.
 ///
@@ -26,9 +26,9 @@ use crate::routes::modules::assignments::get::list_files;
 /// - `GET  /assignments`               → List assignments (with optional filters)
 /// - `GET  /assignments/:assignment_id` → Get details of a specific assignment
 /// - `PUT  /assignments/:assignment_id` → Edit an existing assignment
-/// - `DELETE /assignments/:assignment_id` → Delete an assignment
 /// - `POST /assignments/:assignment_id/files` → Upload files for an assignment
-///
+/// - `DELETE /assignments/:assignment_id` → Delete an assignment
+/// - `DELETE /assignments/:assignment_id/files` → Delete one or more files from the assignment
 /// Note: Expects a module ID to be part of the parent route, i.e., nested under `/modules/:module_id/assignments`.
 pub fn assignment_routes() -> Router {
     Router::new()
@@ -39,5 +39,6 @@ pub fn assignment_routes() -> Router {
         .route("/:assignment_id/files", post(upload_files))
         .route("/:assignment_id/file/:file_id", get(download_file))
         .route("/:assignment_id/files", get(list_files))
+        .route("/:assignment_id/files", delete(delete_files))
         .route("/:assignment_id", delete(delete_assignment))
 }

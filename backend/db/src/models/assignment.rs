@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::Arguments;
 use sqlx::FromRow;
 use sqlx::SqlitePool;
+
+use super::assignment_files::AssignmentFiles;
 //ENUM
 
 /// Represents the type of an assignment, either a normal assignment or a practical.
@@ -84,12 +86,17 @@ impl Assignment {
     /// * `mid` - The ID of the module the assignment is related to
     pub async fn delete_by_id(pool: Option<&SqlitePool>, id: i64, mid: i64) -> sqlx::Result<bool> {
         let pool = pool.unwrap_or_else(|| crate::pool::get());
+        let files: Vec<i64> = AssignmentFiles::get_id_by_assignment_id(Some(pool), id).await?;
+
+        for f in files {
+            AssignmentFiles::delete_by_id(Some(pool), f).await?;
+        }
+
         let result = sqlx::query("DELETE FROM assignments WHERE id = ? AND module_id = ?")
             .bind(id)
             .bind(mid)
             .execute(pool)
             .await?;
-
         Ok(result.rows_affected() > 0)
     }
 
