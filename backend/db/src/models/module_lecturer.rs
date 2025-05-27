@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
-use super::user::User;
+use super::{module::Module, user::User};
 
 /// Represents the relationship between a module and a lecturer (user).
 ///
@@ -141,6 +141,23 @@ impl ModuleLecturer {
         .fetch_all(pool)
         .await?;
 
+        Ok(records)
+    }
+
+       pub async fn get_by_user_id(
+        pool: Option<&SqlitePool>,
+        user_id: i64,
+    ) -> sqlx::Result<Vec<Module>> {
+        let pool = pool.unwrap_or_else(|| crate::pool::get());
+        let records = sqlx::query_as::<_, Module>(
+            "SELECT modules.*
+        FROM module_lecturers
+        INNER JOIN modules ON module_lecturers.module_id = modules.id
+        WHERE module_lecturers.user_id = ?",
+        )
+        .bind(user_id)
+        .fetch_all(pool)
+        .await?;
         Ok(records)
     }
 }

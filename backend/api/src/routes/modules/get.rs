@@ -4,8 +4,11 @@ use crate::routes::modules::post::PersonnelResponse;
 use axum::extract::{Path, Query};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
+use axum::{Extension, Json};
 use db::models::module::Module;
+use db::models::module_lecturer::ModuleLecturer;
+use db::models::module_student::ModuleStudent;
+use db::models::module_tutor::ModuleTutor;
 use db::models::user::User;
 use db::pool;
 use serde::{Deserialize, Serialize};
@@ -429,7 +432,6 @@ pub async fn get_students(
 /// - Module information.
 /// - Lists of users for each role (lecturers, tutors, students), each mapped to `UserResponse`.
 
-
 pub async fn get_module(Path(module_id): Path<i64>) -> impl IntoResponse {
     let module_res = Module::get_by_id(Some(pool::get()), module_id).await;
     match module_res {
@@ -607,7 +609,10 @@ pub async fn get_modules(Query(params): Query<FilterReq>) -> impl IntoResponse {
     if params.sort.is_some() {
         let valid_fields = ["code", "created_at", "year", "credits"];
         if !valid_fields.contains(&params.sort.as_ref().unwrap().as_str()) {
-            return (StatusCode::BAD_REQUEST, Json(ApiResponse::<FilterResponse>::error("Invalid field used")));
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
+            );
         }
     }
     let res = Module::filter(
@@ -636,6 +641,50 @@ pub async fn get_modules(Query(params): Query<FilterReq>) -> impl IntoResponse {
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<FilterResponse>::error(
                 "An error occurred while retrieving modules",
+            )),
+        ),
+    }
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MyDetailsResponse {
+    pub as_student: Vec<ModuleDetailsResponse>,
+    pub as_tutor: Vec<ModuleDetailsResponse>,
+    pub as_lecturer: Vec<ModuleDetailsResponse>,
+}
+
+impl From<(Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsResponse {
+    fn from((as_student, as_tutor, as_lecturer): (Vec<Module>, Vec<Module>, Vec<Module>)) -> Self {
+        use std::convert::From;
+        MyDetailsResponse {
+            as_student: as_student.into_iter().map(From::from).collect(),
+            as_tutor: as_tutor.into_iter().map(From::from).collect(),
+            as_lecturer: as_lecturer.into_iter().map(From::from).collect(),
+        }
+    }
+}
+
+pub async fn get_my_details(Extension(AuthUser(claims)): Extension<AuthUser>) -> impl IntoResponse {
+    let id = claims.sub;
+    let pool = pool::get();
+    let as_student = ModuleStudent::get_by_user_id(Some(pool), id).await;
+    let as_tutor = ModuleTutor::get_by_user_id(Some(pool), id).await;
+    let as_lecturer = ModuleLecturer::get_by_user_id(Some(pool), id).await;
+
+    match (as_student, as_tutor, as_lecturer) {
+        (Ok(students), Ok(tutors), Ok(lecturers)) => {
+            let response = MyDetailsResponse::from((students, tutors, lecturers));
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    response,
+                    "My module details retrieved successfully",
+                )),
+            )
+        }
+        _ => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<MyDetailsResponse>::error(
+                "An error occurred while retrieving module details",
             )),
         ),
     }
