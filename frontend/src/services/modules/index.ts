@@ -12,7 +12,8 @@ import type {
   RemoveTutorsRequest,
   EnrollStudentsRequest,
   RemoveStudentsRequest,
-  UserModuleRole
+  UserModuleRole,
+  ModuleRole
 } from "@/types/modules";
 import type { User } from "@/types/users";
 
@@ -179,8 +180,20 @@ export const ModulesService = {
    * @param moduleId - ID of the module
    * @returns List of lecturer users
    */
-  getLecturers: (moduleId: number): Promise<ApiResponse<{users: User[]}>> =>
-    apiFetch(`/modules/${moduleId}/lecturers`, { method: "GET" }),
+  getLecturers: (
+    moduleId: number,
+    options: { page: number; per_page: number; query?: string; email?: string; student_number?: string; sort?: string }
+  ): Promise<ApiResponse<{ users: User[]; page: number; per_page: number; total: number }>> => {
+    const params = new URLSearchParams();
+    params.append("page", options.page.toString());
+    params.append("per_page", options.per_page.toString());
+    if (options.query) params.append("query", options.query);
+    if (options.email) params.append("email", options.email);
+    if (options.student_number) params.append("student_number", options.student_number);
+    if (options.sort) params.append("sort", options.sort);
+
+    return apiFetch(`/modules/${moduleId}/lecturers?${params.toString()}`, { method: "GET" });
+  },
 
   /**
    * Get a list of tutors assigned to a module.
@@ -188,8 +201,20 @@ export const ModulesService = {
    * @param moduleId - ID of the module
    * @returns List of tutor users
    */
-  getTutors: (moduleId: number): Promise<ApiResponse<{users: User[]}>> =>
-    apiFetch(`/modules/${moduleId}/tutors`, { method: "GET" }),
+  getTutors: (
+    moduleId: number,
+    options: { page: number; per_page: number; query?: string; email?: string; student_number?: string; sort?: string }
+  ): Promise<ApiResponse<{ users: User[]; page: number; per_page: number; total: number }>> => {
+    const params = new URLSearchParams();
+    params.append("page", options.page.toString());
+    params.append("per_page", options.per_page.toString());
+    if (options.query) params.append("query", options.query);
+    if (options.email) params.append("email", options.email);
+    if (options.student_number) params.append("student_number", options.student_number);
+    if (options.sort) params.append("sort", options.sort);
+
+    return apiFetch(`/modules/${moduleId}/tutors?${params.toString()}`, { method: "GET" });
+  },
 
   /**
    * Get a list of students enrolled in a module.
@@ -197,8 +222,20 @@ export const ModulesService = {
    * @param moduleId - ID of the module
    * @returns List of student users
    */
-  getStudents: (moduleId: number): Promise<ApiResponse<{users: User[]}>> =>
-    apiFetch(`/modules/${moduleId}/students`, { method: "GET" }),
+  getStudents: (
+    moduleId: number,
+    options: { page: number; per_page: number; query?: string; email?: string; student_number?: string; sort?: string }
+  ): Promise<ApiResponse<{ users: User[]; page: number; per_page: number; total: number }>> => {
+    const params = new URLSearchParams();
+    params.append("page", options.page.toString());
+    params.append("per_page", options.per_page.toString());
+    if (options.query) params.append("query", options.query);
+    if (options.email) params.append("email", options.email);
+    if (options.student_number) params.append("student_number", options.student_number);
+    if (options.sort) params.append("sort", options.sort);
+
+    return apiFetch(`/modules/${moduleId}/students?${params.toString()}`, { method: "GET" });
+  },
 
   /**
    * Get all modules a user is involved in, with their role for each.
@@ -208,4 +245,39 @@ export const ModulesService = {
    */
   getModulesForUser: (userId: number): Promise<ApiResponse<UserModuleRole[]>> =>
     apiFetch(`/users/${userId}/modules`, { method: "GET" }),
+
+  /**
+   * Get users eligible to be assigned a role (Lecturer, Tutor, Student) in a module.
+   * Supports pagination, search, filtering, and sorting.
+   * 
+   * @param moduleId - Module ID
+   * @param role - Target role ("Lecturer", "Tutor", or "Student")
+   * @param options - Pagination, query, and sort options
+   * @returns A paginated, filtered list of eligible users and total count
+   */
+  getEligibleUsersForRole: (
+    moduleId: number,
+    role: ModuleRole,
+    options: {
+      page: number;
+      per_page: number;
+      query?: string;
+      email?: string;
+      student_number?: string;
+      sort?: string;
+    }
+  ): Promise<ApiResponse<{ users: User[]; page: number; per_page: number; total: number }>> => {
+    const params = new URLSearchParams();
+    params.append("role", role);
+    params.append("page", options.page.toString());
+    params.append("per_page", options.per_page.toString());
+    if (options.query) params.append("query", options.query);
+    if (options.email) params.append("email", options.email);
+    if (options.student_number) params.append("student_number", options.student_number);
+    if (options.sort) params.append("sort", options.sort);
+
+    return apiFetch(`/modules/${moduleId}/eligible-users?${params.toString()}`, {
+      method: "GET",
+    });
+  }
 };

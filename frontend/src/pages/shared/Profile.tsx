@@ -1,4 +1,4 @@
-import { useAuth } from '@/context/AuthContext';
+import { useEffect, useState } from 'react';
 import AppLayout from '@/layouts/AppLayout';
 import {
   Row,
@@ -24,16 +24,21 @@ import {
   MobileOutlined,
   KeyOutlined,
 } from '@ant-design/icons';
+import { AuthService } from '@/services/auth';
+import type { MeResponse, UserModule } from '@/types/auth';
 
 const { Title, Text } = Typography;
 
-const mockModules = [
+const mockModules: UserModule[] = [
   {
     id: 1,
     code: 'COS332',
     year: 2025,
     description: 'Networks and Security',
     role: 'Tutor',
+    created_at: '',
+    updated_at: '',
+    credits: 0,
   },
   {
     id: 2,
@@ -41,6 +46,9 @@ const mockModules = [
     year: 2025,
     description: 'Computer Graphics',
     role: 'Student',
+    created_at: '',
+    updated_at: '',
+    credits: 0,
   },
   {
     id: 3,
@@ -48,27 +56,37 @@ const mockModules = [
     year: 2024,
     description: 'Software Engineering',
     role: 'Lecturer',
+    created_at: '',
+    updated_at: '',
+    credits: 0,
   },
 ];
 
 export default function ProfilePage() {
-  const { user, modules } = useAuth();
+  const [user, setUser] = useState<MeResponse | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  if (!user) return null;
+  useEffect(() => {
+    AuthService.me()
+      .then((res) => {
+        if (res.success && res.data) setUser(res.data);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
-  const userRoles = Array.from(new Set(modules.map((m) => m.role)));
+  if (loading || !user) return null;
 
-  const visibleModules = modules.length === 0 ? mockModules : modules;
+  const userRoles = Array.from(new Set(user.modules.map((m) => m.role)));
+  const visibleModules = user.modules.length === 0 ? mockModules : user.modules;
 
   return (
     <AppLayout title="Profile" description="Manage your account, roles, and settings.">
       <div className="w-full max-w-6xl">
         <Row gutter={24}>
-          {/* Left Panel */}
           <Col xs={24} md={8}>
             <Card className="rounded-lg mb-6 border border-gray-300">
               <div className="flex flex-col gap-4">
-                <Avatar size={80} src="/profile.jpeg" />
+                <Avatar size={80} src="/profile.jpeg" icon={<UserOutlined />} />
                 <div>
                   <Title level={4} className="!mb-0">
                     {user.student_number}
@@ -91,29 +109,25 @@ export default function ProfilePage() {
               </div>
             </Card>
 
-            {/* Recent Activity */}
-            <div className="mt-6">
-              <Card className="rounded-lg border border-gray-300" title="Recent Activity">
-                <List
-                  size="small"
-                  dataSource={[
-                    { date: '2025-05-24', activity: 'Logged in' },
-                    { date: '2025-05-22', activity: 'Viewed Module COS344' },
-                  ]}
-                  renderItem={(item) => (
-                    <List.Item>
-                      <Text>
-                        <CalendarOutlined className="mr-2" />
-                        {item.date} — {item.activity}
-                      </Text>
-                    </List.Item>
-                  )}
-                />
-              </Card>
-            </div>
+            <Card className="rounded-lg border border-gray-300 mt-6" title="Recent Activity">
+              <List
+                size="small"
+                dataSource={[
+                  { date: '2025-05-24', activity: 'Logged in' },
+                  { date: '2025-05-22', activity: 'Viewed Module COS344' },
+                ]}
+                renderItem={(item) => (
+                  <List.Item>
+                    <Text>
+                      <CalendarOutlined className="mr-2" />
+                      {item.date} — {item.activity}
+                    </Text>
+                  </List.Item>
+                )}
+              />
+            </Card>
           </Col>
 
-          {/* Right Panel */}
           <Col xs={24} md={16}>
             <Card className="rounded-lg border border-gray-300" title="Account Information">
               <Descriptions
@@ -137,7 +151,6 @@ export default function ProfilePage() {
 
         <Divider className="my-8" />
 
-        {/* Security Section */}
         <Row>
           <Col span={24}>
             <Card className="rounded-lg border border-gray-300" title="Security Settings">
@@ -179,7 +192,6 @@ export default function ProfilePage() {
 
         <Divider className="my-8" />
 
-        {/* Enrolled Modules */}
         <Row>
           <Col span={24}>
             <Card className="rounded-lg border border-gray-300" title="Enrolled Modules">

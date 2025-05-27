@@ -7,7 +7,8 @@ import type { SortOption, Timestamp } from "./common";
 /**
  * Allowed assignment types.
  */
-export type AssignmentType = "Assignment" | "Practical";
+export type AssignmentType = 'Assignment' | 'Practical';
+
 
 /**
  * Payload shape shared between create/edit requests.
@@ -41,7 +42,7 @@ export interface Assignment extends Timestamp {
  * Metadata for an uploaded assignment file.
  */
 export interface AssignmentFile extends Timestamp {
-  id: string;
+  id: number;
   assignment_id: number;
   filename: string;
   path: string;
@@ -53,10 +54,6 @@ export interface AssignmentFile extends Timestamp {
 
 export type CreateAssignmentRequest = AssignmentPayload;
 export type EditAssignmentRequest = Partial<AssignmentPayload>;
-
-export interface DeleteAssignmentFilesRequest {
-  file_ids: string[];
-}
 
 export interface ListAssignmentsRequest {
   page: number;

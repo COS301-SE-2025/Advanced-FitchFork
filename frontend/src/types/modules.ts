@@ -5,7 +5,8 @@ import type { User } from "./users";
 // CORE ENTITY
 // ─────────────────────────────────────────────────────────────
 
-export type ModuleRole = "Lecturer" | "Tutor" | "Student";
+export type ModuleRole = "lecturer" | "tutor" | "student";
+export const MODULE_ROLES: ModuleRole[] = ['lecturer', 'tutor', 'student'];
 
 /**
  * Base module entity returned from the API.

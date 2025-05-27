@@ -27,8 +27,14 @@ import {
 } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
-import type { Assignment, AssignmentFile, AssignmentType } from '@/types/assignments';
-import { AssignmentsService } from '@/services/assignments/mock'; // TODO: Remeber to change this when services work
+import type {
+  Assignment,
+  AssignmentFile,
+  AssignmentPayload,
+  AssignmentType,
+  EditAssignmentRequest,
+} from '@/types/assignments';
+import { AssignmentsService } from '@/services/assignments';
 import TableControlBar from '@/components/TableControlBar';
 import TableTagSummary from '@/components/TableTagSummary';
 import type { SortOption } from '@/types/common';
@@ -87,8 +93,8 @@ export default function AssignmentsSection({ moduleId }: Props) {
   const [newAssignment, setNewAssignment] = useState<Partial<Assignment>>({
     name: 'New Assignment',
     assignment_type: 'Assignment',
-    available_from: dayjs().format('YYYY-MM-DD HH:mm'),
-    due_date: dayjs().format('YYYY-MM-DD HH:mm'),
+    available_from: dayjs().toISOString(),
+    due_date: dayjs().toISOString(),
   });
 
   // ======================================================================
@@ -97,7 +103,7 @@ export default function AssignmentsSection({ moduleId }: Props) {
 
   const fetchAssignments = async () => {
     setLoading(true);
-    const sort: SortOption[] = sorterState.map(({ field, order }) => ({ field, order }));
+    const sort: SortOption[] = sorterState;
 
     const res = await AssignmentsService.listAssignments(moduleId, {
       page: pagination.current,
@@ -142,14 +148,23 @@ export default function AssignmentsSection({ moduleId }: Props) {
     setNewAssignment({
       name: '',
       assignment_type: 'Assignment',
-      available_from: dayjs().format('YYYY-MM-DD HH:mm'),
-      due_date: dayjs().format('YYYY-MM-DD HH:mm'),
+      available_from: dayjs().toISOString(),
+      due_date: dayjs().toISOString(),
     });
     setIsAddModalOpen(true);
   };
 
-  const handleSubmitNewAssignment = async (values: Partial<Assignment>) => {
-    const res = await AssignmentsService.createAssignment(moduleId, values as any);
+  const handleSubmitNewAssignment = async (values: Partial<AssignmentPayload>) => {
+    const payload: AssignmentPayload = {
+      name: values.name!,
+      assignment_type: values.assignment_type!,
+      available_from: dayjs(values.available_from).toISOString(),
+      due_date: dayjs(values.due_date).toISOString(),
+      description: values.description ?? '',
+    };
+
+    const res = await AssignmentsService.createAssignment(moduleId, payload);
+
     if (res.success) {
       notifySuccess('Created', 'Assignment successfully created');
       setIsAddModalOpen(false);
@@ -164,7 +179,17 @@ export default function AssignmentsSection({ moduleId }: Props) {
   // ======================================================================
 
   const saveEdit = async (id: number) => {
-    const res = await AssignmentsService.editAssignment(moduleId, id, editedRow as any);
+    const payload: EditAssignmentRequest = {
+      name: editedRow.name,
+      assignment_type: editedRow.assignment_type,
+      available_from: editedRow.available_from
+        ? dayjs(editedRow.available_from).toISOString()
+        : undefined,
+      due_date: editedRow.due_date ? dayjs(editedRow.due_date).toISOString() : undefined,
+      description: editedRow.description,
+    };
+    const res = await AssignmentsService.editAssignment(moduleId, id, payload);
+
     if (res.success) {
       notifySuccess('Updated', 'Assignment changes have been saved');
       setEditingId(null);
@@ -196,9 +221,9 @@ export default function AssignmentsSection({ moduleId }: Props) {
   // ======================== Delete Logic (File) =========================
   // ======================================================================
 
-  const handleDeleteFile = async (assignmentId: number, fileId: string) => {
+  const handleDeleteFile = async (assignmentId: number, fileId: number) => {
     const res = await AssignmentsService.deleteFiles(moduleId, assignmentId, {
-      file_ids: [fileId],
+      file_ids: [Number(fileId)],
     });
     if (res.success) {
       notifySuccess('File Removed', 'The file was deleted successfully');
@@ -220,7 +245,7 @@ export default function AssignmentsSection({ moduleId }: Props) {
     if (res.success) {
       notifySuccess('Upload Complete', 'Your file has been uploaded successfully');
       loadFiles(assignmentId);
-      onSuccess?.();
+      onSuccess?.(); // required to resolve the upload in Upload.Dragger
     } else {
       notifyError('Upload Failed', 'There was an error uploading your file');
     }
@@ -312,9 +337,7 @@ export default function AssignmentsSection({ moduleId }: Props) {
           <DatePicker
             showTime={{ format: 'HH:mm' }}
             value={editedRow.available_from ? dayjs(editedRow.available_from) : undefined}
-            onChange={(d) =>
-              setEditedRow((r) => ({ ...r, available_from: d?.format('YYYY-MM-DD HH:mm') }))
-            }
+            onChange={(d) => setEditedRow((r) => ({ ...r, available_from: d?.toISOString() }))}
             allowClear={false}
             format="YYYY-MM-DD HH:mm"
           />
@@ -333,9 +356,7 @@ export default function AssignmentsSection({ moduleId }: Props) {
           <DatePicker
             showTime={{ format: 'HH:mm' }}
             value={editedRow.due_date ? dayjs(editedRow.due_date) : undefined}
-            onChange={(d) =>
-              setEditedRow((r) => ({ ...r, due_date: d?.format('YYYY-MM-DD HH:mm') }))
-            }
+            onChange={(d) => setEditedRow((r) => ({ ...r, due_date: d?.toISOString() }))}
             allowClear={false}
             format="YYYY-MM-DD HH:mm"
           />
@@ -350,24 +371,34 @@ export default function AssignmentsSection({ moduleId }: Props) {
       render: (_, record) =>
         editingId === record.id ? (
           <Space>
-            <Button icon={<CheckOutlined />} type="text" onClick={() => saveEdit(record.id)} />
-            <Button
-              icon={<CloseOutlined />}
-              type="text"
-              danger
-              onClick={() => {
-                setEditingId(null);
-                setEditedRow({});
-              }}
-            />
+            <Tooltip title="Save">
+              <Button
+                icon={<CheckOutlined />}
+                type="primary"
+                shape="circle"
+                onClick={() => saveEdit(record.id)}
+                size="small"
+              />
+            </Tooltip>
+            <Tooltip title="Cancel">
+              <Button
+                icon={<CloseOutlined />}
+                shape="circle"
+                onClick={() => {
+                  setEditingId(null);
+                  setEditedRow({});
+                }}
+                size="small"
+              />
+            </Tooltip>
           </Space>
         ) : (
           <Space>
             <Tooltip title="Edit">
               <Button
-                type="text"
                 icon={<EditOutlined />}
                 size="small"
+                type="text"
                 onClick={() => {
                   setEditingId(record.id);
                   setEditedRow(record);
@@ -381,7 +412,7 @@ export default function AssignmentsSection({ moduleId }: Props) {
                 okText="Yes"
                 cancelText="No"
               >
-                <Button type="text" icon={<DeleteOutlined />} danger size="small" />
+                <Button icon={<DeleteOutlined />} danger type="text" size="small" />
               </Popconfirm>
             </Tooltip>
           </Space>

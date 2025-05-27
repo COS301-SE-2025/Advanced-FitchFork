@@ -1,49 +1,238 @@
 import { useParams } from 'react-router-dom';
-import { Descriptions, Tag } from 'antd';
+import { useEffect, useState } from 'react';
+import {
+  Typography,
+  Table,
+  Spin,
+  Descriptions,
+  Select,
+  Button,
+  Popconfirm,
+  Space,
+  Breadcrumb,
+} from 'antd';
+import { EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import AppLayout from '@/layouts/AppLayout';
+import { UsersService } from '@/services/users';
+import { ModulesService } from '@/services/modules';
+import ModuleRoleTag from '@/components/ModuleRoleTag';
+import AdminTag from '@/components/AdminTag';
+import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
+import { useNotifier } from '@/components/Notifier';
+import type { User } from '@/types/users';
+import type { ModuleRole, Module } from '@/types/modules';
+import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 
-const mockUserData: Record<string, { name: string; email: string; role: string }> = {
-  '1': { name: 'Alice Johnson', email: 'alice@example.com', role: 'Admin' },
-  '2': { name: 'Bob Smith', email: 'bob@example.com', role: 'User' },
-  '3': { name: 'Charlie Rose', email: 'charlie@example.com', role: 'Moderator' },
-  '4': { name: 'Diana Prince', email: 'diana@example.com', role: 'Admin' },
-  '5': { name: 'Ethan Hunt', email: 'ethan@example.com', role: 'User' },
-  '6': { name: 'Fiona Glenanne', email: 'fiona@example.com', role: 'Moderator' },
-  '7': { name: 'George Clooney', email: 'george@example.com', role: 'User' },
-  '8': { name: 'Hannah Baker', email: 'hannah@example.com', role: 'Moderator' },
-  '9': { name: 'Ian Fleming', email: 'ian@example.com', role: 'Admin' },
-  '10': { name: 'Julia Child', email: 'julia@example.com', role: 'User' },
-  '11': { name: 'Kevin Durant', email: 'kevin@example.com', role: 'Moderator' },
-  '12': { name: 'Lara Croft', email: 'lara@example.com', role: 'Admin' },
-};
+const { Title } = Typography;
+
+interface UserModule {
+  module: Module;
+  role: ModuleRole;
+}
+
+const ROLE_OPTIONS: ModuleRole[] = ['lecturer', 'tutor', 'student'];
 
 export default function UserView() {
-  const { id } = useParams<{ id: string }>();
-  const user = mockUserData[id ?? ''];
+  const { id } = useParams();
+  const userId = Number(id);
+  const [user, setUser] = useState<User | null>(null);
+  const [modules, setModules] = useState<UserModule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingModuleId, setEditingModuleId] = useState<number | null>(null);
+  const [editedRole, setEditedRole] = useState<ModuleRole | null>(null);
+  const { notifySuccess, notifyError } = useNotifier();
+  const { setBreadcrumbLabel } = useBreadcrumbContext();
 
-  if (!user) {
-    return (
-      <AppLayout title="User Not Found">
-        <p>No user with ID {id} found.</p>
-      </AppLayout>
-    );
-  }
+  const fetchUserData = async () => {
+    setLoading(true);
+    const userRes = await UsersService.getUser(userId);
+    const moduleRes = await UsersService.getUserModules(userId);
+
+    if (userRes.success) {
+      setUser(userRes.data);
+
+      // Set custom breadcrumb label using the student number
+      setBreadcrumbLabel(`users/${userId}`, userRes.data.student_number);
+    } else {
+      notifyError('Failed to load user', userRes.message);
+    }
+
+    if (moduleRes.success) {
+      const transformed = moduleRes.data.map((mod) => ({
+        module: {
+          id: mod.id,
+          code: mod.code,
+          year: mod.year,
+          description: mod.description,
+          credits: mod.credits,
+          created_at: mod.created_at,
+          updated_at: mod.updated_at,
+        },
+        role: mod.role as ModuleRole,
+      }));
+      setModules(transformed);
+    } else {
+      notifyError('Failed to load modules', moduleRes.message);
+    }
+
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchUserData();
+  }, [id]);
+
+  const handleChangeRole = async (moduleId: number, oldRole: ModuleRole, newRole: ModuleRole) => {
+    if (oldRole === newRole) return;
+
+    try {
+      if (oldRole === 'lecturer')
+        await ModulesService.removeLecturers(moduleId, { user_ids: [userId] });
+      if (oldRole === 'tutor') await ModulesService.removeTutors(moduleId, { user_ids: [userId] });
+      if (oldRole === 'student')
+        await ModulesService.removeStudents(moduleId, { user_ids: [userId] });
+
+      if (newRole === 'lecturer')
+        await ModulesService.assignLecturers(moduleId, { user_ids: [userId] });
+      if (newRole === 'tutor') await ModulesService.assignTutors(moduleId, { user_ids: [userId] });
+      if (newRole === 'student')
+        await ModulesService.enrollStudents(moduleId, { user_ids: [userId] });
+
+      notifySuccess('Role updated', 'The user’s role was successfully updated.');
+      setEditingModuleId(null);
+      setEditedRole(null);
+      fetchUserData();
+    } catch (err) {
+      notifyError('Update failed', 'Could not change the user’s role.');
+    }
+  };
+
+  const handleRemove = async (moduleId: number, role: ModuleRole) => {
+    try {
+      if (role === 'lecturer')
+        await ModulesService.removeLecturers(moduleId, { user_ids: [userId] });
+      if (role === 'tutor') await ModulesService.removeTutors(moduleId, { user_ids: [userId] });
+      if (role === 'student') await ModulesService.removeStudents(moduleId, { user_ids: [userId] });
+
+      notifySuccess('User removed', 'The user was removed from this module.');
+      fetchUserData();
+    } catch {
+      notifyError('Removal failed', 'Could not remove the user from the module.');
+    }
+  };
+
+  if (loading || !user) return <Spin className="mt-12 ml-6" />;
 
   return (
-    <AppLayout title={`User ${id} View`} description="Specific users details.">
-      <Descriptions bordered column={1}>
-        <Descriptions.Item label="Name">{user.name}</Descriptions.Item>
+    <AppLayout
+      title={user.student_number}
+      description="This is a user view showing profile and module involvement."
+    >
+      <Descriptions layout="vertical" bordered column={3} className="mb-8">
+        <Descriptions.Item label="User ID">{user.id}</Descriptions.Item>
+        <Descriptions.Item label="Student Number">{user.student_number}</Descriptions.Item>
         <Descriptions.Item label="Email">{user.email}</Descriptions.Item>
-        <Descriptions.Item label="Role">
-          <Tag
-            color={
-              user.role === 'Admin' ? 'volcano' : user.role === 'Moderator' ? 'geekblue' : 'green'
-            }
-          >
-            {user.role}
-          </Tag>
+        <Descriptions.Item label="Admin">
+          <AdminTag isAdmin={user.admin} />
         </Descriptions.Item>
       </Descriptions>
+
+      <Title level={4} className="!mb-4 !mt-6">
+        Module Roles
+      </Title>
+      <Table
+        rowKey={(record) => `${record.module.id}-${record.role}`}
+        dataSource={modules}
+        pagination={false}
+        columns={[
+          {
+            title: 'Code',
+            dataIndex: ['module', 'code'],
+            width: '15%',
+          },
+          {
+            title: 'Year',
+            dataIndex: ['module', 'year'],
+            width: '10%',
+          },
+          {
+            title: 'Description',
+            dataIndex: ['module', 'description'],
+            width: '40%',
+            ellipsis: true,
+          },
+          {
+            title: 'Role',
+            dataIndex: 'role',
+            width: '20%',
+            render: (role: ModuleRole, record) =>
+              editingModuleId === record.module.id ? (
+                <Select
+                  value={editedRole ?? role}
+                  onChange={(value) => setEditedRole(value)}
+                  options={ROLE_OPTIONS.map((r) => ({
+                    value: r,
+                    label: r.charAt(0).toUpperCase() + r.slice(1),
+                  }))}
+                  style={{ width: '100%' }}
+                />
+              ) : (
+                <ModuleRoleTag role={role} />
+              ),
+          },
+          {
+            title: 'Actions',
+            dataIndex: 'actions',
+            width: '15%',
+            render: (_, record) => {
+              const isEditing = editingModuleId === record.module.id;
+
+              return (
+                <Space>
+                  {isEditing ? (
+                    <>
+                      <Button
+                        icon={<CheckOutlined />}
+                        type="primary"
+                        size="small"
+                        onClick={() =>
+                          handleChangeRole(record.module.id, record.role, editedRole ?? record.role)
+                        }
+                      />
+                      <Button
+                        icon={<CloseOutlined />}
+                        size="small"
+                        onClick={() => {
+                          setEditingModuleId(null);
+                          setEditedRole(null);
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <Button
+                      icon={<EditOutlined />}
+                      type="link"
+                      size="small"
+                      onClick={() => {
+                        setEditingModuleId(record.module.id);
+                        setEditedRole(record.role);
+                      }}
+                    />
+                  )}
+                  <Popconfirm
+                    title="Remove user from this module?"
+                    onConfirm={() => handleRemove(record.module.id, record.role)}
+                    okText="Yes"
+                    cancelText="No"
+                  >
+                    <Button icon={<DeleteOutlined />} type="text" size="small" danger />
+                  </Popconfirm>
+                </Space>
+              );
+            },
+          },
+        ]}
+      />
     </AppLayout>
   );
 }

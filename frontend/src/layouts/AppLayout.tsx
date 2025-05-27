@@ -13,12 +13,13 @@ import Logo from '@/components/Logo';
 import { TOP_MENU_ITEMS, BOTTOM_MENU_ITEMS } from '@/constants/sidebar';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Paragraph, Text } = Typography;
 
 interface AppLayoutProps {
-  title: string;
+  title: React.ReactNode;
   description?: string;
   children: React.ReactNode;
 }
@@ -27,6 +28,7 @@ export default function AppLayout({ title, description, children }: AppLayoutPro
   const [collapsed, setCollapsed] = useState(() => {
     return localStorage.getItem('sidebarCollapsed') === 'true';
   });
+  const breadcrumbs = useBreadcrumbs();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -126,12 +128,14 @@ export default function AppLayout({ title, description, children }: AppLayoutPro
             <Menu
               mode="inline"
               theme="light"
-              selectedKeys={[]}
+              selectedKeys={[location.pathname]}
               items={visibleBottomItems}
               onClick={({ key }) => {
                 if (key === 'logout') {
                   logout();
                   navigate('/login');
+                } else {
+                  navigate(key);
                 }
               }}
               className="!bg-transparent"
@@ -163,24 +167,15 @@ export default function AppLayout({ title, description, children }: AppLayoutPro
           <div className="bg-white dark:bg-gray-950 px-6 flex items-center justify-between w-full h-full">
             <Breadcrumb
               separator=">"
-              items={location.pathname
-                .split('/')
-                .filter(Boolean)
-                .map((part, index, arr) => {
-                  const path = '/' + arr.slice(0, index + 1).join('/');
-                  const isLast = index === arr.length - 1;
-                  const label = part.charAt(0).toUpperCase() + part.slice(1);
-
-                  return {
-                    title: isLast ? (
-                      label
-                    ) : (
-                      <a onClick={() => navigate(path)} className="text-blue-600 hover:underline">
-                        {label}
-                      </a>
-                    ),
-                  };
-                })}
+              items={breadcrumbs.map(({ path, label, isLast }) => ({
+                title: isLast ? (
+                  label
+                ) : (
+                  <a onClick={() => navigate(path)} className="text-blue-600 hover:underline">
+                    {label}
+                  </a>
+                ),
+              }))}
             />
 
             <Dropdown overlay={profileMenu} trigger={['click']} placement="bottomRight">
@@ -188,7 +183,7 @@ export default function AppLayout({ title, description, children }: AppLayoutPro
                 <Text className="hidden sm:inline text-gray-700 dark:text-gray-200 font-medium">
                   {user?.student_number ?? 'User'}
                 </Text>
-                <Avatar size="large" src="profile.jpeg" alt="User Avatar" />
+                <Avatar size="large" src="/profile.jpeg" alt="User Avatar" />
               </div>
             </Dropdown>
           </div>

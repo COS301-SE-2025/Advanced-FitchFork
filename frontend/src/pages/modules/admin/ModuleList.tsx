@@ -1,4 +1,15 @@
-import { Table, Space, Button, Input, Popconfirm, Empty, Tooltip, Card, Statistic } from 'antd';
+import {
+  Table,
+  Space,
+  Button,
+  Input,
+  Popconfirm,
+  Empty,
+  Tooltip,
+  Card,
+  Statistic,
+  Select,
+} from 'antd';
 import {
   EditOutlined,
   DeleteOutlined,
@@ -14,7 +25,7 @@ import type { FilterDropdownProps } from 'antd/es/table/interface';
 import type { Module } from '@/types/modules';
 import { useTableQuery } from '@/hooks/useTableQuery';
 import type { SortOption } from '@/types/common';
-import { ModulesService } from '@/services/modules/mock'; // TODO: Remeber to change this when services work
+import { ModulesService } from '@/services/modules';
 import AppLayout from '@/layouts/AppLayout';
 import TableControlBar from '@/components/TableControlBar';
 import TableTagSummary from '@/components/TableTagSummary';
@@ -78,7 +89,7 @@ export default function ModuleList() {
       setModules(res.data.modules);
       setPagination({ total: res.data.total });
     } else {
-      notifyError('Failed to fetch modules');
+      notifyError('Failed to fetch modules', res.message);
     }
 
     setLoading(false);
@@ -112,11 +123,11 @@ export default function ModuleList() {
 
     const res = await ModulesService.createModule(payload);
     if (res.success) {
-      notifySuccess('Module created successfully');
+      notifySuccess('Module created successfully', res.message);
       setIsAddModalOpen(false);
       fetchModules();
     } else {
-      notifyError('Failed to create module');
+      notifyError('Failed to create module', res.message);
     }
   };
 
@@ -132,22 +143,22 @@ export default function ModuleList() {
 
     const res = await ModulesService.editModule(editingRowId, payload);
     if (res.success) {
-      notifySuccess('Module updated successfully');
+      notifySuccess('Module updated successfully', res.message);
       setEditingRowId(null);
       setEditCache({});
       fetchModules();
     } else {
-      notifyError('Failed to update module');
+      notifyError('Failed to update module', res.message);
     }
   };
 
   const handleDelete = async (id: number) => {
     const res = await ModulesService.deleteModule(id);
     if (res.success) {
-      notifySuccess('Module deleted');
+      notifySuccess('Module deleted', res.message);
       fetchModules();
     } else {
-      notifyError('Delete failed');
+      notifyError('Delete failed', res.message);
     }
   };
 
@@ -156,11 +167,20 @@ export default function ModuleList() {
       await handleDelete(Number(id));
     }
     setSelectedRowKeys([]);
+    if (selectedRowKeys.length > 0) {
+      notifySuccess(
+        'Selected modules deleted',
+        `${selectedRowKeys.length} module(s) have been deleted.`,
+      );
+    }
   };
 
   // ======================================================================
   // =========================== Table Columns ============================
   // ======================================================================
+
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from({ length: 10 }, (_, i) => String(currentYear - i));
 
   const columns: ColumnsType<Module> = [
     {
@@ -172,7 +192,7 @@ export default function ModuleList() {
       filteredValue: filterState.code || null,
       onFilter: () => true,
       filterDropdown: (props: FilterDropdownProps) => {
-        const { setSelectedKeys, selectedKeys, confirm, clearFilters } = props;
+        const { setSelectedKeys, selectedKeys, confirm } = props;
         return (
           <div className="flex flex-col gap-2 p-2 w-56">
             <Input
@@ -188,8 +208,8 @@ export default function ModuleList() {
               <Button
                 size="small"
                 onClick={() => {
-                  clearFilters?.();
-                  (props as any).closeDropdown?.();
+                  setSelectedKeys([]);
+                  confirm({ closeDropdown: true });
                 }}
               >
                 Reset
@@ -198,6 +218,7 @@ export default function ModuleList() {
           </div>
         );
       },
+
       render: (_, record) =>
         editingRowId === record.id ? (
           <Input
@@ -217,24 +238,26 @@ export default function ModuleList() {
       filteredValue: filterState.year || null,
       onFilter: () => true,
       filterDropdown: (props: FilterDropdownProps) => {
-        const { setSelectedKeys, selectedKeys, confirm, clearFilters } = props;
+        const { setSelectedKeys, selectedKeys, confirm } = props;
+
         return (
           <div className="flex flex-col gap-2 p-2 w-56">
-            <Input
-              placeholder="Search year"
+            <Select
+              placeholder="Select year"
               value={selectedKeys[0]}
-              onChange={(e) => setSelectedKeys([e.target.value])}
-              onPressEnter={() => confirm()}
+              onChange={(value) => setSelectedKeys([value])}
+              style={{ width: '100%' }}
+              options={yearOptions.map((y) => ({ label: y, value: y }))}
             />
-            <div className="flex justify-between gap-2">
+            <div className="flex justify-between gap-2 mt-2">
               <Button type="primary" size="small" onClick={() => confirm()}>
                 Filter
               </Button>
               <Button
                 size="small"
                 onClick={() => {
-                  clearFilters?.();
-                  (props as any).closeDropdown?.();
+                  setSelectedKeys([]);
+                  confirm({ closeDropdown: true });
                 }}
               >
                 Reset

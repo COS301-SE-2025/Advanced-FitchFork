@@ -6,20 +6,46 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 type ModuleRole = 'Lecturer' | 'Tutor' | 'Student';
 
+/**
+ * Defines the structure of the authentication context.
+ */
 interface AuthContextType {
+  /** The currently authenticated user or null. */
   user: User | null;
+
+  /** The list of modules assigned to the current user. */
   modules: UserModule[];
+
+  /** Whether the context is still loading user data. */
   loading: boolean;
+
+  /** Logs the user in with given credentials. */
   login: (credentials: LoginRequest) => Promise<ApiResponse<AuthUser | null>>;
+
+  /** Registers a new user with the given details. */
   register: (details: RegisterRequest) => Promise<ApiResponse<AuthUser | null>>;
+
+  /** Logs the user out and clears stored auth info. */
   logout: () => void;
+
+  /** Returns whether the current user is an admin. */
   isAdmin: () => boolean;
+
+  /** Returns the role of the user in a specific module. */
   getModuleRole: (moduleId: number) => ModuleRole | null;
+
+  /** Returns true if the user has the specified role in a module. */
   hasModuleRole: (moduleId: number, role: ModuleRole) => boolean;
+
+  /** Returns true if the stored token is expired. */
+  isExpired: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * Provides authentication state and actions to the app.
+ */
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [modules, setModules] = useState<UserModule[]>([]);
@@ -31,11 +57,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          const { token, expires_at } = parsed;
 
-          if (!token || (expires_at && new Date(expires_at) < new Date())) {
+          if (isExpired()) {
             logout();
-            return;
           }
 
           const res = await AuthService.me();
@@ -54,8 +78,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else {
             logout();
           }
-        } catch {
-          logout();
+        } catch (err) {
+          logout(); // Token expired or fetch error
         }
       }
       setLoading(false);
@@ -64,13 +88,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadUser();
   }, []);
 
+  /**
+   * Logs in a user and saves their session to localStorage.
+   */
   const login = async (credentials: LoginRequest): Promise<ApiResponse<AuthUser | null>> => {
     try {
       const res = await AuthService.login(credentials);
       if (res.success && res.data) {
         const { token, expires_at, ...user } = res.data;
 
-        // Save token first
         localStorage.setItem(
           'auth',
           JSON.stringify({
@@ -81,14 +107,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }),
         );
 
-        // Then call /me using the saved token
         const meRes = await AuthService.me();
         if (meRes.success && meRes.data) {
           const { modules: userModules, ...userData } = meRes.data;
           setUser(userData);
           setModules(userModules);
-
-          // Save updated info again
           localStorage.setItem(
             'auth',
             JSON.stringify({
@@ -112,6 +135,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Registers a new user and returns the API response.
+   */
   const register = async (details: RegisterRequest): Promise<ApiResponse<AuthUser | null>> => {
     try {
       const res = await AuthService.register(details);
@@ -125,19 +151,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Logs the user out and redirects to the login page.
+   */
   const logout = () => {
     localStorage.removeItem('auth');
     setUser(null);
     setModules([]);
+    window.location.href = '/login';
   };
 
+  /**
+   * Checks if the stored token is expired based on its expiration timestamp.
+   */
+  const isExpired = (): boolean => {
+    const stored = localStorage.getItem('auth');
+    if (!stored) return true;
+
+    try {
+      const { expires_at } = JSON.parse(stored);
+      return !expires_at || new Date(expires_at) < new Date();
+    } catch {
+      return true;
+    }
+  };
+
+  /**
+   * Returns true if the user has admin privileges.
+   */
   const isAdmin = () => !!user?.admin;
 
+  /**
+   * Gets the role of the user for the given module ID.
+   */
   const getModuleRole = (moduleId: number): ModuleRole | null => {
     const mod = modules.find((m) => m.id === moduleId);
     return mod?.role || null;
   };
 
+  /**
+   * Checks if the user has a specific role in the given module.
+   */
   const hasModuleRole = (moduleId: number, role: ModuleRole): boolean => {
     return getModuleRole(moduleId) === role;
   };
@@ -154,6 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdmin,
         getModuleRole,
         hasModuleRole,
+        isExpired,
       }}
     >
       {children}
@@ -161,6 +216,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
+/**
+ * Hook to access the authentication context.
+ */
 export const useAuth = (): AuthContextType => {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
