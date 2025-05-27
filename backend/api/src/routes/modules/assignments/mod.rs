@@ -14,7 +14,6 @@ use get::{get_assignment, get_assignments,download_file};
 use post::{create, upload_files};
 use put::edit_assignment;
 use crate::routes::modules::assignments::get::list_files;
-use crate::routes::modules::assignments::post::upload_files;
 
 /// Expects a module ID
 /// If an assignment ID is included it will be deleted
@@ -41,5 +40,4 @@ pub fn assignment_routes() -> Router {
         .route("/:assignment_id/file/:file_id", get(download_file))
         .route("/:assignment_id/files", get(list_files))
         .route("/:assignment_id", delete(delete_assignment))
-        .route("/:assignment_id/files", post(upload_files)) // ← Add this line
 }
