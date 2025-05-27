@@ -124,9 +124,6 @@ pub struct AssignmentFile {
     pub assignment_id: i64,
     pub filename: String,
     pub path: String,
-    pub mime_type: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
 }
 /// GET /api/modules/:module_id/assignments/:assignment_id/files/:file_id
 ///
@@ -136,72 +133,110 @@ pub struct AssignmentFile {
 /// - `200 OK`: Returns file with correct headers
 /// - `403 Forbidden`: User not authorized
 /// - `404 Not Found`: File or assignment not found
-pub async fn download_file(Path((module_id, assignment_id, file_id)): Path<(i64, i64, i64)>, AuthUser(claims): AuthUser, ) -> Response {
+pub async fn download_file(
+    Path((module_id, assignment_id, file_id)): Path<(i64, i64, i64)>,
+    AuthUser(claims): AuthUser,
+) -> Response {
     let pool = pool::get();
 
+    // 1) Check authorization
     let is_authorized = claims.admin || {
         let query = r#"
             SELECT EXISTS(
                 SELECT 1 FROM module_lecturers WHERE module_id = ? AND user_id = ?
                 UNION
-                SELECT 1 FROM module_tutors WHERE module_id = ? AND user_id = ?
+                SELECT 1 FROM module_tutors    WHERE module_id = ? AND user_id = ?
                 UNION
-                SELECT 1 FROM module_students WHERE module_id = ? AND user_id = ?
+                SELECT 1 FROM module_students  WHERE module_id = ? AND user_id = ?
             )
         "#;
-
-        sqlx::query_scalar(query).bind(module_id).bind(claims.sub).bind(module_id).bind(claims.sub).bind(module_id).bind(claims.sub).fetch_one(pool).await.unwrap_or(false)
+        sqlx::query_scalar(query)
+            .bind(module_id).bind(claims.sub)
+            .bind(module_id).bind(claims.sub)
+            .bind(module_id).bind(claims.sub)
+            .fetch_one(pool)
+            .await
+            .unwrap_or(false)
     };
 
     if !is_authorized {
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<AssignmentFile>::error("You do not have permission to access this file")),
-        ).into_response();
+        )
+            .into_response();
     }
 
-    let file: Option<AssignmentFile> = sqlx::query_as::<_, AssignmentFile>(
-        "SELECT * FROM assignment_files WHERE id = ? AND assignment_id = ?"
-    ).bind(file_id).bind(assignment_id).fetch_optional(pool).await.unwrap_or(None);
+    // 2) Fetch exactly the columns your struct needs
+    let file_res = sqlx::query_as::<_, AssignmentFile>(
+        r#"
+        SELECT id, assignment_id, filename, path
+          FROM assignment_files
+         WHERE id = ? AND assignment_id = ?
+        "#,
+    )
+        .bind(file_id)
+        .bind(assignment_id)
+        .fetch_optional(pool)
+        .await;
 
-    let Some(file) = file else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<AssignmentFile>::error("File not found")),
-        ).into_response();
+    let file = match file_res {
+        Ok(Some(f)) => f,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<AssignmentFile>::error("File not found")),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            eprintln!("DB error fetching file: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<AssignmentFile>::error("Database error")),
+            )
+                .into_response();
+        }
     };
 
+    // 3) Ensure it exists on disk
     let fs_path = PathBuf::from(&file.path);
     if !fs_path.exists() {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<AssignmentFile>::error("File missing on disk")),
-        ).into_response();
+        )
+            .into_response();
     }
 
-    match File::open(&fs_path).await {
-        Ok(mut f) => {
-            let mut buf = Vec::new();
-            if let Err(_) = f.read_to_end(&mut buf).await {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<AssignmentFile>::error("Failed to read file")),
-                ).into_response();
-            }
-
-            let mut headers = HeaderMap::new();
-
-            let disposition = HeaderValue::from_str(&format!("attachment; filename=\"{}\"", file.filename))
-                .unwrap_or_else(|_| HeaderValue::from_static("attachment"));
-
-            headers.insert(header::CONTENT_DISPOSITION, disposition);
-            headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
-
-            (StatusCode::OK, headers, buf).into_response()
+    // 4) Open and read it
+    let mut f = match File::open(&fs_path).await {
+        Ok(f) => f,
+        Err(err) => {
+            eprintln!("File open error: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<AssignmentFile>::error("Could not open file")),
+            )
+                .into_response();
         }
-        Err(_) => (
+    };
+    let mut buf = Vec::new();
+    if let Err(err) = f.read_to_end(&mut buf).await {
+        eprintln!("File read error: {:?}", err);
+        return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<AssignmentFile>::error("Could not open file")),
-        ).into_response(),
+            Json(ApiResponse::<AssignmentFile>::error("Failed to read file")),
+        )
+            .into_response();
     }
+
+    // 5) Stream it back with headers
+    let mut headers = HeaderMap::new();
+    let disposition = HeaderValue::from_str(&format!("attachment; filename=\"{}\"", file.filename))
+        .unwrap_or_else(|_| HeaderValue::from_static("attachment"));
+    headers.insert(header::CONTENT_DISPOSITION, disposition);
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+
+    (StatusCode::OK, headers, buf).into_response()
 }
