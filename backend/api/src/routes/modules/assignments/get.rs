@@ -12,13 +12,13 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use crate::auth::AuthUser;
 use crate::response::ApiResponse;
-use tokio::fs::File;
+use tokio::fs::File as FsFile;
 use tokio::io::AsyncReadExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AssignmentResponse {
     pub assignment: AssignmentDetailResponse,
-    pub files: Vec<File2>,
+    pub files: Vec<File>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AssignmentDetailResponse {
@@ -69,7 +69,7 @@ impl From<Assignment> for AssignmentResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct File2 {
+pub struct File {
     pub id: String,
     pub filename: String,
     pub path: String,
@@ -107,9 +107,9 @@ pub async fn get_assignment(
 
             match files_res {
                 Ok(files) => {
-                    let converted_files: Vec<File2> = files
+                    let converted_files: Vec<File> = files
                         .into_iter()
-                        .map(|f| File2 {
+                        .map(|f| File {
                             id: f.id.to_string(), 
 
                             filename: f.filename,
@@ -248,7 +248,7 @@ pub async fn download_file(Path((module_id, assignment_id, file_id)): Path<(i64,
             .into_response();
     }
     
-    let mut f = match File::open(&fs_path).await {
+    let mut f = match FsFile::open(&fs_path).await {
         Ok(f) => f,
         Err(err) => {
             eprintln!("File open error: {:?}", err);
@@ -286,7 +286,7 @@ pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)>, Auth
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<Vec<File2>>::error(
+                Json(ApiResponse::<Vec<File>>::error(
                     "Assignment not found".to_string(),
                 )),
             )
@@ -296,7 +296,7 @@ pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)>, Auth
             eprintln!("DB error checking assignment: {:?}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<File2>>::error(
+                Json(ApiResponse::<Vec<File>>::error(
                     "Database error".to_string(),
                 )),
             ).into_response();
@@ -319,7 +319,7 @@ pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)>, Auth
     if !is_authorized {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<Vec<File2>>::error(
+            Json(ApiResponse::<Vec<File>>::error(
                 "You do not have permission to view files for this assignment".to_string(),
             )),
         ).into_response();
@@ -327,9 +327,9 @@ pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)>, Auth
 
     match AssignmentFiles::get_by_assignment_id(Some(pool::get()), assignment_id).await {
         Ok(files) => {
-            let file_list: Vec<File2> = files
+            let file_list: Vec<File> = files
                 .into_iter()
-                .map(|f| File2 {
+                .map(|f| File {
                     id: f.id.to_string(),
                     filename: f.filename,
                     path: f.path,
@@ -350,7 +350,7 @@ pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)>, Auth
             eprintln!("DB error fetching files: {:?}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<File2>>::error(
+                Json(ApiResponse::<Vec<File>>::error(
                     "Failed to retrieve files".to_string(),
                 )),
             ).into_response()
