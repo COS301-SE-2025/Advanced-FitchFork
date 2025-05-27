@@ -197,6 +197,7 @@ impl Assignment {
     /// * `sort` - Optional comma-separated string specifying sorting fields and directions.
     ///            Fields can be prefixed with '-' for descending order (e.g., "-due_date").
     ///            Allowed fields: `name`, `due_date`, `available_from`, `assignment_type`, `created_at`, `updated_at`.
+    /// * `query` - Optional substring to match against both `name` and `description` (case-insensitive).
     /// * `name` - Optional substring filter for assignment name (case-insensitive).
     /// * `assignment_type` - Optional filter by assignment type (e.g., "Practical" or "Assignment").
     /// * `available_before` - Optional ISO 8601 date string to filter assignments available before this date.
@@ -213,6 +214,7 @@ impl Assignment {
         page: i32,
         length: i32,
         sort: Option<String>,
+        query: Option<String>,
         name: Option<String>,
         assignment_type: Option<String>,
         available_before: Option<String>,
@@ -254,6 +256,13 @@ impl Assignment {
         if let Some(ref after) = due_after {
             sql.push_str(" AND due_date >= ?");
             args.add(after);
+        }
+
+        if let Some(ref q) = query {
+            sql.push_str(" AND (LOWER(name) LIKE ? OR LOWER(description) LIKE ?)");
+            let pattern = format!("%{}%", q.to_lowercase());
+            args.add(pattern.clone());
+            args.add(pattern);
         }
 
         if let Some(sort_str) = sort {

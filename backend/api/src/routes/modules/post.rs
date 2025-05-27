@@ -221,8 +221,6 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
     }
 }
 
-
-
 /// POST /api/modules/:module_id/lecturers
 ///
 /// Assign one or more users as lecturers to a module. Admin only.
@@ -245,7 +243,7 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
 /// ```json
 /// {
 ///   "success": true,
-///   "data": {},
+///   "data": null,
 ///   "message": "Lecturers assigned to module successfully"
 /// }
 /// ```
@@ -254,6 +252,7 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "Request must include a non-empty list of user_ids"
 /// }
 /// ```
@@ -262,6 +261,7 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "You do not have permission to perform this action"
 /// }
 /// ```
@@ -270,6 +270,7 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "User with ID 3 does not exist"
 /// }
 /// ```
@@ -278,30 +279,27 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "Some users are already lecturers for this module"
 /// }
 /// ```
 
-pub async fn assign_lecturers(axum::extract::Path(module_id): axum::extract::Path<i64>, AuthUser(claims): AuthUser, Json(body): Json<ModifyUsersModuleRequest>, ) -> impl IntoResponse {
+pub async fn assign_lecturers(
+    axum::extract::Path(module_id): axum::extract::Path<i64>,
+    AuthUser(claims): AuthUser,
+    Json(body): Json<ModifyUsersModuleRequest>,
+) -> impl IntoResponse {
     if !claims.admin {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                message: "You do not have permission to perform this action".into(),
-            }),
+            Json(ApiResponse::<()>::error("You do not have permission to perform this action")),
         );
     }
 
     if body.user_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                message: "Request must include a non-empty list of user_ids".into(),
-            }),
+            Json(ApiResponse::<()>::error("Request must include a non-empty list of user_ids")),
         );
     }
 
@@ -310,51 +308,44 @@ pub async fn assign_lecturers(axum::extract::Path(module_id): axum::extract::Pat
     let module_exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)"
     )
-        .bind(module_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
+    .bind(module_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false);
 
     if !module_exists {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                message: "Module not found".into(),
-            }),
+            Json(ApiResponse::<()>::error("Module not found")),
         );
     }
 
     let mut already_assigned = Vec::new();
+
     for &user_id in &body.user_ids {
         let user_exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)"
         )
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-            .unwrap_or(false);
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(false);
 
         if !user_exists {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()> {
-                    success: false,
-                    data: None,
-                    message: format!("User with ID {} does not exist", user_id),
-                }),
+                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", user_id))),
             );
         }
 
         let is_already: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM module_lecturers WHERE module_id = ? AND user_id = ?)"
         )
-            .bind(module_id)
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-            .unwrap_or(false);
+        .bind(module_id)
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(false);
 
         if is_already {
             already_assigned.push(user_id);
@@ -362,30 +353,22 @@ pub async fn assign_lecturers(axum::extract::Path(module_id): axum::extract::Pat
             let _ = sqlx::query(
                 "INSERT OR IGNORE INTO module_lecturers (module_id, user_id) VALUES (?, ?)"
             )
-                .bind(module_id)
-                .bind(user_id)
-                .execute(pool)
-                .await;
+            .bind(module_id)
+            .bind(user_id)
+            .execute(pool)
+            .await;
         }
     }
 
     if already_assigned.is_empty() {
         (
             StatusCode::OK,
-            Json(ApiResponse::<()> {
-                success: true,
-                data: None,
-                message: "Lecturers assigned to module successfully".into(),
-            })
+            Json(ApiResponse::<()>::success((), "Lecturers assigned to module successfully")),
         )
     } else {
         (
             StatusCode::CONFLICT,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                message: "Some users are already lecturers for this module".into(),
-            })
+            Json(ApiResponse::<()>::error("Some users are already lecturers for this module")),
         )
     }
 }
@@ -402,9 +385,9 @@ pub async fn assign_lecturers(axum::extract::Path(module_id): axum::extract::Pat
 /// ```
 ///
 /// ### Validation Rules
-/// - `user_ids`: must be a non-empty list.
+/// - `user_ids`: must be a non-empty list of valid user IDs.
 /// - All users must exist.
-/// - No user may already be assigned as a student.
+/// - Each user must not already be assigned as a student.
 ///
 /// ### Responses
 ///
@@ -412,7 +395,7 @@ pub async fn assign_lecturers(axum::extract::Path(module_id): axum::extract::Pat
 /// ```json
 /// {
 ///   "success": true,
-///   "data": {},
+///   "data": null,
 ///   "message": "Students assigned to module successfully"
 /// }
 /// ```
@@ -421,6 +404,7 @@ pub async fn assign_lecturers(axum::extract::Path(module_id): axum::extract::Pat
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "Request must include a non-empty list of user_ids"
 /// }
 /// ```
@@ -429,6 +413,7 @@ pub async fn assign_lecturers(axum::extract::Path(module_id): axum::extract::Pat
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "You do not have permission to perform this action"
 /// }
 /// ```
@@ -437,6 +422,7 @@ pub async fn assign_lecturers(axum::extract::Path(module_id): axum::extract::Pat
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "User with ID 3 does not exist"
 /// }
 /// ```
@@ -445,30 +431,27 @@ pub async fn assign_lecturers(axum::extract::Path(module_id): axum::extract::Pat
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "Some users are already students for this module"
 /// }
 /// ```
 
-pub async fn assign_students(axum::extract::Path(module_id): axum::extract::Path<i64>, AuthUser(claims): AuthUser, Json(body): Json<ModifyUsersModuleRequest>, ) -> impl IntoResponse {
+pub async fn assign_students(
+    axum::extract::Path(module_id): axum::extract::Path<i64>,
+    AuthUser(claims): AuthUser,
+    Json(body): Json<ModifyUsersModuleRequest>,
+) -> impl IntoResponse {
     if !claims.admin {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                message: "You do not have permission to perform this action".into(),
-            }),
+            Json(ApiResponse::<()>::error("You do not have permission to perform this action")),
         );
     }
 
     if body.user_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                message: "Request must include a non-empty list of user_ids".into(),
-            }),
+            Json(ApiResponse::<()>::error("Request must include a non-empty list of user_ids")),
         );
     }
 
@@ -477,19 +460,15 @@ pub async fn assign_students(axum::extract::Path(module_id): axum::extract::Path
     let module_exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)"
     )
-        .bind(module_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
+    .bind(module_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false);
 
     if !module_exists {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                message: "Module not found".into(),
-            }),
+            Json(ApiResponse::<()>::error("Module not found")),
         );
     }
 
@@ -498,56 +477,52 @@ pub async fn assign_students(axum::extract::Path(module_id): axum::extract::Path
         let user_exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)"
         )
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-            .unwrap_or(false);
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(false);
 
         if !user_exists {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()> {
-                    success: false,
-                    data: None,
-                    message: format!("User with ID {} does not exist", user_id),
-                }),
+                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", user_id))),
             );
         }
 
         let is_already: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM module_students WHERE module_id = ? AND user_id = ?)"
-        ).bind(module_id).bind(user_id).fetch_one(pool).await.unwrap_or(false);
+        )
+        .bind(module_id)
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(false);
 
         if is_already {
             already_assigned.push(user_id);
         } else {
             let _ = sqlx::query(
                 "INSERT OR IGNORE INTO module_students (module_id, user_id) VALUES (?, ?)"
-            ).bind(module_id).bind(user_id).execute(pool).await;
+            )
+            .bind(module_id)
+            .bind(user_id)
+            .execute(pool)
+            .await;
         }
     }
 
     if already_assigned.is_empty() {
         (
             StatusCode::OK,
-            Json(ApiResponse::<()> {
-                success: true,
-                data: None,
-                message: "Students assigned to module successfully".into(),
-            })
+            Json(ApiResponse::<()>::success((), "Students assigned to module successfully")),
         )
     } else {
         (
             StatusCode::CONFLICT,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                message: "Some users are already lecturers for this module".into(),
-            })
+            Json(ApiResponse::<()>::error("Some users are already students for this module")),
         )
     }
 }
-
 
 /// POST /api/modules/:module_id/tutors
 ///
@@ -561,9 +536,9 @@ pub async fn assign_students(axum::extract::Path(module_id): axum::extract::Path
 /// ```
 ///
 /// ### Validation Rules
-/// - `user_ids`: must be a non-empty list.
+/// - `user_ids`: must be a non-empty list of valid user IDs.
 /// - All users must exist.
-/// - Each user must not already be a tutor in this module.
+/// - Each user must not already be assigned as a tutor.
 ///
 /// ### Responses
 ///
@@ -571,7 +546,7 @@ pub async fn assign_students(axum::extract::Path(module_id): axum::extract::Path
 /// ```json
 /// {
 ///   "success": true,
-///   "data": {},
+///   "data": null,
 ///   "message": "Tutors assigned to module successfully"
 /// }
 /// ```
@@ -580,6 +555,7 @@ pub async fn assign_students(axum::extract::Path(module_id): axum::extract::Path
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "Request must include a non-empty list of user_ids"
 /// }
 /// ```
@@ -588,6 +564,7 @@ pub async fn assign_students(axum::extract::Path(module_id): axum::extract::Path
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "You do not have permission to perform this action"
 /// }
 /// ```
@@ -596,6 +573,7 @@ pub async fn assign_students(axum::extract::Path(module_id): axum::extract::Path
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "User with ID 3 does not exist"
 /// }
 /// ```
@@ -604,11 +582,16 @@ pub async fn assign_students(axum::extract::Path(module_id): axum::extract::Path
 /// ```json
 /// {
 ///   "success": false,
+///   "data": null,
 ///   "message": "Some users are already tutors for this module"
 /// }
 /// ```
 
-pub async fn assign_tutors(axum::extract::Path(module_id): axum::extract::Path<i64>, AuthUser(claims): AuthUser, Json(body): Json<ModifyUsersModuleRequest>, ) -> impl axum::response::IntoResponse {
+pub async fn assign_tutors(
+    axum::extract::Path(module_id): axum::extract::Path<i64>,
+    AuthUser(claims): AuthUser,
+    Json(body): Json<ModifyUsersModuleRequest>,
+) -> impl axum::response::IntoResponse {
     if !claims.admin {
         return (
             StatusCode::FORBIDDEN,
@@ -641,32 +624,38 @@ pub async fn assign_tutors(axum::extract::Path(module_id): axum::extract::Path<i
     let mut already_assigned = Vec::new();
 
     for &user_id in &body.user_ids {
-        let user_exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)").bind(user_id).fetch_one(pool)
-.await.unwrap_or(false);
+        let user_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)")
+            .bind(user_id)
+            .fetch_one(pool)
+            .await
+            .unwrap_or(false);
 
         if !user_exists {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error(format!("User with ID {} does not exist", user_id))),
+                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", user_id))),
             );
         }
 
         let is_already = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM module_tutors WHERE module_id = ? AND user_id = ?)",
         )
-            .bind(module_id)
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-            .unwrap_or(false);
+        .bind(module_id)
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(false);
 
         if is_already {
             already_assigned.push(user_id);
         } else {
             let _ = sqlx::query(
                 "INSERT OR IGNORE INTO module_tutors (module_id, user_id) VALUES (?, ?)",
-            ).bind(module_id).bind(user_id).execute(pool).await;
+            )
+            .bind(module_id)
+            .bind(user_id)
+            .execute(pool)
+            .await;
         }
     }
 
@@ -678,11 +667,7 @@ pub async fn assign_tutors(axum::extract::Path(module_id): axum::extract::Path<i
     } else {
         (
             StatusCode::CONFLICT,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                message: "Some users are already lecturers for this module".into(),
-            })
+            Json(ApiResponse::<()>::error("Some users are already tutors for this module")),
         )
     }
 }
