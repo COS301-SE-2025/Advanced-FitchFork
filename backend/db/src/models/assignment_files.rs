@@ -187,6 +187,20 @@ impl AssignmentFiles {
         .fetch_all(pool)
         .await
     }
+
+    pub async fn get_id_by_assignment_id(
+        pool: Option<&SqlitePool>,
+        id: i64,
+    ) -> sqlx::Result<Vec<i64>> {
+        let pool = pool.unwrap_or_else(|| crate::pool::get());
+        let rows = sqlx::query_as::<_, (i64,)>(
+            "SELECT id FROM assignment_files WHERE assignment_id = ?",
+        )
+        .bind(id)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(|row| row.0).collect())
+    }
 }
 
 #[cfg(test)]
