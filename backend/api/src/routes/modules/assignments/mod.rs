@@ -10,7 +10,7 @@ pub mod put;
 
 use delete::delete_assignment;
 use get::{get_assignment, get_assignments};
-use post::create;
+use post::{create, upload_files};
 use put::edit_assignment;
 
 /// Builds and returns the `/assignments` route group.
@@ -21,6 +21,7 @@ use put::edit_assignment;
 /// - `GET  /assignments/:assignment_id` → Get details of a specific assignment
 /// - `PUT  /assignments/:assignment_id` → Edit an existing assignment
 /// - `DELETE /assignments/:assignment_id` → Delete an assignment
+/// - `POST /assignments/:assignment_id/files` → Upload files for an assignment
 ///
 /// Note: Expects a module ID to be part of the parent route, i.e., nested under `/modules/:module_id/assignments`.
 pub fn assignment_routes() -> Router {
@@ -30,4 +31,5 @@ pub fn assignment_routes() -> Router {
         .route("/:assignment_id", get(get_assignment))
         .route("/:assignment_id", put(edit_assignment))
         .route("/:assignment_id", delete(delete_assignment))
+        .route("/:assignment_id/files", post(upload_files)) // ← Add this line
 }

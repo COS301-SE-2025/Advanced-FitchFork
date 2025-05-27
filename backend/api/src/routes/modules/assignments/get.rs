@@ -152,6 +152,7 @@ pub struct FilterReq {
     pub page: Option<i32>,
     pub per_page: Option<i32>,
     pub sort: Option<String>,
+    pub query: Option<String>,
     pub name: Option<String>,
     pub assignment_type: Option<String>,
     pub available_before: Option<String>,
@@ -189,12 +190,13 @@ impl From<(Vec<Assignment>, i32, i32, i32)> for FilterResponse {
 /// - `page`: (Optional) The page number for pagination. Defaults to 1 if not provided. Minimum value is 1.
 /// - `per_page`: (Optional) The number of items per page. Defaults to 20. Maximum is 100. Minimum is 1.
 /// - `sort`: (Optional) A comma-separated list of fields to sort by. Prefix with `-` for descending order (e.g., `-due_date`).
-/// - `name`: (Optional) A filter to match assignments by name.
-/// - `assignment_type`: (Optional) A filter to match assignments by their type.
-/// - `available_before`: (Optional) Filter assignments that become available before this date/time.
-/// - `available_after`: (Optional) Filter assignments that become available after this date/time.
-/// - `due_before`: (Optional) Filter assignments that are due before this date/time.
-/// - `due_after`: (Optional) Filter assignments that are due after this date/time.
+/// - `query`: (Optional) A case-insensitive substring match applied to both `name` and `description`.
+/// - `name`: (Optional) A case-insensitive filter to match assignment names.
+/// - `assignment_type`: (Optional) A filter to match assignments by their type ("Assignment" or "Practical").
+/// - `available_before`: (Optional) Filter assignments that become available before this date/time (ISO 8601).
+/// - `available_after`: (Optional) Filter assignments that become available after this date/time (ISO 8601).
+/// - `due_before`: (Optional) Filter assignments that are due before this date/time (ISO 8601).
+/// - `due_after`: (Optional) Filter assignments that are due after this date/time (ISO 8601).
 ///
 /// Allowed sort fields: `"name"`, `"due_date"`, `"available_from"`, `"assignment_type"`, `"created_at"`, `"updated_at"`.
 ///
@@ -221,20 +223,23 @@ pub async fn get_assignments(Query(params): Query<FilterReq>) -> impl IntoRespon
             "created_at",
             "updated_at",
         ];
-        if !valid_fields.contains(&params.sort.as_ref().unwrap().as_str()) {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
-            );
+        if let Some(sort_field) = &params.sort {
+            let field = sort_field.trim_start_matches('-');
+            if !valid_fields.contains(&field) {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
+                );
+            }
         }
     }
-
 
     let res = Assignment::filter(
         Some(pool::get()),
         page,
         length,
         params.sort,
+        params.query,
         params.name,
         params.assignment_type,
         params.available_before,

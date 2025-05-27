@@ -607,13 +607,17 @@ pub async fn get_modules(Query(params): Query<FilterReq>) -> impl IntoResponse {
     let length = params.per_page.unwrap_or(20).min(100).max(1);
 
     if params.sort.is_some() {
-        let valid_fields = ["code", "created_at", "year", "credits"];
-        if !valid_fields.contains(&params.sort.as_ref().unwrap().as_str()) {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
-            );
+        if let Some(sort) = &params.sort {
+            let valid_fields = ["code", "created_at", "year", "credits"];
+            let stripped = sort.trim_start_matches('-');
+            if !valid_fields.contains(&stripped) {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
+                );
+            }
         }
+
     }
     let res = Module::filter(
         Some(pool::get()),
