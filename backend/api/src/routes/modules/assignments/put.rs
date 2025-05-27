@@ -1,6 +1,8 @@
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use chrono::{DateTime, Utc};
 use db::models::assignment::{Assignment, AssignmentType};
 use serde::Serialize;
+use serde_json::Value;
 
 use crate::response::ApiResponse;
 #[derive(Debug, Serialize)]
@@ -32,18 +34,47 @@ impl From<Assignment> for AssignmentResponse {
     }
 }
 
+/// Edits a specific assignment by its ID and module ID.
+///
+/// # Arguments
+///
+/// The arguments are extracted automatically from the HTTP request:
+/// - Path parameters `(module_id, assignment_id)` identify the assignment to edit.
+/// - JSON body with the following fields:
+///   - `name` (string, required): The new name of the assignment.
+///   - `description` (string, optional): The new description of the assignment.
+///   - `assignment_type` (string, optional): The new type of the assignment ("A" for Assignment, otherwise Practical).
+///   - `available_from` (string, required): The new availability date (ISO 8601 format).
+///   - `due_date` (string, required): The new due date (ISO 8601 format).
+///
+/// # Returns
+///
+/// Returns an HTTP response indicating the result:
+/// - `200 OK` with the updated assignment data if successful.
+/// - `400 BAD REQUEST` if any required fields are missing or malformed(dates)
+/// - `404 NOT FOUND` if no assignment was found matching the given `module_id` and `assignment_id`.
+/// - `500 INTERNAL SERVER ERROR` if the update operation fails for other reasons.
+
 pub async fn edit_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
-    Json(req): Json<serde_json::Value>,
+    Json(req): Json<Value>,
 ) -> impl IntoResponse {
     let name = req.get("name").and_then(|v| v.as_str());
     let description = req.get("description").and_then(|v| v.as_str());
     let available_from = req.get("available_from").and_then(|v| v.as_str());
     let due_date = req.get("due_date").and_then(|v| v.as_str());
+
+    fn validate_and_format(date_str: &str) -> Option<String> {
+        DateTime::parse_from_rfc3339(date_str)
+            .ok()
+            .map(|dt| dt.with_timezone(&Utc).to_rfc3339())
+    }
+
     let assignment_type = match req.get("assignment_type").and_then(|v| v.as_str()) {
         Some("A") => db::models::assignment::AssignmentType::Assignment,
         _ => db::models::assignment::AssignmentType::Practical,
     };
+
     if name.is_none() {
         return (
             StatusCode::BAD_REQUEST,
@@ -53,27 +84,51 @@ pub async fn edit_assignment(
         );
     }
 
-    if available_from.is_none() {
+    let Some(available_from_raw) = available_from else {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<AssignmentResponse>::error(
                 "Release date is expected",
             )),
         );
-    }
+    };
 
-    if due_date.is_none() {
+    let Some(due_date_raw) = due_date else {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<AssignmentResponse>::error(
                 "Due date is expected",
             )),
         );
-    }
+    };
+
+    let available_from = match validate_and_format(available_from_raw) {
+        Some(date) => date,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error(
+                    "Release date must be in valid ISO 8601 format",
+                )),
+            );
+        }
+    };
+
+    let due_date = match validate_and_format(due_date_raw) {
+        Some(date) => date,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error(
+                    "Due date must be in valid ISO 8601 format",
+                )),
+            );
+        }
+    };
+    let available_from = available_from.as_str();
+    let due_date = due_date.as_str();
 
     let name = name.unwrap();
-    let available_from = available_from.unwrap();
-    let due_date = due_date.unwrap();
 
     match db::models::assignment::Assignment::edit(
         Some(db::pool::get()),
@@ -89,24 +144,27 @@ pub async fn edit_assignment(
     {
         Ok(module) => {
             let res = AssignmentResponse::from(module);
-            return (
+            (
                 StatusCode::OK,
                 Json(ApiResponse::success(res, "Module updated successfully")),
-            );
+            )
         }
         Err(e) => {
             if e.to_string().contains("no rows") {
-                return (
+                (
                     StatusCode::NOT_FOUND,
-                    Json(ApiResponse::<AssignmentResponse>::error("Assignment not found")),
-                );
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Assignment not found",
+                    )),
+                )
+            } else {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Failed to update module",
+                    )),
+                )
             }
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<AssignmentResponse>::error(&format!(
-                    "Failed to update module:",
-                ))),
-            );
         }
     }
 }

@@ -15,24 +15,22 @@
 /// # Errors
 /// Returns an error response if any of the required fields are missing or invalid.
 /// Handles the deletion of an assignment.
-use axum::{http::StatusCode, response::IntoResponse, extract::{Multipart, Path}, Json};
+use axum::{
+    extract::{Multipart, Path},
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
 use db::{
     models::assignment::{Assignment, AssignmentType},
     pool,
 };
 use serde::Serialize;
 
-use crate::{
-    auth::claims::AuthUser,
-    response::ApiResponse,
-};
+use crate::{auth::claims::AuthUser, response::ApiResponse};
 
-use std::{
-    fs,
-    io::Write,
-    path::PathBuf,
-};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use std::{fs, io::Write, path::PathBuf};
 
 #[derive(Debug, Serialize)]
 
@@ -73,8 +71,6 @@ pub struct UploadedFileMetadata {
     pub updated_at: String,
 }
 
-
-
 /// POST /api/modules/:module_id/assignments/:assignment_id/files
 ///
 /// Upload one or more files for a given assignment (Admin or Lecturer only).
@@ -96,7 +92,11 @@ pub struct UploadedFileMetadata {
 /// - `403 Forbidden` (unauthorized)
 /// - `404 Not Found` (assignment/module not found)
 
-pub async fn upload_files(Path((module_id, assignment_id)): Path<(i64, i64)>, AuthUser(claims): AuthUser, mut multipart: Multipart, ) -> impl IntoResponse {
+pub async fn upload_files(
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    AuthUser(claims): AuthUser,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
     if !claims.admin {
         return (
             StatusCode::FORBIDDEN,
@@ -110,12 +110,19 @@ pub async fn upload_files(Path((module_id, assignment_id)): Path<(i64, i64)>, Au
 
     let assignment_exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM assignments WHERE id = ? AND module_id = ?)",
-    ).bind(assignment_id).bind(module_id).fetch_one(pool).await.unwrap_or(false);
+    )
+    .bind(assignment_id)
+    .bind(module_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false);
 
     if !assignment_exists {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error("Assignment not found")),
+            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
+                "Assignment not found",
+            )),
         );
     }
 
@@ -163,16 +170,42 @@ pub async fn upload_files(Path((module_id, assignment_id)): Path<(i64, i64)>, Au
     if saved_files.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error("No files were uploaded or invalid file format", )),
+            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
+                "No files were uploaded or invalid file format",
+            )),
         );
     }
 
     (
         StatusCode::CREATED,
-        Json(ApiResponse::success(saved_files, "Files uploaded successfully", )),
+        Json(ApiResponse::success(
+            saved_files,
+            "Files uploaded successfully",
+        )),
     )
 }
 
+/// Creates a new assignment under a specific module.
+///
+/// # Arguments
+///
+/// The arguments are extracted automatically from the HTTP request:
+/// - Path parameter `module_id`: The ID of the module the assignment belongs to.
+/// - JSON body with the following fields:
+///   - `name` (string, required): The name of the assignment.
+///   - `description` (string, optional): A description of the assignment.
+///   - `assignment_type` (string, optional): The type of assignment (`"A"` for Assignment, anything else defaults to Practical).
+///   - `available_from` (string, required): The release date in ISO 8601 format.
+///   - `due_date` (string, required): The due date in ISO 8601 format.
+///
+/// # Returns
+///
+/// Returns an HTTP response indicating the result:
+/// - `200 OK` with the created assignment data if successful.
+/// - `400 BAD REQUEST` if required fields (`name`, `available_from`, or `due_date`) are missing or malformed.
+/// - `500 INTERNAL SERVER ERROR` if the database operation fails.
+///
+/// The response body is a JSON object using a standardized API response format.
 
 pub async fn create(
     Path(module_id): Path<i64>,
@@ -186,6 +219,13 @@ pub async fn create(
         Some("A") => db::models::assignment::AssignmentType::Assignment,
         _ => db::models::assignment::AssignmentType::Practical,
     };
+
+    fn validate_and_format(date_str: &str) -> Option<String> {
+        DateTime::parse_from_rfc3339(date_str)
+            .ok()
+            .map(|dt| dt.with_timezone(&Utc).to_rfc3339())
+    }
+
     if name.is_none() {
         return (
             StatusCode::BAD_REQUEST,
@@ -195,27 +235,51 @@ pub async fn create(
         );
     }
 
-    if available_from.is_none() {
+    let Some(available_from_raw) = available_from else {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<AssignmentResponse>::error(
                 "Release date is expected",
             )),
         );
-    }
+    };
 
-    if due_date.is_none() {
+    let Some(due_date_raw) = due_date else {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<AssignmentResponse>::error(
                 "Due date is expected",
             )),
         );
-    }
+    };
+
+    let available_from = match validate_and_format(available_from_raw) {
+        Some(date) => date,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error(
+                    "Release date must be in valid ISO 8601 format",
+                )),
+            );
+        }
+    };
+
+    let due_date = match validate_and_format(due_date_raw) {
+        Some(date) => date,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error(
+                    "Due date must be in valid ISO 8601 format",
+                )),
+            );
+        }
+    };
+    let available_from = available_from.as_str();
+    let due_date = due_date.as_str();
 
     let name = name.unwrap();
-    let available_from = available_from.unwrap();
-    let due_date = due_date.unwrap();
 
     let result: Result<Assignment, sqlx::Error> = Assignment::create(
         Some(pool::get()),
@@ -243,8 +307,6 @@ pub async fn create(
         ),
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

@@ -1,42 +1,61 @@
-//! # modules Routes Module
+//! # Modules Routes Module
 //!
-//! This module defines and wires up routes for the `/modules` endpoint group.
+//! Defines and wires up routes for the `/modules` endpoint group.
 //!
 //! ## Structure
 //! - `post.rs` — POST handlers (e.g., create module, assign lecturers)
+//! - `get.rs` — GET handlers (e.g., fetch modules, lecturers, students)
+//! - `put.rs` — PUT handlers (e.g., edit module)
+//! - `delete.rs` — DELETE handlers (e.g., remove lecturers, students, tutors)
+//! - `assignments.rs` — nested assignment routes under modules
 //!
 //! ## Usage
-//! The `modules_routes()` function returns a `Router` which is nested under `/modules` in the main application.
+//! Call `modules_routes()` to get a configured `Router` for `/modules` to be mounted in the main app.
 
-pub mod post;
+pub mod assignments;
 pub mod delete;
 pub mod get;
+pub mod post;
 pub mod put;
-pub mod assignments;
 
+use crate::auth::guards::require_admin;
 use assignments::assignment_routes;
 use axum::{
+    routing::{delete, get, post, put},
     Router,
-    routing::{post, delete, get, put},
 };
+use delete::{remove_lecturers, remove_students, remove_tutors};
+use get::{get_lecturers, get_module, get_modules, get_students, get_tutors};
+use post::{assign_lecturers, assign_students, assign_tutors, create};
 use put::edit_module;
-use crate::auth::guards::require_admin;
-use post::{create, assign_lecturers, assign_students, assign_tutors};
-use delete::{remove_lecturers, remove_tutors, remove_students};
-use get::{get_lecturers, get_students, get_tutors, get_module};
 
-
-
-/// Builds the `/modules` route group, mapping HTTP methods to handlers.
+/// Builds and returns the `/modules` route group.
 ///
-/// - `POST /` → `create` (admin only)
-/// - `POST /:module_id/lecturers` → `assign_lecturers` (admin only)
+/// Routes:
+/// - `GET    /modules`                 → list all modules
+/// - `POST   /modules`                 → create a new module (admin only)
+/// - `GET    /modules/:module_id`     → get a single module by ID
+/// - `PUT    /modules/:module_id`     → edit module details (admin only)
 ///
-/// # Returns
-/// A configured `Router` instance to be nested in the main app.
+/// - `POST   /modules/:module_id/lecturers` → assign lecturers (admin only)
+/// - `POST   /modules/:module_id/students`  → assign students (admin only)
+/// - `POST   /modules/:module_id/tutors`    → assign tutors (admin only)
+///
+/// - `GET    /modules/:module_id/lecturers` → get lecturers assigned to module
+/// - `GET    /modules/:module_id/students`  → get students assigned to module
+/// - `GET    /modules/:module_id/tutors`    → get tutors assigned to module
+///
+/// - `DELETE /modules/:module_id/lecturers` → remove lecturers from module (admin only)
+/// - `DELETE /modules/:module_id/students`  → remove students from module (admin only)
+/// - `DELETE /modules/:module_id/tutors`    → remove tutors from module (admin only)
+///
+/// - Nested assignments routes under `/modules/:module_id/assignments`
+///
+/// All routes are protected by `require_admin` middleware.
 pub fn modules_routes() -> Router {
     Router::new()
-        .route("/", post(create))
+        .route("/", get(get_modules))        // Public: list modules
+        .route("/", post(create))             // Admin: create module
         .route("/:module_id/lecturers", post(assign_lecturers))
         .route("/:module_id/students", post(assign_students))
         .route("/:module_id/tutors", post(assign_tutors))

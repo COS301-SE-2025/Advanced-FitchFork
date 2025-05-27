@@ -1,7 +1,7 @@
 use crate::auth::AuthUser;
 use crate::response::ApiResponse;
 use crate::routes::modules::post::PersonnelResponse;
-use axum::extract::Path;
+use axum::extract::{Path, Query};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -12,28 +12,24 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModuleResponse {
-    pub id: i64,
-    pub code: String,
-    pub year: i32,
-    pub description: Option<String>,
-    pub credits: i32,
-    pub created_at: String,
-    pub updated_at: String,
+    pub module: ModuleDetailsResponse,
     pub lecturers: Vec<UserResponse>,
     pub tutors: Vec<UserResponse>,
     pub students: Vec<UserResponse>,
 }
 
 impl From<Module> for ModuleResponse {
-    fn from(module: Module) -> Self {
+    fn from(m: Module) -> Self {
         Self {
-            id: module.id,
-            code: module.code,
-            year: module.year,
-            description: module.description,
-            credits: module.credits,
-            created_at: module.created_at,
-            updated_at: module.updated_at,
+            module: ModuleDetailsResponse {
+                id: m.id,
+                code: m.code,
+                year: m.year,
+                description: m.description,
+                credits: m.credits,
+                created_at: m.created_at,
+                updated_at: m.updated_at,
+            },
             lecturers: Vec::new(),
             tutors: Vec::new(),
             students: Vec::new(),
@@ -415,6 +411,25 @@ pub async fn get_students(
         .into_response()
 }
 
+/// Retrieves detailed information about a specific module, including assigned lecturers, tutors, and students.
+///
+/// # Arguments
+///
+/// The argument is extracted automatically from the HTTP route:
+/// - Path parameter `module_id`: The ID of the module to retrieve.
+///
+/// # Returns
+///
+/// Returns an HTTP response indicating the result:
+/// - `200 OK` with the full module details (including associated lecturers, tutors, and students) if successful.
+/// - `404 NOT FOUND` if no module is found with the given `module_id`.
+/// - `500 INTERNAL SERVER ERROR` if a database error occurs or if related personnel data (lecturers, tutors, or students) fails to load.
+///
+/// The response body is a JSON object using a standardized API response format, containing:
+/// - Module information.
+/// - Lists of users for each role (lecturers, tutors, students), each mapped to `UserResponse`.
+
+
 pub async fn get_module(Path(module_id): Path<i64>) -> impl IntoResponse {
     let module_res = Module::get_by_id(Some(pool::get()), module_id).await;
     match module_res {
@@ -438,9 +453,6 @@ pub async fn get_module(Path(module_id): Path<i64>) -> impl IntoResponse {
             .await;
 
             if lecturers.is_err() || tutors.is_err() || students.is_err() {
-                println!("Error retrieving module personnel: {:?}", lecturers.err());
-                println!("Error retrieving module personnel: {:?}", tutors.err());
-                println!("Error retrieving module personnel: {:?}", students.err());
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ApiResponse::<ModuleResponse>::error(
@@ -502,6 +514,128 @@ pub async fn get_module(Path(module_id): Path<i64>) -> impl IntoResponse {
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<ModuleResponse>::error(
                 "An error occurred in the database",
+            )),
+        ),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FilterReq {
+    pub page: Option<i32>,
+    pub per_page: Option<i32>,
+    pub query: Option<String>,
+    pub code: Option<String>,
+    pub year: Option<i32>,
+    pub sort: Option<String>,
+}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ModuleDetailsResponse {
+    pub id: i64,
+    pub code: String,
+    pub year: i32,
+    pub description: Option<String>,
+    pub credits: i32,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<Module> for ModuleDetailsResponse {
+    fn from(m: Module) -> Self {
+        Self {
+            id: m.id,
+            code: m.code,
+            year: m.year,
+            description: m.description,
+            credits: m.credits,
+            created_at: m.created_at,
+            updated_at: m.updated_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct FilterResponse {
+    pub modules: Vec<ModuleDetailsResponse>,
+    pub page: i32,
+    pub per_page: i32,
+    pub total: i32,
+}
+
+impl From<(Vec<Module>, i32, i32, i32)> for FilterResponse {
+    fn from(data: (Vec<Module>, i32, i32, i32)) -> Self {
+        let (modules, page, per_page, total) = data;
+        Self {
+            modules: modules
+                .into_iter()
+                .map(ModuleDetailsResponse::from)
+                .collect(),
+            page,
+            per_page,
+            total,
+        }
+    }
+}
+/// Retrieves a paginated and optionally filtered list of modules.
+///
+/// # Arguments
+///
+/// The arguments are automatically extracted from query parameters via the `FilterReq` struct:
+/// - `page`: (Optional) The page number for pagination. Defaults to 1 if not provided. Minimum value is 1.
+/// - `per_page`: (Optional) The number of items per page. Defaults to 20. Maximum is 100. Minimum is 1.
+/// - `query`: (Optional) A general search string that filters modules by `code` or `description`.
+/// - `code`: (Optional) A filter to match specific module codes.
+/// - `year`: (Optional) A filter to match modules by academic year.
+/// - `sort`: (Optional) A comma-separated list of fields to sort by. Prefix with `-` for descending order (e.g., `-year`).
+///
+/// Allowed sort fields: `"code"`, `"created_at"`, `"year"`, `"credits"`.
+///
+/// # Returns
+///
+/// Returns an HTTP response indicating the result:
+/// - `200 OK` with a list of matching modules, paginated and wrapped in a standardized response format.
+/// - `400 BAD REQUEST` if an invalid field is used for sorting.
+/// - `500 INTERNAL SERVER ERROR` if a database error occurs while retrieving the modules.
+///
+/// The response body contains:
+/// - A paginated list of modules.
+/// - Metadata: current page, items per page, and total items.
+
+pub async fn get_modules(Query(params): Query<FilterReq>) -> impl IntoResponse {
+    let page = params.page.unwrap_or(1).max(1);
+    let length = params.per_page.unwrap_or(20).min(100).max(1);
+
+    if params.sort.is_some() {
+        let valid_fields = ["code", "created_at", "year", "credits"];
+        if !valid_fields.contains(&params.sort.as_ref().unwrap().as_str()) {
+            return (StatusCode::BAD_REQUEST, Json(ApiResponse::<FilterResponse>::error("Invalid field used")));
+        }
+    }
+    let res = Module::filter(
+        Some(pool::get()),
+        page,
+        length,
+        params.query,
+        params.code,
+        params.year,
+        params.sort,
+    )
+    .await;
+    match res {
+        Ok(data) => {
+            let total = data.len() as i32;
+            let response: FilterResponse = FilterResponse::from((data, page, length, total));
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    response,
+                    "Modules retrieved successfully",
+                )),
+            )
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<FilterResponse>::error(
+                "An error occurred while retrieving modules",
             )),
         ),
     }
