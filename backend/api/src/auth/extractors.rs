@@ -20,9 +20,13 @@ use crate::auth::claims::{Claims, AuthUser};
 /// - Returns `401 Unauthorized` if the header is missing, malformed, or the token is invalid or expired.
 ///
 /// # Example
-/// ```rust
+/// ```ignore
+/// use axum::response::IntoResponse;
+/// use api::auth::claims::AuthUser;
+///
 /// async fn protected_route(user: AuthUser) -> impl IntoResponse {
 ///     // User is now available
+///     format!("User ID: {}", user.0.sub)
 /// }
 /// ```
 #[async_trait]
@@ -59,8 +63,11 @@ where
 /// - `None` if the tuple structure is invalid or missing.
 ///
 /// # Example
-/// ```rust
-/// let id = extract_module_id((42, 7)); // returns Some(42)
+/// ```
+/// use api::auth::extractors::extract_module_id;
+///
+/// let id = extract_module_id((42, 7));
+/// assert_eq!(id, Some(42));
 /// ```
 pub fn extract_module_id<T: Into<PathParams>>(params: T) -> Option<i64> {
     let v: Vec<i64> = match params.into() {
