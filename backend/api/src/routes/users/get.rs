@@ -66,8 +66,8 @@ impl From<User> for UserListItem {
 /// - `page` (optional): Page number (default: 1, min: 1)
 /// - `per_page` (optional): Items per page (default: 20, min: 1, max: 100)
 /// - `query` (optional): Case-insensitive partial match against email OR student_number
-/// - `email` (optional): Case-insensitive partial match on email (ignored if query is provided)
-/// - `student_number` (optional): Case-insensitive partial match on student number (ignored if query is provided)
+/// - `email` (optional): Case-insensitive partial match on email
+/// - `student_number` (optional): Case-insensitive partial match on student number
 /// - `admin` (optional): Filter by admin status (true/false)
 /// - `sort` (optional): Comma-separated sort fields. Use `-` prefix for descending
 ///
@@ -127,23 +127,23 @@ pub async fn list_users(Query(query_params): Query<ListUsersQuery>) -> impl Into
     let offset = (page - 1) * per_page;
 
     let mut where_conditions = Vec::new();
-    let mut params = Vec::new();
+    let mut params: Vec<String> = Vec::new();
     
     if let Some(query) = &query_params.query {
         where_conditions.push("(LOWER(email) LIKE LOWER(?) OR LOWER(student_number) LIKE LOWER(?))");
         let query_pattern = format!("%{}%", query);
         params.push(query_pattern.clone());
         params.push(query_pattern);
-    } else {
-        if let Some(email) = &query_params.email {
-            where_conditions.push("LOWER(email) LIKE LOWER(?)");
-            params.push(format!("%{}%", email));
-        }
-        
-        if let Some(student_number) = &query_params.student_number {
-            where_conditions.push("LOWER(student_number) LIKE LOWER(?)");
-            params.push(format!("%{}%", student_number));
-        }
+    }
+
+    if let Some(email) = &query_params.email {
+        where_conditions.push("LOWER(email) LIKE LOWER(?)");
+        params.push(format!("%{}%", email));
+    }
+    
+    if let Some(student_number) = &query_params.student_number {
+        where_conditions.push("LOWER(student_number) LIKE LOWER(?)");
+        params.push(format!("%{}%", student_number));
     }
     
     if let Some(admin_filter) = query_params.admin {
