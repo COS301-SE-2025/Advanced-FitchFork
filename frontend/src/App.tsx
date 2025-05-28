@@ -11,16 +11,18 @@ import ModuleView from './pages/modules/admin/view/ModuleView';
 import NotFound from './pages/shared/status/NotFound';
 import UnderConstruction from './pages/shared/status/UnderConstruction';
 import ProfilePage from './pages/shared/Profile';
+import UserView from './pages/users/UserView';
 
 export default function App() {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading, isExpired } = useAuth();
 
   if (loading) return null;
 
-  const requireAuth = (element: JSX.Element) => (user ? element : <Navigate to="/login" replace />);
+  const requireAuth = (element: JSX.Element) =>
+    user && !isExpired() ? element : <Navigate to="/login" replace />;
 
   const requireAdmin = (element: JSX.Element) =>
-    user ? (
+    user && !isExpired() ? (
       isAdmin() ? (
         element
       ) : (
@@ -40,7 +42,7 @@ export default function App() {
 
         {/* Admin-only User Routes */}
         <Route path="/users" element={requireAdmin(<UsersList />)} />
-        <Route path="/users/:id" element={requireAdmin(<Unauthorized />)} />
+        <Route path="/users/:id" element={requireAdmin(<UserView />)} />
         <Route path="/users/:id/modules" element={requireAdmin(<Unauthorized />)} />
 
         <Route path="/home" element={requireAuth(<Home />)} />

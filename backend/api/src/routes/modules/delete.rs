@@ -6,6 +6,69 @@ use crate::auth::AuthUser;
 use crate::response::ApiResponse;
 use crate::routes::modules::post::ModifyUsersModuleRequest;
 
+/// DELETE /api/modules/:module_id
+///
+/// Permanently deletes a module by ID.  
+/// Only accessible by admin users.
+///
+/// ### Responses
+///
+/// - `200 OK`  
+/// ```json
+/// {
+///   "success": true,
+///   "data": null,
+///   "message": "Module deleted successfully"
+/// }
+/// ```
+///
+/// - `403 Forbidden`  
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "You do not have permission to perform this action"
+/// }
+/// ```
+///
+/// - `404 Not Found`  
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Module not found"
+/// }
+/// ```
+pub async fn delete_module(
+    axum::extract::Path(module_id): axum::extract::Path<i64>,
+) -> impl axum::response::IntoResponse {
+    let pool = db::pool::get();
+
+    let module_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)"
+    )
+    .bind(module_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false);
+
+    if !module_exists {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("Module not found")),
+        );
+    }
+
+    let _ = sqlx::query("DELETE FROM modules WHERE id = ?")
+        .bind(module_id)
+        .execute(pool)
+        .await;
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::<()>::success((), "Module deleted successfully")),
+    )
+}
 
 
 /// DELETE /api/modules/:module_id/lecturers

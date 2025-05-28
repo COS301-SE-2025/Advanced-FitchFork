@@ -6,13 +6,16 @@ import 'antd/dist/reset.css';
 import { AuthProvider } from './context/AuthContext.tsx';
 import { ThemeProvider } from './context/ThemeContext.tsx';
 import { App as AntApp } from 'antd';
+import { BreadcrumbProvider } from './context/BreadcrumbContext.tsx';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeProvider>
       <AuthProvider>
         <AntApp>
-          <App />
+          <BreadcrumbProvider>
+            <App />
+          </BreadcrumbProvider>
         </AntApp>
       </AuthProvider>
     </ThemeProvider>

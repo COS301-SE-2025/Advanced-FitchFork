@@ -1,5 +1,6 @@
 use api::routes::routes;
 use axum::Router;
+use axum::http::header;
 use common::{config::Config, logger::init_logger};
 use log::info;
 use std::net::SocketAddr;
@@ -24,7 +25,8 @@ async fn main() {
             "http://localhost:5173",
         ))
         .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_headers(Any)
+        .expose_headers([header::CONTENT_DISPOSITION]);
 
     // Compose routes and apply middleware
     let app = Router::new().nest("/api", routes()).layer(cors);

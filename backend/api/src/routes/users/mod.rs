@@ -23,7 +23,7 @@ use axum::{
 };
 use crate::auth::guards::require_admin;
 use get::list_users;
-use get::get_user_modules;
+use get::{get_user_modules, get_user};
 use put::update_user;
 use delete::delete_user;
 
@@ -40,6 +40,7 @@ pub fn users_routes() -> Router {
     Router::new()
         .route("/", get(list_users))
         .route("/:id/modules", get(get_user_modules))
+        .route("/:id", get(get_user))
         .route("/:id", put(update_user))
         .route("/:id", delete(delete_user))
         .route_layer(axum::middleware::from_fn(require_admin))

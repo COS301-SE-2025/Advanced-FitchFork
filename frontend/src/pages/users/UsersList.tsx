@@ -5,6 +5,7 @@ import {
   CheckOutlined,
   CloseOutlined,
   ReloadOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
@@ -18,11 +19,14 @@ import AppLayout from '@/layouts/AppLayout';
 import TableCreateModal from '@/components/TableCreateModal';
 import { AuthService } from '@/services/auth';
 import { useNotifier } from '@/components/Notifier';
+import { useNavigate } from 'react-router-dom';
 
 export default function UsersList() {
   // ======================================================================
   // =========================== State & Hooks ============================
   // ======================================================================
+  const navigate = useNavigate();
+
   const { notifySuccess, notifyError } = useNotifier();
   const {
     searchTerm,
@@ -110,14 +114,14 @@ export default function UsersList() {
       });
 
       if (res.success) {
-        notifySuccess('User registered successfully');
+        notifySuccess('User registered successfully', res.message);
         setIsAddModalOpen(false);
         fetchUsers();
       } else {
-        notifyError(res.message || 'Failed to register user');
+        notifyError(res.message || 'Failed to register user', res.message);
       }
     } catch (err) {
-      notifyError('Registration failed due to network/server error');
+      notifyError('Registration failed', 'Registration failed due to network/server error');
     }
   };
 
@@ -140,12 +144,12 @@ export default function UsersList() {
 
     const res = await UsersService.editUser(updated.id, updated);
     if (res.success) {
-      notifySuccess('User updated successfully');
+      notifySuccess('User updated successfully', res.message);
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? res.data : u)));
       setEditingRowId(null);
       setEditCache({});
     } else {
-      notifyError('Failed to update user');
+      notifyError('Failed to update user', res.message);
     }
   };
 
@@ -154,9 +158,9 @@ export default function UsersList() {
     if (res.success) {
       setUsers((prev) => prev.filter((u) => u.id !== id));
       setSelectedRowKeys((prev) => prev.filter((k) => k !== id));
-      notifySuccess('User deleted successfully');
+      notifySuccess('User deleted successfully', res.message);
     } else {
-      notifyError('Failed to delete user');
+      notifyError('Failed to delete user', res.message);
     }
   };
 
@@ -166,7 +170,10 @@ export default function UsersList() {
     }
     setSelectedRowKeys([]);
     if (selectedRowKeys.length > 0) {
-      notifySuccess('Selected users deleted');
+      notifySuccess(
+        'Selected users deleted',
+        `${selectedRowKeys.length} user(s) have been deleted.`,
+      );
     }
   };
 
@@ -313,6 +320,14 @@ export default function UsersList() {
           </Space>
         ) : (
           <Space>
+            <Tooltip title="View">
+              <Button
+                icon={<EyeOutlined />}
+                size="small"
+                type="text"
+                onClick={() => navigate(`/users/${record.id}`)}
+              />
+            </Tooltip>
             <Tooltip title="Edit">
               <Button
                 icon={<EditOutlined />}
@@ -324,6 +339,7 @@ export default function UsersList() {
                 }}
               />
             </Tooltip>
+
             <Tooltip title="Delete">
               <Popconfirm
                 title="Delete this user?"

@@ -5,7 +5,7 @@ import type {
   User,
   UserEditableFields,
 } from "@/types/users";
-import { apiFetch, type ApiResponse} from "@/utils/api";
+import { apiFetch, type ApiResponse } from "@/utils/api";
 
 /**
  * UsersService handles API requests related to user management.
@@ -37,6 +37,12 @@ export const UsersService = {
   },
 
   /**
+   * Retrieves details of a single user by ID.
+   */
+  getUser: (userId: number): Promise<ApiResponse<User>> =>
+    apiFetch(`/users/${userId}`, { method: "GET" }),
+
+  /**
    * Updates a user's details.
    */
   editUser: (userId: number, user: User): Promise<ApiResponse<User>> => {
@@ -61,6 +67,6 @@ export const UsersService = {
   /**
    * Returns the list of modules a user is involved in.
    */
-  getModulesForUser: (userId: number): Promise<ApiResponse<ModuleSummary[]>> =>
+  getUserModules: (userId: number): Promise<ApiResponse<ModuleSummary[]>> =>
     apiFetch(`/users/${userId}/modules`, { method: "GET" }),
 };

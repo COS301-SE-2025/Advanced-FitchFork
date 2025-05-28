@@ -1,382 +1,385 @@
-import {
-  Typography,
-  Table,
-  Button,
-  Space,
-  Popconfirm,
-  Tooltip,
-  Input,
-  Select,
-  Tag,
-  Empty,
-} from 'antd';
-import {
-  EditOutlined,
-  DeleteOutlined,
-  CheckOutlined,
-  CloseOutlined,
-  ReloadOutlined,
-} from '@ant-design/icons';
 import { useEffect, useState } from 'react';
-import type { ColumnsType } from 'antd/es/table';
-import { ModulesService } from '@/services/modules/mock'; // TODO: Remeber to change this when services work
-import { UsersService } from '@/services/users';
-import TableControlBar from '@/components/TableControlBar';
-import TableTagSummary from '@/components/TableTagSummary';
-import TableCreateModal from '@/components/TableCreateModal';
-import type { ModuleUser, User } from '@/types/users';
-import { useTableQuery } from '@/hooks/useTableQuery';
+import { Typography, Segmented, Table, Transfer, Input, Button, Tag, Skeleton } from 'antd';
+import type { Key } from 'react';
+import type { TransferProps, TablePaginationConfig, TableProps } from 'antd';
 import type { ModuleRole } from '@/types/modules';
+import { ModulesService } from '@/services/modules';
 import { useNotifier } from '@/components/Notifier';
+import { useTableQuery } from '@/hooks/useTableQuery';
 
 const { Title, Text } = Typography;
-const ROLES = ['Lecturer', 'Tutor', 'Student'] as const;
+const ROLES: ModuleRole[] = ['Lecturer', 'Tutor', 'Student'];
 
 interface Props {
   moduleId: number;
 }
 
+interface TableTransferItem {
+  key: string;
+  student_number: string;
+  email: string;
+  title: string;
+  description: string;
+  role?: ModuleRole;
+}
+
+type TableRowSelection<T> = TableProps<T>['rowSelection'];
+type TransferItem = Required<TransferProps>['dataSource'][number];
+
 export default function PersonnelSection({ moduleId }: Props) {
-  // ======================================================================
-  // =========================== State & Hooks ============================
-  // ======================================================================
+  const { notifyError, notifySuccess } = useNotifier();
 
-  const {
-    searchTerm,
-    setSearchTerm,
-    sorterState,
-    setSorterState,
-    filterState,
-    setFilterState,
-    pagination,
-    setPagination,
-    clearSearch,
-    clearSorters,
-    clearFilters,
-    clearAll,
-  } = useTableQuery();
-
-  const { notifySuccess, notifyError } = useNotifier();
-
+  const [eligibleUsers, setEligibleUsers] = useState<TableTransferItem[]>([]);
+  const [assignedUsers, setAssignedUsers] = useState<TableTransferItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [personnel, setPersonnel] = useState<ModuleUser[]>([]);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editedRow, setEditedRow] = useState<Partial<ModuleUser>>({});
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [selectedRole, setSelectedRole] = useState<ModuleRole>('Student');
+  const [roleAssignments, setRoleAssignments] = useState<Record<ModuleRole, Key[]>>({
+    Lecturer: [],
+    Tutor: [],
+    Student: [],
+  });
 
-  // ======================================================================
-  // ============================ Data Fetching ===========================
-  // ======================================================================
+  const available = useTableQuery();
+  const assigned = useTableQuery();
 
-  const fetchPersonnel = async () => {
+  const fetchData = async () => {
     setLoading(true);
-    const [lect, tut, stud] = await Promise.all([
-      ModulesService.getLecturers(moduleId),
-      ModulesService.getTutors(moduleId),
-      ModulesService.getStudents(moduleId),
-    ]);
-
-    if (lect.success && tut.success && stud.success) {
-      const all = [
-        ...lect.data.users.map((u) => ({ ...u, role: 'Lecturer' as ModuleRole })),
-        ...tut.data.users.map((u) => ({ ...u, role: 'Tutor' as ModuleRole })),
-        ...stud.data.users.map((u) => ({ ...u, role: 'Student' as ModuleRole })),
-      ];
-      const filtered = all.filter(
-        (p) =>
-          p.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          p.student_number.toLowerCase().includes(searchTerm.toLowerCase()),
-      );
-
-      const start = ((pagination.current || 1) - 1) * (pagination.pageSize || 10);
-      const paginated = filtered.slice(start, start + (pagination.pageSize || 10));
-
-      setPersonnel(paginated);
-      setPagination({ total: filtered.length });
-    } else {
-      notifyError('Failed to load personnel');
-    }
-
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchPersonnel();
-  }, [moduleId, pagination.current, pagination.pageSize, sorterState, searchTerm, filterState]);
-
-  useEffect(() => {
-    if (isAddModalOpen) {
-      UsersService.listUsers({ page: 1, per_page: 100 }).then((res) => {
-        if (res.success) {
-          setAllUsers(res.data.users);
-        } else {
-          notifyError('Failed to load users');
-        }
+    try {
+      const eligibleRes = await ModulesService.getEligibleUsersForRole(moduleId, selectedRole, {
+        page: available.pagination.current,
+        per_page: available.pagination.pageSize,
+        query: available.searchTerm,
+        email: available.filterState.email?.[0],
+        student_number: available.filterState.student_number?.[0],
       });
+
+      const assignedRes = await {
+        Lecturer: ModulesService.getLecturers,
+        Tutor: ModulesService.getTutors,
+        Student: ModulesService.getStudents,
+      }[selectedRole](moduleId, {
+        page: assigned.pagination.current,
+        per_page: assigned.pagination.pageSize,
+        query: assigned.searchTerm,
+        email: assigned.filterState.email?.[0],
+        student_number: assigned.filterState.student_number?.[0],
+      });
+
+      if (eligibleRes.success) {
+        setEligibleUsers(
+          eligibleRes.data.users.map((u) => ({
+            key: String(u.id),
+            student_number: u.student_number,
+            email: u.email,
+            title: u.email,
+            description: u.student_number,
+          })),
+        );
+        available.setPagination({ total: eligibleRes.data.total });
+      } else {
+        notifyError('Failed to load eligible users', eligibleRes.message);
+      }
+
+      if (assignedRes.success) {
+        setAssignedUsers(
+          assignedRes.data.users.map((u) => ({
+            key: String(u.id),
+            student_number: u.student_number,
+            email: u.email,
+            title: u.email,
+            description: u.student_number,
+            role: selectedRole, // <- add this line
+          })),
+        );
+        assigned.setPagination({ total: assignedRes.data.total });
+        setRoleAssignments((prev) => ({
+          ...prev,
+          [selectedRole]: assignedRes.data.users.map((u) => String(u.id)),
+        }));
+      } else {
+        notifyError('Failed to load assigned users', assignedRes.message);
+      }
+    } finally {
+      setLoading(false);
     }
-  }, [isAddModalOpen]);
-
-  // ======================================================================
-  // ============================== Handlers ==============================
-  // ======================================================================
-
-  const handleSaveEdit = (_id: number) => {
-    notifySuccess('Updated locally');
-    setEditingId(null);
-    setEditedRow({});
-    fetchPersonnel();
   };
 
-  const handleDeleteUser = (id: number) => {
-    setPersonnel((prev) => prev.filter((u) => u.id !== id));
-    setSelectedRowKeys((prev) => prev.filter((k) => k !== id));
-    notifySuccess('User removed from module');
-  };
+  useEffect(() => {
+    fetchData();
+  }, [
+    moduleId,
+    selectedRole,
+    available.pagination.current,
+    available.pagination.pageSize,
+    available.searchTerm,
+    available.filterState.email,
+    available.filterState.student_number,
+    assigned.pagination.current,
+    assigned.pagination.pageSize,
+    assigned.searchTerm,
+    assigned.filterState.email,
+    assigned.filterState.student_number,
+  ]);
 
-  const handleBulkDelete = () => {
-    for (const key of selectedRowKeys) {
-      handleDeleteUser(Number(key));
+  const handleTransferChange = async (
+    nextKeys: Key[],
+    _direction: 'left' | 'right',
+    _movedKeys: Key[],
+  ) => {
+    const user_ids = nextKeys.map(Number);
+    const prevKeys = roleAssignments[selectedRole].map(Number);
+
+    const toAdd = user_ids.filter((id) => !prevKeys.includes(id));
+    const toRemove = prevKeys.filter((id) => !user_ids.includes(id));
+
+    setRoleAssignments((prev) => ({ ...prev, [selectedRole]: nextKeys }));
+
+    const assignFn = {
+      Lecturer: ModulesService.assignLecturers,
+      Tutor: ModulesService.assignTutors,
+      Student: ModulesService.enrollStudents,
+    }[selectedRole];
+
+    const removeFn = {
+      Lecturer: ModulesService.removeLecturers,
+      Tutor: ModulesService.removeTutors,
+      Student: ModulesService.removeStudents,
+    }[selectedRole];
+
+    let assignRes = { success: true, message: '' };
+    let removeRes = { success: true, message: '' };
+
+    if (toAdd.length) {
+      assignRes = await assignFn(moduleId, { user_ids: toAdd });
     }
-    setSelectedRowKeys([]);
-  };
 
-  const handleAddPerson = () => {
-    clearAll();
-    setIsAddModalOpen(true);
-  };
+    if (toRemove.length) {
+      removeRes = await removeFn(moduleId, { user_ids: toRemove });
+    }
 
-  const handleSubmitNewUser = async (values: Record<string, any>) => {
-    const userId = Number(values.user_id);
-    const res = await ModulesService.enrollStudents(moduleId, { user_ids: [userId] });
-    if (res.success) {
-      notifySuccess('User added to module');
-      setIsAddModalOpen(false);
-      fetchPersonnel();
+    if (assignRes.success && removeRes.success) {
+      notifySuccess(`Updated ${selectedRole}s`, assignRes.message || removeRes.message);
+      await fetchData();
     } else {
-      notifyError('Failed to enroll user');
+      const firstError = !assignRes.success ? assignRes : removeRes;
+      notifyError(`Failed to update ${selectedRole}s`, firstError.message);
     }
   };
 
-  // ======================================================================
-  // =========================== Table Columns ============================
-  // ======================================================================
+  const allUsers = [...eligibleUsers, ...assignedUsers].filter(
+    (u, i, arr) => arr.findIndex((x) => x.key === u.key) === i,
+  );
 
-  const columns: ColumnsType<ModuleUser> = [
+  const getColumns = (
+    state: ReturnType<typeof useTableQuery>,
+  ): TableProps<TableTransferItem>['columns'] => [
     {
-      title: 'Email',
-      dataIndex: 'email',
-      key: 'email',
-      sorter: { multiple: 1 },
-      sortOrder: sorterState.find((s) => s.field === 'email')?.order ?? null,
-      render: (_, record) =>
-        editingId === record.id ? (
-          <Input
-            value={editedRow.email}
-            onChange={(e) => setEditedRow((r) => ({ ...r, email: e.target.value }))}
-          />
-        ) : (
-          record.email
-        ),
-    },
-    {
-      title: 'Student Number',
       dataIndex: 'student_number',
-      key: 'student_number',
-      sorter: { multiple: 2 },
-      sortOrder: sorterState.find((s) => s.field === 'student_number')?.order ?? null,
-      render: (_, record) =>
-        editingId === record.id ? (
+      title: 'Student Number',
+      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
+        <div style={{ padding: 8 }}>
           <Input
-            value={editedRow.student_number}
-            onChange={(e) => setEditedRow((r) => ({ ...r, student_number: e.target.value }))}
+            placeholder="Filter by student number"
+            value={selectedKeys[0]}
+            onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+            onPressEnter={() => {
+              confirm();
+              state.setFilterState({
+                ...state.filterState,
+                student_number: [selectedKeys[0] as string],
+              });
+            }}
+            style={{ width: 188, marginBottom: 8, display: 'block' }}
           />
-        ) : (
-          record.student_number
-        ),
-    },
-    {
-      title: 'Role',
-      dataIndex: 'role',
-      key: 'role',
-      sorter: { multiple: 3 },
-      sortOrder: sorterState.find((s) => s.field === 'role')?.order ?? null,
-      filters: ROLES.map((r) => ({ text: r, value: r })),
-      filteredValue: filterState.role || null,
-      onFilter: (val, rec) => rec.role === val,
-      render: (_, record) =>
-        editingId === record.id ? (
-          <Select
-            value={editedRow.role}
-            onChange={(val) => setEditedRow((r) => ({ ...r, role: val }))}
-            options={ROLES.map((r) => ({ label: r, value: r }))}
-            style={{ width: 120 }}
-          />
-        ) : (
-          <Tag
-            color={
-              record.role === 'Lecturer' ? 'volcano' : record.role === 'Tutor' ? 'blue' : 'green'
-            }
-          >
-            {record.role}
-          </Tag>
-        ),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      align: 'right',
-      width: 120,
-      render: (_, record) =>
-        editingId === record.id ? (
-          <Space>
-            <Button
-              icon={<CheckOutlined />}
-              type="text"
-              onClick={() => handleSaveEdit(record.id)}
-            />
-            <Button
-              icon={<CloseOutlined />}
-              type="text"
-              danger
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <a
               onClick={() => {
-                setEditingId(null);
-                setEditedRow({});
+                confirm();
+                state.setFilterState({
+                  ...state.filterState,
+                  student_number: [selectedKeys[0] as string],
+                });
               }}
-            />
-          </Space>
-        ) : (
-          <Space>
-            <Tooltip title="Edit">
-              <Button
-                type="text"
-                icon={<EditOutlined />}
-                size="small"
-                onClick={() => {
-                  setEditingId(record.id);
-                  setEditedRow(record);
-                }}
-              />
-            </Tooltip>
-            <Tooltip title="Delete">
-              <Popconfirm
-                title="Remove this user?"
-                onConfirm={() => handleDeleteUser(record.id)}
-                okText="Yes"
-                cancelText="No"
-              >
-                <Button type="text" icon={<DeleteOutlined />} danger size="small" />
-              </Popconfirm>
-            </Tooltip>
-          </Space>
-        ),
+            >
+              Apply
+            </a>
+            <a
+              onClick={() => {
+                clearFilters?.();
+                state.setFilterState({ ...state.filterState, student_number: [] });
+              }}
+            >
+              Reset
+            </a>
+          </div>
+        </div>
+      ),
+    },
+    {
+      dataIndex: 'email',
+      title: 'Email',
+      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
+        <div style={{ padding: 8 }}>
+          <Input
+            placeholder="Filter by email"
+            value={selectedKeys[0]}
+            onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+            onPressEnter={() => {
+              confirm();
+              state.setFilterState({ ...state.filterState, email: [selectedKeys[0] as string] });
+            }}
+            style={{ width: 188, marginBottom: 8, display: 'block' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <a
+              onClick={() => {
+                confirm();
+                state.setFilterState({ ...state.filterState, email: [selectedKeys[0] as string] });
+              }}
+            >
+              Apply
+            </a>
+            <a
+              onClick={() => {
+                clearFilters?.();
+                state.setFilterState({ ...state.filterState, email: [] });
+              }}
+            >
+              Reset
+            </a>
+          </div>
+        </div>
+      ),
+    },
+    {
+      dataIndex: 'role',
+      title: 'Role',
+      render: (_, record) => {
+        if (!record.role) {
+          return <Tag color="default">None</Tag>;
+        }
+        const color =
+          record.role === 'Lecturer' ? 'volcano' : record.role === 'Tutor' ? 'geekblue' : 'green';
+        return <Tag color={color}>{record.role}</Tag>;
+      },
     },
   ];
 
-  // ======================================================================
-  // ============================== Render ================================
-  // ======================================================================
+  const renderTableTransfer = (direction: 'left' | 'right', props: any) => {
+    const state = direction === 'left' ? available : assigned;
+    const pagination: TablePaginationConfig = {
+      current: state.pagination.current,
+      pageSize: state.pagination.pageSize,
+      total: state.pagination.total,
+      pageSizeOptions: state.pagination.pageSizeOptions,
+      showSizeChanger: true,
+      onChange: (page, pageSize) => {
+        state.setPagination({ current: page, pageSize });
+      },
+    };
+
+    const rowSelection: TableRowSelection<TransferItem> = {
+      getCheckboxProps: () => ({ disabled: props.disabled }),
+      onChange: (selectedRowKeys) => {
+        props.onItemSelectAll(selectedRowKeys, 'replace');
+      },
+      selectedRowKeys: props.selectedKeys,
+    };
+
+    return (
+      <div className="space-y-2 p-2">
+        <div className="flex gap-2">
+          <Input.Search
+            allowClear
+            placeholder={`Search ${direction === 'left' ? 'available' : 'assigned'} users`}
+            value={state.searchTerm}
+            onChange={(e) => state.setSearchTerm(e.target.value)}
+            onSearch={() => state.setPagination({ current: 1 })}
+            style={{ width: '100%' }}
+          />
+          <Button
+            onClick={() => {
+              state.clearSearch();
+              state.setPagination({ current: 1 });
+            }}
+          >
+            Clear
+          </Button>
+        </div>
+        {loading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, idx) => (
+              <div key={idx} className="grid grid-cols-3 gap-4 w-full">
+                <Skeleton.Input block active />
+                <Skeleton.Input block active />
+                <Skeleton.Input block active />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Table
+            rowSelection={rowSelection}
+            columns={getColumns(state)}
+            dataSource={props.filteredItems}
+            pagination={pagination}
+            size="small"
+            rowKey="key"
+            onRow={({ key }) => ({
+              onClick: () => {
+                if (!props.disabled) {
+                  props.onItemSelect(key, !props.selectedKeys.includes(key));
+                }
+              },
+            })}
+            style={{ pointerEvents: props.disabled ? 'none' : undefined }}
+          />
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div>
-      <Title level={4}>Module Personnel</Title>
-      <Text className="block mb-4 text-gray-500 dark:text-gray-400">
-        All the Lecturers, Tutors and Students of the module.
-      </Text>
+    <div className="space-y-6">
+      <div>
+        <Title level={4}>Module Personnel</Title>
+        <Text className="text-gray-500 dark:text-gray-400">
+          Use the segmented selector to assign Lecturers, Tutors, or Students.
+        </Text>
+      </div>
 
-      <TableControlBar
-        handleSearch={setSearchTerm}
-        searchTerm={searchTerm}
-        handleAdd={handleAddPerson}
-        addButtonText="Add Person"
-        handleBulkDelete={handleBulkDelete}
-        selectedRowKeys={selectedRowKeys}
-        clearMenuItems={[
-          { key: 'clear-search', label: 'Clear Search', onClick: clearSearch },
-          { key: 'clear-sort', label: 'Clear Sorters', onClick: clearSorters },
-          { key: 'clear-filters', label: 'Clear Filters', onClick: clearFilters },
-          { key: 'clear-all', label: 'Clear All', onClick: clearAll },
-        ]}
-      />
+      <div className="bg-white dark:bg-gray-900">
+        <div className="flex flex-col gap-4">
+          <Segmented
+            options={ROLES}
+            value={selectedRole}
+            onChange={(val) => {
+              setSelectedRole(val as ModuleRole);
+              available.setPagination({ current: 1 });
+              assigned.setPagination({ current: 1 });
+              available.clearSearch();
+              assigned.clearSearch();
+              available.clearFilters();
+              assigned.clearFilters();
+            }}
+            size="large"
+            block
+          />
 
-      <TableCreateModal
-        open={isAddModalOpen}
-        onCancel={() => setIsAddModalOpen(false)}
-        onCreate={handleSubmitNewUser}
-        title="Assign User to Module"
-        fields={[
-          {
-            label: 'Select User',
-            name: 'user_id',
-            type: 'select',
-            required: true,
-            options: allUsers.map((u) => ({
-              value: String(u.id),
-              label: `${u.student_number} — ${u.email}`,
-            })),
-          },
-        ]}
-        initialValues={{ user_id: '' }}
-      />
-
-      <TableTagSummary
-        searchTerm={searchTerm}
-        onClearSearch={clearSearch}
-        filters={filterState}
-        onClearFilter={(key) => {
-          const updated = { ...filterState };
-          delete updated[key];
-          setFilterState(updated);
-        }}
-        sorters={sorterState.map((s) => ({ columnKey: s.field, order: s.order }))}
-        onClearSorter={(key) => setSorterState(sorterState.filter((s) => s.field !== key))}
-      />
-
-      <Table<ModuleUser>
-        columns={columns}
-        dataSource={personnel}
-        rowKey="id"
-        loading={loading}
-        rowSelection={{
-          selectedRowKeys,
-          onChange: setSelectedRowKeys,
-        }}
-        pagination={{
-          ...pagination,
-          showSizeChanger: true,
-          showQuickJumper: true,
-          onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
-        }}
-        onChange={(pagination, filters, sorter) => {
-          const sorterArray = (Array.isArray(sorter) ? sorter : [sorter])
-            .filter(
-              (s): s is { columnKey: string; order: 'ascend' | 'descend' } =>
-                !!s.columnKey && !!s.order,
-            )
-            .map((s) => ({
-              field: String(s.columnKey),
-              order: s.order,
-            }));
-
-          setSorterState(sorterArray);
-          setFilterState(filters as Record<string, string[]>);
-          setPagination({
-            current: pagination.current || 1,
-            pageSize: pagination.pageSize || 10,
-          });
-        }}
-        locale={{
-          emptyText: (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No personnel found.">
-              <Button icon={<ReloadOutlined />} onClick={clearAll}>
-                Clear All Filters
-              </Button>
-            </Empty>
-          ),
-        }}
-        className="border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
-      />
+          <Transfer
+            dataSource={allUsers}
+            targetKeys={roleAssignments[selectedRole]}
+            onChange={handleTransferChange}
+            showSearch={false}
+            showSelectAll={false}
+            rowKey={(record) => record.key}
+            titles={['Available', 'Assigned']}
+            filterOption={() => true}
+            oneWay={false}
+          >
+            {(props) => renderTableTransfer(props.direction as 'left' | 'right', props)}
+          </Transfer>
+        </div>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,6 @@ import type {
   AssignmentDetailsResponse,
   CreateAssignmentRequest,
   CreateAssignmentResponse,
-  DeleteAssignmentFilesRequest,
   DeleteAssignmentFilesResponse,
   DeleteAssignmentResponse,
   EditAssignmentRequest,
@@ -13,7 +12,7 @@ import type {
   UploadAssignmentFilesResponse,
   ListAssignmentFilesResponse,
 } from "@/types/assignments";
-import { apiFetch, type ApiResponse } from "@/utils/api";
+import { apiDownload, apiFetch, apiUpload, type ApiResponse } from "@/utils/api";
 
 /**
  * AssignmentsService handles API requests related to module assignments and their attachments.
@@ -81,6 +80,7 @@ export const AssignmentsService = {
 
     params.append("page", request.page.toString());
     params.append("per_page", request.per_page.toString());
+    params.append("query", request.query?.toString() ?? "");
 
     if (Array.isArray(request.sort)) {
       const sortValue = request.sort
@@ -114,11 +114,9 @@ export const AssignmentsService = {
       form.append("files[]", file);
     }
 
-    return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/files`, {
-      method: "POST",
-      body: form,
-    });
+    return apiUpload(`/modules/${moduleId}/assignments/${assignmentId}/files`, form);
   },
+
 
   /**
    * List metadata for all files of a specific assignment.
@@ -138,7 +136,7 @@ export const AssignmentsService = {
   deleteFiles: (
     moduleId: number,
     assignmentId: number,
-    payload: DeleteAssignmentFilesRequest
+    payload: {  file_ids: number[]; }
   ): Promise<ApiResponse<DeleteAssignmentFilesResponse | PartialDeleteAssignmentFilesResponse>> => {
     return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/files`, {
       method: "DELETE",
@@ -146,17 +144,14 @@ export const AssignmentsService = {
     });
   },
 
-  /**
-   * Download a specific file by its ID.
+   /**
+   * Download a specific file by its ID, preserving the filename sent by the server.
    */
   downloadFile: (
     moduleId: number,
     assignmentId: number,
-    fileId: string
-  ): Promise<Response> => {
-    return fetch(`/api/modules/${moduleId}/assignments/${assignmentId}/files/${fileId}`, {
-      method: "GET",
-      credentials: "include",
-    });
+    fileId: number
+  ): Promise<void> => {
+    return apiDownload(`/modules/${moduleId}/assignments/${assignmentId}/file/${fileId}`);
   },
 };

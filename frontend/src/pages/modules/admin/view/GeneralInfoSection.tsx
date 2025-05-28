@@ -1,73 +1,41 @@
-import { Typography, Card, Row, Col } from 'antd';
+import { Row, Col, Descriptions } from 'antd';
+import type { ModuleDetailsResponse } from '@/types/modules';
 
-const { Text } = Typography;
+interface Props {
+  module: ModuleDetailsResponse;
+}
 
-export default function GeneralInfoSection() {
+export default function GeneralInfoSection({ module }: Props) {
   return (
     <div className="overflow-hidden">
       <Row gutter={[24, 24]}>
         <Col span={12}>
-          <Card title="Module Overview">
-            <Row gutter={[0, 12]}>
-              <Col span={12}>
-                <Text strong>Code</Text>
-                <div>COS132</div>
-              </Col>
-              <Col span={12}>
-                <Text strong>Year</Text>
-                <div>2025</div>
-              </Col>
-              <Col span={24}>
-                <Text strong>Description</Text>
-                <div>
-                  An introductory course in computer science and programming fundamentals. This
-                  module helps students learn the basics of algorithms, data structures, and Python.
-                </div>
-              </Col>
-              <Col span={12}>
-                <Text strong>Created At</Text>
-                <div>2025-01-10 14:23</div>
-              </Col>
-              <Col span={12}>
-                <Text strong>Last Updated</Text>
-                <div>2025-03-05 09:17</div>
-              </Col>
-            </Row>
-          </Card>
+          <Descriptions title="Module Overview" bordered column={1} size="middle">
+            <Descriptions.Item label="Code">{module.code}</Descriptions.Item>
+            <Descriptions.Item label="Year">{module.year}</Descriptions.Item>
+            <Descriptions.Item label="Description">{module.description}</Descriptions.Item>
+            <Descriptions.Item label="Created At">{module.created_at}</Descriptions.Item>
+            <Descriptions.Item label="Last Updated">{module.updated_at}</Descriptions.Item>
+          </Descriptions>
         </Col>
 
         <Col span={12}>
-          <Card title="People Summary">
-            <Row gutter={[0, 12]}>
-              <Col span={12}>
-                <Text strong>Lecturers</Text>
-                <div>2 assigned</div>
-              </Col>
-              <Col span={12}>
-                <Text strong>Tutors</Text>
-                <div>4 assigned</div>
-              </Col>
-              <Col span={24}>
-                <Text strong>Students</Text>
-                <div>134 enrolled</div>
-              </Col>
-            </Row>
-          </Card>
+          <Descriptions title="People Summary" bordered column={1} size="middle">
+            <Descriptions.Item label="Lecturers">
+              {module.lecturers.length} assigned
+            </Descriptions.Item>
+            <Descriptions.Item label="Tutors">{module.tutors.length} assigned</Descriptions.Item>
+            <Descriptions.Item label="Students">
+              {module.students.length} enrolled
+            </Descriptions.Item>
+          </Descriptions>
         </Col>
 
         <Col span={24}>
-          <Card title="Assignments Summary">
-            <Row gutter={[0, 12]}>
-              <Col span={12}>
-                <Text strong>Total Assignments</Text>
-                <div>5</div>
-              </Col>
-              <Col span={12}>
-                <Text strong>Next Due Date</Text>
-                <div>2025-05-30</div>
-              </Col>
-            </Row>
-          </Card>
+          <Descriptions title="Assignments Summary" bordered column={2} size="middle">
+            <Descriptions.Item label="Total Assignments">5</Descriptions.Item>
+            <Descriptions.Item label="Next Due Date">2025-05-30</Descriptions.Item>
+          </Descriptions>
         </Col>
       </Row>
     </div>

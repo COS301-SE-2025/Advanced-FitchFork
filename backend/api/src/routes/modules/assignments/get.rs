@@ -10,7 +10,6 @@ use db::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use crate::auth::AuthUser;
 use crate::response::ApiResponse;
 use tokio::fs::File as FsFile;
 use tokio::io::AsyncReadExt;
@@ -178,35 +177,8 @@ pub struct AssignmentFile {
 /// - `200 OK`: Returns file with correct headers
 /// - `403 Forbidden`: User not authorized
 /// - `404 Not Found`: File or assignment not found
-pub async fn download_file(Path((module_id, assignment_id, file_id)): Path<(i64, i64, i64)>, AuthUser(claims): AuthUser, ) -> Response {
+pub async fn download_file(Path((_module_id, assignment_id, file_id)): Path<(i64, i64, i64)>) -> Response {
     let pool = pool::get();
-
-    let is_authorized = claims.admin || {
-        let query = r#"
-            SELECT EXISTS(
-                SELECT 1 FROM module_lecturers WHERE module_id = ? AND user_id = ?
-                UNION
-                SELECT 1 FROM module_tutors    WHERE module_id = ? AND user_id = ?
-                UNION
-                SELECT 1 FROM module_students  WHERE module_id = ? AND user_id = ?
-            )
-        "#;
-        sqlx::query_scalar(query)
-            .bind(module_id).bind(claims.sub)
-            .bind(module_id).bind(claims.sub)
-            .bind(module_id).bind(claims.sub)
-            .fetch_one(pool)
-            .await
-            .unwrap_or(false)
-    };
-
-    if !is_authorized {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<AssignmentFile>::error("You do not have permission to access this file")),
-        )
-            .into_response();
-    }
 
     let file_res = sqlx::query_as::<_, AssignmentFile>(
         r#"
@@ -269,7 +241,7 @@ pub async fn download_file(Path((module_id, assignment_id, file_id)): Path<(i64,
             .into_response();
     }
 
-    
+
     let mut headers = HeaderMap::new();
     let disposition = HeaderValue::from_str(&format!("attachment; filename=\"{}\"", file.filename))
         .unwrap_or_else(|_| HeaderValue::from_static("attachment"));
@@ -280,7 +252,7 @@ pub async fn download_file(Path((module_id, assignment_id, file_id)): Path<(i64,
 }
 
 
-pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)>, AuthUser(claims): AuthUser, ) -> Response {
+pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)> ) -> Response {
     match Assignment::get_by_id(Some(pool::get()), assignment_id, module_id).await {
         Ok(Some(_)) => {}
         Ok(None) => {
@@ -301,28 +273,6 @@ pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)>, Auth
                 )),
             ).into_response();
         }
-    }
-
-    let is_authorized = claims.admin
-        || {
-        let q = r#"
-                SELECT EXISTS(
-                  SELECT 1 FROM module_lecturers WHERE module_id = ? AND user_id = ?
-                  UNION
-                  SELECT 1 FROM module_tutors    WHERE module_id = ? AND user_id = ?
-                  UNION
-                  SELECT 1 FROM module_students  WHERE module_id = ? AND user_id = ?
-                )
-            "#;
-        sqlx::query_scalar(q).bind(module_id).bind(claims.sub).bind(module_id).bind(claims.sub).bind(module_id).bind(claims.sub).fetch_one(pool::get()).await.unwrap_or(false)
-    };
-    if !is_authorized {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<Vec<File>>::error(
-                "You do not have permission to view files for this assignment".to_string(),
-            )),
-        ).into_response();
     }
 
     match AssignmentFiles::get_by_assignment_id(Some(pool::get()), assignment_id).await {
@@ -428,6 +378,7 @@ pub async fn get_assignments(Query(params): Query<FilterReq>) -> impl IntoRespon
     if params.sort.is_some() {
         let valid_fields = [
             "name",
+            "description",
             "due_date",
             "available_from",
             "assignment_type",
@@ -435,12 +386,14 @@ pub async fn get_assignments(Query(params): Query<FilterReq>) -> impl IntoRespon
             "updated_at",
         ];
         if let Some(sort_field) = &params.sort {
-            let field = sort_field.trim_start_matches('-');
-            if !valid_fields.contains(&field) {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
-                );
+            for field in sort_field.split(',') {
+                let field = field.trim_start_matches('-');
+                if !valid_fields.contains(&field) {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
+                    );
+                }
             }
         }
     }

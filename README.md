@@ -31,13 +31,13 @@ Please refer to our detailed [Functional and Non-Functional Requirements](#funct
 
 ## Meet the Team
 
-| Member           | Role(s)                             | Skills                                    | GitHub                                          |
-| ---------------- | ----------------------------------- | ----------------------------------------- | ----------------------------------------------- |
-| Jacques Klooster | Team Lead, Fullstack Dev            | React, Rust, Tailwind, SQLite, Ant Design | [GitHub](https://github.com/jacqu3sk)           |
-| Reece Jordaan    | DevOps, Backend Developer           | Restful APIs, Rust, Testing               | [GitHub](https://github.com/ReeceJordaan)       |
-| Luke Gouws       | Backend/Frontend                    | Restful APIs, Rust, React                 | [GitHub](https://github.com/CartographySilence) |
-| Richard Kruse    | Business Analyst, Backend Developer | Rust, Docker, SQLite                      | [GitHub](https://github.com/RKruse42)           |
-| Aidan McKenzie   | Backend/Frontend                    | Rust, Figma                               | [GitHub](https://github.com/RaiderRoss)         |
+| Member           | Role(s)                             | Skills                                    | GitHub / LinkedIn                                                                                             |
+| ---------------- | ----------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Jacques Klooster | Team Lead, Fullstack Dev            | React, Rust, Tailwind, SQLite, Ant Design | [GitHub](https://github.com/jacqu3sk) [LinkedIn](https://www.linkedin.com/in/jacquesklooster/)                |
+| Reece Jordaan    | DevOps, Backend Developer           | Restful APIs, Rust, Testing               | [GitHub](https://github.com/ReeceJordaan) [LinkedIn](https://www.linkedin.com/in/reecejordaan/)               |
+| Luke Gouws       | Backend/Frontend                    | Restful APIs, Rust, React                 | [GitHub](https://github.com/CartographySilence) [LinkedIn](https://www.linkedin.com/in/luke-gouws-4b07b7300/) |
+| Richard Kruse    | Business Analyst, Backend Developer | Rust, Docker, SQLite                      | [GitHub](https://github.com/RKruse42) [LinkedIn](https://www.linkedin.com/in/richard-kruse/)                  |
+| Aidan McKenzie   | Backend/Frontend                    | Rust, Figma                               | [GitHub](https://github.com/RaiderRoss) [LinkedIn](https://www.linkedin.com/in/aidan-mckenzie-772730355/)     |
 
 ---
 
@@ -139,7 +139,7 @@ cargo test
 
 ## Functional and Non-Functional Requirements
 
-Refer to the full specification in the [`requirement_specification.pdf`](./docs/requirement_specification.pdf) file.
+Refer to the full specification in the [requirement_specification.pdf](./docs/requirement_specification.pdf) file.
 
 **Highlights:**
 
@@ -147,6 +147,39 @@ Refer to the full specification in the [`requirement_specification.pdf`](./docs/
 - NFR1–NFR7: Performance (<3s), scalability, 99.9% uptime, 3-click UX, RBAC, TLS, modular plugin architecture.
 
 > Full requirement list available in `docs/` folder or internal documentation.
+
+---
+
+## Additional Resources
+
+- **[Project Board (GitHub)](https://github.com/orgs/COS301-SE-2025/projects/199)**
+  Track issues, iterations, and overall project progress.
+
+- **[Domain Model Diagram](./docs/domain_model.png)**
+  Visual design of system architecture and module relationships.
+
+- **[User Stories](./docs/user_stories.pdf)**
+  Detailed user-focused functionality and workflow requirements.
+
+- **[Use Cases](./docs/use_cases.pdf)**
+  Descriptions of system interactions from the perspective of different roles.
+
+---
+
+Here's an updated section you can add under **"## Additional Resources"** (or create a new section if you prefer):
+
+## Viewing Internal Rust Documentation
+
+To browse the backend's internal API documentation (generated with `rustdoc`), follow these steps:
+
+```bash
+cd backend
+cargo doc --open
+```
+
+This will generate and open the documentation in your default web browser. It includes all public modules, functions, and type definitions used throughout the backend.
+
+> Ensure you have Rust installed and configured properly before running the above command.
 
 ---
 

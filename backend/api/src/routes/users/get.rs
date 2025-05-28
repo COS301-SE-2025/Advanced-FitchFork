@@ -256,6 +256,50 @@ fn build_order_clause(sort_param: &str) -> String {
     }
 }
 
+/// GET /api/users/:id
+///
+/// Fetch a single user by ID. Requires admin privileges.
+///
+/// ### Path Parameters
+/// - `id`: The user ID (integer)
+///
+/// ### Responses
+/// - `200 OK`: User found
+/// - `400 Bad Request`: Invalid ID format
+/// - `404 Not Found`: User does not exist
+/// - `500 Internal Server Error`: DB error
+pub async fn get_user(
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let user_id = match id.parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<User>::error("Invalid user ID format")),
+            );
+        }
+    };
+
+    let pool = pool::get();
+
+    match User::get_by_id(Some(pool), user_id).await {
+        Ok(Some(user)) => (
+            StatusCode::OK,
+            Json(ApiResponse::success(user, "User retrieved successfully")),
+        ),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<User>::error("User not found")),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<User>::error(format!("Database error: {}", e))),
+        ),
+    }
+}
+
+
 #[derive(Debug, Serialize)]
 pub struct UserModule {
     pub id: i64,

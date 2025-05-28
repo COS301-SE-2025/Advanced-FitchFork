@@ -4,11 +4,19 @@ pub mod extractors;
 pub mod guards;
 
 pub use claims::{Claims, AuthUser};
-pub use guards::{require_authenticated, require_admin};
+pub use guards::{
+    require_authenticated,
+    require_admin,
+    require_lecturer,
+    require_tutor,
+    require_student,
+};
+
 use jsonwebtoken::{encode, Header, EncodingKey};
 use chrono::{Utc, Duration};
 use common::config::Config;
 
+/// Generates a JWT and its expiry timestamp for a given user.
 pub fn generate_jwt(user_id: i64, admin: bool) -> (String, String) {
     let config = Config::get();
 

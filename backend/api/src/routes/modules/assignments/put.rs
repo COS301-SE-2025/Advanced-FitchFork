@@ -43,7 +43,7 @@ impl From<Assignment> for AssignmentResponse {
 /// - JSON body with the following fields:
 ///   - `name` (string, required): The new name of the assignment.
 ///   - `description` (string, optional): The new description of the assignment.
-///   - `assignment_type` (string, optional): The new type of the assignment ("A" for Assignment, otherwise Practical).
+///   - `assignment_type` (string, required): The type of the assignment. Must be either `"Assignment"` or `"Practical"`.
 ///   - `available_from` (string, required): The new availability date (ISO 8601 format).
 ///   - `due_date` (string, required): The new due date (ISO 8601 format).
 ///
@@ -51,10 +51,9 @@ impl From<Assignment> for AssignmentResponse {
 ///
 /// Returns an HTTP response indicating the result:
 /// - `200 OK` with the updated assignment data if successful.
-/// - `400 BAD REQUEST` if any required fields are missing or malformed(dates)
+/// - `400 BAD REQUEST` if any required fields are missing or malformed (e.g., invalid dates).
 /// - `404 NOT FOUND` if no assignment was found matching the given `module_id` and `assignment_id`.
 /// - `500 INTERNAL SERVER ERROR` if the update operation fails for other reasons.
-
 pub async fn edit_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<Value>,
@@ -71,8 +70,16 @@ pub async fn edit_assignment(
     }
 
     let assignment_type = match req.get("assignment_type").and_then(|v| v.as_str()) {
-        Some("A") => db::models::assignment::AssignmentType::Assignment,
-        _ => db::models::assignment::AssignmentType::Practical,
+        Some("Assignment") => db::models::assignment::AssignmentType::Assignment,
+        Some("Practical") => db::models::assignment::AssignmentType::Practical,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error(
+                    "assignment_type must be either 'Assignment' or 'Practical'",
+                )),
+            );
+        }
     };
 
     if name.is_none() {
@@ -125,8 +132,6 @@ pub async fn edit_assignment(
             );
         }
     };
-    let available_from = available_from.as_str();
-    let due_date = due_date.as_str();
 
     let name = name.unwrap();
 
@@ -137,8 +142,8 @@ pub async fn edit_assignment(
         name,
         description,
         assignment_type,
-        available_from,
-        due_date,
+        &available_from,
+        &due_date,
     )
     .await
     {
@@ -146,7 +151,7 @@ pub async fn edit_assignment(
             let res = AssignmentResponse::from(module);
             (
                 StatusCode::OK,
-                Json(ApiResponse::success(res, "Module updated successfully")),
+                Json(ApiResponse::success(res, "Assignment updated successfully")),
             )
         }
         Err(e) => {
@@ -161,7 +166,7 @@ pub async fn edit_assignment(
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ApiResponse::<AssignmentResponse>::error(
-                        "Failed to update module",
+                        "Failed to update assignment",
                     )),
                 )
             }
