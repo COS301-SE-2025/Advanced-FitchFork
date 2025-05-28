@@ -164,9 +164,13 @@ Refer to the full specification in the [requirement_specification.pdf](./docs/re
 - **[Use Cases](./docs/use_cases.pdf)**
   Descriptions of system interactions from the perspective of different roles.
 
----
+- **[Software Requirements Specification (SRS)](./docs/srs.pdf)**
+  Full formal specification of system-level requirements and constraints.
 
-Here's an updated section you can add under **"## Additional Resources"** (or create a new section if you prefer):
+- **[Functional and Non-Functional Requirements Summary](./docs/requirement_specification.pdf)**
+  Concise document highlighting core features, performance expectations, and architectural principles.
+
+---
 
 ## Viewing Internal Rust Documentation
 
