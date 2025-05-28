@@ -1,34 +1,43 @@
-mod api;
-mod config;
-mod db;
-
-use common::logger;
-use config::ApiConfig;
-
+use api::routes::routes;
+use axum::Router;
+use axum::http::header;
+use common::{config::Config, logger::init_logger};
+use log::info;
 use std::net::SocketAddr;
-use tokio::net::TcpListener;
+use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
 async fn main() {
-    // Initialize config (singleton)
-    ApiConfig::init(".env");
-    let config = ApiConfig::get();
+    let config = Config::init(".env");
+    init_logger(&config.log_level, &config.log_file);
+    db::init(&config.database_url, true).await;
+    db::seed_db().await;
+    // docker_example::run_assignment_code("docker_example/src/files/good_java_example.zip", "java").await;
 
-    // Setup logging (logs to terminal + file)
-    logger::init_logger(&config.log_level, &config.log_file);
+    info!(
+        "Starting {} on http://{}:{}",
+        config.project_name, config.host, config.port
+    );
 
-    log::info!("Starting {} backend...", config.project_name);
+    // CORS setup (allow frontend origin)
+    let cors = CorsLayer::new()
+        .allow_origin(axum::http::HeaderValue::from_static(
+            "http://localhost:5173",
+        ))
+        .allow_methods(Any)
+        .allow_headers(Any)
+        .expose_headers([header::CONTENT_DISPOSITION]);
 
-    db::init(&config.database_url).await;
+    // Compose routes and apply middleware
+    let app = Router::new().nest("/api", routes()).layer(cors);
 
-    // Build our application
-    let app = api::routes();
+    // Bind and serve
+    let addr: SocketAddr = format!("{}:{}", config.host, config.port)
+        .parse()
+        .expect("Invalid address");
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .expect("Failed to bind");
 
-    let addr = SocketAddr::new(config.host.parse().expect("Invalid HOST"), config.port);
-    let listener = TcpListener::bind(addr).await.unwrap();
-
-    log::info!("{}-api running at http://{}", config.project_name, addr);
-
-    // Serve the application
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app).await.expect("Server crashed");
 }

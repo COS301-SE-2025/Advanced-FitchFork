@@ -4,20 +4,13 @@
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["jest"],
     "module": "ESNext",
     "skipLibCheck": true,
 
     "baseUrl": "./src",
     "paths": {
-      "@pages/*": ["pages/*"],
-      "@layouts/*": ["layouts/*"],
-      "@context/*": ["context/*"],
-      "@models/*": ["types/*"],
-      "@components/*": ["components/*"],
-      "@hooks/*": ["hooks/*"],
-      "@routes/*": ["routes/*"],
-      "@services/*": ["services/*"],
-      "@utils/*": ["utils/*"]
+      "@/*": ["*"]
     },
 
     "moduleResolution": "bundler",
