@@ -1,0 +1,18 @@
+[package]
+name = "seeder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+sea-orm = { version = "0.12", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
+migration = { path = "../migration" }
+db = { path = "../db" } # assuming your main SeaORM entity crate is in `../db`
+chrono = "0.4"
+dotenvy = "0.15"
+async-trait = "0.1"
+fake = "2"
+fastrand = "2"
+colored = "2"
+futures = "0.3"
+rand = "0.8"

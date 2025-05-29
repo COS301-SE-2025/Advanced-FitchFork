@@ -4,4 +4,6 @@ members = [
     "api", 
     "db",
     "common", "docker_example",
+    "migration",
+    "seeder",
 ]

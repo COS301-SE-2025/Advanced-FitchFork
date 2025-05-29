@@ -1,0 +1,5 @@
+pub mod m202505290001_create_users;
+pub mod m202505290002_create_modules;
+pub mod m202505290003_create_user_module_roles;
+pub mod m202505290004_create_assignments;
+pub mod m202505290005_create_assignment_files;
