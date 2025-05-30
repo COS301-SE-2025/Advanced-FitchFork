@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react';
 import { Typography, Segmented, Table, Transfer, Input, Button, Tag, Skeleton } from 'antd';
 import type { Key } from 'react';
 import type { TransferProps, TablePaginationConfig, TableProps } from 'antd';
-import type { ModuleRole } from '@/types/modules';
+import { MODULE_ROLES, type ModuleRole } from '@/types/modules';
 import { ModulesService } from '@/services/modules';
 import { useNotifier } from '@/components/Notifier';
 import { useTableQuery } from '@/hooks/useTableQuery';
 
 const { Title, Text } = Typography;
-const ROLES: ModuleRole[] = ['Lecturer', 'Tutor', 'Student'];
 
 interface Props {
   moduleId: number;
@@ -350,7 +349,7 @@ export default function PersonnelSection({ moduleId }: Props) {
       <div className="bg-white dark:bg-gray-900">
         <div className="flex flex-col gap-4">
           <Segmented
-            options={ROLES}
+            options={MODULE_ROLES}
             value={selectedRole}
             onChange={(val) => {
               setSelectedRole(val as ModuleRole);
