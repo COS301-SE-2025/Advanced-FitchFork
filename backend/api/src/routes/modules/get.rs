@@ -1,21 +1,31 @@
-use crate::auth::AuthUser;
-use crate::response::ApiResponse;
-use crate::routes::modules::post::PersonnelResponse;
-use axum::extract::{Path, Query};
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
-use axum::{Extension, Json};
-use db::models::module::Module;
-use db::models::module_lecturer::ModuleLecturer;
-use db::models::module_student::ModuleStudent;
-use db::models::module_tutor::ModuleTutor;
-use db::models::user::User;
-use db::pool;
-use serde::{Deserialize, Serialize};
-use sqlx::Arguments;
-use sqlx::sqlite::SqliteArguments;
-use sqlx::Row;
+use axum::{
+    extract::{Path, Query},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Extension, Json,
+};
 
+use serde::{Deserialize, Serialize};
+
+use sea_orm::{
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, Order,
+    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+};
+
+use crate::{
+    auth::AuthUser,
+    response::ApiResponse,
+    routes::modules::post::PersonnelResponse,
+};
+
+use db::{
+    connect,
+    models::{
+        module::{Column as ModuleCol, Entity as ModuleEntity, Model as Module},
+        user::{self, Column as UserCol, Entity as UserEntity, Model as UserModel},
+        user_module_role::{self, Column as RoleCol, Entity as RoleEntity, Role},
+    },
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModuleResponse {
@@ -31,23 +41,22 @@ pub struct ModuleResponse {
     pub students: Vec<UserResponse>,
 }
 
-impl From<Module> for ModuleResponse {
-    fn from(m: Module) -> Self {
+impl From<db::models::module::Model> for ModuleResponse {
+    fn from(m: db::models::module::Model) -> Self {
         Self {
             id: m.id,
             code: m.code,
             year: m.year,
             description: m.description,
             credits: m.credits,
-            created_at: m.created_at,
-            updated_at: m.updated_at,
-            lecturers: Vec::new(),
-            tutors: Vec::new(),
-            students: Vec::new(),
+            created_at: m.created_at.to_rfc3339(),
+            updated_at: m.updated_at.to_rfc3339(),
+            lecturers: vec![],
+            tutors: vec![],
+            students: vec![],
         }
     }
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserResponse {
@@ -59,23 +68,38 @@ pub struct UserResponse {
     pub updated_at: String,
 }
 
+impl From<db::models::user::Model> for UserResponse {
+    fn from(user: db::models::user::Model) -> Self {
+        Self {
+            id: user.id,
+            student_number: user.student_number,
+            email: user.email,
+            admin: user.admin,
+            created_at: user.created_at.to_rfc3339(),
+            updated_at: user.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+
 #[derive(Debug, Deserialize)]
 pub struct LecturerQuery {
     pub page: Option<u32>,
     pub per_page: Option<u32>,
-    pub query: Option<String>,         // fuzzy match on email or student_number
-    pub email: Option<String>,         // filter on email (ignored if query is set)
-    pub student_number: Option<String>,// filter on student_number (ignored if query is set)
-    pub sort: Option<String>,          // e.g. "-email"
+    pub query: Option<String>,
+    pub email: Option<String>,
+    pub student_number: Option<String>,
+    pub sort: Option<String>,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, Serialize)]
 pub struct LecturerListResponse {
     pub users: Vec<PersonnelResponse>,
     pub page: u32,
     pub per_page: u32,
-    pub total: i64,
+    pub total: u64,
 }
+
 /// GET /api/modules/:module_id/lecturers
 ///
 /// Retrieve a paginated, filtered, and sorted list of users assigned as lecturers to the specified module.
@@ -159,18 +183,18 @@ pub struct LecturerListResponse {
 /// }
 /// ```
 pub async fn get_lecturers(
-    Path(module_id): Path<i64>,
+    Path(module_id): Path<i32>,
     Query(params): Query<LecturerQuery>,
 ) -> Response {
-    let pool = pool::get();
+    let db: DatabaseConnection = connect().await;
 
-    // Validate module exists
-    let module_exists = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)")
-        .bind(module_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
-    if !module_exists {
+    // Check module existence
+    let module_exists = user_module_role::Entity::find()
+        .filter(RoleCol::ModuleId.eq(module_id))
+        .one(&db)
+        .await;
+
+    if let Ok(None) | Err(_) = module_exists {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Module not found")),
@@ -178,66 +202,57 @@ pub async fn get_lecturers(
             .into_response();
     }
 
+    // Pagination
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
-    let offset = (page - 1) * per_page;
 
-    let mut base_sql = String::from(
-        "FROM users u
-         INNER JOIN module_lecturers ml ON u.id = ml.user_id
-         WHERE ml.module_id = ?",
-    );
-    let mut args = SqliteArguments::default();
-    args.add(module_id);
+    // Build base filter condition
+    let mut condition = Condition::all()
+        .add(RoleCol::ModuleId.eq(module_id))
+        .add(RoleCol::Role.eq(Role::Lecturer));
 
-    // Filtering
+    // Search query
     if let Some(ref q) = params.query {
-        base_sql.push_str(" AND (LOWER(u.email) LIKE ? OR LOWER(u.student_number) LIKE ?)");
-        let pattern = format!("%{}%", q.to_lowercase());
-        args.add(pattern.clone());
-        args.add(pattern);
+        let q_lower = q.to_lowercase();
+        condition = condition.add(
+            Condition::any()
+                .add(user::Column::Email.contains(&q_lower))
+                .add(user::Column::StudentNumber.contains(&q_lower)),
+        );
     } else {
         if let Some(ref email) = params.email {
-            base_sql.push_str(" AND LOWER(u.email) LIKE ?");
-            args.add(format!("%{}%", email.to_lowercase()));
+            condition = condition.add(user::Column::Email.contains(email));
         }
         if let Some(ref sn) = params.student_number {
-            base_sql.push_str(" AND LOWER(u.student_number) LIKE ?");
-            args.add(format!("%{}%", sn.to_lowercase()));
+            condition = condition.add(user::Column::StudentNumber.contains(sn));
         }
     }
+
+    // Build query
+    let mut query = user::Entity::find()
+        .join(
+            JoinType::InnerJoin,
+            user::Entity::belongs_to(user_module_role::Entity)
+                .from(user::Column::Id)
+                .to(RoleCol::UserId)
+                .into(),
+        )
+        .filter(condition.clone());
 
     // Sorting
-    let mut order_sql = String::from(" ORDER BY u.id ASC");
-    if let Some(ref sort) = params.sort {
-        let (field, dir) = if sort.starts_with('-') {
-            (&sort[1..], "DESC")
-        } else {
-            (sort.as_str(), "ASC")
-        };
-        let allowed_fields = ["email", "student_number", "created_at"];
-        if allowed_fields.contains(&field) {
-            order_sql = format!(" ORDER BY u.{} {}", field, dir);
-        }
+    match params.sort.as_deref() {
+        Some("-email") => query = query.order_by_desc(user::Column::Email),
+        Some("email") => query = query.order_by_asc(user::Column::Email),
+        Some("-student_number") => query = query.order_by_desc(user::Column::StudentNumber),
+        Some("student_number") => query = query.order_by_asc(user::Column::StudentNumber),
+        Some("-created_at") => query = query.order_by_desc(user::Column::CreatedAt),
+        Some("created_at") => query = query.order_by_asc(user::Column::CreatedAt),
+        _ => query = query.order_by_asc(user::Column::Id),
     }
 
-    // Count total
-    let count_sql = format!("SELECT COUNT(*) {}", base_sql);
-    let total = sqlx::query_scalar_with::<_, i64, _>(&count_sql, args.clone())
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0);
-
-    // Final query
-    let data_sql = format!("SELECT u.* {}{} LIMIT ? OFFSET ?", base_sql, order_sql);
-    args.add(per_page as i64);
-    args.add(offset as i64);
-
-    let users: Vec<User> = sqlx::query_as_with(&data_sql, args)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
-
+    let paginator = query.paginate(&db, per_page.into());
+    let total = paginator.num_items().await.unwrap_or(0);
+    let users = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
     let result = users.into_iter().map(PersonnelResponse::from).collect();
 
     (
@@ -271,7 +286,7 @@ pub struct PaginatedPersonnelResponse {
     pub users: Vec<PersonnelResponse>,
     pub page: u32,
     pub per_page: u32,
-    pub total: i64,
+    pub total: u64,
 }
 
 /// GET /api/modules/:module_id/tutors
@@ -357,21 +372,19 @@ pub struct PaginatedPersonnelResponse {
 /// }
 /// ```
 pub async fn get_tutors(
-    Path(module_id): Path<i64>,
+    Path(module_id): Path<i32>,
     Query(params): Query<TutorQuery>,
 ) -> Response {
-    let pool = pool::get();
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).min(100);
-    let offset = (page - 1) * per_page;
+    let db = connect().await;
 
-    let module_exists = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)")
-        .bind(module_id)
-        .fetch_one(pool)
+    // Check if module exists
+    let exists = db::models::module::Entity::find_by_id(module_id)
+        .one(&db)
         .await
-        .unwrap_or(false);
+        .unwrap_or(None)
+        .is_some();
 
-    if !module_exists {
+    if !exists {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Module not found")),
@@ -379,62 +392,63 @@ pub async fn get_tutors(
             .into_response();
     }
 
-    let mut base_sql = String::from(
-        "FROM users u
-         INNER JOIN module_tutors mt ON u.id = mt.user_id
-         WHERE mt.module_id = ?",
-    );
-    let mut args = SqliteArguments::default();
-    args.add(module_id);
+    let page = params.page.unwrap_or(1).max(1);
+    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
+
+    // Build filter condition
+    let mut condition = Condition::all()
+        .add(RoleCol::ModuleId.eq(module_id))
+        .add(RoleCol::Role.eq(Role::Tutor));
 
     if let Some(ref q) = params.query {
-        base_sql.push_str(" AND (LOWER(u.email) LIKE ? OR LOWER(u.student_number) LIKE ?)");
         let pattern = format!("%{}%", q.to_lowercase());
-        args.add(pattern.clone());
-        args.add(pattern);
+        condition = condition.add(
+            Condition::any()
+                .add(user::Column::Email.contains(&pattern))
+                .add(user::Column::StudentNumber.contains(&pattern)),
+        );
     } else {
         if let Some(ref email) = params.email {
-            base_sql.push_str(" AND LOWER(u.email) LIKE ?");
-            args.add(format!("%{}%", email.to_lowercase()));
+            condition = condition.add(user::Column::Email.contains(email));
         }
         if let Some(ref sn) = params.student_number {
-            base_sql.push_str(" AND LOWER(u.student_number) LIKE ?");
-            args.add(format!("%{}%", sn.to_lowercase()));
+            condition = condition.add(user::Column::StudentNumber.contains(sn));
         }
     }
 
-    let count_sql = format!("SELECT COUNT(*) as count {}", base_sql);
-    let total = sqlx::query_with(&count_sql, args.clone())
-        .fetch_one(pool)
-        .await
-        .and_then(|row| row.try_get::<i64, _>("count"))
-        .unwrap_or(0);
+    // Build query
+    let mut query = user::Entity::find()
+        .join(
+            JoinType::InnerJoin,
+            user::Entity::belongs_to(RoleEntity)
+                .from(user::Column::Id)
+                .to(RoleCol::UserId)
+                .into(),
+        )
+        .filter(condition.clone());
 
-    let mut data_sql = format!("SELECT u.* {}", base_sql);
-
+    // Sorting
     if let Some(ref sort) = params.sort {
         let (field, dir) = if sort.starts_with('-') {
-            (&sort[1..], "DESC")
+            (&sort[1..], sea_orm::Order::Desc)
         } else {
-            (sort.as_str(), "ASC")
+            (sort.as_str(), sea_orm::Order::Asc)
         };
 
-        let allowed = ["email", "student_number", "created_at"];
-        if allowed.contains(&field) {
-            data_sql.push_str(&format!(" ORDER BY u.{} {}", field, dir));
+        match field {
+            "email" => query = query.order_by(user::Column::Email, dir),
+            "student_number" => query = query.order_by(user::Column::StudentNumber, dir),
+            "created_at" => query = query.order_by(user::Column::CreatedAt, dir),
+            _ => {}
         }
     } else {
-        data_sql.push_str(" ORDER BY u.id ASC");
+        query = query.order_by(user::Column::Id, sea_orm::Order::Asc);
     }
 
-    data_sql.push_str(" LIMIT ? OFFSET ?");
-    args.add(per_page as i64);
-    args.add(offset as i64);
-
-    let users = sqlx::query_as_with::<_, User, _>(&data_sql, args)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
+    // Pagination
+    let paginator = query.paginate(&db, per_page.into());
+    let total = paginator.num_items().await.unwrap_or(0);
+    let users = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
 
     let result = users.into_iter().map(PersonnelResponse::from).collect();
 
@@ -499,19 +513,16 @@ pub struct StudentQuery {
 /// - `403 Forbidden` – if user is not admin or assigned to module
 /// - `404 Not Found` – if the module does not exist
 pub async fn get_students(
-    Path(module_id): Path<i64>,
+    Path(module_id): Path<i32>,
     Query(params): Query<StudentQuery>,
-) -> axum::response::Response {
-    let pool = db::pool::get();
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).min(100);
-    let offset = (page - 1) * per_page;
+) -> Response {
+    let db = connect().await;
 
-    let module_exists = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)")
-        .bind(module_id)
-        .fetch_one(pool)
+    let module_exists = db::models::module::Entity::find_by_id(module_id)
+        .one(&db)
         .await
-        .unwrap_or(false);
+        .unwrap_or(None)
+        .is_some();
 
     if !module_exists {
         return (
@@ -521,62 +532,62 @@ pub async fn get_students(
             .into_response();
     }
 
-    let mut base_sql = String::from(
-        "FROM users u
-         INNER JOIN module_students ms ON u.id = ms.user_id
-         WHERE ms.module_id = ?",
-    );
-    let mut args = SqliteArguments::default();
-    args.add(module_id);
+    let page = params.page.unwrap_or(1).max(1);
+    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
+
+    // Build base filter
+    let mut condition = Condition::all()
+        .add(RoleCol::ModuleId.eq(module_id))
+        .add(RoleCol::Role.eq(Role::Student));
 
     if let Some(ref q) = params.query {
-        base_sql.push_str(" AND (LOWER(u.email) LIKE ? OR LOWER(u.student_number) LIKE ?)");
         let pattern = format!("%{}%", q.to_lowercase());
-        args.add(pattern.clone());
-        args.add(pattern);
+        condition = condition.add(
+            Condition::any()
+                .add(user::Column::Email.contains(&pattern))
+                .add(user::Column::StudentNumber.contains(&pattern)),
+        );
     } else {
         if let Some(ref email) = params.email {
-            base_sql.push_str(" AND LOWER(u.email) LIKE ?");
-            args.add(format!("%{}%", email.to_lowercase()));
+            condition = condition.add(user::Column::Email.contains(email));
         }
         if let Some(ref sn) = params.student_number {
-            base_sql.push_str(" AND LOWER(u.student_number) LIKE ?");
-            args.add(format!("%{}%", sn.to_lowercase()));
+            condition = condition.add(user::Column::StudentNumber.contains(sn));
         }
     }
 
-    let count_sql = format!("SELECT COUNT(*) as count {}", base_sql);
-    let total = sqlx::query_with(&count_sql, args.clone())
-        .fetch_one(pool)
-        .await
-        .and_then(|row| row.try_get::<i64, _>("count"))
-        .unwrap_or(0);
+    let mut query = user::Entity::find()
+        .join(
+            JoinType::InnerJoin,
+            user::Entity::belongs_to(RoleEntity)
+                .from(user::Column::Id)
+                .to(RoleCol::UserId)
+                .into(),
+        )
+        .filter(condition);
 
-    let mut data_sql = format!("SELECT u.* {}", base_sql);
-
+    // Sorting
     if let Some(ref sort) = params.sort {
         let (field, dir) = if sort.starts_with('-') {
-            (&sort[1..], "DESC")
+            (&sort[1..], Order::Desc)
         } else {
-            (sort.as_str(), "ASC")
+            (sort.as_str(), Order::Asc)
         };
 
-        let allowed_fields = ["email", "student_number", "created_at"];
-        if allowed_fields.contains(&field) {
-            data_sql.push_str(&format!(" ORDER BY u.{} {}", field, dir));
+        match field {
+            "email" => query = query.order_by(user::Column::Email, dir),
+            "student_number" => query = query.order_by(user::Column::StudentNumber, dir),
+            "created_at" => query = query.order_by(user::Column::CreatedAt, dir),
+            _ => {}
         }
     } else {
-        data_sql.push_str(" ORDER BY u.id ASC");
+        query = query.order_by(user::Column::Id, Order::Asc);
     }
 
-    data_sql.push_str(" LIMIT ? OFFSET ?");
-    args.add(per_page as i64);
-    args.add(offset as i64);
-
-    let users = sqlx::query_as_with::<_, User, _>(&data_sql, args)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
+    // Pagination
+    let paginator = query.paginate(&db, per_page.into());
+    let total = paginator.num_items().await.unwrap_or(0);
+    let users = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
 
     let result = users.into_iter().map(PersonnelResponse::from).collect();
 
@@ -608,125 +619,97 @@ pub struct EligibleUserQuery {
 
 #[derive(Debug, Serialize)]
 pub struct EligibleUserListResponse {
-    pub users: Vec<User>,
+    pub users: Vec<db::models::user::Model>,
     pub page: u32,
     pub per_page: u32,
-    pub total: i64,
+    pub total: u64,
 }
 
 pub async fn get_eligible_users_for_module(
     Path(module_id): Path<i64>,
     Query(params): Query<EligibleUserQuery>,
-) -> impl IntoResponse {
-    let pool = pool::get();
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
-    let offset = (page - 1) * per_page;
+) -> Response {
+    let db = connect().await;
 
     if !["Lecturer", "Tutor", "Student"].contains(&params.role.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<EligibleUserListResponse>::error("Invalid role")),
-        );
+        )
+            .into_response();
     }
 
-    let mut base_sql = r#"
-        FROM users
-        WHERE id NOT IN (
-            SELECT user_id FROM module_lecturers WHERE module_id = ?
-            UNION
-            SELECT user_id FROM module_tutors WHERE module_id = ?
-            UNION
-            SELECT user_id FROM module_students WHERE module_id = ?
-        )
-    "#.to_string();
+    let page = params.page.unwrap_or(1).max(1);
+    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
 
-    let mut args = sqlx::sqlite::SqliteArguments::default();
-    args.add(module_id);
-    args.add(module_id);
-    args.add(module_id);
+    // Find all user IDs already assigned to the module
+    let assigned_ids: Vec<i32> = user_module_role::Entity::find()
+        .select_only()
+        .column(user_module_role::Column::UserId)
+        .filter(user_module_role::Column::ModuleId.eq(module_id))
+        .into_tuple::<i32>()
+        .all(&db)
+        .await
+        .unwrap_or_default();
+
+    let mut condition = Condition::all();
+
+    if !assigned_ids.is_empty() {
+    condition = condition.add(user::Column::Id.is_not_in(assigned_ids));
+    }
 
     if let Some(ref q) = params.query {
-        if !q.trim().is_empty() {
-            base_sql.push_str(" AND (LOWER(email) LIKE ? OR LOWER(student_number) LIKE ?)");
-            let pattern = format!("%{}%", q.to_lowercase());
-            args.add(pattern.clone());
-            args.add(pattern);
-        }
-    }
-
-    // These apply regardless of query
-    if let Some(ref email) = params.email {
-        if !email.trim().is_empty() {
-            base_sql.push_str(" AND LOWER(email) LIKE ?");
-            args.add(format!("%{}%", email.to_lowercase()));
-        }
-    }
-
-    if let Some(ref student_number) = params.student_number {
-        if !student_number.trim().is_empty() {
-            base_sql.push_str(" AND LOWER(student_number) LIKE ?");
-            args.add(format!("%{}%", student_number.to_lowercase()));
-        }
-    }
-
-    let count_sql = format!("SELECT COUNT(*) as count {}", base_sql);
-    let total = match sqlx::query_with(&count_sql, args.clone())
-        .fetch_one(pool)
-        .await
-    {
-        Ok(row) => row.try_get("count").unwrap_or(0),
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<EligibleUserListResponse>::error(format!(
-                    "Count query failed: {}",
-                    e
-                ))),
-            )
-        }
-    };
-
-    let mut data_sql = format!("SELECT * {}", base_sql);
-    if let Some(sort) = &params.sort {
-        let (field, direction) = if sort.starts_with('-') {
-            (&sort[1..], "DESC")
-        } else {
-            (&sort[..], "ASC")
-        };
-        data_sql.push_str(&format!(" ORDER BY {} {}", field, direction));
+        let pattern = format!("%{}%", q.to_lowercase());
+        condition = condition.add(
+            Condition::any()
+                .add(user::Column::Email.contains(&pattern))
+                .add(user::Column::StudentNumber.contains(&pattern)),
+        );
     } else {
-        data_sql.push_str(" ORDER BY id ASC");
+        if let Some(ref email) = params.email {
+            condition = condition.add(user::Column::Email.contains(email));
+        }
+        if let Some(ref sn) = params.student_number {
+            condition = condition.add(user::Column::StudentNumber.contains(sn));
+        }
     }
 
-    data_sql.push_str(" LIMIT ? OFFSET ?");
-    args.add(per_page as i64);
-    args.add(offset as i64);
+    let mut query = user::Entity::find().filter(condition);
 
-    match sqlx::query_as_with::<_, User, _>(&data_sql, args)
-        .fetch_all(pool)
-        .await
-    {
-        Ok(users) => (
-            StatusCode::OK,
-            Json(ApiResponse::success(
-                EligibleUserListResponse {
-                    users,
-                    page,
-                    per_page,
-                    total,
-                },
-                "Eligible users fetched",
-            )),
-        ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<EligibleUserListResponse>::error(format!(
-                "Failed to fetch users: {}",
-                e
-            ))),
-        ),
+    if let Some(sort) = &params.sort {
+        let (field, dir) = if sort.starts_with('-') {
+            (&sort[1..], Order::Desc)
+        } else {
+            (sort.as_str(), Order::Asc)
+        };
+
+        match field {
+            "email" => query = query.order_by(user::Column::Email, dir),
+            "student_number" => query = query.order_by(user::Column::StudentNumber, dir),
+            "created_at" => query = query.order_by(user::Column::CreatedAt, dir),
+            _ => {}
+        }
+    } else {
+        query = query.order_by(user::Column::Id, Order::Asc);
     }
+
+    let paginator = query.paginate(&db, per_page.into());
+    let total = paginator.num_items().await.unwrap_or(0);
+    let users = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            EligibleUserListResponse {
+                users,
+                page,
+                per_page,
+                total,
+            },
+            "Eligible users fetched",
+        )),
+    )
+        .into_response()
 }
 
 /// Retrieves detailed information about a specific module, including assigned lecturers, tutors, and students.
@@ -746,94 +729,76 @@ pub async fn get_eligible_users_for_module(
 /// The response body is a JSON object using a standardized API response format, containing:
 /// - Module information.
 /// - Lists of users for each role (lecturers, tutors, students), each mapped to `UserResponse`.
+pub async fn get_module(Path(module_id): Path<i32>) -> Response {
+    let db: DatabaseConnection = connect().await;
 
-pub async fn get_module(Path(module_id): Path<i64>) -> impl IntoResponse {
-    let module_res = Module::get_by_id(Some(pool::get()), module_id).await;
-    match module_res {
-        Ok(Some(module)) => {
-            let lecturers = db::models::module_lecturer::ModuleLecturer::get_details_by_id(
-                Some(pool::get()),
-                module_id,
+    // Get the module by ID using match properly
+    let module = match ModuleEntity::find_by_id(module_id).one(&db).await {
+        Ok(Some(m)) => m,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Module not found")),
             )
-            .await;
-
-            let tutors = db::models::module_tutor::ModuleTutor::get_details_by_id(
-                Some(pool::get()),
-                module_id,
-            )
-            .await;
-
-            let students = db::models::module_student::ModuleStudent::get_details_by_id(
-                Some(pool::get()),
-                module_id,
-            )
-            .await;
-
-            if lecturers.is_err() || tutors.is_err() || students.is_err() {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<ModuleResponse>::error(
-                        "Failed to retrieve module personnel".to_string(),
-                    )),
-                );
-            }
-            let mut response = ModuleResponse::from(module);
-            response.lecturers = lecturers
-                .unwrap_or_default()
-                .into_iter()
-                .map(|u| UserResponse {
-                    id: u.id,
-                    student_number: u.student_number,
-                    email: u.email,
-                    admin: u.admin,
-                    created_at: u.created_at,
-                    updated_at: u.updated_at,
-                })
-                .collect();
-            response.tutors = tutors
-                .unwrap_or_default()
-                .into_iter()
-                .map(|u| UserResponse {
-                    id: u.id,
-                    student_number: u.student_number,
-                    email: u.email,
-                    admin: u.admin,
-                    created_at: u.created_at,
-                    updated_at: u.updated_at,
-                })
-                .collect();
-            response.students = students
-                .unwrap_or_default()
-                .into_iter()
-                .map(|u| UserResponse {
-                    id: u.id,
-                    student_number: u.student_number,
-                    email: u.email,
-                    admin: u.admin,
-                    created_at: u.created_at,
-                    updated_at: u.updated_at,
-                })
-                .collect();
-
-            (
-                StatusCode::OK,
-                Json(ApiResponse::success(
-                    response,
-                    "Module retrieved successfully",
-                )),
-            )
+                .into_response();
         }
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<ModuleResponse>::error("Module not found")),
-        ),
-        Err(_) => (
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error retrieving module")),
+            )
+                .into_response();
+        }
+    };
+
+    // Concurrently fetch users by role
+    let (lecturers, tutors, students) = tokio::join!(
+        get_users_by_role(&db, module_id, Role::Lecturer),
+        get_users_by_role(&db, module_id, Role::Tutor),
+        get_users_by_role(&db, module_id, Role::Student),
+    );
+
+    if lecturers.is_err() || tutors.is_err() || students.is_err() {
+        return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<ModuleResponse>::error(
-                "An error occurred in the database",
-            )),
-        ),
+            Json(ApiResponse::<()>::error("Failed to retrieve assigned personnel")),
+        )
+            .into_response();
     }
+
+    let mut response = ModuleResponse::from(module);
+    response.lecturers = lecturers.unwrap().into_iter().map(UserResponse::from).collect();
+    response.tutors = tutors.unwrap().into_iter().map(UserResponse::from).collect();
+    response.students = students.unwrap().into_iter().map(UserResponse::from).collect();
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(response, "Module retrieved successfully")),
+    )
+        .into_response()
+}
+
+
+async fn get_users_by_role(
+    db: &DatabaseConnection,
+    module_id: i32,
+    role: Role,
+) -> Result<Vec<UserModel>, sea_orm::DbErr> {
+    UserEntity::find()
+        .join(
+            JoinType::InnerJoin,
+            UserEntity::belongs_to(RoleEntity)
+                .from(UserCol::Id)
+                .to(RoleCol::UserId)
+                .into(),
+        )
+        .filter(
+            Condition::all()
+                .add(RoleCol::ModuleId.eq(module_id))
+                .add(RoleCol::Role.eq(role)),
+        )
+        .all(db)
+        .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -864,8 +829,8 @@ impl From<Module> for ModuleDetailsResponse {
             year: m.year,
             description: m.description,
             credits: m.credits,
-            created_at: m.created_at,
-            updated_at: m.updated_at,
+            created_at: m.created_at.to_rfc3339(),
+            updated_at: m.updated_at.to_rfc3339(),
         }
     }
 }
@@ -892,6 +857,7 @@ impl From<(Vec<Module>, i32, i32, i32)> for FilterResponse {
         }
     }
 }
+
 /// Retrieves a paginated and optionally filtered list of modules.
 ///
 /// # Arguments
@@ -916,87 +882,108 @@ impl From<(Vec<Module>, i32, i32, i32)> for FilterResponse {
 /// The response body contains:
 /// - A paginated list of modules.
 /// - Metadata: current page, items per page, and total items.
-
 pub async fn get_modules(Query(params): Query<FilterReq>) -> impl IntoResponse {
+    let db: DatabaseConnection = db::connect().await;
+
     let page = params.page.unwrap_or(1).max(1);
-    let length = params.per_page.unwrap_or(20).min(100).max(1);
-    let offset = (page - 1) * length;
+    let per_page = params.per_page.unwrap_or(20).min(100).max(1);
 
     // Validate sort fields
     if let Some(sort) = &params.sort {
-        let valid_fields: [&'static str; 5] = ["code", "created_at", "year", "credits", "description"];
+        let valid_fields = ["code", "created_at", "year", "credits", "description"];
         for field in sort.split(',') {
             let field = field.trim_start_matches('-');
             if !valid_fields.contains(&field) {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
+                    Json(ApiResponse::<FilterResponse>::error("Invalid field used for sorting")),
                 );
             }
         }
     }
 
-    let pool = pool::get();
-    let mut args = sqlx::sqlite::SqliteArguments::default();
-    let mut base_sql = String::from("FROM modules WHERE 1=1");
+    // Build filter conditions
+    let mut condition = Condition::all();
 
     if let Some(ref q) = params.query {
-        base_sql.push_str(" AND (LOWER(code) LIKE ? OR LOWER(description) LIKE ?)");
-        let q_like = format!("%{}%", q.to_lowercase());
-        args.add(q_like.clone());
-        args.add(q_like);
+        let q = q.to_lowercase();
+        condition = condition.add(
+            ModuleCol::Code.contains(&q).or(ModuleCol::Description.contains(&q)),
+        );
     }
 
-    if let Some(ref c) = params.code {
-        base_sql.push_str(" AND LOWER(code) LIKE ?");
-        args.add(format!("%{}%", c.to_lowercase()));
+    if let Some(ref code) = params.code {
+        condition = condition.add(ModuleCol::Code.contains(&code.to_lowercase()));
     }
 
-    if let Some(y) = params.year {
-        base_sql.push_str(" AND year = ?");
-        args.add(y);
+    if let Some(year) = params.year {
+        condition = condition.add(ModuleCol::Year.eq(year));
     }
 
-    // Count total
-    let total_query = format!("SELECT COUNT(*) {}", base_sql);
-    let total: i32 = sqlx::query_scalar_with(&total_query, args.clone())
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0);
+    // Base query
+    let mut query = ModuleEntity::find().filter(condition);
 
-    // Add sorting
-    let mut final_sql = format!("SELECT * {}", base_sql);
-    if let Some(sort_str) = params.sort {
-        let mut order_clauses = Vec::new();
+    // Apply sorting
+    if let Some(sort_str) = &params.sort {
         for field in sort_str.split(',') {
             let trimmed = field.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            let (field_name, direction) = if trimmed.starts_with('-') {
-                (&trimmed[1..], "DESC")
+
+            let (column, descending) = if trimmed.starts_with('-') {
+                (&trimmed[1..], true)
             } else {
-                (trimmed, "ASC")
+                (trimmed, false)
             };
-            order_clauses.push(format!("{} {}", field_name, direction));
-        }
-        if !order_clauses.is_empty() {
-            final_sql.push_str(" ORDER BY ");
-            final_sql.push_str(&order_clauses.join(", "));
+
+            match column {
+                "code" => {
+                    query = if descending {
+                        query.order_by_desc(ModuleCol::Code)
+                    } else {
+                        query.order_by_asc(ModuleCol::Code)
+                    };
+                }
+                "created_at" => {
+                    query = if descending {
+                        query.order_by_desc(ModuleCol::CreatedAt)
+                    } else {
+                        query.order_by_asc(ModuleCol::CreatedAt)
+                    };
+                }
+                "year" => {
+                    query = if descending {
+                        query.order_by_desc(ModuleCol::Year)
+                    } else {
+                        query.order_by_asc(ModuleCol::Year)
+                    };
+                }
+                "credits" => {
+                    query = if descending {
+                        query.order_by_desc(ModuleCol::Credits)
+                    } else {
+                        query.order_by_asc(ModuleCol::Credits)
+                    };
+                }
+                "description" => {
+                    query = if descending {
+                        query.order_by_desc(ModuleCol::Description)
+                    } else {
+                        query.order_by_asc(ModuleCol::Description)
+                    };
+                }
+                _ => {}
+            }
         }
     }
 
-    // Pagination
-    final_sql.push_str(" LIMIT ? OFFSET ?");
-    args.add(length);
-    args.add(offset);
+    // Paginate and fetch
+    let paginator = query.paginate(&db, per_page as u64);
+    let total = paginator.num_items().await.unwrap_or(0) as i32;
+    let modules: Vec<Module> = paginator.fetch_page((page - 1) as u64).await.unwrap_or_default();
 
-    let modules: Vec<Module> = sqlx::query_as_with(&final_sql, args)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_else(|_| vec![]);
-
-    let response = FilterResponse::from((modules, page, length, total));
+    let response = FilterResponse::from((modules, page, per_page, total));
     (
         StatusCode::OK,
         Json(ApiResponse::success(response, "Modules retrieved successfully")),
@@ -1012,21 +999,25 @@ pub struct MyDetailsResponse {
 
 impl From<(Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsResponse {
     fn from((as_student, as_tutor, as_lecturer): (Vec<Module>, Vec<Module>, Vec<Module>)) -> Self {
-        use std::convert::From;
         MyDetailsResponse {
-            as_student: as_student.into_iter().map(From::from).collect(),
-            as_tutor: as_tutor.into_iter().map(From::from).collect(),
-            as_lecturer: as_lecturer.into_iter().map(From::from).collect(),
+            as_student: as_student.into_iter().map(ModuleDetailsResponse::from).collect(),
+            as_tutor: as_tutor.into_iter().map(ModuleDetailsResponse::from).collect(),
+            as_lecturer: as_lecturer.into_iter().map(ModuleDetailsResponse::from).collect(),
         }
     }
 }
 
-pub async fn get_my_details(Extension(AuthUser(claims)): Extension<AuthUser>) -> impl IntoResponse {
-    let id = claims.sub;
-    let pool = pool::get();
-    let as_student = ModuleStudent::get_by_user_id(Some(pool), id).await;
-    let as_tutor = ModuleTutor::get_by_user_id(Some(pool), id).await;
-    let as_lecturer = ModuleLecturer::get_by_user_id(Some(pool), id).await;
+pub async fn get_my_details(
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+) -> impl IntoResponse {
+    let db: DatabaseConnection = connect().await;
+    let user_id = claims.sub;
+
+    let (as_student, as_tutor, as_lecturer) = tokio::join!(
+        get_modules_by_user_and_role(&db, user_id, Role::Student),
+        get_modules_by_user_and_role(&db, user_id, Role::Tutor),
+        get_modules_by_user_and_role(&db, user_id, Role::Lecturer),
+    );
 
     match (as_student, as_tutor, as_lecturer) {
         (Ok(students), Ok(tutors), Ok(lecturers)) => {
@@ -1046,4 +1037,27 @@ pub async fn get_my_details(Extension(AuthUser(claims)): Extension<AuthUser>) ->
             )),
         ),
     }
+}
+
+/// Helper to fetch modules by user_id and role using SeaORM relations
+async fn get_modules_by_user_and_role(
+    db: &DatabaseConnection,
+    user_id: i64,
+    role: Role,
+) -> Result<Vec<Module>, sea_orm::DbErr> {
+    RoleEntity::find()
+        .filter(
+            Condition::all()
+                .add(RoleCol::UserId.eq(user_id))
+                .add(RoleCol::Role.eq(role)),
+        )
+        .find_also_related(ModuleEntity) // this returns tuples (role, Option<module>)
+        .all(db)
+        .await
+        .map(|results| {
+            results
+                .into_iter()
+                .filter_map(|(_, module)| module) // extract just the Some(module)
+                .collect()
+        })
 }

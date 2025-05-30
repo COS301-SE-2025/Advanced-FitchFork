@@ -21,45 +21,22 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use db::{
-    models::assignment::{Assignment, AssignmentType},
-    pool,
-};
-use serde::Serialize;
-
-use crate::{response::ApiResponse};
 
 use chrono::{DateTime, Utc};
-use std::{fs, io::Write, path::PathBuf};
 
-#[derive(Debug, Serialize)]
+use serde::{Deserialize, Serialize};
 
-pub struct AssignmentResponse {
-    pub id: i64,
-    pub module_id: i64,
-    pub name: String,
-    pub description: Option<String>,
-    pub assignment_type: AssignmentType,
-    pub available_from: String,
-    pub due_date: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
-impl From<Assignment> for AssignmentResponse {
-    fn from(assignment: Assignment) -> Self {
-        Self {
-            id: assignment.id,
-            module_id: assignment.module_id,
-            name: assignment.name,
-            description: assignment.description,
-            assignment_type: assignment.assignment_type,
-            available_from: assignment.available_from,
-            due_date: assignment.due_date,
-            created_at: assignment.created_at,
-            updated_at: assignment.updated_at,
-        }
-    }
-}
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, DbErr};
+
+use db::{
+    connect,
+    models::{
+        assignment::{Column as AssignmentColumn, Entity as AssignmentEntity, Model as AssignmentModel, AssignmentType},
+        assignment_file::{FileType, Model as FileModel},
+    },
+};
+
+use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
 pub struct UploadedFileMetadata {
@@ -70,6 +47,7 @@ pub struct UploadedFileMetadata {
     pub created_at: String,
     pub updated_at: String,
 }
+
 
 /// POST /api/modules/:module_id/assignments/:assignment_id/files
 ///
@@ -91,31 +69,39 @@ pub struct UploadedFileMetadata {
 /// - `400 Bad Request` (no files or invalid format)
 /// - `403 Forbidden` (unauthorized)
 /// - `404 Not Found` (assignment/module not found)
-
 pub async fn upload_files(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let pool = pool::get();
+    let db = connect().await;
 
-    let assignment_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM assignments WHERE id = ? AND module_id = ?)",
-    )
-    .bind(assignment_id)
-    .bind(module_id)
-    .fetch_one(pool)
-    .await
-    .unwrap_or(false);
+    // 1. Check if the assignment exists
+    let assignment_exists = AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
+        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
+        .one(&db)
+        .await;
 
-    if !assignment_exists {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
-                "Assignment not found",
-            )),
-        );
+    match assignment_exists {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<Vec<UploadedFileMetadata>>::error("Assignment not found")),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            eprintln!("DB error checking assignment: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<Vec<UploadedFileMetadata>>::error("Database error")),
+            )
+                .into_response();
+        }
     }
 
+    // 2. Save files
     let mut saved_files = vec![];
 
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
@@ -129,31 +115,29 @@ pub async fn upload_files(
             continue;
         }
 
-        let saved_path = format!("data/modules/{}/assignments/{}/{}", module_id, assignment_id, file_name);
+        let file_type = FileType::Spec; // Or dynamically assign based on form field
 
-        let fs_path = PathBuf::from(&saved_path);
-
-        if let Some(parent) = fs_path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-
-        if let Ok(mut file) = fs::File::create(&fs_path) {
-            if file.write_all(&file_bytes).is_ok() {
-                let now = Utc::now().to_rfc3339();
-
-                let _ = sqlx::query(
-                    "INSERT INTO assignment_files (assignment_id, filename, path, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?)",
-                ).bind(assignment_id).bind(&file_name).bind(&saved_path).bind(&now).bind(&now).execute(pool).await;
-
-                saved_files.push(UploadedFileMetadata {
-                    id: 0,
-                    assignment_id,
-                    filename: file_name.clone(),
-                    path: saved_path,
-                    created_at: now.clone(),
-                    updated_at: now.clone(),
-                });
+        match FileModel::save_file(
+            &db,
+            assignment_id,
+            module_id,
+            file_type,
+            &file_name,
+            &file_bytes,
+        )
+        .await
+        {
+            Ok(saved) => saved_files.push(UploadedFileMetadata {
+                id: saved.id,
+                assignment_id: saved.assignment_id,
+                filename: saved.filename,
+                path: saved.path,
+                created_at: saved.created_at.to_rfc3339(),
+                updated_at: saved.updated_at.to_rfc3339(),
+            }),
+            Err(e) => {
+                eprintln!("Error saving file '{}': {:?}", file_name, e);
+                continue;
             }
         }
     }
@@ -161,10 +145,9 @@ pub async fn upload_files(
     if saved_files.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
-                "No files were uploaded or invalid file format",
-            )),
-        );
+            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error("No files were uploaded")),
+        )
+            .into_response();
     }
 
     (
@@ -174,7 +157,40 @@ pub async fn upload_files(
             "Files uploaded successfully",
         )),
     )
+        .into_response()
 }
+
+
+
+#[derive(Debug, Serialize)]
+pub struct AssignmentResponse {
+    pub id: i64,
+    pub module_id: i64,
+    pub name: String,
+    pub description: Option<String>,
+    pub assignment_type: String,
+    pub available_from: String,
+    pub due_date: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<AssignmentModel> for AssignmentResponse {
+    fn from(model: AssignmentModel) -> Self {
+        Self {
+            id: model.id,
+            module_id: model.module_id,
+            name: model.name,
+            description: model.description,
+            assignment_type: model.assignment_type.to_string(),
+            available_from: model.available_from.to_rfc3339(),
+            due_date: model.due_date.to_rfc3339(),
+            created_at: model.created_at.to_rfc3339(),
+            updated_at: model.updated_at.to_rfc3339(),
+        }
+    }
+}
+
 
 /// Creates a new assignment under a specific module.
 ///
@@ -197,115 +213,90 @@ pub async fn upload_files(
 /// - `500 INTERNAL SERVER ERROR` if the database operation fails.
 ///
 /// The response body is a JSON object using a standardized API response format.
+#[derive(Debug, Deserialize)]
+pub struct CreateAssignmentRequest {
+    name: String,
+    description: Option<String>,
+    assignment_type: String,
+    available_from: String,
+    due_date: String,
+}
 
+/// Creates a new assignment under a specific module.
 pub async fn create(
     Path(module_id): Path<i64>,
-    Json(req): Json<serde_json::Value>,
+    Json(req): Json<CreateAssignmentRequest>,
 ) -> impl IntoResponse {
-    let name = req.get("name").and_then(|v| v.as_str());
-    let description = req.get("description").and_then(|v| v.as_str());
-    let available_from = req.get("available_from").and_then(|v| v.as_str());
-    let due_date = req.get("due_date").and_then(|v| v.as_str());
-    let assignment_type = match req.get("assignment_type").and_then(|v| v.as_str()) {
-        Some("Assignment") => db::models::assignment::AssignmentType::Assignment,
-        Some("Practical") => db::models::assignment::AssignmentType::Practical,
-        _ => {
+    let db = connect().await;
+
+    // Parse and validate dates
+    let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
+        .map(|dt| dt.with_timezone(&Utc))
+    {
+        Ok(date) => date,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error("Invalid available_from datetime")),
+            );
+        }
+    };
+
+    let due_date = match DateTime::parse_from_rfc3339(&req.due_date)
+        .map(|dt| dt.with_timezone(&Utc))
+    {
+        Ok(date) => date,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error("Invalid due_date datetime")),
+            );
+        }
+    };
+    // Convert string to enum
+    let assignment_type = match req.assignment_type.parse::<AssignmentType>() {
+        Ok(t) => t,
+        Err(_) => {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<AssignmentResponse>::error(
-                    "Invalid assignment_type. Expected 'Assignment' or 'Practical'.",
+                    "assignment_type must be 'assignment' or 'practical'",
                 )),
             );
         }
     };
 
-    fn validate_and_format(date_str: &str) -> Option<String> {
-        DateTime::parse_from_rfc3339(date_str)
-            .ok()
-            .map(|dt| dt.with_timezone(&Utc).to_rfc3339())
-    }
-
-    if name.is_none() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<AssignmentResponse>::error(
-                "Assignment Name is expected",
-            )),
-        );
-    }
-
-    let Some(available_from_raw) = available_from else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<AssignmentResponse>::error(
-                "Release date is expected",
-            )),
-        );
-    };
-
-    let Some(due_date_raw) = due_date else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<AssignmentResponse>::error(
-                "Due date is expected",
-            )),
-        );
-    };
-
-    let available_from = match validate_and_format(available_from_raw) {
-        Some(date) => date,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error(
-                    "Release date must be in valid ISO 8601 format",
-                )),
-            );
-        }
-    };
-
-    let due_date = match validate_and_format(due_date_raw) {
-        Some(date) => date,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error(
-                    "Due date must be in valid ISO 8601 format",
-                )),
-            );
-        }
-    };
-    let available_from = available_from.as_str();
-    let due_date = due_date.as_str();
-
-    let name = name.unwrap();
-
-    let result: Result<Assignment, sqlx::Error> = Assignment::create(
-        Some(pool::get()),
+    match AssignmentModel::create(
+        &db,
         module_id,
-        name,
-        description,
+        &req.name,
+        req.description.as_deref(),
         assignment_type,
         available_from,
         due_date,
     )
-    .await;
-    match result {
-        Ok(assignment) => {
-            let res = AssignmentResponse::from(assignment);
+    .await {
+        Ok(model) => {
+            let response = AssignmentResponse::from(model);
             (
                 StatusCode::OK,
-                Json(ApiResponse::success(res, "Assignment successfully created")),
+                Json(ApiResponse::success(response, "Assignment created successfully")),
             )
         }
-        Err(_) => (
+        Err(DbErr::RecordNotInserted) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<AssignmentResponse>::error(format!(
-                "An error occurred in the database"
-            ))),
+            Json(ApiResponse::<AssignmentResponse>::error("Assignment could not be inserted")),
         ),
+        Err(e) => {
+            eprintln!("DB error: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<AssignmentResponse>::error("Database error")),
+            )
+        }
     }
 }
+
 
 #[cfg(test)]
 mod tests {

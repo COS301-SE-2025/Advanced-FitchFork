@@ -3,11 +3,20 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use db::models::user::{User, UserModuleRole};
-use db::pool;
-use crate::auth::claims::AuthUser;
-use crate::response::ApiResponse;
+
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
 use serde::Serialize;
+
+use crate::{
+    auth::claims::AuthUser,
+    response::ApiResponse,
+};
+
+use db::{
+    connect,
+    models::{user, module, user_module_role},
+};
 
 #[derive(Debug, Serialize)]
 pub struct MeResponse {
@@ -17,17 +26,34 @@ pub struct MeResponse {
     pub admin: bool,
     pub created_at: String,
     pub updated_at: String,
-    pub modules: Vec<UserModuleRole>,
+    pub modules: Vec<UserModuleRoleResponse>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserModuleRoleResponse {
+    pub module_id: i64,
+    pub module_code: String,
+    pub module_year: i32,
+    pub module_description: Option<String>,
+    pub module_credits: i32,
+    pub module_created_at: String,
+    pub module_updated_at: String,
+    pub role: String,
 }
 
 /// GET /api/auth/me
 ///
-/// Returns the authenticated user's profile and module roles.
+/// Returns the authenticated user's profile and module roles using raw SeaORM.
 pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
-    let pool = pool::get();
+    let db = connect().await;
     let user_id = claims.sub;
 
-    let user = match User::get_by_id(Some(pool), user_id).await {
+    // Find the user directly
+    let user = match user::Entity::find()
+        .filter(user::Column::Id.eq(user_id))
+        .one(&db)
+        .await
+    {
         Ok(Some(u)) => u,
         Ok(None) => {
             return (
@@ -43,8 +69,14 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
         }
     };
 
-    let modules = match User::get_module_roles(Some(pool), user.id).await {
-        Ok(r) => r,
+    // Join user_module_roles with modules
+    let roles = match user_module_role::Entity::find()
+        .filter(user_module_role::Column::UserId.eq(user.id))
+        .find_also_related(module::Entity)
+        .all(&db)
+        .await
+    {
+        Ok(results) => results,
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -53,13 +85,29 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
         }
     };
 
+    let modules: Vec<UserModuleRoleResponse> = roles
+        .into_iter()
+        .filter_map(|(role, maybe_module)| {
+            maybe_module.map(|m| UserModuleRoleResponse {
+                module_id: m.id,
+                module_code: m.code,
+                module_year: m.year,
+                module_description: m.description,
+                module_credits: m.credits,
+                module_created_at: m.created_at.to_rfc3339(),
+                module_updated_at: m.updated_at.to_rfc3339(),
+                role: role.role.to_string(),
+            })
+        })
+        .collect();
+
     let response_data = MeResponse {
         id: user.id,
         email: user.email,
         student_number: user.student_number,
         admin: user.admin,
-        created_at: user.created_at,
-        updated_at: user.updated_at,
+        created_at: user.created_at.to_rfc3339(),
+        updated_at: user.updated_at.to_rfc3339(),
         modules,
     };
 

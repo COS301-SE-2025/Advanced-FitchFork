@@ -1,24 +1,30 @@
 use axum::{
-    extract::Query,
+    extract::{Path, Query},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use db::models::user::User;
-use db::pool;
-use crate::response::ApiResponse;
+
+use sea_orm::{
+    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
+};
+
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-use sqlx::Row;
+
+use crate::response::ApiResponse;
+
+use db::{
+    connect,
+    models::user::{Entity as UserEntity, Model as UserModel, Column as UserColumn},
+};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct ListUsersQuery {
-    #[validate(range(min = 1, message = "Page must be at least 1"))]
-    pub page: Option<i64>,
-    
-    #[validate(range(min = 1, max = 100, message = "Per page must be between 1 and 100"))]
-    pub per_page: Option<i64>,
-    
+    #[validate(range(min = 1))]
+    pub page: Option<u64>,
+    #[validate(range(min = 1, max = 100))]
+    pub per_page: Option<u64>,
     pub sort: Option<String>,
     pub query: Option<String>,
     pub email: Option<String>,
@@ -39,20 +45,20 @@ pub struct UserListItem {
 #[derive(Debug, Serialize)]
 pub struct UsersListResponse {
     pub users: Vec<UserListItem>,
-    pub page: i64,
-    pub per_page: i64,
-    pub total: i64,
+    pub page: u64,
+    pub per_page: u64,
+    pub total: u64,
 }
 
-impl From<User> for UserListItem {
-    fn from(user: User) -> Self {
+impl From<UserModel> for UserListItem {
+    fn from(user: UserModel) -> Self {
         Self {
             id: user.id.to_string(),
             email: user.email,
             student_number: user.student_number,
             admin: user.admin,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
+            created_at: user.created_at.to_string(),
+            updated_at: user.updated_at.to_string(),
         }
     }
 }
@@ -111,149 +117,106 @@ impl From<User> for UserListItem {
 /// - `401 Unauthorized` - Missing or invalid JWT
 /// - `403 Forbidden` - Authenticated but not admin user
 /// - `500 Internal Server Error` - Database error
-pub async fn list_users(Query(query_params): Query<ListUsersQuery>) -> impl IntoResponse {
-    if let Err(validation_errors) = query_params.validate() {
-        let error_message = common::format_validation_errors(&validation_errors);
+pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoResponse {
+    if let Err(e) = query.validate() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<UsersListResponse>::error(error_message)),
+            Json(ApiResponse::<UsersListResponse>::error(
+                common::format_validation_errors(&e),
+            )),
         );
     }
 
-    let pool = pool::get();
-    
-    let page = query_params.page.unwrap_or(1);
-    let per_page = query_params.per_page.unwrap_or(20);
-    let offset = (page - 1) * per_page;
+    let db = connect().await;
+    let page = query.page.unwrap_or(1);
+    let per_page = query.per_page.unwrap_or(20);
 
-    let mut where_conditions = Vec::new();
-    let mut params: Vec<String> = Vec::new();
-    
-    if let Some(query) = &query_params.query {
-        where_conditions.push("(LOWER(email) LIKE LOWER(?) OR LOWER(student_number) LIKE LOWER(?))");
-        let query_pattern = format!("%{}%", query);
-        params.push(query_pattern.clone());
-        params.push(query_pattern);
+    let mut condition = Condition::all();
+
+    if let Some(q) = &query.query {
+        let pattern = format!("%{}%", q.to_lowercase());
+        condition = condition.add(
+            Condition::any()
+                .add(UserColumn::Email.contains(&pattern))
+                .add(UserColumn::StudentNumber.contains(&pattern)),
+        );
     }
 
-    if let Some(email) = &query_params.email {
-        where_conditions.push("LOWER(email) LIKE LOWER(?)");
-        params.push(format!("%{}%", email));
-    }
-    
-    if let Some(student_number) = &query_params.student_number {
-        where_conditions.push("LOWER(student_number) LIKE LOWER(?)");
-        params.push(format!("%{}%", student_number));
-    }
-    
-    if let Some(admin_filter) = query_params.admin {
-        where_conditions.push("admin = ?");
-        params.push(if admin_filter { "1" } else { "0" }.to_string()); // goofy ahhh code
+    if let Some(email) = &query.email {
+        condition = condition.add(UserColumn::Email.contains(&format!("%{}%", email)));
     }
 
-    let where_clause = if where_conditions.is_empty() {
-        String::new()
-    } else {
-        format!("WHERE {}", where_conditions.join(" AND "))
-    };
-
-    let order_clause = if let Some(sort_param) = &query_params.sort {
-        build_order_clause(sort_param)
-    } else {
-        "ORDER BY id ASC".to_string()
-    };
-
-    let count_query = format!("SELECT COUNT(*) as count FROM users {}", where_clause);
-    let mut count_query_builder = sqlx::query(&count_query);
-    
-    for param in &params {
-        count_query_builder = count_query_builder.bind(param);
+    if let Some(sn) = &query.student_number {
+        condition = condition.add(UserColumn::StudentNumber.contains(&format!("%{}%", sn)));
     }
-    
-    let total = match count_query_builder.fetch_one(pool).await {
-        Ok(row) => {
-            match row.try_get::<i64, _>("count") {
-                Ok(count) => count,
-                Err(_) => 0,
+
+    if let Some(admin) = query.admin {
+        condition = condition.add(UserColumn::Admin.eq(admin));
+    }
+
+    let mut query_builder = UserEntity::find().filter(condition);
+
+    if let Some(sort_param) = &query.sort {
+        for sort_field in sort_param.split(',') {
+            let (field, desc) = if sort_field.starts_with('-') {
+                (&sort_field[1..], true)
+            } else {
+                (sort_field, false)
+            };
+
+            match field {
+                "email" => {
+                    query_builder = if desc {
+                        query_builder.order_by_desc(UserColumn::Email)
+                    } else {
+                        query_builder.order_by_asc(UserColumn::Email)
+                    };
+                }
+                "student_number" => {
+                    query_builder = if desc {
+                        query_builder.order_by_desc(UserColumn::StudentNumber)
+                    } else {
+                        query_builder.order_by_asc(UserColumn::StudentNumber)
+                    };
+                }
+                "created_at" => {
+                    query_builder = if desc {
+                        query_builder.order_by_desc(UserColumn::CreatedAt)
+                    } else {
+                        query_builder.order_by_asc(UserColumn::CreatedAt)
+                    };
+                }
+                "admin" => {
+                    query_builder = if desc {
+                        query_builder.order_by_desc(UserColumn::Admin)
+                    } else {
+                        query_builder.order_by_asc(UserColumn::Admin)
+                    };
+                }
+                _ => {}
             }
         }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UsersListResponse>::error(format!("Database error: {}", e))),
-            );
-        }
-    };
-
-    let users_query = format!(
-        "SELECT id, student_number, email, password_hash, admin, created_at, updated_at 
-         FROM users {} {} LIMIT ? OFFSET ?",
-        where_clause, order_clause
-    );
-    
-    let mut users_query_builder = sqlx::query_as::<_, User>(&users_query);
-    
-    for param in &params {
-        users_query_builder = users_query_builder.bind(param);
+    } else {
+        query_builder = query_builder.order_by_asc(UserColumn::Id);
     }
-    
-    users_query_builder = users_query_builder.bind(per_page).bind(offset);
 
-    match users_query_builder.fetch_all(pool).await {
-        Ok(users) => {
-            let user_items: Vec<UserListItem> = users.into_iter().map(UserListItem::from).collect();
-            
-            let response = UsersListResponse {
-                users: user_items,
+    let paginator = query_builder.paginate(&db, per_page);
+    let total = paginator.num_items().await.unwrap_or(0);
+    let users = paginator.fetch_page(page - 1).await.unwrap_or_default();
+    let users = users.into_iter().map(UserListItem::from).collect();
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            UsersListResponse {
+                users,
                 page,
                 per_page,
                 total,
-            };
-
-            (
-                StatusCode::OK,
-                Json(ApiResponse::success(response, "Users retrieved successfully")),
-            )
-        }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<UsersListResponse>::error(format!("Database error: {}", e))),
-        ),
-    }
-}
-
-/// Builds ORDER BY clause from sort parameter string
-/// 
-/// # Arguments
-/// * `sort_param` - Comma-separated list of fields, with optional `-` prefix for descending
-/// 
-/// # Examples
-/// * `"email"` -> `"ORDER BY email ASC"`
-/// * `"email,-created_at"` -> `"ORDER BY email ASC, created_at DESC"`
-/// * `"-created_at,email"` -> `"ORDER BY created_at DESC, email ASC"`
-fn build_order_clause(sort_param: &str) -> String {
-    let valid_fields = ["email", "student_number", "created_at", "admin"];
-    let mut order_parts = Vec::new();
-
-    for field in sort_param.split(',') {
-        let field = field.trim();
-        
-        let (field_name, direction) = if field.starts_with('-') {
-            (&field[1..], "DESC")
-        } else {
-            (field, "ASC")
-        };
-
-        if valid_fields.contains(&field_name) {
-            order_parts.push(format!("{} {}", field_name, direction));
-        }
-    }
-
-    if order_parts.is_empty() {
-        "ORDER BY id ASC".to_string()
-    } else {
-        format!("ORDER BY {}", order_parts.join(", "))
-    }
+            },
+            "Users retrieved successfully",
+        )),
+    )
 }
 
 /// GET /api/users/:id
@@ -268,33 +231,34 @@ fn build_order_clause(sort_param: &str) -> String {
 /// - `400 Bad Request`: Invalid ID format
 /// - `404 Not Found`: User does not exist
 /// - `500 Internal Server Error`: DB error
-pub async fn get_user(
-    axum::extract::Path(id): axum::extract::Path<String>,
-) -> impl IntoResponse {
-    let user_id = match id.parse::<i64>() {
+pub async fn get_user(Path(id): Path<String>) -> impl IntoResponse {
+    let user_id: i32 = match id.parse() {
         Ok(id) => id,
         Err(_) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<User>::error("Invalid user ID format")),
+                Json(ApiResponse::<UserListItem>::error("Invalid user ID format")),
             );
         }
     };
 
-    let pool = pool::get();
+    let db = connect().await;
 
-    match User::get_by_id(Some(pool), user_id).await {
-        Ok(Some(user)) => (
-            StatusCode::OK,
-            Json(ApiResponse::success(user, "User retrieved successfully")),
-        ),
+    match UserEntity::find_by_id(user_id).one(&db).await {
+        Ok(Some(user)) => {
+            let user_item = UserListItem::from(user);
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(user_item, "User retrieved successfully")),
+            )
+        }
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<User>::error("User not found")),
+            Json(ApiResponse::<UserListItem>::error("User not found")),
         ),
-        Err(e) => (
+        Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<User>::error(format!("Database error: {}", e))),
+            Json(ApiResponse::<UserListItem>::error(format!("Database error: {}", err))),
         ),
     }
 }
@@ -366,11 +330,9 @@ pub struct UserModule {
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn get_user_modules(
-    axum::extract::Path(id): axum::extract::Path<String>,
-) -> impl IntoResponse {
-    let user_id = match id.parse::<i64>() {
-        Ok(id) => id,
+pub async fn get_user_modules(Path(id): Path<String>) -> impl IntoResponse {
+    let user_id: i64 = match id.parse() {
+        Ok(val) => val,
         Err(_) => {
             return (
                 StatusCode::BAD_REQUEST,
@@ -379,9 +341,9 @@ pub async fn get_user_modules(
         }
     };
 
-    let pool = pool::get();
+    let db = connect().await;
 
-    let user = match User::get_by_id(Some(pool), user_id).await {
+    let user = match UserEntity::find_by_id(user_id).one(&db).await {
         Ok(Some(user)) => user,
         Ok(None) => {
             return (
@@ -397,8 +359,8 @@ pub async fn get_user_modules(
         }
     };
 
-    let module_roles = match User::get_module_roles(Some(pool), user.id).await {
-        Ok(roles) => roles,
+    let roles = match UserModel::get_module_roles(&db, user.id).await {
+        Ok(r) => r,
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -407,23 +369,23 @@ pub async fn get_user_modules(
         }
     };
 
-    let modules = module_roles
+    let modules = roles
         .into_iter()
-        .map(|role| UserModule {
-            id: role.module_id,
-            code: role.module_code,
-            year: role.module_year,
-            description: role.module_description.unwrap_or_default(),
-            credits: role.module_credits.unwrap_or(0),
-            role: role.role,
-            created_at: role.module_created_at.unwrap_or_default(),
-            updated_at: role.module_updated_at.unwrap_or_default(),
+        .map(|r| UserModule {
+            id: r.module_id,
+            code: r.module_code,
+            year: r.module_year,
+            description: r.module_description.unwrap_or_default(),
+            credits: r.module_credits,
+            role: r.role,
+            created_at: r.module_created_at,
+            updated_at: r.module_updated_at,
         })
-        .collect::<Vec<UserModule>>();
+        .collect::<Vec<_>>();
 
     (
         StatusCode::OK,
-        Json(ApiResponse::<Vec<UserModule>>::success(
+        Json(ApiResponse::success(
             modules,
             "Modules for user retrieved successfully",
         )),
@@ -433,88 +395,34 @@ pub async fn get_user_modules(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use db::models::user::User;
-    use sqlx::SqlitePool;
-    use db::create_test_db;
-    use db::delete_database;
+    use db::models::user::Model as UserModel;
+    use sea_orm::DatabaseConnection;
 
-    // Helper function to create test users
-    async fn create_test_users(pool: &SqlitePool) -> Vec<User> {
+    // Helper to insert multiple test users into SeaORM DB
+    async fn create_test_users(db: &DatabaseConnection) -> Vec<UserModel> {
         let mut users = Vec::new();
-        
-        // Create users with different attributes for testing
-        let user1 = User::create(Some(pool), "u12345678", "alice@example.com", "password1", false)
+
+        let user1 = UserModel::create(db, "u12345678", "alice@example.com", "password1", false)
             .await
             .unwrap();
         users.push(user1);
 
-        let user2 = User::create(Some(pool), "u87654321", "bob@test.com", "password2", true)
+        let user2 = UserModel::create(db, "u87654321", "bob@test.com", "password2", true)
             .await
             .unwrap();
         users.push(user2);
 
-        let user3 = User::create(Some(pool), "u11111111", "charlie@example.com", "password3", false)
+        let user3 = UserModel::create(db, "u11111111", "charlie@example.com", "password3", false)
             .await
             .unwrap();
         users.push(user3);
 
-        let user4 = User::create(Some(pool), "u22222222", "diana@university.edu", "password4", true)
+        let user4 = UserModel::create(db, "u22222222", "diana@university.edu", "password4", true)
             .await
             .unwrap();
         users.push(user4);
 
         users
-    }
-
-    #[tokio::test]
-    async fn test_build_order_clause_valid_fields() {
-        // Test single field ascending
-        let result = build_order_clause("email");
-        assert_eq!(result, "ORDER BY email ASC");
-
-        // Test single field descending
-        let result = build_order_clause("-created_at");
-        assert_eq!(result, "ORDER BY created_at DESC");
-
-        // Test multiple fields
-        let result = build_order_clause("email,-created_at,admin");
-        assert_eq!(result, "ORDER BY email ASC, created_at DESC, admin ASC");
-
-        // Test with spaces
-        let result = build_order_clause(" email , -created_at , admin ");
-        assert_eq!(result, "ORDER BY email ASC, created_at DESC, admin ASC");
-    }
-
-    #[tokio::test]
-    async fn test_build_order_clause_invalid_fields() {
-        // Test invalid field - should be filtered out
-        let result = build_order_clause("invalid_field");
-        assert_eq!(result, "ORDER BY id ASC");
-
-        // Test mix of valid and invalid fields
-        let result = build_order_clause("email,invalid_field,-created_at");
-        assert_eq!(result, "ORDER BY email ASC, created_at DESC");
-
-        // Test empty string
-        let result = build_order_clause("");
-        assert_eq!(result, "ORDER BY id ASC");
-
-        // Test only invalid fields
-        let result = build_order_clause("bad_field,another_bad_field");
-        assert_eq!(result, "ORDER BY id ASC");
-    }
-
-    #[tokio::test]
-    async fn test_build_order_clause_sql_injection_prevention() {
-        // Test potential SQL injection attempts
-        let result = build_order_clause("email; DROP TABLE users; --");
-        assert_eq!(result, "ORDER BY id ASC");
-
-        let result = build_order_clause("email' OR '1'='1");
-        assert_eq!(result, "ORDER BY id ASC");
-
-        let result = build_order_clause("email UNION SELECT * FROM users");
-        assert_eq!(result, "ORDER BY id ASC");
     }
 
     #[tokio::test]
@@ -570,9 +478,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_user_list_item_from_user() {
-        let pool = create_test_db(Some("test_user_list_item.db")).await;
-        
-        let user = User::create(Some(&pool), "u12345678", "test@example.com", "password", true)
+        use db::test_utils::setup_test_db;
+        use db::models::user::Model as UserModel;
+
+        let db = setup_test_db().await;
+
+        let user = UserModel::create(&db, "u12345678", "test@example.com", "password", true)
             .await
             .unwrap();
 
@@ -581,8 +492,8 @@ mod tests {
         let email = user.email.clone();
         let student_number = user.student_number.clone();
         let admin = user.admin;
-        let created_at = user.created_at.clone();
-        let updated_at = user.updated_at.clone();
+        let created_at = user.created_at.to_string();
+        let updated_at = user.updated_at.to_string();
 
         let list_item = UserListItem::from(user);
 
@@ -592,19 +503,18 @@ mod tests {
         assert_eq!(list_item.admin, admin);
         assert_eq!(list_item.created_at, created_at);
         assert_eq!(list_item.updated_at, updated_at);
-
-        pool.close().await;
-        delete_database("test_user_list_item.db");
     }
 
     #[tokio::test]
     async fn test_list_users_default_parameters() {
-        let pool = create_test_db(Some("test_list_users_defaults.db")).await;
-        
-        // Create some test users
-        create_test_users(&pool).await;
+        use db::test_utils::setup_test_db;
 
-        // Test with empty query parameters (should use defaults)
+        let db = setup_test_db().await;
+
+        // Create some test users
+        create_test_users(&db).await;
+
+        // Simulate an empty query (should use defaults)
         let query_params = ListUsersQuery {
             page: None,
             per_page: None,
@@ -615,7 +525,6 @@ mod tests {
             admin: None,
         };
 
-        // Since we can't easily test the full handler, we'll test the parameter defaults
         let page = query_params.page.unwrap_or(1);
         let per_page = query_params.per_page.unwrap_or(20);
         let offset = (page - 1) * per_page;
@@ -623,16 +532,10 @@ mod tests {
         assert_eq!(page, 1);
         assert_eq!(per_page, 20);
         assert_eq!(offset, 0);
-
-        pool.close().await;
-        delete_database("test_list_users_defaults.db");
     }
 
     #[tokio::test]
     async fn test_where_clause_building_logic() {
-        // Test query parameter logic (the core filtering logic)
-        
-        // Test with general query (should override email and student_number)
         let query_params = ListUsersQuery {
             page: Some(1),
             per_page: Some(10),
@@ -645,7 +548,7 @@ mod tests {
 
         let mut where_conditions = Vec::new();
         let mut params = Vec::new();
-        
+
         // Simulate the where clause building logic from list_users
         if let Some(query) = &query_params.query {
             where_conditions.push("(LOWER(email) LIKE LOWER(?) OR LOWER(student_number) LIKE LOWER(?))");
@@ -657,25 +560,25 @@ mod tests {
                 where_conditions.push("LOWER(email) LIKE LOWER(?)");
                 params.push(format!("%{}%", email));
             }
-            
+
             if let Some(student_number) = &query_params.student_number {
                 where_conditions.push("LOWER(student_number) LIKE LOWER(?)");
                 params.push(format!("%{}%", student_number));
             }
         }
-        
+
         if let Some(admin_filter) = query_params.admin {
             where_conditions.push("admin = ?");
             params.push(if admin_filter { "1" } else { "0" }.to_string());
         }
 
-        // Verify the logic worked correctly
-        assert_eq!(where_conditions.len(), 2); // query condition + admin condition
-        assert_eq!(params.len(), 3); // query pattern twice + admin value
+        assert_eq!(where_conditions.len(), 2);
+        assert_eq!(params.len(), 3);
         assert_eq!(params[0], "%test%");
         assert_eq!(params[1], "%test%");
         assert_eq!(params[2], "1");
     }
+
 
     #[tokio::test]
     async fn test_where_clause_building_without_query() {
@@ -759,121 +662,127 @@ mod tests {
     // Integration-style test that creates users and tests the database queries
     #[tokio::test]
     async fn test_user_filtering_queries() {
-        let pool = create_test_db(Some("test_user_filtering.db")).await;
-        
-        // Create test users with specific data for filtering
-        let _users = create_test_users(&pool).await;
+        use db::{test_utils::setup_test_db, models::user::Entity as UserEntity};
+        use sea_orm::{
+            ColumnTrait, EntityTrait, QueryFilter, Condition,
+            sea_query::Expr, DatabaseConnection
+        };
 
-        // Test count query (simulate the count logic from list_users)
-        let count_result = sqlx::query("SELECT COUNT(*) as count FROM users")
-            .fetch_one(&pool)
+        // Fully qualified column type alias to disambiguate `Column`
+        type UserColumn = <UserEntity as EntityTrait>::Column;
+
+        let db: DatabaseConnection = setup_test_db().await;
+
+        // Seed 4 users
+        create_test_users(&db).await;
+
+        // Count total users
+        let total = UserEntity::find().count(&db).await.unwrap();
+        assert_eq!(total, 4);
+
+        // Count users with email like '%example.com%'
+        let email_like = UserEntity::find()
+            .filter(Expr::col(UserColumn::Email).like("%example.com%"))
+            .count(&db)
             .await
             .unwrap();
-        
-        let total: i64 = count_result.try_get("count").unwrap();
-        assert_eq!(total, 4); // We created 4 users
+        assert_eq!(email_like, 2); // alice@example.com and charlie@example.com
 
-        // Test email filter query
-        let email_filter_result = sqlx::query("SELECT COUNT(*) as count FROM users WHERE LOWER(email) LIKE LOWER(?)")
-            .bind("%example.com%")
-            .fetch_one(&pool)
+        // Count users where admin = true
+        let admin_count = UserEntity::find()
+            .filter(UserColumn::Admin.eq(true))
+            .count(&db)
             .await
             .unwrap();
-        
-        let email_count: i64 = email_filter_result.try_get("count").unwrap();
-        assert_eq!(email_count, 2); // alice@example.com and charlie@example.com
+        assert_eq!(admin_count, 2); // bob and diana
 
-        // Test admin filter query
-        let admin_filter_result = sqlx::query("SELECT COUNT(*) as count FROM users WHERE admin = ?")
-            .bind("1")
-            .fetch_one(&pool)
+        // Count users where student_number or email contains 'u1'
+        let combined = UserEntity::find()
+            .filter(
+                Condition::any()
+                    .add(Expr::col(UserColumn::Email).like("%u1%"))
+                    .add(Expr::col(UserColumn::StudentNumber).like("%u1%")),
+            )
+            .count(&db)
             .await
             .unwrap();
-        
-        let admin_count: i64 = admin_filter_result.try_get("count").unwrap();
-        assert_eq!(admin_count, 2); // bob and diana are admins
-
-        // Test combined query filter (email OR student_number)
-        let combined_filter_result = sqlx::query("SELECT COUNT(*) as count FROM users WHERE (LOWER(email) LIKE LOWER(?) OR LOWER(student_number) LIKE LOWER(?))")
-            .bind("%u1%")
-            .bind("%u1%")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        
-        let combined_count: i64 = combined_filter_result.try_get("count").unwrap();
-        assert!(combined_count >= 2); // Should match users with "u1" in student number or email
-
-        pool.close().await;
-        delete_database("test_user_filtering.db");
+        assert!(combined >= 2);
     }
 
     #[tokio::test]
     async fn test_ordering_queries() {
-        let pool = create_test_db(Some("test_user_ordering.db")).await;
-        
-        // Create test users
-        let _users = create_test_users(&pool).await;
+        use db::{test_utils::setup_test_db, models::user::Entity as UserEntity};
+        use sea_orm::{EntityTrait, QueryOrder, DatabaseConnection};
+
+        type UserColumn = <UserEntity as EntityTrait>::Column;
+
+        let db: DatabaseConnection = setup_test_db().await;
+
+        // Seed users
+        create_test_users(&db).await;
 
         // Test ordering by email ascending
-        let ordered_users = sqlx::query_as::<_, User>("SELECT * FROM users ORDER BY email ASC")
-            .fetch_all(&pool)
+        let ordered_users = UserEntity::find()
+            .order_by_asc(UserColumn::Email)
+            .all(&db)
             .await
             .unwrap();
 
-        // Verify ordering
         assert!(ordered_users.len() >= 4);
         for i in 1..ordered_users.len() {
-            assert!(ordered_users[i-1].email <= ordered_users[i].email);
+            assert!(ordered_users[i - 1].email <= ordered_users[i].email);
         }
 
         // Test ordering by created_at descending
-        let desc_users = sqlx::query_as::<_, User>("SELECT * FROM users ORDER BY created_at DESC")
-            .fetch_all(&pool)
+        let desc_users = UserEntity::find()
+            .order_by_desc(UserColumn::CreatedAt)
+            .all(&db)
             .await
             .unwrap();
 
         assert!(desc_users.len() >= 4);
-        // Note: We can't easily test timestamp ordering without more control over creation times
-
-        pool.close().await;
-        delete_database("test_user_ordering.db");
+        // Optionally: Add stricter timestamp checks if needed
     }
 
     #[tokio::test]
     async fn test_pagination_queries() {
-        let pool = create_test_db(Some("test_user_pagination.db")).await;
-        
-        // Create test users
-        let _users = create_test_users(&pool).await;
+        use db::{test_utils::setup_test_db, models::user::Entity as UserEntity};
+        use sea_orm::{EntityTrait, QueryOrder, PaginatorTrait, DatabaseConnection};
 
-        // Test LIMIT and OFFSET
-        let page1_users = sqlx::query_as::<_, User>("SELECT * FROM users ORDER BY id ASC LIMIT ? OFFSET ?")
-            .bind(2_i64)
-            .bind(0_i64)
-            .fetch_all(&pool)
+        type UserColumn = <UserEntity as EntityTrait>::Column;
+
+        let db: DatabaseConnection = setup_test_db().await;
+
+        // Seed users
+        create_test_users(&db).await;
+
+        // Page size
+        let per_page = 2;
+
+        // Page 1
+        let page1 = UserEntity::find()
+            .order_by_asc(UserColumn::Id)
+            .paginate(&db, per_page)
+            .fetch_page(0)
             .await
             .unwrap();
 
-        let page2_users = sqlx::query_as::<_, User>("SELECT * FROM users ORDER BY id ASC LIMIT ? OFFSET ?")
-            .bind(2_i64)
-            .bind(2_i64)
-            .fetch_all(&pool)
+        // Page 2
+        let page2 = UserEntity::find()
+            .order_by_asc(UserColumn::Id)
+            .paginate(&db, per_page)
+            .fetch_page(1)
             .await
             .unwrap();
 
-        assert_eq!(page1_users.len(), 2);
-        assert_eq!(page2_users.len(), 2);
-        
-        // Ensure no overlap
-        let page1_ids: Vec<i64> = page1_users.iter().map(|u| u.id).collect();
-        let page2_ids: Vec<i64> = page2_users.iter().map(|u| u.id).collect();
-        
-        for id1 in &page1_ids {
-            assert!(!page2_ids.contains(id1), "Pages should not overlap");
+        assert_eq!(page1.len(), 2);
+        assert_eq!(page2.len(), 2);
+
+        let page1_ids: Vec<i64> = page1.iter().map(|u| u.id).collect();
+        let page2_ids: Vec<i64> = page2.iter().map(|u| u.id).collect();
+
+        for id in &page1_ids {
+            assert!(!page2_ids.contains(id), "Pages should not overlap");
         }
-
-        pool.close().await;
-        delete_database("test_user_pagination.db");
     }
 }

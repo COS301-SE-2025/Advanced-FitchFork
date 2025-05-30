@@ -1,14 +1,30 @@
-use axum::http::StatusCode;
-use axum::Json;
-use axum::response::IntoResponse;
-use db::pool;
-use crate::auth::AuthUser;
-use crate::response::ApiResponse;
-use crate::routes::modules::post::ModifyUsersModuleRequest;
+use axum::{
+    extract::Path,
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
+
+use sea_orm::{ColumnTrait, Condition, EntityTrait, ModelTrait, QueryFilter};
+
+use crate::{
+    auth::AuthUser,
+    response::ApiResponse,
+    routes::modules::post::ModifyUsersModuleRequest,
+};
+
+use db::{
+    connect,
+    models::{
+        module,
+        user,
+        user_module_role::{self, Column as RoleCol, Role},
+    },
+};
 
 /// DELETE /api/modules/:module_id
 ///
-/// Permanently deletes a module by ID.  
+/// Permanently deletes a module by ID, including all its assignments and assignment files.  
 /// Only accessible by admin users.
 ///
 /// ### Responses
@@ -39,37 +55,36 @@ use crate::routes::modules::post::ModifyUsersModuleRequest;
 ///   "message": "Module not found"
 /// }
 /// ```
-pub async fn delete_module(
-    axum::extract::Path(module_id): axum::extract::Path<i64>,
-) -> impl axum::response::IntoResponse {
-    let pool = db::pool::get();
+pub async fn delete_module(Path(module_id): Path<i32>) -> impl IntoResponse {
+    let db = connect().await;
 
-    let module_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)"
-    )
-    .bind(module_id)
-    .fetch_one(pool)
-    .await
-    .unwrap_or(false);
-
-    if !module_exists {
-        return (
+    match module::Entity::find()
+        .filter(module::Column::Id.eq(module_id))
+        .one(&db)
+        .await
+    {
+        Ok(Some(m)) => {
+            match m.delete(&db).await {
+                Ok(_) => (
+                    StatusCode::OK,
+                    Json(ApiResponse::<()>::success((), "Module deleted successfully")),
+                ),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error(format!("Failed to delete module: {}", e))),
+                ),
+            }
+        }
+        Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Module not found")),
-        );
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+        ),
     }
-
-    let _ = sqlx::query("DELETE FROM modules WHERE id = ?")
-        .bind(module_id)
-        .execute(pool)
-        .await;
-
-    (
-        StatusCode::OK,
-        Json(ApiResponse::<()>::success((), "Module deleted successfully")),
-    )
 }
-
 
 /// DELETE /api/modules/:module_id/lecturers
 ///
@@ -134,7 +149,7 @@ pub async fn delete_module(
 /// }
 /// ```
 pub async fn remove_lecturers(
-    axum::extract::Path(module_id): axum::extract::Path<i64>,
+    Path(module_id): Path<i64>,
     AuthUser(claims): AuthUser,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
@@ -152,15 +167,14 @@ pub async fn remove_lecturers(
         );
     }
 
-    let pool = pool::get();
+    let db = connect().await;
 
-    let module_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)"
-    )
-    .bind(module_id)
-    .fetch_one(pool)
-    .await
-    .unwrap_or(false);
+    // Verify module exists
+    let module_exists = module::Entity::find_by_id(module_id)
+        .one(&db)
+        .await
+        .map(|opt| opt.is_some())
+        .unwrap_or(false);
 
     if !module_exists {
         return (
@@ -172,13 +186,12 @@ pub async fn remove_lecturers(
     let mut not_assigned = Vec::new();
 
     for &user_id in &body.user_ids {
-        let user_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)"
-        )
-        .bind(user_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
+        // Verify user exists
+        let user_exists = user::Entity::find_by_id(user_id)
+            .one(&db)
+            .await
+            .map(|opt| opt.is_some())
+            .unwrap_or(false);
 
         if !user_exists {
             return (
@@ -187,25 +200,21 @@ pub async fn remove_lecturers(
             );
         }
 
-        let is_assigned: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM module_lecturers WHERE module_id = ? AND user_id = ?)"
-        )
-        .bind(module_id)
-        .bind(user_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
-
-        if is_assigned {
-            let _ = sqlx::query(
-                "DELETE FROM module_lecturers WHERE module_id = ? AND user_id = ?"
-            )
-            .bind(module_id)
-            .bind(user_id)
-            .execute(pool)
+        // Attempt to delete the lecturer role for the user from the module
+        let deletion = user_module_role::Model::remove_user_from_module(&db, user_id, module_id)
             .await;
-        } else {
-            not_assigned.push(user_id);
+
+        match deletion {
+            Ok(res) if res.rows_affected == 0 => {
+                not_assigned.push(user_id);
+            }
+            Ok(_) => {}
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Error while removing lecturer role")),
+                );
+            }
         }
     }
 
@@ -285,7 +294,7 @@ pub async fn remove_lecturers(
 /// }
 /// ```
 pub async fn remove_students(
-    axum::extract::Path(module_id): axum::extract::Path<i64>,
+    Path(module_id): Path<i32>,
     AuthUser(claims): AuthUser,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
@@ -303,17 +312,14 @@ pub async fn remove_students(
         );
     }
 
-    let pool = pool::get();
+    let db = connect().await;
 
-    let module_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)"
-    )
-    .bind(module_id)
-    .fetch_one(pool)
-    .await
-    .unwrap_or(false);
+    // Check if module exists
+    let module_exists = module::Entity::find_by_id(module_id)
+        .one(&db)
+        .await;
 
-    if !module_exists {
+    if let Ok(None) | Err(_) = module_exists {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Module not found")),
@@ -323,25 +329,40 @@ pub async fn remove_students(
     let mut not_assigned = Vec::new();
 
     for &user_id in &body.user_ids {
-        let assigned: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM module_students WHERE module_id = ? AND user_id = ?)"
-        )
-        .bind(module_id)
-        .bind(user_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
-
-        if assigned {
-            let _ = sqlx::query(
-                "DELETE FROM module_students WHERE module_id = ? AND user_id = ?"
-            )
-            .bind(module_id)
-            .bind(user_id)
-            .execute(pool)
+        // Ensure user exists
+        let user_exists = user::Entity::find_by_id(user_id)
+            .one(&db)
             .await;
-        } else {
-            not_assigned.push(user_id);
+
+        if let Ok(None) | Err(_) = user_exists {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", user_id))),
+            );
+        }
+
+        // Check if user is a student for the module
+        let role_entry = user_module_role::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(RoleCol::UserId.eq(user_id))
+                    .add(RoleCol::ModuleId.eq(module_id))
+                    .add(RoleCol::Role.eq(Role::Student)),
+            )
+            .one(&db)
+            .await;
+
+        match role_entry {
+            Ok(Some(role)) => {
+                let _ = role.delete(&db).await;
+            }
+            Ok(None) => not_assigned.push(user_id),
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Database error during role check")),
+                );
+            }
         }
     }
 
@@ -421,10 +442,10 @@ pub async fn remove_students(
 /// }
 /// ```
 pub async fn remove_tutors(
-    axum::extract::Path(module_id): axum::extract::Path<i64>,
-    crate::auth::claims::AuthUser(claims): crate::auth::claims::AuthUser,
-    axum::Json(body): axum::Json<crate::routes::modules::post::ModifyUsersModuleRequest>,
-) -> impl axum::response::IntoResponse {
+    Path(module_id): Path<i32>,
+    AuthUser(claims): AuthUser,
+    Json(body): Json<ModifyUsersModuleRequest>,
+) -> impl IntoResponse {
     if !claims.admin {
         return (
             StatusCode::FORBIDDEN,
@@ -439,17 +460,13 @@ pub async fn remove_tutors(
         );
     }
 
-    let pool = db::pool::get();
+    let db = connect().await;
 
-    let module_exists = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)"
-    )
-    .bind(module_id)
-    .fetch_one(pool)
-    .await
-    .unwrap_or(false);
+    let module_exists = module::Entity::find_by_id(module_id)
+        .one(&db)
+        .await;
 
-    if !module_exists {
+    if let Ok(None) | Err(_) = module_exists {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Module not found")),
@@ -459,25 +476,43 @@ pub async fn remove_tutors(
     let mut not_assigned = Vec::new();
 
     for &user_id in &body.user_ids {
-        let assigned = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM module_tutors WHERE module_id = ? AND user_id = ?)"
-        )
-        .bind(module_id)
-        .bind(user_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
-
-        if assigned {
-            let _ = sqlx::query(
-                "DELETE FROM module_tutors WHERE module_id = ? AND user_id = ?"
-            )
-            .bind(module_id)
-            .bind(user_id)
-            .execute(pool)
+        let user_exists = user::Entity::find_by_id(user_id)
+            .one(&db)
             .await;
-        } else {
-            not_assigned.push(user_id);
+
+        if let Ok(None) | Err(_) = user_exists {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", user_id))),
+            );
+        }
+
+        let role_entry = user_module_role::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(RoleCol::UserId.eq(user_id))
+                    .add(RoleCol::ModuleId.eq(module_id))
+                    .add(RoleCol::Role.eq(Role::Tutor)),
+            )
+            .one(&db)
+            .await;
+
+        match role_entry {
+            Ok(Some(model)) => {
+                if model.delete(&db).await.is_err() {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<()>::error("Failed to remove tutor role")),
+                    );
+                }
+            }
+            Ok(None) => not_assigned.push(user_id),
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Database error during role check")),
+                );
+            }
         }
     }
 
