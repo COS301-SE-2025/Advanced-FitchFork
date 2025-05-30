@@ -14,12 +14,6 @@ pub struct Model {
     /// Foreign key to the user who submitted.
     pub user_id: i64,
 
-    /// Grade awarded to this submission.
-    pub grade: i32,
-
-    /// Feedback comments for the submission.
-    pub feedback: String,
-
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

@@ -1,12 +1,12 @@
-// entities/assignment_file.rs
+// models/assignment_file.rs
 
+use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::ActiveValue::Set;
-use chrono::{DateTime, Utc};
 use std::env;
 use std::fs;
-use std::path::{PathBuf};
-use strum_macros::{EnumIter, EnumString, Display};
+use std::path::PathBuf;
+use strum_macros::{Display, EnumIter, EnumString};
 
 /// Represents a file associated with an assignment, such as a spec, main file, memo, or submission.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -34,7 +34,11 @@ pub struct Model {
 /// Enum representing the type/category of an assignment file.
 #[derive(Debug, Clone, PartialEq, EnumIter, EnumString, Display, DeriveActiveEnum)]
 #[strum(ascii_case_insensitive)]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "assignment_file_type")]
+#[sea_orm(
+    rs_type = "String",
+    db_type = "Enum",
+    enum_name = "assignment_file_type"
+)]
 pub enum FileType {
     #[strum(serialize = "spec")]
     #[sea_orm(string_value = "spec")]
@@ -49,7 +53,6 @@ pub enum FileType {
     #[sea_orm(string_value = "submission")]
     Submission,
 }
-
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
@@ -162,12 +165,12 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::assignment::AssignmentType;
     use crate::test_utils::setup_test_db;
-    use tempfile::TempDir;
-    use std::env;
     use chrono::Utc;
     use sea_orm::Set;
-    use crate::models::assignment::AssignmentType;
+    use std::env;
+    use tempfile::TempDir;
 
     fn fake_bytes() -> Vec<u8> {
         vec![0x50, 0x4B, 0x03, 0x04] // ZIP file signature
@@ -213,8 +216,8 @@ mod tests {
         let filename = "test_file.zip";
         let saved = Model::save_file(
             &db,
-            1,             // assignment_id
-            1,             // module_id
+            1, // assignment_id
+            1, // module_id
             FileType::Spec,
             filename,
             &content,
