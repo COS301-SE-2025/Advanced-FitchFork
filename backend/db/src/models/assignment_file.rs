@@ -166,15 +166,34 @@ impl Model {
         fs::remove_file(full_path)
     }
 
-    /// Creates memo output by running the memo and main files with the code runner.
-    /// Checks if memo and main exist, returns error if not.
-    /// Saves output to a file and returns the saved Model.
+    /// Creates the memo output for an assignment by executing both the memo file and the main file.
+    ///
+    /// This function does the following:
+    /// - Looks up the memo and main files for the given assignment ID.
+    /// - Verifies that both files exist, or returns an error.
+    /// - Executes the memo and main zip files using the code runner.
+    /// - Stores the resulting output as a `.txt` file in a memo output directory.
+    /// - Persists the generated output file as a `FileType::MemoOutput` record in the database.
+    ///
+    /// # Arguments
+    /// - `db`: Database connection.
+    /// - `assignment_id`: The ID of the assignment for which to generate memo output.
+    /// - `lang`: Programming language to use when executing the files (e.g., "java").
+    /// - `exec_config`: Optional execution configuration (e.g., time limit, memory, cores). If `None`, the default is used.
+    ///
+    /// # Returns
+    /// Returns the saved output `Model` on success or an error `String` on failure.
+    ///
+    /// # Errors
+    /// Returns errors if:
+    /// - The memo or main file cannot be found.
+    /// - There are database or filesystem errors.
+    /// - The code runner fails during execution.
     pub async fn create_memo_output(
         db: &DatabaseConnection,
-        module_id: i64,
         assignment_id: i64,
         lang: &str,
-        exec_config: ExecutionConfig,
+        exec_config: Option<ExecutionConfig>, //None uses default
     ) -> Result<Model, String> {
         use sea_orm::{EntityTrait, QueryFilter};
         // Find memo file
@@ -194,6 +213,15 @@ impl Model {
             .await
             .map_err(|e| format!("DB error finding main: {}", e))?
             .ok_or_else(|| "Main file not found".to_string())?;
+
+        //Get assignment
+        let assignment = super::assignment::Entity::find_by_id(assignment_id)
+            .one(db)
+            .await
+            .map_err(|e| format!("DB error finding assignment: {}", e))?
+            .ok_or_else(|| "Assignment not found".to_string())?;
+
+        let module_id = assignment.module_id;
 
         // Paths to the files
         let memo_path = Self::storage_root().join(&memo.path);
@@ -228,27 +256,50 @@ impl Model {
         .map_err(|e| format!("Failed to save output file record: {}", e))
     }
 
+    /// Creates the output of a student's submission by executing their submission file with the assignment's main file.
+    ///
+    /// This function does the following:
+    /// - Retrieves the submission file using the provided submission file ID.
+    /// - Looks up the associated assignment and its main file.
+    /// - Verifies that both the submission and main files exist, or returns an error.
+    /// - Executes both zip files using the code runner.
+    /// - Stores the resulting output as a `.txt` file in a directory under `submission_outputs/<submission_file_id>/`.
+    /// - Persists the output file as a `FileType::SubmissionOutput` record in the database.
+    ///
+    /// # Arguments
+    /// - `db`: Database connection.
+    /// - `submission_file_id`: ID of the uploaded submission file.
+    /// - `lang`: Programming language to use when executing the files (e.g., "java").
+    /// - `exec_config`: Optional execution configuration. Uses default values if `None`.
+    ///
+    /// # Returns
+    /// Returns the saved output `Model` on success or an error `String` on failure.
+    ///
+    /// # Errors
+    /// Returns errors if:
+    /// - The submission, assignment, or main file cannot be found.
+    /// - Filesystem or database operations fail.
+    /// - The code runner returns an execution error.
     pub async fn create_submission_output(
         db: &DatabaseConnection,
         submission_file_id: i64,
         lang: &str,
-        exec_config: ExecutionConfig,
+        exec_config: Option<ExecutionConfig>, //None uses default
     ) -> Result<Model, String> {
         use sea_orm::{EntityTrait, QueryFilter};
         // Find submission file
-        let submission_file = super::submission_file::Entity::find_by_id(submission_file_id)
+        let submission_file = super::assignment_submission::Entity::find_by_id(submission_file_id)
             .one(db)
             .await
             .map_err(|e| format!("DB error finding submission file: {}", e))?
             .ok_or_else(|| "Submission file not found".to_string())?;
 
         // Find submission to get assignment_id and module_id
-        let submission =
-            super::assignment_submission::Entity::find_by_id(submission_file.submission_id)
-                .one(db)
-                .await
-                .map_err(|e| format!("DB error finding submission: {}", e))?
-                .ok_or_else(|| "Submission not found".to_string())?;
+        let submission = super::assignment_submission::Entity::find_by_id(submission_file.id)
+            .one(db)
+            .await
+            .map_err(|e| format!("DB error finding submission: {}", e))?
+            .ok_or_else(|| "Submission not found".to_string())?;
 
         let assignment = super::assignment::Entity::find_by_id(submission.assignment_id)
             .one(db)
@@ -270,7 +321,7 @@ impl Model {
 
         // Paths to the files
         let submission_path =
-            super::submission_file::Model::storage_root().join(&submission_file.path);
+            super::assignment_submission::Model::storage_root().join(&submission_file.path);
         let main_path = Self::storage_root().join(&main.path);
 
         // Run the code using the existing run_zip_files API (async)
@@ -608,9 +659,12 @@ mod tests {
         assert_eq!(err, "Main file not found");
     }
 
+    //TODO - move Integration tests to their own file (all tests beneath this line)
+    //Technically Integration tests but you can only run them seperately
+
     //TODO - once again I have to ignore this test since github actions isn't set up for docker containers
     #[tokio::test]
-    // #[ignore]
+    #[ignore]
     async fn test_create_memo_output_with_real_java_files() -> Result<(), Box<dyn std::error::Error>>
     {
         use std::io::Write;
@@ -622,6 +676,30 @@ mod tests {
 
         let db = setup_test_db().await;
 
+        // Insert dummy module not used
+        let _module1 = crate::models::module::ActiveModel {
+            code: Set("COS713".to_string()),
+            year: Set(1635),
+            description: Set(Some("asg".to_string())),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await?;
+
+        // Insert dummy module not used
+        let _module2 = crate::models::module::ActiveModel {
+            code: Set("COS669".to_string()),
+            year: Set(9362),
+            description: Set(Some("smtelse".to_string())),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await?;
+
         // Insert dummy module
         let module = crate::models::module::ActiveModel {
             code: Set("COS301".to_string()),
@@ -632,6 +710,18 @@ mod tests {
             ..Default::default()
         }
         .insert(&db)
+        .await?;
+
+        // Insert dummy assignment not used
+        let _assignment1 = crate::models::assignment::Model::create(
+            &db,
+            module.id,
+            "smt",
+            None,
+            crate::models::assignment::AssignmentType::Practical,
+            Utc::now(),
+            Utc::now(),
+        )
         .await?;
 
         // Insert dummy assignment
@@ -731,13 +821,9 @@ mod tests {
         )
         .await?;
 
-        // Execute create_memo_output (calls actual run_zip_files, no mocking)
-        let exec_config = ExecutionConfig::default();
-
-        let output_model =
-            Model::create_memo_output(&db, module.id, assignment.id, "java", exec_config)
-                .await
-                .expect("create_memo_output failed");
+        let output_model = Model::create_memo_output(&db, assignment.id, "java", None)
+            .await
+            .expect("create_memo_output failed");
 
         // Verify output file exists on disk physically
         let output_path = Model::storage_root().join(&output_model.path);
@@ -750,6 +836,210 @@ mod tests {
         println!("Output file path: {}", output_path.display());
 
         // Optionally print content for manual verification
+        let content = std::fs::read_to_string(output_path)?;
+        println!("Output content:\n{}", content);
+
+        Ok(())
+    }
+
+    //TODO - once again I have to ignore this test since github actions isn't set up for docker containers
+    #[tokio::test]
+    #[ignore]
+    async fn test_create_submission_output_with_real_java_files(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::io::Write;
+        use zip::write::FileOptions;
+
+        let temp_dir = TempDir::new()?;
+        let storage_path = temp_dir.path().to_path_buf();
+        env::set_var("ASSIGNMENT_STORAGE_ROOT", &storage_path);
+
+        let db = setup_test_db().await;
+
+        // Insert dummy module thats not used to check file path
+        let _modulenotused = crate::models::module::ActiveModel {
+            code: Set("COS638".to_string()),
+            year: Set(1923),
+            description: Set(Some("asfkahs".to_string())),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await?;
+
+        // Insert dummy module
+        let module = crate::models::module::ActiveModel {
+            code: Set("COS5284".to_string()),
+            year: Set(1638),
+            description: Set(Some("faisyvs".to_string())),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await?;
+
+        // Insert dummy assignment not used
+        let _assignment1 = crate::models::assignment::Model::create(
+            &db,
+            module.id,
+            "smt",
+            None,
+            crate::models::assignment::AssignmentType::Practical,
+            Utc::now(),
+            Utc::now(),
+        )
+        .await?;
+
+        // Insert dummy assignment not used
+        let _assignment2 = crate::models::assignment::Model::create(
+            &db,
+            module.id,
+            "smtelse",
+            None,
+            crate::models::assignment::AssignmentType::Practical,
+            Utc::now(),
+            Utc::now(),
+        )
+        .await?;
+
+        // Insert dummy assignment
+        let assignment = crate::models::assignment::Model::create(
+            &db,
+            module.id,
+            "aifhkashvgkas",
+            None,
+            crate::models::assignment::AssignmentType::Practical,
+            Utc::now(),
+            Utc::now(),
+        )
+        .await?;
+
+        // Create Java source contents
+        let main_java = r#"
+        public class Main {
+            public static void main(String[] args) {
+                HelperOne.greet();
+                HelperTwo.farewell();
+            }
+        }
+    "#;
+
+        let helper_one_java = r#"
+        public class HelperOne {
+            public static void greet() {
+                System.out.println("Hello from HelperOne");
+            }
+        }
+    "#;
+
+        let helper_two_java = r#"
+        public class HelperTwo {
+            public static void farewell() {
+                System.out.println("Goodbye from HelperTwo");
+            }
+        }
+    "#;
+
+        // Helper function to write a zip
+        fn create_zip_from_files(
+            zip_path: &std::path::Path,
+            files: Vec<(&str, &str)>,
+        ) -> std::io::Result<()> {
+            let zip_file = std::fs::File::create(zip_path)?;
+            let mut zip = zip::ZipWriter::new(zip_file);
+
+            let options = FileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored)
+                .unix_permissions(0o644);
+
+            for (name, content) in files {
+                zip.start_file(name, options)?;
+                zip.write_all(content.as_bytes())?;
+            }
+
+            zip.finish()?;
+            Ok(())
+        }
+
+        // Write main.zip
+        let main_zip_path = storage_path.join("main.zip");
+        create_zip_from_files(&main_zip_path, vec![("Main.java", main_java)])?;
+
+        // Write submission.zip
+        let submission_zip_path = storage_path.join("submission.zip");
+        create_zip_from_files(
+            &submission_zip_path,
+            vec![
+                ("HelperOne.java", helper_one_java),
+                ("HelperTwo.java", helper_two_java),
+            ],
+        )?;
+
+        // Save main file as FileType::Main in DB
+        let main_bytes = std::fs::read(&main_zip_path)?;
+        let _main_model = Model::save_file(
+            &db,
+            assignment.id,
+            module.id,
+            FileType::Main,
+            "main.zip",
+            &main_bytes,
+        )
+        .await?;
+
+        // Manually create submission file record in assignment_submissions
+        let submission_bytes = std::fs::read(&submission_zip_path)?;
+        let submission_path = format!(
+            "modules/{}/assignments/{}/submissions/submission.zip",
+            module.id, assignment.id
+        );
+        let full_submission_path = storage_path.join(&submission_path);
+
+        std::fs::create_dir_all(full_submission_path.parent().unwrap())?;
+        std::fs::write(&full_submission_path, &submission_bytes)?;
+
+        // Insert dummy user
+        let user = crate::models::user::ActiveModel {
+            student_number: Set("u12345678".to_string()),
+            email: Set("student@example.com".to_string()),
+            password_hash: Set("hashed_password".to_string()),
+            admin: Set(false),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await?;
+
+        let submission = crate::models::assignment_submission::ActiveModel {
+            assignment_id: Set(assignment.id),
+            user_id: Set(user.id), // dummy user ID
+            filename: Set("submission.zip".to_string()),
+            path: Set(submission_path),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await?;
+
+        let output_model = Model::create_submission_output(&db, submission.id, "java", None)
+            .await
+            .expect("create_submission_output failed");
+
+        // Check output file exists
+        let output_path = Model::storage_root().join(&output_model.path);
+        assert!(
+            output_path.exists(),
+            "Output file does not exist: {}",
+            output_path.display()
+        );
+
+        println!("Output file path: {}", output_path.display());
+
+        // Optionally verify content
         let content = std::fs::read_to_string(output_path)?;
         println!("Output content:\n{}", content);
 

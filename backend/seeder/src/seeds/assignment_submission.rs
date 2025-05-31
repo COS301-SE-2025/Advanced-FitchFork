@@ -1,13 +1,13 @@
 use crate::seed::Seeder;
-use chrono::Utc;
-use db::models::{assignment, assignment_submission, user};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+use db::models::{assignment, assignment_submission::Model as AssignmentSubmissionModel, user};
+use sea_orm::{DatabaseConnection, EntityTrait};
 
 pub struct AssignmentSubmissionSeeder;
 
 #[async_trait::async_trait]
 impl Seeder for AssignmentSubmissionSeeder {
     async fn seed(&self, db: &DatabaseConnection) {
+        // Fetch all assignments and users
         let assignments = assignment::Entity::find()
             .all(db)
             .await
@@ -22,17 +22,35 @@ impl Seeder for AssignmentSubmissionSeeder {
             panic!("No users found — at least one user must exist to seed assignment_submissions");
         }
 
-        for a in &assignments {
-            for u in &users {
-                let submission = assignment_submission::ActiveModel {
-                    assignment_id: Set(a.id),
-                    user_id: Set(u.id),
-                    created_at: Set(Utc::now()),
-                    updated_at: Set(Utc::now()),
-                    ..Default::default()
-                };
+        for assignment in &assignments {
+            for user in &users {
+                // Dummy original filename and content for seeding
+                let dummy_filename = "submission.txt";
+                let dummy_content = format!(
+                    "Dummy submission content for assignment {} by user {}",
+                    assignment.id, user.id
+                );
 
-                let _ = submission.insert(db).await;
+                // Use the Model's save_file method to create DB entry and write file
+                match AssignmentSubmissionModel::save_file(
+                    db,
+                    assignment.id,
+                    user.id,
+                    dummy_filename,
+                    dummy_content.as_bytes(),
+                )
+                .await
+                {
+                    Ok(_file) => {
+                        // Optionally log or handle success
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Failed to save assignment_submission file for assignment {} user {}: {}",
+                            assignment.id, user.id, e
+                        );
+                    }
+                }
             }
         }
     }

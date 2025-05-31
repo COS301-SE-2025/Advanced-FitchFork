@@ -75,8 +75,9 @@ fn get_language_config(lang: &str) -> Option<LanguageConfig> {
 pub async fn run_zip_files(
     zip_paths: Vec<PathBuf>,
     lang: &str,
-    config: ExecutionConfig,
+    config: Option<ExecutionConfig>,
 ) -> Result<String, String> {
+    let config = config.unwrap_or_default();
     match get_language_config(lang) {
         Some(lang_cfg) => match run_all_zips(zip_paths, &lang_cfg, &config).await {
             Ok(output) => Ok(output),
@@ -209,9 +210,9 @@ fn extract_zip_contents(
 
     Ok(())
 }
-//TODO - Fix github actions
+//TODO - Fix github actions to be able to run docker containers with all the languages
 // The problem with these tests is that they fail with github actions
-// That is why they are commented out
+// That is why they are ignored
 
 #[cfg(test)]
 mod tests {
