@@ -17,7 +17,7 @@ use axum::{
     routing::{post, get},
 };
 
-use post::{register, login, request_password_reset, verify_reset_token};
+use post::{register, login, request_password_reset, verify_reset_token, reset_password};
 use get::get_me;
 
 /// Builds the `/auth` route group, mapping HTTP methods to handlers.
@@ -26,6 +26,7 @@ use get::get_me;
 /// - `POST /auth/login` → `login`
 /// - `POST /auth/request-password-reset` → `request_password_reset`
 /// - `POST /auth/verify-reset-token` → `verify_reset_token`
+/// - `POST /auth/reset-password` → `reset_password`
 /// - `GET /auth/me` → `get_me`
 ///
 /// # Returns
@@ -36,5 +37,6 @@ pub fn auth_routes() -> Router {
         .route("/login", post(login))
         .route("/request-password-reset", post(request_password_reset))
         .route("/verify-reset-token", post(verify_reset_token))
+        .route("/reset-password", post(reset_password))
         .route("/me", get(get_me))
 }

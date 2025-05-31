@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set};
 
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -513,6 +513,118 @@ pub async fn verify_reset_token(Json(req): Json<VerifyResetTokenRequest>) -> imp
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<VerifyResetTokenResponse>::error(format!("Database error: {}", e))),
+        ),
+    }
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct ResetPasswordRequest {
+    #[validate(length(min = 1, message = "Token is required"))]
+    pub token: String,
+
+    #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
+    pub new_password: String,
+}
+
+/// POST /auth/reset-password
+///
+/// Reset a user's password using a valid reset token.
+///
+/// ### Request Body
+/// ```json
+/// {
+///   "token": "abcdef123456",
+///   "new_password": "SecureP@ssw0rd!"
+/// }
+/// ```
+///
+/// ### Responses
+///
+/// - `200 OK`  
+/// ```json
+/// {
+///   "success": true,
+///   "data": null,
+///   "message": "Password has been reset successfully."
+/// }
+/// ```
+///
+/// - `400 Bad Request` (validation failure)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Password must be at least 8 characters"
+/// }
+/// ```
+///
+/// - `400 Bad Request` (invalid token)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Reset failed. The token may be invalid or expired."
+/// }
+/// ```
+pub async fn reset_password(Json(req): Json<ResetPasswordRequest>) -> impl IntoResponse {
+    if let Err(validation_errors) = req.validate() {
+        let error_message = common::format_validation_errors(&validation_errors);
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(error_message)),
+        );
+    }
+
+    let db = connect().await;
+
+    match PasswordResetTokenModel::find_valid_token(&db, &req.token).await {
+        Ok(Some(token)) => {
+            match user::Entity::find_by_id(token.user_id).one(&db).await {
+                Ok(Some(user)) => {
+                    let user_email = user.email.clone();
+                    
+                    let mut active_model: user::ActiveModel = user.into();
+                    active_model.password_hash = Set(UserModel::hash_password(&req.new_password));
+                    
+                    match active_model.update(&db).await {
+                        Ok(_) => {
+                            if let Err(e) = token.mark_as_used(&db).await {
+                                eprintln!("Failed to mark token as used: {}", e);
+                            }
+
+                            if let Err(e) = EmailService::send_password_changed_email(&user_email).await {
+                                eprintln!("Failed to send password change confirmation email: {}", e);
+                            }
+
+                            (
+                                StatusCode::OK,
+                                Json(ApiResponse::success(
+                                    (),
+                                    "Password has been reset successfully.",
+                                )),
+                            )
+                        }
+                        Err(e) => (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+                        ),
+                    }
+                }
+                Ok(None) => (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<()>::error("Reset failed. The token may be invalid or expired.")),
+                ),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+                ),
+            }
+        }
+        Ok(None) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error("Reset failed. The token may be invalid or expired.")),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
         ),
     }
 }
