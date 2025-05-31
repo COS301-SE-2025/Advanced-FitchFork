@@ -1,7 +1,4 @@
-//!Okay this is just an example I came up with. It only runs java files and has not been extensively tested
-//! This is just a proof of concept which addresses as many security issues which I discovered in a few hours
-
-use std::{fs::File, io::Cursor, process::Stdio};
+use std::{fs::File, io::Cursor, path::PathBuf, process::Stdio};
 use tempfile::tempdir;
 use tokio::{
     process::Command,
@@ -9,31 +6,25 @@ use tokio::{
 };
 use zip::ZipArchive;
 
-/// Configuration for supported programming languages.
-///
-/// Contains language name, file extensions, Docker image to use,
-/// and the command to compile/run code inside the container.
-pub struct LanguageConfig {
-    /// Human-readable language name.
-    pub name: &'static str,
-    /// Valid file extensions for source files of this language.
-    pub file_extensions: &'static [&'static str],
-    /// Docker image name for running the language environment.
-    pub docker_image: &'static str,
-    /// Shell command to compile and/or run code inside the container.
-    pub run_command: &'static str,
+/// Configuration for runtime environment limits (used for Docker container).
+pub struct RunnerConfig {
+    pub timeout_secs: u64,          // Max execution time
+    pub memory_limit: &'static str, // Max memory (e.g., "128m")
+    pub cpu_limit: &'static str,    // CPU cores (e.g., "1.0")
+    pub max_file_size: u64,         // Max total size of decompressed files (zip bomb protection)
+    pub pids_limit: u32,            // Max number of processes inside container
 }
 
-/// Returns the configuration for a given language code.
-///
-/// # Arguments
-///
-/// * `lang` - The language identifier (e.g. "java", "cpp", "python").
-///
-/// # Returns
-///
-/// Returns `Some(LanguageConfig)` if the language is supported,
-/// otherwise returns `None`.
+/// Contains language-specific settings for Docker and execution.
+pub struct LanguageConfig {
+    pub name: &'static str,                       // Human-readable name
+    pub file_extensions: &'static [&'static str], // Allowed file extensions
+    pub docker_image: &'static str,               // Docker image to use
+    pub run_command: &'static str,                // Command to compile and/or run code
+}
+
+/// Map string language to LanguageConfig.
+/// Add additional languages as needed.
 fn get_language_config(lang: &str) -> Option<LanguageConfig> {
     match lang {
         "java" => Some(LanguageConfig {
@@ -58,185 +49,72 @@ fn get_language_config(lang: &str) -> Option<LanguageConfig> {
     }
 }
 
-/// Runs code from a zip archive file on disk, for a given language.
+/// Main entry point: run multiple student zip files as a single codebase.
+/// This assumes that each zip contains part of a valid program (e.g., modules in Java).
 ///
 /// # Arguments
-///
-/// * `zip_path` - The path to the zip archive containing the assignment code.
-/// * `lang` - The language identifier to determine how to run the code.
-///
-/// # Behavior
-///
-/// Reads the zip file from disk, extracts the source code safely, runs the code
-/// in a Docker container with security restrictions, and prints the program output or errors.
-///
-/// This function is asynchronous.
-pub async fn run_assignment_code(zip_path: &str, lang: &str) {
-    //read zip into memory
-    println!(
-        "Current working dir: {}",
-        std::env::current_dir().unwrap().display()
-    );
-    let zip_bytes = std::fs::read(zip_path).expect("Failed to read zip file");
-
-    //run code
-    match run_assignment_zip(&zip_bytes, lang).await {
-        Ok(output) => println!("Program output:\n{}", output),
-        Err(e) => eprintln!("Error: {}", e),
+/// * `zip_paths` - One or more zip files to combine and execute.
+/// * `lang` - Programming language identifier.
+/// * `config` - Runtime restrictions and security config.
+pub async fn run_multiple_zips(zip_paths: Vec<PathBuf>, lang: &str, config: RunnerConfig) {
+    match get_language_config(lang) {
+        Some(lang_cfg) => match run_all_zips(zip_paths, &lang_cfg, &config).await {
+            Ok(output) => println!("Program output:\n{}", output),
+            Err(e) => eprintln!("Error: {}", e),
+        },
+        None => eprintln!("Unsupported language: {}", lang),
     }
 }
 
-/// Runs code contained in a zip archive byte slice for a specified language.
-///
-/// # Arguments
-///
-/// * `zip_bytes` - Byte slice of the zip archive containing source code files.
-/// * `lang` - The language identifier (e.g. "java", "cpp", "python").
+/// Extracts contents of all zip files, verifies them, then runs them in a Docker container.
+/// Ensures strict resource limits and security.
 ///
 /// # Returns
-///
-/// On success, returns `Ok(String)` containing the program's standard output.
-///
-/// On failure, returns `Err` with a boxed error describing the failure.
-///
-/// # Security
-///
-/// This function unpacks the zip safely with:
-/// - Zip slip protection (no `..` in paths)
-/// - Max uncompressed size limit to prevent zip bombs
-/// - Only allows files with supported extensions for the language
-///
-/// It runs the code inside a restricted Docker container with:
-/// - No network access
-/// - Memory and CPU limits
-/// - Process count limits
-/// - No privilege escalation
-/// - Read-only volume for source code
-/// - Writable volume for output
-///
-/// # Notes
-///
-/// This is a proof of concept designed to mitigate common security risks
-/// when running untrusted code submitted as zip archives.
-async fn run_assignment_zip(
-    zip_bytes: &[u8],
-    lang: &str,
+/// Standard output of the program if successful; otherwise an error.
+async fn run_all_zips(
+    zip_paths: Vec<PathBuf>,
+    lang_cfg: &LanguageConfig,
+    config: &RunnerConfig,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    //Accepted languages
-    let config = get_language_config(lang).ok_or("Unsupported language")?;
-
-    //I get to explain my super genius solution for security issues lets goooooooooooooooo
-    //======================================================================================
-    //Okay here is the basic problem
-    //Step 1) Studnet submits their code
-    //Step 2) Their code is run with the memo Main
-    //Step 3) The students code can overwrite or edit the memo Main
-    //Step 4) You probably: "WHy is that bad? The code is compiled first so it doesn't matter if they edit the main? It doesn't get saved anyway"
-    //Step 5) The problem is the Main changes with GATLAM. Its run multiple times. If the student can alter code while it evolves -> not good
-    //My solution? -> We have 2 temporary directories. One is read-only and one is read-write
-    //Temporary directories delete automatically when it goes out of scope so it is perfect for this
-    //The code is placed in the read-only directory so nothing can be tampered with
-    //All the output needs to be written though so that goes to the read-write directory
-    //So code is run, but sorce code in read-only directory cannot be tampered with, but all the output is piped to another directory
-    //This way no code can be overwritten, but you can still get the output which needs to be written
-    //Okay now that I am writing this down I'm realising this isn't that groundbreaking. Good security measure anyway
-    //I'm leaving these comments here
-
-    //Read-only directory
+    // Create temporary directories for input code and compiled/built output
     let temp_code_dir = tempdir()?;
-    //Read-write directory
     let temp_output_dir = tempdir()?;
 
-    let temp_code_path = temp_code_dir.path();
-    let temp_output_path = temp_output_dir.path();
+    let code_path = temp_code_dir.path();
+    let output_path = temp_output_dir.path();
 
-    //analyse zip file before extracting it for security
-    let reader = Cursor::new(zip_bytes);
-    let mut archive = ZipArchive::new(reader)?;
-
-    //Maximum size that the uncompressed file may be
-    //This is to prevent zip bombing and all that
-    let max_total_uncompressed: u64 = 50 * 1024 * 1024; //50 MB
-    let mut total_uncompressed: u64 = 0;
-
-    //Loop over every file in zip archive
-    for i in 0..archive.len() {
-        //Gets a file in the zip
-        let mut file = archive.by_index(i)?;
-
-        total_uncompressed += file.size();
-        //Exceeded maximum size
-        if total_uncompressed > max_total_uncompressed {
-            return Err("Zip file too large when decompressed".into());
-        }
-
-        //gets the original filepath of the file
-        let raw_name = file.name();
-
-        //Zip Slip Prevention
-        //Might actually not be needed since it is in an isolated environment that gets deleted
-        if raw_name.contains("..") || raw_name.starts_with('/') || raw_name.contains('\\') {
-            return Err(format!("Invalid file path in zip: {}", raw_name).into());
-        }
-
-        let is_valid = config
-            .file_extensions
-            .iter()
-            .any(|ext| raw_name.ends_with(ext) || raw_name.ends_with('/'));
-
-        if !is_valid {
-            return Err(format!("Unsupported file type in zip: {}", raw_name).into());
-        }
-
-        let outpath = temp_code_path.join(raw_name);
-
-        //Actually extracting the zip now
-        if file.name().ends_with('/') {
-            std::fs::create_dir_all(&outpath)?;
-        } else {
-            if let Some(parent) = outpath.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            let mut outfile = File::create(&outpath)?;
-            std::io::copy(&mut file, &mut outfile)?;
-        }
+    // Process each zip file: validate, decompress, filter only allowed extensions
+    for zip_path in zip_paths {
+        let zip_bytes = std::fs::read(&zip_path)?;
+        extract_zip_contents(&zip_bytes, lang_cfg, config.max_file_size, code_path)?;
     }
 
-    //Maybe remove this
-    println!(
-        "Zip file for language '{}' extracted safely to: {}",
-        config.name,
-        temp_code_path.display()
-    );
-
-    //Now comes the fun part - running a docker enviroment
-
-    let docker_command = Command::new("docker")
-        .arg("run") //run docker
-        .arg("--rm") //automatically removes container once done
-        .arg("--network=none") // disable network
-        .arg("--memory=128m") //limit memory usage to 128MB
-        .arg("--cpus=1") //limit CPU usage to one core
-        .arg("--pids-limit=64") //max processes to 64. -> prevents fork bombs
-        .arg("--security-opt=no-new-privileges") //prevent privilege escalation
-        .arg("--user=1000:1000") //run with user id 1000 and group id 1000 which is usually non-root user
-        .arg("-v") //adds volume mount
-        .arg(format!("{}:/code:ro", temp_code_path.display())) //read-only for sources
-        .arg("-v") //adds another volume mount
-        .arg(format!("{}:/output", temp_output_path.display())) //writable for build output
-        .arg(config.docker_image) //language
-        .arg("sh") //run shell inside container
+    // Launch Docker container with strict runtime limits and no network access
+    let output = Command::new("docker")
+        .arg("run")
+        .arg("--rm") // Remove container after execution
+        .arg("--network=none") // No network access (security)
+        .arg(format!("--memory={}", config.memory_limit)) // RAM limit
+        .arg(format!("--cpus={}", config.cpu_limit)) // CPU core limit
+        .arg(format!("--pids-limit={}", config.pids_limit)) // Process limit
+        .arg("--security-opt=no-new-privileges") // Prevent privilege escalation
+        .arg("--user=1000:1000") // Run as non-root user
+        .arg("-v")
+        .arg(format!("{}:/code:ro", code_path.display())) // Mount code directory read-only
+        .arg("-v")
+        .arg(format!("{}:/output", output_path.display())) // Mount output directory
+        .arg(&lang_cfg.docker_image) // Base Docker image
+        .arg("sh")
         .arg("-c")
-        .arg(config.run_command) //run the code
+        .arg(&lang_cfg.run_command) // Run/compile inside container
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()?; //spawn for timeout control
+        .spawn()?;
 
-    //Specify timeout
-    let timeout_seconds = 60;
+    // Enforce timeout on Docker execution
     let output = timeout(
-        Duration::from_secs(timeout_seconds),
-        docker_command.wait_with_output(),
+        Duration::from_secs(config.timeout_secs),
+        output.wait_with_output(),
     )
     .await??;
 
@@ -248,112 +126,61 @@ async fn run_assignment_zip(
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::run_assignment_zip;
-//     use std::fs;
+/// Extracts a zip archive to the provided output directory.
+/// Ensures all files are of valid types, checks for zip-slip, and enforces size limits.
+///
+/// # Security Measures
+/// - Blocks dangerous paths (`..`, absolute paths, backslashes)
+/// - Limits total decompressed size (defends against zip bombs)
+/// - Rejects unexpected file extensions
+fn extract_zip_contents(
+    zip_bytes: &[u8],
+    lang_cfg: &LanguageConfig,
+    max_total_uncompressed: u64,
+    output_dir: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut archive = ZipArchive::new(Cursor::new(zip_bytes))?;
+    let mut total_uncompressed = 0;
 
-//     async fn run_test_zip(path: &str, lang: &str) {
-//         let zip_bytes = fs::read(&path).expect(&format!("Failed to read test zip file: {}", path));
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        total_uncompressed += file.size();
 
-//         match run_assignment_zip(&zip_bytes, lang).await {
-//             Ok(output) => panic!("{} unexpectedly succeeded with output:\n{}", path, output),
-//             Err(e) => println!("{} correctly failed with error: {}", path, e),
-//         }
-//     }
+        // Zip bomb protection: limit total extracted size
+        if total_uncompressed > max_total_uncompressed {
+            return Err("Zip file too large when decompressed".into());
+        }
 
-//     async fn run_success_zip(path: &str, lang: &str) {
-//         let zip_bytes = fs::read(path).expect(&format!("Failed to read {}", path));
-//         match super::run_assignment_zip(&zip_bytes, lang).await {
-//             Ok(output) => println!("{} succeeded with output:\n{}", path, output),
-//             Err(e) => panic!("{} failed unexpectedly with error: {}", path, e),
-//         }
-//     }
+        let raw_name = file.name();
 
-//     #[tokio::test]
-//     async fn test_good_java_example_succeeds() {
-//         run_success_zip("src/files/good_java_example.zip", "java").await;
-//     }
+        // Zip slip protection: reject dangerous paths
+        if raw_name.contains("..") || raw_name.starts_with('/') || raw_name.contains('\\') {
+            return Err(format!("Invalid file path in zip: {}", raw_name).into());
+        }
 
-//     #[tokio::test]
-//     async fn test_good_cpp_example_succeeds() {
-//         run_success_zip("src/files/good_cpp_example.zip", "cpp").await;
-//     }
+        // Validate file extension
+        let is_valid = lang_cfg
+            .file_extensions
+            .iter()
+            .any(|ext| raw_name.ends_with(ext) || raw_name.ends_with('/'));
 
-//     #[tokio::test]
-//     async fn test_good_python_example_succeeds() {
-//         run_success_zip("src/files/good_python_example.zip", "python").await;
-//     }
+        if !is_valid {
+            return Err(format!("Unsupported file type in zip: {}", raw_name).into());
+        }
 
-// #[tokio::test]
-// async fn test_infinite_loop_rejected() {
-//     run_test_zip("src/files/infinite_loop_java_example.zip", "java").await;
-// }
+        let outpath = output_dir.join(raw_name);
 
-// #[tokio::test]
-// async fn test_memory_overflow_rejected() {
-//     run_test_zip("src/files/memory_overflow_java_example.zip", "java").await;
-// }
+        // Ensure parent directories exist before writing file
+        if file.name().ends_with('/') {
+            std::fs::create_dir_all(&outpath)?;
+        } else {
+            if let Some(parent) = outpath.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let mut outfile = File::create(&outpath)?;
+            std::io::copy(&mut file, &mut outfile)?;
+        }
+    }
 
-// #[tokio::test]
-// async fn test_fork_bomb_rejected() {
-//     run_test_zip("src/files/fork_bomb_java_example.zip", "java").await;
-// }
-
-// #[tokio::test]
-// async fn test_edit_code_rejected() {
-//     let zip_path = "src/files/edit_code_java_example.zip";
-//     let zip_bytes = std::fs::read(zip_path).expect("Failed to read zip");
-//     let result = run_assignment_zip(&zip_bytes, "java").await;
-
-//     match result {
-//         Ok(output) => {
-//             if output.contains("failed") {
-//                 //success
-//             } else {
-//                 panic!("succeeded with output:\n{}", output);
-//             }
-//         }
-//         Err(_) => {
-//             //good if error
-//         }
-//     }
-// }
-
-// #[tokio::test]
-// async fn test_priviledge_escalation_rejected() {
-//     let path = "src/files/priviledge_escalation_java_example.zip";
-//     let zip_bytes = std::fs::read(path).expect("Failed to read test zip");
-
-//     match run_assignment_zip(&zip_bytes, "java").await {
-//         Ok(output) => {
-//             assert!(
-//                 output.contains("uid=1000"),
-//                 "Unexpected user privileges:\n{}",
-//                 output
-//             );
-//         }
-//         Err(e) => panic!("Program failed unexpectedly: {}", e),
-//     }
-// }
-
-// #[tokio::test]
-// async fn test_network_access_rejected() {
-//     let zip_path = "src/files/access_network_java_example.zip";
-//     let zip_bytes = std::fs::read(zip_path).expect("Failed to read zip");
-//     let result = run_assignment_zip(&zip_bytes, "java").await;
-
-//     match result {
-//         Ok(output) => {
-//             if output.contains("Network access blocked") {
-//                 //success
-//             } else {
-//                 panic!("succeeded with output:\n{}", output);
-//             }
-//         }
-//         Err(_) => {
-//             //good if error
-//         }
-//     }
-// }
-// }
+    Ok(())
+}
