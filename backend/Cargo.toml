@@ -1,9 +1,11 @@
 [workspace]
 resolver = "3"
 members = [
-    "api", 
+    "api",
     "db",
-    "common", "docker_example",
+    "common",
+    "docker_example",
     "migration",
     "seeder",
+    "code_runner",
 ]
