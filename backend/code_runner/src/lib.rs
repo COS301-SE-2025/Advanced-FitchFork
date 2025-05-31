@@ -210,180 +210,189 @@ fn extract_zip_contents(
     Ok(())
 }
 //TODO - Fix github actions
-//The problem with these tests is that they fail with github actions
-//That is why they are commented out
+// The problem with these tests is that they fail with github actions
+// That is why they are commented out
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use std::path::PathBuf;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
 
-//     fn test_zip_path(name: &str) -> PathBuf {
-//         PathBuf::from(format!("src/test_files/{}", name))
-//     }
+    fn test_zip_path(name: &str) -> PathBuf {
+        PathBuf::from(format!("src/test_files/{}", name))
+    }
 
-//     fn test_config() -> ExecutionConfig {
-//         ExecutionConfig {
-//             timeout_secs: 30,
-//             max_memory: "128m",
-//             max_cpus: "1",
-//             max_processes: 64,
-//             max_uncompressed_size: 50 * 1024 * 1024,
-//         }
-//     }
+    fn test_config() -> ExecutionConfig {
+        ExecutionConfig {
+            timeout_secs: 30,
+            max_memory: "128m",
+            max_cpus: "1",
+            max_processes: 64,
+            max_uncompressed_size: 50 * 1024 * 1024,
+        }
+    }
 
-//     fn get_test_language_config(lang: &str) -> LanguageConfig {
-//         get_language_config(lang).expect("Language config not found")
-//     }
+    fn get_test_language_config(lang: &str) -> LanguageConfig {
+        get_language_config(lang).expect("Language config not found")
+    }
 
-//     #[tokio::test]
-//     async fn test_good_java_example_succeeds() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("good_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    #[tokio::test]
+    #[ignore]
+    async fn test_good_java_example_succeeds() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("good_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
 
-//         let output = result.expect("Expected success, got error");
-//         assert!(!output.trim().is_empty(), "Expected non-empty output");
-//     }
+        let output = result.expect("Expected success, got error");
+        assert!(!output.trim().is_empty(), "Expected non-empty output");
+    }
 
-//     #[tokio::test]
-//     async fn test_good_cpp_example_succeeds() {
-//         let lang_cfg = get_test_language_config("cpp");
-//         let result = run_all_zips(
-//             vec![test_zip_path("good_cpp_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    #[tokio::test]
+    #[ignore]
+    async fn test_good_cpp_example_succeeds() {
+        let lang_cfg = get_test_language_config("cpp");
+        let result = run_all_zips(
+            vec![test_zip_path("good_cpp_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
 
-//         assert!(result.is_ok(), "Expected successful C++ run");
-//     }
+        assert!(result.is_ok(), "Expected successful C++ run");
+    }
 
-//     #[tokio::test]
-//     async fn test_good_python_example_succeeds() {
-//         let lang_cfg = get_test_language_config("python");
-//         let result = run_all_zips(
-//             vec![test_zip_path("good_python_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    #[tokio::test]
+    #[ignore]
+    async fn test_good_python_example_succeeds() {
+        let lang_cfg = get_test_language_config("python");
+        let result = run_all_zips(
+            vec![test_zip_path("good_python_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
 
-//         assert!(result.is_ok(), "Expected successful Python run");
-//     }
+        assert!(result.is_ok(), "Expected successful Python run");
+    }
 
-//     #[tokio::test]
-//     async fn test_infinite_loop_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("infinite_loop_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    #[tokio::test]
+    #[ignore]
+    async fn test_infinite_loop_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("infinite_loop_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
 
-//         assert!(result.is_err(), "Infinite loop should timeout or fail");
-//     }
+        assert!(result.is_err(), "Infinite loop should timeout or fail");
+    }
 
-//     #[tokio::test]
-//     async fn test_memory_overflow_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("memory_overflow_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    #[tokio::test]
+    #[ignore]
+    async fn test_memory_overflow_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("memory_overflow_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
 
-//         assert!(result.is_err(), "Memory overflow should fail");
-//     }
+        assert!(result.is_err(), "Memory overflow should fail");
+    }
 
-//     #[tokio::test]
-//     async fn test_fork_bomb_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("fork_bomb_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    #[tokio::test]
+    #[ignore]
+    async fn test_fork_bomb_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("fork_bomb_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
 
-//         assert!(result.is_err(), "Fork bomb should fail");
-//     }
+        assert!(result.is_err(), "Fork bomb should fail");
+    }
 
-//     #[tokio::test]
-//     async fn test_edit_code_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("edit_code_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    #[tokio::test]
+    #[ignore]
+    async fn test_edit_code_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("edit_code_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
 
-//         match result {
-//             Ok(output) => {
-//                 assert!(
-//                     output.contains("Read-only file system"),
-//                     "Expected sandbox to block file edits, but got:\n{}",
-//                     output
-//                 );
-//             }
-//             Err(err) => {
-//                 let msg = err.to_string();
-//                 assert!(
-//                     msg.contains("Read-only file system") || msg.contains("Permission denied"),
-//                     "Expected read-only FS error, but got: {}",
-//                     msg
-//                 );
-//             }
-//         }
-//     }
+        match result {
+            Ok(output) => {
+                assert!(
+                    output.contains("Read-only file system"),
+                    "Expected sandbox to block file edits, but got:\n{}",
+                    output
+                );
+            }
+            Err(err) => {
+                let msg = err.to_string();
+                assert!(
+                    msg.contains("Read-only file system") || msg.contains("Permission denied"),
+                    "Expected read-only FS error, but got: {}",
+                    msg
+                );
+            }
+        }
+    }
 
-//     #[tokio::test]
-//     async fn test_privilege_escalation_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("priviledge_escalation_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    #[tokio::test]
+    #[ignore]
+    async fn test_privilege_escalation_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("priviledge_escalation_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
 
-//         match result {
-//             Ok(output) => {
-//                 assert!(
-//                     output.contains("uid=1000"),
-//                     "Should not run with root privileges"
-//                 );
-//             }
-//             Err(_) => {
-//                 // Error is also acceptable
-//             }
-//         }
-//     }
+        match result {
+            Ok(output) => {
+                assert!(
+                    output.contains("uid=1000"),
+                    "Should not run with root privileges"
+                );
+            }
+            Err(_) => {
+                // Error is also acceptable
+            }
+        }
+    }
 
-//     #[tokio::test]
-//     async fn test_network_access_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("access_network_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    #[tokio::test]
+    #[ignore]
+    async fn test_network_access_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("access_network_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
 
-//         assert!(
-//             result.is_err()
-//                 || result
-//                     .as_ref()
-//                     .map(|s| s.contains("Network access blocked"))
-//                     .unwrap_or(false),
-//             "Network access should not be allowed"
-//         );
-//     }
-// }
+        assert!(
+            result.is_err()
+                || result
+                    .as_ref()
+                    .map(|s| s.contains("Network access blocked"))
+                    .unwrap_or(false),
+            "Network access should not be allowed"
+        );
+    }
+}

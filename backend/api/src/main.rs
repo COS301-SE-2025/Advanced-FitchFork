@@ -1,13 +1,13 @@
-use api::routes::routes;
-use axum::{Router};
-use dotenvy::dotenv;
-use std::{env};
-use std::net::SocketAddr;
-use tower_http::cors::{CorsLayer};
-use tracing::{info};
-use tracing_appender::rolling;
 use api::auth::middleware::log_request;
+use api::routes::routes;
 use axum::middleware::from_fn;
+use axum::Router;
+use dotenvy::dotenv;
+use std::env;
+use std::net::SocketAddr;
+use tower_http::cors::CorsLayer;
+use tracing::info;
+use tracing_appender::rolling;
 
 #[tokio::main]
 async fn main() {
@@ -26,10 +26,7 @@ async fn main() {
     // Important: hold the guard to flush logs
     let _log_guard = init_logging(&log_file, &log_level);
 
-    info!(
-        "Starting {} on http://{}:{}",
-        project_name, host, port
-    );
+    info!("Starting {} on http://{}:{}", project_name, host, port);
 
     // Setup CORS
     let cors = CorsLayer::very_permissive();
@@ -48,14 +45,17 @@ async fn main() {
         .await
         .expect("Failed to bind");
 
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .await
-        .expect("Server crashed");
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .expect("Server crashed");
 }
 
 fn init_logging(log_file: &str, _log_level: &str) -> tracing_appender::non_blocking::WorkerGuard {
-    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
     use std::{env, fs};
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
     fs::create_dir_all("logs").ok();
 
@@ -70,7 +70,8 @@ fn init_logging(log_file: &str, _log_level: &str) -> tracing_appender::non_block
 
     let log_to_stdout = env::var("LOG_TO_STDOUT")
         .unwrap_or_else(|_| "false".to_string())
-        .to_lowercase() == "true";
+        .to_lowercase()
+        == "true";
 
     let stdout_layer = fmt::layer()
         .with_writer(std::io::stdout)
@@ -78,8 +79,8 @@ fn init_logging(log_file: &str, _log_level: &str) -> tracing_appender::non_block
         .with_target(true)
         .with_thread_ids(true);
 
-    let env_filter = EnvFilter::try_from_env("LOG_LEVEL")
-        .unwrap_or_else(|_| EnvFilter::new("api=info"));
+    let env_filter =
+        EnvFilter::try_from_env("LOG_LEVEL").unwrap_or_else(|_| EnvFilter::new("api=info"));
 
     let registry = tracing_subscriber::registry()
         .with(env_filter)

@@ -147,7 +147,6 @@ dependencies = [
  "chrono",
  "common",
  "db",
- "docker_example",
  "dotenvy",
  "futures",
  "headers",
@@ -817,16 +816,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.101",
-]
-
-[[package]]
-name = "docker_example"
-version = "0.1.0"
-dependencies = [
- "tempfile",
- "tokio",
- "uuid",
- "zip",
 ]
 
 [[package]]

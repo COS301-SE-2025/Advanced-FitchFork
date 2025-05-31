@@ -1,11 +1,3 @@
 [workspace]
 resolver = "3"
-members = [
-    "api",
-    "db",
-    "common",
-    "docker_example",
-    "migration",
-    "seeder",
-    "code_runner",
-]
+members = ["api", "db", "common", "migration", "seeder", "code_runner"]

@@ -11,7 +11,6 @@ path = "src/main.rs"
 # Workspace-local crates
 common = { path = "../common" }
 db = { path = "../db" }
-docker_example = { path = "../docker_example" }
 
 # Web framework and middleware
 axum = { version = "0.7", features = ["multipart"] }

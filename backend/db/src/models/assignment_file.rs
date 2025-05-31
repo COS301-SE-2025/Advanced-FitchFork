@@ -53,6 +53,9 @@ pub enum FileType {
     #[strum(serialize = "memo_output")]
     #[sea_orm(string_value = "memo_output")]
     MemoOutput,
+    #[strum(serialize = "submission_output")]
+    #[sea_orm(string_value = "submission_output")]
+    SubmissionOutput,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -218,6 +221,83 @@ impl Model {
             assignment_id,
             module_id,
             FileType::MemoOutput,
+            output_filename,
+            output.as_bytes(),
+        )
+        .await
+        .map_err(|e| format!("Failed to save output file record: {}", e))
+    }
+
+    pub async fn create_submission_output(
+        db: &DatabaseConnection,
+        submission_file_id: i64,
+        lang: &str,
+        exec_config: ExecutionConfig,
+    ) -> Result<Model, String> {
+        use sea_orm::{EntityTrait, QueryFilter};
+        // Find submission file
+        let submission_file = super::submission_file::Entity::find_by_id(submission_file_id)
+            .one(db)
+            .await
+            .map_err(|e| format!("DB error finding submission file: {}", e))?
+            .ok_or_else(|| "Submission file not found".to_string())?;
+
+        // Find submission to get assignment_id and module_id
+        let submission =
+            super::assignment_submission::Entity::find_by_id(submission_file.submission_id)
+                .one(db)
+                .await
+                .map_err(|e| format!("DB error finding submission: {}", e))?
+                .ok_or_else(|| "Submission not found".to_string())?;
+
+        let assignment = super::assignment::Entity::find_by_id(submission.assignment_id)
+            .one(db)
+            .await
+            .map_err(|e| format!("DB error finding assignment: {}", e))?
+            .ok_or_else(|| "Assignment not found".to_string())?;
+
+        let module_id = assignment.module_id;
+        let assignment_id = assignment.id;
+
+        // Find main file
+        let main = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .filter(Column::FileType.eq(FileType::Main))
+            .one(db)
+            .await
+            .map_err(|e| format!("DB error finding main: {}", e))?
+            .ok_or_else(|| "Main file not found".to_string())?;
+
+        // Paths to the files
+        let submission_path =
+            super::submission_file::Model::storage_root().join(&submission_file.path);
+        let main_path = Self::storage_root().join(&main.path);
+
+        // Run the code using the existing run_zip_files API (async)
+        let output = run_zip_files(vec![submission_path, main_path], lang, exec_config)
+            .await
+            .map_err(|e| format!("Code runner error: {}", e))?;
+
+        // Create output directory: <storage_root>/submission_outputs/<submission_file_id>/
+        let output_dir = Self::storage_root()
+            .join("submission_outputs")
+            .join(submission_file_id.to_string());
+
+        std::fs::create_dir_all(&output_dir)
+            .map_err(|e| format!("Failed to create output directory: {}", e))?;
+
+        let output_filename = "submission_output.txt";
+        let output_file_path = output_dir.join(output_filename);
+
+        fs::write(&output_file_path, output.as_bytes())
+            .map_err(|e| format!("Failed to write output file: {}", e))?;
+
+        // Save file record in DB
+        Self::save_file(
+            db,
+            assignment_id,
+            module_id,
+            FileType::SubmissionOutput,
             output_filename,
             output.as_bytes(),
         )
@@ -528,7 +608,9 @@ mod tests {
         assert_eq!(err, "Main file not found");
     }
 
+    //TODO - once again I have to ignore this test since github actions isn't set up for docker containers
     #[tokio::test]
+    // #[ignore]
     async fn test_create_memo_output_with_real_java_files() -> Result<(), Box<dyn std::error::Error>>
     {
         use std::io::Write;
@@ -587,29 +669,29 @@ mod tests {
 
         // Create Main.java content which calls HelperOne and HelperTwo
         let main_java = r#"
-        public class Main {
-            public static void main(String[] args) {
-                HelperOne.greet();
-                HelperTwo.farewell();
+            public class Main {
+                public static void main(String[] args) {
+                    HelperOne.greet();
+                    HelperTwo.farewell();
+                }
             }
-        }
-    "#;
+        "#;
 
         let helper_one_java = r#"
-        public class HelperOne {
-            public static void greet() {
-                System.out.println("Hello from HelperOne");
+            public class HelperOne {
+                public static void greet() {
+                    System.out.println("Hello from HelperOne");
+                }
             }
-        }
-    "#;
+        "#;
 
         let helper_two_java = r#"
-        public class HelperTwo {
-            public static void farewell() {
-                System.out.println("Goodbye from HelperTwo");
+            public class HelperTwo {
+                public static void farewell() {
+                    System.out.println("Goodbye from HelperTwo");
+                }
             }
-        }
-    "#;
+        "#;
 
         // Create main.zip containing Main.java only
         let main_zip_path = storage_path.join("main.zip");
