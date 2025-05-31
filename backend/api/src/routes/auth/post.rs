@@ -4,17 +4,25 @@ use axum::{
     Json,
 };
 
-use sea_orm::{Database, EntityTrait, ColumnTrait, QueryFilter};
+use sea_orm::{Database, EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait};
 
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+use chrono::{Utc, Duration};
+use std::env;
 
 use crate::{
     auth::generate_jwt,
     response::ApiResponse,
+    services::email::EmailService,
 };
 
-use db::models::user::{self, Model as UserModel};
+use db::connect;
+
+use db::models::{
+    user::{self, Model as UserModel},
+    password_reset_token::{self, Model as PasswordResetTokenModel},
+};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -30,7 +38,7 @@ pub struct RegisterRequest {
     #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
     pub password: String,
 
-      // TODO: Add some more password validation later
+    // TODO: Add some more password validation later
 }
 
 #[derive(Debug, Serialize, Default)]
@@ -110,7 +118,7 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
         );
     }
 
-    let db = Database::connect("sqlite://data/dev.db").await.unwrap();
+    let db = connect().await;
 
     let email_exists = user::Entity::find()
         .filter(user::Column::Email.eq(req.email.clone()))
@@ -231,7 +239,7 @@ pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
         );
     }
 
-    let db = Database::connect("sqlite://data/dev.db").await.unwrap();
+    let db = connect().await;
 
     let user = match UserModel::verify_credentials(&db, &req.student_number, &req.password).await {
         Ok(Some(u)) => u,
@@ -263,6 +271,143 @@ pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
         StatusCode::OK,
         Json(ApiResponse::success(user_response, "Login successful")),
     )
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct RequestPasswordResetRequest {
+    #[validate(email(message = "Invalid email format"))]
+    pub email: String,
+}
+
+/// POST /auth/request-password-reset
+///
+/// Request a password reset token for a user.
+///
+/// ### Request Body
+/// ```json
+/// {
+///   "email": "user@example.com"
+/// }
+/// ```
+///
+/// ### Responses
+///
+/// - `200 OK`  
+/// ```json
+/// {
+///   "success": true,
+///   "data": null,
+///   "message": "If the account exists, a reset link has been sent."
+/// }
+/// ```
+///
+/// - `400 Bad Request` (validation failure)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Invalid email format"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Database error: detailed error here"
+/// }
+/// ```
+pub async fn request_password_reset(Json(req): Json<RequestPasswordResetRequest>) -> impl IntoResponse {
+    if let Err(validation_errors) = req.validate() {
+        let error_message = common::format_validation_errors(&validation_errors);
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(error_message)),
+        );
+    }
+
+    let db = connect().await;
+
+    // Find user by email
+    let user = match user::Entity::find()
+        .filter(user::Column::Email.eq(req.email.clone()))
+        .one(&db)
+        .await
+    {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            // Return success even if user doesn't exist to prevent enumeration
+            return (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    (),
+                    "If the account exists, a reset link has been sent.",
+                )),
+            );
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+            );
+        }
+    };
+
+    // Check rate limit (3 requests per hour)
+    let one_hour_ago = Utc::now() - Duration::hours(1);
+    let recent_requests = password_reset_token::Entity::find()
+        .filter(password_reset_token::Column::UserId.eq(user.id))
+        .filter(password_reset_token::Column::CreatedAt.gt(one_hour_ago))
+        .count(&db)
+        .await
+        .unwrap_or(0);
+
+    if recent_requests >= 99 {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(ApiResponse::<()>::error(
+                "Too many password reset requests. Please try again later.",
+            )),
+        );
+    }
+
+    // Get expiry minutes from environment
+    let expiry_minutes = std::env::var("RESET_TOKEN_EXPIRY_MINUTES")
+        .unwrap_or_else(|_| "15".to_string())
+        .parse::<i64>()
+        .unwrap_or(15);
+
+    // Create reset token
+    match PasswordResetTokenModel::create(&db, user.id, expiry_minutes).await {
+        Ok(token) => {
+            // Send email with reset link
+            match EmailService::send_password_reset_email(&user.email, &token.token).await {
+                Ok(_) => (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(
+                        (),
+                        "If the account exists, a reset link has been sent.",
+                    )),
+                ),
+                Err(e) => {
+                    // Log the error but still return success to prevent enumeration
+                    eprintln!("Failed to send password reset email: {}", e);
+                    (
+                        StatusCode::OK,
+                        Json(ApiResponse::success(
+                            (),
+                            "If the account exists, a reset link has been sent.",
+                        )),
+                    )
+                }
+            }
+        }
+        Err(e) => {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+            )
+        }
+    }
 }
 
 #[cfg(test)]

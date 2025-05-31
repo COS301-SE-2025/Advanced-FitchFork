@@ -13,6 +13,7 @@ impl MigratorTrait for Migrator {
             Box::new(migrations::m202505290003_create_user_module_roles::Migration),
             Box::new(migrations::m202505290004_create_assignments::Migration),
             Box::new(migrations::m202505290005_create_assignment_files::Migration),
+            Box::new(migrations::m202505290006_create_password_reset_tokens::Migration),
         ]
     }
 }
