@@ -9,7 +9,6 @@ use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 use chrono::{Utc, Duration};
-use std::env;
 
 use crate::{
     auth::generate_jwt,
@@ -17,11 +16,13 @@ use crate::{
     services::email::EmailService,
 };
 
-use db::models::{
-    user::{self, Model as UserModel},
-    password_reset_token::{self, Model as PasswordResetTokenModel},
+use db::{
+    models::{
+        user::{self, Model as UserModel},
+        password_reset_token::{self, Model as PasswordResetTokenModel}
+    },
+    connect
 };
-use db::connect;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -117,7 +118,6 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
         );
     }
 
-    let db = connect().await;
     let db = connect().await;
 
     let email_exists = user::Entity::find()
@@ -240,7 +240,6 @@ pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
     }
 
     let db = connect().await;
-    let db = connect().await;
 
     let user = match UserModel::verify_credentials(&db, &req.student_number, &req.password).await {
         Ok(Some(u)) => u,
@@ -310,6 +309,14 @@ pub struct RequestPasswordResetRequest {
 /// }
 /// ```
 ///
+/// - `429 Too Many Requests`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Too many password reset requests. Please try again later."
+/// }
+/// ```
+///
 /// - `500 Internal Server Error`  
 /// ```json
 /// {
@@ -328,7 +335,6 @@ pub async fn request_password_reset(Json(req): Json<RequestPasswordResetRequest>
 
     let db = connect().await;
 
-    // Find user by email
     let user = match user::Entity::find()
         .filter(user::Column::Email.eq(req.email.clone()))
         .one(&db)
@@ -336,7 +342,6 @@ pub async fn request_password_reset(Json(req): Json<RequestPasswordResetRequest>
     {
         Ok(Some(u)) => u,
         Ok(None) => {
-            // Return success even if user doesn't exist to prevent enumeration
             return (
                 StatusCode::OK,
                 Json(ApiResponse::success(
@@ -353,7 +358,6 @@ pub async fn request_password_reset(Json(req): Json<RequestPasswordResetRequest>
         }
     };
 
-    // Check rate limit (3 requests per hour)
     let one_hour_ago = Utc::now() - Duration::hours(1);
     let recent_requests = password_reset_token::Entity::find()
         .filter(password_reset_token::Column::UserId.eq(user.id))
@@ -362,7 +366,12 @@ pub async fn request_password_reset(Json(req): Json<RequestPasswordResetRequest>
         .await
         .unwrap_or(0);
 
-    if recent_requests >= 99 {
+    let max_requests = std::env::var("MAX_PASSWORD_RESET_REQUESTS_PER_HOUR")
+        .unwrap_or_else(|_| "3".to_string())
+        .parse::<u64>()
+        .unwrap_or(3);
+
+    if recent_requests >= max_requests {
         return (
             StatusCode::TOO_MANY_REQUESTS,
             Json(ApiResponse::<()>::error(
@@ -371,16 +380,13 @@ pub async fn request_password_reset(Json(req): Json<RequestPasswordResetRequest>
         );
     }
 
-    // Get expiry minutes from environment
     let expiry_minutes = std::env::var("RESET_TOKEN_EXPIRY_MINUTES")
         .unwrap_or_else(|_| "15".to_string())
         .parse::<i64>()
         .unwrap_or(15);
 
-    // Create reset token
     match PasswordResetTokenModel::create(&db, user.id, expiry_minutes).await {
         Ok(token) => {
-            // Send email with reset link
             match EmailService::send_password_reset_email(&user.email, &token.token).await {
                 Ok(_) => (
                     StatusCode::OK,
@@ -390,7 +396,6 @@ pub async fn request_password_reset(Json(req): Json<RequestPasswordResetRequest>
                     )),
                 ),
                 Err(e) => {
-                    // Log the error but still return success to prevent enumeration
                     eprintln!("Failed to send password reset email: {}", e);
                     (
                         StatusCode::OK,
@@ -408,6 +413,107 @@ pub async fn request_password_reset(Json(req): Json<RequestPasswordResetRequest>
                 Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
             )
         }
+    }
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct VerifyResetTokenRequest {
+    #[validate(length(min = 1, message = "Token is required"))]
+    pub token: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VerifyResetTokenResponse {
+    pub email_hint: String,
+}
+
+/// POST /auth/verify-reset-token
+///
+/// Verify the validity of a password reset token.
+///
+/// ### Request Body
+/// ```json
+/// {
+///   "token": "abcdef123456"
+/// }
+/// ```
+///
+/// ### Responses
+///
+/// - `200 OK`  
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///     "email_hint": "u***@example.com"
+///   },
+///   "message": "Token verified. You may now reset your password."
+/// }
+/// ```
+///
+/// - `400 Bad Request` (validation failure)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Token is required"
+/// }
+/// ```
+///
+/// - `400 Bad Request` (invalid token)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Invalid or expired token."
+/// }
+/// ```
+pub async fn verify_reset_token(Json(req): Json<VerifyResetTokenRequest>) -> impl IntoResponse {
+    if let Err(validation_errors) = req.validate() {
+        let error_message = common::format_validation_errors(&validation_errors);
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<VerifyResetTokenResponse>::error(error_message)),
+        );
+    }
+
+    let db = connect().await;
+
+    match PasswordResetTokenModel::find_valid_token(&db, &req.token).await {
+        Ok(Some(token)) => {
+            match user::Entity::find_by_id(token.user_id).one(&db).await {
+                Ok(Some(user)) => {
+                    let email_parts: Vec<&str> = user.email.split('@').collect();
+                    let username = email_parts[0];
+                    let domain = email_parts[1];
+                    let masked_username = format!("{}***", &username[0..1]);
+                    let email_hint = format!("{}@{}", masked_username, domain);
+
+                    let response = VerifyResetTokenResponse { email_hint };
+                    (
+                        StatusCode::OK,
+                        Json(ApiResponse::success(
+                            response,
+                            "Token verified. You may now reset your password.",
+                        )),
+                    )
+                }
+                Ok(None) => (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<VerifyResetTokenResponse>::error("Invalid or expired token.")),
+                ),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<VerifyResetTokenResponse>::error(format!("Database error: {}", e))),
+                ),
+            }
+        }
+        Ok(None) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<VerifyResetTokenResponse>::error("Invalid or expired token.")),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<VerifyResetTokenResponse>::error(format!("Database error: {}", e))),
+        ),
     }
 }
 

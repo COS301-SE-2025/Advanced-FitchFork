@@ -10,16 +10,14 @@ use std::env;
 static SMTP_CLIENT: Lazy<AsyncSmtpTransport<Tokio1Executor>> = Lazy::new(|| {
     let username = env::var("GMAIL_USERNAME").expect("GMAIL_USERNAME must be set");
     let password = env::var("GMAIL_APP_PASSWORD").expect("GMAIL_APP_PASSWORD must be set");
-    println!("Initializing SMTP client with username: {}", username);
 
-    // Create TLS parameters
     let tls_parameters = TlsParameters::new("smtp.gmail.com".to_string())
         .expect("Failed to create TLS parameters");
 
     AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
         .expect("Failed to create SMTP transport")
         .port(587)
-        .tls(Tls::Required(tls_parameters))  // Use Required variant
+        .tls(Tls::Required(tls_parameters))
         .credentials(Credentials::new(username, password))
         .build()
 });
@@ -31,18 +29,10 @@ impl EmailService {
         to_email: &str,
         reset_token: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Attempting to send password reset email to: {}", to_email);
-        
         let frontend_url = env::var("FRONTEND_URL").expect("FRONTEND_URL must be set");
         let from_email = env::var("GMAIL_USERNAME").expect("GMAIL_USERNAME must be set");
         let from_name = env::var("EMAIL_FROM_NAME").expect("EMAIL_FROM_NAME must be set");
-        
-        println!("Using frontend URL: {}", frontend_url);
-        println!("From email: {}", from_email);
-        println!("From name: {}", from_name);
-        
         let reset_link = format!("{}/reset-password?token={}", frontend_url, reset_token);
-        println!("Generated reset link: {}", reset_link);
 
         let email = Message::builder()
             .from(format!("{} <{}>", from_name, from_email).parse().unwrap())
@@ -105,7 +95,6 @@ impl EmailService {
                     ),
             )?;
 
-        println!("Attempting to send email...");
         match SMTP_CLIENT.send(email).await {
             Ok(_) => {
                 println!("Email sent successfully!");

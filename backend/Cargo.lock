@@ -756,6 +756,7 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "tokio",
+ "uuid",
  "zip",
 ]
 
