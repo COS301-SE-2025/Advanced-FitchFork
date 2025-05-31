@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-sea-orm = { version = "0.12", features = ["macros", "runtime-tokio-rustls", "sqlx-sqlite", "chrono"] }
+sea-orm = { version = "0.12", features = [
+    "macros",
+    "runtime-tokio-rustls",
+    "sqlx-sqlite",
+    "chrono",
+] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 chrono = { version = "0.4", features = ["serde"] }
 argon2 = "0.5"
@@ -16,6 +21,8 @@ rand = { version = "0.8", features = ["std"] }
 strum = { version = "0.25", features = ["derive"] }
 strum_macros = "0.25"
 log = "0.4"
+code-runner = { path = "../code_runner" }
 
 [dev-dependencies]
 tempfile = "3"
+zip = "0.6"

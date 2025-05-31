@@ -29,6 +29,8 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(ColumnDef::new(Alias::new("user_id")).integer().not_null())
+                    .col(ColumnDef::new(Alias::new("filename")).string().not_null())
+                    .col(ColumnDef::new(Alias::new("path")).string().not_null())
                     .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()
@@ -55,12 +57,6 @@ impl MigrationTrait for Migration {
                             .from(Alias::new("assignment_submissions"), Alias::new("user_id"))
                             .to(Alias::new("users"), Alias::new("id"))
                             .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .index(
-                        Index::create()
-                            .col(Alias::new("assignment_id"))
-                            .col(Alias::new("user_id"))
-                            .unique(),
                     )
                     .to_owned(),
             )

@@ -11,7 +11,6 @@ path = "src/main.rs"
 # Workspace-local crates
 common = { path = "../common" }
 db = { path = "../db" }
-docker_example = { path = "../docker_example" }
 
 # Web framework and middleware
 axum = { version = "0.7", features = ["multipart"] }
@@ -41,9 +40,16 @@ lazy_static = "1.4"
 regex = "1.10"
 
 # Database
-sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-native-tls", "macros"] }
+sqlx = { version = "0.7", features = [
+    "sqlite",
+    "runtime-tokio-native-tls",
+    "macros",
+] }
 
-sea-orm = { version = "0.12", features = ["sqlx-sqlite", "runtime-tokio-native-tls"] }
+sea-orm = { version = "0.12", features = [
+    "sqlx-sqlite",
+    "runtime-tokio-native-tls",
+] }
 futures = "0.3"
 dotenvy = "0.15"
 tracing = "0.1"
