@@ -147,7 +147,6 @@ dependencies = [
  "chrono",
  "common",
  "db",
- "docker_example",
  "dotenvy",
  "futures",
  "headers",
@@ -570,6 +569,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
+name = "code-runner"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "tokio",
+ "uuid",
+ "zip",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -735,6 +744,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "chrono",
+ "code-runner",
  "log",
  "migration",
  "rand",
@@ -746,7 +756,7 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "tokio",
- "uuid",
+ "zip",
 ]
 
 [[package]]
@@ -808,16 +818,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.101",
-]
-
-[[package]]
-name = "docker_example"
-version = "0.1.0"
-dependencies = [
- "tempfile",
- "tokio",
- "uuid",
- "zip",
 ]
 
 [[package]]

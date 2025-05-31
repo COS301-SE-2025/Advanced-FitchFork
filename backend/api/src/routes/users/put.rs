@@ -12,7 +12,7 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::response::ApiResponse;
+use crate::{response::ApiResponse};
 use common::format_validation_errors;
 use db::{connect, models::user};
 
@@ -161,6 +161,15 @@ pub async fn update_user(
             );
         }
     };
+
+    // TODO: Should probaly make a more robsut system with a super admin
+    // Prevent changing your own admin status or changing others' admin status
+    if let Some(_) = req.admin {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<UpdateUserResponse>::error("Changing admin status is not allowed")),
+        );
+    }
 
     // Check email conflict
     if let Some(email) = &req.email {

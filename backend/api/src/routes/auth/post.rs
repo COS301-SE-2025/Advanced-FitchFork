@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 
-use sea_orm::{Database, EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait};
 
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -17,12 +17,11 @@ use crate::{
     services::email::EmailService,
 };
 
-use db::connect;
-
 use db::models::{
     user::{self, Model as UserModel},
     password_reset_token::{self, Model as PasswordResetTokenModel},
 };
+use db::connect;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -118,6 +117,7 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
         );
     }
 
+    let db = connect().await;
     let db = connect().await;
 
     let email_exists = user::Entity::find()
@@ -239,6 +239,7 @@ pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
         );
     }
 
+    let db = connect().await;
     let db = connect().await;
 
     let user = match UserModel::verify_credentials(&db, &req.student_number, &req.password).await {
