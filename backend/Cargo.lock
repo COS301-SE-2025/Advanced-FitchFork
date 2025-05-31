@@ -743,6 +743,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "chrono",
+ "code-runner",
  "log",
  "migration",
  "rand",
@@ -754,6 +755,7 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "tokio",
+ "zip",
 ]
 
 [[package]]

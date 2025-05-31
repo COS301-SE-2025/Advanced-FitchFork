@@ -1,6 +1,7 @@
 // models/assignment_file.rs
 
 use chrono::{DateTime, Utc};
+use code_runner::{run_zip_files, ExecutionConfig};
 use sea_orm::entity::prelude::*;
 use sea_orm::ActiveValue::Set;
 use std::env;
@@ -49,9 +50,9 @@ pub enum FileType {
     #[strum(serialize = "memo")]
     #[sea_orm(string_value = "memo")]
     Memo,
-    #[strum(serialize = "submission")]
-    #[sea_orm(string_value = "submission")]
-    Submission,
+    #[strum(serialize = "memo_output")]
+    #[sea_orm(string_value = "memo_output")]
+    MemoOutput,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -161,7 +162,70 @@ impl Model {
         let full_path = Self::storage_root().join(&self.path);
         fs::remove_file(full_path)
     }
+
+    /// Creates memo output by running the memo and main files with the code runner.
+    /// Checks if memo and main exist, returns error if not.
+    /// Saves output to a file and returns the saved Model.
+    pub async fn create_memo_output(
+        db: &DatabaseConnection,
+        module_id: i64,
+        assignment_id: i64,
+        lang: &str,
+        exec_config: ExecutionConfig,
+    ) -> Result<Model, String> {
+        use sea_orm::{EntityTrait, QueryFilter};
+        // Find memo file
+        let memo = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .filter(Column::FileType.eq(FileType::Memo))
+            .one(db)
+            .await
+            .map_err(|e| format!("DB error finding memo: {}", e))?
+            .ok_or_else(|| "Memo file not found".to_string())?;
+
+        // Find main file
+        let main = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .filter(Column::FileType.eq(FileType::Main))
+            .one(db)
+            .await
+            .map_err(|e| format!("DB error finding main: {}", e))?
+            .ok_or_else(|| "Main file not found".to_string())?;
+
+        // Paths to the files
+        let memo_path = Self::storage_root().join(&memo.path);
+        let main_path = Self::storage_root().join(&main.path);
+
+        // Run the code using the existing run_zip_files API (async)
+        let output = run_zip_files(vec![memo_path, main_path], lang, exec_config)
+            .await
+            .map_err(|e| format!("Code runner error: {}", e))?;
+
+        // Save the output to a new file in memo_output directory
+        let output_dir = Self::full_directory_path(module_id, assignment_id, &FileType::Memo);
+        fs::create_dir_all(&output_dir)
+            .map_err(|e| format!("Failed to create output directory: {}", e))?;
+
+        let output_filename = "memo_output.txt";
+        let output_file_path = output_dir.join(output_filename);
+
+        fs::write(&output_file_path, output.as_bytes())
+            .map_err(|e| format!("Failed to write output file: {}", e))?;
+
+        // Save file record in DB
+        Self::save_file(
+            db,
+            assignment_id,
+            module_id,
+            FileType::MemoOutput,
+            output_filename,
+            output.as_bytes(),
+        )
+        .await
+        .map_err(|e| format!("Failed to save output file record: {}", e))
+    }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,5 +304,373 @@ mod tests {
         // Delete file only
         saved.delete_file_only().unwrap();
         assert!(!full_path.exists());
+    }
+
+    // Mock the run_zip_files function for testing
+    async fn mock_run_zip_files(
+        _files: Vec<std::path::PathBuf>,
+        _lang: &str,
+        _config: ExecutionConfig,
+    ) -> Result<String, String> {
+        Ok("mocked output from code runner".to_string())
+    }
+
+    // Override run_zip_files in the test scope using a trait or by dependency injection
+    // For now, we will patch via a test-only feature or use a global override
+    // Here we'll shadow the function locally to simulate
+
+    impl Model {
+        // Re-implement create_memo_output with mock run_zip_files for testing
+        pub async fn create_memo_output_mock(
+            db: &DatabaseConnection,
+            module_id: i64,
+            assignment_id: i64,
+            lang: &str,
+            exec_config: ExecutionConfig,
+        ) -> Result<Model, String> {
+            use sea_orm::{EntityTrait, QueryFilter};
+            // Find memo file
+            let memo = Entity::find()
+                .filter(Column::AssignmentId.eq(assignment_id))
+                .filter(Column::FileType.eq(FileType::Memo))
+                .one(db)
+                .await
+                .map_err(|e| format!("DB error finding memo: {}", e))?
+                .ok_or_else(|| "Memo file not found".to_string())?;
+
+            // Find main file
+            let main = Entity::find()
+                .filter(Column::AssignmentId.eq(assignment_id))
+                .filter(Column::FileType.eq(FileType::Main))
+                .one(db)
+                .await
+                .map_err(|e| format!("DB error finding main: {}", e))?
+                .ok_or_else(|| "Main file not found".to_string())?;
+
+            // Paths to the files
+            let memo_path = Self::storage_root().join(&memo.path);
+            let main_path = Self::storage_root().join(&main.path);
+
+            // Use mocked run_zip_files
+            let output = mock_run_zip_files(vec![memo_path, main_path], lang, exec_config)
+                .await
+                .map_err(|e| format!("Code runner error: {}", e))?;
+
+            // Save the output to a new file in memo_output directory
+            let output_dir =
+                Self::full_directory_path(module_id, assignment_id, &FileType::MemoOutput);
+            std::fs::create_dir_all(&output_dir)
+                .map_err(|e| format!("Failed to create output directory: {}", e))?;
+
+            let output_filename = "memo_output.txt";
+            let output_file_path = output_dir.join(output_filename);
+
+            std::fs::write(&output_file_path, output.as_bytes())
+                .map_err(|e| format!("Failed to write output file: {}", e))?;
+
+            // Save file record in DB
+            Self::save_file(
+                db,
+                assignment_id,
+                module_id,
+                FileType::MemoOutput,
+                output_filename,
+                output.as_bytes(),
+            )
+            .await
+            .map_err(|e| format!("Failed to save output file record: {}", e))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_memo_output_success() {
+        let temp_dir = TempDir::new().unwrap();
+        env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path());
+
+        let db = setup_test_db().await;
+
+        // Insert dummy module
+        let module = crate::models::module::ActiveModel {
+            code: Set("COS309".to_string()),
+            year: Set(2025),
+            description: Set(Some("Capstone".to_string())),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+        let module = module.insert(&db).await.unwrap();
+
+        // Insert dummy assignment
+        let assignment = crate::models::assignment::Model::create(
+            &db,
+            module.id,
+            "Test Assignment",
+            None,
+            crate::models::assignment::AssignmentType::Practical,
+            Utc::now(),
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+        // Save memo file
+        let memo_content = b"memo file content";
+        let _memo = Model::save_file(
+            &db,
+            assignment.id,
+            module.id,
+            FileType::Memo,
+            "memo.zip",
+            memo_content,
+        )
+        .await
+        .unwrap();
+
+        // Save main file
+        let main_content = b"main file content";
+        let _main = Model::save_file(
+            &db,
+            assignment.id,
+            module.id,
+            FileType::Main,
+            "main.zip",
+            main_content,
+        )
+        .await
+        .unwrap();
+
+        // Call create_memo_output_mock (uses mock_run_zip_files)
+        let exec_config = ExecutionConfig::default();
+        let result =
+            Model::create_memo_output_mock(&db, module.id, assignment.id, "python", exec_config)
+                .await;
+
+        assert!(result.is_ok());
+        let output_model = result.unwrap();
+        assert_eq!(output_model.assignment_id, assignment.id);
+        assert_eq!(output_model.file_type, FileType::MemoOutput);
+
+        // Check the output file exists
+        let output_path = Model::storage_root().join(&output_model.path);
+        assert!(output_path.exists());
+
+        let contents = std::fs::read_to_string(output_path).unwrap();
+        assert_eq!(contents, "mocked output from code runner");
+    }
+
+    #[tokio::test]
+    async fn test_create_memo_output_missing_memo() {
+        let db = setup_test_db().await;
+        let err = Model::create_memo_output_mock(
+            &db,
+            1,
+            9999, // nonexistent assignment_id
+            "python",
+            ExecutionConfig::default(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err, "Memo file not found");
+    }
+
+    #[tokio::test]
+    async fn test_create_memo_output_missing_main() {
+        let temp_dir = TempDir::new().unwrap();
+        env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path());
+        let db = setup_test_db().await;
+
+        // Insert module & assignment
+        let module = crate::models::module::ActiveModel {
+            code: Set("COS308".to_string()),
+            year: Set(2025),
+            description: Set(Some("Capstone".to_string())),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+        let module = module.insert(&db).await.unwrap();
+
+        let assignment = crate::models::assignment::Model::create(
+            &db,
+            module.id,
+            "Test Assignment",
+            None,
+            crate::models::assignment::AssignmentType::Practical,
+            Utc::now(),
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+
+        // Save memo file only (no main file)
+        let memo_content = b"memo file content";
+        let _memo = Model::save_file(
+            &db,
+            assignment.id,
+            module.id,
+            FileType::Memo,
+            "memo.zip",
+            memo_content,
+        )
+        .await
+        .unwrap();
+
+        let err = Model::create_memo_output_mock(
+            &db,
+            module.id,
+            assignment.id,
+            "python",
+            ExecutionConfig::default(),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(err, "Main file not found");
+    }
+
+    #[tokio::test]
+    async fn test_create_memo_output_with_real_java_files() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use std::io::Write;
+        use zip::write::FileOptions;
+
+        let temp_dir = TempDir::new()?;
+        let storage_path = temp_dir.path().to_path_buf();
+        env::set_var("ASSIGNMENT_STORAGE_ROOT", &storage_path);
+
+        let db = setup_test_db().await;
+
+        // Insert dummy module
+        let module = crate::models::module::ActiveModel {
+            code: Set("COS301".to_string()),
+            year: Set(2025),
+            description: Set(Some("Capstone".to_string())),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await?;
+
+        // Insert dummy assignment
+        let assignment = crate::models::assignment::Model::create(
+            &db,
+            module.id,
+            "Java Test Assignment",
+            None,
+            crate::models::assignment::AssignmentType::Practical,
+            Utc::now(),
+            Utc::now(),
+        )
+        .await?;
+
+        // Helper function to create a zip file from given files with content
+        fn create_zip_from_files(
+            zip_path: &std::path::Path,
+            files: Vec<(&str, &str)>,
+        ) -> std::io::Result<()> {
+            let zip_file = std::fs::File::create(zip_path)?;
+            let mut zip = zip::ZipWriter::new(zip_file);
+
+            let options = FileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored)
+                .unix_permissions(0o644);
+
+            for (name, content) in files {
+                zip.start_file(name, options)?;
+                zip.write_all(content.as_bytes())?;
+            }
+
+            zip.finish()?;
+            Ok(())
+        }
+
+        // Create Main.java content which calls HelperOne and HelperTwo
+        let main_java = r#"
+        public class Main {
+            public static void main(String[] args) {
+                HelperOne.greet();
+                HelperTwo.farewell();
+            }
+        }
+    "#;
+
+        let helper_one_java = r#"
+        public class HelperOne {
+            public static void greet() {
+                System.out.println("Hello from HelperOne");
+            }
+        }
+    "#;
+
+        let helper_two_java = r#"
+        public class HelperTwo {
+            public static void farewell() {
+                System.out.println("Goodbye from HelperTwo");
+            }
+        }
+    "#;
+
+        // Create main.zip containing Main.java only
+        let main_zip_path = storage_path.join("main.zip");
+        create_zip_from_files(&main_zip_path, vec![("Main.java", main_java)])?;
+
+        // Create memo.zip containing HelperOne.java and HelperTwo.java
+        let memo_zip_path = storage_path.join("memo.zip");
+        create_zip_from_files(
+            &memo_zip_path,
+            vec![
+                ("HelperOne.java", helper_one_java),
+                ("HelperTwo.java", helper_two_java),
+            ],
+        )?;
+
+        // Save main file as FileType::Main in DB
+        let main_bytes = std::fs::read(&main_zip_path)?;
+        let _main_model = Model::save_file(
+            &db,
+            assignment.id,
+            module.id,
+            FileType::Main,
+            "main.zip",
+            &main_bytes,
+        )
+        .await?;
+
+        // Save memo file as FileType::Memo in DB
+        let memo_bytes = std::fs::read(&memo_zip_path)?;
+        let _memo_model = Model::save_file(
+            &db,
+            assignment.id,
+            module.id,
+            FileType::Memo,
+            "memo.zip",
+            &memo_bytes,
+        )
+        .await?;
+
+        // Execute create_memo_output (calls actual run_zip_files, no mocking)
+        let exec_config = ExecutionConfig::default();
+
+        let output_model =
+            Model::create_memo_output(&db, module.id, assignment.id, "java", exec_config)
+                .await
+                .expect("create_memo_output failed");
+
+        // Verify output file exists on disk physically
+        let output_path = Model::storage_root().join(&output_model.path);
+        assert!(
+            output_path.exists(),
+            "Output file does not exist: {}",
+            output_path.display()
+        );
+
+        println!("Output file path: {}", output_path.display());
+
+        // Optionally print content for manual verification
+        let content = std::fs::read_to_string(output_path)?;
+        println!("Output content:\n{}", content);
+
+        Ok(())
     }
 }
