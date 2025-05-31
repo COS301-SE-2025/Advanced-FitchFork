@@ -7,12 +7,12 @@ use tokio::{
 use zip::ZipArchive;
 
 /// Configuration for runtime environment limits (used for Docker container).
-pub struct RunnerConfig {
+pub struct ExecutionConfig {
     pub timeout_secs: u64,          // Max execution time
-    pub memory_limit: &'static str, // Max memory (e.g., "128m")
-    pub cpu_limit: &'static str,    // CPU cores (e.g., "1.0")
-    pub max_file_size: u64,         // Max total size of decompressed files (zip bomb protection)
-    pub pids_limit: u32,            // Max number of processes inside container
+    pub max_memory: &'static str,   // Max memory (e.g., "128m")
+    pub max_cpus: &'static str,     // CPU cores (e.g., "1.0")
+    pub max_uncompressed_size: u64, // Max total size of decompressed files (zip bomb protection)
+    pub max_processes: u32,         // Max number of processes inside container
 }
 
 /// Contains language-specific settings for Docker and execution.
@@ -56,7 +56,7 @@ fn get_language_config(lang: &str) -> Option<LanguageConfig> {
 /// * `zip_paths` - One or more zip files to combine and execute.
 /// * `lang` - Programming language identifier.
 /// * `config` - Runtime restrictions and security config.
-pub async fn run_multiple_zips(zip_paths: Vec<PathBuf>, lang: &str, config: RunnerConfig) {
+pub async fn run_zip_files(zip_paths: Vec<PathBuf>, lang: &str, config: ExecutionConfig) {
     match get_language_config(lang) {
         Some(lang_cfg) => match run_all_zips(zip_paths, &lang_cfg, &config).await {
             Ok(output) => println!("Program output:\n{}", output),
@@ -74,7 +74,7 @@ pub async fn run_multiple_zips(zip_paths: Vec<PathBuf>, lang: &str, config: Runn
 async fn run_all_zips(
     zip_paths: Vec<PathBuf>,
     lang_cfg: &LanguageConfig,
-    config: &RunnerConfig,
+    config: &ExecutionConfig,
 ) -> Result<String, Box<dyn std::error::Error>> {
     // Create temporary directories for input code and compiled/built output
     let temp_code_dir = tempdir()?;
@@ -86,7 +86,12 @@ async fn run_all_zips(
     // Process each zip file: validate, decompress, filter only allowed extensions
     for zip_path in zip_paths {
         let zip_bytes = std::fs::read(&zip_path)?;
-        extract_zip_contents(&zip_bytes, lang_cfg, config.max_file_size, code_path)?;
+        extract_zip_contents(
+            &zip_bytes,
+            lang_cfg,
+            config.max_uncompressed_size,
+            code_path,
+        )?;
     }
 
     // Launch Docker container with strict runtime limits and no network access
@@ -94,9 +99,9 @@ async fn run_all_zips(
         .arg("run")
         .arg("--rm") // Remove container after execution
         .arg("--network=none") // No network access (security)
-        .arg(format!("--memory={}", config.memory_limit)) // RAM limit
-        .arg(format!("--cpus={}", config.cpu_limit)) // CPU core limit
-        .arg(format!("--pids-limit={}", config.pids_limit)) // Process limit
+        .arg(format!("--memory={}", config.max_memory)) // RAM limit
+        .arg(format!("--cpus={}", config.max_cpus)) // CPU core limit
+        .arg(format!("--pids-limit={}", config.max_processes)) // Process limit
         .arg("--security-opt=no-new-privileges") // Prevent privilege escalation
         .arg("--user=1000:1000") // Run as non-root user
         .arg("-v")
@@ -183,4 +188,178 @@ fn extract_zip_contents(
     }
 
     Ok(())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn test_zip_path(name: &str) -> PathBuf {
+        PathBuf::from(format!("src/test_files/{}", name))
+    }
+
+    fn test_config() -> ExecutionConfig {
+        ExecutionConfig {
+            timeout_secs: 10,
+            max_memory: "128m",
+            max_cpus: "1",
+            max_processes: 64,
+            max_uncompressed_size: 50 * 1024 * 1024,
+        }
+    }
+
+    fn get_test_language_config(lang: &str) -> LanguageConfig {
+        get_language_config(lang).expect("Language config not found")
+    }
+
+    #[tokio::test]
+    async fn test_good_java_example_succeeds() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("good_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
+
+        let output = result.expect("Expected success, got error");
+        assert!(!output.trim().is_empty(), "Expected non-empty output");
+    }
+
+    #[tokio::test]
+    async fn test_good_cpp_example_succeeds() {
+        let lang_cfg = get_test_language_config("cpp");
+        let result = run_all_zips(
+            vec![test_zip_path("good_cpp_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
+
+        assert!(result.is_ok(), "Expected successful C++ run");
+    }
+
+    #[tokio::test]
+    async fn test_good_python_example_succeeds() {
+        let lang_cfg = get_test_language_config("python");
+        let result = run_all_zips(
+            vec![test_zip_path("good_python_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
+
+        assert!(result.is_ok(), "Expected successful Python run");
+    }
+
+    #[tokio::test]
+    async fn test_infinite_loop_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("infinite_loop_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
+
+        assert!(result.is_err(), "Infinite loop should timeout or fail");
+    }
+
+    #[tokio::test]
+    async fn test_memory_overflow_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("memory_overflow_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
+
+        assert!(result.is_err(), "Memory overflow should fail");
+    }
+
+    #[tokio::test]
+    async fn test_fork_bomb_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("fork_bomb_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
+
+        assert!(result.is_err(), "Fork bomb should fail");
+    }
+
+    #[tokio::test]
+    async fn test_edit_code_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("edit_code_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
+
+        match result {
+            Ok(output) => {
+                assert!(
+                    output.contains("Read-only file system"),
+                    "Expected sandbox to block file edits, but got:\n{}",
+                    output
+                );
+            }
+            Err(err) => {
+                let msg = err.to_string();
+                assert!(
+                    msg.contains("Read-only file system") || msg.contains("Permission denied"),
+                    "Expected read-only FS error, but got: {}",
+                    msg
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_privilege_escalation_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("priviledge_escalation_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
+
+        match result {
+            Ok(output) => {
+                assert!(
+                    output.contains("uid=1000"),
+                    "Should not run with root privileges"
+                );
+            }
+            Err(_) => {
+                // Error is also acceptable
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_network_access_fails() {
+        let lang_cfg = get_test_language_config("java");
+        let result = run_all_zips(
+            vec![test_zip_path("access_network_java_example.zip")],
+            &lang_cfg,
+            &test_config(),
+        )
+        .await;
+
+        assert!(
+            result.is_err()
+                || result
+                    .as_ref()
+                    .map(|s| s.contains("Network access blocked"))
+                    .unwrap_or(false),
+            "Network access should not be allowed"
+        );
+    }
 }
