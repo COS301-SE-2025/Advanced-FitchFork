@@ -51,7 +51,7 @@ impl RelationTrait for Relation {
 /// SeaORM hook point for customizing model behavior.
 impl ActiveModelBehavior for ActiveModel {}
 
-/// Struct returned by `get_module_roles`, summarizing a user’s role in a module.
+/// Struct returned by `get_module_roles`, summarizing a user's role in a module.
 #[derive(Debug, Clone)]
 pub struct UserModuleRole {
     pub module_id: i64,
@@ -208,7 +208,7 @@ impl Model {
     ///
     /// # Returns
     /// A hashed password string.
-    fn hash_password(password: &str) -> String {
+    pub fn hash_password(password: &str) -> String {
         let salt = SaltString::generate(&mut OsRng);
         Argon2::default()
             .hash_password(password.as_bytes(), &salt)
