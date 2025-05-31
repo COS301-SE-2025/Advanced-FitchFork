@@ -1,9 +1,9 @@
 use api::routes::routes;
-use axum::{http::header, Router};
+use axum::{Router};
 use dotenvy::dotenv;
 use std::{env};
 use std::net::SocketAddr;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{CorsLayer};
 use tracing::{info};
 use tracing_appender::rolling;
 use api::auth::middleware::log_request;
@@ -32,13 +32,7 @@ async fn main() {
     );
 
     // Setup CORS
-    let cors = CorsLayer::new()
-        .allow_origin(axum::http::HeaderValue::from_static(
-            "http://localhost:5173",
-        ))
-        .allow_methods(Any)
-        .allow_headers(Any)
-        .expose_headers([header::CONTENT_DISPOSITION]);
+    let cors = CorsLayer::very_permissive();
 
     // Setup Axum app
     let app = Router::new()

@@ -6,9 +6,9 @@ interface Props {
 }
 
 const roleColors: Record<ModuleRole, string> = {
-  lecturer: 'purple',
-  tutor: 'blue',
-  student: 'green',
+  Lecturer: 'purple',
+  Tutor: 'blue',
+  Student: 'green',
 };
 
 function capitalize(word: string) {

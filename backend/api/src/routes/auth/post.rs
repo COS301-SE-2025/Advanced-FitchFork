@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 
-use sea_orm::{Database, EntityTrait, ColumnTrait, QueryFilter};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -15,6 +15,7 @@ use crate::{
 };
 
 use db::models::user::{self, Model as UserModel};
+use db::connect;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -110,7 +111,7 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
         );
     }
 
-    let db = Database::connect("sqlite://data/dev.db").await.unwrap();
+    let db = connect().await;
 
     let email_exists = user::Entity::find()
         .filter(user::Column::Email.eq(req.email.clone()))
@@ -231,7 +232,7 @@ pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
         );
     }
 
-    let db = Database::connect("sqlite://data/dev.db").await.unwrap();
+    let db = connect().await;
 
     let user = match UserModel::verify_credentials(&db, &req.student_number, &req.password).await {
         Ok(Some(u)) => u,
