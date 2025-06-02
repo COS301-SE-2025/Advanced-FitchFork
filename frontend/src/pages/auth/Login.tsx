@@ -24,7 +24,7 @@ export default function Login() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const handleFinish = async (values: LoginRequest) => {
-    setFormError(null); // Clear error before submission
+    setFormError(null);
     const res = await login(values);
     if (res.success) {
       navigate('/home');
@@ -35,20 +35,19 @@ export default function Login() {
 
   return (
     <ConfigProvider theme={{ algorithm: antdTheme.defaultAlgorithm }}>
-      <div className="flex flex-col lg:flex-row min-h-screen w-full bg-white text-gray-800 dark:bg-white dark:text-gray-800">
-        <div className="flex w-full lg:w-1/2 items-center justify-center px-4 sm:px-6 md:px-10 min-h-screen">
-          <Card className="w-full max-w-2xl rounded-2xl shadow-2xl">
+      <div className="flex flex-col lg:flex-row min-h-screen w-full bg-white text-gray-800">
+        {/* Left: Form Panel */}
+        <div className="flex w-full lg:w-2/5 items-center justify-center px-4 sm:px-6 md:px-10 py-12">
+          <Card className="w-full max-w-md sm:max-w-xl rounded-2xl shadow-none lg:shadow-2xl">
             <div className="flex justify-start mb-6">
-              <Logo size="md" showText={false} variant="light" />
+              <Logo size="md" showText={false} variant="light" shadow={true} />
             </div>
+
             <div className="text-center mb-8">
-              <Title level={1} className="!mb-2 text-2xl sm:text-3xl md:text-4xl">
+              <Title level={2} className="!mb-2 text-2xl sm:text-3xl">
                 Welcome back
               </Title>
-              <Text
-                type="secondary"
-                className="block text-sm sm:text-base md:text-lg text-gray-600"
-              >
+              <Text className="block text-sm sm:text-base text-gray-600">
                 Log in to access your dashboard
               </Text>
             </div>
@@ -60,7 +59,7 @@ export default function Login() {
                 showIcon
                 closable
                 onClose={() => setFormError(null)}
-                className="!mb-4"
+                className="mb-4"
               />
             )}
 
@@ -89,44 +88,23 @@ export default function Login() {
               </Form.Item>
 
               <div className="text-right -mt-2 mb-4">
-                <Link href="#" className="text-sm text-blue-600">
+                <Link href="/forgot-password" className="text-sm text-blue-600">
                   Forgot password?
                 </Link>
               </div>
 
-              <Form.Item className="mt-8">
+              <Form.Item className="mt-6">
                 <Button type="primary" htmlType="submit" block size="large">
                   Sign In
                 </Button>
               </Form.Item>
-
-              <Form.Item>
-                <div className="flex gap-4">
-                  <Button
-                    block
-                    onClick={() =>
-                      handleFinish({ student_number: 'u00000001', password: 'password123' })
-                    }
-                  >
-                    Admin
-                  </Button>
-                  <Button
-                    block
-                    onClick={() =>
-                      handleFinish({ student_number: 'u00000002', password: 'password123' })
-                    }
-                  >
-                    Normal User
-                  </Button>
-                </div>
-              </Form.Item>
             </Form>
 
-            <Divider plain className="!mt-10">
+            <Divider plain className="mt-8">
               or
             </Divider>
 
-            <Text className="block text-center text-xs sm:text-sm md:text-base text-gray-600">
+            <Text className="block text-center text-sm text-gray-600">
               Don&apos;t have an account?{' '}
               <Link href="/signup" className="text-blue-600">
                 Sign up
@@ -136,10 +114,10 @@ export default function Login() {
         </div>
 
         {/* Right: Visual Panel */}
-        <div className="hidden lg:flex w-1/2 relative items-center justify-center bg-gradient-to-br from-blue-600 to-indigo-700">
+        <div className="hidden lg:flex w-3/5 relative items-center justify-center bg-gradient-to-br from-blue-600 to-indigo-700">
           <div className="absolute inset-0 bg-black bg-opacity-30" />
           <div className="relative z-10 px-6 py-10 text-center text-white max-w-xl">
-            <Title level={2} className="!text-white !mb-4 !text-2xl xl:!text-3xl leading-snug">
+            <Title level={2} className="!text-white !mb-4 text-2xl xl:!text-3xl leading-snug">
               Automate Code Evaluation with Precision
             </Title>
             <Text className="text-base xl:text-lg text-white opacity-90 leading-relaxed">

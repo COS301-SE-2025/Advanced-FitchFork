@@ -2,6 +2,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useAuth } from './context/AuthContext';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
+import RequestPasswordResetPage from './pages/auth/RequestPasswordResetPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import Forbidden from './pages/shared/status/Forbidden';
 import Unauthorized from './pages/shared/status/Unauthorized';
 import Home from './pages/Home';
@@ -12,6 +14,7 @@ import NotFound from './pages/shared/status/NotFound';
 import UnderConstruction from './pages/shared/status/UnderConstruction';
 import ProfilePage from './pages/shared/Profile';
 import UserView from './pages/users/UserView';
+import PasswordResetSuccessPage from './pages/auth/PasswordResetSuccessPage';
 
 export default function App() {
   const { user, isAdmin, loading, isExpired } = useAuth();
@@ -39,12 +42,16 @@ export default function App() {
         <Route path="/" element={<Navigate to={user ? '/home' : '/login'} />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/forgot-password" element={<RequestPasswordResetPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/password-reset-success" element={<PasswordResetSuccessPage />} />
 
         {/* Admin-only User Routes */}
         <Route path="/users" element={requireAdmin(<UsersList />)} />
         <Route path="/users/:id" element={requireAdmin(<UserView />)} />
         <Route path="/users/:id/modules" element={requireAdmin(<Unauthorized />)} />
 
+        {/* Authenticated Routes */}
         <Route path="/home" element={requireAuth(<Home />)} />
         <Route path="/settings" element={requireAuth(<UnderConstruction />)} />
         <Route path="/profile" element={requireAuth(<ProfilePage />)} />
@@ -64,8 +71,10 @@ export default function App() {
 
         <Route path="/reports" element={<UnderConstruction />} />
 
+        {/* Status Pages */}
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/forbidden" element={<Forbidden />} />
+
         {/* Fallback */}
         <Route path="*" element={<NotFound />} />
       </Routes>

@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_appender::rolling;
+use axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
 
 #[tokio::main]
 async fn main() {
@@ -29,7 +30,8 @@ async fn main() {
     info!("Starting {} on http://{}:{}", project_name, host, port);
 
     // Setup CORS
-    let cors = CorsLayer::very_permissive();
+    let cors = CorsLayer::very_permissive()
+      .expose_headers([CONTENT_DISPOSITION, CONTENT_TYPE]);
 
     // Setup Axum app
     let app = Router::new()

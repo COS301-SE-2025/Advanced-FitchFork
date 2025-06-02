@@ -76,7 +76,7 @@ export default function Home() {
       title="Admin Dashboard"
       description="Manage modules, users, assignments, and submissions efficiently."
     >
-      <div className="w-full px-6">
+      <div className="w-full px-4 sm:px-6">
         {/* Header */}
         <Row justify="space-between" align="middle" className="mb-6">
           <Col>
@@ -86,7 +86,7 @@ export default function Home() {
             <Text type="secondary">Welcome back, Admin</Text>
           </Col>
           <Col>
-            <Space>
+            <Space wrap>
               <Button onClick={() => notifyInfo('Info', 'This is an info message.')}>Info</Button>
               <Button onClick={() => notifyError('Error', 'An error occurred.')}>Error</Button>
               <Button onClick={() => notifySuccess('Success', 'Everything is working.')}>
@@ -128,11 +128,13 @@ export default function Home() {
             <Row gutter={[16, 16]}>
               <Col span={24}>
                 <Card>
-                  <Table
-                    columns={submissionColumns}
-                    dataSource={dummySubmissions}
-                    pagination={false}
-                  />
+                  <div className="overflow-x-auto">
+                    <Table
+                      columns={submissionColumns}
+                      dataSource={dummySubmissions}
+                      pagination={false}
+                    />
+                  </div>
                 </Card>
               </Col>
             </Row>

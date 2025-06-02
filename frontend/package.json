@@ -21,6 +21,7 @@
     "dayjs": "^1.11.13",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-responsive": "^10.0.1",
     "react-router-dom": "^7.6.0"
   },
   "devDependencies": {
