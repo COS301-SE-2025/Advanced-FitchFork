@@ -171,3 +171,36 @@ pub async fn require_assigned_to_module<T: Into<PathParams>>(
         Err((StatusCode::FORBIDDEN, Json(ApiResponse::error("Access denied: Not assigned to this module"))))
     }
 }
+
+/// Guard for requiring either lecturer or tutor access.
+pub async fn require_lecturer_or_tutor<T: Into<PathParams>>(
+    Path(params): Path<T>,
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    let module_id = match extract_module_id(params.into()) {
+        Some(id) => id,
+        None => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error("Invalid module path")))),
+    };
+
+    let user = req.extensions().get::<AuthUser>()
+        .ok_or((
+            StatusCode::UNAUTHORIZED,
+            Json(ApiResponse::error("Authentication required"))
+        ))?
+        .0.clone();
+
+    if user.admin {
+        return Ok(next.run(req).await);
+    }
+
+    let db = connect().await;
+    let is_lecturer = user::Model::is_in_role(&db, user.sub, module_id, "lecturer").await.unwrap_or(false);
+    let is_tutor = user::Model::is_in_role(&db, user.sub, module_id, "tutor").await.unwrap_or(false);
+
+    if is_lecturer || is_tutor {
+        Ok(next.run(req).await)
+    } else {
+        Err((StatusCode::FORBIDDEN, Json(ApiResponse::error("Lecturer or tutor access required for this module"))))
+    }
+}
