@@ -12,7 +12,7 @@ use axum::{
 
 use delete::{delete_assignment, delete_files};
 use get::{download_file, get_assignment, get_assignments};
-use post::{create, upload_files};
+use post::{create, upload_files, submit_assignment};
 use put::edit_assignment;
 
 use crate::auth::guards::{require_assigned_to_module, require_lecturer};
@@ -34,6 +34,7 @@ use crate::routes::modules::assignments::get::list_files;
 /// - `GET  /assignments/:assignment_id/file/:file_id` → Download a file
 /// - `DELETE /assignments/:assignment_id/files`  → Delete files
 /// - `DELETE /assignments/:assignment_id`        → Delete assignment
+/// - `POST /assignments/:assignment_id/submissions` → Submit assignment
 pub fn assignment_routes() -> Router {
     Router::new()
         .route("/", post(create))
@@ -61,6 +62,12 @@ pub fn assignment_routes() -> Router {
         .route(
             "/:assignment_id/file/:file_id",
             get(download_file).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_assigned_to_module(Path(params), req, next)
+            })),
+        )
+        .route(
+            "/:assignment_id/submissions",
+            post(submit_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_assigned_to_module(Path(params), req, next)
             })),
         )
