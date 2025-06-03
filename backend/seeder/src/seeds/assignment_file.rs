@@ -1,120 +1,46 @@
 use crate::seed::Seeder;
-use chrono::Utc;
 use db::models::assignment;
-use db::models::assignment_file::{self, FileType};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
-use std::{env, fs, path::PathBuf};
+use db::models::assignment_file::{FileType, Model};
+use sea_orm::{DatabaseConnection, EntityTrait};
 
 pub struct AssignmentFileSeeder;
 
 #[async_trait::async_trait]
 impl Seeder for AssignmentFileSeeder {
     async fn seed(&self, db: &DatabaseConnection) {
-        let storage_root =
-            env::var("ASSIGNMENT_STORAGE_ROOT").expect("ASSIGNMENT_STORAGE_ROOT must be set");
-
         let assignments = assignment::Entity::find()
             .all(db)
             .await
             .expect("Failed to fetch assignments");
 
-        for a in &assignments {
-            let assignment_id = a.id;
-
-            let relative_path = format!(
-                "module_{}/assignment_{}/spec/spec_{}.txt",
-                a.module_id, a.id, a.id
-            );
-            let full_path = PathBuf::from(&storage_root).join(&relative_path);
-
-            if let Some(parent) = full_path.parent() {
-                fs::create_dir_all(parent)
-                    .expect("Failed to create directories for assignment file");
-            }
-
-            fs::write(
-                &full_path,
-                format!("This is the content of assignment file {assignment_id}"),
-            )
-            .expect("Failed to write assignment file");
-
-            let f = assignment_file::ActiveModel {
-                assignment_id: Set(assignment_id),
-                filename: Set(format!("spec_{assignment_id}.txt")),
-                path: Set(relative_path.clone()),
-                file_type: Set(FileType::Spec),
-                created_at: Set(Utc::now()),
-                updated_at: Set(Utc::now()),
-                ..Default::default()
-            };
-
-            let _ = f.insert(db).await;
-        }
+        // Define the file types and corresponding filename templates
+        let file_types: Vec<(FileType, fn(i32) -> String)> = vec![
+            (FileType::Spec, |id| format!("spec_{}.txt", id)),
+            (FileType::Memo, |id| format!("memo_{}.txt", id)),
+            (FileType::Main, |id| format!("main_{}.txt", id)),
+            (FileType::Additional, |id| format!("additional_{}.txt", id)),
+            (FileType::Makefile, |id| format!("makefile_{}.txt", id)),
+            (FileType::MarkAllocator, |id| {
+                format!("mark_allocator_{}.txt", id)
+            }),
+            (FileType::Config, |id| format!("config_{}.txt", id)),
+        ];
 
         for a in &assignments {
-            let assignment_id = a.id;
+            for &(ref file_type, filename_fn) in &file_types {
+                let filename = filename_fn(a.id.try_into().unwrap());
+                let content = format!("This is the content of assignment file {}", a.id);
 
-            let relative_path = format!(
-                "module_{}/assignment_{}/memo/memo_{}.txt",
-                a.module_id, a.id, a.id
-            );
-            let full_path = PathBuf::from(&storage_root).join(&relative_path);
-
-            if let Some(parent) = full_path.parent() {
-                fs::create_dir_all(parent)
-                    .expect("Failed to create directories for assignment file");
+                let _ = Model::save_file(
+                    db,
+                    a.id,
+                    a.module_id,
+                    file_type.clone(),
+                    &filename,
+                    content.as_bytes(),
+                )
+                .await;
             }
-
-            fs::write(
-                &full_path,
-                format!("This is the content of assignment file {assignment_id}"),
-            )
-            .expect("Failed to write assignment file");
-
-            let f = assignment_file::ActiveModel {
-                assignment_id: Set(assignment_id),
-                filename: Set(format!("memo_{assignment_id}.txt")),
-                path: Set(relative_path.clone()),
-                file_type: Set(FileType::Memo),
-                created_at: Set(Utc::now()),
-                updated_at: Set(Utc::now()),
-                ..Default::default()
-            };
-
-            let _ = f.insert(db).await;
-        }
-
-        for a in &assignments {
-            let assignment_id = a.id;
-
-            let relative_path = format!(
-                "module_{}/assignment_{}/main/main_{}.txt",
-                a.module_id, a.id, a.id
-            );
-            let full_path = PathBuf::from(&storage_root).join(&relative_path);
-
-            if let Some(parent) = full_path.parent() {
-                fs::create_dir_all(parent)
-                    .expect("Failed to create directories for assignment file");
-            }
-
-            fs::write(
-                &full_path,
-                format!("This is the content of assignment file {assignment_id}"),
-            )
-            .expect("Failed to write assignment file");
-
-            let f = assignment_file::ActiveModel {
-                assignment_id: Set(assignment_id),
-                filename: Set(format!("main_{assignment_id}.txt")),
-                path: Set(relative_path.clone()),
-                file_type: Set(FileType::Main),
-                created_at: Set(Utc::now()),
-                updated_at: Set(Utc::now()),
-                ..Default::default()
-            };
-
-            let _ = f.insert(db).await;
         }
     }
 }
