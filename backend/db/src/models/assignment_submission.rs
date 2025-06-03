@@ -20,6 +20,8 @@ pub struct Model {
     pub assignment_id: i64,
     /// ID of the user who submitted the assignment.
     pub user_id: i64,
+    /// Attempt number
+    pub attempt: i64,
     /// The original filename uploaded by the user.
     pub filename: String,
     /// Relative file path from the storage root.
@@ -76,11 +78,18 @@ impl Model {
     ///
     /// # Returns
     /// - `PathBuf` with the complete directory path.
-    pub fn full_directory_path(module_id: i64, assignment_id: i64) -> PathBuf {
+    pub fn full_directory_path(
+        module_id: i64,
+        assignment_id: i64,
+        user_id: i64,
+        attempt: i64,
+    ) -> PathBuf {
         Self::storage_root()
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{assignment_id}"))
             .join("assignment_submissions")
+            .join(format!("user_{user_id}"))
+            .join(format!("attempt_{attempt}"))
     }
 
     /// Computes the absolute path to the stored file on disk.
@@ -103,6 +112,7 @@ impl Model {
     /// - `db`: Reference to the active database connection.
     /// - `assignment_id`: ID of the assignment this submission is for.
     /// - `user_id`: ID of the user submitting.
+    /// - `attempt`: Attempt number,
     /// - `filename`: The original filename as submitted.
     /// - `bytes`: The file content as a byte slice.
     ///
@@ -113,6 +123,7 @@ impl Model {
         db: &DatabaseConnection,
         assignment_id: i64,
         user_id: i64,
+        attempt: i64,
         filename: &str,
         bytes: &[u8],
     ) -> Result<Self, DbErr> {
@@ -122,6 +133,7 @@ impl Model {
         let partial = ActiveModel {
             assignment_id: Set(assignment_id),
             user_id: Set(user_id),
+            attempt: Set(attempt),
             filename: Set(filename.to_string()),
             path: Set("".to_string()),
             created_at: Set(now),
@@ -150,7 +162,7 @@ impl Model {
         };
 
         // Step 4: Write file to disk
-        let dir_path = Self::full_directory_path(module_id, assignment_id);
+        let dir_path = Self::full_directory_path(module_id, assignment_id, user_id, attempt);
         fs::create_dir_all(&dir_path)
             .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
 
@@ -256,6 +268,7 @@ mod tests {
         let submission = crate::models::assignment_submission::ActiveModel {
             assignment_id: Set(assignment.id),
             user_id: Set(user.id),
+            attempt: Set(1),
             filename: Set("solution.zip".to_string()),
             path: Set("".to_string()),
             created_at: Set(Utc::now()),
@@ -268,7 +281,7 @@ mod tests {
 
         // Save file via submission
         let content = fake_bytes();
-        let file = Model::save_file(&db, submission.id, user.id, "solution.zip", &content)
+        let file = Model::save_file(&db, submission.id, user.id, 6, "solution.zip", &content)
             .await
             .expect("Failed to save file");
 

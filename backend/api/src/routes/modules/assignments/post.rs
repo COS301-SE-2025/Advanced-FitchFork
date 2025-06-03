@@ -16,7 +16,7 @@
 /// Returns an error response if any of the required fields are missing or invalid.
 /// Handles the deletion of an assignment.
 use axum::{
-    extract::{Multipart, Path, Extension},
+    extract::{Extension, Multipart, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -26,19 +26,22 @@ use chrono::{DateTime, Utc};
 
 use serde::{Deserialize, Serialize};
 
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, DbErr};
+use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
 
 use db::{
     connect,
     models::{
-        assignment::{Column as AssignmentColumn, Entity as AssignmentEntity, Model as AssignmentModel, AssignmentType},
+        assignment::{
+            AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
+            Model as AssignmentModel,
+        },
         assignment_file::{FileType, Model as FileModel},
         assignment_submission::Model as AssignmentSubmissionModel,
     },
 };
 
-use crate::response::ApiResponse;
 use crate::auth::AuthUser;
+use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
 pub struct UploadedFileMetadata {
@@ -99,7 +102,9 @@ pub async fn upload_files(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<Vec<UploadedFileMetadata>>::error("Assignment not found")),
+                Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
+                    "Assignment not found",
+                )),
             )
                 .into_response();
         }
@@ -107,7 +112,9 @@ pub async fn upload_files(
             eprintln!("DB error checking assignment: {:?}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<UploadedFileMetadata>>::error("Database error")),
+                Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
+                    "Database error",
+                )),
             )
                 .into_response();
         }
@@ -157,7 +164,9 @@ pub async fn upload_files(
     if saved_files.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error("No files were uploaded")),
+            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
+                "No files were uploaded",
+            )),
         )
             .into_response();
     }
@@ -171,8 +180,6 @@ pub async fn upload_files(
     )
         .into_response()
 }
-
-
 
 #[derive(Debug, Serialize)]
 pub struct AssignmentResponse {
@@ -202,7 +209,6 @@ impl From<AssignmentModel> for AssignmentResponse {
         }
     }
 }
-
 
 /// Creates a new assignment under a specific module.
 ///
@@ -242,29 +248,31 @@ pub async fn create(
     let db = connect().await;
 
     // Parse and validate dates
-    let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
-        .map(|dt| dt.with_timezone(&Utc))
-    {
-        Ok(date) => date,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error("Invalid available_from datetime")),
-            );
-        }
-    };
+    let available_from =
+        match DateTime::parse_from_rfc3339(&req.available_from).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(date) => date,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid available_from datetime",
+                    )),
+                );
+            }
+        };
 
-    let due_date = match DateTime::parse_from_rfc3339(&req.due_date)
-        .map(|dt| dt.with_timezone(&Utc))
-    {
-        Ok(date) => date,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error("Invalid due_date datetime")),
-            );
-        }
-    };
+    let due_date =
+        match DateTime::parse_from_rfc3339(&req.due_date).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(date) => date,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid due_date datetime",
+                    )),
+                );
+            }
+        };
     // Convert string to enum
     let assignment_type = match req.assignment_type.parse::<AssignmentType>() {
         Ok(t) => t,
@@ -287,17 +295,23 @@ pub async fn create(
         available_from,
         due_date,
     )
-    .await {
+    .await
+    {
         Ok(model) => {
             let response = AssignmentResponse::from(model);
             (
                 StatusCode::OK,
-                Json(ApiResponse::success(response, "Assignment created successfully")),
+                Json(ApiResponse::success(
+                    response,
+                    "Assignment created successfully",
+                )),
             )
         }
         Err(DbErr::RecordNotInserted) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<AssignmentResponse>::error("Assignment could not be inserted")),
+            Json(ApiResponse::<AssignmentResponse>::error(
+                "Assignment could not be inserted",
+            )),
         ),
         Err(e) => {
             eprintln!("DB error: {:?}", e);
@@ -328,146 +342,165 @@ pub async fn create(
 /// - `400 Bad Request` (no file, invalid format, or unsupported file type)
 /// - `403 Forbidden` (unauthorized)
 /// - `404 Not Found` (assignment/module not found)
-pub async fn submit_assignment(
-    Path((module_id, assignment_id)): Path<(i64, i64)>,
-    Extension(AuthUser(claims)): Extension<AuthUser>,
-    mut multipart: Multipart,
-) -> impl IntoResponse {
-    let db = connect().await;
 
-    let assignment_exists = AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await;
+// pub async fn submit_assignment(
+//     Path((module_id, assignment_id)): Path<(i64, i64)>,
+//     Extension(AuthUser(claims)): Extension<AuthUser>,
+//     mut multipart: Multipart,
+// ) -> impl IntoResponse {
+//     let db = connect().await;
 
-    match assignment_exists {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<UploadedFileMetadata>::error("Assignment not found")),
-            )
-                .into_response();
-        }
-        Err(err) => {
-            eprintln!("DB error checking assignment: {:?}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UploadedFileMetadata>::error("Database error")),
-            )
-                .into_response();
-        }
-    }
+//     let assignment_exists = AssignmentEntity::find()
+//         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
+//         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
+//         .one(&db)
+//         .await;
 
-    let field = match multipart.next_field().await {
-        Ok(Some(field)) => field,
-        Ok(None) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<UploadedFileMetadata>::error("No file provided")),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            eprintln!("Error reading multipart field: {:?}", e);
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<UploadedFileMetadata>::error("Invalid file upload")),
-            )
-                .into_response();
-        }
-    };
+//     match assignment_exists {
+//         Ok(Some(_)) => {}
+//         Ok(None) => {
+//             return (
+//                 StatusCode::NOT_FOUND,
+//                 Json(ApiResponse::<UploadedFileMetadata>::error(
+//                     "Assignment not found",
+//                 )),
+//             )
+//                 .into_response();
+//         }
+//         Err(err) => {
+//             eprintln!("DB error checking assignment: {:?}", err);
+//             return (
+//                 StatusCode::INTERNAL_SERVER_ERROR,
+//                 Json(ApiResponse::<UploadedFileMetadata>::error("Database error")),
+//             )
+//                 .into_response();
+//         }
+//     }
 
-    let file_name = match field.file_name().map(|s| s.to_string()) {
-        Some(name) => name,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<UploadedFileMetadata>::error("No filename provided")),
-            )
-                .into_response();
-        }
-    };
+//     let field = match multipart.next_field().await {
+//         Ok(Some(field)) => field,
+//         Ok(None) => {
+//             return (
+//                 StatusCode::BAD_REQUEST,
+//                 Json(ApiResponse::<UploadedFileMetadata>::error(
+//                     "No file provided",
+//                 )),
+//             )
+//                 .into_response();
+//         }
+//         Err(e) => {
+//             eprintln!("Error reading multipart field: {:?}", e);
+//             return (
+//                 StatusCode::BAD_REQUEST,
+//                 Json(ApiResponse::<UploadedFileMetadata>::error(
+//                     "Invalid file upload",
+//                 )),
+//             )
+//                 .into_response();
+//         }
+//     };
 
-    let allowed_extensions = [".tgz", ".gz", ".tar", ".zip"];
-    let file_extension = std::path::Path::new(&file_name)
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| format!(".{}", ext.to_lowercase()));
+//     let file_name = match field.file_name().map(|s| s.to_string()) {
+//         Some(name) => name,
+//         None => {
+//             return (
+//                 StatusCode::BAD_REQUEST,
+//                 Json(ApiResponse::<UploadedFileMetadata>::error(
+//                     "No filename provided",
+//                 )),
+//             )
+//                 .into_response();
+//         }
+//     };
 
-    if !file_extension
-        .as_ref()
-        .map_or(false, |ext| allowed_extensions.contains(&ext.as_str()))
-    {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<UploadedFileMetadata>::error(
-                "Only .tgz, .gz, .tar, and .zip files are allowed",
-            )),
-        )
-            .into_response();
-    }
+//     let allowed_extensions = [".tgz", ".gz", ".tar", ".zip"];
+//     let file_extension = std::path::Path::new(&file_name)
+//         .extension()
+//         .and_then(|ext| ext.to_str())
+//         .map(|ext| format!(".{}", ext.to_lowercase()));
 
-    let file_bytes = match field.bytes().await {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            eprintln!("Error reading file bytes: {:?}", e);
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<UploadedFileMetadata>::error("Error reading file")),
-            )
-                .into_response();
-        }
-    };
+//     if !file_extension
+//         .as_ref()
+//         .map_or(false, |ext| allowed_extensions.contains(&ext.as_str()))
+//     {
+//         return (
+//             StatusCode::BAD_REQUEST,
+//             Json(ApiResponse::<UploadedFileMetadata>::error(
+//                 "Only .tgz, .gz, .tar, and .zip files are allowed",
+//             )),
+//         )
+//             .into_response();
+//     }
 
-    if file_bytes.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<UploadedFileMetadata>::error("Empty file provided")),
-        )
-            .into_response();
-    }
+//     let file_bytes = match field.bytes().await {
+//         Ok(bytes) => bytes,
+//         Err(e) => {
+//             eprintln!("Error reading file bytes: {:?}", e);
+//             return (
+//                 StatusCode::BAD_REQUEST,
+//                 Json(ApiResponse::<UploadedFileMetadata>::error(
+//                     "Error reading file",
+//                 )),
+//             )
+//                 .into_response();
+//         }
+//     };
 
-    let saved = match AssignmentSubmissionModel::save_file(
-        &db,
-        assignment_id,
-        claims.sub,
-        &file_name,
-        &file_bytes,
-    )
-    .await
-    {
-        Ok(model) => model,
-        Err(e) => {
-            eprintln!("Error saving submission: {:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<AssignmentSubmissionMetadata>::error("Failed to save submission")),
-            )
-                .into_response();
-        }
-    };
+//     if file_bytes.is_empty() {
+//         return (
+//             StatusCode::BAD_REQUEST,
+//             Json(ApiResponse::<UploadedFileMetadata>::error(
+//                 "Empty file provided",
+//             )),
+//         )
+//             .into_response();
+//     }
 
-    let response = AssignmentSubmissionMetadata {
-        id: saved.id,
-        assignment_id: saved.assignment_id,
-        user_id: saved.user_id,
-        filename: saved.filename,
-        path: saved.path,
-        created_at: saved.created_at.to_rfc3339(),
-        updated_at: saved.updated_at.to_rfc3339(),
-    };
+//TODO - Reece please fix this. I think this route needs to be nested one deeper since assignment_submission also has an attempt number
+//This:
+//POST /api/modules/:module_id/assignments/:assignment_id/submissions
+//Needs to change to this:
+//POST /api/modules/:module_id/assignments/:assignment_id/submissions/:attempt_number
 
-    (
-        StatusCode::CREATED,
-        Json(ApiResponse::success(
-            response,
-            "Assignment submitted successfully",
-        )),
-    )
-        .into_response()
-}
+// let saved = match AssignmentSubmissionModel::save_file(
+//     &db,
+//     assignment_id,
+//     claims.sub,
+//     &file_name,
+//     &file_bytes,
+// )
+// .await
+// {
+//     Ok(model) => model,
+//     Err(e) => {
+//         eprintln!("Error saving submission: {:?}", e);
+//         return (
+//             StatusCode::INTERNAL_SERVER_ERROR,
+//             Json(ApiResponse::<AssignmentSubmissionMetadata>::error("Failed to save submission")),
+//         )
+//             .into_response();
+//     }
+// };
+
+// let response = AssignmentSubmissionMetadata {
+//     id: saved.id,
+//     assignment_id: saved.assignment_id,
+//     user_id: saved.user_id,
+//     filename: saved.filename,
+//     path: saved.path,
+//     created_at: saved.created_at.to_rfc3339(),
+//     updated_at: saved.updated_at.to_rfc3339(),
+// };
+
+// (
+//     StatusCode::CREATED,
+//     Json(ApiResponse::success(
+//         response,
+//         "Assignment submitted successfully",
+//     )),
+// )
+//     .into_response()
+// }
 
 #[cfg(test)]
 mod tests {
