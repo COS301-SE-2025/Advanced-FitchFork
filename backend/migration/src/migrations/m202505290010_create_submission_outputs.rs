@@ -4,7 +4,7 @@ pub struct Migration;
 
 impl MigrationName for Migration {
     fn name(&self) -> &str {
-        "m202505290008_create_tasks"
+        "m202505290010_create_submission_outputs"
     }
 }
 
@@ -14,7 +14,7 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Alias::new("assignment_tasks"))
+                    .table(Alias::new("assignment_submission_outputs"))
                     .if_not_exists()
                     .col(
                         ColumnDef::new(Alias::new("id"))
@@ -29,11 +29,16 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(
-                        ColumnDef::new(Alias::new("task_number"))
+                        ColumnDef::new(Alias::new("task_id"))
                             .big_integer()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(Alias::new("command")).string().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("user_id"))
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(Alias::new("path")).string().not_null())
                     .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()
@@ -48,8 +53,29 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .from(Alias::new("assignment_tasks"), Alias::new("assignment_id"))
+                            .from(
+                                Alias::new("assignment_submission_outputs"),
+                                Alias::new("assignment_id"),
+                            )
                             .to(Alias::new("assignments"), Alias::new("id"))
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(
+                                Alias::new("assignment_submission_outputs"),
+                                Alias::new("task_id"),
+                            )
+                            .to(Alias::new("assignment_tasks"), Alias::new("id"))
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(
+                                Alias::new("assignment_submission_outputs"),
+                                Alias::new("user_id"),
+                            )
+                            .to(Alias::new("users"), Alias::new("id"))
                             .on_delete(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
@@ -61,7 +87,7 @@ impl MigrationTrait for Migration {
         manager
             .drop_table(
                 Table::drop()
-                    .table(Alias::new("assignment_tasks"))
+                    .table(Alias::new("assignment_submission_outputs"))
                     .to_owned(),
             )
             .await
