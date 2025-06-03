@@ -1,6 +1,8 @@
 pub mod assignment;
 pub mod assignment_file;
+pub mod assignment_memo_output;
 pub mod assignment_submission;
+pub mod assignment_task;
 pub mod module;
 pub mod user;
 pub mod user_role;
