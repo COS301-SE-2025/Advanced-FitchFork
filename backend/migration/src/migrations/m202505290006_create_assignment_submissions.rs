@@ -29,6 +29,7 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(ColumnDef::new(Alias::new("user_id")).integer().not_null())
+                    .col(ColumnDef::new(Alias::new("attempt")).integer().not_null())
                     .col(ColumnDef::new(Alias::new("filename")).string().not_null())
                     .col(ColumnDef::new(Alias::new("path")).string().not_null())
                     .col(

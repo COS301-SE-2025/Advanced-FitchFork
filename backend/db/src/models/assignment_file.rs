@@ -50,9 +50,6 @@ pub enum FileType {
     #[strum(serialize = "memo")]
     #[sea_orm(string_value = "memo")]
     Memo,
-    #[strum(serialize = "additional")]
-    #[sea_orm(string_value = "additional")]
-    Additional,
     #[strum(serialize = "makefile")]
     #[sea_orm(string_value = "makefile")]
     Makefile,
@@ -171,6 +168,8 @@ impl Model {
         let full_path = Self::storage_root().join(&self.path);
         fs::remove_file(full_path)
     }
+
+    //TODO - move all these commented things to their own file (Richard will do)
 
     // /// Creates the memo output for an assignment by executing both the memo file and the main file.
     // ///
@@ -442,6 +441,8 @@ mod tests {
         saved.delete_file_only().unwrap();
         assert!(!full_path.exists());
     }
+
+    //TODO - move all these commented things to their own file (Richard will do)
 
     // // Mock the run_zip_files function for testing
     // async fn mock_run_zip_files(

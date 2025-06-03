@@ -21,9 +21,9 @@ impl Seeder for AssignmentSubmissionSeeder {
         if users.is_empty() {
             panic!("No users found — at least one user must exist to seed assignment_submissions");
         }
-
         for assignment in &assignments {
             for user in &users {
+                let counter = 1;
                 // Dummy original filename and content for seeding
                 let dummy_filename = "submission.txt";
                 let dummy_content = format!(
@@ -36,6 +36,7 @@ impl Seeder for AssignmentSubmissionSeeder {
                     db,
                     assignment.id,
                     user.id,
+                    counter,
                     dummy_filename,
                     dummy_content.as_bytes(),
                 )

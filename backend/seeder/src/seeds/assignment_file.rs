@@ -18,7 +18,6 @@ impl Seeder for AssignmentFileSeeder {
             (FileType::Spec, |id| format!("spec_{}.txt", id)),
             (FileType::Memo, |id| format!("memo_{}.txt", id)),
             (FileType::Main, |id| format!("main_{}.txt", id)),
-            (FileType::Additional, |id| format!("additional_{}.txt", id)),
             (FileType::Makefile, |id| format!("makefile_{}.txt", id)),
             (FileType::MarkAllocator, |id| {
                 format!("mark_allocator_{}.txt", id)
