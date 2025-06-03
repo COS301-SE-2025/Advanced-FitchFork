@@ -1,6 +1,7 @@
 pub mod assignment;
 pub mod assignment_file;
 pub mod assignment_memo_output;
+pub mod assignment_overwrite_file;
 pub mod assignment_submission;
 pub mod assignment_submission_output;
 pub mod assignment_task;
@@ -12,6 +13,7 @@ pub mod user_module_role;
 pub use assignment::Entity as Assignment;
 pub use assignment_file::Entity as AssignmentFile;
 pub use assignment_memo_output::Entity as AssignmentMemoOutput;
+pub use assignment_overwrite_file::Entity as AssignmentOverwriteFile;
 pub use assignment_submission::Entity as AssignmentSubmission;
 pub use assignment_submission_output::Entity as AssignmentSubmissionOutput;
 pub use assignment_task::Entity as AssignmentTask;

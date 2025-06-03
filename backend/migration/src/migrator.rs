@@ -18,6 +18,7 @@ impl MigratorTrait for Migrator {
             Box::new(migrations::m202505290008_create_tasks::Migration),
             Box::new(migrations::m202505290009_create_memo_outputs::Migration),
             Box::new(migrations::m202505290010_create_submission_outputs::Migration),
+            Box::new(migrations::m202505290011_create_overwrite_files::Migration),
         ]
     }
 }

@@ -3,6 +3,7 @@ use crate::seed::Seeder;
 use crate::seeds::{
     assignment::AssignmentSeeder, assignment_file::AssignmentFileSeeder,
     assignment_memo_output::AssignmentMemoOutputSeeder,
+    assignment_overwrite_file::AssignmentOverwriteFileSeeder,
     assignment_submission::AssignmentSubmissionSeeder,
     assignment_submission_output::AssignmentSubmissionOutputSeeder,
     assignment_task::AssignmentTaskSeeder, module::ModuleSeeder, user::UserSeeder,
@@ -32,6 +33,10 @@ async fn main() {
         (
             Box::new(AssignmentSubmissionOutputSeeder),
             "AssignmentSubmissionOutput",
+        ),
+        (
+            Box::new(AssignmentOverwriteFileSeeder),
+            "AssignmentOverwriteFile",
         ),
     ] {
         run_seeder(&*seeder, name, &db).await;
