@@ -4,7 +4,7 @@ pub struct Migration;
 
 impl MigrationName for Migration {
     fn name(&self) -> &str {
-        "m202505290007_create_password_reset_token"
+        "m202505290008_create_tasks"
     }
 }
 
@@ -14,39 +14,42 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Alias::new("password_reset_tokens"))
+                    .table(Alias::new("assignment_tasks"))
                     .if_not_exists()
                     .col(
                         ColumnDef::new(Alias::new("id"))
-                            .integer()
+                            .big_integer()
                             .not_null()
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(Alias::new("user_id")).integer().not_null())
-                    .col(ColumnDef::new(Alias::new("token")).string().not_null())
                     .col(
-                        ColumnDef::new(Alias::new("expires_at"))
-                            .timestamp()
+                        ColumnDef::new(Alias::new("assignment_id"))
+                            .big_integer()
                             .not_null(),
                     )
                     .col(
-                        ColumnDef::new(Alias::new("used"))
-                            .boolean()
-                            .not_null()
-                            .default(false),
+                        ColumnDef::new(Alias::new("task_number"))
+                            .big_integer()
+                            .not_null(),
                     )
+                    .col(ColumnDef::new(Alias::new("command")).string().not_null())
                     .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()
                             .not_null()
                             .default(Expr::cust("CURRENT_TIMESTAMP")),
                     )
+                    .col(
+                        ColumnDef::new(Alias::new("updated_at"))
+                            .timestamp()
+                            .not_null()
+                            .default(Expr::cust("CURRENT_TIMESTAMP")),
+                    )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_password_reset_token_user")
-                            .from(Alias::new("password_reset_tokens"), Alias::new("user_id"))
-                            .to(Alias::new("users"), Alias::new("id"))
+                            .from(Alias::new("assignment_tasks"), Alias::new("assignment_id"))
+                            .to(Alias::new("assignments"), Alias::new("id"))
                             .on_delete(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
@@ -58,7 +61,7 @@ impl MigrationTrait for Migration {
         manager
             .drop_table(
                 Table::drop()
-                    .table(Alias::new("password_reset_tokens"))
+                    .table(Alias::new("assignment_tasks"))
                     .to_owned(),
             )
             .await

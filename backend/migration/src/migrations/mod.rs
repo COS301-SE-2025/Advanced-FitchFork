@@ -5,3 +5,7 @@ pub mod m202505290004_create_assignments;
 pub mod m202505290005_create_assignment_files;
 pub mod m202505290006_create_assignment_submissions;
 pub mod m202505290007_create_password_reset_tokens;
+pub mod m202505290008_create_tasks;
+pub mod m202505290009_create_memo_outputs;
+pub mod m202505290010_create_submission_outputs;
+pub mod m202505290011_create_overwrite_files;
