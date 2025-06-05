@@ -565,6 +565,11 @@ pub struct SubmissionResponse {
 /// - `200 OK` with list of submissions
 /// - `404 Not Found` (assignment not found)
 /// - `500 Internal Server Error` (database error)
+/// 
+pub fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
+    submission > due_date
+}
+
 pub async fn get_my_submissions(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
@@ -609,7 +614,7 @@ pub async fn get_my_submissions(
                     id: s.id,
                     filename: s.filename,
                     created_at: s.created_at.to_rfc3339(),
-                    is_late: s.created_at > assignment.due_date,
+                    is_late: is_late(s.created_at, assignment.due_date)
                 })
                 .collect();
 
@@ -772,7 +777,7 @@ pub async fn list_submissions(
             user_id: s.user_id,
             filename: s.filename,
             created_at: s.created_at.to_rfc3339(),
-            is_late: s.created_at > assignment.due_date,
+            is_late: is_late(s.created_at, assignment.due_date)
         })
         .collect();
 
