@@ -1,7 +1,7 @@
 use std::{env, path::PathBuf};
 
 use axum::{
-    extract::{Path, Query, Extension},
+    extract::{Extension, Path, Query},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Json, Response},
 };
@@ -10,32 +10,26 @@ use chrono::{DateTime, Utc};
 
 use serde::{Deserialize, Serialize};
 
-use tokio::{
-    fs::File as FsFile,
-    io::AsyncReadExt,
-};
+use tokio::{fs::File as FsFile, io::AsyncReadExt};
 
 use sea_orm::{
-    ColumnTrait,
-    Condition,
-    DatabaseConnection,
-    EntityTrait,
-    PaginatorTrait,
-    QueryFilter,
-    QueryOrder,
-    sea_query::Expr,
+    sea_query::Expr, ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait,
+    QueryFilter, QueryOrder,
 };
 
+use crate::auth::AuthUser;
+use crate::response::ApiResponse;
 use db::{
     connect,
     models::{
-        assignment::{self, Column as AssignmentColumn, Entity as AssignmentEntity, Model as AssignmentModel, AssignmentType},
+        assignment::{
+            self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
+            Model as AssignmentModel,
+        },
         assignment_file::{self, Column as FileColumn, Entity as FileEntity},
         assignment_submission,
     },
 };
-use crate::response::ApiResponse;
-use crate::auth::AuthUser;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AssignmentResponse {
@@ -172,7 +166,9 @@ pub async fn get_assignment(
         }
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<AssignmentResponse>::error("Assignment not found")),
+            Json(ApiResponse::<AssignmentResponse>::error(
+                "Assignment not found",
+            )),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -236,8 +232,8 @@ pub async fn download_file(
         }
     };
 
-    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/assignment_files".to_string());
+    let storage_root =
+        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".to_string());
     let fs_path = PathBuf::from(storage_root).join(&file.path);
 
     eprintln!("Resolved file path: {:?}", fs_path);
@@ -247,7 +243,7 @@ pub async fn download_file(
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("File missing on disk")),
         )
-        .into_response();
+            .into_response();
     }
 
     let mut file_handle = match FsFile::open(&fs_path).await {
@@ -278,7 +274,10 @@ pub async fn download_file(
         HeaderValue::from_str(&format!("attachment; filename=\"{}\"", file.filename))
             .unwrap_or_else(|_| HeaderValue::from_static("attachment")),
     );
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
 
     (StatusCode::OK, headers, buffer).into_response()
 }
@@ -372,8 +371,18 @@ pub struct FilterResponse {
 }
 
 impl FilterResponse {
-    fn new(assignments: Vec<AssignmentDetailResponse>, page: i32, per_page: i32, total: i32) -> Self {
-        Self { assignments, page, per_page, total }
+    fn new(
+        assignments: Vec<AssignmentDetailResponse>,
+        page: i32,
+        per_page: i32,
+        total: i32,
+    ) -> Self {
+        Self {
+            assignments,
+            page,
+            per_page,
+            total,
+        }
     }
 }
 
@@ -417,8 +426,13 @@ pub async fn get_assignments(
     // Validate sort fields
     if let Some(sort_field) = &params.sort {
         let valid_fields = [
-            "name", "description", "due_date", "available_from",
-            "assignment_type", "created_at", "updated_at",
+            "name",
+            "description",
+            "due_date",
+            "available_from",
+            "assignment_type",
+            "created_at",
+            "updated_at",
         ];
         for field in sort_field.split(',') {
             let field = field.trim_start_matches('-');
@@ -456,7 +470,9 @@ pub async fn get_assignments(
             Err(_) => {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<FilterResponse>::error("Invalid assignment_type")),
+                    Json(ApiResponse::<FilterResponse>::error(
+                        "Invalid assignment_type",
+                    )),
                 );
             }
         }
@@ -499,13 +515,55 @@ pub async fn get_assignments(
             };
 
             query = match field {
-                "name" => if asc { query.order_by_asc(AssignmentColumn::Name) } else { query.order_by_desc(AssignmentColumn::Name) },
-                "description" => if asc { query.order_by_asc(AssignmentColumn::Description) } else { query.order_by_desc(AssignmentColumn::Description) },
-                "due_date" => if asc { query.order_by_asc(AssignmentColumn::DueDate) } else { query.order_by_desc(AssignmentColumn::DueDate) },
-                "available_from" => if asc { query.order_by_asc(AssignmentColumn::AvailableFrom) } else { query.order_by_desc(AssignmentColumn::AvailableFrom) },
-                "assignment_type" => if asc { query.order_by_asc(AssignmentColumn::AssignmentType) } else { query.order_by_desc(AssignmentColumn::AssignmentType) },
-                "created_at" => if asc { query.order_by_asc(AssignmentColumn::CreatedAt) } else { query.order_by_desc(AssignmentColumn::CreatedAt) },
-                "updated_at" => if asc { query.order_by_asc(AssignmentColumn::UpdatedAt) } else { query.order_by_desc(AssignmentColumn::UpdatedAt) },
+                "name" => {
+                    if asc {
+                        query.order_by_asc(AssignmentColumn::Name)
+                    } else {
+                        query.order_by_desc(AssignmentColumn::Name)
+                    }
+                }
+                "description" => {
+                    if asc {
+                        query.order_by_asc(AssignmentColumn::Description)
+                    } else {
+                        query.order_by_desc(AssignmentColumn::Description)
+                    }
+                }
+                "due_date" => {
+                    if asc {
+                        query.order_by_asc(AssignmentColumn::DueDate)
+                    } else {
+                        query.order_by_desc(AssignmentColumn::DueDate)
+                    }
+                }
+                "available_from" => {
+                    if asc {
+                        query.order_by_asc(AssignmentColumn::AvailableFrom)
+                    } else {
+                        query.order_by_desc(AssignmentColumn::AvailableFrom)
+                    }
+                }
+                "assignment_type" => {
+                    if asc {
+                        query.order_by_asc(AssignmentColumn::AssignmentType)
+                    } else {
+                        query.order_by_desc(AssignmentColumn::AssignmentType)
+                    }
+                }
+                "created_at" => {
+                    if asc {
+                        query.order_by_asc(AssignmentColumn::CreatedAt)
+                    } else {
+                        query.order_by_desc(AssignmentColumn::CreatedAt)
+                    }
+                }
+                "updated_at" => {
+                    if asc {
+                        query.order_by_asc(AssignmentColumn::UpdatedAt)
+                    } else {
+                        query.order_by_desc(AssignmentColumn::UpdatedAt)
+                    }
+                }
                 _ => query,
             };
         }
@@ -534,7 +592,10 @@ pub async fn get_assignments(
             let response = FilterResponse::new(assignments, page, per_page, total);
             (
                 StatusCode::OK,
-                Json(ApiResponse::success(response, "Assignments retrieved successfully")),
+                Json(ApiResponse::success(
+                    response,
+                    "Assignments retrieved successfully",
+                )),
             )
         }
         Err(err) => {
@@ -565,7 +626,7 @@ pub struct SubmissionResponse {
 /// - `200 OK` with list of submissions
 /// - `404 Not Found` (assignment not found)
 /// - `500 Internal Server Error` (database error)
-/// 
+///
 pub fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
 }
@@ -586,7 +647,9 @@ pub async fn get_my_submissions(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<Vec<SubmissionResponse>>::error("Assignment not found")),
+                Json(ApiResponse::<Vec<SubmissionResponse>>::error(
+                    "Assignment not found",
+                )),
             )
                 .into_response();
         }
@@ -594,7 +657,9 @@ pub async fn get_my_submissions(
             eprintln!("DB error checking assignment: {:?}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<SubmissionResponse>>::error("Database error")),
+                Json(ApiResponse::<Vec<SubmissionResponse>>::error(
+                    "Database error",
+                )),
             )
                 .into_response();
         }
@@ -614,7 +679,7 @@ pub async fn get_my_submissions(
                     id: s.id,
                     filename: s.filename,
                     created_at: s.created_at.to_rfc3339(),
-                    is_late: is_late(s.created_at, assignment.due_date)
+                    is_late: is_late(s.created_at, assignment.due_date),
                 })
                 .collect();
 
@@ -631,7 +696,9 @@ pub async fn get_my_submissions(
             eprintln!("DB error fetching submissions: {:?}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<SubmissionResponse>>::error("Failed to retrieve submissions")),
+                Json(ApiResponse::<Vec<SubmissionResponse>>::error(
+                    "Failed to retrieve submissions",
+                )),
             )
                 .into_response()
         }
@@ -703,7 +770,9 @@ pub async fn list_submissions(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<SubmissionsListResponse>::error("Assignment not found")),
+                Json(ApiResponse::<SubmissionsListResponse>::error(
+                    "Assignment not found",
+                )),
             )
                 .into_response();
         }
@@ -711,7 +780,9 @@ pub async fn list_submissions(
             eprintln!("DB error checking assignment: {:?}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SubmissionsListResponse>::error("Database error")),
+                Json(ApiResponse::<SubmissionsListResponse>::error(
+                    "Database error",
+                )),
             )
                 .into_response();
         }
@@ -722,8 +793,8 @@ pub async fn list_submissions(
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
 
     // Build filter condition
-    let mut condition = Condition::all()
-        .add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32));
+    let mut condition =
+        Condition::all().add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32));
 
     if let Some(user_id) = params.user_id {
         condition = condition.add(assignment_submission::Column::UserId.eq(user_id as i32));
@@ -731,9 +802,11 @@ pub async fn list_submissions(
 
     if let Some(late) = params.late {
         if late {
-            condition = condition.add(assignment_submission::Column::CreatedAt.gt(assignment.due_date));
+            condition =
+                condition.add(assignment_submission::Column::CreatedAt.gt(assignment.due_date));
         } else {
-            condition = condition.add(assignment_submission::Column::CreatedAt.lte(assignment.due_date));
+            condition =
+                condition.add(assignment_submission::Column::CreatedAt.lte(assignment.due_date));
         }
     }
 
@@ -756,19 +829,27 @@ pub async fn list_submissions(
 
             match field {
                 "filename" => query = query.order_by(assignment_submission::Column::Filename, dir),
-                "created_at" => query = query.order_by(assignment_submission::Column::CreatedAt, dir),
+                "created_at" => {
+                    query = query.order_by(assignment_submission::Column::CreatedAt, dir)
+                }
                 "user_id" => query = query.order_by(assignment_submission::Column::UserId, dir),
                 _ => {}
             }
         }
     } else {
-        query = query.order_by(assignment_submission::Column::CreatedAt, sea_orm::Order::Desc);
+        query = query.order_by(
+            assignment_submission::Column::CreatedAt,
+            sea_orm::Order::Desc,
+        );
     }
 
     // Pagination
     let paginator = query.paginate(&db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
-    let submissions = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
+    let submissions = paginator
+        .fetch_page((page - 1).into())
+        .await
+        .unwrap_or_default();
 
     let response: Vec<SubmissionListItem> = submissions
         .into_iter()
@@ -777,7 +858,7 @@ pub async fn list_submissions(
             user_id: s.user_id,
             filename: s.filename,
             created_at: s.created_at.to_rfc3339(),
-            is_late: is_late(s.created_at, assignment.due_date)
+            is_late: is_late(s.created_at, assignment.due_date),
         })
         .collect();
 
@@ -794,4 +875,27 @@ pub async fn list_submissions(
         )),
     )
         .into_response()
+}
+
+#[derive(Debug, Serialize)]
+pub struct PerStudentSubmission {
+    pub user_id: i64,
+    pub count: i8,
+    pub latest_at: DateTime<Utc>,
+    pub latest_late: bool
+}
+
+
+#[derive(Debug, Serialize)]
+pub struct StatResponse {
+    pub assignment_id: i64,
+    pub total_submissions: i8,
+    pub unique_submitters: i8,
+    pub late_submissions: i8,
+    pub per_student_submission_count: Vec<PerStudentSubmission>
+}
+
+pub async fn stats(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
+    
+
 }

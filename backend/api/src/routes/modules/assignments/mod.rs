@@ -11,14 +11,13 @@ use axum::{
 };
 
 use delete::{delete_assignment, delete_files};
-use get::{download_file, get_assignment, get_assignments, get_my_submissions, list_submissions};
+use get::{download_file, get_assignment, get_assignments, get_my_submissions, list_submissions, stats, list_files};
 use post::{create, upload_files};
 use put::edit_assignment;
 
 use crate::auth::guards::{
     require_assigned_to_module, require_lecturer, require_lecturer_or_tutor,
 };
-use crate::routes::modules::assignments::get::list_files;
 
 /// Expects a module ID
 /// If an assignment ID is included it will be deleted
@@ -79,6 +78,12 @@ pub fn assignment_routes() -> Router {
             "/:assignment_id/submissions",
             get(list_submissions).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer_or_tutor(Path(params), req, next)
+            })),
+        )
+        .route(
+            "/:assignment_id/stats",
+            get(stats).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer(Path(params), req, next)
             })),
         )
         //TODO - Reece I commented this out
