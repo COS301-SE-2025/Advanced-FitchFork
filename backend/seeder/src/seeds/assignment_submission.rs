@@ -23,33 +23,34 @@ impl Seeder for AssignmentSubmissionSeeder {
         }
         for assignment in &assignments {
             for user in &users {
-                let counter = 1;
-                // Dummy original filename and content for seeding
-                let dummy_filename = "submission.txt";
-                let dummy_content = format!(
-                    "Dummy submission content for assignment {} by user {}",
-                    assignment.id, user.id
-                );
+                for counter in 1..=2 {
+                    // Dummy original filename and content for seeding
+                    let dummy_filename = "submission.txt";
+                    let dummy_content = format!(
+                        "Dummy submission content for assignment {} by user {}",
+                        assignment.id, user.id
+                    );
 
-                // Use the Model's save_file method to create DB entry and write file
-                match AssignmentSubmissionModel::save_file(
-                    db,
-                    assignment.id,
-                    user.id,
-                    counter,
-                    dummy_filename,
-                    dummy_content.as_bytes(),
-                )
-                .await
-                {
-                    Ok(_file) => {
-                        // Optionally log or handle success
-                    }
-                    Err(e) => {
-                        eprintln!(
+                    // Use the Model's save_file method to create DB entry and write file
+                    match AssignmentSubmissionModel::save_file(
+                        db,
+                        assignment.id,
+                        user.id,
+                        counter,
+                        dummy_filename,
+                        dummy_content.as_bytes(),
+                    )
+                    .await
+                    {
+                        Ok(_file) => {
+                            // Optionally log or handle success
+                        }
+                        Err(e) => {
+                            eprintln!(
                             "Failed to save assignment_submission file for assignment {} user {}: {}",
                             assignment.id, user.id, e
                         );
+                        }
                     }
                 }
             }

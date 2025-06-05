@@ -24,17 +24,12 @@ impl MigrationTrait for Migration {
                             .primary_key(),
                     )
                     .col(
-                        ColumnDef::new(Alias::new("assignment_id"))
-                            .big_integer()
-                            .not_null(),
-                    )
-                    .col(
                         ColumnDef::new(Alias::new("task_id"))
                             .big_integer()
                             .not_null(),
                     )
                     .col(
-                        ColumnDef::new(Alias::new("user_id"))
+                        ColumnDef::new(Alias::new("submission_id"))
                             .big_integer()
                             .not_null(),
                     )
@@ -55,15 +50,6 @@ impl MigrationTrait for Migration {
                         ForeignKey::create()
                             .from(
                                 Alias::new("assignment_submission_outputs"),
-                                Alias::new("assignment_id"),
-                            )
-                            .to(Alias::new("assignments"), Alias::new("id"))
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(
-                                Alias::new("assignment_submission_outputs"),
                                 Alias::new("task_id"),
                             )
                             .to(Alias::new("assignment_tasks"), Alias::new("id"))
@@ -73,9 +59,9 @@ impl MigrationTrait for Migration {
                         ForeignKey::create()
                             .from(
                                 Alias::new("assignment_submission_outputs"),
-                                Alias::new("user_id"),
+                                Alias::new("submission_id"),
                             )
-                            .to(Alias::new("users"), Alias::new("id"))
+                            .to(Alias::new("assignment_submissions"), Alias::new("id"))
                             .on_delete(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),

@@ -80,6 +80,7 @@ Detailed submodules exist for `auth`, `assignments`, `modules`, `users`, and int
 - Node.js (LTS)
 - Rust (stable)
 - Docker
+- cargo-make
 
 ### Clone & Setup
 
@@ -101,8 +102,16 @@ npm run dev
 ```bash
 cd backend
 cp .env.example .env
-cargo run
+cargo make fresh
+cargo make api
 ```
+
+> **Note:** This project uses [`cargo-make`](https://sagiegurari.github.io/cargo-make/).  
+> Make sure to install it first with:
+> ```bash
+> cargo install cargo-make
+> ```
+
 
 ---
 
