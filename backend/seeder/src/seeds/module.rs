@@ -1,10 +1,10 @@
-use chrono::Utc;
-use rand::{seq::SliceRandom, Rng, SeedableRng};
-use rand::rngs::StdRng;
-use rand::rngs::OsRng;
-use sea_orm::{ActiveModelTrait, Set, DatabaseConnection};
-use db::models::module;
 use crate::seed::Seeder;
+use chrono::Utc;
+use db::models::module;
+use rand::rngs::OsRng;
+use rand::rngs::StdRng;
+use rand::{seq::SliceRandom, Rng, SeedableRng};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, Set};
 
 pub struct ModuleSeeder;
 
@@ -28,7 +28,7 @@ impl Seeder for ModuleSeeder {
             "Mobile Development",
         ];
 
-        for _ in 0..50 {
+        for _ in 0..10 {
             let range_choice = rng.gen_range(0..3);
             let code_number = match range_choice {
                 0 => rng.gen_range(100..200),
@@ -41,7 +41,13 @@ impl Seeder for ModuleSeeder {
                 code: Set(code),
                 year: Set(rng.gen_range(2020..=2025)),
                 credits: Set(*credit_options.as_slice().choose(&mut rng).unwrap()),
-                description: Set(Some(descriptions.as_slice().choose(&mut rng).unwrap().to_string())),
+                description: Set(Some(
+                    descriptions
+                        .as_slice()
+                        .choose(&mut rng)
+                        .unwrap()
+                        .to_string(),
+                )),
                 created_at: Set(Utc::now()),
                 updated_at: Set(Utc::now()),
                 ..Default::default()

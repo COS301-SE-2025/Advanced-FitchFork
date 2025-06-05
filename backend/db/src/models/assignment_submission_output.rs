@@ -14,9 +14,8 @@ use std::path::PathBuf;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
-    pub assignment_id: i64,
     pub task_id: i64,
-    pub user_id: i64,
+    pub submission_id: i64,
     pub path: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -24,13 +23,6 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(
-        belongs_to = "super::assignment::Entity",
-        from = "Column::AssignmentId",
-        to = "super::assignment::Column::Id"
-    )]
-    Assignment,
-
     #[sea_orm(
         belongs_to = "super::assignment_task::Entity",
         from = "Column::TaskId",
@@ -40,10 +32,10 @@ pub enum Relation {
 
     #[sea_orm(
         belongs_to = "super::user::Entity",
-        from = "Column::UserId",
+        from = "Column::SubmissionId",
         to = "super::user::Column::Id"
     )]
-    User,
+    AssignmentSubmission,
 }
 
 impl ActiveModelBehavior for ActiveModel {}
@@ -78,18 +70,16 @@ impl Model {
 
     pub async fn save_file(
         db: &DatabaseConnection,
-        assignment_id: i64,
         task_id: i64,
-        user_id: i64,
+        submission_id: i64,
         filename: &str,
         bytes: &[u8],
     ) -> Result<Self, DbErr> {
         let now = Utc::now();
 
         let partial = ActiveModel {
-            assignment_id: Set(assignment_id),
             task_id: Set(task_id),
-            user_id: Set(user_id),
+            submission_id: Set(submission_id),
             path: Set("".to_string()),
             created_at: Set(now),
             updated_at: Set(now),
@@ -107,7 +97,14 @@ impl Model {
             None => inserted.id.to_string(),
         };
 
-        let assignment = super::assignment::Entity::find_by_id(assignment_id)
+        //Get submission
+        let submission = super::assignment_submission::Entity::find_by_id(submission_id)
+            .one(db)
+            .await
+            .map_err(|e| DbErr::Custom(format!("DB error finding task: {}", e)))?
+            .ok_or_else(|| DbErr::Custom("Submission not found".to_string()))?;
+
+        let assignment = super::assignment::Entity::find_by_id(submission.assignment_id)
             .one(db)
             .await
             .map_err(|e| DbErr::Custom(format!("DB error finding assignment: {}", e)))?
@@ -121,23 +118,12 @@ impl Model {
             .map_err(|e| DbErr::Custom(format!("DB error finding task: {}", e)))?
             .ok_or_else(|| DbErr::Custom("Task not found".to_string()))?;
 
-        let task_number = task.task_number;
-
-        //Get submission
-        let submission = super::assignment_submission::Entity::find_by_id(assignment_id)
-            .one(db)
-            .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding task: {}", e)))?
-            .ok_or_else(|| DbErr::Custom("Submission not found".to_string()))?;
-
-        let submission_attempt = submission.attempt;
-
         let dir_path = Self::full_directory_path(
             module_id,
-            assignment_id,
-            task_number,
-            user_id,
-            submission_attempt,
+            assignment.id,
+            task.task_number,
+            submission.user_id,
+            submission.attempt,
         );
         fs::create_dir_all(&dir_path)
             .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;

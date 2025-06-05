@@ -1,7 +1,7 @@
-use chrono::Utc;
-use sea_orm::{ActiveModelTrait, EntityTrait, Set, DatabaseConnection};
-use db::models::{assignment, assignment::AssignmentType, module};
 use crate::seed::Seeder;
+use chrono::Utc;
+use db::models::{assignment, assignment::AssignmentType, module};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 pub struct AssignmentSeeder;
 
@@ -14,7 +14,7 @@ impl Seeder for AssignmentSeeder {
             .expect("Failed to fetch modules");
 
         for m in &modules {
-            for i in 0..3 {
+            for i in 0..2 {
                 let a = assignment::ActiveModel {
                     module_id: Set(m.id),
                     name: Set(format!("Assignment {i}")),
