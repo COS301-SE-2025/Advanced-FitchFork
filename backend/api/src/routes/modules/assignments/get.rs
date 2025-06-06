@@ -25,9 +25,7 @@ use db::{
         assignment::{
             self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
             Model as AssignmentModel,
-        },
-        assignment_file::{self, Column as FileColumn, Entity as FileEntity},
-        assignment_submission,
+        }, assignment_file::{self, Column as FileColumn, Entity as FileEntity}, assignment_submission, user, User
     },
 };
 
@@ -880,6 +878,7 @@ pub async fn list_submissions(
 #[derive(Debug, Serialize)]
 pub struct PerStudentSubmission {
     pub user_id: i64,
+    pub student_number: String,
     pub count: i8,
     pub latest_at: DateTime<Utc>,
     pub latest_late: bool
@@ -896,6 +895,123 @@ pub struct StatResponse {
 }
 
 pub async fn stats(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
-    
+    let db = connect().await;
 
+    // Validate assignment exists and get its due date
+    let assignment = match AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
+        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
+        .one(&db)
+        .await
+    {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<StatResponse>::error("Assignment not found")),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            eprintln!("DB error fetching assignment: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<StatResponse>::error("Database error")),
+            )
+                .into_response();
+        }
+    };
+
+    // Get all submissions for this assignment
+    match assignment_submission::Entity::find()
+        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
+        .order_by_desc(assignment_submission::Column::CreatedAt)
+        .all(&db)
+        .await
+    {
+        Ok(submissions) => {
+            use std::collections::HashMap;
+
+            let mut total_submissions = 0;
+            let mut late_submissions = 0;
+            let mut unique_users: HashMap<i64, Vec<DateTime<Utc>>> = HashMap::new(); // user_id -> Vec<created_at>
+
+            for sub in &submissions {
+                total_submissions += 1;
+                if is_late(sub.created_at, assignment.due_date) {
+                    late_submissions += 1;
+                }
+
+                unique_users
+                    .entry(sub.user_id)
+                    .or_insert_with(Vec::new)
+                    .push(sub.created_at);
+            }
+
+            let user_ids: Vec<i64> = unique_users.keys().copied().collect();
+            
+            let user_models = user::Entity::find()
+                .filter(user::Column::Id.is_in(user_ids.clone()))
+                .all(&db)
+                .await;
+
+            let mut user_id_to_student_number = HashMap::new();
+            match user_models {
+                Ok(users) => {
+                    for user in users {
+                        user_id_to_student_number.insert(user.id, user.student_number);
+                    }
+                }
+                Err(err) => {
+                    eprintln!("DB error fetching student numbers: {:?}", err);
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<StatResponse>::error("Failed to fetch student numbers")),
+                    )
+                        .into_response();
+                }
+            }
+
+            let mut per_student_submission_count = Vec::new();
+
+            for (user_id, created_times) in unique_users.iter() {
+                let latest_at = *created_times.iter().max().unwrap();
+                let latest_late = is_late(latest_at, assignment.due_date);
+                let student_number = user_id_to_student_number
+                    .get(user_id)
+                    .cloned()
+                    .unwrap_or_else(|| "UNKNOWN".to_string());
+
+                per_student_submission_count.push(PerStudentSubmission {
+                    user_id: *user_id,
+                    student_number,
+                    count: created_times.len() as i8,
+                    latest_at,
+                    latest_late,
+                });
+            }
+
+            let response = StatResponse {
+                assignment_id,
+                total_submissions,
+                unique_submitters: unique_users.len() as i8,
+                late_submissions,
+                per_student_submission_count,
+            };
+
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(response, "Stats retrieved successfully")),
+            )
+                .into_response()
+        }
+        Err(err) => {
+            eprintln!("DB error fetching submissions for stats: {:?}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<StatResponse>::error("Database error")),
+            )
+                .into_response()
+        }
+    }
 }
