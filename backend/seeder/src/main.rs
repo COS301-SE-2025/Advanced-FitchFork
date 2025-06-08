@@ -8,6 +8,7 @@ use crate::seeds::{
     assignment_submission_output::AssignmentSubmissionOutputSeeder,
     assignment_task::AssignmentTaskSeeder, module::ModuleSeeder, user::UserSeeder,
     user_role::UserRoleSeeder,
+    plagiarism_case::PlagiarismCaseSeeder
 };
 
 mod seed;
@@ -30,6 +31,7 @@ async fn main() {
         (Box::new(AssignmentSubmissionSeeder), "AssignmentSubmission"),
         (Box::new(AssignmentTaskSeeder), "AssignmentTask"),
         (Box::new(AssignmentMemoOutputSeeder), "AssignmentMemoOutput"),
+        (Box::new(PlagiarismCaseSeeder), "Plagiarism"),
         (
             Box::new(AssignmentSubmissionOutputSeeder),
             "AssignmentSubmissionOutput",
