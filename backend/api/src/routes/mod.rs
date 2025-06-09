@@ -20,7 +20,7 @@ pub mod example;
 pub mod auth;
 pub mod users;
 pub mod modules;
-
+pub mod plagiarism;
 use axum::Router;
 use axum::middleware::from_fn;
 
@@ -30,6 +30,7 @@ use crate::routes::{
     health::health_routes,
     modules::modules_routes,
     users::users_routes,
+    plagiarism::plagiarism_routes,
 };
 use crate::auth::guards::{require_admin, require_authenticated};
 
@@ -52,4 +53,5 @@ pub fn routes() -> Router {
         .nest("/auth", auth_routes()) // No auth required for login/register
         .nest("/users", users_routes().route_layer(from_fn(require_admin))) // Admin-only access
         .nest("/modules", modules_routes().route_layer(from_fn(require_authenticated))) // All module routes require auth
+        .nest("/plagiarism", plagiarism_routes()) //TODO Add Auth Guard here
 }
