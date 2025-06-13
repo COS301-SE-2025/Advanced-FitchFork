@@ -4,10 +4,11 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use axum::extract::Query;
 use axum::http::{header, HeaderMap, HeaderValue};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use tokio::fs::File as FsFile;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
 use crate::{
     auth::claims::AuthUser,
@@ -18,6 +19,7 @@ use db::{
     connect,
     models::{user, module, user_module_role},
 };
+use db::models::user_module_role::Role;
 
 #[derive(Debug, Serialize)]
 pub struct MeResponse {
@@ -41,6 +43,18 @@ pub struct UserModuleRoleResponse {
     pub module_updated_at: String,
     pub role: String,
 }
+
+#[derive(Deserialize)]
+pub struct HasRoleQuery {
+    pub module_id: i64,
+    pub role: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct HasRoleResponse {
+    pub has_role: bool,
+}
+
 
 /// GET /api/auth/me
 ///
@@ -117,7 +131,7 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
         Json(ApiResponse::success(response_data, "User data retrieved successfully")),
     )
 }
-
+//todo Add docs and tests here
 pub async fn get_own_avatar(AuthUser(claims): AuthUser) -> impl IntoResponse {
     let db = connect().await;
 
@@ -190,4 +204,45 @@ pub async fn get_own_avatar(AuthUser(claims): AuthUser) -> impl IntoResponse {
     );
 
     (StatusCode::OK, headers, buffer).into_response()
+}
+
+
+pub async fn has_role_in_module(AuthUser(claims): AuthUser, Query(params): Query<HasRoleQuery>, ) -> impl IntoResponse {
+    let db = connect().await;
+
+    let role = match params.role.to_lowercase().as_str() {
+        "lecturer" => Role::Lecturer,
+        "tutor" => Role::Tutor,
+        "student" => Role::Student,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<HasRoleResponse>::error("Invalid role specified")),
+            )
+        }
+    };
+
+    let exists = match user_module_role::Entity::find()
+        .filter(user_module_role::Column::UserId.eq(claims.sub))
+        .filter(user_module_role::Column::ModuleId.eq(params.module_id))
+        .filter(user_module_role::Column::Role.eq(role))
+        .one(&db)
+        .await
+    {
+        Ok(Some(_)) => true,
+        Ok(None) => false,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<HasRoleResponse>::error("Database error")),
+            )
+        }
+    };
+
+    let response = HasRoleResponse { has_role: exists };
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(response, "Role check completed")),
+    )
 }
