@@ -5,7 +5,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use axum::extract::Multipart;
+use axum::extract::{Multipart, Path};
 use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set, IntoActiveModel};
 
 use serde::{Deserialize, Serialize};
@@ -715,7 +715,6 @@ pub async fn upload_profile_picture(AuthUser(claims): AuthUser, mut multipart: M
         Json(ApiResponse::success(response, "Profile picture uploaded.")),
     )
 }
-
 
 #[cfg(test)]
 mod tests {
