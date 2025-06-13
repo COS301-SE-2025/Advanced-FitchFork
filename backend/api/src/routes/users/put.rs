@@ -162,7 +162,7 @@ pub async fn update_user(
         }
     };
 
-    // TODO: Should probaly make a more robsut system with a super admin
+    // TODO: Should probably make a more robust system with a super admin
     // Prevent changing your own admin status or changing others' admin status
     if let Some(_) = req.admin {
         return (
@@ -258,6 +258,7 @@ pub async fn update_user(
         ),
     }
 }
+
 
 
 #[cfg(test)]

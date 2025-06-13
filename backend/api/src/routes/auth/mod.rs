@@ -39,4 +39,6 @@ pub fn auth_routes() -> Router {
         .route("/verify-reset-token", post(verify_reset_token))
         .route("/reset-password", post(reset_password))
         .route("/me", get(get_me))
+        .route("avatar/me", get(my_avatar))
+        .route("/upload-profile-picture", post(upload_profile_picture));
 }

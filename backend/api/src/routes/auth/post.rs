@@ -1,15 +1,17 @@
+use std::fs;
+use std::path::PathBuf;
 use axum::{
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set};
+use axum::extract::Multipart;
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set, IntoActiveModel};
 
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 use chrono::{Utc, Duration};
-
+use tokio::io::AsyncWriteExt;
 use crate::{
     auth::generate_jwt,
     response::ApiResponse,
@@ -23,6 +25,7 @@ use db::{
     },
     connect
 };
+use crate::auth::AuthUser;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -629,6 +632,91 @@ pub async fn reset_password(Json(req): Json<ResetPasswordRequest>) -> impl IntoR
     }
 }
 
+#[derive(serde::Serialize)]
+struct ProfilePictureResponse {
+    profile_picture_path: String,
+}
+
+pub async fn upload_profile_picture(AuthUser(claims): AuthUser, mut multipart: Multipart, ) -> impl IntoResponse {
+    const MAX_SIZE: u64 = 2 * 1024 * 1024;
+    const ALLOWED_MIME: &[&str] = &["image/jpeg", "image/png", "image/gif"];
+
+    let mut content_type = None;
+    let mut file_data = None;
+
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        if field.name() == Some("file") {
+            content_type = field.content_type().map(|ct| ct.to_string());
+
+            if let Some(ct) = &content_type {
+                if !ALLOWED_MIME.contains(&ct.as_str()) {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiResponse::<ProfilePictureResponse>::error("File type not supported.")),
+                    );
+                }
+            }
+
+            let bytes = field.bytes().await.unwrap();
+            if bytes.len() as u64 > MAX_SIZE {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<ProfilePictureResponse>::error("File too large.")),
+                );
+            }
+
+            file_data = Some(bytes);
+        }
+    }
+
+    let Some(file_bytes) = file_data else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<ProfilePictureResponse>::error("No file uploaded.")),
+        );
+    };
+
+    let ext = match content_type.as_deref() {
+        Some("image/png") => "png",
+        Some("image/jpeg") => "jpg",
+        Some("image/gif") => "gif",
+        _ => "bin",
+    };
+
+    let root = std::env::var("USER_PROFILE_STORAGE_ROOT")
+        .unwrap_or_else(|_| "data/user_profile_pictures".to_string());
+
+    let user_dir = PathBuf::from(&root).join(format!("user_{}", claims.sub));
+    let _ = fs::create_dir_all(&user_dir);
+
+    let filename = format!("avatar.{}", ext);
+    let path = user_dir.join(&filename);
+    let mut file = tokio::fs::File::create(&path).await.unwrap();
+    file.write_all(&file_bytes).await.unwrap();
+
+    let relative_path = path
+        .strip_prefix(&root)
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+
+    let db = connect().await;
+    let current = user::Entity::find_by_id(claims.sub).one(&db).await.unwrap().unwrap();
+    let mut model = current.into_active_model();
+    model.profile_picture_path = Set(Some(relative_path.clone()));
+    model.update(&db).await.unwrap();
+
+    let response = ProfilePictureResponse {
+        profile_picture_path: relative_path,
+    };
+
+   (
+        StatusCode::OK,
+        Json(ApiResponse::success(response, "Profile picture uploaded.")),
+    )
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -941,7 +1029,7 @@ mod tests {
         use jsonwebtoken::{decode, DecodingKey, Validation};
 
         dotenv().ok();
-        env::set_var("JWT_DURATION_MINUTES", "1");
+        unsafe { env::set_var("JWT_DURATION_MINUTES", "1"); }
 
         let jwt_secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
@@ -1062,3 +1150,4 @@ mod tests {
         assert_eq!(response.expires_at, expiry);
     }
 }
+

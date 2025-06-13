@@ -23,6 +23,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Alias::new("admin")).boolean().not_null())
                     .col(ColumnDef::new(Alias::new("created_at")).timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
                     .col(ColumnDef::new(Alias::new("updated_at")).timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
+                    .col(ColumnDef::new(Alias::new("profile_picture_path")).string())
                     .to_owned(),
             )
             .await
