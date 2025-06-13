@@ -1,13 +1,14 @@
+use std::path::PathBuf;
 use axum::{
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
+use axum::http::{header, HeaderMap, HeaderValue};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-
+use tokio::fs::File as FsFile;
 use serde::Serialize;
-
+use tokio::io::AsyncReadExt;
 use crate::{
     auth::claims::AuthUser,
     response::ApiResponse,
@@ -115,4 +116,78 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
         StatusCode::OK,
         Json(ApiResponse::success(response_data, "User data retrieved successfully")),
     )
+}
+
+pub async fn get_own_avatar(AuthUser(claims): AuthUser) -> impl IntoResponse {
+    let db = connect().await;
+
+    let user = match user::Entity::find_by_id(claims.sub).one(&db).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("User not found")),
+            )
+                .into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response();
+        }
+    };
+
+    let Some(path) = user.profile_picture_path else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("No avatar set")),
+        )
+            .into_response();
+    };
+
+    let root = std::env::var("USER_PROFILE_STORAGE_ROOT")
+        .unwrap_or_else(|_| "data/user_profile_pictures".to_string());
+    let fs_path = PathBuf::from(root).join(path);
+
+    if tokio::fs::metadata(&fs_path).await.is_err() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("Avatar file missing")),
+        )
+            .into_response();
+    }
+
+    let mut file = match FsFile::open(&fs_path).await {
+        Ok(f) => f,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Could not open avatar")),
+            )
+                .into_response();
+        }
+    };
+
+    let mut buffer = Vec::new();
+    if let Err(_) = file.read_to_end(&mut buffer).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error("Failed to read avatar")),
+        )
+            .into_response();
+    }
+
+    let mime = mime_guess::from_path(&fs_path)
+        .first_or_octet_stream()
+        .to_string();
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(&mime).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+    );
+
+    (StatusCode::OK, headers, buffer).into_response()
 }
