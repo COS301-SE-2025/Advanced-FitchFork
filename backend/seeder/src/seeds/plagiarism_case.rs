@@ -1,12 +1,10 @@
 use crate::seed::Seeder;
 use db::models::{assignment_submission, plagiarism_case};
-use sea_orm::{DatabaseConnection, EntityTrait};
-use sea_orm::ActiveModelTrait;
+use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait};
 use chrono::Utc;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use std::collections::HashSet;
 
 pub struct PlagiarismCaseSeeder;
 
@@ -14,44 +12,52 @@ pub struct PlagiarismCaseSeeder;
 impl Seeder for PlagiarismCaseSeeder {
     async fn seed(&self, db: &DatabaseConnection) {
         // Fetch all assignment submissions
-        let submissions = assignment_submission::Entity::find()
-            .all(db)
-            .await
-            .expect("Failed to fetch assignment submissions");
+        let submissions = match assignment_submission::Entity::find().all(db).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Failed to fetch assignment submissions: {}", e);
+                return;
+            }
+        };
 
         if submissions.len() < 2 {
             eprintln!("Not enough submissions to create plagiarism cases");
             return;
         }
+
         let mut rng = StdRng::from_entropy();
-        let mut pairs = HashSet::new();
-        let mut attempts = 0;
 
-        // Try to create up to 100 unique cross-user pairs
-        while pairs.len() < 100 && attempts < 10000 {
-            let sub1 = submissions.choose(&mut rng).unwrap();
-            let sub2 = submissions.choose(&mut rng).unwrap();
-            attempts += 1;
-
-            if sub1.id == sub2.id || sub1.user_id == sub2.user_id {
-                continue; // Skip same submission or same user
+        // Generate all valid unique pairs of submissions with different users
+        let mut valid_pairs = Vec::new();
+        for i in 0..submissions.len() {
+            for j in (i + 1)..submissions.len() {
+                let sub1 = &submissions[i];
+                let sub2 = &submissions[j];
+                if sub1.user_id != sub2.user_id {
+                    let mut pair = vec![sub1.id, sub2.id];
+                    pair.sort();
+                    valid_pairs.push(pair);
+                }
             }
+        }
 
-            let mut pair = vec![sub1.id, sub2.id];
-            pair.sort();
+        if valid_pairs.is_empty() {
+            eprintln!("No valid cross-user submission pairs found");
+            return;
+        }
 
-            if pairs.contains(&pair) {
-                continue; // Skip duplicates
-            }
+        // Shuffle and limit to 100 pairs
+        valid_pairs.shuffle(&mut rng);
+        let selected_pairs = valid_pairs.into_iter().take(100);
 
-            pairs.insert(pair.clone());
+        let now = Utc::now();
 
+        for pair in selected_pairs {
             let description = format!(
                 "Possible plagiarism detected between submission {} and {}",
                 pair[0], pair[1]
             );
 
-            let now = Utc::now();
             let case = plagiarism_case::ActiveModel {
                 submission_id_1: sea_orm::ActiveValue::Set(pair[0]),
                 submission_id_2: sea_orm::ActiveValue::Set(pair[1]),
