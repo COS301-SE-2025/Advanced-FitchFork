@@ -44,7 +44,51 @@ pub struct UserModuleRoleResponse {
 
 /// GET /api/auth/me
 ///
-/// Returns the authenticated user's profile and module roles using raw SeaORM.
+/// Returns the authenticated user's profile along with their module roles.
+/// Requires a valid bearer token in the `Authorization` header.
+///
+/// ### Response: 200 OK
+/// ```json
+/// {
+///   "success": true,
+///   "message": "User data retrieved successfully",
+///   "data": {
+///     "id": 42,
+///     "email": "lecturer@example.edu",
+///     "student_number": null,
+///     "admin": true,
+///     "created_at": "2024-11-10T12:34:56Z",
+///     "updated_at": "2025-06-18T10:00:00Z",
+///     "modules": [
+///       {
+///         "module_id": 101,
+///         "module_code": "CS101",
+///         "module_year": 2025,
+///         "module_description": "Intro to Computer Science",
+///         "module_credits": 15,
+///         "module_created_at": "2023-11-01T08:00:00Z",
+///         "module_updated_at": "2025-02-20T14:22:00Z",
+///         "role": "Lecturer"
+///       },
+///       {
+///         "module_id": 202,
+///         "module_code": "CS202",
+///         "module_year": 2025,
+///         "module_description": "Data Structures",
+///         "module_credits": 20,
+///         "module_created_at": "2023-11-05T09:00:00Z",
+///         "module_updated_at": "2025-03-10T13:45:00Z",
+///         "role": "Admin"
+///       }
+///     ]
+///   }
+/// }
+/// ```
+///
+/// ### Error Responses
+/// - `403 Forbidden` – Missing or invalid token
+/// - `404 Not Found` – User not found
+/// - `500 Internal Server Error` – Database failure
 pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
     let db = connect().await;
     let user_id = claims.sub;
@@ -118,6 +162,41 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
     )
 }
 
+/// GET /auth/avatar/me
+///
+/// Returns the authenticated user's avatar image.
+/// If the user has no avatar set or the file is missing, a suitable error is returned.
+///
+/// ### Authorization
+/// Requires a valid `Authorization: Bearer <token>` header.
+///
+/// ### Response: 200 OK
+/// - Returns raw binary image data
+/// - The `Content-Type` header is automatically set based on file extension (e.g., `image/png`, `image/jpeg`)
+///
+/// ### Error Responses
+/// #### 404 Not Found
+/// - User does not exist
+/// - No avatar is set
+/// - Avatar file is missing
+/// ```json
+/// {
+///   "success": false,
+///   "message": "No avatar set",
+///   "data": null
+/// }
+/// ```
+///
+/// #### 500 Internal Server Error
+/// - Database error
+/// - File could not be opened or read
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to read avatar",
+///   "data": null
+/// }
+/// ```
 pub async fn get_own_avatar(AuthUser(claims): AuthUser) -> impl IntoResponse {
     let db = connect().await;
 
