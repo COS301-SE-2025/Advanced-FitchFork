@@ -32,7 +32,6 @@ use db::{
         },
         user::{Entity as UserEntity},
         user_module_role::{
-            ActiveModel as RoleActiveModel,
             Column as RoleCol,
             Entity as RoleEntity,
             Role,
@@ -175,19 +174,14 @@ pub async fn edit_module(
 }
 
 #[derive(Debug, Deserialize, Validate)]
-pub struct AssignLecturersRequest {
+pub struct EditLecturersRequest {
     #[validate(length(min = 1, message = "Request must include a non-empty list of user_ids"))]
     pub user_ids: Vec<i64>,
 }
 
-#[derive(Debug, Serialize)]
-struct AssignLecturersResponse {
-    message: String,
-}
-
 /// PUT /api/modules/:module_id/lecturers
 ///
-/// Assign one or more users as lecturers to a module. This endpoint will overwrite
+/// Update the role of users already assigned to a module to Lecturer. This endpoint will overwrite
 /// existing role assignments for the specified users in this module, setting their
 /// role exclusively to Lecturer. Admin only.
 ///
@@ -202,7 +196,7 @@ struct AssignLecturersResponse {
 /// - `module_id` must reference an existing module
 /// - All `user_ids` must reference existing users
 /// - `user_ids` array must be non-empty
-/// - Users not previously assigned to the module will be added as Lecturers
+/// - All users must already be assigned to the module (any role)
 /// - Users with existing roles (Student/Tutor) will be converted to Lecturers
 ///
 /// ### Responses
@@ -211,9 +205,7 @@ struct AssignLecturersResponse {
 /// ```json
 /// {
 ///   "success": true,
-///   "data": {
-///     "message": "Users set as lecturers successfully"
-///   },
+///   "data": null,
 ///   "message": "Users set as lecturers successfully"
 /// }
 /// ```
@@ -224,6 +216,15 @@ struct AssignLecturersResponse {
 ///   "success": false,
 ///   "data": null,
 ///   "message": "Request must include a non-empty list of user_ids"
+/// }
+/// ```
+///
+/// - `400 Bad Request` (user not assigned to module)  
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "User with ID 3 is not assigned to this module"
 /// }
 /// ```
 ///
@@ -255,13 +256,13 @@ struct AssignLecturersResponse {
 /// ```
 pub async fn edit_lecturers(
     Path(module_id): Path<i64>,
-    Json(req): Json<AssignLecturersRequest>,
+    Json(req): Json<EditLecturersRequest>,
 ) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<AssignLecturersResponse>::error(error_message)),
+            Json(ApiResponse::<()>::error(error_message)),
         );
     }
 
@@ -271,7 +272,7 @@ pub async fn edit_lecturers(
     if let Ok(None) | Err(_) = module {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<AssignLecturersResponse>::error("Module not found")),
+            Json(ApiResponse::<()>::error("Module not found")),
         );
     }
 
@@ -280,7 +281,7 @@ pub async fn edit_lecturers(
         if let Ok(None) | Err(_) = user {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<AssignLecturersResponse>::error(&format!(
+                Json(ApiResponse::<()>::error(&format!(
                     "User with ID {} does not exist",
                     user_id
                 ))),
@@ -292,7 +293,7 @@ pub async fn edit_lecturers(
     if let Err(_) = transaction {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<AssignLecturersResponse>::error("Failed to start transaction")),
+            Json(ApiResponse::<()>::error("Failed to start transaction")),
         );
     }
     let transaction = transaction.unwrap();
@@ -318,27 +319,18 @@ pub async fn edit_lecturers(
                     }
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<AssignLecturersResponse>::error("Failed to update role assignments")),
+                        Json(ApiResponse::<()>::error("Failed to update role assignments")),
                     );
                 }
             }
             Ok(None) => {
-                let new_role = RoleActiveModel {
-                    user_id: Set(user_id),
-                    module_id: Set(module_id),
-                    role: Set(Role::Lecturer),
-                    ..Default::default()
-                };
-
-                if let Err(_) = new_role.insert(&transaction).await {
-                    if let Err(_) = transaction.rollback().await {
-
-                    }
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<AssignLecturersResponse>::error("Failed to create role assignments")),
-                    );
-                }
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<()>::error(&format!(
+                        "User with ID {} is not assigned to this module",
+                        user_id
+                    ))),
+                );
             }
             Err(_) => {
                 if let Err(_) = transaction.rollback().await {
@@ -346,7 +338,7 @@ pub async fn edit_lecturers(
                 }
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<AssignLecturersResponse>::error("Failed to query existing roles")),
+                    Json(ApiResponse::<()>::error("Failed to query existing roles")),
                 );
             }
         }
@@ -355,34 +347,25 @@ pub async fn edit_lecturers(
     if let Err(_) = transaction.commit().await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<AssignLecturersResponse>::error("Failed to commit role assignments")),
+            Json(ApiResponse::<()>::error("Failed to commit role assignments")),
         );
     }
 
-    let response = AssignLecturersResponse {
-        message: "Users set as lecturers successfully".to_string(),
-    };
-
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response, "Users set as lecturers successfully")),
+        Json(ApiResponse::success((), "Users set as lecturers successfully")),
     )
 }
 
 #[derive(Debug, Deserialize, Validate)]
-pub struct AssignStudentsRequest {
+pub struct EditStudentsRequest {
     #[validate(length(min = 1, message = "Request must include a non-empty list of user_ids"))]
     pub user_ids: Vec<i64>,
 }
 
-#[derive(Debug, Serialize)]
-struct AssignStudentsResponse {
-    message: String,
-}
-
 /// PUT /api/modules/:module_id/students
 ///
-/// Assign one or more users as students to a module. This endpoint will overwrite
+/// Update the role of users already assigned to a module to Student. This endpoint will overwrite
 /// existing role assignments for the specified users in this module, setting their
 /// role exclusively to Student. Admin only.
 ///
@@ -397,7 +380,7 @@ struct AssignStudentsResponse {
 /// - `module_id` must reference an existing module
 /// - All `user_ids` must reference existing users
 /// - `user_ids` array must be non-empty
-/// - Users not previously assigned to the module will be added as Students
+/// - All users must already be assigned to the module (any role)
 /// - Users with existing roles (Lecturer/Tutor) will be converted to Students
 ///
 /// ### Responses
@@ -406,9 +389,7 @@ struct AssignStudentsResponse {
 /// ```json
 /// {
 ///   "success": true,
-///   "data": {
-///     "message": "Users set as students successfully"
-///   },
+///   "data": null,
 ///   "message": "Users set as students successfully"
 /// }
 /// ```
@@ -419,6 +400,15 @@ struct AssignStudentsResponse {
 ///   "success": false,
 ///   "data": null,
 ///   "message": "Request must include a non-empty list of user_ids"
+/// }
+/// ```
+///
+/// - `400 Bad Request` (user not assigned to module)  
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "User with ID 3 is not assigned to this module"
 /// }
 /// ```
 ///
@@ -450,13 +440,13 @@ struct AssignStudentsResponse {
 /// ```
 pub async fn edit_students(
     Path(module_id): Path<i64>,
-    Json(req): Json<AssignStudentsRequest>,
+    Json(req): Json<EditStudentsRequest>,
 ) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<AssignStudentsResponse>::error(error_message)),
+            Json(ApiResponse::<()>::error(error_message)),
         );
     }
 
@@ -466,7 +456,7 @@ pub async fn edit_students(
     if let Ok(None) | Err(_) = module {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<AssignStudentsResponse>::error("Module not found")),
+            Json(ApiResponse::<()>::error("Module not found")),
         );
     }
 
@@ -475,7 +465,7 @@ pub async fn edit_students(
         if let Ok(None) | Err(_) = user {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<AssignStudentsResponse>::error(&format!(
+                Json(ApiResponse::<()>::error(&format!(
                     "User with ID {} does not exist",
                     user_id
                 ))),
@@ -487,7 +477,7 @@ pub async fn edit_students(
     if let Err(_) = transaction {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<AssignStudentsResponse>::error("Failed to start transaction")),
+            Json(ApiResponse::<()>::error("Failed to start transaction")),
         );
     }
     let transaction = transaction.unwrap();
@@ -513,27 +503,18 @@ pub async fn edit_students(
                     }
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<AssignStudentsResponse>::error("Failed to update role assignments")),
+                        Json(ApiResponse::<()>::error("Failed to update role assignments")),
                     );
                 }
             }
             Ok(None) => {
-                let new_role = RoleActiveModel {
-                    user_id: Set(user_id),
-                    module_id: Set(module_id),
-                    role: Set(Role::Student),
-                    ..Default::default()
-                };
-
-                if let Err(_) = new_role.insert(&transaction).await {
-                    if let Err(_) = transaction.rollback().await {
-
-                    }
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<AssignStudentsResponse>::error("Failed to create role assignments")),
-                    );
-                }
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<()>::error(&format!(
+                        "User with ID {} is not assigned to this module",
+                        user_id
+                    ))),
+                );
             }
             Err(_) => {
                 if let Err(_) = transaction.rollback().await {
@@ -541,7 +522,7 @@ pub async fn edit_students(
                 }
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<AssignStudentsResponse>::error("Failed to query existing roles")),
+                    Json(ApiResponse::<()>::error("Failed to query existing roles")),
                 );
             }
         }
@@ -550,34 +531,25 @@ pub async fn edit_students(
     if let Err(_) = transaction.commit().await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<AssignStudentsResponse>::error("Failed to commit role assignments")),
+            Json(ApiResponse::<()>::error("Failed to commit role assignments")),
         );
     }
 
-    let response = AssignStudentsResponse {
-        message: "Users set as students successfully".to_string(),
-    };
-
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response, "Users set as students successfully")),
+        Json(ApiResponse::success((), "Users set as students successfully")),
     )
 }
 
 #[derive(Debug, Deserialize, Validate)]
-pub struct AssignTutorsRequest {
+pub struct EditTutorsRequest {
     #[validate(length(min = 1, message = "Request must include a non-empty list of user_ids"))]
     pub user_ids: Vec<i64>,
 }
 
-#[derive(Debug, Serialize)]
-struct AssignTutorsResponse {
-    message: String,
-}
-
 /// PUT /api/modules/:module_id/tutors
 ///
-/// Assign one or more users as tutors to a module. This endpoint will overwrite
+/// Update the role of users already assigned to a module to Tutor. This endpoint will overwrite
 /// existing role assignments for the specified users in this module, setting their
 /// role exclusively to Tutor. Admin only.
 ///
@@ -592,7 +564,7 @@ struct AssignTutorsResponse {
 /// - `module_id` must reference an existing module
 /// - All `user_ids` must reference existing users
 /// - `user_ids` array must be non-empty
-/// - Users not previously assigned to the module will be added as Tutors
+/// - All users must already be assigned to the module (any role)
 /// - Users with existing roles (Lecturer/Student) will be converted to Tutors
 ///
 /// ### Responses
@@ -601,9 +573,7 @@ struct AssignTutorsResponse {
 /// ```json
 /// {
 ///   "success": true,
-///   "data": {
-///     "message": "Users set as tutors successfully"
-///   },
+///   "data": null,
 ///   "message": "Users set as tutors successfully"
 /// }
 /// ```
@@ -614,6 +584,15 @@ struct AssignTutorsResponse {
 ///   "success": false,
 ///   "data": null,
 ///   "message": "Request must include a non-empty list of user_ids"
+/// }
+/// ```
+///
+/// - `400 Bad Request` (user not assigned to module)  
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "User with ID 3 is not assigned to this module"
 /// }
 /// ```
 ///
@@ -645,13 +624,13 @@ struct AssignTutorsResponse {
 /// ```
 pub async fn edit_tutors(
     Path(module_id): Path<i64>,
-    Json(req): Json<AssignTutorsRequest>,
+    Json(req): Json<EditTutorsRequest>,
 ) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<AssignTutorsResponse>::error(error_message)),
+            Json(ApiResponse::<()>::error(error_message)),
         );
     }
 
@@ -661,7 +640,7 @@ pub async fn edit_tutors(
     if let Ok(None) | Err(_) = module {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<AssignTutorsResponse>::error("Module not found")),
+            Json(ApiResponse::<()>::error("Module not found")),
         );
     }
 
@@ -670,7 +649,7 @@ pub async fn edit_tutors(
         if let Ok(None) | Err(_) = user {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<AssignTutorsResponse>::error(&format!(
+                Json(ApiResponse::<()>::error(&format!(
                     "User with ID {} does not exist",
                     user_id
                 ))),
@@ -682,7 +661,7 @@ pub async fn edit_tutors(
     if let Err(_) = transaction {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<AssignTutorsResponse>::error("Failed to start transaction")),
+            Json(ApiResponse::<()>::error("Failed to start transaction")),
         );
     }
     let transaction = transaction.unwrap();
@@ -708,27 +687,18 @@ pub async fn edit_tutors(
                     }
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<AssignTutorsResponse>::error("Failed to update role assignments")),
+                        Json(ApiResponse::<()>::error("Failed to update role assignments")),
                     );
                 }
             }
             Ok(None) => {
-                let new_role = RoleActiveModel {
-                    user_id: Set(user_id),
-                    module_id: Set(module_id),
-                    role: Set(Role::Tutor),
-                    ..Default::default()
-                };
-
-                if let Err(_) = new_role.insert(&transaction).await {
-                    if let Err(_) = transaction.rollback().await {
-
-                    }
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<AssignTutorsResponse>::error("Failed to create role assignments")),
-                    );
-                }
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<()>::error(&format!(
+                        "User with ID {} is not assigned to this module",
+                        user_id
+                    ))),
+                );
             }
             Err(_) => {
                 if let Err(_) = transaction.rollback().await {
@@ -736,7 +706,7 @@ pub async fn edit_tutors(
                 }
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<AssignTutorsResponse>::error("Failed to query existing roles")),
+                    Json(ApiResponse::<()>::error("Failed to query existing roles")),
                 );
             }
         }
@@ -745,16 +715,12 @@ pub async fn edit_tutors(
     if let Err(_) = transaction.commit().await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<AssignTutorsResponse>::error("Failed to commit role assignments")),
+            Json(ApiResponse::<()>::error("Failed to commit role assignments")),
         );
     }
 
-    let response = AssignTutorsResponse {
-        message: "Users set as tutors successfully".to_string(),
-    };
-
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response, "Users set as tutors successfully")),
+        Json(ApiResponse::success((), "Users set as tutors successfully")),
     )
 }
