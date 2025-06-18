@@ -37,7 +37,7 @@ use get::{
     get_students, get_tutors,
 };
 use post::{assign_lecturers, assign_students, assign_tutors, create};
-use put::{edit_module, edit_lecturers};
+use put::{edit_module, edit_lecturers, edit_students};
 
 /// Builds and returns the `/modules` route group.
 ///
@@ -88,6 +88,10 @@ pub fn modules_routes() -> Router {
         .route(
             "/:module_id/lecturers",
             put(edit_lecturers).route_layer(from_fn(require_admin)),
+        )
+        .route(
+            "/:module_id/students",
+            put(edit_students).route_layer(from_fn(require_admin)),
         )
         .route(
             "/:module_id/students",
