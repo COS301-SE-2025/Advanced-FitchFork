@@ -5,7 +5,7 @@
 //! ## Structure
 //! - `post.rs` — POST handlers (e.g., create module, assign lecturers)
 //! - `get.rs` — GET handlers (e.g., fetch modules, lecturers, students)
-//! - `put.rs` — PUT handlers (e.g., edit module, assign lecturers)
+//! - `put.rs` — PUT handlers (e.g., edit module, edit lecturers)
 //! - `delete.rs` — DELETE handlers (e.g., remove lecturers, students, tutors)
 //! - `assignments.rs` — nested assignment routes under modules
 //!
@@ -37,7 +37,7 @@ use get::{
     get_students, get_tutors,
 };
 use post::{assign_lecturers, assign_students, assign_tutors, create};
-use put::{edit_module, edit_lecturers, edit_students};
+use put::{edit_module, edit_lecturers, edit_students, edit_tutors};
 
 /// Builds and returns the `/modules` route group.
 ///
@@ -60,6 +60,10 @@ use put::{edit_module, edit_lecturers, edit_students};
 /// - `DELETE /modules/:module_id/lecturers` → remove lecturers from module (admin only)
 /// - `DELETE /modules/:module_id/students`  → remove students from module (admin only)
 /// - `DELETE /modules/:module_id/tutors`    → remove tutors from module (admin only)
+///
+/// - `PUT    /modules/:module_id/tutors`    → set tutors (overwrites existing roles) (admin only)
+/// - `PUT    /modules/:module_id/students`  → set students (overwrites existing roles) (admin only)
+/// - `PUT    /modules/:module_id/lecturers` → set lecturers (overwrites existing roles) (admin only)
 ///
 /// - Nested assignments routes under `/modules/:module_id/assignments`
 ///
@@ -96,6 +100,10 @@ pub fn modules_routes() -> Router {
         .route(
             "/:module_id/students",
             post(assign_students).route_layer(from_fn(require_admin)),
+        )
+        .route(
+            "/:module_id/tutors",
+            put(edit_tutors).route_layer(from_fn(require_admin)),
         )
         .route(
             "/:module_id/tutors",
