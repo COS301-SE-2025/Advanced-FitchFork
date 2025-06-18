@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import AppLayout from '@/layouts/AppLayout';
 import ForceGraph3D from 'react-force-graph-3d';
@@ -34,13 +34,30 @@ export default function PlagiarismView() {
     const [loading, setLoading] = useState(true);
     const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
     const [searchValue, setSearchValue] = useState('');
+    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const fgRef = useRef<any>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const [showSuggestions, setShowSuggestions] = useState(false);
+
+    const suggestions = useMemo(() => {
+        if (!searchValue) return [];
+        const lowerSearch = searchValue.toLowerCase();
+        return graphData.nodes
+            .map(node => node.id)
+            .filter(id => id.toLowerCase().startsWith(lowerSearch))
+            .slice(0, 20);
+    }, [searchValue, graphData.nodes]);
 
     useEffect(() => {
-        fetch('/plagiarismGraph.json')
+        setShowSuggestions(searchValue.length > 0 && suggestions.length > 0);
+    }, [searchValue, suggestions]);
+
+    useEffect(() => {
+        fetch('/links.json')
             .then(res => res.json())
             .then((data: { links: GraphLink[] }) => {
-
                 const uniqueNodeIds = new Set<string>();
                 data.links.forEach(link => {
                     uniqueNodeIds.add(link.source);
@@ -92,40 +109,124 @@ export default function PlagiarismView() {
         }
     }, [loading]);
 
-    const handleSearch = useCallback(() => {
-        const node = graphData.nodes.find((n) => n.id === searchValue);
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (
+                containerRef.current &&
+                !containerRef.current.contains(event.target as Node)
+            ) {
+                setShowSuggestions(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
+
+    const focusNode = useCallback((nodeId: string) => {
+        const node = graphData.nodes.find((n) => n.id === nodeId);
         if (node && fgRef.current && node.x != null && node.y != null && node.z != null) {
-            const distance = 1;
+            const distance = 40;
             const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
 
             fgRef.current.cameraPosition(
-                {
-                    x: node.x * distRatio,
-                    y: node.y * distRatio,
-                    z: node.z * distRatio
-                },
+                { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
                 node,
                 3000
             );
         }
-    }, [searchValue, graphData]);
+    }, [graphData.nodes]);
+
+    const handleSearch = useCallback(() => {
+        if (selectedNodeId) {
+            focusNode(selectedNodeId);
+        } else if (searchValue) {
+            focusNode(searchValue);
+        }
+    }, [focusNode, searchValue, selectedNodeId]);
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSearch();
+            setShowSuggestions(false);
+        }
+    };
+
+    const handleSuggestionClick = (id: string) => {
+        setSearchValue(id);
+        setSelectedNodeId(id);
+        setShowSuggestions(false);
+        focusNode(id);
+    };
 
     return (
         <AppLayout title="Plagiarism View">
-            <div style={{ padding: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                <input
-                    type="text"
-                    placeholder="Search by node ID"
-                    value={searchValue}
-                    onChange={(e) => setSearchValue(e.target.value)}
-                    style={{ padding: '0.5rem', fontSize: '1rem' }}
-                />
-                <button onClick={handleSearch} style={{ padding: '0.5rem 1rem' }}>
-                    Focus
-                </button>
+            <div
+                ref={containerRef}
+                style={{ position: 'relative', padding: '1rem', maxWidth: 100 }}
+            >
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        placeholder="Search by node ID"
+                        value={searchValue}
+                        onChange={(e) => {
+                            setSearchValue(e.target.value);
+                            setSelectedNodeId(null);
+                        }}
+                        onKeyDown={handleKeyDown}
+                        style={{
+                            padding: '0.5rem',
+                            fontSize: '1rem',
+                            flexGrow: 1,
+                            border: '1px solid #ccc',
+                            borderRadius: '4px',
+                            outline: 'none',
+                            boxSizing: 'border-box',
+                        }}
+
+                        autoComplete="off"
+                    />
+                </div>
+                {showSuggestions && (
+                    <ul
+                        style={{
+                            border: '1px solid #ccc',
+                            borderRadius: 4,
+                            maxHeight: 150,
+                            overflowY: 'auto',
+                            margin: 0,
+                            padding: '0.25rem 0',
+                            listStyle: 'none',
+                            backgroundColor: 'white',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            cursor: 'pointer',
+                            zIndex: 1000,
+                            position: 'absolute',
+                            width: inputRef.current?.offsetWidth ?? 'auto',
+                        }}
+                    >
+                        {suggestions.map((id) => (
+                            <li
+                                key={id}
+                                onClick={() => handleSuggestionClick(id)}
+                                style={{
+                                    padding: '0.5rem 1rem',
+                                    backgroundColor: id === selectedNodeId ? '#ddd' : 'transparent',
+                                }}
+                                onMouseDown={(e) => e.preventDefault()}
+                            >
+                                {id}
+                            </li>
+                        ))}
+                    </ul>
+                )}
             </div>
 
-            <div style={{ width: '100vw', height: '80vh' }}>
+            <div>
                 <ForceGraph3D
                     ref={fgRef}
                     graphData={graphData}
@@ -135,11 +236,18 @@ export default function PlagiarismView() {
                         const hue = (1 - ratio) * 120;
                         return `hsl(${hue}, 100%, 50%)`;
                     }}
+                    nodeOpacity={1}
                     nodeLabel={(node: GraphNode) => `${node.id} (${node.linkCount} links)`}
                     linkLabel={(link: GraphLink) => `${link.count} link${link.count && link.count > 1 ? 's' : ''}`}
                     backgroundColor="#ffffff"
                     linkColor={() => '#000000'}
                     enableNodeDrag={false}
+                    nodeResolution={20}
+                    warmupTicks={50}
+                    cooldownTicks={200}
+                    onEngineStop={() => fgRef.current?.zoomToFit(50)}
+                    showNavInfo={false}
+                    controlType='fly'
                 />
             </div>
         </AppLayout>
