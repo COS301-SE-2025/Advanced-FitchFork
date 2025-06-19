@@ -26,6 +26,7 @@ use get::list_users;
 use get::{get_user_modules, get_user};
 use put::update_user;
 use delete::delete_user;
+use crate::routes::users::put::upload_user_avatar;
 
 /// Builds the `/users` route group, mapping HTTP methods to handlers.
 ///
@@ -43,5 +44,6 @@ pub fn users_routes() -> Router {
         .route("/:id", get(get_user))
         .route("/:id", put(update_user))
         .route("/:id", delete(delete_user))
+        .route("/:id/avatar", put(upload_user_avatar))
         .route_layer(axum::middleware::from_fn(require_admin))
 }
