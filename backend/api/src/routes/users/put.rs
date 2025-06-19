@@ -1,20 +1,22 @@
+use std::path::PathBuf;
 use axum::{
     extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter, Set,
-};
+use axum::extract::Multipart;
+use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter, Set};
 
 use serde::{Deserialize, Serialize};
+use tokio::fs;
+use tokio::io::AsyncWriteExt;
 use validator::Validate;
 
 use crate::{response::ApiResponse};
 use common::format_validation_errors;
 use db::{connect, models::user};
+use crate::auth::AuthUser;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateUserRequest {
@@ -162,7 +164,7 @@ pub async fn update_user(
         }
     };
 
-    // TODO: Should probaly make a more robsut system with a super admin
+    // TODO: Should probably make a more robust system with a super admin
     // Prevent changing your own admin status or changing others' admin status
     if let Some(_) = req.admin {
         return (
@@ -257,6 +259,113 @@ pub async fn update_user(
             Json(ApiResponse::<UpdateUserResponse>::error(format!("Database error: {}", e))),
         ),
     }
+}
+
+#[derive(serde::Serialize)]
+struct ProfilePictureResponse {
+    profile_picture_path: String,
+}
+
+pub async fn upload_user_avatar(AuthUser(claims): AuthUser, Path(user_id): Path<i64>, mut multipart: Multipart, ) -> impl IntoResponse {
+    if !claims.admin {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<ProfilePictureResponse>::error("Only admins may upload avatars for other users")),
+        )
+    }
+
+    const MAX_SIZE: u64 = 2 * 1024 * 1024;
+    const ALLOWED_MIME: &[&str] = &["image/jpeg", "image/png", "image/gif"];
+
+    let mut content_type = None;
+    let mut file_data = None;
+
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        if field.name() == Some("file") {
+            content_type = field.content_type().map(|ct| ct.to_string());
+
+            if let Some(ct) = &content_type {
+                if !ALLOWED_MIME.contains(&ct.as_str()) {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiResponse::<ProfilePictureResponse>::error("File type not supported.")),
+                    )
+                }
+            }
+
+            let bytes = field.bytes().await.unwrap();
+            if bytes.len() as u64 > MAX_SIZE {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<ProfilePictureResponse>::error("File too large.")),
+                )
+            }
+
+            file_data = Some(bytes);
+        }
+    }
+
+    let Some(file_bytes) = file_data else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<ProfilePictureResponse>::error("No file uploaded.")),
+        )
+    };
+
+    let ext = match content_type.as_deref() {
+        Some("image/png") => "png",
+        Some("image/jpeg") => "jpg",
+        Some("image/gif") => "gif",
+        _ => "bin",
+    };
+
+    let root = std::env::var("USER_PROFILE_STORAGE_ROOT")
+        .unwrap_or_else(|_| "data/user_profile_pictures".to_string());
+
+    let user_dir = PathBuf::from(&root).join(format!("user_{}", user_id));
+    let _ = fs::create_dir_all(&user_dir);
+
+    let filename = format!("avatar.{}", ext);
+    let path = user_dir.join(&filename);
+    let mut file = tokio::fs::File::create(&path).await.unwrap();
+    file.write_all(&file_bytes).await.unwrap();
+
+    let relative_path = path
+        .strip_prefix(&root)
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+
+    let db = connect().await;
+
+    let current = match user::Entity::find_by_id(user_id).one(&db).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<ProfilePictureResponse>::error("User not found.")),
+            )
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ProfilePictureResponse>::error("Database error.")),
+            )
+        }
+    };
+
+    let mut model = current.into_active_model();
+    model.profile_picture_path = Set(Some(relative_path.clone()));
+    model.update(&db).await.unwrap();
+
+    let response = ProfilePictureResponse {
+        profile_picture_path: relative_path,
+    };
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(response, "Avatar uploaded for user.")),
+    )
 }
 
 

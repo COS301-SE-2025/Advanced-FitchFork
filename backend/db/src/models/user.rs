@@ -36,6 +36,8 @@ pub struct Model {
     pub created_at: DateTime<Utc>,
     /// Timestamp when the user was last updated.
     pub updated_at: DateTime<Utc>,
+    //User profile picture
+    pub profile_picture_path: Option<String>,
 }
 
 /// This enum would define relations if any exist. Currently unused.

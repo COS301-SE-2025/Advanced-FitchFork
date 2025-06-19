@@ -64,12 +64,11 @@ impl Model {
 
     /// Constructs the full directory path for a memo output based on
     /// its assignment and task identifiers.
-    pub fn full_directory_path(module_id: i64, assignment_id: i64, task_number: i64) -> PathBuf {
+    pub fn full_directory_path(module_id: i64, assignment_id: i64) -> PathBuf {
         Self::storage_root()
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{assignment_id}"))
             .join(format!("memo_output"))
-            .join(format!("task_{task_number}"))
     }
 
     /// Computes the absolute path to the stored output file on disk.
@@ -116,16 +115,7 @@ impl Model {
 
         let module_id = assignment.module_id;
 
-        //Get task
-        let task = super::assignment_task::Entity::find_by_id(task_id)
-            .one(db)
-            .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding task: {}", e)))?
-            .ok_or_else(|| DbErr::Custom("Task not found".to_string()))?;
-
-        let task_number = task.task_number;
-
-        let dir_path = Self::full_directory_path(module_id, assignment_id, task_number);
+        let dir_path = Self::full_directory_path(module_id, assignment_id);
         fs::create_dir_all(&dir_path)
             .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
 

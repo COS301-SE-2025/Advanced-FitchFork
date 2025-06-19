@@ -17,8 +17,8 @@ use axum::{
     routing::{post, get},
 };
 
-use post::{register, login, request_password_reset, verify_reset_token, reset_password};
-use get::get_me;
+use post::{register, login, request_password_reset, verify_reset_token, reset_password, upload_profile_picture};
+use get::{get_me, get_own_avatar, has_role_in_module};
 
 /// Builds the `/auth` route group, mapping HTTP methods to handlers.
 ///
@@ -39,4 +39,8 @@ pub fn auth_routes() -> Router {
         .route("/verify-reset-token", post(verify_reset_token))
         .route("/reset-password", post(reset_password))
         .route("/me", get(get_me))
+        .route("/upload-profile-picture", post(upload_profile_picture))
+        .route("/avatar/me", get(get_own_avatar))
+        .route("/has-role", get(has_role_in_module))
+    
 }
