@@ -1,17 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Typography, Segmented, Table, Transfer, Input, Button, Tag, Skeleton } from 'antd';
+import { Segmented, Table, Transfer, Input, Button, Tag, Skeleton } from 'antd';
 import type { Key } from 'react';
 import type { TransferProps, TablePaginationConfig, TableProps } from 'antd';
 import { MODULE_ROLES, type ModuleRole } from '@/types/modules';
 import { ModulesService } from '@/services/modules';
 import { useNotifier } from '@/components/Notifier';
 import { useTableQuery } from '@/hooks/useTableQuery';
-
-const { Title, Text } = Typography;
-
-interface Props {
-  moduleId: number;
-}
+import { useParams } from 'react-router-dom';
+import PageHeader from '@/components/PageHeader';
 
 interface TableTransferItem {
   key: string;
@@ -25,7 +21,9 @@ interface TableTransferItem {
 type TableRowSelection<T> = TableProps<T>['rowSelection'];
 type TransferItem = Required<TransferProps>['dataSource'][number];
 
-export default function PersonnelSection({ moduleId }: Props) {
+const ModulePersonnel = () => {
+  const { id } = useParams();
+  const moduleId = Number(id);
   const { notifyError, notifySuccess } = useNotifier();
 
   const [eligibleUsers, setEligibleUsers] = useState<TableTransferItem[]>([]);
@@ -338,12 +336,12 @@ export default function PersonnelSection({ moduleId }: Props) {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <Title level={4}>Module Personnel</Title>
-        <Text className="text-gray-500 dark:text-gray-400">
-          Use the segmented selector to assign Lecturers, Tutors, or Students.
-        </Text>
+    <div className="p-4 sm:p-6">
+      <div className="mb-4">
+        <PageHeader
+          title="Module Personnel"
+          description="Use the segmented selector to assign Lecturers, Tutors, or Students."
+        />
       </div>
 
       <div className="bg-white dark:bg-gray-900">
@@ -381,4 +379,6 @@ export default function PersonnelSection({ moduleId }: Props) {
       </div>
     </div>
   );
-}
+};
+
+export default ModulePersonnel;
