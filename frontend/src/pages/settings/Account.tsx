@@ -14,8 +14,10 @@ import SettingsGroup from '@/components/SettingsGroup';
 import { AuthService } from '@/services/auth';
 import { useAuth } from '@/context/AuthContext';
 import { API_BASE_URL } from '@/utils/api';
+import useNotImplemented from '@/hooks/useNotImplemented';
 
 const Account = () => {
+  const notImplemented = useNotImplemented();
   const { user, profilePictureUrl, setProfilePictureUrl } = useAuth();
 
   useEffect(() => {
@@ -96,7 +98,9 @@ const Account = () => {
         </div>
 
         <div className="flex justify-end">
-          <Button type="primary">Save Name</Button>
+          <Button type="primary" onClick={notImplemented}>
+            Save Name
+          </Button>
         </div>
       </SettingsGroup>
 
@@ -121,7 +125,9 @@ const Account = () => {
         </div>
 
         <div className="flex justify-end">
-          <Button type="primary">Save Contact Info</Button>
+          <Button type="primary" onClick={notImplemented}>
+            Save Contact Info
+          </Button>
         </div>
       </SettingsGroup>
 
@@ -137,7 +143,9 @@ const Account = () => {
         </div>
 
         <div className="flex justify-end">
-          <Button type="primary">Update Username</Button>
+          <Button type="primary" onClick={notImplemented}>
+            Update Username
+          </Button>
         </div>
 
         <div>
