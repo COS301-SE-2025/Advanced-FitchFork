@@ -1,10 +1,12 @@
 // src/context/ThemeContext.tsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { ConfigProvider, theme as antdTheme } from 'antd';
+
+type ThemeMode = 'light' | 'dark' | 'system';
 
 interface ThemeContextType {
+  mode: ThemeMode;
   isDarkMode: boolean;
-  toggleDarkMode: () => void;
+  setMode: (mode: ThemeMode) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -16,33 +18,36 @@ export const useTheme = () => {
 };
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Init based on localStorage (before rendering)
-  const [isDarkMode, setIsDarkMode] = useState(() => {
+  const getInitialMode = (): ThemeMode => {
     const stored = localStorage.getItem('theme');
-    return stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
+    return stored === 'light' || stored === 'dark' ? stored : 'system';
+  };
+
+  const [mode, setMode] = useState<ThemeMode>(getInitialMode);
+  const [isDarkMode, setIsDarkMode] = useState(
+    () =>
+      mode === 'dark' ||
+      (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches),
+  );
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (isDarkMode) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-  }, [isDarkMode]);
+    const handleChange = () => {
+      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const effectiveDark = mode === 'dark' || (mode === 'system' && systemDark);
+      setIsDarkMode(effectiveDark);
+      document.documentElement.classList.toggle('dark', effectiveDark);
+    };
 
-  const toggleDarkMode = () => setIsDarkMode((prev) => !prev);
+    handleChange();
+    localStorage.setItem('theme', mode);
+    if (mode === 'system') {
+      const media = window.matchMedia('(prefers-color-scheme: dark)');
+      media.addEventListener('change', handleChange);
+      return () => media.removeEventListener('change', handleChange);
+    }
+  }, [mode]);
 
   return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleDarkMode }}>
-      <ConfigProvider
-        theme={{
-          algorithm: isDarkMode ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-        }}
-      >
-        {children}
-      </ConfigProvider>
-    </ThemeContext.Provider>
+    <ThemeContext.Provider value={{ mode, isDarkMode, setMode }}>{children}</ThemeContext.Provider>
   );
 };
