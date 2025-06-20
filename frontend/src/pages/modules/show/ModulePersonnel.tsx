@@ -284,7 +284,7 @@ const ModulePersonnel = () => {
     };
 
     return (
-      <div className="space-y-2 p-2">
+      <div className=" space-y-2 p-2">
         <div className="flex gap-2">
           <Input.Search
             allowClear
@@ -336,7 +336,7 @@ const ModulePersonnel = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="bg-white p-4 sm:p-6 h-full overflow-y-auto">
       <div className="mb-4">
         <PageHeader
           title="Module Personnel"

@@ -13,6 +13,8 @@ import { useMediaQuery } from 'react-responsive';
 import { ModulesService } from '@/services/modules';
 import type { ModuleDetailsResponse } from '@/types/modules';
 import { useAuth } from '@/context/AuthContext';
+import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { ModuleProvider } from '@/context/ModuleContext';
 
 const { Sider, Content } = Layout;
 const { Title } = Typography;
@@ -22,6 +24,7 @@ const ModuleLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const moduleId = Number(id);
+  const { setBreadcrumbLabel } = useBreadcrumbContext();
 
   const { isAdmin } = useAuth();
   const showPersonnel = isAdmin;
@@ -34,7 +37,10 @@ const ModuleLayout = () => {
   useEffect(() => {
     const load = async () => {
       const res = await ModulesService.getModuleDetails(moduleId);
-      if (res.success && res.data) setModule(res.data);
+      if (res.success && res.data) {
+        setModule(res.data);
+        setBreadcrumbLabel(`modules/${res.data.id}`, res.data.code);
+      }
       setLoading(false);
     };
 
@@ -106,11 +112,13 @@ const ModuleLayout = () => {
         </Sider>
       )}
 
-      <Layout className="!bg-transparent">
-        <Content className="!bg-white dark:!bg-gray-950 overflow-y-auto min-h-full">
-          <Outlet />
-        </Content>
-      </Layout>
+      <ModuleProvider value={{ module }}>
+        <Layout className="!bg-transparent">
+          <Content className="overflow-y-auto min-h-full">
+            <Outlet />
+          </Content>
+        </Layout>
+      </ModuleProvider>
     </Layout>
   );
 };
