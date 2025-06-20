@@ -19,8 +19,6 @@ import Modules from './pages/modules/index/Modules';
 import CalendarPage from './pages/shared/CalendarPage';
 
 import ModuleOverview from './pages/modules/show/ModuleOverview';
-import ModuleAssignments from './pages/modules/show/user/ModuleAssignments';
-import ModuleGrades from './pages/modules/show/ModuleGrades';
 import ModulePersonnel from './pages/modules/show/ModulePersonnel';
 
 import AppLayout from './layouts/AppLayout';
@@ -29,6 +27,8 @@ import SettingsLayout from './layouts/SettingsLayout';
 import Account from './pages/settings/Account';
 import Security from './pages/settings/Security';
 import Appearance from './pages/settings/Appearance';
+import ModuleAssignments from './pages/modules/show/assignments/ModuleAssignments';
+import AssignmentLayout from './layouts/AssigmentLayout';
 
 export default function App() {
   const { user, isAdmin, loading, isExpired } = useAuth();
@@ -83,15 +83,16 @@ export default function App() {
 
           {/* Modules Overview Pages */}
           <Route path="/modules" element={<Modules />} />
-          <Route path="/modules/enrolled" element={<Modules />} />
-          <Route path="/modules/tutoring" element={<Modules />} />
-          <Route path="/modules/lecturing" element={<Modules />} />
 
           {/* Module Layout Wrapper */}
           <Route path="/modules/:id" element={<ModuleLayout />}>
             <Route index element={<ModuleOverview />} />
             <Route path="assignments" element={<ModuleAssignments />} />
-            <Route path="grades" element={<ModuleGrades />} />
+            <Route path="assignments/:assignment_id" element={<AssignmentLayout />}>
+              <Route path="submissions" element={<UnderConstruction />} />
+              <Route path="stats" element={<UnderConstruction />} />
+            </Route>
+            <Route path="grades" element={<UnderConstruction />} />
             <Route path="resources" element={<UnderConstruction />} />
             <Route path="personnel" element={<ModulePersonnel />} />
           </Route>

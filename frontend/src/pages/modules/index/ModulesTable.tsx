@@ -419,7 +419,7 @@ const ModulesTable = () => {
   // ======================================================================
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="bg-white dark:bg-gray-950 p-4 sm:p-6 h-full">
       <PageHeader title="Modules" description="All the modules in the COS department" />
       <div className="mb-6 flex flex-wrap gap-4">
         <Card className="flex-1 min-w-[200px]">

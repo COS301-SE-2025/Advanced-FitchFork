@@ -1,16 +1,28 @@
 import { Card, Avatar, Tag, Typography, Tooltip } from 'antd';
 import { BookOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import type { Module } from '@/types/modules';
+import type { UserModuleRole } from '@/types/modules';
 
 const { Meta } = Card;
 const { Paragraph } = Typography;
 
 interface Props {
-  module: Module;
+  module: UserModuleRole;
   isFavorite: boolean;
   onToggleFavorite: (moduleId: number) => void;
 }
+
+const roleColorMap: Record<UserModuleRole['role'], string> = {
+  Student: 'green',
+  Tutor: 'orange',
+  Lecturer: 'purple',
+};
+
+const roleLabelMap: Record<UserModuleRole['role'], string> = {
+  Student: 'Enrolled',
+  Tutor: 'Tutoring',
+  Lecturer: 'Lecturing',
+};
 
 const ModuleCard = ({ module, isFavorite, onToggleFavorite }: Props) => {
   const navigate = useNavigate();
@@ -20,7 +32,7 @@ const ModuleCard = ({ module, isFavorite, onToggleFavorite }: Props) => {
   };
 
   const handleStarClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent navigation
+    e.stopPropagation();
     onToggleFavorite(module.id);
   };
 
@@ -48,7 +60,10 @@ const ModuleCard = ({ module, isFavorite, onToggleFavorite }: Props) => {
         title={
           <div className="flex justify-between items-center">
             <span className="text-black dark:text-white">{module.code}</span>
-            <Tag color="blue">{module.year}</Tag>
+            <div className="flex gap-1">
+              <Tag color={roleColorMap[module.role]}>{roleLabelMap[module.role]}</Tag>
+              <Tag color="blue">{module.year}</Tag>
+            </div>
           </div>
         }
         description={
