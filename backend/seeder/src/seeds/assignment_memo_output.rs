@@ -26,6 +26,9 @@ impl Seeder for AssignmentMemoOutputSeeder {
         }
 
         for assignment in &assignments {
+            if assignment.id == 9999 {
+                continue;
+            }
             let relevant_tasks: Vec<_> = tasks
                 .iter()
                 .filter(|t| t.assignment_id == assignment.id)
