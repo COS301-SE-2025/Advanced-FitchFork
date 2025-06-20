@@ -13,39 +13,48 @@ pub struct ExecutionConfig {
 }
 
 impl ExecutionConfig {
-    /// Attempts to load a config from a `config.json` file for the given assignment.
-    /// Returns `None` if the file does not exist or cannot be parsed.
-    pub fn get_execution_config(assignment_id: i64) -> Option<Self> {
-        let base_path = std::env::var("STORAGE_ROOT").ok()?; // e.g., "data/"
+    /// Load execution config from JSON file based on assignment ID.
+    /// If `base_path` is None, fallback to STORAGE_ROOT env var.
+    pub fn get_execution_config_with_base(
+        assignment_id: i64,
+        base_path: Option<&str>,
+    ) -> Result<Self, String> {
+        let base_path = match base_path {
+            Some(path) => path.to_string(),
+            None => {
+                std::env::var("STORAGE_ROOT").map_err(|_| "STORAGE_ROOT not set".to_string())?
+            }
+        };
+
         let file_path = PathBuf::from(base_path)
             .join("assignments")
             .join(assignment_id.to_string())
             .join("config.json");
 
-        let file_contents = fs::read_to_string(file_path).ok()?;
-        serde_json::from_str(&file_contents).ok()
+        let file_contents = fs::read_to_string(&file_path)
+            .map_err(|_| format!("Failed to read config file at {:?}", file_path))?;
+
+        serde_json::from_str(&file_contents).map_err(|_| "Invalid config JSON format".to_string())
+    }
+
+    pub fn get_execution_config(assignment_id: i64) -> Result<Self, String> {
+        Self::get_execution_config_with_base(assignment_id, None)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
     use std::fs;
-    use std::path::PathBuf;
     use tempfile::tempdir;
 
     #[test]
     fn test_load_valid_config() {
         let temp_dir = tempdir().unwrap();
-        let storage_root = temp_dir.path().to_path_buf();
 
-        // Simulate environment setup
-        env::set_var("STORAGE_ROOT", &storage_root);
-
-        // Create path: /assignments/42/config.json
         let assignment_id = 42;
-        let assignment_path = storage_root
+        let assignment_path = temp_dir
+            .path()
             .join("assignments")
             .join(assignment_id.to_string());
         fs::create_dir_all(&assignment_path).unwrap();
@@ -64,8 +73,13 @@ mod tests {
         let config_path = assignment_path.join("config.json");
         fs::write(config_path, config_json).unwrap();
 
-        let config = ExecutionConfig::from_assignment_id(assignment_id);
-        assert!(config.is_some());
+        // Pass the base path explicitly here, no env var needed.
+        let config = ExecutionConfig::get_execution_config_with_base(
+            assignment_id,
+            Some(temp_dir.path().to_str().unwrap()),
+        );
+        assert!(config.is_ok());
+
         let cfg = config.unwrap();
         assert_eq!(cfg.timeout_secs, 15);
         assert_eq!(cfg.max_memory, "256m");
@@ -78,17 +92,19 @@ mod tests {
     #[test]
     fn test_config_file_missing() {
         let temp_dir = tempdir().unwrap();
-        env::set_var("STORAGE_ROOT", temp_dir.path());
 
-        let assignment_id = 999; // No file for this one
-        let config = ExecutionConfig::from_assignment_id(assignment_id);
-        assert!(config.is_none());
+        let assignment_id = 999;
+        let config = ExecutionConfig::get_execution_config_with_base(
+            assignment_id,
+            Some(temp_dir.path().to_str().unwrap()),
+        );
+        assert!(config.is_err());
+        assert!(config.unwrap_err().contains("Failed to read config file"));
     }
 
     #[test]
     fn test_invalid_config_json() {
         let temp_dir = tempdir().unwrap();
-        env::set_var("STORAGE_ROOT", temp_dir.path());
 
         let assignment_id = 77;
         let assignment_path = temp_dir
@@ -100,7 +116,11 @@ mod tests {
         let invalid_json = r#"{ "timeout_secs": "oops" }"#;
         fs::write(assignment_path.join("config.json"), invalid_json).unwrap();
 
-        let config = ExecutionConfig::from_assignment_id(assignment_id);
-        assert!(config.is_none());
+        let config = ExecutionConfig::get_execution_config_with_base(
+            assignment_id,
+            Some(temp_dir.path().to_str().unwrap()),
+        );
+        assert!(config.is_err());
+        assert_eq!(config.unwrap_err(), "Invalid config JSON format");
     }
 }
