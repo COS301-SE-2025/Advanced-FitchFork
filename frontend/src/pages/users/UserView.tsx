@@ -2,7 +2,6 @@ import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Typography, Table, Spin, Descriptions, Select, Button, Popconfirm, Space } from 'antd';
 import { EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
-import AppLayout from '@/layouts/AppLayout';
 import { UsersService } from '@/services/users';
 import { ModulesService } from '@/services/modules';
 import ModuleRoleTag from '@/components/ModuleRoleTag';
@@ -19,7 +18,7 @@ interface UserModule {
   role: ModuleRole;
 }
 
-export default function UserView() {
+const UserView = () => {
   const { id } = useParams();
   const userId = Number(id);
   const [user, setUser] = useState<User | null>(null);
@@ -111,10 +110,7 @@ export default function UserView() {
   if (loading || !user) return <Spin className="mt-12 ml-6" />;
 
   return (
-    <AppLayout
-      title={user.student_number}
-      description="This is a user view showing profile and module involvement."
-    >
+    <div className="p-4 sm:p-6">
       <Descriptions layout="vertical" bordered column={3} className="mb-8">
         <Descriptions.Item label="User ID">{user.id}</Descriptions.Item>
         <Descriptions.Item label="Student Number">{user.student_number}</Descriptions.Item>
@@ -220,6 +216,8 @@ export default function UserView() {
           },
         ]}
       />
-    </AppLayout>
+    </div>
   );
-}
+};
+
+export default UserView;

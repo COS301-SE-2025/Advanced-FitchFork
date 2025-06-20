@@ -9,7 +9,7 @@ export default function UnderConstruction() {
   const navigate = useNavigate();
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-950 px-4 py-12">
+    <div className="flex h-full flex-col items-center justify-center bg-gray-50 dark:bg-gray-950 px-4 py-12">
       <div className="mb-8">
         <Logo />
       </div>
