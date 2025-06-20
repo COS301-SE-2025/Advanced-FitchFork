@@ -1,20 +1,54 @@
+//!
+//! File Loader Utility
+//!
+//! This module provides utilities for loading and validating the set of files required for a submission evaluation.
+//! It ensures that all referenced files exist, are of appropriate size, and that the JSON files are valid and not too large.
+//!
+//! # Functionality
+//!
+//! - Checks the existence and type of memo and student files.
+//! - Ensures the number of memo and student files match.
+//! - Loads and validates the allocator, coverage, and complexity JSON files, enforcing a maximum size.
+//! - Returns a [`LoadedFiles`] struct containing all loaded data and paths.
+//!
+//! # Error Handling
+//!
+//! Returns [`MarkerError`] variants for missing files, size violations, invalid JSON, or mismatched input lengths.
+//!
+//! # Tests
+//!
+//! This module includes comprehensive tests for valid and invalid file sets, covering edge cases and error reporting.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use serde_json::Value;
 use crate::error::MarkerError;
 
+/// Represents all files loaded for a submission, including their paths and parsed JSON content.
 #[derive(Debug)]
 pub struct LoadedFiles {
+    /// Submission identifier.
     pub submission_id: String,
+    /// Paths to memo files.
     pub memo_paths: Vec<PathBuf>,
+    /// Paths to student files.
     pub student_paths: Vec<PathBuf>,
+    /// Raw JSON value for the allocator report.
     pub allocator_raw: Value,
+    /// Raw JSON value for the coverage report.
     pub coverage_raw: Value,
+    /// Raw JSON value for the complexity report.
     pub complexity_raw: Value,
 }
 
+/// Maximum allowed size for JSON files.
 const MAX_JSON_SIZE: u64 = 2 * 1024 * 1024; // 2MB
 
+/// Checks that a file exists, is a file, and (optionally) does not exceed a maximum size.
+///
+/// # Errors
+///
+/// Returns [`MarkerError::IoError`] if the file is missing, not a file, unreadable, or too large.
 fn check_file(path: &Path, max_size: Option<u64>) -> Result<(), MarkerError> {
     if !path.exists() {
         return Err(MarkerError::IoError(format!("File not found: {}", path.display())));
@@ -34,6 +68,19 @@ fn check_file(path: &Path, max_size: Option<u64>) -> Result<(), MarkerError> {
     Ok(())
 }
 
+/// Loads and validates all files required for a submission.
+///
+/// - Checks that all memo and student files exist.
+/// - Ensures the number of memo and student files match.
+/// - Loads and validates the allocator, coverage, and complexity JSON files, enforcing a maximum size.
+///
+/// # Errors
+///
+/// Returns [`MarkerError`] for missing files, size violations, invalid JSON, or mismatched input lengths.
+///
+/// # Returns
+///
+/// A [`LoadedFiles`] struct containing all loaded data and paths.
 pub fn load_files(
     submission_id: &str,
     memo_paths: Vec<PathBuf>,
@@ -77,9 +124,12 @@ pub fn load_files(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the file loader utility.
+    //! These tests cover valid and invalid file sets, including edge cases and error reporting.
     use super::*;
     use std::path::PathBuf;
 
+    /// Test loading a valid set of files (happy path).
     #[test]
     fn test_happy_path_case1() {
         let dir = "src/test_files/file_loader/case1";
@@ -106,6 +156,7 @@ mod tests {
         assert!(loaded.complexity_raw.is_object(), "complexity_raw should be a JSON object");
     }
 
+    /// Test error handling for a missing memo file.
     #[test]
     fn test_missing_memo_file_case2() {
         let dir = "src/test_files/file_loader/case2";
@@ -130,6 +181,7 @@ mod tests {
         }
     }
 
+    /// Test error handling for mismatched memo and student file counts.
     #[test]
     fn test_length_mismatch_case3() {
         let dir = "src/test_files/file_loader/case3";
@@ -157,6 +209,7 @@ mod tests {
         }
     }
 
+    /// Test error handling for a JSON file that is too large.
     #[test]
     fn test_json_too_large_case4() {
         let dir = "src/test_files/file_loader/case4";
@@ -181,6 +234,7 @@ mod tests {
         }
     }
 
+    /// Test error handling for invalid JSON content in a file.
     #[test]
     fn test_invalid_json_content_case5() {
         let dir = "src/test_files/file_loader/case5";

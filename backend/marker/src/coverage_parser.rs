@@ -1,21 +1,77 @@
+//! Coverage Report Parser
+//!
+//! This module provides the [`JsonCoverageParser`] for parsing code coverage report JSON files into a strongly-typed Rust schema [`CoverageReport`].
+//! The parser validates the expected JSON format and provides detailed error messages for schema mismatches.
+//!
+//! # JSON Schema
+//!
+//! The expected JSON structure is as follows:
+//!
+//! ```json
+//! {
+//!   "generated_at": "<timestamp>",
+//!   "summary": {
+//!     "total_files": <u64>,
+//!     "total_lines": <u64>,
+//!     "covered_lines": <u64>,
+//!     "coverage_percent": <f64>
+//!   },
+//!   "files": [
+//!     {
+//!       "path": "<file path>",
+//!       "total_lines": <u64>,
+//!       "covered_lines": <u64>,
+//!       "coverage_percent": <f64>
+//!     },
+//!     ...
+//!   ]
+//! }
+//! ```
+//!
+//! - `generated_at` must be a string.
+//! - `summary` is an object with total/covered lines and percent fields.
+//! - `files` is an array of file coverage objects, each with path, line counts, and percent.
+//!
+//! # Error Handling
+//!
+//! Parsing errors are reported as [`MarkerError::ParseCoverageError`] with descriptive messages.
+//!
+//! # Tests
+//!
+//! This module includes comprehensive tests for valid and invalid report files, covering edge cases and error reporting.
+
+/// The top-level schema for a coverage report, containing summary and per-file coverage.
 #[derive(Debug)]
 pub struct CoverageReport {
+    /// Total number of files in the report.
     pub total_files: u64,
+    /// Total number of lines across all files.
     pub total_lines: u64,
+    /// Total number of covered lines across all files.
     pub covered_lines: u64,
+    /// Overall coverage percentage (0.0 - 100.0).
     pub coverage_percent: f64,
+    /// Per-file coverage details.
     pub files: Vec<FileCoverage>,
 }
 
+/// Represents coverage information for a single file.
 #[derive(Debug)]
 pub struct FileCoverage {
+    /// The file path.
     pub path: String,
+    /// Total number of lines in the file.
     pub total_lines: u64,
+    /// Number of covered lines in the file.
     pub covered_lines: u64,
+    /// Coverage percentage for the file (0.0 - 100.0).
     pub coverage_percent: f64,
     // per-line details omitted
 }
 
+/// Parser for coverage reports in JSON format.
+///
+/// Implements [`ReportParser<CoverageReport>`] for parsing and validating the schema.
 pub struct JsonCoverageParser;
 
 use serde_json::Value;
@@ -23,6 +79,11 @@ use crate::error::MarkerError;
 use crate::traits::report_parser::ReportParser;
 
 impl ReportParser<CoverageReport> for JsonCoverageParser {
+    /// Parses a JSON value into a [`CoverageReport`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MarkerError::ParseCoverageError`] if the JSON does not conform to the expected schema.
     fn parse(&self, raw: &Value) -> Result<CoverageReport, MarkerError> {
         let obj = raw.as_object().ok_or_else(|| {
             MarkerError::ParseCoverageError("Top-level JSON must be an object".to_string())
@@ -114,13 +175,17 @@ impl ReportParser<CoverageReport> for JsonCoverageParser {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the coverage parser.
+    //! These tests cover valid and invalid report files, including edge cases and error reporting.
     use super::*;
     use serde_json::Value;
     use std::fs;
     use std::path::Path;
 
+    /// Helper for approximate float equality.
     fn approx_eq(a: f64, b: f64) -> bool { (a - b).abs() < 1e-8 }
 
+    /// Test parsing a valid report with a single file.
     #[test]
     fn test_parse_valid_single_file_report() {
         // Load the JSON file
@@ -145,6 +210,7 @@ mod tests {
         assert!(approx_eq(file.coverage_percent, 90.0), "file.coverage_percent");
     }
 
+    /// Test parsing a valid report with multiple files and extra fields.
     #[test]
     fn test_parse_valid_multiple_files_extra_fields_report() {
         // Load the JSON file
@@ -178,6 +244,7 @@ mod tests {
         assert!(approx_eq(file2.coverage_percent, 60.0), "file2.coverage_percent");
     }
 
+    /// Test error handling for missing summary object.
     #[test]
     fn test_parse_missing_summary_report() {
         // Load the JSON file
@@ -198,6 +265,7 @@ mod tests {
         }
     }
 
+    /// Test error handling for wrong type in summary.total_lines.
     #[test]
     fn test_parse_summary_total_lines_string_report() {
         // Load the JSON file
@@ -218,6 +286,7 @@ mod tests {
         }
     }
 
+    /// Test error handling for missing file path in a file entry.
     #[test]
     fn test_parse_file_entry_missing_path_report() {
         // Load the JSON file

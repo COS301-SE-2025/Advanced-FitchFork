@@ -1,20 +1,73 @@
+//! Allocator Report Parser
+//!
+//! This module provides the [`JsonAllocatorParser`] for parsing allocator report JSON files into a strongly-typed Rust schema [`AllocatorSchema`].
+//! The expected JSON format is validated strictly, with detailed error reporting for schema mismatches.
+//!
+//! # JSON Schema
+//!
+//! The expected JSON structure is as follows:
+//!
+//! ```json
+//! {
+//!   "generated_at": "<timestamp>",
+//!   "tasks": [
+//!     {
+//!       "task1": {
+//!         "name": "<task name>",
+//!         "value": <u32>,
+//!         "subsections": [
+//!           { "name": "<subsection name>", "value": <u32> },
+//!           ...
+//!         ]
+//!       }
+//!     },
+//!     ...
+//!   ]
+//! }
+//! ```
+//!
+//! - `generated_at` must be a string.
+//! - `tasks` is an array of objects, each with a single key (`task1`, `task2`, ...), whose value is an object with `name`, `value`, and `subsections` fields.
+//! - Each subsection must have a `name` (string) and `value` (u32).
+//! - The sum of subsection values must not exceed the parent task's value.
+//!
+//! # Error Handling
+//!
+//! Parsing errors are reported as [`MarkerError::ParseAllocatorError`] with descriptive messages.
+//!
+//! # Tests
+//!
+//! This module includes comprehensive tests for valid and invalid report files, covering edge cases and error reporting.
+
+/// The top-level schema for an allocator report, containing a list of tasks.
 #[derive(Debug)]
 pub struct AllocatorSchema(pub Vec<TaskEntry>);
 
+/// Represents a single task in the allocator report.
 #[derive(Debug)]
 pub struct TaskEntry {
+    /// The task identifier (e.g., "task1").
     pub id: String,
+    /// The name of the task.
     pub name: String,
+    /// The value (score/points) assigned to the task.
     pub value: u32,
+    /// The subsections of the task, if any.
     pub subsections: Vec<Subsection>,
 }
 
+/// Represents a subsection within a task.
 #[derive(Debug)]
 pub struct Subsection {
+    /// The name of the subsection.
     pub name: String,
+    /// The value (score/points) assigned to the subsection.
     pub value: u32,
 }
 
+/// Parser for allocator reports in JSON format.
+///
+/// Implements [`ReportParser<AllocatorSchema>`] for parsing and validating the schema.
 pub struct JsonAllocatorParser;
 
 use serde_json::Value;
@@ -22,6 +75,11 @@ use crate::error::MarkerError;
 use crate::traits::report_parser::ReportParser;
 
 impl ReportParser<AllocatorSchema> for JsonAllocatorParser {
+    /// Parses a JSON value into an [`AllocatorSchema`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MarkerError::ParseAllocatorError`] if the JSON does not conform to the expected schema.
     fn parse(&self, raw: &Value) -> Result<AllocatorSchema, MarkerError> {
         let obj = raw.as_object().ok_or_else(|| {
             MarkerError::ParseAllocatorError("Top-level JSON must be an object to check 'generated_at' and 'tasks'".to_string())
@@ -157,11 +215,14 @@ impl ReportParser<AllocatorSchema> for JsonAllocatorParser {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the allocator parser.
+    //! These tests cover valid and invalid report files, including edge cases and error reporting.
     use super::*;
     use serde_json::Value;
     use std::fs;
     use std::path::Path;
 
+    /// Test parsing a valid report with a single task and subsections.
     #[test]
     fn test_parse_valid_single_task() {
         let path = Path::new("src/test_files/allocator_parser/allocator_report_1.json");
@@ -182,6 +243,7 @@ mod tests {
         assert_eq!(task.subsections[1].value, 4);
     }
 
+    /// Test parsing a valid report with multiple tasks, including a task with no subsections.
     #[test]
     fn test_parse_valid_multiple_tasks() {
         let path = Path::new("src/test_files/allocator_parser/allocator_report_2.json");
@@ -203,6 +265,7 @@ mod tests {
         assert_eq!(task2.subsections.len(), 0);
     }
 
+    /// Test error handling for a task missing the 'name' field.
     #[test]
     fn test_parse_missing_name() {
         let path = Path::new("src/test_files/allocator_parser/allocator_report_3.json");
@@ -219,6 +282,7 @@ mod tests {
         }
     }
 
+    /// Test error handling when the sum of subsection values exceeds the parent task's value.
     #[test]
     fn test_parse_subsection_sum_exceeds_parent() {
         let path = Path::new("src/test_files/allocator_parser/allocator_report_4.json");
@@ -235,6 +299,7 @@ mod tests {
         }
     }
 
+    /// Test error handling for invalid subsection array and wrong value types.
     #[test]
     fn test_parse_subsections_not_array_and_value_wrong_type() {
         let path = Path::new("src/test_files/allocator_parser/allocator_report_5.json");
