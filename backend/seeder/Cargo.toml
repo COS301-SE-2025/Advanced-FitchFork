@@ -5,7 +5,10 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-sea-orm = { version = "0.12", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
+sea-orm = { version = "0.12", features = [
+    "sqlx-sqlite",
+    "runtime-tokio-rustls",
+] }
 migration = { path = "../migration" }
 db = { path = "../db" } # assuming your main SeaORM entity crate is in `../db`
 chrono = "0.4"
@@ -16,3 +19,4 @@ fastrand = "2"
 colored = "2"
 futures = "0.3"
 rand = "0.8"
+zip = "0.6"

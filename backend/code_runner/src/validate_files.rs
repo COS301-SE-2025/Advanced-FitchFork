@@ -1,71 +1,111 @@
 use crate::execution_config::ExecutionConfig;
-use std::path::PathBuf;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 /// Internal helper used by both production and test code.
 /// Checks config validity and file existence based on passed `storage_root`.
 pub fn validate_memo_files_with_root(
     module_id: i64,
     assignment_id: i64,
-    storage_root: &str,
+    storage_root: &Path,
 ) -> Result<(), String> {
-    ExecutionConfig::get_execution_config_with_base(assignment_id, Some(storage_root))
-        .map_err(|e| format!("Config validation failed: {}", e))?;
+    // Validate config as before
+    ExecutionConfig::get_execution_config_with_base(
+        module_id,
+        assignment_id,
+        Some(storage_root.to_str().unwrap()),
+    )
+    .map_err(|e| format!("Config validation failed: {}", e))?;
 
-    let required_files = [
-        ("memo", "memo.zip"),
-        ("makefile", "makefile.zip"),
-        ("main", "main.zip"),
-    ];
+    // These are the directories we require to have at least one zip file
+    let required_dirs = ["memo", "makefile", "main"];
 
-    for (file_type, filename) in required_files.iter() {
-        let path = PathBuf::from(storage_root)
+    for dir_name in &required_dirs {
+        let dir_path = storage_root
             .join(format!("module_{}", module_id))
             .join(format!("assignment_{}", assignment_id))
-            .join(file_type)
-            .join(filename);
+            .join(dir_name);
 
-        if !path.exists() {
-            return Err(format!("Required file missing: {}", path.display()));
+        // Read directory entries
+        let entries = std::fs::read_dir(&dir_path)
+            .map_err(|_| format!("Failed to read directory {:?}", dir_path))?;
+
+        // Check if there's at least one .zip file
+        let mut has_zip = false;
+        for entry_res in entries {
+            let entry = entry_res.map_err(|_| format!("Failed to read entry in {:?}", dir_path))?;
+            let path = entry.path();
+
+            if path.extension().and_then(|ext| ext.to_str()) == Some("zip") {
+                has_zip = true;
+                break;
+            }
+        }
+
+        if !has_zip {
+            return Err(format!(
+                "Required directory '{}' does not contain any .zip file at {:?}",
+                dir_name, dir_path
+            ));
         }
     }
 
     Ok(())
 }
 
-/// Public version that reads from ASSIGNMENT_STORAGE_ROOT
+/// Public version that reads from ASSIGNMENT_STORAGE_ROOT env var,
+/// converts relative paths to absolute paths relative to project root.
 pub fn validate_memo_files(module_id: i64, assignment_id: i64) -> Result<(), String> {
-    let storage_root = std::env::var("ASSIGNMENT_STORAGE_ROOT")
+    let storage_root_str = std::env::var("ASSIGNMENT_STORAGE_ROOT")
         .map_err(|_| "ASSIGNMENT_STORAGE_ROOT env var is not set".to_string())?;
 
+    let storage_root = resolve_storage_root(&storage_root_str);
+
     validate_memo_files_with_root(module_id, assignment_id, &storage_root)
+}
+
+fn resolve_storage_root(storage_root: &str) -> PathBuf {
+    let path = PathBuf::from(storage_root);
+    if path.is_relative() {
+        // Convert relative path to absolute path relative to current working directory's parent folder
+        // (Assuming current dir is backend/code_runner and actual data is in backend/data/assignment_files)
+        let mut abs_path = std::env::current_dir().unwrap();
+        abs_path.pop(); // go up one level from backend/code_runner to backend/
+        abs_path.push(path);
+        abs_path
+    } else {
+        path
+    }
+}
+
+pub fn write_config_json(base_path: &PathBuf, module_id: i64, assignment_id: i64) {
+    let config_dir = base_path
+        .join(format!("module_{}", module_id))
+        .join(format!("assignment_{}", assignment_id))
+        .join("config");
+    fs::create_dir_all(&config_dir).unwrap();
+
+    let config_json = r#"
+    {
+        "timeout_secs": 10,
+        "max_memory": "256m",
+        "max_cpus": "1.0",
+        "max_uncompressed_size": 10485760,
+        "max_processes": 16,
+        "language": "python"
+    }
+    "#;
+
+    fs::write(config_dir.join("config.json"), config_json).unwrap();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
     use tempfile::tempdir;
-
-    fn write_config_json(base_path: &PathBuf, assignment_id: i64) {
-        let config_dir = base_path
-            .join("assignments")
-            .join(assignment_id.to_string());
-        fs::create_dir_all(&config_dir).unwrap();
-
-        let config_json = r#"
-        {
-            "timeout_secs": 10,
-            "max_memory": "256m",
-            "max_cpus": "1.0",
-            "max_uncompressed_size": 10485760,
-            "max_processes": 16,
-            "language": "python"
-        }
-        "#;
-
-        fs::write(config_dir.join("config.json"), config_json).unwrap();
-    }
 
     fn write_required_file(
         base_path: &PathBuf,
@@ -89,27 +129,8 @@ mod tests {
         let module_id = 5;
         let assignment_id = 99;
 
-        // Setup valid config
-        let config_dir = storage_root
-            .join("assignments")
-            .join(assignment_id.to_string());
-        fs::create_dir_all(&config_dir).unwrap();
-        fs::write(
-            config_dir.join("config.json"),
-            r#"
-            {
-                "timeout_secs": 10,
-                "max_memory": "256m",
-                "max_cpus": "1.0",
-                "max_uncompressed_size": 10485760,
-                "max_processes": 16,
-                "language": "python"
-            }
-            "#,
-        )
-        .unwrap();
+        write_config_json(&storage_root, module_id, assignment_id);
 
-        // Write required zip files
         write_required_file(&storage_root, module_id, assignment_id, "memo", "memo.zip");
         write_required_file(
             &storage_root,
@@ -120,8 +141,7 @@ mod tests {
         );
         write_required_file(&storage_root, module_id, assignment_id, "main", "main.zip");
 
-        let result =
-            validate_memo_files_with_root(module_id, assignment_id, storage_root.to_str().unwrap());
+        let result = validate_memo_files_with_root(module_id, assignment_id, &storage_root);
         assert!(result.is_ok());
     }
 
@@ -132,20 +152,24 @@ mod tests {
         let module_id = 1;
         let assignment_id = 101;
 
-        // Write valid config
-        write_config_json(&storage_root, assignment_id);
+        write_config_json(&storage_root, module_id, assignment_id);
 
-        // Only write 2 of the 3 required zip files
         write_required_file(&storage_root, module_id, assignment_id, "memo", "memo.zip");
         write_required_file(&storage_root, module_id, assignment_id, "main", "main.zip");
-        // makefile.zip is missing
 
-        let result =
-            validate_memo_files_with_root(module_id, assignment_id, storage_root.to_str().unwrap());
+        fs::create_dir_all(
+            storage_root
+                .join(format!("module_{}", module_id))
+                .join(format!("assignment_{}", assignment_id))
+                .join("makefile"),
+        )
+        .unwrap();
+
+        let result = validate_memo_files_with_root(module_id, assignment_id, &storage_root);
         println!("{:?}", result);
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("makefile.zip"));
+        assert!(result.unwrap_err().contains("makefile"));
     }
 
     #[test]
@@ -155,14 +179,13 @@ mod tests {
         let module_id = 2;
         let assignment_id = 123;
 
-        // Invalid config
         let config_dir = storage_root
-            .join("assignments")
-            .join(assignment_id.to_string());
+            .join(format!("module_{}", module_id))
+            .join(format!("assignment_{}", assignment_id))
+            .join("config");
         fs::create_dir_all(&config_dir).unwrap();
         fs::write(config_dir.join("config.json"), b"{ invalid json }").unwrap();
 
-        // Required files
         write_required_file(&storage_root, module_id, assignment_id, "memo", "memo.zip");
         write_required_file(
             &storage_root,
@@ -173,8 +196,7 @@ mod tests {
         );
         write_required_file(&storage_root, module_id, assignment_id, "main", "main.zip");
 
-        let result =
-            validate_memo_files_with_root(module_id, assignment_id, storage_root.to_str().unwrap());
+        let result = validate_memo_files_with_root(module_id, assignment_id, &storage_root);
         println!("{:?}", result);
 
         assert!(result.is_err());
