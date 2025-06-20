@@ -1,0 +1,17 @@
+{
+  "generated_at": "2025-06-20T12:15:00+02:00",
+  "summary": {
+    "total_files": 1,
+    "total_lines": "100",
+    "covered_lines": 80,
+    "coverage_percent": 80.0
+  },
+  "files": [
+    {
+      "path": "src/lib.rs",
+      "total_lines": 100,
+      "covered_lines": 80,
+      "coverage_percent": 80.0
+    }
+  ]
+}
