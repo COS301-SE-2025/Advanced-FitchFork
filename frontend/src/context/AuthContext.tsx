@@ -1,55 +1,57 @@
 import { AuthService } from '@/services/auth';
-import type { AuthUser, LoginRequest, RegisterRequest, UserModule } from '@/types/auth';
+import { ModulesService } from '@/services/modules';
+import type { AuthUser, LoginRequest, RegisterRequest } from '@/types/auth';
 import type { User } from '@/types/users';
-import type { ApiResponse } from '@/utils/api';
+import type { Module, ModuleRole } from '@/types/modules';
+import { API_BASE_URL, type ApiResponse } from '@/utils/api';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-type ModuleRole = 'Lecturer' | 'Tutor' | 'Student';
+interface UserModuleRole extends Module {
+  role: ModuleRole;
+}
 
-/**
- * Defines the structure of the authentication context.
- */
+interface ModulesByRole {
+  Lecturer: Module[];
+  Tutor: Module[];
+  Student: Module[];
+}
+
 interface AuthContextType {
-  /** The currently authenticated user or null. */
   user: User | null;
-
-  /** The list of modules assigned to the current user. */
-  modules: UserModule[];
-
-  /** Whether the context is still loading user data. */
+  modules: UserModuleRole[];
+  modulesByRole: ModulesByRole;
   loading: boolean;
+  profilePictureUrl: string | null;
+  setProfilePictureUrl: (url: string | null) => void;
 
-  /** Logs the user in with given credentials. */
+  // core actions
   login: (credentials: LoginRequest) => Promise<ApiResponse<AuthUser | null>>;
-
-  /** Registers a new user with the given details. */
   register: (details: RegisterRequest) => Promise<ApiResponse<AuthUser | null>>;
-
-  /** Logs the user out and clears stored auth info. */
   logout: () => void;
-
-  /** Returns whether the current user is an admin. */
-  isAdmin: () => boolean;
-
-  /** Returns the role of the user in a specific module. */
-  getModuleRole: (moduleId: number) => ModuleRole | null;
-
-  /** Returns true if the user has the specified role in a module. */
-  hasModuleRole: (moduleId: number, role: ModuleRole) => boolean;
-
-  /** Returns true if the stored token is expired. */
   isExpired: () => boolean;
+
+  // derived info
+  isAdmin: boolean;
+  isUser: boolean;
+  getModuleRole: (moduleId: number) => ModuleRole | null;
+  hasModuleRole: (moduleId: number, role: ModuleRole) => boolean;
+  isLecturer: (moduleId: number) => boolean;
+  isTutor: (moduleId: number) => boolean;
+  isStudent: (moduleId: number) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/**
- * Provides authentication state and actions to the app.
- */
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [modules, setModules] = useState<UserModule[]>([]);
+  const [modules, setModules] = useState<UserModuleRole[]>([]);
+  const [modulesByRole, setModulesByRole] = useState<ModulesByRole>({
+    Lecturer: [],
+    Tutor: [],
+    Student: [],
+  });
   const [loading, setLoading] = useState(true);
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -57,29 +59,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-
           if (isExpired()) {
             logout();
+            return;
           }
 
-          const res = await AuthService.me();
-          if (res.success && res.data) {
-            const { modules: userModules, ...userData } = res.data;
+          const meRes = await AuthService.me();
+          if (meRes.success && meRes.data) {
+            const userData = meRes.data;
             setUser(userData);
-            setModules(userModules);
-            localStorage.setItem(
-              'auth',
-              JSON.stringify({
-                ...parsed,
-                user: userData,
-                modules: userModules,
-              }),
-            );
+            setProfilePictureUrl(`${API_BASE_URL}/auth/avatar/${userData.id}?bust=${Date.now()}`);
+
+            const modRes = await ModulesService.getMyModules();
+            if (modRes.success && modRes.data) {
+              const grouped = modRes.data;
+
+              const flat: UserModuleRole[] = [
+                ...grouped.as_lecturer.map((m) => ({ ...m, role: 'Lecturer' as const })),
+                ...grouped.as_tutor.map((m) => ({ ...m, role: 'Tutor' as const })),
+                ...grouped.as_student.map((m) => ({ ...m, role: 'Student' as const })),
+              ];
+
+              setModules(flat);
+              setModulesByRole({
+                Lecturer: grouped.as_lecturer,
+                Tutor: grouped.as_tutor,
+                Student: grouped.as_student,
+              });
+
+              localStorage.setItem(
+                'auth',
+                JSON.stringify({
+                  ...parsed,
+                  user: userData,
+                  modules: flat,
+                }),
+              );
+            } else {
+              logout();
+            }
           } else {
             logout();
           }
-        } catch (err) {
-          logout(); // Token expired or fetch error
+        } catch {
+          logout();
         }
       }
       setLoading(false);
@@ -88,9 +111,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadUser();
   }, []);
 
-  /**
-   * Logs in a user and saves their session to localStorage.
-   */
   const login = async (credentials: LoginRequest): Promise<ApiResponse<AuthUser | null>> => {
     try {
       const res = await AuthService.login(credentials);
@@ -101,30 +121,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           'auth',
           JSON.stringify({
             user,
-            modules: [],
             token,
             expires_at,
+            modules: [],
           }),
         );
 
         const meRes = await AuthService.me();
         if (meRes.success && meRes.data) {
-          const { modules: userModules, ...userData } = meRes.data;
+          const userData = meRes.data;
           setUser(userData);
-          setModules(userModules);
-          localStorage.setItem(
-            'auth',
-            JSON.stringify({
-              user: userData,
-              modules: userModules,
-              token,
-              expires_at,
-            }),
-          );
+          setProfilePictureUrl(`${API_BASE_URL}/auth/avatar/${userData.id}?bust=${Date.now()}`);
+
+          const modRes = await ModulesService.getMyModules();
+          if (modRes.success && modRes.data) {
+            const grouped = modRes.data;
+
+            const flat: UserModuleRole[] = [
+              ...grouped.as_lecturer.map((m) => ({ ...m, role: 'Lecturer' as const })),
+              ...grouped.as_tutor.map((m) => ({ ...m, role: 'Tutor' as const })),
+              ...grouped.as_student.map((m) => ({ ...m, role: 'Student' as const })),
+            ];
+
+            setModules(flat);
+            setModulesByRole({
+              Lecturer: grouped.as_lecturer,
+              Tutor: grouped.as_tutor,
+              Student: grouped.as_student,
+            });
+
+            localStorage.setItem(
+              'auth',
+              JSON.stringify({
+                user: userData,
+                token,
+                expires_at,
+                modules: flat,
+              }),
+            );
+          }
         }
 
         return res;
       }
+
       return res;
     } catch (err: any) {
       return {
@@ -135,13 +175,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  /**
-   * Registers a new user and returns the API response.
-   */
   const register = async (details: RegisterRequest): Promise<ApiResponse<AuthUser | null>> => {
     try {
-      const res = await AuthService.register(details);
-      return res;
+      return await AuthService.register(details);
     } catch (err: any) {
       return {
         success: false,
@@ -151,23 +187,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  /**
-   * Logs the user out and redirects to the login page.
-   */
   const logout = () => {
     localStorage.removeItem('auth');
     setUser(null);
     setModules([]);
+    setModulesByRole({ Lecturer: [], Tutor: [], Student: [] });
     window.location.href = '/login';
   };
 
-  /**
-   * Checks if the stored token is expired based on its expiration timestamp.
-   */
   const isExpired = (): boolean => {
     const stored = localStorage.getItem('auth');
     if (!stored) return true;
-
     try {
       const { expires_at } = JSON.parse(stored);
       return !expires_at || new Date(expires_at) < new Date();
@@ -176,39 +206,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  /**
-   * Returns true if the user has admin privileges.
-   */
-  const isAdmin = () => !!user?.admin;
+  const isAdmin = !!user?.admin;
+  const isUser = !!user && !user.admin;
 
-  /**
-   * Gets the role of the user for the given module ID.
-   */
   const getModuleRole = (moduleId: number): ModuleRole | null => {
     const mod = modules.find((m) => m.id === moduleId);
     return mod?.role || null;
   };
 
-  /**
-   * Checks if the user has a specific role in the given module.
-   */
   const hasModuleRole = (moduleId: number, role: ModuleRole): boolean => {
     return getModuleRole(moduleId) === role;
   };
+
+  const isLecturer = (moduleId: number): boolean => getModuleRole(moduleId) === 'Lecturer';
+  const isTutor = (moduleId: number): boolean => getModuleRole(moduleId) === 'Tutor';
+  const isStudent = (moduleId: number): boolean => getModuleRole(moduleId) === 'Student';
 
   return (
     <AuthContext.Provider
       value={{
         user,
         modules,
+        modulesByRole,
         loading,
+        profilePictureUrl,
+        setProfilePictureUrl,
         login,
         register,
         logout,
+        isExpired,
         isAdmin,
+        isUser,
         getModuleRole,
         hasModuleRole,
-        isExpired,
+        isLecturer,
+        isTutor,
+        isStudent,
       }}
     >
       {children}
@@ -216,9 +249,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-/**
- * Hook to access the authentication context.
- */
 export const useAuth = (): AuthContextType => {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
