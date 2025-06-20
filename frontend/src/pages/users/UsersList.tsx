@@ -15,13 +15,13 @@ import type { SortOption } from '@/types/common';
 import { useTableQuery } from '@/hooks/useTableQuery';
 import TableControlBar from '@/components/TableControlBar';
 import TableTagSummary from '@/components/TableTagSummary';
-import AppLayout from '@/layouts/AppLayout';
 import TableCreateModal from '@/components/TableCreateModal';
 import { AuthService } from '@/services/auth';
 import { useNotifier } from '@/components/Notifier';
 import { useNavigate } from 'react-router-dom';
+import PageHeader from '@/components/PageHeader';
 
-export default function UsersList() {
+const UsersList = () => {
   // ======================================================================
   // =========================== State & Hooks ============================
   // ======================================================================
@@ -360,7 +360,8 @@ export default function UsersList() {
   // ======================================================================
 
   return (
-    <AppLayout title="Users" description="Manage all registered users in the system.">
+    <div className="p-4 sm:p-6">
+      <PageHeader title="Users" description="Manage all registered users in the system." />
       <TableControlBar
         handleSearch={setSearchTerm}
         searchTerm={searchTerm}
@@ -448,6 +449,8 @@ export default function UsersList() {
         ]}
         initialValues={newUser}
       />
-    </AppLayout>
+    </div>
   );
-}
+};
+
+export default UsersList;
