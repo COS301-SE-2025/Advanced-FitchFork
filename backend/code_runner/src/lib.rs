@@ -8,6 +8,8 @@ use zip::ZipArchive;
 
 pub mod execution_config;
 use crate::execution_config::ExecutionConfig;
+pub mod validate_files;
+use crate::validate_files::validate_memo_files;
 
 /// Contains language-specific settings for Docker and execution.
 pub struct LanguageConfig {
@@ -42,9 +44,15 @@ fn get_language_config(lang: &str) -> Option<LanguageConfig> {
     }
 }
 
-/// Runs multiple student zip files as one combined codebase.
-pub async fn run_zip_files(zip_paths: Vec<PathBuf>) -> Result<String, String> {
-    let config = ExecutionConfig::get_execution_config(1)
+pub async fn run_zip_files(
+    module_id: i64,
+    assignment_id: i64,
+    zip_paths: Vec<PathBuf>,
+) -> Result<String, String> {
+    validate_memo_files(module_id, assignment_id)
+        .map_err(|e| format!("Config validation failed: {}", e))?;
+
+    let config = ExecutionConfig::get_execution_config(assignment_id)
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
     let lang_cfg = get_language_config(&config.language)
@@ -157,9 +165,9 @@ fn extract_zip_contents(
     Ok(())
 }
 
-// //TODO - Fix github actions to be able to run docker containers with all the languages
-// // The problem with these tests is that they fail with github actions
-// // That is why they are ignored
+//TODO - Fix github actions to be able to run docker containers with all the languages
+// The problem with these tests is that they fail with github actions
+// That is why they are ignored
 
 // #[cfg(test)]
 // mod tests {
