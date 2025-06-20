@@ -1,84 +1,131 @@
-import { Row, Col, Typography, List, Button, Divider } from 'antd';
-import { CalendarOutlined, FileTextOutlined } from '@ant-design/icons';
+import { Row, Col, Typography, List, Button, Divider, Card, Empty, Tag } from 'antd';
+import {
+  FileTextOutlined,
+  UserOutlined,
+  IdcardOutlined,
+  BarChartOutlined,
+  BookOutlined,
+  TeamOutlined,
+  NotificationOutlined,
+} from '@ant-design/icons';
+import { useModule } from '@/context/ModuleContext';
+import { useAuth } from '@/context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const { Title, Text, Paragraph } = Typography;
 
 const ModuleOverview = () => {
-  const moduleInfo = {
-    code: 'COS344',
-    name: 'Computer Graphics',
-    year: 2025,
-    description:
-      'This module covers essential concepts in 2D and 3D graphics, including transformations, rendering, and shading using OpenGL and C++.',
-    lecturers: ['Dr. Cobus Redelinghuys'],
-    tutors: ['Jane Doe', 'John Smith'],
-    assignments: [
-      { title: 'Practical 1: Transformations', due: '2025-03-10' },
-      { title: 'Practical 2: Shading', due: '2025-04-14' },
-    ],
-  };
+  const module = useModule();
+  const { isAdmin, isLecturer } = useAuth();
+  const navigate = useNavigate();
+
+  const allStaff = [
+    ...module.lecturers.map((user) => ({ ...user, role: 'Lecturer' })),
+    ...module.tutors.map((user) => ({ ...user, role: 'Tutor' })),
+  ];
+
+  const renderStaffList = (users: typeof allStaff) =>
+    users.length === 0 ? (
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="None assigned" />
+    ) : (
+      <List
+        size="small"
+        dataSource={users}
+        renderItem={(user) => (
+          <List.Item className="!px-0">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <UserOutlined />
+                <span className="font-medium">{user.email}</span>
+              </div>
+              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm">
+                <Tag color={user.role === 'Lecturer' ? 'blue' : 'purple'}>{user.role}</Tag>
+                <IdcardOutlined />
+                <span>{user.student_number}</span>
+              </div>
+            </div>
+          </List.Item>
+        )}
+      />
+    );
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="p-4 sm:p-6">
       {/* Module Header */}
-      <div>
+      <div className="mb-6">
         <Title level={3} className="!mb-1">
-          {moduleInfo.code} · {moduleInfo.name}
+          {module.code} · {module.description}
         </Title>
-        <Text type="secondary">Academic Year: {moduleInfo.year}</Text>
+        <Text type="secondary">Academic Year: {module.year}</Text>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Tag color="blue">Semester 2</Tag>
+        </div>
         <Divider className="!my-4" />
-        <Paragraph>{moduleInfo.description}</Paragraph>
+        <Paragraph>This module is worth {module.credits} credits.</Paragraph>
       </div>
 
-      {/* Two-Column Info */}
-      <Row gutter={32}>
-        <Col xs={24} md={12}>
-          <Title level={5}>Lecturer</Title>
-          <List
-            bordered
-            dataSource={moduleInfo.lecturers}
-            renderItem={(name) => <List.Item>{name}</List.Item>}
-            className="rounded-md"
-          />
+      <Row gutter={[24, 24]}>
+        {/* Left Column */}
+        <Col xs={24} lg={16}>
+          <Card
+            title={<span>Upcoming Assignments</span>}
+            extra={
+              <Button
+                onClick={() => navigate(`/modules/${module.id}/assignments`)}
+                type="default"
+                icon={<FileTextOutlined />}
+              >
+                View All
+              </Button>
+            }
+            className="!mb-6"
+          >
+            <Empty description="No upcoming assignments." />
+          </Card>
+
+          <Card title="Recent Announcements" className="!mb-6">
+            <Empty description="No announcements yet." />
+          </Card>
         </Col>
-        <Col xs={24} md={12}>
-          <Title level={5}>Tutors</Title>
-          <List
-            bordered
-            dataSource={moduleInfo.tutors}
-            renderItem={(name) => <List.Item>{name}</List.Item>}
-            className="rounded-md"
-          />
+
+        {/* Right Column */}
+        <Col xs={24} lg={8}>
+          <Card title="Module Staff" className="!mb-6">
+            {renderStaffList(allStaff)}
+          </Card>
+
+          <Card title="Quick Access" className="!mb-6">
+            <div className="flex flex-col gap-2">
+              <Button
+                block
+                icon={<BarChartOutlined />}
+                onClick={() => navigate(`/modules/${module.id}/grades`)}
+              >
+                Grades
+              </Button>
+              <Button
+                block
+                icon={<BookOutlined />}
+                onClick={() => navigate(`/modules/${module.id}/resources`)}
+              >
+                Resources
+              </Button>
+              {(isAdmin || isLecturer(module.id)) && (
+                <Button
+                  block
+                  icon={<TeamOutlined />}
+                  onClick={() => navigate(`/modules/${module.id}/personnel`)}
+                >
+                  Personnel
+                </Button>
+              )}
+              <Button block icon={<NotificationOutlined />} disabled>
+                Manage Announcements
+              </Button>
+            </div>
+          </Card>
         </Col>
       </Row>
-
-      {/* Assignments */}
-      <div>
-        <Title level={5}>Upcoming Assignments</Title>
-        <List
-          bordered
-          dataSource={moduleInfo.assignments}
-          renderItem={(item) => (
-            <List.Item>
-              <div className="flex flex-col">
-                <Text strong>{item.title}</Text>
-                <Text type="secondary">
-                  <CalendarOutlined className="mr-1" />
-                  Due {item.due}
-                </Text>
-              </div>
-            </List.Item>
-          )}
-          className="rounded-md"
-        />
-      </div>
-
-      {/* Navigation */}
-      <div className="text-right pt-2">
-        <Button type="default" icon={<FileTextOutlined />} size="middle">
-          View All Assignments
-        </Button>
-      </div>
     </div>
   );
 };

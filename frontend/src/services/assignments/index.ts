@@ -11,6 +11,8 @@ import type {
   PartialDeleteAssignmentFilesResponse,
   UploadAssignmentFilesResponse,
   ListAssignmentFilesResponse,
+  Assignment,
+  AssignmentFile,
 } from "@/types/assignments";
 import { apiDownload, apiFetch, apiUpload, type ApiResponse } from "@/utils/api";
 
@@ -60,13 +62,28 @@ export const AssignmentsService = {
   /**
    * Fetch metadata and file list for a single assignment.
    */
-  getAssignmentDetails: (
+  //TODO Change the backend route to return the information directly related to assignment, directly in data not in an object called assignment
+  getAssignmentDetails: async (
     moduleId: number,
     assignmentId: number
   ): Promise<ApiResponse<AssignmentDetailsResponse>> => {
-    return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}`, {
-      method: "GET",
+    const res = await apiFetch<{
+      assignment: Assignment;
+      files: AssignmentFile[];
+    }>(`/modules/${moduleId}/assignments/${assignmentId}`, {
+      method: 'GET',
     });
+
+    const merged: AssignmentDetailsResponse = {
+      ...res.data.assignment,
+      files: res.data.files,
+    };
+
+    return {
+      success: res.success,
+      message: res.message,
+      data: merged,
+    };
   },
 
   /**
