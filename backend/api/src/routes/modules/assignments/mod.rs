@@ -2,6 +2,7 @@ pub mod delete;
 pub mod get;
 pub mod post;
 pub mod put;
+mod submissions;
 
 use axum::{
     extract::Path,
@@ -15,9 +16,9 @@ use get::{download_file, get_assignment, get_assignments, get_my_submissions, li
 use post::{create, upload_files};
 use put::edit_assignment;
 
-use crate::auth::guards::{
-    require_assigned_to_module, require_lecturer, require_lecturer_or_tutor,
-};
+use crate::{auth::guards::{
+    require_admin, require_assigned_to_module, require_lecturer, require_lecturer_or_admin, require_lecturer_or_tutor
+}, routes::modules::assignments::post::create_task};
 
 /// Expects a module ID
 /// If an assignment ID is included it will be deleted
@@ -84,6 +85,11 @@ pub fn assignment_routes() -> Router {
             "/:assignment_id/stats",
             get(stats).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer(Path(params), req, next)
+            })),
+        ).route(
+            "/:assignment_id/tasks",
+            post(create_task).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer_or_admin(Path(params), req, next)
             })),
         )
         //TODO - Reece I commented this out
