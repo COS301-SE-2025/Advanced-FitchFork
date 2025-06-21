@@ -1,4 +1,15 @@
-import { Table, Space, Button, Input, Popconfirm, Select, Empty, Tooltip, Tag } from 'antd';
+import {
+  Table,
+  Space,
+  Button,
+  Input,
+  Popconfirm,
+  Select,
+  Empty,
+  Tooltip,
+  Tag,
+  Dropdown,
+} from 'antd';
 import {
   EditOutlined,
   DeleteOutlined,
@@ -6,6 +17,7 @@ import {
   CloseOutlined,
   ReloadOutlined,
   EyeOutlined,
+  MoreOutlined,
 } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
@@ -15,13 +27,13 @@ import type { SortOption } from '@/types/common';
 import { useTableQuery } from '@/hooks/useTableQuery';
 import TableControlBar from '@/components/TableControlBar';
 import TableTagSummary from '@/components/TableTagSummary';
-import AppLayout from '@/layouts/AppLayout';
 import TableCreateModal from '@/components/TableCreateModal';
 import { AuthService } from '@/services/auth';
 import { useNotifier } from '@/components/Notifier';
 import { useNavigate } from 'react-router-dom';
+import PageHeader from '@/components/PageHeader';
 
-export default function UsersList() {
+const UsersList = () => {
   // ======================================================================
   // =========================== State & Hooks ============================
   // ======================================================================
@@ -296,62 +308,99 @@ export default function UsersList() {
       title: 'Actions',
       key: 'actions',
       align: 'right',
-      width: 120,
-      render: (_, record) =>
-        editingRowId === record.id ? (
-          <Space>
-            <Tooltip title="Save">
-              <Button
-                icon={<CheckOutlined />}
-                type="primary"
-                shape="circle"
-                onClick={handleEditSave}
-                size="small"
-              />
-            </Tooltip>
-            <Tooltip title="Cancel">
-              <Button
-                icon={<CloseOutlined />}
-                shape="circle"
-                onClick={() => setEditingRowId(null)}
-                size="small"
-              />
-            </Tooltip>
-          </Space>
-        ) : (
-          <Space>
-            <Tooltip title="View">
-              <Button
-                icon={<EyeOutlined />}
-                size="small"
-                type="text"
-                onClick={() => navigate(`/users/${record.id}`)}
-              />
-            </Tooltip>
-            <Tooltip title="Edit">
-              <Button
-                icon={<EditOutlined />}
-                size="small"
-                type="text"
-                onClick={() => {
-                  setEditingRowId(record.id);
-                  setEditCache(record);
-                }}
-              />
-            </Tooltip>
+      width: 100,
+      render: (_, record) => {
+        if (editingRowId === record.id) {
+          return (
+            <Space>
+              <Tooltip title="Save">
+                <Button
+                  type="primary"
+                  shape="default"
+                  icon={<CheckOutlined />}
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEditSave();
+                  }}
+                />
+              </Tooltip>
+              <Tooltip title="Cancel">
+                <Button
+                  shape="default"
+                  icon={<CloseOutlined />}
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingRowId(null);
+                  }}
+                />
+              </Tooltip>
+            </Space>
+          );
+        }
 
-            <Tooltip title="Delete">
-              <Popconfirm
-                title="Delete this user?"
-                onConfirm={() => handleDelete(record.id)}
-                okText="Yes"
-                cancelText="No"
-              >
-                <Button icon={<DeleteOutlined />} danger type="text" size="small" />
-              </Popconfirm>
-            </Tooltip>
-          </Space>
-        ),
+        return (
+          <div
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row navigation when interacting with the dropdown
+            }}
+          >
+            <Dropdown
+              trigger={['click']}
+              menu={{
+                items: [
+                  {
+                    key: 'view',
+                    icon: <EyeOutlined />,
+                    label: 'View',
+                  },
+                  {
+                    key: 'edit',
+                    icon: <EditOutlined />,
+                    label: 'Edit',
+                  },
+                  {
+                    key: 'delete',
+                    icon: <DeleteOutlined />,
+                    danger: true,
+                    label: (
+                      <Popconfirm
+                        title="Delete this user?"
+                        onConfirm={(e) => {
+                          e?.stopPropagation();
+                          handleDelete(record.id);
+                        }}
+                        onCancel={(e) => e?.stopPropagation()}
+                        okText="Yes"
+                        cancelText="No"
+                      >
+                        <span onClick={(e) => e.stopPropagation()}>Delete</span>
+                      </Popconfirm>
+                    ),
+                  },
+                ],
+                onClick: ({ key, domEvent }) => {
+                  domEvent.preventDefault();
+                  domEvent.stopPropagation();
+
+                  if (key === 'view') navigate(`/users/${record.id}`);
+                  else if (key === 'edit') {
+                    setEditingRowId(record.id);
+                    setEditCache(record);
+                  }
+                },
+              }}
+            >
+              <Button
+                icon={<MoreOutlined />}
+                style={{ borderRadius: 6 }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </Dropdown>
+          </div>
+        );
+      },
     },
   ];
 
@@ -360,7 +409,8 @@ export default function UsersList() {
   // ======================================================================
 
   return (
-    <AppLayout title="Users" description="Manage all registered users in the system.">
+    <div className="bg-white dark:bg-gray-950 p-4 sm:p-6 h-full">
+      <PageHeader title="Users" description="Manage all registered users in the system." />
       <TableControlBar
         handleSearch={setSearchTerm}
         searchTerm={searchTerm}
@@ -399,6 +449,13 @@ export default function UsersList() {
           selectedRowKeys,
           onChange: setSelectedRowKeys,
         }}
+        onRow={(record) => ({
+          onClick: () => {
+            if (editingRowId === null) {
+              navigate(`/users/${record.id}`);
+            }
+          },
+        })}
         loading={loading}
         pagination={{
           ...pagination,
@@ -448,6 +505,8 @@ export default function UsersList() {
         ]}
         initialValues={newUser}
       />
-    </AppLayout>
+    </div>
   );
-}
+};
+
+export default UsersList;

@@ -1,20 +1,34 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
 import RequestPasswordResetPage from './pages/auth/RequestPasswordResetPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
+import PasswordResetSuccessPage from './pages/auth/PasswordResetSuccessPage';
+
 import Forbidden from './pages/shared/status/Forbidden';
 import Unauthorized from './pages/shared/status/Unauthorized';
+import NotFound from './pages/shared/status/NotFound';
+
 import Home from './pages/Home';
 import UsersList from './pages/users/UsersList';
-import ModuleList from './pages/modules/admin/ModuleList';
-import ModuleView from './pages/modules/admin/view/ModuleView';
-import NotFound from './pages/shared/status/NotFound';
-import UnderConstruction from './pages/shared/status/UnderConstruction';
-import ProfilePage from './pages/shared/Profile';
 import UserView from './pages/users/UserView';
-import PasswordResetSuccessPage from './pages/auth/PasswordResetSuccessPage';
+import UnderConstruction from './pages/shared/status/UnderConstruction';
+import Modules from './pages/modules/index/Modules';
+import CalendarPage from './pages/shared/CalendarPage';
+
+import ModuleOverview from './pages/modules/show/ModuleOverview';
+import ModulePersonnel from './pages/modules/show/ModulePersonnel';
+
+import AppLayout from './layouts/AppLayout';
+import ModuleLayout from './layouts/ModuleLayout';
+import SettingsLayout from './layouts/SettingsLayout';
+import Account from './pages/settings/Account';
+import Security from './pages/settings/Security';
+import Appearance from './pages/settings/Appearance';
+import ModuleAssignments from './pages/modules/show/assignments/ModuleAssignments';
+import AssignmentLayout from './layouts/AssigmentLayout';
 
 export default function App() {
   const { user, isAdmin, loading, isExpired } = useAuth();
@@ -26,7 +40,7 @@ export default function App() {
 
   const requireAdmin = (element: JSX.Element) =>
     user && !isExpired() ? (
-      isAdmin() ? (
+      isAdmin ? (
         element
       ) : (
         <Navigate to="/unauthorized" replace />
@@ -46,36 +60,50 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/password-reset-success" element={<PasswordResetSuccessPage />} />
 
-        {/* Admin-only User Routes */}
-        <Route path="/users" element={requireAdmin(<UsersList />)} />
-        <Route path="/users/:id" element={requireAdmin(<UserView />)} />
-        <Route path="/users/:id/modules" element={requireAdmin(<Unauthorized />)} />
-
-        {/* Authenticated Routes */}
-        <Route path="/home" element={requireAuth(<Home />)} />
-        <Route path="/settings" element={requireAuth(<UnderConstruction />)} />
-        <Route path="/profile" element={requireAuth(<ProfilePage />)} />
-
-        {/* Modules */}
-        <Route path="/modules" element={requireAuth(<ModuleList />)} />
-        <Route path="/modules/my" element={requireAuth(<Unauthorized />)} />
-        <Route path="/modules/:id" element={requireAuth(<ModuleView />)} />
-        <Route path="/modules/:id/edit" element={requireAuth(<Unauthorized />)} />
-
-        {/* Assignments */}
-        <Route path="/modules/:module_id/assignments" element={requireAuth(<Unauthorized />)} />
-        <Route
-          path="/modules/:module_id/assignments/:assignment_id"
-          element={requireAuth(<Unauthorized />)}
-        />
-
-        <Route path="/reports" element={<UnderConstruction />} />
-
-        {/* Status Pages */}
+        {/* Status + Fallback */}
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/forbidden" element={<Forbidden />} />
 
-        {/* Fallback */}
+        {/* AppLayout-wrapped Authenticated Routes */}
+        <Route element={requireAuth(<AppLayout />)}>
+          <Route path="/home" element={<Home />} />
+          <Route path="/settings" element={<SettingsLayout />}>
+            <Route index element={<Navigate to="account" replace />} />
+            <Route path="account" element={<Account />} />
+            <Route path="security" element={<Security />} />
+            <Route path="appearance" element={<Appearance />} />
+            {/* Add others here */}
+          </Route>
+          <Route path="/calendar" element={<CalendarPage />} />
+
+          {/* Admin-only Routes */}
+          <Route path="/users" element={requireAdmin(<UsersList />)} />
+          <Route path="/users/:id" element={requireAdmin(<UserView />)} />
+          <Route path="/users/:id/modules" element={requireAdmin(<Unauthorized />)} />
+
+          {/* Modules Overview Pages */}
+          <Route path="/modules" element={<Modules />} />
+
+          {/* Module Layout Wrapper */}
+          <Route path="/modules/:id" element={<ModuleLayout />}>
+            <Route index element={<ModuleOverview />} />
+            <Route path="assignments" element={<ModuleAssignments />} />
+            <Route path="assignments/:assignment_id" element={<AssignmentLayout />}>
+              <Route path="submissions" element={<UnderConstruction />} />
+              <Route path="stats" element={<UnderConstruction />} />
+            </Route>
+            <Route path="grades" element={<UnderConstruction />} />
+            <Route path="resources" element={<UnderConstruction />} />
+            <Route path="personnel" element={<ModulePersonnel />} />
+          </Route>
+
+          {/* Fallback for assignment routes not implemented */}
+          <Route path="/modules/:module_id/assignments" element={<Unauthorized />} />
+          <Route path="/modules/:module_id/assignments/:assignment_id" element={<Unauthorized />} />
+
+          <Route path="/reports" element={<UnderConstruction />} />
+        </Route>
+
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Router>

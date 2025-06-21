@@ -9,6 +9,7 @@ import {
   Card,
   Statistic,
   Select,
+  Dropdown,
 } from 'antd';
 import {
   EditOutlined,
@@ -17,6 +18,7 @@ import {
   CloseOutlined,
   EyeOutlined,
   ReloadOutlined,
+  MoreOutlined,
 } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -26,13 +28,13 @@ import type { Module } from '@/types/modules';
 import { useTableQuery } from '@/hooks/useTableQuery';
 import type { SortOption } from '@/types/common';
 import { ModulesService } from '@/services/modules';
-import AppLayout from '@/layouts/AppLayout';
 import TableControlBar from '@/components/TableControlBar';
 import TableTagSummary from '@/components/TableTagSummary';
 import TableCreateModal from '@/components/TableCreateModal';
 import { useNotifier } from '@/components/Notifier';
+import PageHeader from '@/components/PageHeader';
 
-export default function ModuleList() {
+const ModulesTable = () => {
   // ======================================================================
   // =========================== State & Hooks ============================
   // ======================================================================
@@ -316,61 +318,99 @@ export default function ModuleList() {
       title: 'Actions',
       key: 'actions',
       align: 'right',
-      width: 120,
-      render: (_, record) =>
-        editingRowId === record.id ? (
-          <Space>
-            <Tooltip title="Save">
+      width: 100,
+      render: (_, record) => {
+        if (editingRowId === record.id) {
+          return (
+            <Space>
+              <Tooltip title="Save">
+                <Button
+                  type="primary"
+                  shape="default"
+                  icon={<CheckOutlined />}
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEditSave();
+                  }}
+                />
+              </Tooltip>
+              <Tooltip title="Cancel">
+                <Button
+                  shape="default"
+                  icon={<CloseOutlined />}
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingRowId(null);
+                  }}
+                />
+              </Tooltip>
+            </Space>
+          );
+        }
+
+        return (
+          <div
+            onClick={(e) => {
+              e.stopPropagation(); // fully prevent row click on dropdown interaction
+            }}
+          >
+            <Dropdown
+              trigger={['click']}
+              menu={{
+                items: [
+                  {
+                    key: 'view',
+                    icon: <EyeOutlined />,
+                    label: 'View',
+                  },
+                  {
+                    key: 'edit',
+                    icon: <EditOutlined />,
+                    label: 'Edit',
+                  },
+                  {
+                    key: 'delete',
+                    icon: <DeleteOutlined />,
+                    danger: true,
+                    label: (
+                      <Popconfirm
+                        title="Delete this module?"
+                        onConfirm={(e) => {
+                          e?.stopPropagation();
+                          handleDelete(record.id);
+                        }}
+                        onCancel={(e) => e?.stopPropagation()}
+                        okText="Yes"
+                        cancelText="No"
+                      >
+                        <span onClick={(e) => e.stopPropagation()}>Delete</span>
+                      </Popconfirm>
+                    ),
+                  },
+                ],
+                onClick: ({ key, domEvent }) => {
+                  domEvent.preventDefault();
+                  domEvent.stopPropagation();
+
+                  if (key === 'view') navigate(`/modules/${record.id}`);
+                  else if (key === 'edit') {
+                    setEditingRowId(record.id);
+                    setEditCache(record);
+                  }
+                },
+              }}
+            >
               <Button
-                type="primary"
-                shape="circle"
-                icon={<CheckOutlined />}
-                size="small"
-                onClick={handleEditSave}
+                icon={<MoreOutlined />}
+                style={{ borderRadius: 6 }}
+                onClick={(e) => e.stopPropagation()}
               />
-            </Tooltip>
-            <Tooltip title="Cancel">
-              <Button
-                shape="circle"
-                icon={<CloseOutlined />}
-                size="small"
-                onClick={() => setEditingRowId(null)}
-              />
-            </Tooltip>
-          </Space>
-        ) : (
-          <Space>
-            <Tooltip title="View module">
-              <Button
-                type="text"
-                icon={<EyeOutlined />}
-                onClick={() => navigate(`/modules/${record.id}`)}
-                size="small"
-              />
-            </Tooltip>
-            <Tooltip title="Edit">
-              <Button
-                type="text"
-                icon={<EditOutlined />}
-                onClick={() => {
-                  setEditingRowId(record.id);
-                  setEditCache(record);
-                }}
-                size="small"
-              />
-            </Tooltip>
-            <Tooltip title="Delete">
-              <Popconfirm
-                title="Delete this module?"
-                onConfirm={() => handleDelete(record.id)}
-                okText="Yes"
-                cancelText="No"
-              >
-                <Button type="text" icon={<DeleteOutlined />} danger size="small" />
-              </Popconfirm>
-            </Tooltip>
-          </Space>
-        ),
+            </Dropdown>
+          </div>
+        );
+      },
     },
   ];
 
@@ -379,7 +419,8 @@ export default function ModuleList() {
   // ======================================================================
 
   return (
-    <AppLayout title="Modules" description="All the modules in the COS department">
+    <div className="bg-white dark:bg-gray-950 p-4 sm:p-6 h-full">
+      <PageHeader title="Modules" description="All the modules in the COS department" />
       <div className="mb-6 flex flex-wrap gap-4">
         <Card className="flex-1 min-w-[200px]">
           <Statistic title="Total Modules" value={modules.length} />
@@ -458,6 +499,14 @@ export default function ModuleList() {
             </Empty>
           ),
         }}
+        onRow={(record) => ({
+          onClick: () => {
+            if (editingRowId === null) {
+              navigate(`/modules/${record.id}`);
+            }
+          },
+        })}
+        rowClassName={() => 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800'}
         className="border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
       />
 
@@ -475,6 +524,8 @@ export default function ModuleList() {
           { name: 'credits', label: 'Credits', type: 'number', required: true },
         ]}
       />
-    </AppLayout>
+    </div>
   );
-}
+};
+
+export default ModulesTable;
