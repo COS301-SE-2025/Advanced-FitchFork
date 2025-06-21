@@ -1,11 +1,11 @@
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Error, Write};
 
-use serde_json::{from_str, json, Value};
+use serde_json::{Value, from_str, json};
 #[allow(dead_code)]
 const SEPARATOR: &str = "&-=-& ";
 
-pub async fn generate_allocator(module: i64, assignment: i64) {
+pub async fn generate_allocator(module: i64, assignment: i64) -> Value {
     let path = format!(
         "../data/assignment_files/module_{}/assignment_{}/memo_output/",
         module, assignment
@@ -79,9 +79,11 @@ pub async fn generate_allocator(module: i64, assignment: i64) {
         serde_json::to_string_pretty(&final_json).unwrap()
     )
     .unwrap();
+
+    final_json
 }
 
-pub async fn load_allocator_json(module: i64, assignment: i64) -> Option<Value> {
+pub async fn load_allocator(module: i64, assignment: i64) -> Option<Value> {
     let path = format!(
         "../data/assignment_files/module_{}/assignment_{}/mark_allocator/allocator.json",
         module, assignment
@@ -100,4 +102,13 @@ pub async fn load_allocator_json(module: i64, assignment: i64) -> Option<Value> 
             None
         }
     }
+}
+
+pub async fn save_allocator(module: i64, assignment: i64, json: Value) -> Result<(), Error> {
+    let allocator_path = format!(
+        "../data/assignment_files/module_{}/assignment_{}/mark_allocator/allocator.json",
+        module, assignment
+    );
+    let mut file = File::open(allocator_path).unwrap();
+    write!(file, "{}", serde_json::to_string_pretty(&json).unwrap())
 }
