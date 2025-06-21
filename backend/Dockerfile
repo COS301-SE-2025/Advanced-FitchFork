@@ -1,13 +1,12 @@
-FROM debian:bullseye-slim
+FROM alpine:3.20
 
-RUN apt-get update && \
-    apt-get install -y \
-    make \
-    default-jdk \
-    g++ \
+# Install Python, pip, full Java (with javac), g++, and make
+RUN apk add --no-cache \
     python3 \
-    python3-pip && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    py3-pip \
+    openjdk17 \
+    g++ \
+    libstdc++ \
+    make
 
 WORKDIR /code

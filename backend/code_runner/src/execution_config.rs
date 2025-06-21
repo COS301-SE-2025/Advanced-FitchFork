@@ -1,26 +1,47 @@
 use serde::Deserialize;
 use std::{env, fs, path::PathBuf};
 
-/// Configuration for runtime environment limits (used for Docker container).
 #[derive(Debug, Clone, Deserialize)]
+
+/// Configuration for resource-limited code execution environments.
+///
+/// This struct is loaded from a JSON file per assignment, and passed to Docker
+/// to enforce memory, CPU, timeout, and process constraints.
 pub struct ExecutionConfig {
-    pub timeout_secs: u64,          // Max execution time
-    pub max_memory: String,         // Max memory (e.g., "128m")
-    pub max_cpus: String,           // CPU cores (e.g., "1.0")
-    pub max_uncompressed_size: u64, // Max total size of decompressed files (zip bomb protection)
-    pub max_processes: u32,         // Max number of processes inside container
-    pub language: String,           // Programming language identifier
+    /// Maximum execution time (in seconds) for the container.
+    pub timeout_secs: u64,
+
+    /// Maximum memory allocated to the container (e.g., "128m").
+    pub max_memory: String,
+
+    /// Maximum number of CPU cores the container may use (e.g., "1.0").
+    pub max_cpus: String,
+
+    /// Maximum total size of decompressed files from zip archives.
+    pub max_uncompressed_size: u64,
+
+    /// Maximum number of processes allowed within the container.
+    pub max_processes: u32,
+
+    /// Programming language identifier (used to choose execution method).
+    pub language: String,
 }
 
+/// Resolves the storage root directory from the `ASSIGNMENT_STORAGE_ROOT` environment variable,
+/// or falls back to a default path relative to the backend root.
+///
+/// Ensures the path is absolute for consistent access in tests and Docker builds.
 impl ExecutionConfig {
-    /// Resolve the storage root from env or use default.
+    /// Resolves the storage root directory from the `ASSIGNMENT_STORAGE_ROOT` environment variable,
+    /// or falls back to a default path relative to the backend root.
+    ///
+    /// Ensures the path is absolute for consistent access in tests and Docker builds.
     fn resolve_storage_root() -> PathBuf {
         if let Ok(p) = env::var("ASSIGNMENT_STORAGE_ROOT") {
             let path = PathBuf::from(p);
             if path.is_relative() {
-                // Adjust relative path to be relative to backend root folder (one level up)
                 let mut adjusted = env::current_dir().unwrap();
-                adjusted.pop(); // go up one directory, from backend/code_runner to backend/
+                adjusted.pop();
                 adjusted.push(path);
                 adjusted
             } else {
@@ -31,8 +52,13 @@ impl ExecutionConfig {
         }
     }
 
-    /// Load execution config from JSON file based on assignment ID.
-    /// If `base_path` is None, fallback to ASSIGNMENT_STORAGE_ROOT env var.
+    /// Loads an execution config from a JSON file located at:
+    /// `<base_path>/module_<module_id>/assignment_<assignment_id>/config/*.json`
+    ///
+    /// If `base_path` is not provided, uses the default resolved storage root.
+    ///
+    /// Returns `Err` if the config directory cannot be read, no config file is found,
+    /// or the JSON is invalid.
     pub fn get_execution_config_with_base(
         module_id: i64,
         assignment_id: i64,
@@ -47,7 +73,6 @@ impl ExecutionConfig {
             .join(format!("assignment_{}", assignment_id))
             .join("config");
 
-        // Choose which config file to load (e.g., the first json file in the dir)
         let entries = fs::read_dir(&config_dir)
             .map_err(|_| format!("Failed to read config dir at {:?}", config_dir))?;
 
@@ -88,7 +113,6 @@ mod tests {
         let module_id = 123;
         let assignment_id = 42;
 
-        // Create config dir: <temp>/module_123/assignment_42/config/
         let config_dir = temp_dir
             .path()
             .join(format!("module_{}", module_id))
@@ -96,7 +120,6 @@ mod tests {
             .join("config");
         fs::create_dir_all(&config_dir).unwrap();
 
-        // Write a config json file inside config/
         let config_json = r#"
         {
             "timeout_secs": 15,
@@ -111,7 +134,6 @@ mod tests {
         let config_path = config_dir.join("124.json");
         fs::write(&config_path, config_json).unwrap();
 
-        // Call the loader with module_id, assignment_id, and base_path
         let config = ExecutionConfig::get_execution_config_with_base(
             module_id,
             assignment_id,
@@ -136,7 +158,6 @@ mod tests {
         let module_id = 123;
         let assignment_id = 999;
 
-        // Create the config dir, but don't add any JSON files
         let config_dir = temp_dir
             .path()
             .join(format!("module_{}", module_id))
@@ -161,7 +182,6 @@ mod tests {
         let module_id = 123;
         let assignment_id = 77;
 
-        // Create config dir and write invalid JSON
         let config_dir = temp_dir
             .path()
             .join(format!("module_{}", module_id))
