@@ -2,6 +2,7 @@ pub mod delete;
 pub mod get;
 pub mod post;
 pub mod put;
+pub mod mark_allocator;
 
 use axum::{
     extract::Path,
@@ -14,6 +15,7 @@ use delete::{delete_assignment, delete_files};
 use get::{download_file, get_assignment, get_assignments, get_my_submissions, list_submissions, stats, list_files};
 use post::{create, upload_files};
 use put::edit_assignment;
+use mark_allocator::mark_allocator_routes;
 
 use crate::auth::guards::{
     require_assigned_to_module, require_lecturer, require_lecturer_or_tutor,
@@ -94,4 +96,5 @@ pub fn assignment_routes() -> Router {
         //     })),
         // )
         .route("/:assignment_id", delete(delete_assignment))
+        .nest("/:assignment_id/mark-allocator", mark_allocator_routes())
 }

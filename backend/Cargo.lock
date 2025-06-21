@@ -165,6 +165,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "util",
  "validator",
 ]
 
