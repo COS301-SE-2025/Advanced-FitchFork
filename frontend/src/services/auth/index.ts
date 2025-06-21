@@ -1,6 +1,6 @@
 import type { LoginRequest, RegisterRequest, MeResponse, AuthUser } from '@/types/auth';
 import type { ModuleRole } from '@/types/modules';
-import { apiFetch, apiUpload, apiDownload, API_BASE_URL } from '@/utils/api';
+import { apiFetch, apiUpload, apiDownload } from '@/utils/api';
 import type { ApiResponse } from '@/utils/api';
 
 export const AuthService = {
