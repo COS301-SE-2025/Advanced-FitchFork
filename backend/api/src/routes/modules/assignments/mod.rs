@@ -18,7 +18,7 @@ use put::edit_assignment;
 
 use crate::{auth::guards::{
     require_admin, require_assigned_to_module, require_lecturer, require_lecturer_or_admin, require_lecturer_or_tutor
-}, routes::modules::assignments::post::create_task};
+}, routes::modules::assignments::{get::list_tasks, post::create_task}};
 
 /// Expects a module ID
 /// If an assignment ID is included it will be deleted
@@ -92,12 +92,18 @@ pub fn assignment_routes() -> Router {
                 require_lecturer_or_admin(Path(params), req, next)
             })),
         )
-        //TODO - Reece I commented this out
-        // .route(
-        //     "/:assignment_id/submissions",
-        //     post(submit_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-        //         require_assigned_to_module(Path(params), req, next)
-        //     })),
-        // )
+        .route(
+            "/:assignment_id/tasks",
+            get(list_tasks).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer_or_admin(Path(params), req, next)
+            })),
+        )
         .route("/:assignment_id", delete(delete_assignment))
+    // TODO: The following route is commented out:
+    // .route(
+    //     "/:assignment_id/submissions",
+    //     post(submit_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+    //         require_assigned_to_module(Path(params), req, next)
+    //     })),
+    // )
 }
