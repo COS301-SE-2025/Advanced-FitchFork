@@ -4,8 +4,26 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Internal helper used by both production and test code.
-/// Checks config validity and file existence based on passed `storage_root`.
+/// Validates the presence of necessary `.zip` files and config correctness
+/// for a given module and assignment in the specified storage root.
+///
+/// This function:
+/// - Checks that the execution config JSON file is valid and readable.
+/// - Ensures that the `memo`, `makefile`, and `main` subdirectories each
+///   contain at least one `.zip` file.
+///
+/// # Arguments
+///
+/// * `module_id` - The module identifier.
+/// * `assignment_id` - The assignment identifier.
+/// * `storage_root` - The root path where assignment files are stored.
+///
+/// # Errors
+///
+/// Returns an `Err` with a descriptive message if:
+/// - The config JSON file is missing or invalid.
+/// - Any of the required directories does not contain a `.zip` file.
+/// - Any directory or file cannot be read.
 pub fn validate_memo_files_with_root(
     module_id: i64,
     assignment_id: i64,
@@ -55,8 +73,18 @@ pub fn validate_memo_files_with_root(
     Ok(())
 }
 
-/// Public version that reads from ASSIGNMENT_STORAGE_ROOT env var,
-/// converts relative paths to absolute paths relative to project root.
+/// Validates memo files by reading the storage root directory from the
+/// `ASSIGNMENT_STORAGE_ROOT` environment variable, resolving relative paths,
+/// and calling `validate_memo_files_with_root`.
+///
+/// # Arguments
+///
+/// * `module_id` - The module identifier.
+/// * `assignment_id` - The assignment identifier.
+///
+/// # Errors
+///
+/// Returns an `Err` if the environment variable is missing or validation fails.
 pub fn validate_memo_files(module_id: i64, assignment_id: i64) -> Result<(), String> {
     let storage_root_str = std::env::var("ASSIGNMENT_STORAGE_ROOT")
         .map_err(|_| "ASSIGNMENT_STORAGE_ROOT env var is not set".to_string())?;
@@ -66,6 +94,18 @@ pub fn validate_memo_files(module_id: i64, assignment_id: i64) -> Result<(), Str
     validate_memo_files_with_root(module_id, assignment_id, &storage_root)
 }
 
+/// Resolves a potentially relative storage root path to an absolute path,
+/// assuming the current working directory is the project backend/code_runner folder.
+///
+/// Relative paths are adjusted to point to the backend root folder.
+///
+/// # Arguments
+///
+/// * `storage_root` - The storage root path as a string.
+///
+/// # Returns
+///
+/// An absolute `PathBuf` for the storage root.
 fn resolve_storage_root(storage_root: &str) -> PathBuf {
     let path = PathBuf::from(storage_root);
     if path.is_relative() {
@@ -80,6 +120,16 @@ fn resolve_storage_root(storage_root: &str) -> PathBuf {
     }
 }
 
+/// Helper function to write a default execution config JSON file
+/// at the expected location for a given module and assignment.
+///
+/// Used in tests or initialization.
+///
+/// # Arguments
+///
+/// * `base_path` - Base storage path to write config under.
+/// * `module_id` - The module identifier.
+/// * `assignment_id` - The assignment identifier.
 pub fn write_config_json(base_path: &PathBuf, module_id: i64, assignment_id: i64) {
     let config_dir = base_path
         .join(format!("module_{}", module_id))

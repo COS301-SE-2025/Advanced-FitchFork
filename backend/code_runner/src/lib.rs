@@ -1,6 +1,9 @@
 use db::models::assignment::AssignmentType;
+use db::models::assignment_memo_output::Model as MemoOutputModel;
+use db::models::assignment_task::Model as AssignmentTask;
+use sea_orm::DatabaseConnection;
 use std::env;
-use std::{fs, fs::File, io::Cursor, path::PathBuf, process::Stdio};
+use std::{fs::File, io::Cursor, path::PathBuf, process::Stdio};
 use tempfile::tempdir;
 use tokio::{
     process::Command,
@@ -12,6 +15,8 @@ pub mod execution_config;
 use crate::execution_config::ExecutionConfig;
 pub mod validate_files;
 
+/// Returns the first `.zip` file found in the given directory.
+/// Returns an error if the directory does not exist or if no zip file is found.
 fn first_zip_in(dir: &PathBuf) -> Result<PathBuf, String> {
     std::fs::read_dir(dir)
         .map_err(|_| format!("Missing directory: {}", dir.display()))?
@@ -21,6 +26,8 @@ fn first_zip_in(dir: &PathBuf) -> Result<PathBuf, String> {
         .ok_or_else(|| format!("No .zip file found in {}", dir.display()))
 }
 
+/// Resolves a potentially relative storage root path to an absolute path,
+/// assuming the current working directory is the root of the project.
 fn resolve_storage_root(storage_root: &str) -> PathBuf {
     let path = PathBuf::from(storage_root);
     if path.is_relative() {
@@ -33,9 +40,11 @@ fn resolve_storage_root(storage_root: &str) -> PathBuf {
     }
 }
 
-use db::models::assignment_task::Model as AssignmentTask;
-use sea_orm::DatabaseConnection;
-
+/// Runs all configured tasks for a given assignment ID by:
+/// 1. Validating memo files
+/// 2. Extracting zip files
+/// 3. Running the configured commands inside Docker
+/// 4. Saving the resulting output as memo files in the database
 pub async fn create_memo_outputs_for_all_tasks(
     db: &DatabaseConnection,
     module_id: i64,
@@ -72,19 +81,41 @@ pub async fn create_memo_outputs_for_all_tasks(
     }
 
     for task in tasks {
-        println!(
-            "\n--- Executing Task {}: {} ---",
-            task.task_number, task.command
-        );
+        // println!(
+        //     "\n--- Executing Task {}: {} ---",
+        //     task.task_number, task.command
+        // );
+
         match run_all_zips_with_command(zip_paths.clone(), &config, &task.command).await {
-            Ok(output) => println!("Output:\n{}", output),
-            Err(err) => println!("Task {} failed:\n{}", task.task_number, err),
+            Ok(output) => {
+                // println!("Task {} output captured.", task.task_number);
+
+                let filename = format!("task_{}_output.txt", task.task_number);
+                match MemoOutputModel::save_file(
+                    db,
+                    assignment_id,
+                    task.task_number,
+                    &filename,
+                    output.as_bytes(),
+                )
+                .await
+                {
+                    // Ok(saved) => println!("Saved output to: {}", saved.full_path().display()),
+                    Ok(_) => {}
+                    Err(e) => println!("Failed to save output: {}", e),
+                }
+            }
+            Err(err) => {
+                println!("Task {} failed:\n{}", task.task_number, err);
+            }
         }
     }
 
     Ok(())
 }
 
+/// Executes a set of zip files inside a Docker container using the specified command.
+/// Captures and returns stdout output if successful, or full error output if not.
 async fn run_all_zips_with_command(
     zip_paths: Vec<PathBuf>,
     config: &ExecutionConfig,
@@ -134,21 +165,21 @@ async fn run_all_zips_with_command(
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     if output.status.success() {
-        println!("--- Output directory contents ---");
-        for entry in fs::read_dir(&output_path)? {
-            let entry = entry?;
-            let path = entry.path();
-            println!("File: {}", path.display());
+        // println!("--- Output directory contents ---");
+        // for entry in fs::read_dir(&output_path)? {
+        //     let entry = entry?;
+        //     let path = entry.path();
+        // println!("File: {}", path.display());
 
-            if path
-                .extension()
-                .map(|ext| ext == "txt" || ext == "log")
-                .unwrap_or(false)
-            {
-                let content = fs::read_to_string(&path)?;
-                println!("Content:\n{}", content);
-            }
-        }
+        // if path
+        //     .extension()
+        //     .map(|ext| ext == "txt" || ext == "log")
+        //     .unwrap_or(false)
+        // {
+        //     let content = fs::read_to_string(&path)?;
+        //     println!("Content:\n{}", content);
+        // }
+        // }
 
         Ok(stdout.into_owned())
     } else {
@@ -162,6 +193,8 @@ async fn run_all_zips_with_command(
     }
 }
 
+/// Extracts the contents of a zip archive into the given output directory,
+/// while checking for total uncompressed size and zip slip vulnerabilities.
 fn extract_zip_contents(
     zip_bytes: &[u8],
     max_total_uncompressed: u64,
@@ -293,6 +326,7 @@ pub async fn setup_test_db_with_seeded_tasks() -> DatabaseConnection {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_create_memo_outputs_for_all_tasks_9999() {
     dotenv::dotenv().ok();
 
@@ -302,12 +336,12 @@ async fn test_create_memo_outputs_for_all_tasks_9999() {
     let assignment_id = 9999;
 
     match crate::create_memo_outputs_for_all_tasks(&db, module_id, assignment_id).await {
-        Ok(_) => println!("✅ Memo outputs generated successfully for all tasks."),
-        Err(e) => panic!("❌ Failed to generate memo outputs: {}", e),
+        Ok(_) => println!("Memo outputs generated successfully for all tasks."),
+        Err(e) => panic!("Failed to generate memo outputs: {}", e),
     }
 }
 
-//TODO - Fix github actions to be able to run docker containers with all the languages
+//TODO - Add testing for bad code in new refactored environment -> Richard will do
 // The problem with these tests is that they fail with github actions
 // That is why they are ignored
 
