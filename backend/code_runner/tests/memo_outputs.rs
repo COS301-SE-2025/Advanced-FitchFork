@@ -75,16 +75,12 @@ async fn seed_tasks(db: &DatabaseConnection) {
     }
 }
 
-pub async fn seed_module_assignment_and_tasks(db: &DatabaseConnection) {
-    seed_module(db).await;
-    seed_assignment(db).await;
-    seed_tasks(db).await;
-}
-
 pub async fn setup_test_db_with_seeded_tasks() -> DatabaseConnection {
     let db = setup_test_db().await;
 
-    seed_module_assignment_and_tasks(&db).await;
+    seed_module(&db).await;
+    seed_assignment(&db).await;
+    seed_tasks(&db).await;
 
     db
 }
@@ -96,10 +92,9 @@ async fn test_create_memo_outputs_for_all_tasks_9999() {
 
     let db = setup_test_db_with_seeded_tasks().await;
 
-    let module_id = 9999;
     let assignment_id = 9999;
 
-    match crate::create_memo_outputs_for_all_tasks(&db, module_id, assignment_id).await {
+    match crate::create_memo_outputs_for_all_tasks(&db, assignment_id).await {
         Ok(_) => println!("Memo outputs generated successfully for all tasks."),
         Err(e) => panic!("Failed to generate memo outputs: {}", e),
     }
