@@ -121,13 +121,13 @@ public class Main {
                 let helper_one = r#"
 public class HelperOne {
     public static String subtaskA() {
-        return "" + "HelperOne: Running subtask A for Task1";
+        return "" + "HelperOne: Subtask for Task1\nThis as well\nAnd this";
     }
     public static String subtaskZ() {
-        return "HelperOne: Running subtask Z for Task2";
+        return "HelperOne: Subtask for Task2\nThis as well\nAnd this";
     }
     public static String subtaskBeta() {
-        return "HelperOne: Running subtask Beta for Task3";
+        return "HelperOne: Subtask for Task3\nThis as well\nAnd this";
     }
 }
 "#;
@@ -135,13 +135,13 @@ public class HelperOne {
                 let helper_two = r#"
 public class HelperTwo {
     public static String subtaskB() {
-        return "HelperTwo: Running subtask B for Task1";
+        return "HelperTwo: Subtask for Task1\nThis as well\nAnd this";
     }
     public static String subtaskX() {
-        return "HelperTwo: Running subtask X for Task2";
+        return "HelperTwo: Subtask for Task2\nThis as well\nAnd this";
     }
     public static String subtaskGamma() {
-        return "HelperTwo: Running subtask Gamma for Task3";
+        return "HelperTwo: Subtask for Task3\nThis as well\nAnd this";
     }
 }
 "#;
@@ -149,13 +149,13 @@ public class HelperTwo {
                 let helper_three = r#"
 public class HelperThree {
     public static String subtaskC() {
-        return "HelperThree: Running subtask C for Task1";
+        return "HelperThree: Subtask for Task1\nThis as well\nAnd this";
     }
     public static String subtaskY() {
-        return "HelperThree: Running subtask Y for Task2";
+        return "HelperThree: Subtask for Task2\nThis as well\nAnd this";
     }
     public static String subtaskAlpha() {
-        return "HelperThree: Running subtask Alpha for Task3";
+        return "HelperThree: Subtask for Task3\nThis as well\nAnd this";
     }
 }
 "#;
