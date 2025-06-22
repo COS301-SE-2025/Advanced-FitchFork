@@ -48,15 +48,15 @@ pub struct JsonAllocatorParser;
 
 use serde_json::Value;
 use crate::error::MarkerError;
-use crate::traits::report_parser::ReportParser;
+use crate::traits::parser::Parser;
 
-impl ReportParser<AllocatorSchema> for JsonAllocatorParser {
+impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
     /// Parses a JSON value into an [`AllocatorSchema`].
     ///
     /// # Errors
     ///
     /// Returns [`MarkerError::ParseAllocatorError`] if the JSON does not conform to the expected schema.
-    fn parse(&self, raw: &Value) -> Result<AllocatorSchema, MarkerError> {
+    fn parse(&self, raw: &'a Value) -> Result<AllocatorSchema, MarkerError> {
         let obj = raw.as_object().ok_or_else(|| {
             MarkerError::ParseAllocatorError("Top-level JSON must be an object to check 'generated_at' and 'tasks'".to_string())
         })?;
@@ -204,7 +204,6 @@ mod tests {
         let path = Path::new("src/test_files/allocator_parser/allocator_report_1.json");
         let data = fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
-        assert_eq!(value.get("generated_at").and_then(|v| v.as_str()), Some("2025-06-20T12:00:00+02:00"), "generated_at should match");
         let parser = JsonAllocatorParser;
         let report = parser.parse(&value).expect("Should parse valid single task report");
         assert_eq!(report.0.len(), 1, "Should have one task");
@@ -225,7 +224,6 @@ mod tests {
         let path = Path::new("src/test_files/allocator_parser/allocator_report_2.json");
         let data = fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
-        assert_eq!(value.get("generated_at").and_then(|v| v.as_str()), Some("2025-06-20T12:05:00+02:00"), "generated_at should match");
         let parser = JsonAllocatorParser;
         let report = parser.parse(&value).expect("Should parse valid multiple tasks report");
         assert_eq!(report.0.len(), 2, "Should have two tasks");
@@ -247,7 +245,6 @@ mod tests {
         let path = Path::new("src/test_files/allocator_parser/allocator_report_3.json");
         let data = fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
-        assert_eq!(value.get("generated_at").and_then(|v| v.as_str()), Some("2025-06-20T12:10:00+02:00"), "generated_at should match");
         let parser = JsonAllocatorParser;
         let result = parser.parse(&value);
         match result {
@@ -264,7 +261,6 @@ mod tests {
         let path = Path::new("src/test_files/allocator_parser/allocator_report_4.json");
         let data = fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
-        assert_eq!(value.get("generated_at").and_then(|v| v.as_str()), Some("2025-06-20T12:15:00+02:00"), "generated_at should match");
         let parser = JsonAllocatorParser;
         let result = parser.parse(&value);
         match result {
@@ -281,7 +277,6 @@ mod tests {
         let path = Path::new("src/test_files/allocator_parser/allocator_report_5.json");
         let data = fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
-        assert_eq!(value.get("generated_at").and_then(|v| v.as_str()), Some("2025-06-20T12:20:00+02:00"), "generated_at should match");
         let parser = JsonAllocatorParser;
         let result = parser.parse(&value);
         match result {

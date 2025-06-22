@@ -39,4 +39,6 @@ pub enum MarkerError {
     ParseAllocatorError(String),
     /// Error parsing complexity report (schema or content error).
     ParseComplexityError(String),
+    /// Error parsing output file format (invalid structure or content).
+    ParseOutputError(String),
 } 

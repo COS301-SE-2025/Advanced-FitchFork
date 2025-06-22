@@ -76,15 +76,15 @@ pub struct JsonCoverageParser;
 
 use serde_json::Value;
 use crate::error::MarkerError;
-use crate::traits::report_parser::ReportParser;
+use crate::traits::parser::Parser;
 
-impl ReportParser<CoverageReport> for JsonCoverageParser {
+impl<'a> Parser<&'a Value, CoverageReport> for JsonCoverageParser {
     /// Parses a JSON value into a [`CoverageReport`].
     ///
     /// # Errors
     ///
     /// Returns [`MarkerError::ParseCoverageError`] if the JSON does not conform to the expected schema.
-    fn parse(&self, raw: &Value) -> Result<CoverageReport, MarkerError> {
+    fn parse(&self, raw: &'a Value) -> Result<CoverageReport, MarkerError> {
         let obj = raw.as_object().ok_or_else(|| {
             MarkerError::ParseCoverageError("Top-level JSON must be an object".to_string())
         })?;

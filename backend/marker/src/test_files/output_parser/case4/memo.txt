@@ -1,0 +1,6 @@
+javac … && java Main task1
+&-=-&Sub1
+Alpha
+&-=-&Sub2
+&-=-&Sub3
+Gamma

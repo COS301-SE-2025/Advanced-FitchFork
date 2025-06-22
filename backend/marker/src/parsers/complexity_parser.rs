@@ -55,15 +55,15 @@ pub struct JsonComplexityParser;
 
 use serde_json::Value;
 use crate::error::MarkerError;
-use crate::traits::report_parser::ReportParser;
+use crate::traits::parser::Parser;
 
-impl ReportParser<ComplexityReport> for JsonComplexityParser {
+impl<'a> Parser<&'a Value, ComplexityReport> for JsonComplexityParser {
     /// Parses a JSON value into a [`ComplexityReport`].
     ///
     /// # Errors
     ///
     /// Returns [`MarkerError::ParseComplexityError`] if the JSON does not conform to the expected schema.
-    fn parse(&self, raw: &Value) -> Result<ComplexityReport, MarkerError> {
+    fn parse(&self, raw: &'a Value) -> Result<ComplexityReport, MarkerError> {
         let obj = raw.as_object().ok_or_else(|| {
             MarkerError::ParseComplexityError("Top-level JSON must be an object".to_string())
         })?;

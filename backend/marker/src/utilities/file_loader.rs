@@ -29,10 +29,10 @@ use crate::error::MarkerError;
 pub struct LoadedFiles {
     /// Submission identifier.
     pub submission_id: String,
-    /// Paths to memo files.
-    pub memo_paths: Vec<PathBuf>,
-    /// Paths to student files.
-    pub student_paths: Vec<PathBuf>,
+    /// Raw content of memo files.
+    pub memo_contents: Vec<String>,
+    /// Raw content of student files.
+    pub student_contents: Vec<String>,
     /// Raw JSON value for the allocator report.
     pub allocator_raw: Value,
     /// Raw JSON value for the coverage report.
@@ -112,10 +112,25 @@ pub fn load_files(
     let coverage_raw  = serde_json::from_slice(&coverage_bytes ).map_err(|_| MarkerError::InvalidJson(coverage_path.display().to_string()))?;
     let complexity_raw= serde_json::from_slice(&complexity_bytes).map_err(|_| MarkerError::InvalidJson(complexity_path.display().to_string()))?;
     
+    // Read memo and student file contents
+    let mut memo_contents = Vec::new();
+    for path in &memo_paths {
+        let content = fs::read_to_string(path)
+            .map_err(|e| MarkerError::IoError(format!("Failed to read memo file {}: {}", path.display(), e)))?;
+        memo_contents.push(content);
+    }
+
+    let mut student_contents = Vec::new();
+    for path in &student_paths {
+        let content = fs::read_to_string(path)
+            .map_err(|e| MarkerError::IoError(format!("Failed to read student file {}: {}", path.display(), e)))?;
+        student_contents.push(content);
+    }
+    
     Ok(LoadedFiles {
         submission_id: submission_id.to_string(),
-        memo_paths,
-        student_paths,
+        memo_contents,
+        student_contents,
         allocator_raw,
         coverage_raw,
         complexity_raw,
@@ -149,8 +164,8 @@ mod tests {
         assert!(result.is_ok(), "Expected Ok for happy path, got: {:?}", result);
         let loaded = result.unwrap();
         assert_eq!(loaded.submission_id, "sub1");
-        assert_eq!(loaded.memo_paths, memo_paths);
-        assert_eq!(loaded.student_paths, student_paths);
+        assert_eq!(loaded.memo_contents.len(), memo_paths.len());
+        assert_eq!(loaded.student_contents.len(), student_paths.len());
         assert!(loaded.allocator_raw.is_object(), "allocator_raw should be a JSON object");
         assert!(loaded.coverage_raw.is_object(), "coverage_raw should be a JSON object");
         assert!(loaded.complexity_raw.is_object(), "complexity_raw should be a JSON object");
