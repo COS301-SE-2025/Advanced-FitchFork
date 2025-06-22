@@ -40,6 +40,7 @@ use crate::auth::guards::{
 /// - `POST /assignments/:assignment_id/submissions` → Submit assignment
 /// - `GET  /assignments/:assignment_id/submissions/me` → Get my submissions
 /// - `GET  /assignments/:assignment_id/submissions` → List all submissions (lecturer/tutor only)
+/// - Nested mark allocator routes under `/assignments/:assignment_id/mark-allocator`
 pub fn assignment_routes() -> Router {
     Router::new()
         .route("/", post(create))
