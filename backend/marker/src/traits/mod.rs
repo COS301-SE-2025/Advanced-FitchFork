@@ -5,8 +5,10 @@
 //!
 //! - [`comparator`]: Defines traits for comparing outputs and reports.
 //! - [`parser`]: Defines the generic trait for parsing JSON data into Rust types.
+//! - [`feedback`]: Defines traits and types for pluggable feedback strategies.
 //!
 //! Implement these traits to extend or customize the marker's behavior for new data types or comparison strategies.
 
 pub mod comparator; 
-pub mod parser; 
+pub mod parser;
+pub mod feedback;
