@@ -55,5 +55,20 @@ impl Seeder for ModuleSeeder {
 
             let _ = m.insert(db).await;
         }
+
+        let special_module = module::ActiveModel {
+            id: Set(9999),
+            code: Set("TEST9999".to_string()),
+            year: Set(2025),
+            credits: Set(16),
+            description: Set(Some(
+                "Special test module for integration testing".to_string(),
+            )),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+
+        let _ = special_module.insert(db).await;
     }
 }

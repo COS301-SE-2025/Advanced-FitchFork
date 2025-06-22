@@ -102,6 +102,7 @@ npm run dev
 ```bash
 cd backend
 cp .env.example .env
+docker build -t universal-runner .
 cargo make fresh
 cargo make api
 ```

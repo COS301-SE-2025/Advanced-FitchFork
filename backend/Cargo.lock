@@ -153,6 +153,7 @@ dependencies = [
  "jsonwebtoken",
  "lazy_static",
  "lettre",
+ "mime_guess",
  "once_cell",
  "regex",
  "sea-orm",
@@ -573,6 +574,13 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 name = "code-runner"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "common",
+ "db",
+ "dotenv",
+ "sea-orm",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "uuid",
@@ -745,7 +753,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "chrono",
- "code-runner",
+ "common",
  "log",
  "migration",
  "rand",
@@ -821,6 +829,12 @@ dependencies = [
  "quote",
  "syn 2.0.101",
 ]
+
+[[package]]
+name = "dotenv"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
 name = "dotenvy"
@@ -1720,6 +1734,16 @@ name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
+
+[[package]]
+name = "mime_guess"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
+dependencies = [
+ "mime",
+ "unicase",
+]
 
 [[package]]
 name = "minimal-lexical"
@@ -2712,6 +2736,7 @@ dependencies = [
  "rand",
  "sea-orm",
  "tokio",
+ "zip",
 ]
 
 [[package]]
@@ -3549,6 +3574,12 @@ name = "typenum"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
+
+[[package]]
+name = "unicase"
+version = "2.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75b844d17643ee918803943289730bec8aac480150456169e647ed0b576ba539"
 
 [[package]]
 name = "unicode-bidi"

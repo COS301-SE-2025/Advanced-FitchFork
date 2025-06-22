@@ -4,20 +4,23 @@ import App from './App.tsx';
 import React from 'react';
 import 'antd/dist/reset.css';
 import { AuthProvider } from './context/AuthContext.tsx';
-import { ThemeProvider } from './context/ThemeContext.tsx';
 import { App as AntApp } from 'antd';
 import { BreadcrumbProvider } from './context/BreadcrumbContext.tsx';
+import { UIProvider } from './context/UIContext.tsx';
+import { ThemeProvider } from './context/ThemeContext.tsx';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeProvider>
-      <AuthProvider>
-        <AntApp>
-          <BreadcrumbProvider>
-            <App />
-          </BreadcrumbProvider>
-        </AntApp>
-      </AuthProvider>
+      <UIProvider>
+        <AuthProvider>
+          <AntApp>
+            <BreadcrumbProvider>
+              <App />
+            </BreadcrumbProvider>
+          </AntApp>
+        </AuthProvider>
+      </UIProvider>
     </ThemeProvider>
   </React.StrictMode>,
 );

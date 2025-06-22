@@ -1,5 +1,4 @@
 import { useNotifier } from '@/components/Notifier';
-import AppLayout from '@/layouts/AppLayout';
 import {
   Card,
   Row,
@@ -23,6 +22,7 @@ import {
   AlertOutlined,
   ClockCircleOutlined,
 } from '@ant-design/icons';
+import PageHeader from '@/components/PageHeader';
 
 const { Title, Text } = Typography;
 const { TabPane } = Tabs;
@@ -72,10 +72,11 @@ export default function Home() {
   const { notifyInfo, notifyError, notifySuccess } = useNotifier();
 
   return (
-    <AppLayout
-      title="Admin Dashboard"
-      description="Manage modules, users, assignments, and submissions efficiently."
-    >
+    <div className="p-4 sm:p-6">
+      <PageHeader
+        title="Admin Dashboard"
+        description="Manage modules, users, assignments, and submissions efficiently."
+      />
       <div className="w-full px-4 sm:px-6">
         {/* Header */}
         <Row justify="space-between" align="middle" className="mb-6">
@@ -201,6 +202,6 @@ export default function Home() {
           </Col>
         </Row>
       </div>
-    </AppLayout>
+    </div>
   );
 }
