@@ -31,8 +31,6 @@ pub enum MarkerError {
     MissingField(String),
     /// I/O error (file not found, unreadable, etc.).
     IoError(String),
-    /// Mark allocation weights do not match expected totals.
-    WeightMismatch(String),
     /// A required task ID is missing in coverage or complexity report.
     MissingTaskId(String),
     /// Error parsing coverage report (schema or content error).

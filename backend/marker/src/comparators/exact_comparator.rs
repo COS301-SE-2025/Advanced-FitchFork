@@ -5,6 +5,7 @@
 //! memo (solution) output.
 
 use crate::traits::comparator::OutputComparator;
+use crate::types::{TaskResult, Subsection};
 
 /// A comparator that awards full marks if the student's output contains a pattern at least as
 /// many times as the memo's output.
@@ -19,24 +20,37 @@ impl OutputComparator for ExactComparator {
     ///
     /// # Arguments
     ///
+    /// * `section` - The subsection entry containing details like name and total possible value.
     /// * `memo_lines` - A slice of strings representing the lines of the memo output.
     /// * `student_lines` - A slice of strings representing the lines of the student's output.
     /// * `pattern` - The exact string pattern to search for in the output lines.
-    /// * `max_marks` - The total marks to award if the comparison is successful.
     ///
     /// # Returns
     ///
-    /// Returns `max_marks` if the `pattern` is found in `memo_lines` at least once, and the count
-    /// of `pattern` in `student_lines` is greater than or equal to its count in `memo_lines`.
-    /// Otherwise, it returns `0`.
-    fn compare(&self, memo_lines: &[String], student_lines: &[String], pattern: &str, max_marks: u32) -> u32 {
+    /// Returns a `TaskResult` with full marks if the comparison is successful, or zero marks otherwise.
+    fn compare(
+        &self,
+        section: &Subsection,
+        memo_lines: &[String],
+        student_lines: &[String],
+        pattern: &str,
+    ) -> TaskResult {
         let memo_count = memo_lines.iter().filter(|l| l.contains(pattern)).count();
         let student_count = student_lines.iter().filter(|l| l.contains(pattern)).count();
 
-        if memo_count > 0 && student_count >= memo_count {
-            max_marks
-        } else {
-            0
+        let (awarded, matched_patterns, missed_patterns) =
+            if memo_count > 0 && student_count >= memo_count {
+                (section.value, vec![pattern.to_string()], vec![])
+            } else {
+                (0, vec![], vec![pattern.to_string()])
+            };
+
+        TaskResult {
+            name: section.name.clone(),
+            awarded,
+            possible: section.value,
+            matched_patterns,
+            missed_patterns,
         }
     }
 }
@@ -44,10 +58,18 @@ impl OutputComparator for ExactComparator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::Subsection;
 
     /// Helper function to create a vector of strings from a slice of string literals.
     fn to_string_vec(lines: &[&str]) -> Vec<String> {
         lines.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn mock_subsection(value: u32) -> Subsection {
+        Subsection {
+            name: "Mock Subsection".to_string(),
+            value,
+        }
     }
 
     #[test]
@@ -56,9 +78,12 @@ mod tests {
         let memo_lines = to_string_vec(&["apple", "orange", "apple"]);
         let student_lines = to_string_vec(&["apple", "apple", "grape"]);
         let pattern = "apple";
-        let max_marks = 10;
+        let section = mock_subsection(10);
         // memo_count = 2, student_count = 2. Should be a match.
-        assert_eq!(comparator.compare(&memo_lines, &student_lines, pattern, max_marks), 10);
+        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        assert_eq!(result.awarded, 10);
+        assert_eq!(result.matched_patterns, vec!["apple"]);
+        assert!(result.missed_patterns.is_empty());
     }
 
     #[test]
@@ -67,9 +92,12 @@ mod tests {
         let memo_lines = to_string_vec(&["one match"]);
         let student_lines = to_string_vec(&["one match", "two matches", "three matches"]);
         let pattern = "match";
-        let max_marks = 5;
+        let section = mock_subsection(5);
         // memo_count = 1, student_count = 3. Student has more, so should match.
-        assert_eq!(comparator.compare(&memo_lines, &student_lines, pattern, max_marks), 5);
+        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        assert_eq!(result.awarded, 5);
+        assert_eq!(result.matched_patterns, vec!["match"]);
+        assert!(result.missed_patterns.is_empty());
     }
 
     #[test]
@@ -78,9 +106,12 @@ mod tests {
         let memo_lines = to_string_vec(&["correct", "correct", "correct"]);
         let student_lines = to_string_vec(&["correct", "wrong"]);
         let pattern = "correct";
-        let max_marks = 20;
+        let section = mock_subsection(20);
         // memo_count = 3, student_count = 1. Student has fewer, so should not match.
-        assert_eq!(comparator.compare(&memo_lines, &student_lines, pattern, max_marks), 0);
+        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        assert_eq!(result.awarded, 0);
+        assert!(result.matched_patterns.is_empty());
+        assert_eq!(result.missed_patterns, vec!["correct"]);
     }
 
     #[test]
@@ -89,9 +120,12 @@ mod tests {
         let memo_lines = to_string_vec(&["no expected output", "none"]);
         let student_lines = to_string_vec(&["unexpected", "unexpected"]);
         let pattern = "unexpected";
-        let max_marks = 10;
+        let section = mock_subsection(10);
         // memo_count = 0. Should not match, regardless of student output.
-        assert_eq!(comparator.compare(&memo_lines, &student_lines, pattern, max_marks), 0);
+        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        assert_eq!(result.awarded, 0);
+        assert!(result.matched_patterns.is_empty());
+        assert_eq!(result.missed_patterns, vec!["unexpected"]);
     }
 
     #[test]
@@ -100,9 +134,12 @@ mod tests {
         let memo_lines = to_string_vec(&["required", "required"]);
         let student_lines = to_string_vec(&["something else"]);
         let pattern = "required";
-        let max_marks = 15;
+        let section = mock_subsection(15);
         // memo_count = 2, student_count = 0. Should not match.
-        assert_eq!(comparator.compare(&memo_lines, &student_lines, pattern, max_marks), 0);
+        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        assert_eq!(result.awarded, 0);
+        assert!(result.matched_patterns.is_empty());
+        assert_eq!(result.missed_patterns, vec!["required"]);
     }
 
     #[test]
@@ -111,8 +148,11 @@ mod tests {
         let memo_lines = to_string_vec(&["empty"]);
         let student_lines = to_string_vec(&["empty"]);
         let pattern = "unique";
-        let max_marks = 10;
+        let section = mock_subsection(10);
         // memo_count = 0, student_count = 0. Should not match.
-        assert_eq!(comparator.compare(&memo_lines, &student_lines, pattern, max_marks), 0);
+        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        assert_eq!(result.awarded, 0);
+        assert!(result.matched_patterns.is_empty());
+        assert_eq!(result.missed_patterns, vec!["unique"]);
     }
 } 

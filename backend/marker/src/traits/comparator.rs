@@ -1,14 +1,21 @@
+use crate::types::{TaskResult, Subsection};
+
 /// OutputComparator is a strategy trait for comparing outputs.
 /// Each implementation provides a specific logic for comparing a single subsection
 /// of a student's output against the reference output.
 pub trait OutputComparator {
-    /// Compares a single subsection of student output against the memo.
+    /// Compare one subsection (pattern) of a task, producing a full TaskResult.
     ///
-    /// - `memo_lines`: All lines from the reference (memo) output.
-    /// - `student_lines`: All lines from the student's output.
-    /// - `pattern`: The specific string pattern for the subsection to find.
-    /// - `max_marks`: The maximum marks available for this subsection.
+    /// - `section`: contains `name`, `value`.
+    /// - `memo_lines`/`student_lines`: text to search.
+    /// - `pattern`: the string/regex for this subsection.
     ///
-    /// Returns the awarded marks as a u32.
-    fn compare(&self, memo_lines: &[String], student_lines: &[String], pattern: &str, max_marks: u32) -> u32;
+    /// Returns the result as a `TaskResult`
+    fn compare(
+        &self,
+        section: &Subsection,
+        memo_lines: &[String],
+        student_lines: &[String],
+        pattern: &str,
+    ) -> TaskResult;
 } 

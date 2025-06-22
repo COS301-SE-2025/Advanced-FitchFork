@@ -39,31 +39,7 @@
 //!
 //! This module includes comprehensive tests for valid and invalid report files, covering edge cases and error reporting.
 
-/// The top-level schema for an allocator report, containing a list of tasks.
-#[derive(Debug)]
-pub struct AllocatorSchema(pub Vec<TaskEntry>);
-
-/// Represents a single task in the allocator report.
-#[derive(Debug)]
-pub struct TaskEntry {
-    /// The task identifier (e.g., "task1").
-    pub id: String,
-    /// The name of the task.
-    pub name: String,
-    /// The value (score/points) assigned to the task.
-    pub value: u32,
-    /// The subsections of the task, if any.
-    pub subsections: Vec<Subsection>,
-}
-
-/// Represents a subsection within a task.
-#[derive(Debug)]
-pub struct Subsection {
-    /// The name of the subsection.
-    pub name: String,
-    /// The value (score/points) assigned to the subsection.
-    pub value: u32,
-}
+use crate::types::{AllocatorSchema, TaskEntry, Subsection};
 
 /// Parser for allocator reports in JSON format.
 ///
