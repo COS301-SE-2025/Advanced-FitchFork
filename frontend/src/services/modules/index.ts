@@ -100,7 +100,7 @@ export const ModulesService = {
    * @returns Modules the user is a student, tutor, or lecturer in
    */
   getMyModules: (): Promise<ApiResponse<MyModulesResponse>> =>
-    apiFetch(`/modules/my`, { method: "GET" }),
+    apiFetch(`/modules/me`, { method: "GET" }),
 
   /**
    * Assign lecturers to a module.

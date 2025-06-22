@@ -4,7 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use axum::extract::Query;
+use axum::extract::{Query, Path};
 use axum::http::{header, HeaderMap, HeaderValue};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use tokio::fs::File as FsFile;
@@ -176,17 +176,26 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
     )
 }
 
-/// GET /auth/avatar/me
+/// GET /auth/avatar/:user_id
 ///
-/// Returns the authenticated user's avatar image.
-/// If the user has no avatar set or the file is missing, a suitable error is returned.
+/// Returns the avatar image for a specific user ID.
 ///
 /// ### Authorization
-/// Requires a valid `Authorization: Bearer <token>` header.
+/// This endpoint is **public** and does **not** require authentication.
 ///
 /// ### Response: 200 OK
-/// - Returns raw binary image data
-/// - The `Content-Type` header is automatically set based on file extension (e.g., `image/png`, `image/jpeg`)
+/// - Returns raw binary image data of the avatar
+/// - The `Content-Type` header is automatically inferred based on the file extension (e.g., `image/png`, `image/jpeg`)
+///
+/// ### Example Request
+/// ```http
+/// GET /auth/avatar/42
+/// ```
+///
+/// ### Example Response Headers
+/// ```http
+/// Content-Type: image/png
+/// ```
 ///
 /// ### Error Responses
 /// #### 404 Not Found
@@ -211,22 +220,15 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
 ///   "data": null
 /// }
 /// ```
-pub async fn get_own_avatar(AuthUser(claims): AuthUser) -> impl IntoResponse {
+pub async fn get_avatar(Path(user_id): Path<i64>) -> impl IntoResponse {
+    // Find user by ID
     let db = connect().await;
-
-    let user = match user::Entity::find_by_id(claims.sub).one(&db).await {
+    let user = match user::Entity::find_by_id(user_id).one(&db).await {
         Ok(Some(u)) => u,
-        Ok(None) => {
+        _ => {
             return (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::error("User not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error")),
             )
                 .into_response();
         }

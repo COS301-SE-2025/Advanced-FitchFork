@@ -5,31 +5,26 @@ import {
   Space,
   Popconfirm,
   Tooltip,
-  Upload,
-  List,
-  Skeleton,
   Tag,
   DatePicker,
   Input,
   Select,
   Empty,
+  Dropdown,
 } from 'antd';
 import {
   EditOutlined,
   DeleteOutlined,
   FileTextOutlined,
-  InboxOutlined,
-  DownloadOutlined,
-  PaperClipOutlined,
   CheckOutlined,
   CloseOutlined,
   ReloadOutlined,
+  MoreOutlined,
 } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import type {
   Assignment,
-  AssignmentFile,
   AssignmentPayload,
   AssignmentType,
   EditAssignmentRequest,
@@ -46,6 +41,8 @@ import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import TableCreateModal from '@/components/TableCreateModal';
 import { useNotifier } from '@/components/Notifier';
+import { useModule } from '@/context/ModuleContext';
+import { useNavigate } from 'react-router-dom';
 
 dayjs.extend(weekday);
 dayjs.extend(localeData);
@@ -54,18 +51,15 @@ dayjs.extend(isSameOrAfter);
 
 const { Title, Text } = Typography;
 
-interface Props {
-  moduleId: number;
-}
-
 const ASSIGNMENT_TYPES: AssignmentType[] = ['Assignment', 'Practical'];
 
-export default function AssignmentsSection({ moduleId }: Props) {
+const ModuleAssignmentsTable = () => {
   // ======================================================================
   // =========================== State and Hooks ==========================
   // ======================================================================
 
   const { notifySuccess, notifyError } = useNotifier();
+  const navigate = useNavigate();
 
   const {
     searchTerm,
@@ -82,13 +76,13 @@ export default function AssignmentsSection({ moduleId }: Props) {
     clearAll,
   } = useTableQuery();
 
+  const module = useModule();
+
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editedRow, setEditedRow] = useState<Partial<Assignment>>({});
   const [loading, setLoading] = useState(false);
-  const [fileMap, setFileMap] = useState<Record<number, AssignmentFile[]>>({});
-  const [fileLoadingMap, setFileLoadingMap] = useState<Record<number, boolean>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newAssignment, setNewAssignment] = useState<Partial<Assignment>>({
     name: 'New Assignment',
@@ -105,7 +99,7 @@ export default function AssignmentsSection({ moduleId }: Props) {
     setLoading(true);
     const sort: SortOption[] = sorterState;
 
-    const res = await AssignmentsService.listAssignments(moduleId, {
+    const res = await AssignmentsService.listAssignments(module.id, {
       page: pagination.current,
       per_page: pagination.pageSize,
       query: searchTerm,
@@ -126,18 +120,7 @@ export default function AssignmentsSection({ moduleId }: Props) {
 
   useEffect(() => {
     fetchAssignments();
-  }, [moduleId, pagination.current, pagination.pageSize, sorterState, searchTerm, filterState]);
-
-  const loadFiles = async (assignmentId: number) => {
-    setFileLoadingMap((prev) => ({ ...prev, [assignmentId]: true }));
-    const res = await AssignmentsService.listFiles(moduleId, assignmentId);
-    if (res.success) {
-      setFileMap((prev) => ({ ...prev, [assignmentId]: res.data }));
-    } else {
-      notifyError('File Load Failed', 'Could not load attached files');
-    }
-    setFileLoadingMap((prev) => ({ ...prev, [assignmentId]: false }));
-  };
+  }, [module.id, pagination.current, pagination.pageSize, sorterState, searchTerm, filterState]);
 
   // ======================================================================
   // ========================== Add Item Handlers =========================
@@ -163,7 +146,7 @@ export default function AssignmentsSection({ moduleId }: Props) {
       description: values.description ?? '',
     };
 
-    const res = await AssignmentsService.createAssignment(moduleId, payload);
+    const res = await AssignmentsService.createAssignment(module.id, payload);
 
     if (res.success) {
       notifySuccess('Created', 'Assignment successfully created');
@@ -188,7 +171,7 @@ export default function AssignmentsSection({ moduleId }: Props) {
       due_date: editedRow.due_date ? dayjs(editedRow.due_date).toISOString() : undefined,
       description: editedRow.description,
     };
-    const res = await AssignmentsService.editAssignment(moduleId, id, payload);
+    const res = await AssignmentsService.editAssignment(module.id, id, payload);
 
     if (res.success) {
       notifySuccess('Updated', 'Assignment changes have been saved');
@@ -201,7 +184,7 @@ export default function AssignmentsSection({ moduleId }: Props) {
   };
 
   const handleDeleteAssignment = async (assignmentId: number) => {
-    const res = await AssignmentsService.deleteAssignment(moduleId, assignmentId);
+    const res = await AssignmentsService.deleteAssignment(module.id, assignmentId);
     if (res.success) {
       notifySuccess('Deleted', 'Assignment removed successfully');
       fetchAssignments();
@@ -215,40 +198,6 @@ export default function AssignmentsSection({ moduleId }: Props) {
       await handleDeleteAssignment(Number(key));
     }
     setSelectedRowKeys([]);
-  };
-
-  // ======================================================================
-  // ======================== Delete Logic (File) =========================
-  // ======================================================================
-
-  const handleDeleteFile = async (assignmentId: number, fileId: number) => {
-    const res = await AssignmentsService.deleteFiles(moduleId, assignmentId, {
-      file_ids: [Number(fileId)],
-    });
-    if (res.success) {
-      notifySuccess('File Removed', 'The file was deleted successfully');
-      setFileMap((prev) => ({
-        ...prev,
-        [assignmentId]: prev[assignmentId].filter((f) => f.id !== fileId),
-      }));
-    } else {
-      notifyError('File Delete Failed', 'Could not remove the selected file');
-    }
-  };
-
-  // ======================================================================
-  // ======================= Upload New File Logic ========================
-  // ======================================================================
-
-  const handleUpload = async (assignmentId: number, file: File, onSuccess?: () => void) => {
-    const res = await AssignmentsService.uploadFiles(moduleId, assignmentId, [file]);
-    if (res.success) {
-      notifySuccess('Upload Complete', 'Your file has been uploaded successfully');
-      loadFiles(assignmentId);
-      onSuccess?.(); // required to resolve the upload in Upload.Dragger
-    } else {
-      notifyError('Upload Failed', 'There was an error uploading your file');
-    }
   };
 
   // ======================================================================
@@ -368,55 +317,88 @@ export default function AssignmentsSection({ moduleId }: Props) {
       title: 'Actions',
       key: 'actions',
       align: 'right',
-      render: (_, record) =>
-        editingId === record.id ? (
-          <Space>
-            <Tooltip title="Save">
-              <Button
-                icon={<CheckOutlined />}
-                type="primary"
-                shape="circle"
-                onClick={() => saveEdit(record.id)}
-                size="small"
-              />
-            </Tooltip>
-            <Tooltip title="Cancel">
-              <Button
-                icon={<CloseOutlined />}
-                shape="circle"
-                onClick={() => {
-                  setEditingId(null);
-                  setEditedRow({});
-                }}
-                size="small"
-              />
-            </Tooltip>
-          </Space>
-        ) : (
-          <Space>
-            <Tooltip title="Edit">
-              <Button
-                icon={<EditOutlined />}
-                size="small"
-                type="text"
-                onClick={() => {
-                  setEditingId(record.id);
-                  setEditedRow(record);
-                }}
-              />
-            </Tooltip>
-            <Tooltip title="Delete">
-              <Popconfirm
-                title="Delete this assignment?"
-                onConfirm={() => handleDeleteAssignment(record.id)}
-                okText="Yes"
-                cancelText="No"
-              >
-                <Button icon={<DeleteOutlined />} danger type="text" size="small" />
-              </Popconfirm>
-            </Tooltip>
-          </Space>
-        ),
+      width: 100,
+      render: (_, record) => {
+        const isEditing = editingId === record.id;
+
+        if (isEditing) {
+          return (
+            <Space>
+              <Tooltip title="Save">
+                <Button
+                  type="primary"
+                  shape="default"
+                  icon={<CheckOutlined />}
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    saveEdit(record.id);
+                  }}
+                />
+              </Tooltip>
+              <Tooltip title="Cancel">
+                <Button
+                  shape="default"
+                  icon={<CloseOutlined />}
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingId(null);
+                    setEditedRow({});
+                  }}
+                />
+              </Tooltip>
+            </Space>
+          );
+        }
+
+        return (
+          <div onClick={(e) => e.stopPropagation()}>
+            <Dropdown
+              trigger={['click']}
+              menu={{
+                items: [
+                  {
+                    key: 'edit',
+                    icon: <EditOutlined />,
+                    label: 'Edit',
+                  },
+                  {
+                    key: 'delete',
+                    icon: <DeleteOutlined />,
+                    danger: true,
+                    label: (
+                      <Popconfirm
+                        title="Delete this assignment?"
+                        onConfirm={(e) => {
+                          e?.stopPropagation();
+                          handleDeleteAssignment(record.id);
+                        }}
+                        onCancel={(e) => e?.stopPropagation()}
+                        okText="Yes"
+                        cancelText="No"
+                      >
+                        <span onClick={(e) => e.stopPropagation()}>Delete</span>
+                      </Popconfirm>
+                    ),
+                  },
+                ],
+                onClick: ({ key, domEvent }) => {
+                  domEvent.preventDefault();
+                  domEvent.stopPropagation();
+
+                  if (key === 'edit') {
+                    setEditingId(record.id);
+                    setEditedRow(record);
+                  }
+                },
+              }}
+            >
+              <Button icon={<MoreOutlined />} style={{ borderRadius: 6 }} />
+            </Dropdown>
+          </div>
+        );
+      },
     },
   ];
 
@@ -425,7 +407,7 @@ export default function AssignmentsSection({ moduleId }: Props) {
   // ======================================================================
 
   return (
-    <div>
+    <div className="p-4 sm:p-6">
       <Title level={4}>Assignments</Title>
       <Text className="block mb-4 text-gray-500 dark:text-gray-400">
         Manage all assignments for this module below.
@@ -532,81 +514,13 @@ export default function AssignmentsSection({ moduleId }: Props) {
             pageSize: pagination.pageSize || 10,
           });
         }}
-        expandable={{
-          expandedRowRender: (assignment) => (
-            <div>
-              <Upload.Dragger
-                multiple
-                customRequest={({ file, onSuccess }) =>
-                  handleUpload(assignment.id, file as File, () => onSuccess?.('ok'))
-                }
-                showUploadList={false}
-                className="mb-6 p-6 rounded-xl bg-white dark:bg-gray-900"
-              >
-                <p className="ant-upload-drag-icon">
-                  <InboxOutlined style={{ fontSize: 32 }} />
-                </p>
-                <p className="ant-upload-text">Click or drag files here to upload</p>
-                <p className="ant-upload-hint text-sm text-gray-400">
-                  Supports multiple files. Max 10MB each.
-                </p>
-              </Upload.Dragger>
-
-              {fileLoadingMap[assignment.id] ? (
-                <Skeleton active paragraph={{ rows: 2 }} className="mt-4" />
-              ) : (
-                <List
-                  itemLayout="horizontal"
-                  dataSource={fileMap[assignment.id] || []}
-                  locale={{ emptyText: 'No files uploaded yet.' }}
-                  renderItem={(file) => (
-                    <List.Item
-                      actions={[
-                        <Tooltip title="Download">
-                          <Button
-                            type="text"
-                            size="small"
-                            icon={<DownloadOutlined />}
-                            onClick={() =>
-                              AssignmentsService.downloadFile(moduleId, assignment.id, file.id)
-                            }
-                          />
-                        </Tooltip>,
-                        <Tooltip title="Delete">
-                          <Popconfirm
-                            title="Delete this file?"
-                            onConfirm={() => handleDeleteFile(assignment.id, file.id)}
-                            okText="Yes"
-                            cancelText="No"
-                          >
-                            <Button type="text" danger size="small" icon={<DeleteOutlined />} />
-                          </Popconfirm>
-                        </Tooltip>,
-                      ]}
-                    >
-                      <List.Item.Meta
-                        avatar={
-                          <PaperClipOutlined
-                            className="text-gray-400 dark:text-gray-500"
-                            style={{ fontSize: 18 }}
-                          />
-                        }
-                        title={
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                            {file.filename}
-                          </span>
-                        }
-                      />
-                    </List.Item>
-                  )}
-                />
-              )}
-            </div>
-          ),
-          onExpand: (expanded, record) => {
-            if (expanded && !fileMap[record.id]) loadFiles(record.id);
+        onRow={(record) => ({
+          onClick: () => {
+            if (editingId === null) {
+              navigate(`/modules/${module.id}/assignments/${record.id}/submissions`);
+            }
           },
-        }}
+        })}
         locale={{
           emptyText: (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No assignments found.">
@@ -625,4 +539,6 @@ export default function AssignmentsSection({ moduleId }: Props) {
       />
     </div>
   );
-}
+};
+
+export default ModuleAssignmentsTable;
