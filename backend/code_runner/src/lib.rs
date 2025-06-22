@@ -1,4 +1,3 @@
-use db::models::assignment::AssignmentType;
 use db::models::assignment_memo_output::Model as MemoOutputModel;
 use db::models::assignment_task::Model as AssignmentTask;
 use sea_orm::DatabaseConnection;
@@ -107,6 +106,97 @@ pub async fn create_memo_outputs_for_all_tasks(
             }
             Err(err) => {
                 println!("Task {} failed:\n{}", task.task_number, err);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+use db::models::assignment_submission_output::Model as SubmissionOutputModel;
+
+/// Runs all configured tasks for a given assignment ID and student attempt by:
+/// 1. Validating submission files
+/// 2. Extracting zip files (submission, makefile, main)
+/// 3. Running the configured commands inside Docker
+/// 4. Saving the output to disk and database as `assignment_submission_output`
+pub async fn create_submission_outputs_for_all_tasks(
+    db: &DatabaseConnection,
+    module_id: i64,
+    assignment_id: i64,
+    submission_id: i64,
+    user_id: i64,
+    attempt_number: i64,
+) -> Result<(), String> {
+    use crate::validate_files::validate_submission_files;
+
+    // Validate submission-related files
+    validate_submission_files(module_id, assignment_id, user_id, attempt_number)?;
+
+    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
+        .map_err(|e| format!("Failed to load execution config: {}", e))?;
+
+    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
+        .map_err(|_| "ASSIGNMENT_STORAGE_ROOT not set".to_string())?;
+
+    let base_path = resolve_storage_root(&storage_root)
+        .join(format!("module_{}", module_id))
+        .join(format!("assignment_{}", assignment_id));
+
+    let submission_path = base_path
+        .join("assignment_submissions")
+        .join(format!("user_{}", user_id))
+        .join(format!("attempt_{}", attempt_number));
+
+    let zip_paths = vec![
+        first_zip_in(&submission_path)?,
+        first_zip_in(&base_path.join("makefile"))?,
+        first_zip_in(&base_path.join("main"))?,
+    ];
+
+    let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
+        .await
+        .map_err(|e| format!("DB error loading tasks: {}", e))?;
+
+    if tasks.is_empty() {
+        println!("No tasks found for assignment {}", assignment_id);
+        return Ok(());
+    }
+
+    for task in tasks {
+        match run_all_zips_with_command(zip_paths.clone(), &config, &task.command).await {
+            Ok(output) => {
+                let filename = format!(
+                    "submission_task_{}_user_{}_attempt_{}.txt",
+                    task.task_number, user_id, attempt_number
+                );
+
+                match SubmissionOutputModel::save_file(
+                    db,
+                    task.task_number,
+                    submission_id,
+                    &filename,
+                    output.as_bytes(),
+                )
+                .await
+                {
+                    Ok(saved) => {
+                        println!(
+                            "Saved submission output for task {} to {}",
+                            task.task_number,
+                            saved.full_path().display()
+                        );
+                    }
+                    Err(e) => {
+                        println!("Failed to save submission output: {}", e);
+                    }
+                }
+            }
+            Err(err) => {
+                println!(
+                    "Task {} failed for user {} attempt {}:\n{}",
+                    task.task_number, user_id, attempt_number, err
+                );
             }
         }
     }
@@ -234,111 +324,6 @@ fn extract_zip_contents(
     }
 
     Ok(())
-}
-
-use chrono::Utc;
-use db::models::assignment::{ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity};
-use db::models::assignment_task::Model as AssignmentTaskModel;
-use db::models::module::{ActiveModel as ModuleActiveModel, Entity as ModuleEntity};
-use db::test_utils::setup_test_db;
-use sea_orm::{ActiveModelTrait, EntityTrait, Set};
-
-async fn seed_module(db: &DatabaseConnection) {
-    let module_id = 9999;
-
-    let existing_module = ModuleEntity::find_by_id(module_id)
-        .one(db)
-        .await
-        .expect("DB error during module lookup");
-
-    if existing_module.is_none() {
-        let module = ModuleActiveModel {
-            id: Set(module_id),
-            code: Set("COS999".to_string()),
-            year: Set(2025),
-            description: Set(Some("Test module for ID 9999".to_string())),
-            credits: Set(12),
-            created_at: Set(Utc::now()),
-            updated_at: Set(Utc::now()),
-        };
-
-        module
-            .insert(db)
-            .await
-            .expect("Failed to insert module with id 9999");
-    }
-}
-
-async fn seed_assignment(db: &DatabaseConnection) {
-    let assignment_id = 9999;
-    let module_id = 9999;
-
-    let existing_assignment = AssignmentEntity::find_by_id(assignment_id)
-        .one(db)
-        .await
-        .expect("DB error during assignment lookup");
-
-    if existing_assignment.is_none() {
-        let assignment = AssignmentActiveModel {
-            id: Set(assignment_id),
-            module_id: Set(module_id),
-            name: Set("Special Assignment".to_string()),
-            description: Set(Some("Special assignment for testing".to_string())),
-            assignment_type: Set(AssignmentType::Assignment),
-            available_from: Set(Utc::now()),
-            due_date: Set(Utc::now()),
-            created_at: Set(Utc::now()),
-            updated_at: Set(Utc::now()),
-            ..Default::default()
-        };
-
-        assignment
-            .insert(db)
-            .await
-            .expect("Failed to insert assignment with id 9999");
-    }
-}
-
-async fn seed_tasks(db: &DatabaseConnection) {
-    let assignment_id = 9999;
-    let tasks = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
-
-    for (task_number, command) in tasks {
-        AssignmentTaskModel::create(db, assignment_id, task_number, command)
-            .await
-            .expect("Failed to create assignment task");
-    }
-}
-
-pub async fn seed_module_assignment_and_tasks(db: &DatabaseConnection) {
-    seed_module(db).await;
-    seed_assignment(db).await;
-    seed_tasks(db).await;
-}
-
-#[allow(dead_code)]
-pub async fn setup_test_db_with_seeded_tasks() -> DatabaseConnection {
-    let db = setup_test_db().await;
-
-    seed_module_assignment_and_tasks(&db).await;
-
-    db
-}
-
-#[tokio::test]
-#[ignore]
-async fn test_create_memo_outputs_for_all_tasks_9999() {
-    dotenv::dotenv().ok();
-
-    let db = setup_test_db_with_seeded_tasks().await;
-
-    let module_id = 9999;
-    let assignment_id = 9999;
-
-    match crate::create_memo_outputs_for_all_tasks(&db, module_id, assignment_id).await {
-        Ok(_) => println!("Memo outputs generated successfully for all tasks."),
-        Err(e) => panic!("Failed to generate memo outputs: {}", e),
-    }
 }
 
 //TODO - Add testing for bad code in new refactored environment -> Richard will do

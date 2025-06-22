@@ -77,7 +77,7 @@ public class Main {
     }
 
     static void runTask1() {
-        System.out.println("" + "&-=-&Task1");
+        System.out.println("" + "&-=-&Task1Subtask1");
         System.out.println(HelperOne.subtaskA());
         System.out.println("&-=-&Task1Subtask2");
         System.out.println(HelperTwo.subtaskB());
@@ -86,7 +86,7 @@ public class Main {
     }
 
     static void runTask2() {
-        System.out.println("&-=-&Task2");
+        System.out.println("&-=-&Task2Subtask1");
         System.out.println(HelperTwo.subtaskX());
         System.out.println("&-=-&Task2Subtask2");
         System.out.println(HelperThree.subtaskY());
@@ -95,7 +95,7 @@ public class Main {
     }
 
     static void runTask3() {
-        System.out.println("&-=-&Task3");
+        System.out.println("&-=-&Task3Subtask1");
         System.out.println(HelperThree.subtaskAlpha());
         System.out.println("&-=-&Task3Subtask2");
         System.out.println(HelperOne.subtaskBeta());
