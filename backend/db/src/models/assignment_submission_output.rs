@@ -42,9 +42,19 @@ impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
     pub fn storage_root() -> PathBuf {
-        env::var("ASSIGNMENT_STORAGE_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("data/assignment_files"))
+        let relative_root = env::var("ASSIGNMENT_STORAGE_ROOT")
+            .unwrap_or_else(|_| "data/assignment_files".to_string());
+
+        let mut dir = std::env::current_dir().expect("Failed to get current dir");
+
+        while let Some(parent) = dir.parent() {
+            if dir.ends_with("backend") {
+                return dir.join(relative_root);
+            }
+            dir = parent.to_path_buf();
+        }
+
+        PathBuf::from(relative_root)
     }
 
     pub fn full_directory_path(

@@ -46,11 +46,21 @@ fn resolve_storage_root(storage_root: &str) -> PathBuf {
 /// 4. Saving the resulting output as memo files in the database
 pub async fn create_memo_outputs_for_all_tasks(
     db: &DatabaseConnection,
-    module_id: i64,
     assignment_id: i64,
 ) -> Result<(), String> {
     use crate::execution_config::ExecutionConfig;
     use crate::validate_files::validate_memo_files;
+    use db::models::assignment::Entity as Assignment;
+    use sea_orm::EntityTrait;
+
+    // Fetch the assignment to get module_id
+    let assignment = Assignment::find_by_id(assignment_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch assignment: {}", e))?
+        .ok_or_else(|| format!("Assignment {} not found", assignment_id))?;
+
+    let module_id = assignment.module_id;
 
     validate_memo_files(module_id, assignment_id)?;
 
@@ -122,13 +132,33 @@ use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 /// 4. Saving the output to disk and database as `assignment_submission_output`
 pub async fn create_submission_outputs_for_all_tasks(
     db: &DatabaseConnection,
-    module_id: i64,
-    assignment_id: i64,
     submission_id: i64,
-    user_id: i64,
-    attempt_number: i64,
 ) -> Result<(), String> {
     use crate::validate_files::validate_submission_files;
+    use db::models::assignment::Entity as Assignment;
+    use db::models::assignment_submission::Entity as AssignmentSubmission;
+
+    use sea_orm::EntityTrait;
+
+    // Fetch the submission
+    let submission = AssignmentSubmission::find_by_id(submission_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?
+        .ok_or_else(|| format!("Submission {} not found", submission_id))?;
+
+    let assignment_id = submission.assignment_id;
+    let user_id = submission.user_id;
+    let attempt_number = submission.attempt;
+
+    // Fetch the assignment to get module_id
+    let assignment = Assignment::find_by_id(assignment_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch assignment: {}", e))?
+        .ok_or_else(|| format!("Assignment {} not found", assignment_id))?;
+
+    let module_id = assignment.module_id;
 
     // Validate submission-related files
     validate_submission_files(module_id, assignment_id, user_id, attempt_number)?;
@@ -180,13 +210,7 @@ pub async fn create_submission_outputs_for_all_tasks(
                 )
                 .await
                 {
-                    Ok(saved) => {
-                        println!(
-                            "Saved submission output for task {} to {}",
-                            task.task_number,
-                            saved.full_path().display()
-                        );
-                    }
+                    Ok(_) => {}
                     Err(e) => {
                         println!("Failed to save submission output: {}", e);
                     }
