@@ -573,6 +573,13 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 name = "code-runner"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "common",
+ "db",
+ "dotenv",
+ "sea-orm",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "uuid",
@@ -745,7 +752,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "chrono",
- "code-runner",
+ "common",
  "log",
  "migration",
  "rand",
@@ -821,6 +828,12 @@ dependencies = [
  "quote",
  "syn 2.0.101",
 ]
+
+[[package]]
+name = "dotenv"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
 name = "dotenvy"
@@ -2722,6 +2735,7 @@ dependencies = [
  "rand",
  "sea-orm",
  "tokio",
+ "zip",
 ]
 
 [[package]]
