@@ -36,12 +36,9 @@ use db::{
             Model as AssignmentModel,
         },
         assignment_file::{FileType, Model as FileModel},
-        assignment_submission::Model as AssignmentSubmissionModel,
     },
 };
 use db::models::assignment_task::{ActiveModel, Column, Entity};
-use db::models::AssignmentTask;
-use crate::auth::AuthUser;
 use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
@@ -518,7 +515,36 @@ pub struct TaskResponse {
     updated_at: DateTime<Utc>
 }
 
-// todo - Add docs
+/// POST /api/modules/:module_id/assignments/:assignment_id/tasks
+///
+/// Create a new task for a given assignment (Lecturers and Admins only).
+///
+/// Each task must have a unique `task_number` within the assignment. The `command`
+/// field defines how the task will be executed during evaluation.
+///
+/// ### JSON Body
+/// ```json
+/// {
+///   "task_number": 1,
+///   "command": "cargo test"
+/// }
+/// ```
+///
+/// ### Example curl
+/// ```bash
+/// curl -X POST http://localhost:3000/api/modules/1/assignments/2/tasks \
+///   -H "Authorization: Bearer <token>" \
+///   -H "Content-Type: application/json" \
+///   -d '{"task_number": 1, "command": "cargo test"}'
+/// ```
+///
+/// ### Responses
+/// - `201 Created` with task metadata
+/// - `400 Bad Request` (missing or malformed JSON body)
+/// - `403 Forbidden` (unauthorized)
+/// - `404 Not Found` (assignment or module not found)
+/// - `422 Unprocessable Entity` (invalid input or task_number not unique)
+/// - `500 Internal Server Error` (unexpected database error)
 pub async fn create_task(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(payload): Json<CreateTaskRequest>,

@@ -9,9 +9,16 @@ use sea_orm::{
 };
 
 use crate::{
-    db::connect,
     response::ApiResponse,
-    entities::assignment::{Entity as AssignmentEntity, Column as AssignmentColumn, ActiveModel as AssignmentModel},
+};
+
+use db::{
+    connect,
+    models::{
+        assignment::{
+            Column as AssignmentColumn, Entity as AssignmentEntity,
+        },
+    },
 };
 
 pub async fn set_assignment_config(
@@ -52,13 +59,13 @@ pub async fn set_assignment_config(
         }
     };
 
-    let mut updated = AssignmentModel::from(assignment);
-    updated.config = Set(Some(config));
+    let mut active_model: db::models::assignment::ActiveModel = assignment.into();
+    active_model.config = Set(Some(config));
 
-    match updated.update(&db).await {
+    match active_model.update(&db).await {
         Ok(_) => (
             StatusCode::OK,
-            Json(ApiResponse::<()>::success(None, "Assignment configuration saved")),
+            Json(ApiResponse::<()>::success((), "Assignment configuration saved")),
         )
             .into_response(),
         Err(err) => {
