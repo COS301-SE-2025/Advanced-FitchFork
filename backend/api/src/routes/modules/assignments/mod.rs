@@ -5,6 +5,7 @@ pub mod put;
 mod submissions;
 mod config;
 pub mod mark_allocator;
+pub mod memo_output;
 
 use axum::{
     extract::Path,

@@ -19,13 +19,13 @@ export interface AuthUser extends User, JWTToken {}
 // ─────────────────────────────────────────────────────────────
 
 export interface RegisterRequest {
-  student_number: string;
+  username: string;
   email: string;
   password: string;
 }
 
 export interface LoginRequest {
-  student_number: string;
+  username: string;
   password: string;
 }
 

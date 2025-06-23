@@ -23,7 +23,7 @@ async fn seed_user(db: &DatabaseConnection) -> i64 {
     {
         let user = UserActiveModel {
             id: Set(user_id), // explicitly set ID if your DB allows it
-            student_number: Set("u00000001".to_string()),
+            username: Set("u00000001".to_string()),
             email: Set("testuser@example.com".to_string()),
             password_hash: Set("hashedpassword".to_string()), // or generate with Model::hash_password
             admin: Set(false),

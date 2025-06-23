@@ -182,14 +182,14 @@ export const ModulesService = {
    */
   getLecturers: (
     moduleId: number,
-    options: { page: number; per_page: number; query?: string; email?: string; student_number?: string; sort?: string }
+    options: { page: number; per_page: number; query?: string; email?: string; username?: string; sort?: string }
   ): Promise<ApiResponse<{ users: User[]; page: number; per_page: number; total: number }>> => {
     const params = new URLSearchParams();
     params.append("page", options.page.toString());
     params.append("per_page", options.per_page.toString());
     if (options.query) params.append("query", options.query);
     if (options.email) params.append("email", options.email);
-    if (options.student_number) params.append("student_number", options.student_number);
+    if (options.username) params.append("username", options.username);
     if (options.sort) params.append("sort", options.sort);
 
     return apiFetch(`/modules/${moduleId}/lecturers?${params.toString()}`, { method: "GET" });
@@ -203,14 +203,14 @@ export const ModulesService = {
    */
   getTutors: (
     moduleId: number,
-    options: { page: number; per_page: number; query?: string; email?: string; student_number?: string; sort?: string }
+    options: { page: number; per_page: number; query?: string; email?: string; username?: string; sort?: string }
   ): Promise<ApiResponse<{ users: User[]; page: number; per_page: number; total: number }>> => {
     const params = new URLSearchParams();
     params.append("page", options.page.toString());
     params.append("per_page", options.per_page.toString());
     if (options.query) params.append("query", options.query);
     if (options.email) params.append("email", options.email);
-    if (options.student_number) params.append("student_number", options.student_number);
+    if (options.username) params.append("username", options.username);
     if (options.sort) params.append("sort", options.sort);
 
     return apiFetch(`/modules/${moduleId}/tutors?${params.toString()}`, { method: "GET" });
@@ -224,14 +224,14 @@ export const ModulesService = {
    */
   getStudents: (
     moduleId: number,
-    options: { page: number; per_page: number; query?: string; email?: string; student_number?: string; sort?: string }
+    options: { page: number; per_page: number; query?: string; email?: string; username?: string; sort?: string }
   ): Promise<ApiResponse<{ users: User[]; page: number; per_page: number; total: number }>> => {
     const params = new URLSearchParams();
     params.append("page", options.page.toString());
     params.append("per_page", options.per_page.toString());
     if (options.query) params.append("query", options.query);
     if (options.email) params.append("email", options.email);
-    if (options.student_number) params.append("student_number", options.student_number);
+    if (options.username) params.append("username", options.username);
     if (options.sort) params.append("sort", options.sort);
 
     return apiFetch(`/modules/${moduleId}/students?${params.toString()}`, { method: "GET" });
@@ -263,7 +263,7 @@ export const ModulesService = {
       per_page: number;
       query?: string;
       email?: string;
-      student_number?: string;
+      username?: string;
       sort?: string;
     }
   ): Promise<ApiResponse<{ users: User[]; page: number; per_page: number; total: number }>> => {
@@ -273,7 +273,7 @@ export const ModulesService = {
     params.append("per_page", options.per_page.toString());
     if (options.query) params.append("query", options.query);
     if (options.email) params.append("email", options.email);
-    if (options.student_number) params.append("student_number", options.student_number);
+    if (options.username) params.append("username", options.username);
     if (options.sort) params.append("sort", options.sort);
 
     return apiFetch(`/modules/${moduleId}/eligible-users?${params.toString()}`, {

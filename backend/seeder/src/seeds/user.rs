@@ -16,9 +16,9 @@ impl Seeder for UserSeeder {
 
         // Random Users
         for _ in 0..10 {
-            let student_number = format!("u{:08}", fastrand::u32(..100_000_000));
+            let username = format!("u{:08}", fastrand::u32(..100_000_000));
             let email: String = SafeEmail().fake();
-            let _ = Model::create(db, &student_number, &email, "password_hash", false).await;
+            let _ = Model::create(db, &username, &email, "password_hash", false).await;
         }
     }
 }

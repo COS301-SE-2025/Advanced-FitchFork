@@ -29,7 +29,7 @@ export default function Signup() {
     confirmPassword: string;
   }) => {
     const res = await register({
-      student_number: values.username,
+      username: values.username,
       email: values.email,
       password: values.password,
     });

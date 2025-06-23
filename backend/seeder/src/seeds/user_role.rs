@@ -16,7 +16,7 @@ impl Seeder for UserRoleSeeder {
         let mut rng = StdRng::from_rng(OsRng).expect("Failed to seed RNG");
 
         for u in users {
-            if u.student_number == "u00000002" {
+            if u.username == "u00000002" {
                 if modules.len() < 10 {
                     panic!("Need at least 10 modules to assign 10 to the normal user");
                 }

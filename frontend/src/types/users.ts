@@ -6,7 +6,7 @@ import type { ModuleRole } from "./modules";
  */
 export interface User extends Timestamp {
   id: number;
-  student_number: string;
+  username: string;
   email: string;
   admin: boolean;
 }
@@ -31,7 +31,7 @@ export interface ListUsersRequest {
   sort?: SortOption[];
   query?: string;
   email?: string;
-  student_number?: string;
+  username?: string;
   admin?: boolean;
 }
 

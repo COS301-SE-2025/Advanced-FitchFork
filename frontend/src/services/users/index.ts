@@ -30,7 +30,7 @@ export const UsersService = {
 
     if (request.query) params.append("query", request.query);
     if (request.email) params.append("email", request.email);
-    if (request.student_number) params.append("student_number", request.student_number);
+    if (request.username) params.append("username", request.username);
     if (typeof request.admin === "boolean") params.append("admin", request.admin.toString());
 
     return apiFetch(`/users?${params.toString()}`, { method: "GET" });
@@ -47,7 +47,7 @@ export const UsersService = {
    */
   editUser: (userId: number, user: User): Promise<ApiResponse<User>> => {
     const payload: UserEditableFields = {
-      student_number: user.student_number,
+      username: user.username,
       email: user.email,
       admin: user.admin,
     };

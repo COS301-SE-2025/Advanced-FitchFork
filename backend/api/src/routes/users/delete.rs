@@ -128,7 +128,7 @@ mod tests {
     // Seed admin and regular user
     async fn create_test_users(db: &sea_orm::DatabaseConnection) -> (user::Model, user::Model) {
         let admin_user = UserActiveModel {
-            student_number: Set("u12345678".into()),
+            username: Set("u12345678".into()),
             email: Set("admin@example.com".into()),
             password_hash: Set("hashed1".into()),
             admin: Set(true),
@@ -139,7 +139,7 @@ mod tests {
         .unwrap();
 
         let regular_user = UserActiveModel {
-            student_number: Set("u87654321".into()),
+            username: Set("u87654321".into()),
             email: Set("user@example.com".into()),
             password_hash: Set("hashed2".into()),
             admin: Set(false),
@@ -219,7 +219,7 @@ mod tests {
         let db = setup_test_db().await;
 
         let admin_user = UserActiveModel {
-            student_number: Set("u99999999".into()),
+            username: Set("u99999999".into()),
             email: Set("admin_self@example.com".into()),
             password_hash: Set("hashed".into()),
             admin: Set(true),
@@ -241,7 +241,7 @@ mod tests {
         let db = setup_test_db().await;
 
         let admin_user = UserActiveModel {
-            student_number: Set("u11111111".into()),
+            username: Set("u11111111".into()),
             email: Set("admin_nf@example.com".into()),
             password_hash: Set("hashed".into()),
             admin: Set(true),
@@ -269,7 +269,7 @@ mod tests {
 
         // Insert a user
         let user = UserActiveModel {
-            student_number: Set("u32132132".into()),
+            username: Set("u32132132".into()),
             email: Set("target@dbops.com".into()),
             password_hash: Set("pass".into()),
             admin: Set(false),
@@ -352,7 +352,7 @@ mod tests {
 
         // Create users
         let user1 = UserActiveModel {
-            student_number: Set("u11111111".into()),
+            username: Set("u11111111".into()),
             email: Set("user1@test.com".into()),
             password_hash: Set("pass1".into()),
             admin: Set(false),
@@ -360,7 +360,7 @@ mod tests {
         }.insert(&db).await.unwrap();
 
         let user2 = UserActiveModel {
-            student_number: Set("u22222222".into()),
+            username: Set("u22222222".into()),
             email: Set("user2@test.com".into()),
             password_hash: Set("pass2".into()),
             admin: Set(false),
@@ -368,7 +368,7 @@ mod tests {
         }.insert(&db).await.unwrap();
 
         let user3 = UserActiveModel {
-            student_number: Set("u33333333".into()),
+            username: Set("u33333333".into()),
             email: Set("user3@test.com".into()),
             password_hash: Set("pass3".into()),
             admin: Set(false),
@@ -376,7 +376,7 @@ mod tests {
         }.insert(&db).await.unwrap();
 
         let admin = UserActiveModel {
-            student_number: Set("u99999999".into()),
+            username: Set("u99999999".into()),
             email: Set("admin@test.com".into()),
             password_hash: Set("admin_pass".into()),
             admin: Set(true),
@@ -436,7 +436,7 @@ mod tests {
         let db = setup_test_db().await;
 
         let admin_user = UserActiveModel {
-            student_number: Set("u00000001".into()),
+            username: Set("u00000001".into()),
             email: Set("admin@example.com".into()),
             password_hash: Set("adminhash".into()),
             admin: Set(true),
@@ -447,7 +447,7 @@ mod tests {
         .unwrap();
 
         let target_user = UserActiveModel {
-            student_number: Set("u00000002".into()),
+            username: Set("u00000002".into()),
             email: Set("target@example.com".into()),
             password_hash: Set("targethash".into()),
             admin: Set(false),
@@ -503,7 +503,7 @@ mod tests {
 
         // 2. Self-deletion attempt
         let user = UserActiveModel {
-            student_number: Set("u12345678".into()),
+            username: Set("u12345678".into()),
             email: Set("test@example.com".into()),
             password_hash: Set("hashed".into()),
             admin: Set(true),

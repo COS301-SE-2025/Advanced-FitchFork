@@ -28,7 +28,7 @@ pub struct ListUsersQuery {
     pub sort: Option<String>,
     pub query: Option<String>,
     pub email: Option<String>,
-    pub student_number: Option<String>,
+    pub username: Option<String>,
     pub admin: Option<bool>,
 }
 
@@ -36,7 +36,7 @@ pub struct ListUsersQuery {
 pub struct UserListItem {
     pub id: String,
     pub email: String,
-    pub student_number: String,
+    pub username: String,
     pub admin: bool,
     pub created_at: String,
     pub updated_at: String,
@@ -55,7 +55,7 @@ impl From<UserModel> for UserListItem {
         Self {
             id: user.id.to_string(),
             email: user.email,
-            student_number: user.student_number,
+            username: user.username,
             admin: user.admin,
             created_at: user.created_at.to_string(),
             updated_at: user.updated_at.to_string(),
@@ -71,9 +71,9 @@ impl From<UserModel> for UserListItem {
 /// ### Query Parameters
 /// - `page` (optional): Page number (default: 1, min: 1)
 /// - `per_page` (optional): Items per page (default: 20, min: 1, max: 100)
-/// - `query` (optional): Case-insensitive partial match against email OR student_number
+/// - `query` (optional): Case-insensitive partial match against email OR username
 /// - `email` (optional): Case-insensitive partial match on email
-/// - `student_number` (optional): Case-insensitive partial match on student number
+/// - `username` (optional): Case-insensitive partial match on student number
 /// - `admin` (optional): Filter by admin status (true/false)
 /// - `sort` (optional): Comma-separated sort fields. Use `-` prefix for descending
 ///
@@ -82,7 +82,7 @@ impl From<UserModel> for UserListItem {
 /// GET /api/users?page=2&per_page=10
 /// GET /api/users?query=u1234
 /// GET /api/users?email=@example.com
-/// GET /api/users?student_number=u1234
+/// GET /api/users?username=u1234
 /// GET /api/users?admin=true
 /// GET /api/users?sort=email,-created_at
 /// GET /api/users?page=1&per_page=10&admin=false&query=jacques&sort=-email
@@ -99,7 +99,7 @@ impl From<UserModel> for UserListItem {
 ///       {
 ///         "id": "uuid",
 ///         "email": "user@example.com",
-///         "student_number": "u12345678",
+///         "username": "u12345678",
 ///         "admin": false,
 ///         "created_at": "2025-05-23T18:00:00Z",
 ///         "updated_at": "2025-05-23T18:00:00Z"
@@ -138,7 +138,7 @@ pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoRespons
         condition = condition.add(
             Condition::any()
                 .add(UserColumn::Email.contains(&pattern))
-                .add(UserColumn::StudentNumber.contains(&pattern)),
+                .add(UserColumn::Username.contains(&pattern)),
         );
     }
 
@@ -146,8 +146,8 @@ pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoRespons
         condition = condition.add(UserColumn::Email.contains(&format!("%{}%", email)));
     }
 
-    if let Some(sn) = &query.student_number {
-        condition = condition.add(UserColumn::StudentNumber.contains(&format!("%{}%", sn)));
+    if let Some(sn) = &query.username {
+        condition = condition.add(UserColumn::Username.contains(&format!("%{}%", sn)));
     }
 
     if let Some(admin) = query.admin {
@@ -172,11 +172,11 @@ pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoRespons
                         query_builder.order_by_asc(UserColumn::Email)
                     };
                 }
-                "student_number" => {
+                "username" => {
                     query_builder = if desc {
-                        query_builder.order_by_desc(UserColumn::StudentNumber)
+                        query_builder.order_by_desc(UserColumn::Username)
                     } else {
-                        query_builder.order_by_asc(UserColumn::StudentNumber)
+                        query_builder.order_by_asc(UserColumn::Username)
                     };
                 }
                 "created_at" => {
@@ -434,7 +434,7 @@ mod tests {
             sort: Some("email".to_string()),
             query: Some("test".to_string()),
             email: None,
-            student_number: None,
+            username: None,
             admin: Some(false),
         };
         assert!(valid_query.validate().is_ok());
@@ -446,7 +446,7 @@ mod tests {
             sort: None,
             query: None,
             email: None,
-            student_number: None,
+            username: None,
             admin: None,
         };
         assert!(invalid_page.validate().is_err());
@@ -458,7 +458,7 @@ mod tests {
             sort: None,
             query: None,
             email: None,
-            student_number: None,
+            username: None,
             admin: None,
         };
         assert!(invalid_per_page.validate().is_err());
@@ -470,7 +470,7 @@ mod tests {
             sort: None,
             query: None,
             email: None,
-            student_number: None,
+            username: None,
             admin: None,
         };
         assert!(invalid_per_page_low.validate().is_err());
@@ -490,7 +490,7 @@ mod tests {
         // Store the values we need before converting
         let id = user.id.to_string();
         let email = user.email.clone();
-        let student_number = user.student_number.clone();
+        let username = user.username.clone();
         let admin = user.admin;
         let created_at = user.created_at.to_string();
         let updated_at = user.updated_at.to_string();
@@ -499,7 +499,7 @@ mod tests {
 
         assert_eq!(list_item.id, id);
         assert_eq!(list_item.email, email);
-        assert_eq!(list_item.student_number, student_number);
+        assert_eq!(list_item.username, username);
         assert_eq!(list_item.admin, admin);
         assert_eq!(list_item.created_at, created_at);
         assert_eq!(list_item.updated_at, updated_at);
@@ -521,7 +521,7 @@ mod tests {
             sort: None,
             query: None,
             email: None,
-            student_number: None,
+            username: None,
             admin: None,
         };
 
@@ -542,7 +542,7 @@ mod tests {
             sort: None,
             query: Some("test".to_string()),
             email: Some("should_be_ignored".to_string()),
-            student_number: Some("also_ignored".to_string()),
+            username: Some("also_ignored".to_string()),
             admin: Some(true),
         };
 
@@ -551,7 +551,7 @@ mod tests {
 
         // Simulate the where clause building logic from list_users
         if let Some(query) = &query_params.query {
-            where_conditions.push("(LOWER(email) LIKE LOWER(?) OR LOWER(student_number) LIKE LOWER(?))");
+            where_conditions.push("(LOWER(email) LIKE LOWER(?) OR LOWER(username) LIKE LOWER(?))");
             let query_pattern = format!("%{}%", query);
             params.push(query_pattern.clone());
             params.push(query_pattern);
@@ -561,9 +561,9 @@ mod tests {
                 params.push(format!("%{}%", email));
             }
 
-            if let Some(student_number) = &query_params.student_number {
-                where_conditions.push("LOWER(student_number) LIKE LOWER(?)");
-                params.push(format!("%{}%", student_number));
+            if let Some(username) = &query_params.username {
+                where_conditions.push("LOWER(username) LIKE LOWER(?)");
+                params.push(format!("%{}%", username));
             }
         }
 
@@ -582,14 +582,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_where_clause_building_without_query() {
-        // Test email and student_number filters when query is not provided
+        // Test email and username filters when query is not provided
         let query_params = ListUsersQuery {
             page: Some(1),
             per_page: Some(10),
             sort: None,
             query: None,
             email: Some("example.com".to_string()),
-            student_number: Some("u1234".to_string()),
+            username: Some("u1234".to_string()),
             admin: Some(false),
         };
 
@@ -598,7 +598,7 @@ mod tests {
         
         // Simulate the where clause building logic
         if let Some(query) = &query_params.query {
-            where_conditions.push("(LOWER(email) LIKE LOWER(?) OR LOWER(student_number) LIKE LOWER(?))");
+            where_conditions.push("(LOWER(email) LIKE LOWER(?) OR LOWER(username) LIKE LOWER(?))");
             let query_pattern = format!("%{}%", query);
             params.push(query_pattern.clone());
             params.push(query_pattern);
@@ -608,9 +608,9 @@ mod tests {
                 params.push(format!("%{}%", email));
             }
             
-            if let Some(student_number) = &query_params.student_number {
-                where_conditions.push("LOWER(student_number) LIKE LOWER(?)");
-                params.push(format!("%{}%", student_number));
+            if let Some(username) = &query_params.username {
+                where_conditions.push("LOWER(username) LIKE LOWER(?)");
+                params.push(format!("%{}%", username));
             }
         }
         
@@ -620,7 +620,7 @@ mod tests {
         }
 
         // Verify the logic worked correctly
-        assert_eq!(where_conditions.len(), 3); // email + student_number + admin
+        assert_eq!(where_conditions.len(), 3); // email + username + admin
         assert_eq!(params.len(), 3);
         assert_eq!(params[0], "%example.com%");
         assert_eq!(params[1], "%u1234%");
@@ -696,12 +696,12 @@ mod tests {
             .unwrap();
         assert_eq!(admin_count, 2); // bob and diana
 
-        // Count users where student_number or email contains 'u1'
+        // Count users where username or email contains 'u1'
         let combined = UserEntity::find()
             .filter(
                 Condition::any()
                     .add(Expr::col(UserColumn::Email).like("%u1%"))
-                    .add(Expr::col(UserColumn::StudentNumber).like("%u1%")),
+                    .add(Expr::col(UserColumn::Username).like("%u1%")),
             )
             .count(&db)
             .await
