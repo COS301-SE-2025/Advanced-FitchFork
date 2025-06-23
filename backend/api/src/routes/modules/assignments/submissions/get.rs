@@ -8,7 +8,9 @@ use chrono::{DateTime, Utc};
 use db::{
     connect,
     models::{
-        assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, assignment_submission, user, user_module_role::{self, Role}, User
+        assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
+        assignment_submission, user,
+        user_module_role::{self, Role},
     },
 };
 use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
@@ -16,8 +18,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{auth::AuthUser, response::ApiResponse};
 
-/// GET /api/modules/:module_id/assignments/:assignment_id/submissions/me
-///
 /// Get a list of the current user's submissions for a specific assignment.
 ///
 /// ### Responses
@@ -32,8 +32,10 @@ pub fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
 #[derive(Debug, Serialize)]
 pub struct SubmissionResponse {
     pub id: i64,
+    pub attempt: i64,
     pub filename: String,
     pub created_at: String,
+    pub updated_at: String,
     pub is_late: bool,
 }
 
@@ -85,7 +87,9 @@ pub async fn get_user_submissions(
                 .map(|s| SubmissionResponse {
                     id: s.id,
                     filename: s.filename,
+                    attempt: s.attempt,
                     created_at: s.created_at.to_rfc3339(),
+                    updated_at: s.updated_at.to_rfc3339(),
                     is_late: is_late(s.created_at, assignment.due_date),
                 })
                 .collect();
