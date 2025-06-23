@@ -124,6 +124,7 @@ pub struct ListSubmissionsQuery {
     pub query: Option<String>,
     pub user_id: Option<i64>,
     pub late: Option<bool>,
+    pub student_number: Option<String>,
 }
 #[derive(Debug, Serialize, Clone)]
 pub struct UserResponse {
@@ -162,7 +163,7 @@ pub struct SubmissionsListResponse {
 ///   - `filename`
 ///   - `created_at`
 ///   - `user_id`
-///
+///   - `student_number` filter by unique students
 /// ### Responses
 /// - `200 OK` with list of submissions
 /// - `403 Forbidden` (not a lecturer or tutor)
@@ -175,6 +176,38 @@ pub async fn get_list_submissions(
     params: ListSubmissionsQuery,
 ) -> impl IntoResponse {
     let db = connect().await;
+    if let Some(student_number) = &params.student_number {
+        match user::Entity::find()
+            .filter(user::Column::StudentNumber.eq(student_number.clone()))
+            .one(&db)
+            .await
+        {
+            Ok(Some(user)) => {
+                return get_user_submissions(module_id, assignment_id, user.id)
+                    .await
+                    .into_response();
+            }
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<SubmissionsListResponse>::error(
+                        "Student not found",
+                    )),
+                )
+                    .into_response();
+            }
+            Err(err) => {
+                eprintln!("DB error looking up student_number: {:?}", err);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<SubmissionsListResponse>::error(
+                        "Database error",
+                    )),
+                )
+                    .into_response();
+            }
+        }
+    }
     // Check if assignment exists and get due date
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
