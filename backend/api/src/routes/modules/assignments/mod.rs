@@ -4,6 +4,7 @@ pub mod post;
 pub mod put;
 mod submissions;
 mod config;
+pub mod mark_allocator;
 
 use axum::{
     extract::Path,
@@ -17,6 +18,7 @@ use get::{download_file, get_assignment, get_assignments, get_my_submissions, li
 use post::{create, upload_files};
 use put::edit_assignment;
 use config::config_routes;
+use mark_allocator::mark_allocator_routes;
 
 use crate::{auth::guards::{
     require_assigned_to_module, require_lecturer, require_lecturer_or_admin, require_lecturer_or_tutor
@@ -117,4 +119,5 @@ pub fn assignment_routes() -> Router {
     //         require_assigned_to_module(Path(params), req, next)
     //     })),
     // )
+        .nest("/:assignment_id/mark-allocator", mark_allocator_routes())
 }
