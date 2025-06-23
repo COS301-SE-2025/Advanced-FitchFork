@@ -13,6 +13,7 @@ use crate::types::{TaskResult, Subsection};
 /// This comparator is useful for tasks where the presence and frequency of a specific output line
 /// or pattern is a critical success factor. If the expected pattern appears one or more times in
 /// the memo, the student's output must contain it at least that many times to receive any marks.
+/// **Extra lines in the student output are penalized: full marks are only awarded if the number of lines matches exactly.**
 pub struct ExactComparator;
 
 impl OutputComparator for ExactComparator {
@@ -144,5 +145,16 @@ mod tests {
         let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 0);
         assert_eq!(result.missed_patterns, vec!["required line"]);
+    }
+
+    #[test]
+    fn test_extra_lines_penalized() {
+        let comparator = ExactComparator;
+        let memo_lines = to_string_vec(&["a", "b"]);
+        let student_lines = to_string_vec(&["a", "b", "extra"]);
+        let section = mock_subsection(10);
+        // Extra line should result in 0 marks.
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 0);
     }
 } 

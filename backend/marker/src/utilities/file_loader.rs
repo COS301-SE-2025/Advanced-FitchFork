@@ -27,8 +27,6 @@ use crate::error::MarkerError;
 /// Represents all files loaded for a submission, including their paths and parsed JSON content.
 #[derive(Debug)]
 pub struct LoadedFiles {
-    /// Submission identifier.
-    pub submission_id: String,
     /// Raw content of memo files.
     pub memo_contents: Vec<String>,
     /// Raw content of student files.
@@ -82,7 +80,6 @@ fn check_file(path: &Path, max_size: Option<u64>) -> Result<(), MarkerError> {
 ///
 /// A [`LoadedFiles`] struct containing all loaded data and paths.
 pub fn load_files(
-    submission_id: &str,
     memo_paths: Vec<PathBuf>,
     student_paths: Vec<PathBuf>,
     allocator_path: PathBuf,
@@ -92,19 +89,15 @@ pub fn load_files(
     for p in &memo_paths {
         check_file(p, None)?;
     }
-
     for p in &student_paths {
         check_file(p, None)?;
     }
-
     if memo_paths.len() != student_paths.len() {
         return Err(MarkerError::InputMismatch(format!("memo_paths.len() != student_paths.len(): {} != {}", memo_paths.len(), student_paths.len())));
     }
-
     check_file(&allocator_path, Some(MAX_JSON_SIZE))?;
     let allocator_bytes = fs::read(&allocator_path).map_err(|e| MarkerError::IoError(format!("{}: {}", allocator_path.display(), e)))?;
     let allocator_raw = serde_json::from_slice(&allocator_bytes).map_err(|_| MarkerError::InvalidJson(allocator_path.display().to_string()))?;
-
     let coverage_raw = if let Some(path) = coverage_path {
         check_file(&path, Some(MAX_JSON_SIZE))?;
         let bytes = fs::read(&path).map_err(|e| MarkerError::IoError(format!("{}: {}", path.display(), e)))?;
@@ -112,7 +105,6 @@ pub fn load_files(
     } else {
         None
     };
-
     let complexity_raw = if let Some(path) = complexity_path {
         check_file(&path, Some(MAX_JSON_SIZE))?;
         let bytes = fs::read(&path).map_err(|e| MarkerError::IoError(format!("{}: {}", path.display(), e)))?;
@@ -120,23 +112,19 @@ pub fn load_files(
     } else {
         None
     };
-    
     let mut memo_contents = Vec::new();
     for path in &memo_paths {
         let content = fs::read_to_string(path)
             .map_err(|e| MarkerError::IoError(format!("Failed to read memo file {}: {}", path.display(), e)))?;
         memo_contents.push(content);
     }
-
     let mut student_contents = Vec::new();
     for path in &student_paths {
         let content = fs::read_to_string(path)
             .map_err(|e| MarkerError::IoError(format!("Failed to read student file {}: {}", path.display(), e)))?;
         student_contents.push(content);
     }
-    
     Ok(LoadedFiles {
-        submission_id: submission_id.to_string(),
         memo_contents,
         student_contents,
         allocator_raw,
@@ -162,7 +150,6 @@ mod tests {
         let coverage_path = PathBuf::from(format!("{}/coverage.json", dir));
         let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
         let result = load_files(
-            "sub1",
             memo_paths.clone(),
             student_paths.clone(),
             allocator_path.clone(),
@@ -171,7 +158,6 @@ mod tests {
         );
         assert!(result.is_ok(), "Expected Ok for happy path, got: {:?}", result);
         let loaded = result.unwrap();
-        assert_eq!(loaded.submission_id, "sub1");
         assert_eq!(loaded.memo_contents.len(), memo_paths.len());
         assert_eq!(loaded.student_contents.len(), student_paths.len());
         assert!(loaded.allocator_raw.is_object(), "allocator_raw should be a JSON object");
@@ -189,7 +175,6 @@ mod tests {
         let coverage_path = PathBuf::from(format!("{}/coverage.json", dir));
         let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
         let result = load_files(
-            "sub2",
             memo_paths,
             student_paths,
             allocator_path,
@@ -217,7 +202,6 @@ mod tests {
         let coverage_path = PathBuf::from(format!("{}/coverage.json", dir));
         let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
         let result = load_files(
-            "sub3",
             memo_paths,
             student_paths,
             allocator_path,
@@ -242,7 +226,6 @@ mod tests {
         let coverage_path = PathBuf::from(format!("{}/coverage.json", dir));
         let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
         let result = load_files(
-            "sub4",
             memo_paths,
             student_paths,
             allocator_path,
@@ -267,7 +250,6 @@ mod tests {
         let coverage_path = PathBuf::from(format!("{}/coverage.json", dir));
         let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
         let result = load_files(
-            "sub5",
             memo_paths,
             student_paths,
             allocator_path,
@@ -292,7 +274,6 @@ mod tests {
         let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
         
         let result = load_files(
-            "sub6",
             memo_paths,
             student_paths,
             allocator_path,
@@ -315,7 +296,6 @@ mod tests {
         let allocator_path = PathBuf::from(format!("{}/allocator.json", dir));
         
         let result = load_files(
-            "sub7",
             memo_paths,
             student_paths,
             allocator_path,

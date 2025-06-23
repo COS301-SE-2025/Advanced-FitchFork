@@ -12,7 +12,7 @@ use regex::Regex;
 ///
 /// This comparator is ideal for tasks where the correctness of the output can be verified with
 /// a regular expression. It provides a powerful way to validate complex patterns. Marks are awarded
-/// based on the ratio of matches in the student's output compared to the memo's output.
+/// based on the ratio of matches in the student's output compared to the memo's output. **Extra lines in the student output are penalized: the score is multiplied by the ratio of memo lines to student lines if student_lines > memo_lines.**
 pub struct RegexComparator;
 
 impl OutputComparator for RegexComparator {
@@ -68,7 +68,7 @@ impl OutputComparator for RegexComparator {
         }
 
         let total_patterns = memo_lines.len();
-        let awarded = if total_patterns == 0 {
+        let mut awarded = if total_patterns == 0 {
             if student_lines.is_empty() {
                 section.value
             } else {
@@ -78,6 +78,11 @@ impl OutputComparator for RegexComparator {
             let ratio = awarded_marks as f32 / total_patterns as f32;
             (section.value as f32 * ratio).round() as u32
         };
+
+        if student_lines.len() > memo_lines.len() && student_lines.len() > 0 {
+            let penalty = memo_lines.len() as f32 / student_lines.len() as f32;
+            awarded = (awarded as f32 * penalty).round() as u32;
+        }
 
         TaskResult {
             name: section.name.clone(),
@@ -134,7 +139,7 @@ mod tests {
         let student_lines = to_string_vec(&["item-1", "item-2", "item-3"]);
         let section = mock_subsection(5);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 5);
+        assert_eq!(result.awarded, 2);
     }
 
     #[test]
@@ -187,5 +192,17 @@ mod tests {
         let section = mock_subsection(10);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 10);
+    }
+
+    #[test]
+    fn test_extra_lines_penalized() {
+        let comparator = RegexComparator;
+        let memo_lines = to_string_vec(&[r"^a$", r"^b$"]);
+        let student_lines = to_string_vec(&["a", "b", "extra"]);
+        let section = mock_subsection(10);
+        // All memo patterns are matched, but there is an extra line, so the score should be less than 10.
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert!(result.awarded < 10);
+        assert!(result.awarded > 0);
     }
 } 

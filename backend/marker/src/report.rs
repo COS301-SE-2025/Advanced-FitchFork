@@ -1,87 +1,187 @@
-//! # Mark Report Module
+//! # Report Module
 //!
-//! This module defines the data structures and response envelope for returning grading results from the marker system.
-//! It provides a standardized, serializable format for reporting per-task results, overall score, and feedback to clients.
+//! This module defines the data structures and utilities for representing grading reports in the FitchFork system.
+//! It provides a comprehensive model for scores, tasks, subtasks, code coverage, and code complexity, as well as
+//! serialization for API responses. The main entry point is the `MarkReport` struct, which aggregates all relevant
+//! grading information for a submission.
 //!
-//! ## Overview
+//! ## Main Components
+//! - [`Score`]: Represents a simple earned/total score.
+//! - [`ReportSubsection`]: Represents a subtask or subcomponent of a grading task, with feedback.
+//! - [`ReportTask`]: Represents a grading task, which may have multiple subsections.
+//! - [`CodeCoverageReport`]: Represents code coverage results, including per-file details.
+//! - [`CodeComplexityReport`]: Represents code complexity metrics.
+//! - [`MarkReport`]: The top-level report, aggregating all grading information.
+//! - [`MarkReportResponse`]: API response wrapper for a grading report.
+//! - [`generate_new_mark_report`]: Utility function to create a new `MarkReport` with default optional fields.
 //!
-//! The main types are:
-//! - [`MarkReport`]: Contains all grading data for a submission, including per-task results, feedback, and overall score.
-//! - [`MarkReportResponse`]: A response envelope that wraps a [`MarkReport`] with success and message fields for API responses.
+//! ## Usage
+//! These types are used throughout the marker service to construct, serialize, and return grading results for assignments.
+//! They are designed to be extensible and to support optional code coverage and complexity reporting.
 //!
-//! ## JSON Output Example
-//!
-//! When serialized, the response will look like:
+//! ## Example JSON Output
 //!
 //! ```json
 //! {
-//!   "success": true,
-//!   "message": "Grading complete.",
-//!   "data": {
-//!     "submission_id": "...",
-//!     "task_results": [
-//!       { "name": "...", "awarded": 5, "possible": 10, "percentage": 50.0 },
-//!       ...
-//!     ],
-//!     "overall_score": 75,
-//!     "feedback": [
-//!       { "task": "...", "message": "..." },
-//!       ...
+//!   "id": 42,
+//!   "created_at": "2024-06-01T12:00:00Z",
+//!   "updated_at": "2024-06-01T12:00:00Z",
+//!   "mark": { "earned": 18, "total": 20 },
+//!   "tasks": [
+//!     {
+//!       "task_number": 1,
+//!       "name": "Task 1",
+//!       "score": { "earned": 8, "total": 10 },
+//!       "subsections": [
+//!         {
+//!           "label": "Subtask 1",
+//!           "earned": 4,
+//!           "total": 5,
+//!           "feedback": "Good job"
+//!         },
+//!         {
+//!           "label": "Subtask 2",
+//!           "earned": 4,
+//!           "total": 5,
+//!           "feedback": "Needs improvement"
+//!         }
+//!       ]
+//!     },
+//!     {
+//!       "task_number": 2,
+//!       "name": "Task 2",
+//!       "score": { "earned": 10, "total": 10 },
+//!       "subsections": []
+//!     }
+//!   ],
+//!   "code_coverage": {
+//!     "summary": { "earned": 9, "total": 10 },
+//!     "files": [
+//!       { "path": "src/lib.rs", "earned": 5, "total": 5 },
+//!       { "path": "src/main.rs", "earned": 4, "total": 5 }
+//!     ]
+//!   },
+//!   "code_complexity": {
+//!     "summary": { "earned": 2, "total": 4 },
+//!     "metrics": [
+//!       { "name": "Cyclomatic", "earned": 2, "total": 4, "unit": "count" }
 //!     ]
 //!   }
 //! }
 //! ```
 //!
-//! ## Design Notes
-//!
-//! - [`MarkReport`] is intended for API output. It contains only serializable fields and is not used for internal grading logic.
-//! - The [`From<MarkReport> for MarkReportResponse`] implementation provides ergonomic conversion for API handlers.
 
-use crate::{traits::feedback::FeedbackEntry, types::JsonTaskResult};
 use serde::Serialize;
-use crate::types::TaskResult;
 
-/// Represents the final report generated after marking a submission.
-///
-/// This struct is designed for API output and contains all information needed to present grading results
-/// to the client, including per-task results, overall score, and feedback.
-///
-/// - `submission_id`: The unique identifier for the submission.
-/// - `overall_score`: The overall score as a percentage (0-100).
-/// - `feedback`: A list of feedback entries for the submission.
-/// - `task_results`: A list of per-task results, each including name, awarded, possible, and percentage.
-#[derive(Debug, Serialize)]
-pub struct MarkReport {
-    /// The unique identifier for the submission.
-    pub submission_id: String,
-    /// The overall score as a percentage (0-100).
-    pub overall_score: u32,
-    /// A list of feedback entries for the submission.
-    pub feedback: Vec<FeedbackEntry>,
-    /// A list of task results for the submission, each with computed percentage.
-    pub task_results: Vec<JsonTaskResult>,
+/// Represents a simple score with earned and total points.
+#[derive(Debug, Serialize, Clone)]
+pub struct Score {
+    /// Points earned by the student.
+    pub earned: u32,
+    /// Total possible points.
+    pub total: u32,
 }
 
-/// The API response envelope for grading results.
-///
-/// This struct wraps a [`MarkReport`] and adds top-level `success` and `message` fields for consistency
-/// with other API responses.
-///
-/// - `success`: Always true for successful grading.
-/// - `message`: A human-readable message (e.g., "Grading complete.").
-/// - `data`: The [`MarkReport`] containing all grading details.
+/// Represents a subsection of a grading task, such as a subtask or rubric item.
+#[derive(Debug, Serialize, Clone)]
+pub struct ReportSubsection {
+    /// Label or name of the subsection (e.g., "Subtask 1").
+    pub label: String,
+    /// Points earned for this subsection.
+    pub earned: u32,
+    /// Total possible points for this subsection.
+    pub total: u32,
+    /// Feedback or comments for this subsection.
+    pub feedback: String,
+}
+
+/// Represents a grading task, which may have multiple subsections.
+#[derive(Debug, Serialize, Clone)]
+pub struct ReportTask {
+    /// Task number (e.g., 1 for the first task).
+    pub task_number: u32,
+    /// Name or description of the task.
+    pub name: String,
+    /// Score for the task.
+    pub score: Score,
+    /// Subsections (subtasks or rubric items) for this task.
+    pub subsections: Vec<ReportSubsection>,
+}
+
+/// Represents a code coverage report, including a summary and per-file details.
+#[derive(Debug, Serialize, Clone)]
+pub struct CodeCoverageReport {
+    /// Optional summary score for code coverage.
+    pub summary: Option<Score>,
+    /// Coverage details for each file.
+    pub files: Vec<CoverageFile>,
+}
+
+/// Represents code coverage information for a single file.
+#[derive(Debug, Serialize, Clone)]
+pub struct CoverageFile {
+    /// File path (relative or absolute).
+    pub path: String,
+    /// Lines or items covered in this file.
+    pub earned: u32,
+    /// Total lines or items in this file.
+    pub total: u32,
+}
+
+/// Represents a code complexity report, including a summary and per-metric details.
+#[derive(Debug, Serialize, Clone)]
+pub struct CodeComplexityReport {
+    /// Optional summary score for code complexity.
+    pub summary: Option<Score>,
+    /// List of complexity metrics (e.g., cyclomatic complexity).
+    pub metrics: Vec<ComplexityMetric>,
+}
+
+/// Represents a single code complexity metric.
+#[derive(Debug, Serialize, Clone)]
+pub struct ComplexityMetric {
+    /// Name of the metric (e.g., "Cyclomatic").
+    pub name: String,
+    /// Value earned (e.g., number of allowed complexity points used).
+    pub earned: u32,
+    /// Maximum allowed or total value for this metric.
+    pub total: u32,
+    /// Unit of measurement (e.g., "count").
+    pub unit: String,
+}
+
+/// The top-level grading report, aggregating all tasks, scores, and optional code analysis results.
+#[derive(Debug, Serialize, Clone)]
+pub struct MarkReport {
+    /// ISO 8601 timestamp for when the report was created.
+    pub created_at: String,
+    /// ISO 8601 timestamp for when the report was last updated.
+    pub updated_at: String,
+    /// Overall mark (score) for the submission.
+    pub mark: Score,
+    /// List of grading tasks and their results.
+    pub tasks: Vec<ReportTask>,
+    /// Optional code coverage report.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_coverage: Option<CodeCoverageReport>,
+    /// Optional code complexity report.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_complexity: Option<CodeComplexityReport>,
+}
+
+/// API response wrapper for a grading report, used for serialization.
 #[derive(Debug, Serialize)]
 pub struct MarkReportResponse {
-    /// Indicates the grading was successful.
+    /// Indicates if the grading was successful.
     pub success: bool,
-    /// A human-readable message for the client.
+    /// Human-readable message about the grading result.
     pub message: String,
-    /// The detailed grading report.
+    /// The actual grading report data.
     pub data: MarkReport,
 }
 
-/// Enables ergonomic conversion from [`MarkReport`] to [`MarkReportResponse`].
 impl From<MarkReport> for MarkReportResponse {
+    /// Converts a `MarkReport` into a `MarkReportResponse` with a default success message.
     fn from(report: MarkReport) -> Self {
         MarkReportResponse {
             success: true,
@@ -91,255 +191,145 @@ impl From<MarkReport> for MarkReportResponse {
     }
 }
 
-/// Generates a MarkReport from the provided grading artifacts.
+/// Utility function to create a new `MarkReport` with default `None` for optional fields.
 ///
-/// This function converts internal TaskResult structs to JsonTaskResult for API output.
-pub fn generate_mark_report(
-    submission_id: &str,
-    task_results: Vec<TaskResult>,
-    overall_score: u32,
-    feedback: Vec<FeedbackEntry>,
+/// # Arguments
+/// * `created_at` - Creation timestamp (ISO 8601).
+/// * `updated_at` - Update timestamp (ISO 8601).
+/// * `tasks` - List of grading tasks.
+/// * `mark` - Overall score.
+///
+/// # Returns
+/// A new `MarkReport` instance with `code_coverage` and `code_complexity` set to `None`.
+pub fn generate_new_mark_report(
+    created_at: String,
+    updated_at: String,
+    tasks: Vec<ReportTask>,
+    mark: Score,
 ) -> MarkReport {
-    let task_results: Vec<JsonTaskResult> = task_results
-        .into_iter()
-        .map(|tr| JsonTaskResult {
-            name: tr.name,
-            awarded: tr.awarded,
-            possible: tr.possible,
-            percentage: if tr.possible > 0 {
-                (tr.awarded as f32 / tr.possible as f32) * 100.0
-            } else {
-                0.0
-            },
-        })
-        .collect();
-
     MarkReport {
-        submission_id: submission_id.to_string(),
-        overall_score,
-        feedback,
-        task_results,
+        created_at,
+        updated_at,
+        mark,
+        tasks,
+        code_coverage: None,
+        code_complexity: None,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Value;
+    use serde_json;
+
+    fn sample_score() -> Score {
+        Score { earned: 8, total: 10 }
+    }
+
+    fn sample_subsection() -> ReportSubsection {
+        ReportSubsection {
+            label: "Subtask 1".to_string(),
+            earned: 4,
+            total: 5,
+            feedback: "Good job".to_string(),
+        }
+    }
+
+    fn sample_task() -> ReportTask {
+        ReportTask {
+            task_number: 1,
+            name: "Task 1".to_string(),
+            score: sample_score(),
+            subsections: vec![sample_subsection()],
+        }
+    }
 
     #[test]
-    fn test_mark_report_response_serialization() {
+    fn test_score_struct_fields() {
+        let score = Score { earned: 5, total: 10 };
+        assert_eq!(score.earned, 5);
+        assert_eq!(score.total, 10);
+    }
+
+    #[test]
+    fn test_report_task_and_subsection() {
+        let subsection = sample_subsection();
+        let task = ReportTask {
+            task_number: 2,
+            name: "Task 2".to_string(),
+            score: Score { earned: 7, total: 10 },
+            subsections: vec![subsection.clone()],
+        };
+        assert_eq!(task.task_number, 2);
+        assert_eq!(task.name, "Task 2");
+        assert_eq!(task.score.earned, 7);
+        assert_eq!(task.subsections[0].label, "Subtask 1");
+    }
+
+    #[test]
+    fn test_mark_report_serialization() {
         let report = MarkReport {
-            submission_id: "abc123".to_string(),
-            overall_score: 88,
-            feedback: vec![FeedbackEntry { task: "Task1".to_string(), message: "Well done".to_string() }],
-            task_results: vec![JsonTaskResult {
-                name: "Task1".to_string(),
-                awarded: 8,
-                possible: 10,
-                percentage: 80.0,
-            }],
+            created_at: "2024-06-01T12:00:00Z".to_string(),
+            updated_at: "2024-06-01T12:00:00Z".to_string(),
+            mark: sample_score(),
+            tasks: vec![sample_task()],
+            code_coverage: None,
+            code_complexity: None,
+        };
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(json.contains("\"created_at\":\"2024-06-01T12:00:00Z\""));
+        assert!(json.contains("\"updated_at\":\"2024-06-01T12:00:00Z\""));
+        assert!(json.contains("Task 1"));
+        assert!(json.contains("Subtask 1"));
+    }
+
+    #[test]
+    fn test_mark_report_response_from_trait() {
+        let report = MarkReport {
+            created_at: "2024-06-01T12:00:00Z".to_string(),
+            updated_at: "2024-06-01T12:00:00Z".to_string(),
+            mark: sample_score(),
+            tasks: vec![],
+            code_coverage: None,
+            code_complexity: None,
         };
         let response: MarkReportResponse = report.into();
-        let value: Value = serde_json::to_value(&response).unwrap();
-        assert_eq!(value["success"], true);
-        assert_eq!(value["message"], "Grading complete.");
-        assert_eq!(value["data"]["submission_id"], "abc123");
-        assert_eq!(value["data"]["overall_score"], 88);
-        assert_eq!(value["data"]["task_results"][0]["name"], "Task1");
-        assert_eq!(value["data"]["task_results"][0]["awarded"], 8);
-        assert_eq!(value["data"]["task_results"][0]["possible"], 10);
-        assert_eq!(value["data"]["task_results"][0]["percentage"], 80.0);
-        assert_eq!(value["data"]["feedback"][0]["task"], "Task1");
-        assert_eq!(value["data"]["feedback"][0]["message"], "Well done");
+        assert!(response.success);
+        assert_eq!(response.message, "Grading complete.");
     }
 
     #[test]
-    fn test_percentage_computation_and_serialization() {
-        let report = MarkReport {
-            submission_id: "id".to_string(),
-            overall_score: 100,
-            feedback: vec![],
-            task_results: vec![JsonTaskResult {
-                name: "T2".to_string(),
-                awarded: 5,
-                possible: 10,
-                percentage: 50.0,
-            }, JsonTaskResult {
-                name: "T3".to_string(),
-                awarded: 0,
-                possible: 0,
-                percentage: 0.0,
-            }],
+    fn test_generate_new_mark_report_function() {
+        let now = "2024-06-01T12:00:00Z".to_string();
+        let mark = Score { earned: 10, total: 20 };
+        let tasks = vec![sample_task()];
+        let report = generate_new_mark_report(now.clone(), now.clone(), tasks.clone(), mark.clone());
+        assert_eq!(report.created_at, now);
+        assert_eq!(report.updated_at, now);
+        assert_eq!(report.mark.earned, 10);
+        assert_eq!(report.tasks.len(), 1);
+    }
+
+    #[test]
+    fn test_code_coverage_and_complexity_optional_fields() {
+        let coverage = CodeCoverageReport {
+            summary: Some(Score { earned: 5, total: 10 }),
+            files: vec![CoverageFile { path: "src/lib.rs".to_string(), earned: 5, total: 10 }],
         };
-        let response: MarkReportResponse = report.into();
-        let value: Value = serde_json::to_value(&response).unwrap();
-        assert_eq!(value["data"]["task_results"][0]["percentage"], 50.0);
-        assert_eq!(value["data"]["task_results"][1]["percentage"], 0.0);
-    }
-
-    #[test]
-    fn test_feedback_serialization() {
-        let report = MarkReport {
-            submission_id: "id2".to_string(),
-            overall_score: 77,
-            feedback: vec![
-                FeedbackEntry { task: "T1".to_string(), message: "msg1".to_string() },
-                FeedbackEntry { task: "T2".to_string(), message: "msg2".to_string() },
-            ],
-            task_results: vec![],
+        let complexity = CodeComplexityReport {
+            summary: Some(Score { earned: 2, total: 4 }),
+            metrics: vec![ComplexityMetric { name: "Cyclomatic".to_string(), earned: 2, total: 4, unit: "count".to_string() }],
         };
-        let response: MarkReportResponse = report.into();
-        let value: Value = serde_json::to_value(&response).unwrap();
-        assert_eq!(value["data"]["feedback"].as_array().unwrap().len(), 2);
-        assert_eq!(value["data"]["feedback"][1]["task"], "T2");
-        assert_eq!(value["data"]["feedback"][1]["message"], "msg2");
-    }
-
-    #[test]
-    fn test_empty_report_serialization() {
         let report = MarkReport {
-            submission_id: "empty".to_string(),
-            overall_score: 0,
-            feedback: vec![],
-            task_results: vec![],
+            created_at: "2024-06-01T12:00:00Z".to_string(),
+            updated_at: "2024-06-01T12:00:00Z".to_string(),
+            mark: sample_score(),
+            tasks: vec![],
+            code_coverage: Some(coverage),
+            code_complexity: Some(complexity),
         };
-        let response: MarkReportResponse = report.into();
-        let value: Value = serde_json::to_value(&response).unwrap();
-        assert_eq!(value["data"]["submission_id"], "empty");
-        assert_eq!(value["data"]["overall_score"], 0);
-        assert!(value["data"]["feedback"].as_array().unwrap().is_empty());
-        assert!(value["data"]["task_results"].as_array().unwrap().is_empty());
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(json.contains("code_coverage"));
+        assert!(json.contains("code_complexity"));
     }
-
-    #[test]
-    fn test_round_trip_json() {
-        let report = MarkReport {
-            submission_id: "roundtrip".to_string(),
-            overall_score: 42,
-            feedback: vec![FeedbackEntry { task: "A".to_string(), message: "B".to_string() }],
-            task_results: vec![JsonTaskResult {
-                name: "T".to_string(),
-                awarded: 1,
-                possible: 2,
-                percentage: 50.0,
-            }],
-        };
-        let response: MarkReportResponse = report.into();
-        let json = serde_json::to_string(&response).unwrap();
-        let value: Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(value["data"]["submission_id"], "roundtrip");
-        assert_eq!(value["data"]["task_results"][0]["name"], "T");
-        assert_eq!(value["data"]["feedback"][0]["task"], "A");
-    }
-
-    #[test]
-    fn test_generate_mark_report_basic() {
-        let task_results = vec![
-            TaskResult {
-                name: "Task1".to_string(),
-                awarded: 8,
-                possible: 10,
-                matched_patterns: vec!["foo".to_string()],
-                missed_patterns: vec![],
-            },
-            TaskResult {
-                name: "Task2".to_string(),
-                awarded: 5,
-                possible: 5,
-                matched_patterns: vec!["bar".to_string()],
-                missed_patterns: vec![],
-            },
-        ];
-        let feedback = vec![
-            FeedbackEntry { task: "Task1".to_string(), message: "Good job".to_string() },
-            FeedbackEntry { task: "Task2".to_string(), message: "Perfect".to_string() },
-        ];
-        let report = generate_mark_report("sub1", task_results, 90, feedback.clone());
-        assert_eq!(report.submission_id, "sub1");
-        assert_eq!(report.overall_score, 90);
-        assert_eq!(report.feedback, feedback);
-        assert_eq!(report.task_results.len(), 2);
-        assert_eq!(report.task_results[0].name, "Task1");
-        assert_eq!(report.task_results[0].awarded, 8);
-        assert_eq!(report.task_results[0].possible, 10);
-        assert_eq!(report.task_results[0].percentage, 80.0);
-        assert_eq!(report.task_results[1].name, "Task2");
-        assert_eq!(report.task_results[1].awarded, 5);
-        assert_eq!(report.task_results[1].possible, 5);
-        assert_eq!(report.task_results[1].percentage, 100.0);
-    }
-
-    #[test]
-    fn test_generate_mark_report_empty() {
-        let report = generate_mark_report("empty", vec![], 0, vec![]);
-        assert_eq!(report.submission_id, "empty");
-        assert_eq!(report.overall_score, 0);
-        assert!(report.feedback.is_empty());
-        assert!(report.task_results.is_empty());
-    }
-
-    #[test]
-    fn test_generate_mark_report_zero_possible() {
-        let task_results = vec![
-            TaskResult {
-                name: "ImpossibleTask".to_string(),
-                awarded: 0,
-                possible: 0,
-                matched_patterns: vec![],
-                missed_patterns: vec![],
-            },
-        ];
-        let report = generate_mark_report("zero", task_results, 0, vec![]);
-        assert_eq!(report.task_results.len(), 1);
-        assert_eq!(report.task_results[0].name, "ImpossibleTask");
-        assert_eq!(report.task_results[0].awarded, 0);
-        assert_eq!(report.task_results[0].possible, 0);
-        assert_eq!(report.task_results[0].percentage, 0.0);
-    }
-
-    #[test]
-    fn test_generate_mark_report_feedback_only() {
-        let feedback = vec![
-            FeedbackEntry { task: "T1".to_string(), message: "msg1".to_string() },
-            FeedbackEntry { task: "T2".to_string(), message: "msg2".to_string() },
-        ];
-        let report = generate_mark_report("fb", vec![], 42, feedback.clone());
-        assert_eq!(report.submission_id, "fb");
-        assert_eq!(report.overall_score, 42);
-        assert_eq!(report.feedback, feedback);
-        assert!(report.task_results.is_empty());
-    }
-
-    #[test]
-    fn test_generate_mark_report_percentage_calculation() {
-        let task_results = vec![
-            TaskResult {
-                name: "Half".to_string(),
-                awarded: 5,
-                possible: 10,
-                matched_patterns: vec![],
-                missed_patterns: vec![],
-            },
-            TaskResult {
-                name: "Full".to_string(),
-                awarded: 10,
-                possible: 10,
-                matched_patterns: vec![],
-                missed_patterns: vec![],
-            },
-            TaskResult {
-                name: "Zero".to_string(),
-                awarded: 0,
-                possible: 10,
-                matched_patterns: vec![],
-                missed_patterns: vec![],
-            },
-        ];
-        let report = generate_mark_report("percent", task_results, 50, vec![]);
-        assert_eq!(report.task_results.len(), 3);
-        assert_eq!(report.task_results[0].percentage, 50.0);
-        assert_eq!(report.task_results[1].percentage, 100.0);
-        assert_eq!(report.task_results[2].percentage, 0.0);
-    }
-} 
+}

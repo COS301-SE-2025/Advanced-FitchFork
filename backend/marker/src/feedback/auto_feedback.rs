@@ -29,24 +29,16 @@ impl Feedback for AutoFeedback {
         let mut feedback_entries = Vec::new();
 
         for result in results {
-            if !result.matched_patterns.is_empty() {
-                feedback_entries.push(FeedbackEntry {
-                    task: result.name.clone(),
-                    message: format!(
-                        "Matched {}/{} patterns; awarded {}/{} marks.",
-                        result.matched_patterns.len(),
-                        result.matched_patterns.len() + result.missed_patterns.len(),
-                        result.awarded,
-                        result.possible
-                    ),
-                });
-            }
+            let mut summary = String::new();
             if !result.missed_patterns.is_empty() {
-                feedback_entries.push(FeedbackEntry {
-                    task: result.name.clone(),
-                    message: format!("Missing patterns: {}.", result.missed_patterns.join(", ")),
-                });
+                summary.push_str(&format!("Missing: {}", result.missed_patterns.join(", ")));
+            } else if !result.matched_patterns.is_empty() {
+                summary.push_str("All patterns matched");
             }
+            feedback_entries.push(FeedbackEntry {
+                task: result.name.clone(),
+                message: summary,
+            });
         }
 
         Ok(feedback_entries)
@@ -73,7 +65,7 @@ mod tests {
         let feedback = AutoFeedback.assemble_feedback(&[task]).unwrap();
         assert_eq!(feedback, vec![FeedbackEntry {
             task: "Task1".to_string(),
-            message: "Matched 2/2 patterns; awarded 2/2 marks.".to_string(),
+            message: "All patterns matched".to_string(),
         }]);
     }
 
@@ -84,11 +76,7 @@ mod tests {
         assert_eq!(feedback, vec![
             FeedbackEntry {
                 task: "Task2".to_string(),
-                message: "Matched 1/3 patterns; awarded 1/3 marks.".to_string(),
-            },
-            FeedbackEntry {
-                task: "Task2".to_string(),
-                message: "Missing patterns: b, c.".to_string(),
+                message: "Missing: b, c".to_string(),
             },
         ]);
     }
@@ -99,7 +87,7 @@ mod tests {
         let feedback = AutoFeedback.assemble_feedback(&[task]).unwrap();
         assert_eq!(feedback, vec![FeedbackEntry {
             task: "Task3".to_string(),
-            message: "Missing patterns: x, y.".to_string(),
+            message: "Missing: x, y".to_string(),
         }]);
     }
 
@@ -107,7 +95,10 @@ mod tests {
     fn test_empty_patterns() {
         let task = make_task("Task4", &[], &[], 0, 0);
         let feedback = AutoFeedback.assemble_feedback(&[task]).unwrap();
-        assert!(feedback.is_empty());
+        assert_eq!(feedback, vec![FeedbackEntry {
+            task: "Task4".to_string(),
+            message: "".to_string(),
+        }]);
     }
 
     #[test]
@@ -119,20 +110,16 @@ mod tests {
         assert_eq!(feedback, vec![
             FeedbackEntry {
                 task: "T1".to_string(),
-                message: "Matched 1/1 patterns; awarded 1/1 marks.".to_string(),
+                message: "All patterns matched".to_string(),
             },
             FeedbackEntry {
                 task: "T2".to_string(),
-                message: "Missing patterns: b.".to_string(),
+                message: "Missing: b".to_string(),
             },
             FeedbackEntry {
                 task: "T3".to_string(),
-                message: "Matched 1/2 patterns; awarded 1/2 marks.".to_string(),
-            },
-            FeedbackEntry {
-                task: "T3".to_string(),
-                message: "Missing patterns: y.".to_string(),
+                message: "Missing: y".to_string(),
             },
         ]);
     }
-} 
+}

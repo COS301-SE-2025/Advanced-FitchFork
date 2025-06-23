@@ -1,0 +1,25 @@
+{
+  "generated_at": "2025-06-20T12:00:00+02:00",
+  "tasks": [
+    {
+      "task1": {
+        "name": "FizzBuzz",
+        "value": 10,
+        "subsections": [
+          { "name": "Output Fizz", "value": 5 },
+          { "name": "Output Buzz", "value": 5 }
+        ]
+      }
+    },
+    {
+      "task2": {
+        "name": "Sum",
+        "value": 20,
+        "subsections": [
+          { "name": "Sum correct", "value": 10 },
+          { "name": "Handles negatives", "value": 10 }
+        ]
+      }
+    }
+  ]
+} 
