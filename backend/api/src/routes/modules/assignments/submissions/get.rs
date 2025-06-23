@@ -8,9 +8,7 @@ use chrono::{DateTime, Utc};
 use db::{
     connect,
     models::{
-        assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-        assignment_submission,
-        user_module_role::{self, Role},
+        assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, assignment_submission, user, user_module_role::{self, Role}, User
     },
 };
 use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
@@ -123,13 +121,21 @@ pub struct ListSubmissionsQuery {
     pub user_id: Option<i64>,
     pub late: Option<bool>,
 }
+#[derive(Debug, Serialize, Clone)]
+pub struct UserResponse {
+    user_id: i64,
+    student_number: String,
+    email: String,
+}
 
 #[derive(Debug, Serialize)]
 pub struct SubmissionListItem {
     pub id: i64,
-    pub user_id: i64,
+    pub user: UserResponse,
+    pub attempt: i64,
     pub filename: String,
     pub created_at: String,
+    pub updated_at: String,
     pub is_late: bool,
 }
 
@@ -257,13 +263,41 @@ pub async fn get_list_submissions(
         .await
         .unwrap_or_default();
 
+    let user_ids: Vec<i64> = submissions.iter().map(|s| s.user_id).collect();
+
+    let users = user::Entity::find()
+        .filter(user::Column::Id.is_in(user_ids.clone()))
+        .all(&db)
+        .await
+        .unwrap_or_default();
+
+    let user_map: std::collections::HashMap<i64, UserResponse> = users
+        .into_iter()
+        .map(|u| {
+            (
+                u.id,
+                UserResponse {
+                    user_id: u.id,
+                    student_number: u.student_number,
+                    email: u.email,
+                },
+            )
+        })
+        .collect();
+
     let response: Vec<SubmissionListItem> = submissions
         .into_iter()
         .map(|s| SubmissionListItem {
             id: s.id,
-            user_id: s.user_id,
+            user: user_map.get(&s.user_id).cloned().unwrap_or(UserResponse {
+                user_id: s.user_id,
+                student_number: "unkown student number".to_string(),
+                email: "unknown email".to_string(),
+            }),
             filename: s.filename,
+            attempt: s.attempt,
             created_at: s.created_at.to_rfc3339(),
+            updated_at: s.updated_at.to_rfc3339(),
             is_late: is_late(s.created_at, assignment.due_date),
         })
         .collect();
@@ -299,8 +333,12 @@ pub async fn list_submissions(
         .map(|opt| opt.is_some())
         .unwrap_or(false);
     if is_student {
-        return get_user_submissions(module_id, assignment_id, user_id).await.into_response();
+        return get_user_submissions(module_id, assignment_id, user_id)
+            .await
+            .into_response();
     }
 
-    get_list_submissions(module_id, assignment_id, params).await.into_response()
+    get_list_submissions(module_id, assignment_id, params)
+        .await
+        .into_response()
 }
