@@ -7,13 +7,20 @@ use axum::{
 use serde_json::{Value, Map};
 
 use crate::{
-    db::connect,
     response::ApiResponse,
-    entities::assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
 };
 
+use db::{
+    connect,
+    models::{
+        assignment::{
+            Column as AssignmentColumn, Entity as AssignmentEntity,
+        },
+    },
+};
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 
-// Todo - Add docs
+
 pub async fn get_assignment_config( Path((module_id, assignment_id)): Path<(i64, i64)>,) -> impl IntoResponse {
 
     let db = connect().await;

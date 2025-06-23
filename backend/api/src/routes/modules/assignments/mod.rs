@@ -3,6 +3,7 @@ pub mod get;
 pub mod post;
 pub mod put;
 mod submissions;
+mod config;
 
 use axum::{
     extract::Path,
@@ -15,9 +16,10 @@ use delete::{delete_assignment, delete_files};
 use get::{download_file, get_assignment, get_assignments, get_my_submissions, list_submissions, stats, list_files};
 use post::{create, upload_files};
 use put::edit_assignment;
+use config::config_routes;
 
 use crate::{auth::guards::{
-    require_admin, require_assigned_to_module, require_lecturer, require_lecturer_or_admin, require_lecturer_or_tutor
+    require_assigned_to_module, require_lecturer, require_lecturer_or_admin, require_lecturer_or_tutor
 }, routes::modules::assignments::{get::list_tasks, post::create_task}};
 
 /// Expects a module ID
@@ -39,6 +41,9 @@ use crate::{auth::guards::{
 /// - `POST /assignments/:assignment_id/submissions` → Submit assignment
 /// - `GET  /assignments/:assignment_id/submissions/me` → Get my submissions
 /// - `GET  /assignments/:assignment_id/submissions` → List all submissions (lecturer/tutor only)
+/// - `GET  /assignments/:assignment_id/stats`         → Assignment statistics (lecturer only)
+/// - `POST /assignments/:assignment_id/tasks`         → Create a new task (lecturer/admin only)
+/// - `GET  /assignments/:assignment_id/tasks`         → List tasks (lecturer/admin only)
 pub fn assignment_routes() -> Router {
     Router::new()
         .route("/", post(create))
@@ -99,6 +104,12 @@ pub fn assignment_routes() -> Router {
             })),
         )
         .route("/:assignment_id", delete(delete_assignment))
+        .nest(
+            "/:assignment_id/config",
+            config_routes().layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer_or_admin(Path(params), req, next)
+            })),
+        )
     // TODO: The following route is commented out:
     // .route(
     //     "/:assignment_id/submissions",

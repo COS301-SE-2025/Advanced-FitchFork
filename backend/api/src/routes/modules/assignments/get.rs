@@ -7,8 +7,7 @@ use axum::{
 };
 
 use chrono::{DateTime, Utc};
-use db::models::AssignmentTask;
-use db::models::assignment_task::{ActiveModel, Entity};
+use db::models::assignment_task::{Entity};
 use serde::{Deserialize, Serialize};
 
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
@@ -1032,7 +1031,25 @@ pub struct TaskResponse {
     updated_at: DateTime<Utc>
 }
 
-// todo - Add docs
+/// GET /api/modules/:module_id/assignments/:assignment_id/tasks
+///
+/// Retrieve all tasks for a specific assignment (Lecturers, Admins, and Students with access).
+///
+/// Tasks are sorted by their `task_number` in ascending order. Each task contains metadata
+/// including the associated command and timestamps.
+///
+/// ### Example curl
+/// ```bash
+/// curl -X GET http://localhost:3000/api/modules/1/assignments/2/tasks \
+///   -H "Authorization: Bearer <token>"
+/// ```
+///
+/// ### Responses
+/// - `200 OK` with an array of task metadata
+/// - `403 Forbidden` (unauthorized)
+/// - `404 Not Found` (assignment or module not found)
+/// - `500 Internal Server Error` (unexpected database error)
+
 pub async fn list_tasks(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {

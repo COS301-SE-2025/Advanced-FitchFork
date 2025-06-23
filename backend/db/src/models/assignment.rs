@@ -6,7 +6,7 @@
 use sea_orm::entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, IntoActiveModel,
-    PaginatorTrait, QueryFilter, QueryOrder, Set,
+    PaginatorTrait, QueryFilter, QueryOrder, Set, JsonValue, 
 };
 use chrono::{DateTime, Utc};
 use std::{env, fs, path::PathBuf};
@@ -38,6 +38,9 @@ pub struct Model {
 
     /// Timestamp representing the assignment's due date.
     pub due_date: DateTime<Utc>,
+
+    /// Optional JSON configuration (e.g., grading rules, time limits).
+    pub config: Option<JsonValue>,
 
     /// Auto-managed creation timestamp.
     pub created_at: DateTime<Utc>,
