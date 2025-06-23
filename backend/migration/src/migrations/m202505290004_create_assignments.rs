@@ -33,6 +33,7 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Alias::new("available_from")).timestamp().not_null())
                     .col(ColumnDef::new(Alias::new("due_date")).timestamp().not_null())
+                    .col(ColumnDef::new(Alias::new("config")).json().null())
                     .col(ColumnDef::new(Alias::new("created_at")).timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
                     .col(ColumnDef::new(Alias::new("updated_at")).timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
                     .foreign_key(
