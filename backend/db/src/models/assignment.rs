@@ -39,7 +39,8 @@ pub struct Model {
     /// Timestamp representing the assignment's due date.
     pub due_date: DateTime<Utc>,
 
-    /// Optional JSON configuration (e.g., grading rules, time limits).
+    /// Optional JSON configuration (e.g., grading rules, language, etc.).
+    #[sea_orm(column_type = "Json", nullable)]
     pub config: Option<JsonValue>,
 
     /// Auto-managed creation timestamp.

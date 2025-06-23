@@ -26,8 +26,40 @@ pub struct PartialConfigUpdate {
     #[serde(flatten)]
     pub fields: serde_json::Map<String, Value>,
 }
-
-// todo - Add docs
+/// PUT /assignments/:assignment_id/config
+///
+/// Partially update specific fields of an assignment's configuration.
+///
+/// This endpoint merges the provided fields into the existing JSON configuration,
+/// validating known keys. Only a subset of configuration keys are currently supported.
+/// Unrecognized keys will result in a `400 Bad Request`.
+///
+/// ### JSON Body
+/// A JSON object containing only the fields to update.
+/// ```json
+/// {
+///   "timeout_seconds": 20,
+///   "max_processors": 4
+/// }
+/// ```
+///
+/// ### Allowed Fields
+/// - `timeout_seconds` (integer)
+/// - `max_processors` (integer)
+///
+/// ### Example curl
+/// ```bash
+/// curl -X PUT http://localhost:3000/assignments/1/config \
+///   -H "Authorization: Bearer <token>" \
+///   -H "Content-Type: application/json" \
+///   -d '{"timeout_seconds": 20, "max_processors": 4}'
+/// ```
+///
+/// ### Responses
+/// - `200 OK` if the config was updated successfully
+/// - `400 Bad Request` if the request includes unknown or invalid fields
+/// - `404 Not Found` if the assignment or module does not exist
+/// - `500 Internal Server Error` on database failure
 pub async fn update_assignment_config(Path((module_id, assignment_id)) : Path<(i64, i64)>, Json(payload): Json<PartialConfigUpdate>) -> impl IntoResponse {
     let db = connect().await;
 

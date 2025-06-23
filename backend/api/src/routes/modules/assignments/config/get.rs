@@ -20,7 +20,24 @@ use db::{
 };
 use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 
-
+/// GET /assignments/:assignment_id/config
+///
+/// Retrieve the JSON configuration object associated with a specific assignment.
+///
+/// The configuration is returned only if it exists and is a valid JSON object. If no configuration
+/// has been set, an empty object is returned with an appropriate message.
+///
+/// ### Example curl
+/// ```bash
+/// curl -X GET http://localhost:3000/assignments/1/config \
+///   -H "Authorization: Bearer <token>"
+/// ```
+///
+/// ### Responses
+/// - `200 OK` with the JSON configuration object (empty object if not set)
+/// - `400 Bad Request` if the stored config is not a valid JSON object
+/// - `404 Not Found` if the assignment or module does not exist
+/// - `500 Internal Server Error` on database failure
 pub async fn get_assignment_config( Path((module_id, assignment_id)): Path<(i64, i64)>,) -> impl IntoResponse {
 
     let db = connect().await;
