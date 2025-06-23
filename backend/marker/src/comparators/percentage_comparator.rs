@@ -14,57 +14,51 @@ use crate::types::{TaskResult, Subsection};
 pub struct PercentageComparator;
 
 impl OutputComparator for PercentageComparator {
-    /// Compares student output to memo output and awards marks based on the similarity of pattern counts.
-    ///
-    /// Marks are awarded based on the ratio of pattern occurrences. The comparator penalizes for both
-    /// missing and extra occurrences relative to the memo. For example, having half the expected
-    /// occurrences gives the same score as having twice the expected occurrences.
+    /// Compares student and memo outputs based on the percentage of matching lines.
     ///
     /// # Arguments
     ///
-    /// * `section` - The subsection entry containing details like name and total possible value.
-    /// * `memo_lines` - A slice of strings representing the lines of the memo output.
-    /// * `student_lines` - A slice of strings representing the lines of the student's output.
-    /// * `pattern` - The exact string pattern to search for in the output lines.
+    /// * `section` - The subsection entry with name and value.
+    /// * `memo_lines` - The lines from the memo output.
+    /// * `student_lines` - The lines from the student's output.
     ///
     /// # Returns
     ///
-    /// Returns a `TaskResult` with marks proportional to the similarity.
+    /// A `TaskResult` with marks awarded based on the percentage of matching lines
+    /// between the student and memo outputs.
     fn compare(
         &self,
         section: &Subsection,
         memo_lines: &[String],
         student_lines: &[String],
-        pattern: &str,
     ) -> TaskResult {
-        let memo_count = memo_lines.iter().filter(|l| l.contains(pattern)).count();
-        let student_count = student_lines.iter().filter(|l| l.contains(pattern)).count();
-
-        let awarded = if memo_count == 0 {
-            if student_count == 0 {
-                section.value
-            } else {
-                0
-            }
-        } else {
-            let ratio = if student_count > memo_count {
-                memo_count as f32 / student_count as f32
-            } else {
-                student_count as f32 / memo_count as f32
+        if memo_lines.is_empty() {
+            return TaskResult {
+                name: section.name.clone(),
+                awarded: if student_lines.is_empty() { section.value } else { 0 },
+                possible: section.value,
+                matched_patterns: vec![],
+                missed_patterns: vec![],
             };
-
-            (section.value as f32 * ratio).round() as u32
-        };
-
-        let mut matched_patterns = vec![];
-        if student_count > 0 && memo_count > 0 {
-            matched_patterns.push(pattern.to_string());
         }
 
-        let mut missed_patterns = vec![];
-        if student_count < memo_count || (memo_count == 0 && student_count > 0) {
-            missed_patterns.push(pattern.to_string());
+        let mut matched_count = 0;
+        let mut matched_patterns = Vec::new();
+        let mut missed_patterns = Vec::new();
+        let mut student_lines_mut = student_lines.to_vec();
+
+        for memo_line in memo_lines {
+            if let Some(pos) = student_lines_mut.iter().position(|s| s == memo_line) {
+                matched_count += 1;
+                matched_patterns.push(memo_line.clone());
+                student_lines_mut.remove(pos);
+            } else {
+                missed_patterns.push(memo_line.clone());
+            }
         }
+
+        let percentage = matched_count as f32 / memo_lines.len() as f32;
+        let awarded = (section.value as f32 * percentage).round() as u32;
 
         TaskResult {
             name: section.name.clone(),
@@ -94,105 +88,105 @@ mod tests {
     }
 
     #[test]
-    fn test_perfect_match() {
+    fn test_perfect_match_percentage() {
         let comparator = PercentageComparator;
-        let memo_lines = to_string_vec(&["apple", "orange", "apple"]);
-        let student_lines = to_string_vec(&["apple", "apple", "grape"]);
-        let pattern = "apple";
+        let memo_lines = to_string_vec(&["line 1", "line 2"]);
+        let student_lines = to_string_vec(&["line 2", "line 1"]);
         let section = mock_subsection(10);
-        // memo_count = 2, student_count = 2. percent = 1.0. marks = 10 * 1.0 = 10
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 10);
-        assert_eq!(result.matched_patterns, vec!["apple"]);
+        assert_eq!(result.matched_patterns.len(), 2);
         assert!(result.missed_patterns.is_empty());
     }
 
     #[test]
-    fn test_partial_match() {
+    fn test_partial_match_percentage() {
         let comparator = PercentageComparator;
-        let memo_lines = to_string_vec(&["line 1 correct", "line 2 correct", "line 3 correct", "line 4 correct"]);
-        let student_lines = to_string_vec(&["line 1 correct", "line 2 wrong", "line 3 correct", "line 4 wrong"]);
-        let pattern = "correct";
+        let memo_lines = to_string_vec(&["line 1", "line 2", "line 3", "line 4"]);
+        let student_lines = to_string_vec(&["line 1", "line 3"]);
         let section = mock_subsection(20);
-        // memo_count = 4, student_count = 2. percent = 0.5. marks = 20 * 0.5 = 10
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        // 2 out of 4 lines match (50%), so 10 marks should be awarded.
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 10);
-        assert_eq!(result.matched_patterns, vec!["correct"]);
-        assert_eq!(result.missed_patterns, vec!["correct"]);
+        assert_eq!(result.matched_patterns.len(), 2);
+        assert_eq!(result.missed_patterns.len(), 2);
     }
 
     #[test]
-    fn test_more_student_matches_than_memo() {
+    fn test_no_match_percentage() {
         let comparator = PercentageComparator;
-        let memo_lines = to_string_vec(&["one match"]);
-        let student_lines = to_string_vec(&["one match", "two matches", "three matches"]);
-        let pattern = "match";
-        let section = mock_subsection(5);
-        // memo_count = 1, student_count = 3. ratio = 1/3. marks = 5 * 0.333... = 1.66... rounded to 2.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
-        assert_eq!(result.awarded, 2);
-        assert_eq!(result.matched_patterns, vec!["match"]);
-        assert!(result.missed_patterns.is_empty());
-    }
-
-    #[test]
-    fn test_no_student_matches() {
-        let comparator = PercentageComparator;
-        let memo_lines = to_string_vec(&["hello", "world", "hello"]);
-        let student_lines = to_string_vec(&["goodbye", "world"]);
-        let pattern = "hello";
+        let memo_lines = to_string_vec(&["a", "b", "c"]);
+        let student_lines = to_string_vec(&["d", "e", "f"]);
         let section = mock_subsection(15);
-        // memo_count = 2, student_count = 0. percent = 0.0. marks = 15 * 0.0 = 0
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 0);
         assert!(result.matched_patterns.is_empty());
-        assert_eq!(result.missed_patterns, vec!["hello"]);
+        assert_eq!(result.missed_patterns.len(), 3);
     }
 
     #[test]
-    fn test_no_memo_matches() {
+    fn test_student_has_extra_lines() {
         let comparator = PercentageComparator;
-        let memo_lines = to_string_vec(&["no matches here", "or here"]);
-        let student_lines = to_string_vec(&["pattern", "pattern", "pattern"]);
-        let pattern = "pattern";
+        let memo_lines = to_string_vec(&["line 1", "line 2"]);
+        let student_lines = to_string_vec(&["line 1", "line 2", "line 3"]);
         let section = mock_subsection(10);
-        // memo_count = 0, student_count = 3. Should return 0.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
-        assert_eq!(result.awarded, 0);
-        assert!(result.matched_patterns.is_empty());
-        assert_eq!(result.missed_patterns, vec!["pattern"]);
-    }
-
-    #[test]
-    fn test_no_memo_no_student_matches() {
-        let comparator = PercentageComparator;
-        let memo_lines = to_string_vec(&["nothing here"]);
-        let student_lines = to_string_vec(&["or here"]);
-        let pattern = "unique";
-        let section = mock_subsection(10);
-        // memo_count = 0, student_count = 0. Should return max_marks.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        // All memo lines are found, so it's a 100% match.
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 10);
-        assert!(result.matched_patterns.is_empty());
-        assert!(result.missed_patterns.is_empty());
     }
 
     #[test]
-    fn test_rounding_logic() {
+    fn test_empty_inputs_percentage() {
         let comparator = PercentageComparator;
-        let memo_lines = to_string_vec(&["a", "a", "a"]);
-        let student_lines_half_round_down = to_string_vec(&["a"]);
-        let pattern = "a";
-        let section = mock_subsection(10);
-        // memo_count = 3, student_count = 1. percent = 1/3 = 0.333...
-        // marks = 10 * 0.333... = 3.333... rounded = 3
-        let result1 = comparator.compare(&section, &memo_lines, &student_lines_half_round_down, pattern);
-        assert_eq!(result1.awarded, 3);
+        let memo_lines = to_string_vec(&[]);
+        let student_lines = to_string_vec(&[]);
+        let section = mock_subsection(5);
+        // Both empty, should be a 100% match.
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 5);
+    }
 
-        let student_lines_half_round_up = to_string_vec(&["a", "a"]);
-        // memo_count = 3, student_count = 2. percent = 2/3 = 0.666...
-        // marks = 10 * 0.666... = 6.666... rounded = 7
-        let result2 = comparator.compare(&section, &memo_lines, &student_lines_half_round_up, pattern);
-        assert_eq!(result2.awarded, 7);
+    #[test]
+    fn test_empty_memo_non_empty_student_percentage() {
+        let comparator = PercentageComparator;
+        let memo_lines = to_string_vec(&[]);
+        let student_lines = to_string_vec(&["extra"]);
+        let section = mock_subsection(5);
+        // Memo is empty, student is not. This is a 0% match.
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 0);
+    }
+
+    #[test]
+    fn test_non_empty_memo_empty_student_percentage() {
+        let comparator = PercentageComparator;
+        let memo_lines = to_string_vec(&["required"]);
+        let student_lines = to_string_vec(&[]);
+        let section = mock_subsection(5);
+        // 0% match.
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 0);
+    }
+
+    #[test]
+    fn test_duplicate_lines_in_memo() {
+        let comparator = PercentageComparator;
+        let memo_lines = to_string_vec(&["a", "a", "b"]);
+        let student_lines = to_string_vec(&["a", "b"]);
+        let section = mock_subsection(12);
+        // 2 out of 3 lines match (66.6%), so 8 marks.
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 8);
+    }
+
+    #[test]
+    fn test_duplicate_lines_in_student() {
+        let comparator = PercentageComparator;
+        let memo_lines = to_string_vec(&["a", "b"]);
+        let student_lines = to_string_vec(&["a", "a", "b", "b"]);
+        let section = mock_subsection(10);
+        // All memo lines are found, so 100% match.
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 10);
     }
 } 

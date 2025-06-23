@@ -21,10 +21,8 @@ impl OutputComparator for RegexComparator {
     /// # Arguments
     ///
     /// * `section` - The subsection entry containing details like name and total possible value.
-    /// * `memo_lines` - A slice of strings representing the lines of the memo output.
+    /// * `memo_lines` - A slice of strings representing the regex patterns for the memo output.
     /// * `student_lines` - A slice of strings representing the lines of the student's output.
-    /// * `pattern` - The regular expression pattern to search for. If the pattern is invalid,
-    ///   0 marks will be awarded.
     ///
     /// # Returns
     ///
@@ -34,48 +32,52 @@ impl OutputComparator for RegexComparator {
         section: &Subsection,
         memo_lines: &[String],
         student_lines: &[String],
-        pattern: &str,
     ) -> TaskResult {
-        let regex = match Regex::new(pattern) {
-            Ok(re) => re,
-            Err(_) => {
-                return TaskResult {
-                    name: section.name.clone(),
-                    awarded: 0,
-                    possible: section.value,
-                    matched_patterns: vec![],
-                    missed_patterns: vec![format!("Invalid regex pattern: {}", pattern)],
+        if memo_lines.is_empty() {
+            return TaskResult {
+                name: section.name.clone(),
+                awarded: if student_lines.is_empty() { section.value } else { 0 },
+                possible: section.value,
+                matched_patterns: vec![],
+                missed_patterns: vec![],
+            };
+        }
+
+        let mut awarded_marks = 0;
+        let mut matched_patterns = vec![];
+        let mut missed_patterns = vec![];
+
+        for (i, pattern) in memo_lines.iter().enumerate() {
+            let regex = match Regex::new(pattern) {
+                Ok(re) => re,
+                Err(_) => {
+                    missed_patterns.push(format!("Invalid regex pattern: {}", pattern));
+                    continue; // Skip invalid regex patterns
                 }
+            };
+
+            if student_lines
+                .get(i)
+                .map_or(false, |line| regex.is_match(line))
+            {
+                awarded_marks += 1;
+                matched_patterns.push(pattern.clone());
+            } else {
+                missed_patterns.push(pattern.clone());
             }
-        };
+        }
 
-        let memo_matches = memo_lines.iter().flat_map(|line| regex.find_iter(line)).count();
-        let student_matches = student_lines.iter().flat_map(|line| regex.find_iter(line)).count();
-
-        let awarded = if memo_matches == 0 {
-            if student_matches == 0 {
+        let total_patterns = memo_lines.len();
+        let awarded = if total_patterns == 0 {
+            if student_lines.is_empty() {
                 section.value
             } else {
                 0
             }
         } else {
-            let ratio = if student_matches > memo_matches {
-                memo_matches as f32 / student_matches as f32
-            } else {
-                student_matches as f32 / memo_matches as f32
-            };
+            let ratio = awarded_marks as f32 / total_patterns as f32;
             (section.value as f32 * ratio).round() as u32
         };
-
-        let mut matched_patterns = vec![];
-        if student_matches > 0 && memo_matches > 0 {
-            matched_patterns.push(pattern.to_string());
-        }
-
-        let mut missed_patterns = vec![];
-        if student_matches < memo_matches || (memo_matches == 0 && student_matches > 0) {
-            missed_patterns.push(pattern.to_string());
-        }
 
         TaskResult {
             name: section.name.clone(),
@@ -107,101 +109,83 @@ mod tests {
     #[test]
     fn test_perfect_match_with_regex() {
         let comparator = RegexComparator;
-        let memo_lines = to_string_vec(&["number: 123", "number: 456"]);
-        let student_lines = to_string_vec(&["number: 789", "number: 012"]);
-        let pattern = r"number: \d+";
+        let memo_lines = to_string_vec(&[r"number: \d+", r"item: \w+"]);
+        let student_lines = to_string_vec(&["number: 123", "item: abc"]);
         let section = mock_subsection(10);
-        // memo_matches = 2, student_matches = 2. ratio = 1.0. marks = 10.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 10);
     }
 
     #[test]
     fn test_partial_match_with_regex() {
         let comparator = RegexComparator;
-        let memo_lines = to_string_vec(&["word", "word", "word", "word"]);
-        let student_lines = to_string_vec(&["word", "nope", "word", "nope"]);
-        let pattern = r"word";
+        let memo_lines = to_string_vec(&[r"apple", r"banana"]);
+        let student_lines = to_string_vec(&["apple", "orange"]);
         let section = mock_subsection(20);
-        // memo_matches = 4, student_matches = 2. ratio = 0.5. marks = 10.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 10);
     }
 
     #[test]
     fn test_more_student_matches_than_memo() {
         let comparator = RegexComparator;
-        let memo_lines = to_string_vec(&["item-1"]);
+        let memo_lines = to_string_vec(&[r"item-\d"]);
         let student_lines = to_string_vec(&["item-1", "item-2", "item-3"]);
-        let pattern = r"item-\d";
         let section = mock_subsection(5);
-        // memo_matches = 1, student_matches = 3. ratio = 1/3. marks = 5 * 0.333... = 2.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
-        assert_eq!(result.awarded, 2);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 5);
     }
 
     #[test]
     fn test_no_student_matches_with_regex() {
         let comparator = RegexComparator;
-        let memo_lines = to_string_vec(&["email: a@b.com", "email: c@d.com"]);
+        let memo_lines = to_string_vec(&[r"email: \S+@\S+\.\S+"]);
         let student_lines = to_string_vec(&["not an email", "another one"]);
-        let pattern = r"email: \S+@\S+\.\S+";
         let section = mock_subsection(15);
-        // memo_matches = 2, student_matches = 0. ratio = 0.0. marks = 0.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 0);
     }
 
     #[test]
     fn test_no_memo_matches_but_student_has_matches() {
         let comparator = RegexComparator;
-        let memo_lines = to_string_vec(&["nothing here"]);
+        let memo_lines = to_string_vec(&[r"pattern-that-matches-nothing"]);
         let student_lines = to_string_vec(&["123", "456"]);
-        let pattern = r"\d+";
         let section = mock_subsection(10);
-        // memo_matches = 0, student_matches = 2. Should return 0.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 0);
     }
 
     #[test]
     fn test_no_matches_in_memo_or_student() {
         let comparator = RegexComparator;
-        let memo_lines = to_string_vec(&["nothing here"]);
+        let memo_lines = to_string_vec(&[r"pattern-that-matches-nothing"]);
         let student_lines = to_string_vec(&["abc", "def"]);
-        let pattern = r"\d+";
         let section = mock_subsection(10);
-        // memo_matches = 0, student_matches = 0. Should return max_marks.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
-        assert_eq!(result.awarded, 10);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 0);
     }
 
     #[test]
     fn test_invalid_regex_pattern() {
         let comparator = RegexComparator;
-        let memo_lines = to_string_vec(&["some content"]);
-        let student_lines = to_string_vec(&["some content"]);
-        let pattern = r"["; // Invalid regex
+        let memo_lines = to_string_vec(&[r"[", r"valid-pattern"]); // Invalid and valid regex
+        let student_lines = to_string_vec(&["some content", "valid-pattern"]);
         let section = mock_subsection(10);
-        // Invalid regex should result in 0 marks.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
-        assert_eq!(result.awarded, 0);
-        assert!(result.matched_patterns.is_empty());
-        assert_eq!(
-            result.missed_patterns,
-            vec!["Invalid regex pattern: ["]
-        );
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 5);
+        assert!(!result.missed_patterns.is_empty());
+        assert!(result.missed_patterns.iter().any(|p| p.starts_with("Invalid regex pattern")));
     }
 
     #[test]
     fn test_multiple_matches_in_one_line() {
         let comparator = RegexComparator;
-        let memo_lines = to_string_vec(&["tag1 tag2"]);
-        let student_lines = to_string_vec(&["tag1"]);
-        let pattern = r"tag\d";
+        let memo_lines = to_string_vec(&[r"tag\d"]);
+        let student_lines = to_string_vec(&["tag1 tag2"]);
         let section = mock_subsection(10);
-        // memo_matches = 2, student_matches = 1. ratio = 0.5. marks = 5.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
-        assert_eq!(result.awarded, 5);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 10);
     }
 } 

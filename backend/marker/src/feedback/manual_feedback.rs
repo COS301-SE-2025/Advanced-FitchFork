@@ -10,6 +10,7 @@ pub struct ManualFeedback;
 
 impl Feedback for ManualFeedback {
     fn assemble_feedback(&self, _results: &[TaskResult]) -> Result<Vec<FeedbackEntry>, MarkerError> {
+        // TODO: Implement manual feedback assembly
         Err(MarkerError::InputMismatch("Manual feedback not implemented".into()))
     }
 }

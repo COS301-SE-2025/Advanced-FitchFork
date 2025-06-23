@@ -16,34 +16,42 @@ use crate::types::{TaskResult, Subsection};
 pub struct ExactComparator;
 
 impl OutputComparator for ExactComparator {
-    /// Compares the student's output with the memo's output based on the occurrence count of a pattern.
+    /// Compares student and memo outputs for an exact, line-by-line match.
     ///
     /// # Arguments
     ///
-    /// * `section` - The subsection entry containing details like name and total possible value.
-    /// * `memo_lines` - A slice of strings representing the lines of the memo output.
-    /// * `student_lines` - A slice of strings representing the lines of the student's output.
-    /// * `pattern` - The exact string pattern to search for in the output lines.
+    /// * `section` - The subsection entry from the allocator, containing the name and value.
+    /// * `memo_lines` - The lines from the memo output file.
+    /// * `student_lines` - The lines from the student's output file.
     ///
     /// # Returns
     ///
-    /// Returns a `TaskResult` with full marks if the comparison is successful, or zero marks otherwise.
+    /// Returns a `TaskResult` indicating whether the outputs were an exact match. If they match,
+    /// the full value of the section is awarded. Otherwise, 0 is awarded.
     fn compare(
         &self,
         section: &Subsection,
         memo_lines: &[String],
         student_lines: &[String],
-        pattern: &str,
     ) -> TaskResult {
-        let memo_count = memo_lines.iter().filter(|l| l.contains(pattern)).count();
-        let student_count = student_lines.iter().filter(|l| l.contains(pattern)).count();
+        let mut matched_patterns = Vec::new();
+        let mut missed_patterns = Vec::new();
 
-        let (awarded, matched_patterns, missed_patterns) =
-            if memo_count > 0 && student_count >= memo_count {
-                (section.value, vec![pattern.to_string()], vec![])
+        let all_match = memo_lines.iter().all(|memo_line| {
+            let found = student_lines.contains(memo_line);
+            if found {
+                matched_patterns.push(memo_line.clone());
             } else {
-                (0, vec![], vec![pattern.to_string()])
-            };
+                missed_patterns.push(memo_line.clone());
+            }
+            found
+        });
+
+        let awarded = if all_match && memo_lines.len() == student_lines.len() {
+            section.value
+        } else {
+            0
+        };
 
         TaskResult {
             name: section.name.clone(),
@@ -73,86 +81,68 @@ mod tests {
     }
 
     #[test]
-    fn test_perfect_match() {
+    fn test_exact_match() {
         let comparator = ExactComparator;
-        let memo_lines = to_string_vec(&["apple", "orange", "apple"]);
-        let student_lines = to_string_vec(&["apple", "apple", "grape"]);
-        let pattern = "apple";
+        let memo_lines = to_string_vec(&["line 1", "line 2"]);
+        let student_lines = to_string_vec(&["line 1", "line 2"]);
         let section = mock_subsection(10);
-        // memo_count = 2, student_count = 2. Should be a match.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 10);
-        assert_eq!(result.matched_patterns, vec!["apple"]);
         assert!(result.missed_patterns.is_empty());
     }
 
     #[test]
-    fn test_student_has_more_matches() {
+    fn test_mismatched_content() {
         let comparator = ExactComparator;
-        let memo_lines = to_string_vec(&["one match"]);
-        let student_lines = to_string_vec(&["one match", "two matches", "three matches"]);
-        let pattern = "match";
+        let memo_lines = to_string_vec(&["line 1", "line 2"]);
+        let student_lines = to_string_vec(&["line 1", "line 3"]);
+        let section = mock_subsection(10);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 0);
+        assert_eq!(result.missed_patterns, vec!["line 2"]);
+    }
+
+    #[test]
+    fn test_mismatched_length() {
+        let comparator = ExactComparator;
+        let memo_lines = to_string_vec(&["line 1", "line 2"]);
+        let student_lines = to_string_vec(&["line 1"]);
+        let section = mock_subsection(10);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
+        assert_eq!(result.awarded, 0);
+        assert_eq!(result.missed_patterns, vec!["line 2"]);
+    }
+
+    #[test]
+    fn test_empty_inputs_match() {
+        let comparator = ExactComparator;
+        let memo_lines = to_string_vec(&[]);
+        let student_lines = to_string_vec(&[]);
         let section = mock_subsection(5);
-        // memo_count = 1, student_count = 3. Student has more, so should match.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 5);
-        assert_eq!(result.matched_patterns, vec!["match"]);
+        assert!(result.matched_patterns.is_empty());
         assert!(result.missed_patterns.is_empty());
     }
 
     #[test]
-    fn test_student_has_fewer_matches() {
+    fn test_empty_memo_non_empty_student() {
         let comparator = ExactComparator;
-        let memo_lines = to_string_vec(&["correct", "correct", "correct"]);
-        let student_lines = to_string_vec(&["correct", "wrong"]);
-        let pattern = "correct";
-        let section = mock_subsection(20);
-        // memo_count = 3, student_count = 1. Student has fewer, so should not match.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        let memo_lines = to_string_vec(&[]);
+        let student_lines = to_string_vec(&["extra line"]);
+        let section = mock_subsection(5);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 0);
-        assert!(result.matched_patterns.is_empty());
-        assert_eq!(result.missed_patterns, vec!["correct"]);
     }
 
     #[test]
-    fn test_no_matches_in_memo() {
+    fn test_non_empty_memo_empty_student() {
         let comparator = ExactComparator;
-        let memo_lines = to_string_vec(&["no expected output", "none"]);
-        let student_lines = to_string_vec(&["unexpected", "unexpected"]);
-        let pattern = "unexpected";
-        let section = mock_subsection(10);
-        // memo_count = 0. Should not match, regardless of student output.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
+        let memo_lines = to_string_vec(&["required line"]);
+        let student_lines = to_string_vec(&[]);
+        let section = mock_subsection(5);
+        let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 0);
-        assert!(result.matched_patterns.is_empty());
-        assert_eq!(result.missed_patterns, vec!["unexpected"]);
-    }
-
-    #[test]
-    fn test_no_matches_in_student() {
-        let comparator = ExactComparator;
-        let memo_lines = to_string_vec(&["required", "required"]);
-        let student_lines = to_string_vec(&["something else"]);
-        let pattern = "required";
-        let section = mock_subsection(15);
-        // memo_count = 2, student_count = 0. Should not match.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
-        assert_eq!(result.awarded, 0);
-        assert!(result.matched_patterns.is_empty());
-        assert_eq!(result.missed_patterns, vec!["required"]);
-    }
-
-    #[test]
-    fn test_no_matches_in_either() {
-        let comparator = ExactComparator;
-        let memo_lines = to_string_vec(&["empty"]);
-        let student_lines = to_string_vec(&["empty"]);
-        let pattern = "unique";
-        let section = mock_subsection(10);
-        // memo_count = 0, student_count = 0. Should not match.
-        let result = comparator.compare(&section, &memo_lines, &student_lines, pattern);
-        assert_eq!(result.awarded, 0);
-        assert!(result.matched_patterns.is_empty());
-        assert_eq!(result.missed_patterns, vec!["unique"]);
+        assert_eq!(result.missed_patterns, vec!["required line"]);
     }
 } 

@@ -62,4 +62,4 @@ pub struct Subsection {
     pub name: String,
     /// The value (score/points) assigned to the subsection.
     pub value: u32,
-} 
+}

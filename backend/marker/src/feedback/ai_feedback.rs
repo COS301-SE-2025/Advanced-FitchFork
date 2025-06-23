@@ -10,6 +10,7 @@ pub struct AiFeedback;
 
 impl Feedback for AiFeedback {
     fn assemble_feedback(&self, _results: &[TaskResult]) -> Result<Vec<FeedbackEntry>, MarkerError> {
+        // TODO: Implement AI feedback assembly
         Err(MarkerError::InputMismatch("AI feedback not implemented".into()))
     }
 }

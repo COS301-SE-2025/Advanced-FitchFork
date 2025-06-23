@@ -39,7 +39,7 @@ use crate::types::TaskResult;
 ///     TaskResult { name: "Task 2".to_string(), awarded: 5, possible: 10, matched_patterns: vec![], missed_patterns: vec![] },  // 50%
 /// ];
 ///
-/// // The average of (1.0 + 0.5) / 2 = 0.75, which is 75%
+/// // Total awarded: 15, Total possible: 20. Score: (15 / 20) * 100 = 75
 /// let score = compute_overall_score(&results).unwrap();
 /// assert_eq!(score, 75);
 ///
@@ -53,16 +53,18 @@ pub fn compute_overall_score(results: &[TaskResult]) -> Result<u32, MarkerError>
         return Ok(0);
     }
 
-    let mut total_percentage = 0.0;
+    let mut total_awarded = 0.0;
+    let mut total_possible = 0.0;
+
     for result in results {
         if result.possible > 0 {
-            total_percentage += result.awarded as f64 / result.possible as f64;
+            total_awarded += result.awarded as f64;
+            total_possible += result.possible as f64;
         }
     }
 
-    let num_tasks = results.len() as f64;
-    let overall_score = if num_tasks > 0.0 {
-        total_percentage / num_tasks
+    let overall_score = if total_possible > 0.0 {
+        total_awarded / total_possible
     } else {
         0.0
     };
@@ -94,7 +96,7 @@ mod tests {
                 missed_patterns: vec![],
             }, // 50%
         ];
-        // Average of (1.0 + 0.5) / 2 = 0.75 => 75
+        // Total awarded: 15, Total possible: 20. (15/20) * 100 = 75
         assert_eq!(compute_overall_score(&results).unwrap(), 75);
     }
 
@@ -124,13 +126,8 @@ mod tests {
                 missed_patterns: vec![],
             }, // Ignored
         ];
-        // Average of 1.0 / 1 = 1.0 => 100. This is because the second task is ignored from the count.
-        // Let's adjust the logic slightly to be more intuitive. A task with possible: 0 should be counted as a task but contribute 0% to the score.
-        // (1.0 + 0.0) / 2 = 0.5 => 50
-        // The current implementation does (1.0 / 2) = 0.5, which is 50. Let's confirm this logic is what we want.
-        // Yes, `num_tasks` is `results.len()`, so the task is included in the denominator. This is correct.
-        // Average of (1.0 + 0.0) / 2 = 0.5 => 50
-        assert_eq!(compute_overall_score(&results).unwrap(), 50);
+        // Total awarded: 10, Total possible: 10. (10/10) * 100 = 100
+        assert_eq!(compute_overall_score(&results).unwrap(), 100);
     }
 
     /// Tests a scenario where the final score requires rounding.
@@ -152,8 +149,8 @@ mod tests {
                 missed_patterns: vec![],
             }, // 50%
         ];
-        // Average of (0.666... + 0.5) / 2 = 0.58333... => 58
-        assert_eq!(compute_overall_score(&results).unwrap(), 58);
+        // Total awarded: 2 + 1 = 3. Total possible: 3 + 2 = 5. (3/5) * 100 = 60
+        assert_eq!(compute_overall_score(&results).unwrap(), 60);
     }
 
     /// Tests the case where all tasks score zero.
