@@ -26,7 +26,7 @@ use chrono::{DateTime, Utc};
 
 use serde::{Deserialize, Serialize};
 
-use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, QueryOrder};
 
 use db::{
     connect,
@@ -36,11 +36,9 @@ use db::{
             Model as AssignmentModel,
         },
         assignment_file::{FileType, Model as FileModel},
-        assignment_submission::Model as AssignmentSubmissionModel,
     },
 };
-
-use crate::auth::AuthUser;
+use db::models::assignment_task::{ActiveModel, Column, Entity};
 use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
@@ -501,6 +499,139 @@ pub async fn create(
 // )
 //     .into_response()
 // }
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTaskRequest {
+    task_number: i64,
+    command: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TaskResponse {
+    id: i64,
+    task_number: i64,
+    command: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>
+}
+
+/// POST /api/modules/:module_id/assignments/:assignment_id/tasks
+///
+/// Create a new task for a given assignment (Lecturers and Admins only).
+///
+/// Each task must have a unique `task_number` within the assignment. The `command`
+/// field defines how the task will be executed during evaluation.
+///
+/// ### JSON Body
+/// ```json
+/// {
+///   "task_number": 1,
+///   "command": "cargo test"
+/// }
+/// ```
+///
+/// ### Example curl
+/// ```bash
+/// curl -X POST http://localhost:3000/api/modules/1/assignments/2/tasks \
+///   -H "Authorization: Bearer <token>" \
+///   -H "Content-Type: application/json" \
+///   -d '{"task_number": 1, "command": "cargo test"}'
+/// ```
+///
+/// ### Responses
+/// - `201 Created` with task metadata
+/// - `400 Bad Request` (missing or malformed JSON body)
+/// - `403 Forbidden` (unauthorized)
+/// - `404 Not Found` (assignment or module not found)
+/// - `422 Unprocessable Entity` (invalid input or task_number not unique)
+/// - `500 Internal Server Error` (unexpected database error)
+pub async fn create_task(
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    Json(payload): Json<CreateTaskRequest>,
+) -> impl IntoResponse {
+    if payload.task_number <= 0 || payload.command.trim().is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ApiResponse::<()>::error("Invalid task_number or command")),
+        )
+            .into_response();
+    }
+
+    let db = connect().await;
+
+    let assignment = AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
+        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
+        .one(&db)
+        .await;
+
+    match assignment {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment or module not found")),
+            )
+                .into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response();
+        }
+    }
+
+    let exists = Entity::find()
+        .filter(Column::AssignmentId.eq(assignment_id))
+        .filter(Column::TaskNumber.eq(payload.task_number))
+        .one(&db)
+        .await;
+
+    if let Ok(Some(_)) = exists {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ApiResponse::<()>::error("task_number must be unique")),
+        )
+            .into_response();
+    }
+
+    let now = Utc::now();
+    let new_task = ActiveModel {
+        assignment_id: sea_orm::ActiveValue::Set(assignment_id),
+        task_number: sea_orm::ActiveValue::Set(payload.task_number),
+        command: sea_orm::ActiveValue::Set(payload.command.clone()),
+        created_at: sea_orm::ActiveValue::Set(now.clone()),
+        updated_at: sea_orm::ActiveValue::Set(now.clone()),
+        ..Default::default()
+    };
+
+    match new_task.insert(&db).await {
+        Ok(task) => {
+            let response = TaskResponse {
+                id: task.id,
+                task_number: task.task_number,
+                command: task.command,
+                created_at: task.created_at,
+                updated_at: task.updated_at,
+            };
+
+            (
+                StatusCode::CREATED,
+                Json(ApiResponse::success(response, "Task created successfully")),
+            )
+                .into_response()
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error("Failed to create task")),
+        )
+            .into_response(),
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {

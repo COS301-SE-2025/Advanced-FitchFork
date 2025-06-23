@@ -7,7 +7,7 @@ use axum::{
 };
 
 use chrono::{DateTime, Utc};
-
+use db::models::assignment_task::{Entity};
 use serde::{Deserialize, Serialize};
 
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
@@ -25,7 +25,7 @@ use db::{
         assignment::{
             self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
             Model as AssignmentModel,
-        }, assignment_file::{self, Column as FileColumn, Entity as FileEntity}, assignment_submission, user, User
+        }, assignment_file::{self, Column as FileColumn, Entity as FileEntity}, assignment_submission, assignment_task::Column, user, User
     },
 };
 
@@ -1013,5 +1013,104 @@ pub async fn stats(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl I
             )
                 .into_response()
         }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTaskRequest {
+    task_number: i64,
+    command: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TaskResponse {
+    id: i64,
+    task_number: i64,
+    command: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>
+}
+
+/// GET /api/modules/:module_id/assignments/:assignment_id/tasks
+///
+/// Retrieve all tasks for a specific assignment (Lecturers, Admins, and Students with access).
+///
+/// Tasks are sorted by their `task_number` in ascending order. Each task contains metadata
+/// including the associated command and timestamps.
+///
+/// ### Example curl
+/// ```bash
+/// curl -X GET http://localhost:3000/api/modules/1/assignments/2/tasks \
+///   -H "Authorization: Bearer <token>"
+/// ```
+///
+/// ### Responses
+/// - `200 OK` with an array of task metadata
+/// - `403 Forbidden` (unauthorized)
+/// - `404 Not Found` (assignment or module not found)
+/// - `500 Internal Server Error` (unexpected database error)
+
+pub async fn list_tasks(
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    let db = connect().await;
+
+
+    let assignment_exists = AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
+        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
+        .one(&db)
+        .await;
+
+    match assignment_exists {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<Vec<TaskResponse>>::error(
+                    "Assignment or module not found",
+                )),
+            )
+                .into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<Vec<TaskResponse>>::error("Database error")),
+            )
+                .into_response();
+        }
+    }
+
+
+    match Entity::find()
+        .filter(Column::AssignmentId.eq(assignment_id))
+        .order_by_asc(Column::TaskNumber)
+        .all(&db)
+        .await
+    {
+        Ok(tasks) => {
+            let data = tasks
+                .into_iter()
+                .map(|task| TaskResponse {
+                    id: task.id,
+                    task_number: task.task_number,
+                    command: task.command,
+                    created_at: task.created_at,
+                    updated_at: task.updated_at,
+                })
+                .collect::<Vec<_>>();
+
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(data, "Tasks retrieved successfully")),
+            )
+                .into_response()
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<Vec<TaskResponse>>::error("Failed to retrieve tasks")),
+        )
+            .into_response(),
     }
 }
