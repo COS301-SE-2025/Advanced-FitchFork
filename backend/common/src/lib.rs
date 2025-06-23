@@ -1,3 +1,5 @@
+pub mod events;
+
 use validator::ValidationErrors;
 
 pub fn format_validation_errors(errors: &ValidationErrors) -> String {

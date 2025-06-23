@@ -13,3 +13,4 @@ chrono = "0.4"
 colored = "2"
 validator = { version = "0.16", features = ["derive"] }
 axum-extra = "0.9"
+tokio = { version = "1.45.1", features = ["sync"] }
