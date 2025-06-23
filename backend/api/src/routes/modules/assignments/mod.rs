@@ -41,8 +41,6 @@ use crate::{auth::guards::{
 /// - `DELETE /assignments/:assignment_id/files`  → Delete files
 /// - `DELETE /assignments/:assignment_id`        → Delete assignment
 /// - `POST /assignments/:assignment_id/submissions` → Submit assignment
-/// - `GET  /assignments/:assignment_id/submissions/me` → Get my submissions
-/// - `GET  /assignments/:assignment_id/submissions` → List all submissions (lecturer/tutor only)
 /// - `GET  /assignments/:assignment_id/stats`         → Assignment statistics (lecturer only)
 /// - `POST /assignments/:assignment_id/tasks`         → Create a new task (lecturer/admin only)
 /// - `GET  /assignments/:assignment_id/tasks`         → List tasks (lecturer/admin only)
