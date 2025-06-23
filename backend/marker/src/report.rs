@@ -39,6 +39,7 @@
 
 use crate::{traits::feedback::FeedbackEntry, types::JsonTaskResult};
 use serde::Serialize;
+use crate::types::TaskResult;
 
 /// Represents the final report generated after marking a submission.
 ///
@@ -72,11 +73,11 @@ pub struct MarkReport {
 #[derive(Debug, Serialize)]
 pub struct MarkReportResponse {
     /// Indicates the grading was successful.
-    success: bool,
+    pub success: bool,
     /// A human-readable message for the client.
-    message: String,
+    pub message: String,
     /// The detailed grading report.
-    data: MarkReport,
+    pub data: MarkReport,
 }
 
 /// Enables ergonomic conversion from [`MarkReport`] to [`MarkReportResponse`].
@@ -87,6 +88,37 @@ impl From<MarkReport> for MarkReportResponse {
             message: "Grading complete.".to_string(),
             data: report,
         }
+    }
+}
+
+/// Generates a MarkReport from the provided grading artifacts.
+///
+/// This function converts internal TaskResult structs to JsonTaskResult for API output.
+pub fn generate_mark_report(
+    submission_id: &str,
+    task_results: Vec<TaskResult>,
+    overall_score: u32,
+    feedback: Vec<FeedbackEntry>,
+) -> MarkReport {
+    let task_results: Vec<JsonTaskResult> = task_results
+        .into_iter()
+        .map(|tr| JsonTaskResult {
+            name: tr.name,
+            awarded: tr.awarded,
+            possible: tr.possible,
+            percentage: if tr.possible > 0 {
+                (tr.awarded as f32 / tr.possible as f32) * 100.0
+            } else {
+                0.0
+            },
+        })
+        .collect();
+
+    MarkReport {
+        submission_id: submission_id.to_string(),
+        overall_score,
+        feedback,
+        task_results,
     }
 }
 
@@ -199,5 +231,115 @@ mod tests {
         assert_eq!(value["data"]["submission_id"], "roundtrip");
         assert_eq!(value["data"]["task_results"][0]["name"], "T");
         assert_eq!(value["data"]["feedback"][0]["task"], "A");
+    }
+
+    #[test]
+    fn test_generate_mark_report_basic() {
+        let task_results = vec![
+            TaskResult {
+                name: "Task1".to_string(),
+                awarded: 8,
+                possible: 10,
+                matched_patterns: vec!["foo".to_string()],
+                missed_patterns: vec![],
+            },
+            TaskResult {
+                name: "Task2".to_string(),
+                awarded: 5,
+                possible: 5,
+                matched_patterns: vec!["bar".to_string()],
+                missed_patterns: vec![],
+            },
+        ];
+        let feedback = vec![
+            FeedbackEntry { task: "Task1".to_string(), message: "Good job".to_string() },
+            FeedbackEntry { task: "Task2".to_string(), message: "Perfect".to_string() },
+        ];
+        let report = generate_mark_report("sub1", task_results, 90, feedback.clone());
+        assert_eq!(report.submission_id, "sub1");
+        assert_eq!(report.overall_score, 90);
+        assert_eq!(report.feedback, feedback);
+        assert_eq!(report.task_results.len(), 2);
+        assert_eq!(report.task_results[0].name, "Task1");
+        assert_eq!(report.task_results[0].awarded, 8);
+        assert_eq!(report.task_results[0].possible, 10);
+        assert_eq!(report.task_results[0].percentage, 80.0);
+        assert_eq!(report.task_results[1].name, "Task2");
+        assert_eq!(report.task_results[1].awarded, 5);
+        assert_eq!(report.task_results[1].possible, 5);
+        assert_eq!(report.task_results[1].percentage, 100.0);
+    }
+
+    #[test]
+    fn test_generate_mark_report_empty() {
+        let report = generate_mark_report("empty", vec![], 0, vec![]);
+        assert_eq!(report.submission_id, "empty");
+        assert_eq!(report.overall_score, 0);
+        assert!(report.feedback.is_empty());
+        assert!(report.task_results.is_empty());
+    }
+
+    #[test]
+    fn test_generate_mark_report_zero_possible() {
+        let task_results = vec![
+            TaskResult {
+                name: "ImpossibleTask".to_string(),
+                awarded: 0,
+                possible: 0,
+                matched_patterns: vec![],
+                missed_patterns: vec![],
+            },
+        ];
+        let report = generate_mark_report("zero", task_results, 0, vec![]);
+        assert_eq!(report.task_results.len(), 1);
+        assert_eq!(report.task_results[0].name, "ImpossibleTask");
+        assert_eq!(report.task_results[0].awarded, 0);
+        assert_eq!(report.task_results[0].possible, 0);
+        assert_eq!(report.task_results[0].percentage, 0.0);
+    }
+
+    #[test]
+    fn test_generate_mark_report_feedback_only() {
+        let feedback = vec![
+            FeedbackEntry { task: "T1".to_string(), message: "msg1".to_string() },
+            FeedbackEntry { task: "T2".to_string(), message: "msg2".to_string() },
+        ];
+        let report = generate_mark_report("fb", vec![], 42, feedback.clone());
+        assert_eq!(report.submission_id, "fb");
+        assert_eq!(report.overall_score, 42);
+        assert_eq!(report.feedback, feedback);
+        assert!(report.task_results.is_empty());
+    }
+
+    #[test]
+    fn test_generate_mark_report_percentage_calculation() {
+        let task_results = vec![
+            TaskResult {
+                name: "Half".to_string(),
+                awarded: 5,
+                possible: 10,
+                matched_patterns: vec![],
+                missed_patterns: vec![],
+            },
+            TaskResult {
+                name: "Full".to_string(),
+                awarded: 10,
+                possible: 10,
+                matched_patterns: vec![],
+                missed_patterns: vec![],
+            },
+            TaskResult {
+                name: "Zero".to_string(),
+                awarded: 0,
+                possible: 10,
+                matched_patterns: vec![],
+                missed_patterns: vec![],
+            },
+        ];
+        let report = generate_mark_report("percent", task_results, 50, vec![]);
+        assert_eq!(report.task_results.len(), 3);
+        assert_eq!(report.task_results[0].percentage, 50.0);
+        assert_eq!(report.task_results[1].percentage, 100.0);
+        assert_eq!(report.task_results[2].percentage, 0.0);
     }
 } 
