@@ -58,7 +58,7 @@ const { Title, Text } = Typography;
 
 const ASSIGNMENT_TYPES: AssignmentType[] = ['Assignment', 'Practical'];
 
-const ModuleAssignmentsTable = () => {
+const AssignmentsTable = () => {
   // ======================================================================
   // =========================== State and Hooks ==========================
   // ======================================================================
@@ -546,4 +546,4 @@ const ModuleAssignmentsTable = () => {
   );
 };
 
-export default ModuleAssignmentsTable;
+export default AssignmentsTable;
