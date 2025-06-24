@@ -145,6 +145,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "chrono",
+ "code-runner",
  "common",
  "db",
  "dotenvy",

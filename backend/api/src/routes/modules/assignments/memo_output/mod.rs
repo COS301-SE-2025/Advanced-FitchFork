@@ -1,8 +1,11 @@
 pub mod get;
 pub mod post;
 
-use axum::Router;
+use axum::{Router, routing::post};
 
-pub fn assignment_routes() -> Router {
+use post::generate_memo_output;
+
+pub fn memo_output_routes() -> Router {
     Router::new()
+        .route("/generate", post(generate_memo_output))
 }
