@@ -1,0 +1,28 @@
+{
+  "generated_at": "2025-06-20T12:05:00+02:00",
+  "summary": {
+    "total_files": 2,
+    "total_lines": 300,
+    "covered_lines": 210,
+    "coverage_percent": 70.0
+  },
+  "files": [
+    {
+      "path": "src/parser.rs",
+      "total_lines": 150,
+      "covered_lines": 120,
+      "coverage_percent": 80.0,
+      "line_details": [
+        { "line_number": 10,  "hit": true },
+        { "line_number": 11,  "hit": false }
+      ]
+    },
+    {
+      "path": "src/processor.rs",
+      "total_lines": 150,
+      "covered_lines": 90,
+      "coverage_percent": 60.0,
+      "notes": "Partial coverage on edge cases"
+    }
+  ]
+}
