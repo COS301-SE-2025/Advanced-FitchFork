@@ -1,0 +1,4 @@
+BadMemo
+&-=-&First
+foo
+bar 

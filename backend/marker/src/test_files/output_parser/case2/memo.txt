@@ -1,0 +1,5 @@
+javac … && java Main task1
+&-=-&Sub1
+Line A
+&-=-&Sub2
+Line B

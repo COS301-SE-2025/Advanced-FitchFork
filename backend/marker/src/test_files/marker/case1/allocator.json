@@ -1,0 +1,14 @@
+{
+    "generated_at": "2025-06-20T12:00:00+02:00",
+    "tasks": [
+        {
+            "task1": {
+                "name": "Task 1",
+                "value": 10,
+                "subsections": [
+                    { "name": "Sub1", "value": 10 }
+                ]
+            }
+        }
+    ]
+}  

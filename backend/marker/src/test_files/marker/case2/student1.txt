@@ -1,0 +1,5 @@
+echo task1
+&-=-&Sub1.1
+foo
+&-=-&Sub1.2
+bar
