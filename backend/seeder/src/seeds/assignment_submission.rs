@@ -24,14 +24,12 @@ impl Seeder for AssignmentSubmissionSeeder {
             panic!("No users found — at least one user must exist to seed assignment_submissions");
         }
 
-        // Regular seeding logic for all assignments/users
         for assignment in &assignments {
-            if assignment.module_id == 9999 {
+            if assignment.module_id == 9999 || assignment.module_id == 9998 {
                 continue;
             }
             for user in &users {
                 for counter in 1..=2 {
-                    // Skip the specific one we'll hardcode below
                     if assignment.id == 9999 && user.id == 1 && counter == 1 {
                         continue;
                     }
@@ -42,7 +40,7 @@ impl Seeder for AssignmentSubmissionSeeder {
                         assignment.id, user.id
                     );
 
-                    match AssignmentSubmissionModel::save_file(
+                    let _ = AssignmentSubmissionModel::save_file(
                         db,
                         assignment.id,
                         user.id,
@@ -50,22 +48,12 @@ impl Seeder for AssignmentSubmissionSeeder {
                         dummy_filename,
                         dummy_content.as_bytes(),
                     )
-                    .await
-                    {
-                        Ok(_) => {}
-                        Err(e) => {
-                            eprintln!(
-                                "Failed to save assignment_submission file for assignment {} user {}: {}",
-                                assignment.id, user.id, e
-                            );
-                        }
-                    }
+                    .await;
                 }
             }
         }
 
-        //Hardcoded seeding of a "memo-as-submission" zip file for user 1, attempt 1, assignment 9999
-        fn create_memo_zip_as_submission() -> Vec<u8> {
+        fn create_memo_zip_as_submission_java() -> Vec<u8> {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
@@ -127,29 +115,109 @@ public class HelperThree {
             buf.into_inner()
         }
 
-        let assignment_id = 9999;
+        fn create_cpp_submission_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = FileOptions::default().unix_permissions(0o644);
+
+                let helper_one_cpp = r#"
+#include "HelperOne.h"
+std::string HelperOne::subtaskA() {
+    return "HelperOne: Subtask for Task1\nThis as well\nAnd this";
+}
+std::string HelperOne::subtaskZ() {
+    return "HelperOne: Subtask for Task2\nThis as well\nAnd this";
+}
+std::string HelperOne::subtaskBeta() {
+    return "HelperOne: Subtask for Task3\nThis as well\nAnd this";
+}
+"#;
+
+                let helper_two_cpp = r#"
+#include "HelperTwo.h"
+std::string HelperTwo::subtaskB() {
+    return "HelperTwo: Subtask for Task1\nThis as well\nWrong output here";
+}
+std::string HelperTwo::subtaskX() {
+    return "HelperTwo: Subtask for Task2\nThis as well\nAnd this";
+}
+std::string HelperTwo::subtaskGamma() {
+    return "";
+}
+"#;
+
+                let helper_three_cpp = r#"
+#include "HelperThree.h"
+std::string HelperThree::subtaskC() {
+    return "HelperThree: Subtask for Task1\nThis as well\nAnd this";
+}
+std::string HelperThree::subtaskY() {
+    return "HelperThree: Subtask for Task2\nThis as well\nAnd this\nAdditional wrong line";
+}
+std::string HelperThree::subtaskAlpha() {
+    return "HelperThree: Subtask for Task3\nThis as well";
+}
+"#;
+
+                zip.start_file("HelperOne.cpp", options).unwrap();
+                zip.write_all(helper_one_cpp.as_bytes()).unwrap();
+
+                zip.start_file("HelperTwo.cpp", options).unwrap();
+                zip.write_all(helper_two_cpp.as_bytes()).unwrap();
+
+                zip.start_file("HelperThree.cpp", options).unwrap();
+                zip.write_all(helper_three_cpp.as_bytes()).unwrap();
+
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        let assignment_id_java = 9999;
         let user_id = 1;
         let attempt_number = 1;
-        let filename = "submission_memo_clone.zip";
-        let content = create_memo_zip_as_submission();
+        let filename_java = "submission_memo_clone.zip";
+        let content_java = create_memo_zip_as_submission_java();
 
         match AssignmentSubmissionModel::save_file(
             db,
-            assignment_id,
+            assignment_id_java,
             user_id,
             attempt_number,
-            filename,
-            &content,
+            filename_java,
+            &content_java,
         )
         .await
         {
-            Ok(_) => {
-                //Nothing
-            }
+            Ok(_) => {}
             Err(e) => {
                 eprintln!(
                     "Failed to seed hardcoded submission for assignment {} user {}: {}",
-                    assignment_id, user_id, e
+                    assignment_id_java, user_id, e
+                );
+            }
+        }
+
+        let assignment_id_cpp = 9998;
+        let filename_cpp = "submission_cpp_clone.zip";
+        let content_cpp = create_cpp_submission_zip();
+
+        match AssignmentSubmissionModel::save_file(
+            db,
+            assignment_id_cpp,
+            user_id,
+            attempt_number,
+            filename_cpp,
+            &content_cpp,
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!(
+                    "Failed to seed hardcoded C++ submission for assignment {} user {}: {}",
+                    assignment_id_cpp, user_id, e
                 );
             }
         }
