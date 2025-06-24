@@ -11,7 +11,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Logo from '@/components/Logo';
-import { AuthService } from '@/services/auth';
+import { resetPassword } from '@/services/auth';
 
 const { Title, Text } = Typography;
 
@@ -39,7 +39,7 @@ export default function ResetPasswordPage() {
     setLoading(true);
     setError(null);
 
-    const res = await AuthService.resetPassword(token, values.password);
+    const res = await resetPassword(token, values.password);
 
     setLoading(false);
 

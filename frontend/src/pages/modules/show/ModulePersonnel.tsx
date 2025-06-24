@@ -3,11 +3,22 @@ import { Segmented, Table, Transfer, Input, Button, Tag, Skeleton } from 'antd';
 import type { Key } from 'react';
 import type { TransferProps, TablePaginationConfig, TableProps } from 'antd';
 import { MODULE_ROLES, type ModuleRole } from '@/types/modules';
-import { ModulesService } from '@/services/modules';
 import { useNotifier } from '@/components/Notifier';
 import { useTableQuery } from '@/hooks/useTableQuery';
 import { useParams } from 'react-router-dom';
 import PageHeader from '@/components/PageHeader';
+import {
+  assignLecturers,
+  assignTutors,
+  enrollStudents,
+  getEligibleUsersForRole,
+  getLecturers,
+  getStudents,
+  getTutors,
+  removeLecturers,
+  removeStudents,
+  removeTutors,
+} from '@/services/modules';
 
 interface TableTransferItem {
   key: string;
@@ -42,7 +53,7 @@ const ModulePersonnel = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const eligibleRes = await ModulesService.getEligibleUsersForRole(moduleId, selectedRole, {
+      const eligibleRes = await getEligibleUsersForRole(moduleId, selectedRole, {
         page: available.pagination.current,
         per_page: available.pagination.pageSize,
         query: available.searchTerm,
@@ -51,9 +62,9 @@ const ModulePersonnel = () => {
       });
 
       const assignedRes = await {
-        Lecturer: ModulesService.getLecturers,
-        Tutor: ModulesService.getTutors,
-        Student: ModulesService.getStudents,
+        Lecturer: getLecturers,
+        Tutor: getTutors,
+        Student: getStudents,
       }[selectedRole](moduleId, {
         page: assigned.pagination.current,
         per_page: assigned.pagination.pageSize,
@@ -132,15 +143,15 @@ const ModulePersonnel = () => {
     setRoleAssignments((prev) => ({ ...prev, [selectedRole]: nextKeys }));
 
     const assignFn = {
-      Lecturer: ModulesService.assignLecturers,
-      Tutor: ModulesService.assignTutors,
-      Student: ModulesService.enrollStudents,
+      Lecturer: assignLecturers,
+      Tutor: assignTutors,
+      Student: enrollStudents,
     }[selectedRole];
 
     const removeFn = {
-      Lecturer: ModulesService.removeLecturers,
-      Tutor: ModulesService.removeTutors,
-      Student: ModulesService.removeStudents,
+      Lecturer: removeLecturers,
+      Tutor: removeTutors,
+      Student: removeStudents,
     }[selectedRole];
 
     let assignRes = { success: true, message: '' };

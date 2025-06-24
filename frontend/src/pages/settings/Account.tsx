@@ -11,10 +11,10 @@ import { Avatar, Button, Divider, Input, message, Upload } from 'antd';
 import type { UploadProps } from 'antd';
 import PageHeader from '@/components/PageHeader';
 import SettingsGroup from '@/components/SettingsGroup';
-import { AuthService } from '@/services/auth';
 import { useAuth } from '@/context/AuthContext';
 import { API_BASE_URL } from '@/utils/api';
 import useNotImplemented from '@/hooks/useNotImplemented';
+import { uploadProfilePicture } from '@/services/auth';
 
 const Account = () => {
   const notImplemented = useNotImplemented();
@@ -31,7 +31,7 @@ const Account = () => {
     form.append('file', file as File);
 
     try {
-      const res = await AuthService.uploadProfilePicture(form);
+      const res = await uploadProfilePicture(form);
       if (res.success && user?.id) {
         const bust = Date.now();
         const newUrl = `${API_BASE_URL}/auth/avatar/${user.id}?bust=${bust}`;

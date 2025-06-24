@@ -23,13 +23,6 @@ import {
 } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
-import type {
-  Assignment,
-  AssignmentPayload,
-  AssignmentType,
-  EditAssignmentRequest,
-} from '@/types/assignments';
-import { AssignmentsService } from '@/services/assignments';
 import TableControlBar from '@/components/TableControlBar';
 import TableTagSummary from '@/components/TableTagSummary';
 import type { SortOption } from '@/types/common';
@@ -43,6 +36,18 @@ import TableCreateModal from '@/components/TableCreateModal';
 import { useNotifier } from '@/components/Notifier';
 import { useModule } from '@/context/ModuleContext';
 import { useNavigate } from 'react-router-dom';
+import {
+  listAssignments,
+  createAssignment,
+  editAssignment,
+  deleteAssignment,
+} from '@/services/modules/assignments';
+import type {
+  AssignmentType,
+  Assignment,
+  PostAssignmentRequest,
+  PutAssignmentRequest,
+} from '@/types/modules/assignments';
 
 dayjs.extend(weekday);
 dayjs.extend(localeData);
@@ -99,7 +104,7 @@ const ModuleAssignmentsTable = () => {
     setLoading(true);
     const sort: SortOption[] = sorterState;
 
-    const res = await AssignmentsService.listAssignments(module.id, {
+    const res = await listAssignments(module.id, {
       page: pagination.current,
       per_page: pagination.pageSize,
       query: searchTerm,
@@ -137,8 +142,8 @@ const ModuleAssignmentsTable = () => {
     setIsAddModalOpen(true);
   };
 
-  const handleSubmitNewAssignment = async (values: Partial<AssignmentPayload>) => {
-    const payload: AssignmentPayload = {
+  const handleSubmitNewAssignment = async (values: Partial<PostAssignmentRequest>) => {
+    const payload: PostAssignmentRequest = {
       name: values.name!,
       assignment_type: values.assignment_type!,
       available_from: dayjs(values.available_from).toISOString(),
@@ -146,7 +151,7 @@ const ModuleAssignmentsTable = () => {
       description: values.description ?? '',
     };
 
-    const res = await AssignmentsService.createAssignment(module.id, payload);
+    const res = await createAssignment(module.id, payload);
 
     if (res.success) {
       notifySuccess('Created', 'Assignment successfully created');
@@ -162,7 +167,7 @@ const ModuleAssignmentsTable = () => {
   // ======================================================================
 
   const saveEdit = async (id: number) => {
-    const payload: EditAssignmentRequest = {
+    const payload: PutAssignmentRequest = {
       name: editedRow.name,
       assignment_type: editedRow.assignment_type,
       available_from: editedRow.available_from
@@ -171,7 +176,7 @@ const ModuleAssignmentsTable = () => {
       due_date: editedRow.due_date ? dayjs(editedRow.due_date).toISOString() : undefined,
       description: editedRow.description,
     };
-    const res = await AssignmentsService.editAssignment(module.id, id, payload);
+    const res = await editAssignment(module.id, id, payload);
 
     if (res.success) {
       notifySuccess('Updated', 'Assignment changes have been saved');
@@ -184,7 +189,7 @@ const ModuleAssignmentsTable = () => {
   };
 
   const handleDeleteAssignment = async (assignmentId: number) => {
-    const res = await AssignmentsService.deleteAssignment(module.id, assignmentId);
+    const res = await deleteAssignment(module.id, assignmentId);
     if (res.success) {
       notifySuccess('Deleted', 'Assignment removed successfully');
       fetchAssignments();

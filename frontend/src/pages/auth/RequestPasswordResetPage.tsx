@@ -11,8 +11,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Logo from '@/components/Logo';
-import { AuthService } from '@/services/auth';
-// import { AuthService } from '@/services/auth'; // Uncomment when integrating real service
+import { requestPasswordReset } from '@/services/auth';
 
 const { Title, Text } = Typography;
 
@@ -33,7 +32,7 @@ export default function RequestPasswordResetPage() {
     setError(null);
     setLoading(true);
 
-    const res = await AuthService.requestPasswordReset(values.email);
+    const res = await requestPasswordReset(values.email);
 
     setLoading(false);
 

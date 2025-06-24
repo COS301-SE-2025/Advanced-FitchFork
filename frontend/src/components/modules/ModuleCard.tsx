@@ -1,24 +1,25 @@
 import { Card, Avatar, Tag, Typography, Tooltip } from 'antd';
 import { BookOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import type { UserModuleRole } from '@/types/modules';
+import type { Module } from '@/types/modules';
+import type { ModuleRole } from '@/types/modules';
 
 const { Meta } = Card;
 const { Paragraph } = Typography;
 
 interface Props {
-  module: UserModuleRole;
+  module: { role: ModuleRole } & Module;
   isFavorite: boolean;
   onToggleFavorite: (moduleId: number) => void;
 }
 
-const roleColorMap: Record<UserModuleRole['role'], string> = {
+const roleColorMap: Record<ModuleRole, string> = {
   Student: 'green',
   Tutor: 'orange',
   Lecturer: 'purple',
 };
 
-const roleLabelMap: Record<UserModuleRole['role'], string> = {
+const roleLabelMap: Record<ModuleRole, string> = {
   Student: 'Enrolled',
   Tutor: 'Tutoring',
   Lecturer: 'Lecturing',

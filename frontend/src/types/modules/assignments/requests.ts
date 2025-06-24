@@ -1,42 +1,20 @@
-import type { Module } from "./modules";
-import type { User } from "./users";
-
-
+import type { Assignment } from ".";
 
 // ─────────────────────────────────────────────────────────────
-// TYPES - Core Domain Types
+// Utility Types
 // ─────────────────────────────────────────────────────────────
 
-export interface JWTToken {
-  token: string,
-  expires_at: string
-}
-
-export interface AuthUser extends User, JWTToken {}
+// Used for post and put routes
+type AssignmentPayload = Omit<Assignment, "id" | "module_id" | "created_at" | "updated_at">;
 
 // ─────────────────────────────────────────────────────────────
-// REQUEST - API Request Payloads
+// POST Request Types
 // ─────────────────────────────────────────────────────────────
 
-export interface RegisterRequest {
-  student_number: string;
-  email: string;
-  password: string;
-}
-
-export interface LoginRequest {
-  student_number: string;
-  password: string;
-}
+export type PostAssignmentRequest = AssignmentPayload;
 
 // ─────────────────────────────────────────────────────────────
-// RESPONSE - API Response Structures
+// PUT Request Types
 // ─────────────────────────────────────────────────────────────
 
-export interface UserModule extends Module {
-  role: 'Lecturer' | 'Tutor' | 'Student';
-}
-
-export interface MeResponse extends User {
-  modules: UserModule[]
-}
+export type PutAssignmentRequest = Partial<AssignmentPayload>;

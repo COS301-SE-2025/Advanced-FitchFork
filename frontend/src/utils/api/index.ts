@@ -1,24 +1,40 @@
+import type { ApiResponse } from "@/types/common";
+
 /**
  * Base URL used for all API requests.
  */
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 
 /**
- * Standardized shape for all API responses.
- *
- * @template T - The expected type of the `data` payload.
+ * Serializes a flat or semi-structured object into a query string.
+ * Special handling is included for sort arrays (e.g. SortOption[]).
  */
-export interface ApiResponse<T> {
-  /** Indicates if the request was successful. */
-  success: boolean;
+export const buildQuery = (params: Record<string, any>): string => {
+  const query = new URLSearchParams();
 
-  /** The actual response data from the server. */
-  data: T;
+  for (const key in params) {
+    const value = params[key];
 
-  /** A human-readable message from the server. */
-  message: string;
-}
+    if (value === undefined || value === null) continue;
 
+    // Special case for sort: SortOption[]
+    if (key === "sort" && Array.isArray(value)) {
+      const sortString = value
+        .map((s: { field: string; order: "ascend" | "descend" }) =>
+          s.order === "descend" ? `-${s.field}` : s.field
+        )
+        .join(",");
+      if (sortString) query.append("sort", sortString);
+    }
+
+    // Everything else: normal flat values
+    else {
+      query.append(key, value.toString());
+    }
+  }
+
+  return query.toString();
+};
 /**
  * A wrapper around `fetch` for JSON-based API requests.
  *

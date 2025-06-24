@@ -1,9 +1,9 @@
 import { Card, Space, Tag, Typography } from 'antd';
 import { CalendarOutlined, ClockCircleOutlined, FileTextOutlined } from '@ant-design/icons';
-import type { Assignment } from '@/types/assignments';
 
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import type { Assignment } from '@/types/modules/assignments';
 dayjs.extend(relativeTime);
 
 const { Text, Paragraph } = Typography;

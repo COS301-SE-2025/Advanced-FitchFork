@@ -1,10 +1,15 @@
-import { AuthService } from '@/services/auth';
-import { ModulesService } from '@/services/modules';
-import type { AuthUser, LoginRequest, RegisterRequest } from '@/types/auth';
+import type { AuthUser, PostLoginResponse, PostRegisterResponse } from '@/types/auth';
 import type { User } from '@/types/users';
 import type { Module, ModuleRole } from '@/types/modules';
-import { API_BASE_URL, type ApiResponse } from '@/utils/api';
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import type { ApiResponse } from '@/types/common';
+import { API_BASE_URL } from '@/utils/api';
+import { getMyModules } from '@/services/modules';
+import {
+  getAuthenticatedUser,
+  login as loginService,
+  register as registerService,
+} from '@/services/auth';
 
 interface UserModuleRole extends Module {
   role: ModuleRole;
@@ -25,8 +30,12 @@ interface AuthContextType {
   setProfilePictureUrl: (url: string | null) => void;
 
   // core actions
-  login: (credentials: LoginRequest) => Promise<ApiResponse<AuthUser | null>>;
-  register: (details: RegisterRequest) => Promise<ApiResponse<AuthUser | null>>;
+  login: (student_number: string, password: string) => Promise<PostLoginResponse>;
+  register: (
+    student_number: string,
+    email: string,
+    password: string,
+  ) => Promise<PostRegisterResponse>;
   logout: () => void;
   isExpired: () => boolean;
 
@@ -64,13 +73,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
           }
 
-          const meRes = await AuthService.me();
+          const meRes = await getAuthenticatedUser();
           if (meRes.success && meRes.data) {
             const userData = meRes.data;
             setUser(userData);
             setProfilePictureUrl(`${API_BASE_URL}/auth/avatar/${userData.id}?bust=${Date.now()}`);
 
-            const modRes = await ModulesService.getMyModules();
+            const modRes = await getMyModules();
             if (modRes.success && modRes.data) {
               const grouped = modRes.data;
 
@@ -111,9 +120,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadUser();
   }, []);
 
-  const login = async (credentials: LoginRequest): Promise<ApiResponse<AuthUser | null>> => {
+  const login = async (
+    student_number: string,
+    password: string,
+  ): Promise<ApiResponse<AuthUser | null>> => {
     try {
-      const res = await AuthService.login(credentials);
+      const res = await loginService(student_number, password);
       if (res.success && res.data) {
         const { token, expires_at, ...user } = res.data;
 
@@ -127,13 +139,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }),
         );
 
-        const meRes = await AuthService.me();
+        const meRes = await getAuthenticatedUser();
         if (meRes.success && meRes.data) {
           const userData = meRes.data;
           setUser(userData);
           setProfilePictureUrl(`${API_BASE_URL}/auth/avatar/${userData.id}?bust=${Date.now()}`);
 
-          const modRes = await ModulesService.getMyModules();
+          const modRes = await getMyModules();
           if (modRes.success && modRes.data) {
             const grouped = modRes.data;
 
@@ -175,9 +187,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (details: RegisterRequest): Promise<ApiResponse<AuthUser | null>> => {
+  const register = async (
+    student_number: string,
+    email: string,
+    password: string,
+  ): Promise<ApiResponse<AuthUser | null>> => {
     try {
-      return await AuthService.register(details);
+      return await registerService(student_number, email, password);
     } catch (err: any) {
       return {
         success: false,

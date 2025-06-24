@@ -4,10 +4,14 @@ import { Tabs, Spin, Alert } from 'antd';
 
 import { useModule } from '@/context/ModuleContext';
 import { AssignmentProvider } from '@/context/AssignmentContext';
-import { AssignmentsService } from '@/services/assignments';
-import type { AssignmentDetailsResponse } from '@/types/assignments';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import PageHeader from '@/components/PageHeader';
+import { getAssignmentDetails } from '@/services/modules/assignments';
+import type { Assignment, AssignmentFile } from '@/types/modules/assignments';
+
+interface AssignmentDetails extends Assignment {
+  files: AssignmentFile[];
+}
 
 const AssignmentLayout = () => {
   const module = useModule();
@@ -16,7 +20,7 @@ const AssignmentLayout = () => {
   const location = useLocation();
   const { setBreadcrumbLabel } = useBreadcrumbContext();
 
-  const [assignment, setAssignment] = useState<AssignmentDetailsResponse | null>(null);
+  const [assignment, setAssignment] = useState<AssignmentDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +39,7 @@ const AssignmentLayout = () => {
   useEffect(() => {
     const loadAssignment = async () => {
       setLoading(true);
-      const res = await AssignmentsService.getAssignmentDetails(module.id, assignmentIdNum);
+      const res = await getAssignmentDetails(module.id, assignmentIdNum);
       if (res.success && res.data) {
         setAssignment(res.data);
         setError(null);

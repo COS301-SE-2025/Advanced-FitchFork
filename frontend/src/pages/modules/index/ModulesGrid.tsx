@@ -7,8 +7,9 @@ import {
   CheckOutlined,
 } from '@ant-design/icons';
 import ModuleCard from '@/components/modules/ModuleCard';
-import type { UserModuleRole, ModuleRole } from '@/types/modules';
+import { MODULE_ROLES, type ModuleRole } from '@/types/modules';
 import PageHeader from '@/components/PageHeader';
+import type { Module } from '@/types/modules';
 
 const { Search } = Input;
 const { Title } = Typography;
@@ -26,7 +27,9 @@ const filterOptions = [
   { key: '2025', label: '2025' },
 ];
 
-const roleFilterOptions: ModuleRole[] = ['Student', 'Tutor', 'Lecturer'];
+interface UserModuleRole extends Module {
+  role: ModuleRole;
+}
 
 interface Props {
   title: string;
@@ -178,7 +181,7 @@ const ModulesGrid = ({ title, modules }: Props) => {
     ),
   }));
 
-  const roleFilterMenuItems: MenuProps['items'] = roleFilterOptions.map((role) => ({
+  const roleFilterMenuItems: MenuProps['items'] = MODULE_ROLES.map((role) => ({
     key: role,
     label: (
       <div

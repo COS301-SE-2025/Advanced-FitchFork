@@ -3,16 +3,18 @@ import { CalendarOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useModule } from '@/context/ModuleContext';
-import { AssignmentsService } from '@/services/assignments';
 import { useNotifier } from '@/components/Notifier';
 import { useTableQuery } from '@/hooks/useTableQuery';
 import dayjs from 'dayjs';
-import type { Assignment, AssignmentType } from '@/types/assignments';
 import PageHeader from '@/components/PageHeader';
+import { listAssignments } from '@/services/modules/assignments';
+import {
+  type AssignmentType,
+  type Assignment,
+  ASSIGNMENT_TYPES,
+} from '@/types/modules/assignments';
 
 const { Search } = Input;
-
-const ASSIGNMENT_TYPES: AssignmentType[] = ['Assignment', 'Practical'];
 
 const statusColorMap: Record<string, string> = {
   Submitted: 'green',
@@ -41,7 +43,7 @@ const ModuleAssignmentsList = () => {
 
   const fetchAssignments = async () => {
     setLoading(true);
-    const res = await AssignmentsService.listAssignments(module.id, {
+    const res = await listAssignments(module.id, {
       page: pagination.current,
       per_page: pagination.pageSize,
       query: searchTerm,
