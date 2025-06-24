@@ -1,0 +1,10 @@
+javac … && java Main task2
+&-=-&Sub1
+Memo line D1
+Memo line D2
+&-=-&Sub2
+Memo line E1
+Memo line E2
+&-=-&Sub3
+Memo line F1
+Memo line F2

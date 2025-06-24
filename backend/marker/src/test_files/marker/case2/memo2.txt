@@ -1,0 +1,7 @@
+echo task2
+&-=-&Sub2.1
+alpha
+alpha
+&-=-&Sub2.2
+beta
+beta

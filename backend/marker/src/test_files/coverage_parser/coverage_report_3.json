@@ -1,0 +1,11 @@
+{
+  "generated_at": "2025-06-20T12:10:00+02:00",
+  "files": [
+    {
+      "path": "src/lib.rs",
+      "total_lines": 50,
+      "covered_lines": 25,
+      "coverage_percent": 50.0
+    }
+  ]
+}

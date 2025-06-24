@@ -1,0 +1,16 @@
+{
+  "generated_at": "2025-06-20T12:20:00+02:00",
+  "summary": {
+    "total_files": 1,
+    "total_lines": 120,
+    "covered_lines": 96,
+    "coverage_percent": 80.0
+  },
+  "files": [
+    {
+      "total_lines": 120,
+      "covered_lines": 96,
+      "coverage_percent": 80.0
+    }
+  ]
+}
