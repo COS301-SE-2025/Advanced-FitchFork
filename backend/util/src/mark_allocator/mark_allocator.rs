@@ -22,6 +22,23 @@ impl From<serde_json::Error> for SaveError {
 
 #[allow(dead_code)]
 const SEPARATOR: &str = "&-=-&";
+/// Generates a mark allocator JSON structure by reading memo output files from
+/// the specified module and assignment directories.
+/// 
+/// Reads all files in the `memo_output` folder corresponding to the module and assignment,
+/// parses lines to count marks and subsections, and constructs a JSON structure with
+/// tasks and their subsections. The resulting JSON is saved to an `allocator.json` file
+/// in the `mark_allocator` folder.
+///
+/// # Arguments
+///
+/// * `module` - The module id.
+/// * `assignment` - The assignment id.
+///
+/// # Returns
+///
+/// * `Ok(Value)` - A JSON `Value` representing the generated allocator data.
+/// * `Err(SaveError)` - An error if directory/file operations or JSON serialization fail.
 
 pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, SaveError> {
     let path = format!(
@@ -108,6 +125,17 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
     Ok(final_json)
 }
 
+/// Loads the allocator JSON file for the given module and assignment.
+///
+/// # Arguments
+///
+/// * `module` - The module id.
+/// * `assignment` - The assignment id.
+///
+/// # Returns
+///
+/// * `Ok(Value)` - The parsed JSON allocator data.
+/// * `Err(SaveError)` - If the file or directory does not exist or parsing JSON fails.
 pub async fn load_allocator(module: i64, assignment: i64) -> Result<Value, SaveError> {
     let path = format!(
         "./data/assignment_files/module_{}/assignment_{}/mark_allocator/allocator.json",
@@ -125,6 +153,20 @@ pub async fn load_allocator(module: i64, assignment: i64) -> Result<Value, SaveE
     let json_value = from_str::<Value>(&json_str)?;
     Ok(json_value)
 }
+
+/// Saves a JSON allocator object to the allocator.json file for the specified module and assignment.
+/// This will overwrite any existing allocator.json file at the target path.
+///
+/// # Arguments
+///
+/// * `module` - The module number.
+/// * `assignment` - The assignment number.
+/// * `json` - The JSON data to save.
+///
+/// # Returns
+///
+/// * `Ok(())` - On successful write.
+/// * `Err(SaveError)` - If file creation fails or JSON serialization fails.
 pub async fn save_allocator(module: i64, assignment: i64, json: Value) -> Result<(), SaveError> {
     let allocator_path = format!(
         "./data/assignment_files/module_{}/assignment_{}/mark_allocator/allocator.json",
