@@ -250,7 +250,7 @@ pub async fn run_all_zips_with_command(
         .arg(format!("--pids-limit={}", config.max_processes))
         .arg("--security-opt=no-new-privileges")
         .arg("-v")
-        .arg(format!("{}:/code:ro", code_path.display()))
+        .arg(format!("{}:/code:rw", code_path.display()))
         .arg("-v")
         .arg(format!("{}:/output", output_path.display()))
         .arg("universal-runner")
