@@ -398,15 +398,35 @@ std::string HelperThree::subtaskAlpha() {
                 let options = FileOptions::default().unix_permissions(0o644);
 
                 let makefile_content = r#"
-task1:
-	g++ -o /output/main Main.cpp HelperOne.cpp HelperTwo.cpp HelperThree.cpp && /output/main task1
+CXX = g++
+CXXFLAGS = -fprofile-arcs -ftest-coverage -O0 -std=c++17
+LDFLAGS = -lgcov
 
-task2:
-	g++ -o /output/main Main.cpp HelperOne.cpp HelperTwo.cpp HelperThree.cpp && /output/main task2
+SRC = Main.cpp HelperOne.cpp HelperTwo.cpp HelperThree.cpp
+OBJ = Main.o HelperOne.o HelperTwo.o HelperThree.o
 
-task3:
-	g++ -o /output/main Main.cpp HelperOne.cpp HelperTwo.cpp HelperThree.cpp && /output/main task3
+OUTPUT = main
 
+main: $(OBJ)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+task1: main
+	./main task1
+
+task2: main
+	./main task2
+
+task3: main
+	./main task3
+
+task4: main
+	./main task1
+	./main task2
+	./main task3
+	gcov $(SRC)
 "#;
 
                 zip.start_file("Makefile", options).unwrap();

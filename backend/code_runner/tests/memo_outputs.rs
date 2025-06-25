@@ -60,7 +60,11 @@ async fn seed_assignment(db: &DatabaseConnection, assignment_id: i64, module_id:
 }
 
 async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
-    let tasks = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
+    let mut tasks = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
+
+    if assignment_id == 9998 {
+        tasks.push((4, "make task4"));
+    }
 
     for (task_number, command) in tasks {
         AssignmentTaskModel::create(db, assignment_id, task_number, command)
