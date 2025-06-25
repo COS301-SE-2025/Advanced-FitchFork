@@ -17,8 +17,10 @@ use serde_json::json;
 
 use db::{
     connect,
-    models::{assignment, assignment_file},
+    models::{assignment::{self}, assignment_file, assignment_task},
 };
+
+use crate::response::ApiResponse;
 
 /// Deletes a specific assignment and its associated files and folder.
 ///
@@ -139,4 +141,64 @@ pub async fn delete_files(
             "message": "Files removed successfully"
         })),
     )
+}
+
+/// Deletes a specific task from an assignment.
+///
+/// # Path parameters
+/// - `module_id`: ID of the module to which the assignment belongs
+/// - `assignment_id`: ID of the assignment containing the task
+/// - `task_id`: ID of the task to delete
+///
+/// # Returns
+/// - `200 OK` if the task was deleted successfully
+/// - `404 NOT FOUND` if the assignment/module or task was not found
+/// - `500 INTERNAL SERVER ERROR` on database error 
+ 
+pub async fn delete_task(
+    Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
+) -> impl IntoResponse {
+    let db = connect().await;
+
+    let assignment = assignment::Entity::find()
+        .filter(assignment::Column::Id.eq(assignment_id as i32))
+        .filter(assignment::Column::ModuleId.eq(module_id as i32))
+        .one(&db)
+        .await;
+
+    match assignment {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment or module not found")),
+            )
+                .into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response();
+        }
+    }
+
+    match assignment_task::Model::delete(&db, task_id).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::success((), "Task deleted successfully")),
+        )
+            .into_response(),
+        Err(DbErr::RecordNotFound(_)) => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("Task not found")),
+        )
+            .into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error("Failed to delete task")),
+        )
+            .into_response(),
+    }
 }
