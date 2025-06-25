@@ -22,9 +22,9 @@ export default function Login() {
   const [form] = Form.useForm();
   const [formError, setFormError] = useState<string | null>(null);
 
-  const handleFinish = async (values: { student_number: string; password: string }) => {
+  const handleFinish = async (values: { username: string; password: string }) => {
     setFormError(null);
-    const res = await login(values.student_number, values.password);
+    const res = await login(values.username, values.password);
     if (res.success) {
       navigate('/home');
     } else {
@@ -70,9 +70,9 @@ export default function Login() {
               size="large"
             >
               <Form.Item
-                label={<span className="text-sm sm:text-base">Student Number</span>}
+                label={<span className="text-sm sm:text-base">Username</span>}
                 name="username"
-                rules={[{ required: true, message: 'Please enter your student number' }]}
+                rules={[{ required: true, message: 'Please enter your username' }]}
               >
                 <Input placeholder="u00000001" />
               </Form.Item>

@@ -28,7 +28,7 @@ export interface CodeCoverageEntry {
 export interface SubmissionUserInfo {
   id: number;
   email: string;
-  student_number: string;
+  username: string;
 }
 
 export interface SubmissionDetailBase extends Timestamp {

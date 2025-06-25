@@ -1,8 +1,20 @@
 import type { ApiResponse } from "@/types/common";
-import type { ExecutionConfig } from "./shared";
+import type { AssignmentConfig } from "./shared";
 
 // ─────────────────────────────────────────────────────────────
 // GET Responses Types
 // ─────────────────────────────────────────────────────────────
 
-export type GetExecutionConfigResponse = ApiResponse<ExecutionConfig>;
+export type GetAssignmentConfigResponse = ApiResponse<AssignmentConfig>;
+
+// ─────────────────────────────────────────────────────────────
+// POST Responses Types
+// ─────────────────────────────────────────────────────────────
+
+export type PostAssignmentConfigResponse = ApiResponse<AssignmentConfig>;
+
+// ─────────────────────────────────────────────────────────────
+// PUT Responses Types
+// ─────────────────────────────────────────────────────────────
+
+export type UpdateAssignmentConfigResponse = ApiResponse<null>;

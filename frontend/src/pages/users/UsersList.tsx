@@ -119,11 +119,7 @@ const UsersList = () => {
     const { username, email } = formValues;
 
     try {
-      const res = await AuthService.register({
-        username,
-        email,
-        password: 'changeme123',
-      });
+      const res = await register(username, email, 'changeme123');
 
       if (res.success) {
         notifySuccess('User registered successfully', res.message);
@@ -195,7 +191,7 @@ const UsersList = () => {
 
   const columns: ColumnsType<User> = [
     {
-      title: 'Student Number',
+      title: 'Username',
       dataIndex: 'username',
       key: 'username',
       render: (_, record) =>
@@ -214,7 +210,7 @@ const UsersList = () => {
       filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
         <div className="flex flex-col gap-2 p-2 w-56">
           <Input
-            placeholder="Search student number"
+            placeholder="Search username"
             value={selectedKeys[0]}
             onChange={(e) => setSelectedKeys([e.target.value])}
             onPressEnter={() => confirm()}
@@ -424,7 +420,7 @@ const UsersList = () => {
           { key: 'clear-filters', label: 'Clear Filters', onClick: clearFilters },
           { key: 'clear-all', label: 'Clear All', onClick: clearAll },
         ]}
-        searchPlaceholder="Search email or student number"
+        searchPlaceholder="Search email or username"
         bulkDeleteConfirmMessage="Delete selected users?"
       />
 
@@ -500,7 +496,7 @@ const UsersList = () => {
         onCreate={handleSubmitNewUser} // now gets the modal form values
         title="Add User"
         fields={[
-          { name: 'username', label: 'Student Number', type: 'text', required: true },
+          { name: 'username', label: 'Username', type: 'text', required: true },
           { name: 'email', label: 'Email', type: 'email', required: true },
         ]}
         initialValues={newUser}

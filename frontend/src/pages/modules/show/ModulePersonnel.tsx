@@ -183,11 +183,11 @@ const ModulePersonnel = () => {
   ): TableProps<TableTransferItem>['columns'] => [
     {
       dataIndex: 'username',
-      title: 'Student Number',
+      title: 'Username',
       filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
         <div style={{ padding: 8 }}>
           <Input
-            placeholder="Filter by student number"
+            placeholder="Filter by username"
             value={selectedKeys[0]}
             onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
             onPressEnter={() => {

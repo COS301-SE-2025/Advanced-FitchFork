@@ -149,7 +149,7 @@ const Account = () => {
         </div>
 
         <div>
-          <label className="block font-medium mb-1 mt-6">Student Number</label>
+          <label className="block font-medium mb-1 mt-6">Username</label>
           <Input
             size="large"
             value={user?.username || 'u12345678'}

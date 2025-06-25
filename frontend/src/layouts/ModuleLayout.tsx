@@ -82,7 +82,7 @@ const ModuleLayout = () => {
       .sort((a, b) => b.length - a.length)[0] ?? '';
 
   return (
-    <Layout className="!bg-white dark:!bg-gray-950 min-h-[calc(100vh-64px)]">
+    <Layout className="!bg-white dark:!bg-gray-950 h-full">
       {isMobile ? (
         <div className="w-full px-4 pt-4 bg-white dark:bg-gray-950">
           <Tabs
