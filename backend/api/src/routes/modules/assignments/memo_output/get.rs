@@ -7,7 +7,6 @@ use std::{env, fs, path::PathBuf};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 use axum::body::Body;
-use axum::response::IntoResponseParts;
 
 /// Retrieves the generated memo output file for a given assignment.
 ///
@@ -45,7 +44,7 @@ pub async fn get_memo_output_file(
             .into_response();
     }
 
-    let mut entries = match fs::read_dir(&output_dir) {
+    let entries = match fs::read_dir(&output_dir) {
         Ok(entries) => entries.filter_map(Result::ok).collect::<Vec<_>>(),
         Err(_) => {
             return (
