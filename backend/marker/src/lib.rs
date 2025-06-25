@@ -22,6 +22,7 @@ pub mod comparators;
 
 use std::path::PathBuf;
 use crate::comparators::percentage_comparator::PercentageComparator;
+use crate::feedback::auto_feedback::AutoFeedback;
 use crate::error::MarkerError;
 use crate::traits::parser::Parser;
 use crate::utilities::file_loader::load_files;
@@ -45,6 +46,7 @@ use chrono::Utc;
 /// - `coverage_report`: Optional path to a code coverage report.
 /// - `complexity_report`: Optional path to a code complexity report.
 /// - `comparator`: Strategy for comparing outputs (e.g., percentage, exact).
+/// - `feedback`: Automated feedback generation for each subtask.
 pub struct MarkingJob<'a> {
     memo_outputs: Vec<PathBuf>,
     student_outputs: Vec<PathBuf>,
@@ -52,6 +54,7 @@ pub struct MarkingJob<'a> {
     coverage_report: Option<PathBuf>,
     complexity_report: Option<PathBuf>,
     comparator: Box<dyn OutputComparator + 'a>,
+    feedback: Box<dyn Feedback + Send + Sync + 'a>,
 }
 
 impl<'a> MarkingJob<'a> {
@@ -73,6 +76,7 @@ impl<'a> MarkingJob<'a> {
             coverage_report: None,
             complexity_report: None,
             comparator: Box::new(PercentageComparator),
+            feedback: Box::new(AutoFeedback),
         }
     }
 
@@ -103,6 +107,15 @@ impl<'a> MarkingJob<'a> {
         self
     }
 
+    /// Set a custom feedback strategy for this marking job.
+    ///
+    /// # Arguments
+    /// * `feedback` - An implementation of the `Feedback` trait.
+    pub fn with_feedback<F: Feedback + Send + Sync + 'a>(mut self, feedback: F) -> Self {
+        self.feedback = Box::new(feedback);
+        self
+    }
+
     /// Run the marking process and generate a report.
     ///
     /// # Returns
@@ -116,7 +129,7 @@ impl<'a> MarkingJob<'a> {
     /// 4. Compares outputs using the configured comparator for each subtask.
     /// 5. Aggregates results and generates automated feedback.
     /// 6. Builds a detailed report with scores and feedback per task/subtask.
-    pub fn mark(self) -> Result<MarkReportResponse, MarkerError> {
+    pub async fn mark(self) -> Result<MarkReportResponse, MarkerError> {
         let files = load_files(
             self.memo_outputs,
             self.student_outputs,
@@ -200,7 +213,7 @@ impl<'a> MarkingJob<'a> {
             per_task_scores.push((task_earned, task_possible));
         }
 
-        let feedback_entries = crate::feedback::auto_feedback::AutoFeedback.assemble_feedback(&all_results)?;
+        let feedback_entries = self.feedback.assemble_feedback(&all_results).await?;
         let mut feedback_iter = feedback_entries.iter();
 
         let mut report_tasks: Vec<crate::report::ReportTask> = Vec::new();
@@ -254,8 +267,8 @@ mod tests {
         DateTime::parse_from_rfc3339(s).is_ok()
     }
 
-    #[test]
-    fn test_marker_happy_path() {
+    #[tokio::test]
+    async fn test_marker_happy_path() {
         let dir = "src/test_files/marker/case1";
         let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
         let student_outputs = vec![PathBuf::from(format!("{}/student1.txt", dir))];
@@ -267,7 +280,7 @@ mod tests {
             allocation_json,
         );
 
-        let result = job.mark();
+        let result = job.mark().await;
         assert!(result.is_ok(), "Marking should succeed");
 
         let response = result.unwrap();
@@ -294,8 +307,8 @@ mod tests {
         assert!(!sub.feedback.is_empty(), "Feedback should not be empty");
     }
 
-    #[test]
-    fn test_marker_happy_path_case2() {
+    #[tokio::test]
+    async fn test_marker_happy_path_case2() {
         let dir = "src/test_files/marker/case2";
         let memo_outputs = vec![
             PathBuf::from(format!("{}/memo1.txt", dir)),
@@ -313,7 +326,7 @@ mod tests {
             allocation_json,
         );
 
-        let result = job.mark();
+        let result = job.mark().await;
         assert!(result.is_ok(), "Marking should succeed");
 
         let response = result.unwrap();
@@ -357,8 +370,8 @@ mod tests {
         assert!(!task2.subsections[1].feedback.is_empty());
     }
 
-    #[test]
-    fn test_marker_edge_cases_partial_and_empty() {
+    #[tokio::test]
+    async fn test_marker_edge_cases_partial_and_empty() {
         let dir = "src/test_files/marker/case3";
         let memo_outputs = vec![
             PathBuf::from(format!("{}/memo1.txt", dir)),
@@ -376,7 +389,7 @@ mod tests {
             allocation_json,
         );
 
-        let result = job.mark();
+        let result = job.mark().await;
         assert!(result.is_ok(), "Marking should succeed");
 
         let response = result.unwrap();
@@ -414,8 +427,8 @@ mod tests {
         assert_eq!(report.mark.total, 30);
     }
 
-    #[test]
-    fn test_marker_mixed_partial_extra_and_order() {
+    #[tokio::test]
+    async fn test_marker_mixed_partial_extra_and_order() {
         let dir = "src/test_files/marker/case4";
         let memo_outputs = vec![
             PathBuf::from(format!("{}/memo1.txt", dir)),
@@ -433,7 +446,7 @@ mod tests {
             allocation_json,
         );
 
-        let result = job.mark();
+        let result = job.mark().await;
         assert!(result.is_ok(), "Marking should succeed");
 
         let response = result.unwrap();
@@ -480,8 +493,8 @@ mod tests {
         assert_eq!(report.mark.total, 30);
     }
 
-    #[test]
-    fn test_marker_whitespace_case_and_duplicates() {
+    #[tokio::test]
+    async fn test_marker_whitespace_case_and_duplicates() {
         let dir = "src/test_files/marker/case5";
         let memo_outputs = vec![
             PathBuf::from(format!("{}/memo1.txt", dir)),
@@ -499,7 +512,7 @@ mod tests {
             allocation_json,
         );
 
-        let result = job.mark();
+        let result = job.mark().await;
         assert!(result.is_ok(), "Marking should succeed");
 
         let response = result.unwrap();
@@ -546,8 +559,8 @@ mod tests {
         assert_eq!(report.mark.total, 30);
     }
 
-    #[test]
-    fn test_marker_error_handling_mismatched_subsections() {
+    #[tokio::test]
+    async fn test_marker_error_handling_mismatched_subsections() {
         let dir = "src/test_files/marker/case6";
         let memo_outputs = vec![
             PathBuf::from(format!("{}/memo1.txt", dir)),
@@ -563,7 +576,7 @@ mod tests {
             allocation_json,
         );
 
-        let result = job.mark();
+        let result = job.mark().await;
         assert!(result.is_err(), "Marking should fail due to mismatched subsection count");
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -575,8 +588,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_marker_error_handling_missing_file() {
+    #[tokio::test]
+    async fn test_marker_error_handling_missing_file() {
         let dir = "src/test_files/marker/case6";
         let memo_outputs = vec![
             PathBuf::from(format!("{}/memo1.txt", dir)),
@@ -593,7 +606,7 @@ mod tests {
             allocation_json,
         );
 
-        let result = job.mark();
+        let result = job.mark().await;
         assert!(result.is_err(), "Marking should fail due to missing student file");
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -604,8 +617,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_marker_error_handling_invalid_allocator_json() {
+    #[tokio::test]
+    async fn test_marker_error_handling_invalid_allocator_json() {
         let dir = "src/test_files/marker/case7";
         let memo_outputs = vec![
             PathBuf::from(format!("{}/memo1.txt", dir)),
@@ -621,7 +634,7 @@ mod tests {
             allocation_json,
         );
 
-        let result = job.mark();
+        let result = job.mark().await;
         assert!(result.is_err(), "Marking should fail due to invalid allocator JSON");
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -634,8 +647,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_marker_error_handling_invalid_memo_format() {
+    #[tokio::test]
+    async fn test_marker_error_handling_invalid_memo_format() {
         let dir = "src/test_files/marker/case8";
         let memo_outputs = vec![
             PathBuf::from(format!("{}/memo1.txt", dir)),
@@ -651,7 +664,7 @@ mod tests {
             allocation_json,
         );
 
-        let result = job.mark();
+        let result = job.mark().await;
         assert!(result.is_err(), "Marking should fail due to invalid memo output format");
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -664,8 +677,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_marker_error_handling_empty_student_output() {
+    #[tokio::test]
+    async fn test_marker_error_handling_empty_student_output() {
         let dir = "src/test_files/marker/case9";
         let memo_outputs = vec![
             PathBuf::from(format!("{}/memo1.txt", dir)),
@@ -681,7 +694,7 @@ mod tests {
             allocation_json,
         );
 
-        let result = job.mark();
+        let result = job.mark().await;
         // The marker may either return Ok with 0 marks, or an error if it expects at least one delimiter.
         match result {
             Ok(response) => {
