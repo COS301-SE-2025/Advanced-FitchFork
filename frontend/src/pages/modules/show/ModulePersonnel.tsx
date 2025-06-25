@@ -22,7 +22,7 @@ import {
 
 interface TableTransferItem {
   key: string;
-  student_number: string;
+  username: string;
   email: string;
   title: string;
   description: string;
@@ -58,7 +58,7 @@ const ModulePersonnel = () => {
         per_page: available.pagination.pageSize,
         query: available.searchTerm,
         email: available.filterState.email?.[0],
-        student_number: available.filterState.student_number?.[0],
+        username: available.filterState.username?.[0],
       });
 
       const assignedRes = await {
@@ -70,17 +70,17 @@ const ModulePersonnel = () => {
         per_page: assigned.pagination.pageSize,
         query: assigned.searchTerm,
         email: assigned.filterState.email?.[0],
-        student_number: assigned.filterState.student_number?.[0],
+        username: assigned.filterState.username?.[0],
       });
 
       if (eligibleRes.success) {
         setEligibleUsers(
           eligibleRes.data.users.map((u) => ({
             key: String(u.id),
-            student_number: u.student_number,
+            username: u.username,
             email: u.email,
             title: u.email,
-            description: u.student_number,
+            description: u.username,
           })),
         );
         available.setPagination({ total: eligibleRes.data.total });
@@ -92,10 +92,10 @@ const ModulePersonnel = () => {
         setAssignedUsers(
           assignedRes.data.users.map((u) => ({
             key: String(u.id),
-            student_number: u.student_number,
+            username: u.username,
             email: u.email,
             title: u.email,
-            description: u.student_number,
+            description: u.username,
             role: selectedRole, // <- add this line
           })),
         );
@@ -121,12 +121,12 @@ const ModulePersonnel = () => {
     available.pagination.pageSize,
     available.searchTerm,
     available.filterState.email,
-    available.filterState.student_number,
+    available.filterState.username,
     assigned.pagination.current,
     assigned.pagination.pageSize,
     assigned.searchTerm,
     assigned.filterState.email,
-    assigned.filterState.student_number,
+    assigned.filterState.username,
   ]);
 
   const handleTransferChange = async (
@@ -182,7 +182,7 @@ const ModulePersonnel = () => {
     state: ReturnType<typeof useTableQuery>,
   ): TableProps<TableTransferItem>['columns'] => [
     {
-      dataIndex: 'student_number',
+      dataIndex: 'username',
       title: 'Student Number',
       filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
         <div style={{ padding: 8 }}>
@@ -194,7 +194,7 @@ const ModulePersonnel = () => {
               confirm();
               state.setFilterState({
                 ...state.filterState,
-                student_number: [selectedKeys[0] as string],
+                username: [selectedKeys[0] as string],
               });
             }}
             style={{ width: 188, marginBottom: 8, display: 'block' }}
@@ -205,7 +205,7 @@ const ModulePersonnel = () => {
                 confirm();
                 state.setFilterState({
                   ...state.filterState,
-                  student_number: [selectedKeys[0] as string],
+                  username: [selectedKeys[0] as string],
                 });
               }}
             >
@@ -214,7 +214,7 @@ const ModulePersonnel = () => {
             <a
               onClick={() => {
                 clearFilters?.();
-                state.setFilterState({ ...state.filterState, student_number: [] });
+                state.setFilterState({ ...state.filterState, username: [] });
               }}
             >
               Reset

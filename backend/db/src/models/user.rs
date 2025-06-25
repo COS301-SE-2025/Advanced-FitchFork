@@ -25,7 +25,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
     /// Unique student number.
-    pub student_number: String,
+    pub username: String,
     /// User's unique email address.
     pub email: String,
     /// Securely hashed password string.
@@ -71,20 +71,20 @@ impl Model {
     ///
     /// # Arguments
     /// * `db` - Database connection reference.
-    /// * `student_number` - Unique student number.
+    /// * `username` - Unique student number.
     /// * `email` - Email address.
     /// * `password` - Plaintext password to hash.
     /// * `admin` - Whether the user is an admin.
     pub async fn create(
         db: &DatabaseConnection,
-        student_number: &str,
+        username: &str,
         email: &str,
         password: &str,
         admin: bool,
     ) -> Result<Model, DbErr> {
         let hash = Self::hash_password(password);
         let active = UserActiveModel {
-            student_number: Set(student_number.to_owned()),
+            username: Set(username.to_owned()),
             email: Set(email.to_owned()),
             password_hash: Set(hash),
             admin: Set(admin),
@@ -97,16 +97,16 @@ impl Model {
     ///
     /// # Arguments
     /// * `db` - Database connection.
-    /// * `student_number` - The student number to look up.
+    /// * `username` - The student number to look up.
     ///
     /// # Returns
     /// An optional user model if found.
-    pub async fn get_by_student_number(
+    pub async fn get_by_username(
         db: &DatabaseConnection,
-        student_number: &str,
+        username: &str,
     ) -> Result<Option<Model>, DbErr> {
         UserEntity::find()
-            .filter(user::Column::StudentNumber.eq(student_number))
+            .filter(user::Column::Username.eq(username))
             .one(db)
             .await
     }
@@ -115,17 +115,17 @@ impl Model {
     ///
     /// # Arguments
     /// * `db` - Database connection.
-    /// * `student_number` - The student number of the user.
+    /// * `username` - The student number of the user.
     /// * `password` - The plaintext password to verify.
     ///
     /// # Returns
     /// The user model if credentials are valid.
     pub async fn verify_credentials(
         db: &DatabaseConnection,
-        student_number: &str,
+        username: &str,
         password: &str,
     ) -> Result<Option<Model>, DbErr> {
-        if let Some(user) = Self::get_by_student_number(db, student_number).await? {
+        if let Some(user) = Self::get_by_username(db, username).await? {
             let parsed = PasswordHash::new(&user.password_hash)
                 .map_err(|e| DbErr::Custom(format!("Invalid hash: {}", e)))?;
             if Argon2::default()
@@ -228,42 +228,42 @@ mod tests {
     #[tokio::test]
     async fn test_create_and_get_user() {
         let db = setup_test_db().await;
-        let student_number = "u12345678";
+        let username = "u12345678";
         let email = "test@example.com";
         let password = "secret123";
 
-        let _user = Model::create(&db, student_number, email, password, false)
+        let _user = Model::create(&db, username, email, password, false)
             .await
             .expect("Failed to create user");
 
-        let found = Model::get_by_student_number(&db, student_number)
+        let found = Model::get_by_username(&db, username)
             .await
             .expect("Failed to query user");
 
         assert!(found.is_some());
         let found = found.unwrap();
         assert_eq!(found.email, email);
-        assert_eq!(found.student_number, student_number);
+        assert_eq!(found.username, username);
         assert_eq!(found.admin, false);
     }
 
     #[tokio::test]
     async fn test_verify_credentials_success_and_failure() {
         let db = setup_test_db().await;
-        let student_number = "u87654321";
+        let username = "u87654321";
         let email = "auth@example.com";
         let password = "correct_pw";
 
-        Model::create(&db, student_number, email, password, false)
+        Model::create(&db, username, email, password, false)
             .await
             .expect("Failed to create user");
 
-        let ok = Model::verify_credentials(&db, student_number, password)
+        let ok = Model::verify_credentials(&db, username, password)
             .await
             .expect("Failed to verify credentials");
         assert!(ok.is_some());
 
-        let bad = Model::verify_credentials(&db, student_number, "wrong_pw")
+        let bad = Model::verify_credentials(&db, username, "wrong_pw")
             .await
             .expect("Failed to verify wrong credentials");
         assert!(bad.is_none());

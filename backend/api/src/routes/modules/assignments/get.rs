@@ -610,7 +610,7 @@ pub async fn get_assignments(
 #[derive(Debug, Serialize)]
 pub struct PerStudentSubmission {
     pub user_id: i64,
-    pub student_number: String,
+    pub username: String,
     pub count: i8,
     pub latest_at: DateTime<Utc>,
     pub latest_late: bool
@@ -629,7 +629,20 @@ pub struct StatResponse {
 pub fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
 }
-
+/// Returns submission statistics for a specific assignment.
+///
+/// Computes total submissions, late submissions, unique submitters,
+/// and submission counts per student with timestamps.
+///
+/// ### Returns:
+/// - `200 OK` with submission stats if successful
+/// - `404 Not Found` if the assignment does not exist
+/// - `500 Internal Server Error` on database errors
+///
+/// ### Example `curl` request:
+/// ```bash
+/// curl -X GET http://localhost:3000/modules/1/assignments/2/stats
+/// ```
 pub async fn stats(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
     let db = connect().await;
 
@@ -691,11 +704,11 @@ pub async fn stats(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl I
                 .all(&db)
                 .await;
 
-            let mut user_id_to_student_number = HashMap::new();
+            let mut user_id_to_username = HashMap::new();
             match user_models {
                 Ok(users) => {
                     for user in users {
-                        user_id_to_student_number.insert(user.id, user.student_number);
+                        user_id_to_username.insert(user.id, user.username);
                     }
                 }
                 Err(err) => {
@@ -713,14 +726,14 @@ pub async fn stats(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl I
             for (user_id, created_times) in unique_users.iter() {
                 let latest_at = *created_times.iter().max().unwrap();
                 let latest_late = is_late(latest_at, assignment.due_date);
-                let student_number = user_id_to_student_number
+                let username = user_id_to_username
                     .get(user_id)
                     .cloned()
                     .unwrap_or_else(|| "UNKNOWN".to_string());
 
                 per_student_submission_count.push(PerStudentSubmission {
                     user_id: *user_id,
-                    student_number,
+                    username,
                     count: created_times.len() as i8,
                     latest_at,
                     latest_late,

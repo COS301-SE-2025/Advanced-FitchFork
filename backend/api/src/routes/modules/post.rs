@@ -59,7 +59,7 @@ pub struct ConflictData {
 #[derive(Debug, Serialize)]
 pub struct PersonnelResponse {
     pub id: i64,
-    pub student_number: String,
+    pub username: String,
     pub email: String,
     pub admin: bool,
     pub created_at: String,
@@ -70,7 +70,7 @@ impl From<db::models::user::Model> for PersonnelResponse {
     fn from(user: db::models::user::Model) -> Self {
         Self {
             id: user.id,
-            student_number: user.student_number,
+            username: user.username,
             email: user.email,
             admin: user.admin,
             created_at: user.created_at.to_rfc3339(),
