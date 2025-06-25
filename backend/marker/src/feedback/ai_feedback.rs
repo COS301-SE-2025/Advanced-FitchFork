@@ -129,9 +129,9 @@ impl Feedback for AiFeedback {
                 "All patterns matched".to_string()
             } else {
                 let prompt = format!(
-                    "For a task named '{}', the student missed the following patterns: {}. Please provide a short and concise hint to the student without giving away the answer.",
+                    "For a task named '{}', the student missed the following patterns:\n{}\nPlease provide a short and concise hint to the student without giving away the answer.",
                     result.name,
-                    result.missed_patterns.join(", ")
+                    result.missed_patterns.join("\n")
                 );
 
                 let request_body = GeminiRequest {

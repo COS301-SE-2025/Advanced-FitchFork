@@ -1,11 +1,12 @@
 mod config;
 pub mod delete;
 pub mod get;
-pub mod mark_allocator;
 pub mod post;
 pub mod put;
+pub mod mark_allocator;
 pub mod submissions;
 pub mod memo_output;
+pub mod tasks;
 
 use axum::{
     extract::Path,
@@ -21,6 +22,7 @@ use mark_allocator::mark_allocator_routes;
 use post::{create, upload_files};
 use put::edit_assignment;
 use submissions::submission_routes;
+use tasks::tasks_routes;
 
 use crate::{
     auth::guards::{require_assigned_to_module, require_lecturer, require_lecturer_or_admin},
@@ -48,6 +50,7 @@ use crate::{
 /// - `POST /assignments/:assignment_id/tasks`         → Create a new task (lecturer/admin only)
 /// - `GET  /assignments/:assignment_id/tasks`         → List tasks (lecturer/admin only)
 /// - `DELETE  /assignments/:assignment_id/tasks/:task_id`   → Delete a task (lecturer/admin only)
+/// - `GET  /assignments/:assignment_id/tasks/:task_id` → Get task details (lecturer/admin only)
 pub fn assignment_routes() -> Router {
     Router::new()
         .route("/", post(create))
@@ -101,6 +104,10 @@ pub fn assignment_routes() -> Router {
             delete(delete_task).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer_or_admin(Path(params), req, next)
             })),
+        )
+        .nest(
+            "/:assignment_id/tasks",
+            tasks_routes()
         )
         .route("/:assignment_id", delete(delete_assignment))
         .nest(
