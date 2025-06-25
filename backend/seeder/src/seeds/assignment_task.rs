@@ -27,7 +27,7 @@ impl Seeder for AssignmentTaskSeeder {
         ];
 
         for assignment in &assignments {
-            if assignment.id == 9999 {
+            if assignment.id == 9999 || assignment.id == 9998 {
                 continue;
             }
             let task_count = 2; // Number of tasks per assignment
@@ -60,6 +60,27 @@ impl Seeder for AssignmentTaskSeeder {
             match db::models::assignment_task::Model::create(
                 db,
                 special_assignment_id,
+                task_number,
+                command,
+            )
+            .await
+            {
+                Ok(_) => {}
+                Err(e) => eprintln!(
+                    "Failed to create special assignment task {}: {}",
+                    task_number, e
+                ),
+            }
+        }
+
+        let special_assignment_id2: i64 = 9998;
+
+        let special_tasks2 = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
+
+        for (task_number, command) in special_tasks2 {
+            match db::models::assignment_task::Model::create(
+                db,
+                special_assignment_id2,
                 task_number,
                 command,
             )

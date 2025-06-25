@@ -90,33 +90,27 @@ pub async fn create_memo_outputs_for_all_tasks(
     }
 
     for task in tasks {
-        // println!(
-        //     "\n--- Executing Task {}: {} ---",
-        //     task.task_number, task.command
-        // );
+        let filename = format!("task_{}_output.txt", task.task_number);
 
-        match run_all_zips_with_command(zip_paths.clone(), &config, &task.command).await {
-            Ok(output) => {
-                // println!("Task {} output captured.", task.task_number);
-
-                let filename = format!("task_{}_output.txt", task.task_number);
-                match MemoOutputModel::save_file(
-                    db,
-                    assignment_id,
-                    task.task_number,
-                    &filename,
-                    output.as_bytes(),
-                )
-                .await
-                {
-                    // Ok(saved) => println!("Saved output to: {}", saved.full_path().display()),
-                    Ok(_) => {}
-                    Err(e) => println!("Failed to save output: {}", e),
+        let output =
+            match run_all_zips_with_command(zip_paths.clone(), &config, &task.command).await {
+                Ok(output) => output,
+                Err(err) => {
+                    println!("Task {} failed:\n{}", task.task_number, err);
+                    err.to_string() // Save error as output
                 }
-            }
-            Err(err) => {
-                println!("Task {} failed:\n{}", task.task_number, err);
-            }
+            };
+
+        if let Err(e) = MemoOutputModel::save_file(
+            db,
+            assignment_id,
+            task.task_number,
+            &filename,
+            output.as_bytes(),
+        )
+        .await
+        {
+            println!("Failed to save output: {}", e);
         }
     }
 
@@ -194,34 +188,33 @@ pub async fn create_submission_outputs_for_all_tasks(
     }
 
     for task in tasks {
-        match run_all_zips_with_command(zip_paths.clone(), &config, &task.command).await {
-            Ok(output) => {
-                let filename = format!(
-                    "submission_task_{}_user_{}_attempt_{}.txt",
-                    task.task_number, user_id, attempt_number
-                );
+        let filename = format!(
+            "submission_task_{}_user_{}_attempt_{}.txt",
+            task.task_number, user_id, attempt_number
+        );
 
-                match SubmissionOutputModel::save_file(
-                    db,
-                    task.task_number,
-                    submission_id,
-                    &filename,
-                    output.as_bytes(),
-                )
-                .await
-                {
-                    Ok(_) => {}
-                    Err(e) => {
-                        println!("Failed to save submission output: {}", e);
-                    }
+        let output =
+            match run_all_zips_with_command(zip_paths.clone(), &config, &task.command).await {
+                Ok(output) => output,
+                Err(err) => {
+                    println!(
+                        "Task {} failed for user {} attempt {}:\n{}",
+                        task.task_number, user_id, attempt_number, err
+                    );
+                    err.to_string() // Save error as file content
                 }
-            }
-            Err(err) => {
-                println!(
-                    "Task {} failed for user {} attempt {}:\n{}",
-                    task.task_number, user_id, attempt_number, err
-                );
-            }
+            };
+
+        if let Err(e) = SubmissionOutputModel::save_file(
+            db,
+            task.task_number,
+            submission_id,
+            &filename,
+            output.as_bytes(),
+        )
+        .await
+        {
+            println!("Failed to save submission output: {}", e);
         }
     }
 
@@ -256,7 +249,6 @@ pub async fn run_all_zips_with_command(
         .arg(format!("--cpus={}", config.max_cpus))
         .arg(format!("--pids-limit={}", config.max_processes))
         .arg("--security-opt=no-new-privileges")
-        .arg("--user=1000:1000")
         .arg("-v")
         .arg(format!("{}:/code:ro", code_path.display()))
         .arg("-v")

@@ -2,9 +2,9 @@ pub mod delete;
 pub mod get;
 pub mod post;
 pub mod put;
-mod submissions;
 mod config;
 pub mod mark_allocator;
+pub mod submissions;
 pub mod memo_output;
 
 use axum::{
@@ -15,14 +15,15 @@ use axum::{
 };
 
 use delete::{delete_assignment, delete_files};
-use get::{download_file, get_assignment, get_assignments, get_my_submissions, list_submissions, stats, list_files};
+use get::{download_file, get_assignment, get_assignments, stats, list_files};
 use post::{create, upload_files};
 use put::edit_assignment;
 use config::config_routes;
 use mark_allocator::mark_allocator_routes;
+use submissions::submission_routes;
 
 use crate::{auth::guards::{
-    require_assigned_to_module, require_lecturer, require_lecturer_or_admin, require_lecturer_or_tutor
+    require_assigned_to_module, require_lecturer, require_lecturer_or_admin
 }, routes::modules::assignments::{get::list_tasks, post::create_task}};
 
 /// Expects a module ID
@@ -42,8 +43,6 @@ use crate::{auth::guards::{
 /// - `DELETE /assignments/:assignment_id/files`  → Delete files
 /// - `DELETE /assignments/:assignment_id`        → Delete assignment
 /// - `POST /assignments/:assignment_id/submissions` → Submit assignment
-/// - `GET  /assignments/:assignment_id/submissions/me` → Get my submissions
-/// - `GET  /assignments/:assignment_id/submissions` → List all submissions (lecturer/tutor only)
 /// - `GET  /assignments/:assignment_id/stats`         → Assignment statistics (lecturer only)
 /// - `POST /assignments/:assignment_id/tasks`         → Create a new task (lecturer/admin only)
 /// - `GET  /assignments/:assignment_id/tasks`         → List tasks (lecturer/admin only)
@@ -75,18 +74,6 @@ pub fn assignment_routes() -> Router {
             "/:assignment_id/file/:file_id",
             get(download_file).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_assigned_to_module(Path(params), req, next)
-            })),
-        )
-        .route(
-            "/:assignment_id/submissions/me",
-            get(get_my_submissions).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_assigned_to_module(Path(params), req, next)
-            })),
-        )
-        .route(
-            "/:assignment_id/submissions",
-            get(list_submissions).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_lecturer_or_tutor(Path(params), req, next)
             })),
         )
         .route(
@@ -128,4 +115,5 @@ pub fn assignment_routes() -> Router {
     //     })),
     // )
         .nest("/:assignment_id/mark-allocator", mark_allocator_routes())
+        .nest("/:assignment_id/submissions", submission_routes())
 }

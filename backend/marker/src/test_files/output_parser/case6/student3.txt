@@ -1,0 +1,10 @@
+javac … && java Main task3
+&-=-&Sub1
+Student line G1
+Student line G2
+&-=-&Sub2
+Student line H1
+Student line H2
+&-=-&Sub3
+Student line I1
+Student line I2

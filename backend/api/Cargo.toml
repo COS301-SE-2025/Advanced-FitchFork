@@ -31,7 +31,7 @@ validator = { version = "0.16", features = ["derive"] }
 jsonwebtoken = "9"
 
 # Time handling
-chrono = { version = "0.4", features = ["serde"] }
+chrono = "0.4"
 
 # HTTP utilities
 headers = "0.4"

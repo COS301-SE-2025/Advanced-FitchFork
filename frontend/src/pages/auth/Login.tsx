@@ -13,7 +13,6 @@ import {
 } from 'antd';
 import Logo from '@/components/Logo';
 import { useAuth } from '@/context/AuthContext';
-import type { LoginRequest } from '@/types/auth';
 
 const { Title, Text, Link } = Typography;
 
@@ -23,9 +22,9 @@ export default function Login() {
   const [form] = Form.useForm();
   const [formError, setFormError] = useState<string | null>(null);
 
-  const handleFinish = async (values: LoginRequest) => {
+  const handleFinish = async (values: { student_number: string; password: string }) => {
     setFormError(null);
-    const res = await login(values);
+    const res = await login(values.student_number, values.password);
     if (res.success) {
       navigate('/home');
     } else {

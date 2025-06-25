@@ -13,7 +13,6 @@ use sea_orm::DatabaseConnection;
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 
 async fn seed_user(db: &DatabaseConnection) -> i64 {
-    // Check if user exists
     let user_id = 1;
     if UserEntity::find_by_id(user_id)
         .one(db)
@@ -25,7 +24,7 @@ async fn seed_user(db: &DatabaseConnection) -> i64 {
             id: Set(user_id), // explicitly set ID if your DB allows it
             username: Set("u00000001".to_string()),
             email: Set("testuser@example.com".to_string()),
-            password_hash: Set("hashedpassword".to_string()), // or generate with Model::hash_password
+            password_hash: Set("hashedpassword".to_string()),
             admin: Set(false),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
@@ -36,14 +35,11 @@ async fn seed_user(db: &DatabaseConnection) -> i64 {
     user_id
 }
 
-async fn seed_submission(db: &DatabaseConnection) -> SubmissionModel {
-    let assignment_id = 9999;
+async fn seed_submission(db: &DatabaseConnection, assignment_id: i64) -> SubmissionModel {
     let user_id = 1;
     let attempt = 1;
-
     let filename = "submission.zip";
 
-    // Get the module_id from the assignment
     let assignment = AssignmentEntity::find_by_id(assignment_id)
         .one(db)
         .await
@@ -54,7 +50,7 @@ async fn seed_submission(db: &DatabaseConnection) -> SubmissionModel {
 
     let submission_dir =
         SubmissionModel::full_directory_path(module_id, assignment_id, user_id, attempt);
-    let file_path = submission_dir.join("481.zip"); // <- Replace with actual name if known
+    let file_path = submission_dir.join("481.zip"); // Adjust if needed
 
     let relative_path = file_path
         .strip_prefix(SubmissionModel::storage_root())
@@ -81,9 +77,7 @@ async fn seed_submission(db: &DatabaseConnection) -> SubmissionModel {
         .expect("Failed to insert submission")
 }
 
-async fn seed_module(db: &DatabaseConnection) {
-    let module_id = 9999;
-
+async fn seed_module(db: &DatabaseConnection, module_id: i64, code: &str) {
     let existing_module = ModuleEntity::find_by_id(module_id)
         .one(db)
         .await
@@ -92,9 +86,9 @@ async fn seed_module(db: &DatabaseConnection) {
     if existing_module.is_none() {
         let module = ModuleActiveModel {
             id: Set(module_id),
-            code: Set("COS999".to_string()),
+            code: Set(code.to_string()),
             year: Set(2025),
-            description: Set(Some("Test module for ID 9999".to_string())),
+            description: Set(Some(format!("Test module for ID {}", module_id))),
             credits: Set(12),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
@@ -103,14 +97,11 @@ async fn seed_module(db: &DatabaseConnection) {
         module
             .insert(db)
             .await
-            .expect("Failed to insert module with id 9999");
+            .expect(&format!("Failed to insert module with id {}", module_id));
     }
 }
 
-async fn seed_assignment(db: &DatabaseConnection) {
-    let assignment_id = 9999;
-    let module_id = 9999;
-
+async fn seed_assignment(db: &DatabaseConnection, assignment_id: i64, module_id: i64) {
     let existing_assignment = AssignmentEntity::find_by_id(assignment_id)
         .one(db)
         .await
@@ -130,15 +121,14 @@ async fn seed_assignment(db: &DatabaseConnection) {
             ..Default::default()
         };
 
-        assignment
-            .insert(db)
-            .await
-            .expect("Failed to insert assignment with id 9999");
+        assignment.insert(db).await.expect(&format!(
+            "Failed to insert assignment with id {}",
+            assignment_id
+        ));
     }
 }
 
-async fn seed_tasks(db: &DatabaseConnection) {
-    let assignment_id = 9999;
+async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
     let tasks = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
 
     for (task_number, command) in tasks {
@@ -148,24 +138,24 @@ async fn seed_tasks(db: &DatabaseConnection) {
     }
 }
 
-pub async fn setup_test_db_with_seeded_tasks() -> DatabaseConnection {
+async fn setup_test_db_with_seeded_tasks(assignment_id: i64, module_id: i64) -> DatabaseConnection {
     let db = setup_test_db().await;
 
     seed_user(&db).await;
-    seed_module(&db).await;
-    seed_assignment(&db).await;
-    seed_tasks(&db).await;
-    seed_submission(&db).await;
+    seed_module(&db, module_id, &format!("COS{}", module_id)).await;
+    seed_assignment(&db, assignment_id, module_id).await;
+    seed_tasks(&db, assignment_id).await;
+    seed_submission(&db, assignment_id).await;
 
     db
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_create_submission_outputs_for_all_tasks_9999() {
+async fn test_create_submission_outputs_for_all_tasks_9999_java() {
     dotenv::dotenv().ok();
 
-    let db = setup_test_db_with_seeded_tasks().await;
+    let db = setup_test_db_with_seeded_tasks(9999, 9999).await;
 
     use db::models::assignment_submission::Entity as SubmissionEntity;
     use sea_orm::ColumnTrait;
@@ -182,8 +172,39 @@ async fn test_create_submission_outputs_for_all_tasks_9999() {
 
     let submission_id = submission.id;
 
-    match crate::create_submission_outputs_for_all_tasks(&db, submission_id).await {
+    match create_submission_outputs_for_all_tasks(&db, submission_id).await {
         Ok(_) => {}
         Err(e) => panic!("Failed to generate submission outputs: {}", e),
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_create_submission_outputs_for_all_tasks_9998_cpp() {
+    dotenv::dotenv().ok();
+
+    let db = setup_test_db_with_seeded_tasks(9998, 9998).await;
+
+    use db::models::assignment_submission::Entity as SubmissionEntity;
+    use sea_orm::ColumnTrait;
+    use sea_orm::QueryFilter;
+
+    let submission = SubmissionEntity::find()
+        .filter(db::models::assignment_submission::Column::AssignmentId.eq(9998))
+        .filter(db::models::assignment_submission::Column::UserId.eq(1))
+        .filter(db::models::assignment_submission::Column::Attempt.eq(1))
+        .one(&db)
+        .await
+        .expect("Failed to lookup submission")
+        .expect("No matching submission found");
+
+    let submission_id = submission.id;
+
+    match create_submission_outputs_for_all_tasks(&db, submission_id).await {
+        Ok(_) => {}
+        Err(e) => panic!(
+            "Failed to generate submission outputs for C++ assignment: {}",
+            e
+        ),
     }
 }

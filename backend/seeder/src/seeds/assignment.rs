@@ -14,7 +14,7 @@ impl Seeder for AssignmentSeeder {
             .expect("Failed to fetch modules");
 
         for m in &modules {
-            if m.id == 9999 {
+            if m.id == 9999 || m.id == 9998 {
                 continue;
             }
             for i in 0..2 {
@@ -47,5 +47,20 @@ impl Seeder for AssignmentSeeder {
         };
 
         let _ = special_assignment.insert(db).await;
+
+        let special_assignment2 = assignment::ActiveModel {
+            id: Set(9998),
+            module_id: Set(9998),
+            name: Set("Special Assignment".to_string()),
+            description: Set(Some("Used for test zip execution".to_string())),
+            assignment_type: Set(AssignmentType::Practical),
+            available_from: Set(Utc::now()),
+            due_date: Set(Utc::now() + chrono::Duration::days(7)),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+
+        let _ = special_assignment2.insert(db).await;
     }
 }

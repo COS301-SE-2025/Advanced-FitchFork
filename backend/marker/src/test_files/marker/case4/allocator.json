@@ -1,0 +1,25 @@
+{
+  "generated_at": "2025-06-20T12:00:00+02:00",
+  "tasks": [
+    {
+      "task1": {
+        "name": "Reverse String",
+        "value": 10,
+        "subsections": [
+          { "name": "Reverse abc", "value": 5 },
+          { "name": "Reverse xyz", "value": 5 }
+        ]
+      }
+    },
+    {
+      "task2": {
+        "name": "Sort Numbers",
+        "value": 20,
+        "subsections": [
+          { "name": "Sort ascending", "value": 10 },
+          { "name": "Sort descending", "value": 10 }
+        ]
+      }
+    }
+  ]
+} 

@@ -245,7 +245,8 @@ pub fn write_config_json(base_path: &PathBuf, module_id: i64, assignment_id: i64
         "max_cpus": "1.0",
         "max_uncompressed_size": 10485760,
         "max_processes": 16,
-        "language": "python"
+        "marking_scheme": "exact",
+        "feedback_scheme": "auto"
     }
     "#;
 
