@@ -61,7 +61,7 @@ impl From<db::models::module::Model> for ModuleResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserResponse {
     pub id: i64,
-    pub student_number: String,
+    pub username: String,
     pub email: String,
     pub admin: bool,
     pub created_at: String,
@@ -72,7 +72,7 @@ impl From<db::models::user::Model> for UserResponse {
     fn from(user: db::models::user::Model) -> Self {
         Self {
             id: user.id,
-            student_number: user.student_number,
+            username: user.username,
             email: user.email,
             admin: user.admin,
             created_at: user.created_at.to_rfc3339(),
@@ -88,7 +88,7 @@ pub struct LecturerQuery {
     pub per_page: Option<u32>,
     pub query: Option<String>,
     pub email: Option<String>,
-    pub student_number: Option<String>,
+    pub username: Option<String>,
     pub sort: Option<String>,
 }
 
@@ -115,12 +115,12 @@ pub struct LecturerListResponse {
 /// ### Query Parameters (All Optional)
 /// - `page` (integer): Page number, default is `1`, must be ≥ 1.
 /// - `per_page` (integer): Number of results per page, default is `20`, max is `100`.
-/// - `query` (string): Fuzzy search term for `email` or `student_number` (case-insensitive).
+/// - `query` (string): Fuzzy search term for `email` or `username` (case-insensitive).
 /// - `email` (string): Filter by email (case-insensitive, ignored if `query` is present).
-/// - `student_number` (string): Filter by student number (ignored if `query` is present).
+/// - `username` (string): Filter by student number (ignored if `query` is present).
 /// - `sort` (string): Sort by field. Prefix with `-` for descending order. Allowed fields:
 ///   - `email`
-///   - `student_number`
+///   - `username`
 ///   - `created_at`
 ///
 /// ### Authentication
@@ -144,7 +144,7 @@ pub struct LecturerListResponse {
 ///     "users": [
 ///       {
 ///         "id": 1,
-///         "student_number": "u12345678",
+///         "username": "u12345678",
 ///         "email": "lecturer@example.com",
 ///         "admin": false,
 ///         "created_at": "2025-05-23T18:00:00Z",
@@ -217,14 +217,14 @@ pub async fn get_lecturers(
         condition = condition.add(
             Condition::any()
                 .add(user::Column::Email.contains(&q_lower))
-                .add(user::Column::StudentNumber.contains(&q_lower)),
+                .add(user::Column::Username.contains(&q_lower)),
         );
     } else {
         if let Some(ref email) = params.email {
             condition = condition.add(user::Column::Email.contains(email));
         }
-        if let Some(ref sn) = params.student_number {
-            condition = condition.add(user::Column::StudentNumber.contains(sn));
+        if let Some(ref sn) = params.username {
+            condition = condition.add(user::Column::Username.contains(sn));
         }
     }
 
@@ -243,8 +243,8 @@ pub async fn get_lecturers(
     match params.sort.as_deref() {
         Some("-email") => query = query.order_by_desc(user::Column::Email),
         Some("email") => query = query.order_by_asc(user::Column::Email),
-        Some("-student_number") => query = query.order_by_desc(user::Column::StudentNumber),
-        Some("student_number") => query = query.order_by_asc(user::Column::StudentNumber),
+        Some("-username") => query = query.order_by_desc(user::Column::Username),
+        Some("username") => query = query.order_by_asc(user::Column::Username),
         Some("-created_at") => query = query.order_by_desc(user::Column::CreatedAt),
         Some("created_at") => query = query.order_by_asc(user::Column::CreatedAt),
         _ => query = query.order_by_asc(user::Column::Id),
@@ -277,7 +277,7 @@ pub struct TutorQuery {
     pub per_page: Option<u32>,
     pub query: Option<String>,
     pub email: Option<String>,
-    pub student_number: Option<String>,
+    pub username: Option<String>,
     pub sort: Option<String>,
 }
 
@@ -304,12 +304,12 @@ pub struct PaginatedPersonnelResponse {
 /// ### Query Parameters (All Optional)
 /// - `page` (integer): Page number. Default is `1`. Must be ≥ 1.
 /// - `per_page` (integer): Number of results per page. Default is `20`. Maximum is `100`.
-/// - `query` (string): Fuzzy search term for `email` or `student_number` (case-insensitive).
+/// - `query` (string): Fuzzy search term for `email` or `username` (case-insensitive).
 /// - `email` (string): Filter by email (case-insensitive, ignored if `query` is present).
-/// - `student_number` (string): Filter by student number (ignored if `query` is present).
+/// - `username` (string): Filter by student number (ignored if `query` is present).
 /// - `sort` (string): Sort by field. Prefix with `-` for descending order. Allowed fields:
 ///   - `email`
-///   - `student_number`
+///   - `username`
 ///   - `created_at`
 ///
 /// ### Authentication
@@ -333,7 +333,7 @@ pub struct PaginatedPersonnelResponse {
 ///     "users": [
 ///       {
 ///         "id": 7,
-///         "student_number": "u22222222",
+///         "username": "u22222222",
 ///         "email": "tutor@example.com",
 ///         "admin": false,
 ///         "created_at": "2025-05-23T18:00:00Z",
@@ -405,14 +405,14 @@ pub async fn get_tutors(
         condition = condition.add(
             Condition::any()
                 .add(user::Column::Email.contains(&pattern))
-                .add(user::Column::StudentNumber.contains(&pattern)),
+                .add(user::Column::Username.contains(&pattern)),
         );
     } else {
         if let Some(ref email) = params.email {
             condition = condition.add(user::Column::Email.contains(email));
         }
-        if let Some(ref sn) = params.student_number {
-            condition = condition.add(user::Column::StudentNumber.contains(sn));
+        if let Some(ref sn) = params.username {
+            condition = condition.add(user::Column::Username.contains(sn));
         }
     }
 
@@ -437,7 +437,7 @@ pub async fn get_tutors(
 
         match field {
             "email" => query = query.order_by(user::Column::Email, dir),
-            "student_number" => query = query.order_by(user::Column::StudentNumber, dir),
+            "username" => query = query.order_by(user::Column::Username, dir),
             "created_at" => query = query.order_by(user::Column::CreatedAt, dir),
             _ => {}
         }
@@ -471,7 +471,7 @@ pub async fn get_tutors(
 pub struct StudentQuery {
     pub query: Option<String>,
     pub email: Option<String>,
-    pub student_number: Option<String>,
+    pub username: Option<String>,
     pub sort: Option<String>,
     pub page: Option<u32>,
     pub per_page: Option<u32>,
@@ -493,8 +493,8 @@ pub struct StudentQuery {
 /// - `per_page` (optional): Items per page (default: 20, max: 100)
 /// - `query` (optional): Case-insensitive partial match against email or student number
 /// - `email` (optional): Partial match on email (used only if `query` is not provided)
-/// - `student_number` (optional): Partial match on student number (used only if `query` is not provided)
-/// - `sort` (optional): Sort by field. Prefix with `-` for descending. Allowed fields: `email`, `student_number`, `created_at`
+/// - `username` (optional): Partial match on student number (used only if `query` is not provided)
+/// - `sort` (optional): Sort by field. Prefix with `-` for descending. Allowed fields: `email`, `username`, `created_at`
 ///
 /// ### Responses
 /// - `200 OK`
@@ -545,14 +545,14 @@ pub async fn get_students(
         condition = condition.add(
             Condition::any()
                 .add(user::Column::Email.contains(&pattern))
-                .add(user::Column::StudentNumber.contains(&pattern)),
+                .add(user::Column::Username.contains(&pattern)),
         );
     } else {
         if let Some(ref email) = params.email {
             condition = condition.add(user::Column::Email.contains(email));
         }
-        if let Some(ref sn) = params.student_number {
-            condition = condition.add(user::Column::StudentNumber.contains(sn));
+        if let Some(ref sn) = params.username {
+            condition = condition.add(user::Column::Username.contains(sn));
         }
     }
 
@@ -576,7 +576,7 @@ pub async fn get_students(
 
         match field {
             "email" => query = query.order_by(user::Column::Email, dir),
-            "student_number" => query = query.order_by(user::Column::StudentNumber, dir),
+            "username" => query = query.order_by(user::Column::Username, dir),
             "created_at" => query = query.order_by(user::Column::CreatedAt, dir),
             _ => {}
         }
@@ -614,7 +614,7 @@ pub struct EligibleUserQuery {
     pub sort: Option<String>,
     pub query: Option<String>,
     pub email: Option<String>,
-    pub student_number: Option<String>,
+    pub username: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -663,14 +663,14 @@ pub async fn get_eligible_users_for_module(
         condition = condition.add(
             Condition::any()
                 .add(user::Column::Email.contains(&pattern))
-                .add(user::Column::StudentNumber.contains(&pattern)),
+                .add(user::Column::Username.contains(&pattern)),
         );
     } else {
         if let Some(ref email) = params.email {
             condition = condition.add(user::Column::Email.contains(email));
         }
-        if let Some(ref sn) = params.student_number {
-            condition = condition.add(user::Column::StudentNumber.contains(sn));
+        if let Some(ref sn) = params.username {
+            condition = condition.add(user::Column::Username.contains(sn));
         }
     }
 
@@ -685,7 +685,7 @@ pub async fn get_eligible_users_for_module(
 
         match field {
             "email" => query = query.order_by(user::Column::Email, dir),
-            "student_number" => query = query.order_by(user::Column::StudentNumber, dir),
+            "username" => query = query.order_by(user::Column::Username, dir),
             "created_at" => query = query.order_by(user::Column::CreatedAt, dir),
             _ => {}
         }

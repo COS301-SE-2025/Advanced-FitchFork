@@ -223,11 +223,11 @@ pub async fn create_submission_outputs_for_all_tasks(
 
 /// Executes a set of zip files inside a Docker container using the specified command.
 /// Captures and returns stdout output if successful, or full error output if not.
-async fn run_all_zips_with_command(
+pub async fn run_all_zips_with_command(
     zip_paths: Vec<PathBuf>,
     config: &ExecutionConfig,
     custom_command: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
     let temp_code_dir = tempdir()?;
     let temp_output_dir = tempdir()?;
 
@@ -305,7 +305,7 @@ fn extract_zip_contents(
     zip_bytes: &[u8],
     max_total_uncompressed: u64,
     output_dir: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut archive = ZipArchive::new(Cursor::new(zip_bytes))?;
     let mut total_uncompressed = 0;
 

@@ -25,7 +25,7 @@ use db::models::user_module_role::Role;
 pub struct MeResponse {
     pub id: i64,
     pub email: String,
-    pub student_number: String,
+    pub username: String,
     pub admin: bool,
     pub created_at: String,
     pub updated_at: String,
@@ -69,7 +69,7 @@ pub struct HasRoleResponse {
 ///   "data": {
 ///     "id": 42,
 ///     "email": "lecturer@example.edu",
-///     "student_number": null,
+///     "username": null,
 ///     "admin": true,
 ///     "created_at": "2024-11-10T12:34:56Z",
 ///     "updated_at": "2025-06-18T10:00:00Z",
@@ -163,7 +163,7 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
     let response_data = MeResponse {
         id: user.id,
         email: user.email,
-        student_number: user.student_number,
+        username: user.username,
         admin: user.admin,
         created_at: user.created_at.to_rfc3339(),
         updated_at: user.updated_at.to_rfc3339(),

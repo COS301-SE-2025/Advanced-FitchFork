@@ -13,7 +13,7 @@ Register a new user account.
 
 ```json
 {
-	"student_number": "u12345678",
+	"username": "u12345678",
 	"email": "user@example.com",
 	"password": "strongpassword"
 }
@@ -31,7 +31,7 @@ Register a new user account.
 	"success": true,
 	"data": {
 		"id": 1,
-		"student_number": "u12345678",
+		"username": "u12345678",
 		"email": "user@example.com",
 		"admin": false,
 		"token": "jwt_token_here",
@@ -59,7 +59,7 @@ Authenticate an existing user and issue a JWT token.
 
 ```json
 {
-	"student_number": "u12345678",
+	"username": "u12345678",
 	"password": "strongpassword"
 }
 ```
@@ -71,7 +71,7 @@ Authenticate an existing user and issue a JWT token.
 	"success": true,
 	"data": {
 		"id": 1,
-		"student_number": "u12345678",
+		"username": "u12345678",
 		"email": "user@example.com",
 		"admin": false,
 		"token": "jwt_token_here",

@@ -28,9 +28,11 @@ export default function Signup() {
     password: string;
     confirmPassword: string;
   }) => {
-    const { student_number, email, password } = values;
-
-    const res = await register(student_number, email, password);
+    const res = await register({
+      username: values.username,
+      email: values.email,
+      password: values.password,
+    });
 
     if (res.success) {
       navigate('/home');

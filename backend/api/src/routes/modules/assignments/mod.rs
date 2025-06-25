@@ -5,6 +5,8 @@ pub mod put;
 mod config;
 pub mod mark_allocator;
 pub mod submissions;
+pub mod memo_output;
+
 use axum::{
     extract::Path,
     middleware::from_fn,
@@ -98,6 +100,13 @@ pub fn assignment_routes() -> Router {
                 require_lecturer_or_admin(Path(params), req, next)
             })),
         )
+        .nest(
+            "/:assignment_id/memo_output",
+            memo_output::memo_output_routes().layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
+                require_lecturer_or_admin(Path((assignment_id,)), req, next)
+            })),
+        )
+        
     // TODO: The following route is commented out:
     // .route(
     //     "/:assignment_id/submissions",

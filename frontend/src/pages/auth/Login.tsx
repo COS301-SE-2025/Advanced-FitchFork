@@ -71,7 +71,7 @@ export default function Login() {
             >
               <Form.Item
                 label={<span className="text-sm sm:text-base">Student Number</span>}
-                name="student_number"
+                name="username"
                 rules={[{ required: true, message: 'Please enter your student number' }]}
               >
                 <Input placeholder="u00000001" />

@@ -21,8 +21,8 @@ async fn seed_user(db: &DatabaseConnection) -> i64 {
         .is_none()
     {
         let user = UserActiveModel {
-            id: Set(user_id),
-            student_number: Set("u00000001".to_string()),
+            id: Set(user_id), // explicitly set ID if your DB allows it
+            username: Set("u00000001".to_string()),
             email: Set("testuser@example.com".to_string()),
             password_hash: Set("hashedpassword".to_string()),
             admin: Set(false),

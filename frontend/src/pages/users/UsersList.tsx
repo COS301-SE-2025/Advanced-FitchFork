@@ -62,7 +62,7 @@ const UsersList = () => {
   const [editCache, setEditCache] = useState<Partial<User>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newUser, setNewUser] = useState({
-    student_number: '',
+    username: '',
     email: '',
     admin: false,
   });
@@ -81,7 +81,7 @@ const UsersList = () => {
       per_page: pagination.pageSize,
       query: searchTerm || undefined,
       email: filterState.email?.[0],
-      student_number: filterState.student_number?.[0],
+      username: filterState.username?.[0],
       admin:
         filterState.admin?.[0] === 'true'
           ? true
@@ -111,15 +111,19 @@ const UsersList = () => {
   // ======================================================================
 
   const handleAddUser = () => {
-    setNewUser({ student_number: '', email: '', admin: false });
+    setNewUser({ username: '', email: '', admin: false });
     setIsAddModalOpen(true);
   };
 
   const handleSubmitNewUser = async (formValues: Record<string, any>) => {
-    const { student_number, email } = formValues;
+    const { username, email } = formValues;
 
     try {
-      const res = await register(student_number, email, 'changeme123');
+      const res = await AuthService.register({
+        username,
+        email,
+        password: 'changeme123',
+      });
 
       if (res.success) {
         notifySuccess('User registered successfully', res.message);
@@ -139,7 +143,7 @@ const UsersList = () => {
 
   const handleEditSave = async () => {
     const user = users.find((u) => u.id === editingRowId);
-    if (!user || !editCache.email || !editCache.student_number) {
+    if (!user || !editCache.email || !editCache.username) {
       notifyError('Incomplete user info');
       return;
     }
@@ -192,20 +196,20 @@ const UsersList = () => {
   const columns: ColumnsType<User> = [
     {
       title: 'Student Number',
-      dataIndex: 'student_number',
-      key: 'student_number',
+      dataIndex: 'username',
+      key: 'username',
       render: (_, record) =>
         editingRowId === record.id ? (
           <Input
-            value={editCache.student_number}
-            onChange={(e) => setEditCache((prev) => ({ ...prev, student_number: e.target.value }))}
+            value={editCache.username}
+            onChange={(e) => setEditCache((prev) => ({ ...prev, username: e.target.value }))}
           />
         ) : (
-          record.student_number
+          record.username
         ),
       sorter: { multiple: 1 },
-      sortOrder: sorterState.find((s) => s.field === 'student_number')?.order ?? null,
-      filteredValue: filterState.student_number || null,
+      sortOrder: sorterState.find((s) => s.field === 'username')?.order ?? null,
+      filteredValue: filterState.username || null,
       onFilter: () => true,
       filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
         <div className="flex flex-col gap-2 p-2 w-56">
@@ -496,7 +500,7 @@ const UsersList = () => {
         onCreate={handleSubmitNewUser} // now gets the modal form values
         title="Add User"
         fields={[
-          { name: 'student_number', label: 'Student Number', type: 'text', required: true },
+          { name: 'username', label: 'Student Number', type: 'text', required: true },
           { name: 'email', label: 'Email', type: 'email', required: true },
         ]}
         initialValues={newUser}

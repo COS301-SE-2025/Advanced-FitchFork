@@ -41,7 +41,7 @@ const ModuleOverview = () => {
               <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm">
                 <Tag color={user.role === 'Lecturer' ? 'blue' : 'purple'}>{user.role}</Tag>
                 <IdcardOutlined />
-                <span>{user.student_number}</span>
+                <span>{user.username}</span>
               </div>
             </div>
           </List.Item>

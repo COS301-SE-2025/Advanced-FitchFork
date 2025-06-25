@@ -240,7 +240,7 @@ export default function AppLayout() {
                     />
 
                     <Text className="text-gray-700 dark:text-gray-200 font-medium">
-                      {user?.student_number ?? 'User'}
+                      {user?.username ?? 'User'}
                     </Text>
                   </div>
                 </Dropdown>
@@ -284,7 +284,7 @@ export default function AppLayout() {
                   />
 
                   <Text className="hidden sm:inline text-gray-700 dark:text-gray-200 font-medium">
-                    {user?.student_number ?? 'User'}
+                    {user?.username ?? 'User'}
                   </Text>
                 </div>
               </Dropdown>
