@@ -29,10 +29,6 @@ use crate::auth::AuthUser;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
-    #[validate(regex(
-        path = "username_REGEX",
-        message = "Student number must be in format u12345678"
-    ))]
     pub username: String,
 
     #[validate(email(message = "Invalid email format"))]
@@ -54,9 +50,7 @@ pub struct UserResponse {
     pub expires_at: String,
 }
 
-lazy_static::lazy_static! {
-    static ref username_REGEX: regex::Regex = regex::Regex::new("^u\\d{8}$").unwrap();
-}
+
 
 /// POST /auth/register
 ///
