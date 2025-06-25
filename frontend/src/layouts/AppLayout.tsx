@@ -17,6 +17,8 @@ import {
   DoubleLeftOutlined,
   DoubleRightOutlined,
   MenuOutlined,
+  MoonOutlined,
+  SunOutlined,
 } from '@ant-design/icons';
 
 import Logo from '@/components/Logo';
@@ -24,6 +26,7 @@ import { useTopMenuItems, BOTTOM_MENU_ITEMS, type MenuItem } from '@/constants/s
 import { useAuth } from '@/context/AuthContext';
 import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
 import { useMediaQuery } from 'react-responsive';
+import { useTheme } from '@/context/ThemeContext';
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -34,12 +37,13 @@ export default function AppLayout() {
   );
   const [mobileSidebarVisible, setMobileSidebarVisible] = useState(false);
   const isMobile = useMediaQuery({ maxWidth: 768 });
-
   const breadcrumbs = useBreadcrumbs();
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, isAdmin, isUser, user, profilePictureUrl } = useAuth();
   const forceCollapsed = useMediaQuery({ maxWidth: 1024 });
+  const { mode, setMode } = useTheme();
+  const isDark = mode === 'dark';
 
   useEffect(() => {
     localStorage.setItem('sidebarCollapsed', collapsed.toString());
@@ -64,7 +68,7 @@ export default function AppLayout() {
         }
         return (!item.adminOnly || isAdmin) && (!item.userOnly || isUser) ? item : null;
       })
-      .filter(Boolean);
+      .filter((item): item is MenuItem => item !== null);
 
   const visibleMenuItems = filterMenuItems(topMenuItems);
   const visibleBottomItems = filterMenuItems(BOTTOM_MENU_ITEMS);
@@ -101,7 +105,14 @@ export default function AppLayout() {
           <Menu
             mode="inline"
             theme="light"
-            selectedKeys={[location.pathname]}
+            selectedKeys={[
+              visibleMenuItems
+                .map((item) => item.key)
+                .filter(
+                  (key) => location.pathname === key || location.pathname.startsWith(key + '/'),
+                )
+                .sort((a, b) => b.length - a.length)[0] ?? '',
+            ]}
             items={visibleMenuItems}
             onClick={({ key }) => {
               if (key === 'logout') return;
@@ -118,20 +129,51 @@ export default function AppLayout() {
         <Menu
           mode="inline"
           theme="light"
-          selectedKeys={[location.pathname]}
-          items={visibleBottomItems}
+          selectedKeys={[
+            visibleMenuItems
+              .map((item) => item.key)
+              .filter((key) => location.pathname === key || location.pathname.startsWith(key + '/'))
+              .sort((a, b) => b.length - a.length)[0] ?? '',
+          ]}
           onClick={({ key }) => {
             if (key === 'logout') {
               logout();
               navigate('/login');
+            } else if (key === 'theme-toggle') {
+              // Do nothing: Theme toggle handled inside its own onClick
+              return;
             } else {
               navigate(key);
             }
             if (isMobile) setMobileSidebarVisible(false);
           }}
+          inlineCollapsed={!isMobile && collapsed}
           className="!bg-transparent"
           style={{ border: 'none' }}
-        />
+        >
+          <Menu.Item
+            key="theme-toggle"
+            icon={isDark ? <MoonOutlined /> : <SunOutlined />}
+            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            onClick={(e) => {
+              e.domEvent.stopPropagation(); // Prevent sidebar collapse if inside collapsible menu
+              setMode(isDark ? 'light' : 'dark');
+            }}
+          >
+            {!collapsed && (isDark ? 'Dark Mode' : 'Light Mode')}
+          </Menu.Item>
+
+          {/* Then render all bottom items */}
+          {visibleBottomItems.map((item) => {
+            if (!item) return null;
+            return (
+              <Menu.Item key={item.key} icon={item.icon}>
+                {item.label}
+              </Menu.Item>
+            );
+          })}
+        </Menu>
+
         {!isMobile && !forceCollapsed && (
           <div className="px-1 mt-3">
             <Button
@@ -188,7 +230,7 @@ export default function AppLayout() {
                 <Dropdown
                   menu={{ items: profileMenuItems }}
                   trigger={['click']}
-                  placement="bottomLeft"
+                  placement="bottomRight"
                 >
                   <div className="cursor-pointer flex items-center gap-2">
                     <Avatar

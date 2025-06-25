@@ -27,12 +27,12 @@ import type { FilterDropdownProps } from 'antd/es/table/interface';
 import type { Module } from '@/types/modules';
 import { useTableQuery } from '@/hooks/useTableQuery';
 import type { SortOption } from '@/types/common';
-import { ModulesService } from '@/services/modules';
 import TableControlBar from '@/components/TableControlBar';
 import TableTagSummary from '@/components/TableTagSummary';
 import TableCreateModal from '@/components/TableCreateModal';
 import { useNotifier } from '@/components/Notifier';
 import PageHeader from '@/components/PageHeader';
+import { createModule, deleteModule, editModule, listModules } from '@/services/modules';
 
 const ModulesTable = () => {
   // ======================================================================
@@ -78,7 +78,7 @@ const ModulesTable = () => {
     setLoading(true);
     const sort: SortOption[] = sorterState.map(({ field, order }) => ({ field, order }));
 
-    const res = await ModulesService.listModules({
+    const res = await listModules({
       page: pagination.current,
       per_page: pagination.pageSize,
       query: searchTerm || undefined,
@@ -123,7 +123,7 @@ const ModulesTable = () => {
       credits: Number(values.credits),
     };
 
-    const res = await ModulesService.createModule(payload);
+    const res = await createModule(payload);
     if (res.success) {
       notifySuccess('Module created successfully', res.message);
       setIsAddModalOpen(false);
@@ -143,7 +143,7 @@ const ModulesTable = () => {
       credits: editCache.credits || 0,
     };
 
-    const res = await ModulesService.editModule(editingRowId, payload);
+    const res = await editModule(editingRowId, payload);
     if (res.success) {
       notifySuccess('Module updated successfully', res.message);
       setEditingRowId(null);
@@ -155,7 +155,7 @@ const ModulesTable = () => {
   };
 
   const handleDelete = async (id: number) => {
-    const res = await ModulesService.deleteModule(id);
+    const res = await deleteModule(id);
     if (res.success) {
       notifySuccess('Module deleted', res.message);
       fetchModules();

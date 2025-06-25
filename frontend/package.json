@@ -10,8 +10,12 @@
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write .",
+    "test": "jest",
+    "test:unit": "jest --testPathIgnorePatterns=integration",
+    "test:integration": "jest --testMatch \"**/*.integration.test.ts\"",
+    "test:watch": "jest --watch",
     "test:e2e": "cypress open",
-    "test": "jest"
+    "test:e2e:run": "cypress run"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.7",
@@ -50,7 +54,6 @@
     "postcss": "^8.5.3",
     "prettier": "^3.5.3",
     "tailwindcss": "^4.1.7",
-    "ts-jest": "^29.3.4",
     "ts-node": "^10.9.2",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.30.1",

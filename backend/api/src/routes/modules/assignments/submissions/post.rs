@@ -1,53 +1,52 @@
 
-use axum::{
-    extract::{Extension, Multipart, Path},
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+// use axum::{
+//     extract::{Extension, Multipart, Path},
+//     http::StatusCode,
+//     response::IntoResponse,
+//     Json,
+// };
 
-use chrono::{DateTime, Utc};
+// use chrono::{DateTime, Utc};
 
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize};
 
-use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
+// use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
 
-use db::{
-    connect,
-    models::{
-        assignment::{
-            AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
-            Model as AssignmentModel,
-        },
-        assignment_file::{FileType, Model as FileModel},
-        assignment_submission::Model as AssignmentSubmissionModel,
-    },
-};
+// use db::{
+//     connect,
+//     models::{
+//         assignment::{
+//             AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
+//             Model as AssignmentModel,
+//         },
+//         assignment_file::{FileType, Model as FileModel},
+//         assignment_submission::Model as AssignmentSubmissionModel,
+//     },
+// };
 
-use crate::auth::AuthUser;
-use crate::response::ApiResponse;
+// use crate::auth::AuthUser;
+// use crate::response::ApiResponse;
 
-#[derive(Debug, Serialize)]
-pub struct UploadedFileMetadata {
-    pub id: i64,
-    pub assignment_id: i64,
-    pub filename: String,
-    pub path: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
+// #[derive(Debug, Serialize)]
+// pub struct UploadedFileMetadata {
+//     pub id: i64,
+//     pub assignment_id: i64,
+//     pub filename: String,
+//     pub path: String,
+//     pub created_at: String,
+//     pub updated_at: String,
+// }
 
-#[derive(Debug, Serialize)]
-pub struct AssignmentSubmissionMetadata {
-    pub id: i64,
-    pub assignment_id: i64,
-    pub user_id: i64,
-    pub filename: String,
-    pub path: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
+// #[derive(Debug, Serialize)]
+// pub struct AssignmentSubmissionMetadata {
+//     pub id: i64,
+//     pub assignment_id: i64,
+//     pub user_id: i64,
+//     pub filename: String,
+//     pub path: String,
+//     pub created_at: String,
+//     pub updated_at: String,
+// }
 
 // POST /api/modules/:module_id/assignments/:assignment_id/submissions
 // 

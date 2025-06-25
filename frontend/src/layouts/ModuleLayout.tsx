@@ -9,15 +9,21 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { useMediaQuery } from 'react-responsive';
-
-import { ModulesService } from '@/services/modules';
-import type { ModuleDetailsResponse } from '@/types/modules';
 import { useAuth } from '@/context/AuthContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { ModuleProvider } from '@/context/ModuleContext';
+import { getModuleDetails } from '@/services/modules';
+import type { Module } from '@/types/modules';
+import type { User } from '@/types/users';
 
 const { Sider, Content } = Layout;
 const { Title } = Typography;
+
+interface ModuleDetails extends Module {
+  lecturers: User[];
+  tutors: User[];
+  students: User[];
+}
 
 const ModuleLayout = () => {
   const { id } = useParams();
@@ -30,13 +36,13 @@ const ModuleLayout = () => {
   const showPersonnel = isAdmin;
 
   const [loading, setLoading] = useState(true);
-  const [module, setModule] = useState<ModuleDetailsResponse | null>(null);
+  const [module, setModule] = useState<ModuleDetails | null>(null);
 
   const isMobile = useMediaQuery({ maxWidth: 768 });
 
   useEffect(() => {
     const load = async () => {
-      const res = await ModulesService.getModuleDetails(moduleId);
+      const res = await getModuleDetails(moduleId);
       if (res.success && res.data) {
         setModule(res.data);
         setBreadcrumbLabel(`modules/${res.data.id}`, res.data.code);
@@ -76,7 +82,7 @@ const ModuleLayout = () => {
       .sort((a, b) => b.length - a.length)[0] ?? '';
 
   return (
-    <Layout className="!bg-gray-100 dark:!bg-gray-950 min-h-[calc(100vh-64px)]">
+    <Layout className="!bg-white dark:!bg-gray-950 min-h-[calc(100vh-64px)]">
       {isMobile ? (
         <div className="w-full px-4 pt-4 bg-white dark:bg-gray-950">
           <Tabs

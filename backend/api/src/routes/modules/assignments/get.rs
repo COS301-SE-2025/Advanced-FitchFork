@@ -752,11 +752,11 @@ pub async fn stats(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl I
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct CreateTaskRequest {
-    task_number: i64,
-    command: String,
-}
+// #[derive(Debug, Deserialize)]
+// pub struct CreateTaskRequest {
+//     task_number: i64,
+//     command: String,
+// }
 
 #[derive(Debug, Serialize)]
 pub struct TaskResponse {

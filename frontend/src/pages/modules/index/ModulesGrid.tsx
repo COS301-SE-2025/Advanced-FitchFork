@@ -7,8 +7,9 @@ import {
   CheckOutlined,
 } from '@ant-design/icons';
 import ModuleCard from '@/components/modules/ModuleCard';
-import type { UserModuleRole, ModuleRole } from '@/types/modules';
+import { MODULE_ROLES, type ModuleRole } from '@/types/modules';
 import PageHeader from '@/components/PageHeader';
+import type { Module } from '@/types/modules';
 
 const { Search } = Input;
 const { Title } = Typography;
@@ -26,7 +27,9 @@ const filterOptions = [
   { key: '2025', label: '2025' },
 ];
 
-const roleFilterOptions: ModuleRole[] = ['Student', 'Tutor', 'Lecturer'];
+interface UserModuleRole extends Module {
+  role: ModuleRole;
+}
 
 interface Props {
   title: string;
@@ -50,6 +53,11 @@ const ModulesGrid = ({ title, modules }: Props) => {
   const [activeRoles, setActiveRoles] = useState<ModuleRole[]>(() => {
     const stored = localStorage.getItem('modules_roles');
     return stored ? JSON.parse(stored) : [];
+  });
+
+  const [visibleRoles, setVisibleRoles] = useState<ModuleRole[]>(() => {
+    const stored = localStorage.getItem('modules_visible_roles');
+    return stored ? JSON.parse(stored) : ['Lecturer', 'Tutor', 'Student'];
   });
 
   const handleSortSelect = (key: string) => {
@@ -178,7 +186,7 @@ const ModulesGrid = ({ title, modules }: Props) => {
     ),
   }));
 
-  const roleFilterMenuItems: MenuProps['items'] = roleFilterOptions.map((role) => ({
+  const roleFilterMenuItems: MenuProps['items'] = MODULE_ROLES.map((role) => ({
     key: role,
     label: (
       <div
@@ -189,6 +197,12 @@ const ModulesGrid = ({ title, modules }: Props) => {
       </div>
     ),
   }));
+
+  const visibleSectionLabels: Record<ModuleRole, string> = {
+    Lecturer: 'Lecturing',
+    Tutor: 'Tutoring',
+    Student: 'Enrolled',
+  };
 
   return (
     <div className="bg-white dark:bg-gray-950 p-4 sm:p-6 h-full overflow-y-auto">
@@ -220,6 +234,37 @@ const ModulesGrid = ({ title, modules }: Props) => {
             </Button>
           </Dropdown>
         </div>
+        <Dropdown
+          trigger={['click']}
+          menu={{
+            items: (['Lecturer', 'Tutor', 'Student'] as ModuleRole[])
+              .filter((role) => groupedByRole[role]?.length)
+              .map((role) => {
+                const isVisible = visibleRoles.includes(role);
+                return {
+                  key: role,
+                  label: (
+                    <div
+                      className="flex items-center justify-between w-36"
+                      onClick={() => {
+                        const updated = isVisible
+                          ? visibleRoles.filter((r) => r !== role)
+                          : [...visibleRoles, role];
+                        setVisibleRoles(updated);
+                        localStorage.setItem('modules_visible_roles', JSON.stringify(updated));
+                      }}
+                    >
+                      {visibleSectionLabels[role]} {isVisible && <CheckOutlined />}
+                    </div>
+                  ),
+                };
+              }),
+          }}
+        >
+          <Button icon={<FilterOutlined />}>
+            Visible Sections <DownOutlined />
+          </Button>
+        </Dropdown>
       </div>
 
       {favoriteModules.length > 0 && (
@@ -227,7 +272,7 @@ const ModulesGrid = ({ title, modules }: Props) => {
           <Title level={4}>Favorites</Title>
           <Row gutter={[24, 24]}>
             {favoriteModules.map((module) => (
-              <Col key={module.id} xs={24} sm={12} md={12} lg={8} xl={6} xxl={4}>
+              <Col key={module.id} xs={24} sm={12} md={12} lg={8} xl={6} xxl={6}>
                 <ModuleCard module={module} isFavorite onToggleFavorite={handleToggleFavorite} />
               </Col>
             ))}
@@ -254,14 +299,20 @@ const ModulesGrid = ({ title, modules }: Props) => {
               Student: 'Enrolled Modules',
             };
 
+            if (!visibleRoles.includes(role)) {
+              return null;
+            }
+
             return (
               <div key={role} className="mb-10 pt-6 border-gray-200 dark:border-neutral-700">
-                <Title level={4} className="mb-4 text-gray-800 dark:text-gray-200">
-                  {labelMap[role]}
-                </Title>
+                <div className="flex justify-between items-center mb-4">
+                  <Title level={4} className="m-0 text-gray-800 dark:text-gray-200">
+                    {labelMap[role]}
+                  </Title>
+                </div>
                 <Row gutter={[16, 16]}>
                   {list.map((module) => (
-                    <Col key={module.id} xs={24} sm={12} md={12} lg={8} xl={6} xxl={4}>
+                    <Col key={module.id} xs={24} sm={12} md={12} lg={8} xl={6} xxl={6}>
                       <ModuleCard
                         module={module}
                         isFavorite={favorites.includes(module.id)}

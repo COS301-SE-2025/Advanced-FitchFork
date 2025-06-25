@@ -16,7 +16,7 @@
 /// Returns an error response if any of the required fields are missing or invalid.
 /// Handles the deletion of an assignment.
 use axum::{
-    extract::{Extension, Multipart, Path},
+    extract::{Multipart, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -26,7 +26,7 @@ use chrono::{DateTime, Utc};
 
 use serde::{Deserialize, Serialize};
 
-use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter};
 
 use db::{
     connect,
