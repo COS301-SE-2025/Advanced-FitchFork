@@ -26,7 +26,7 @@ impl Seeder for AssignmentOverwriteFileSeeder {
         }
 
         for assignment in &assignments {
-            if assignment.id == 9999 {
+            if assignment.id == 9999 || assignment.id == 9998 {
                 continue;
             }
             let relevant_tasks: Vec<_> = tasks
