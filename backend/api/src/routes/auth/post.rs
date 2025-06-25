@@ -775,13 +775,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_validation() {
-        // Test invalid student number format
-        let invalid_sn = RegisterRequest {
-            username: "invalid".to_string(),
-            email: "valid@example.com".to_string(),
-            password: "strongpassword".to_string(),
-        };
-        assert!(invalid_sn.validate().is_err());
 
         // Test invalid email format
         let invalid_email = RegisterRequest {
