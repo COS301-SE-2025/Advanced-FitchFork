@@ -32,7 +32,7 @@ export const getLecturers = async (
   moduleId: number,
   options: {
     email?: string;
-    student_number?: string;
+    username?: string;
   } & PaginationRequest
 ): Promise<GetPersonnelReponse> => {
   return apiFetch(`/modules/${moduleId}/lecturers?${buildQuery(options)}`);
@@ -42,7 +42,7 @@ export const getTutors = async (
   moduleId: number,
   options: {
     email?: string;
-    student_number?: string;
+    username?: string;
   } & PaginationRequest
 ): Promise<GetPersonnelReponse> => {
   return apiFetch(`/modules/${moduleId}/tutors?${buildQuery(options)}`);
@@ -52,7 +52,7 @@ export const getStudents = async (
   moduleId: number,
   options: {
     email?: string;
-    student_number?: string;
+    username?: string;
   } & PaginationRequest
 ): Promise<GetPersonnelReponse> => {
   return apiFetch(`/modules/${moduleId}/students?${buildQuery(options)}`);
@@ -69,7 +69,7 @@ export const getEligibleUsersForRole = async (
   role: ModuleRole,
   options: {
     email?: string;
-    student_number?: string;
+    username?: string;
   } & PaginationRequest
 ): Promise<GetEligibleUsersResponse> => {
   const query = buildQuery({ ...options, role });

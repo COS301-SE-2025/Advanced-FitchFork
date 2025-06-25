@@ -8,7 +8,7 @@ export interface ApiResponse<T> {
   success: boolean;
 
   /** The actual response data from the server. */
-  data: T | null;
+  data: T;
 
   /** A human-readable message from the server. */
   message: string;
@@ -17,18 +17,18 @@ export interface ApiResponse<T> {
 export type SortOrder = 'ascend' | 'descend';
 
 export interface SortOption {
-    field: string,
-    order: SortOrder;
+  field: string,
+  order: SortOrder;
 }
 
 export interface Timestamp {
-    created_at: string,
-    updated_at: string,
+  created_at: string,
+  updated_at: string,
 }
 
 export interface Score {
-    earned: number;
-    total: number;
+  earned: number;
+  total: number;
 }
 
 export interface PaginationRequest {

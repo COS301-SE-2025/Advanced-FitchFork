@@ -8,23 +8,23 @@ import type {
 import { apiFetch, apiUpload } from "@/utils/api";
 
 export const login = async (
-  student_number: string,
+  username: string,
   password: string,
 ): Promise<PostLoginResponse> => {
   return apiFetch('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ student_number, password }),
+    body: JSON.stringify({ username, password }),
   });
 };
 
 export const register = async (
-  student_number: string,
+  username: string,
   email: string,
   password: string,
 ): Promise<PostRegisterResponse> => {
   return apiFetch('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ student_number, email, password }),
+    body: JSON.stringify({ username, email, password }),
   });
 };
 

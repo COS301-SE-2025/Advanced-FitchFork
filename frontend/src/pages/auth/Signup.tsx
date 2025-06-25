@@ -23,16 +23,12 @@ export default function Signup() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const handleFinish = async (values: {
-    student_number: string;
+    username: string;
     email: string;
     password: string;
     confirmPassword: string;
   }) => {
-    const res = await register({
-      username: values.username,
-      email: values.email,
-      password: values.password,
-    });
+    const res = await register(values.username, values.email, values.password);
 
     if (res.success) {
       navigate('/home');
@@ -92,9 +88,9 @@ export default function Signup() {
               size="large"
             >
               <Form.Item
-                label={<span className="text-sm sm:text-base">Student Number</span>}
-                name="student_number"
-                rules={[{ required: true, message: 'Please enter your student number' }]}
+                label={<span className="text-sm sm:text-base">Username</span>}
+                name="username"
+                rules={[{ required: true, message: 'Please enter your username' }]}
               >
                 <Input placeholder="u00000000" />
               </Form.Item>
