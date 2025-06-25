@@ -205,7 +205,8 @@ task3:
   "max_cpus": "2",
   "max_processes": 256,
   "max_uncompressed_size": 50000000,
-  "language": "java"
+  "marking_scheme": "exact",
+  "feedback_scheme": "auto"
 }
 "#;
 
@@ -422,7 +423,8 @@ task3:
   "max_cpus": "2",
   "max_processes": 256,
   "max_uncompressed_size": 50000000,
-  "language": "cpp"
+  "marking_scheme": "exact",
+  "feedback_scheme": "auto"
 }
 "#;
 
