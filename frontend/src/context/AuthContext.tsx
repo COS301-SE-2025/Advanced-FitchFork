@@ -3,13 +3,8 @@ import type { User } from '@/types/users';
 import type { Module, ModuleRole } from '@/types/modules';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ApiResponse } from '@/types/common';
-import { API_BASE_URL } from '@/utils/api';
-import { getMyModules } from '@/services/modules';
-import {
-  getAuthenticatedUser,
-  login as loginService,
-  register as registerService,
-} from '@/services/auth';
+import { login as loginService, register as registerService } from '@/services/auth';
+import { loadAuthSession } from '@/utils/authSession';
 
 interface UserModuleRole extends Module {
   role: ModuleRole;
@@ -68,48 +63,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          if (isExpired()) {
-            logout();
-            return;
-          }
+          if (isExpired()) return logout();
 
-          const meRes = await getAuthenticatedUser();
-          if (meRes.success && meRes.data) {
-            const userData = meRes.data;
-            setUser(userData);
-            setProfilePictureUrl(`${API_BASE_URL}/auth/avatar/${userData.id}?bust=${Date.now()}`);
+          const session = await loadAuthSession(parsed);
+          if (!session) return logout();
 
-            const modRes = await getMyModules();
-            if (modRes.success && modRes.data) {
-              const grouped = modRes.data;
-
-              const flat: UserModuleRole[] = [
-                ...grouped.as_lecturer.map((m) => ({ ...m, role: 'Lecturer' as const })),
-                ...grouped.as_tutor.map((m) => ({ ...m, role: 'Tutor' as const })),
-                ...grouped.as_student.map((m) => ({ ...m, role: 'Student' as const })),
-              ];
-
-              setModules(flat);
-              setModulesByRole({
-                Lecturer: grouped.as_lecturer,
-                Tutor: grouped.as_tutor,
-                Student: grouped.as_student,
-              });
-
-              localStorage.setItem(
-                'auth',
-                JSON.stringify({
-                  ...parsed,
-                  user: userData,
-                  modules: flat,
-                }),
-              );
-            } else {
-              logout();
-            }
-          } else {
-            logout();
-          }
+          setUser(session);
+          setProfilePictureUrl(session.profilePictureUrl);
+          setModules(session.modules.Flat);
+          setModulesByRole({
+            Lecturer: session.modules.Lecturer,
+            Tutor: session.modules.Tutor,
+            Student: session.modules.Student,
+          });
         } catch {
           logout();
         }
@@ -126,55 +92,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<ApiResponse<AuthUser | null>> => {
     try {
       const res = await loginService(student_number, password);
-      if (res.success && res.data) {
-        const { token, expires_at, ...user } = res.data;
+      if (!res.success || !res.data) return res;
 
-        localStorage.setItem(
-          'auth',
-          JSON.stringify({
-            user,
-            token,
-            expires_at,
-            modules: [],
-          }),
-        );
+      const { token, expires_at, ...user } = res.data;
+      localStorage.setItem('auth', JSON.stringify({ user, token, expires_at, modules: [] }));
 
-        const meRes = await getAuthenticatedUser();
-        if (meRes.success && meRes.data) {
-          const userData = meRes.data;
-          setUser(userData);
-          setProfilePictureUrl(`${API_BASE_URL}/auth/avatar/${userData.id}?bust=${Date.now()}`);
-
-          const modRes = await getMyModules();
-          if (modRes.success && modRes.data) {
-            const grouped = modRes.data;
-
-            const flat: UserModuleRole[] = [
-              ...grouped.as_lecturer.map((m) => ({ ...m, role: 'Lecturer' as const })),
-              ...grouped.as_tutor.map((m) => ({ ...m, role: 'Tutor' as const })),
-              ...grouped.as_student.map((m) => ({ ...m, role: 'Student' as const })),
-            ];
-
-            setModules(flat);
-            setModulesByRole({
-              Lecturer: grouped.as_lecturer,
-              Tutor: grouped.as_tutor,
-              Student: grouped.as_student,
-            });
-
-            localStorage.setItem(
-              'auth',
-              JSON.stringify({
-                user: userData,
-                token,
-                expires_at,
-                modules: flat,
-              }),
-            );
-          }
-        }
-
-        return res;
+      const session = await loadAuthSession({ token, expires_at });
+      if (session) {
+        setUser(session);
+        setProfilePictureUrl(session.profilePictureUrl);
+        setModules(session.modules.Flat);
+        setModulesByRole({
+          Lecturer: session.modules.Lecturer,
+          Tutor: session.modules.Tutor,
+          Student: session.modules.Student,
+        });
       }
 
       return res;

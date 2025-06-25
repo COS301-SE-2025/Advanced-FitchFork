@@ -22,6 +22,8 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const [compact, setCompact] = useState(() => localStorage.getItem('compact') === 'true');
   const [motion, setMotion] = useState(() => localStorage.getItem('motion') !== 'false');
 
+  const { isDarkMode } = useTheme();
+
   useEffect(() => {
     localStorage.setItem('compact', String(compact));
   }, [compact]);
@@ -29,8 +31,6 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   useEffect(() => {
     localStorage.setItem('motion', String(motion));
   }, [motion]);
-
-  const { isDarkMode } = useTheme();
 
   return (
     <UIContext.Provider value={{ compact, setCompact, motion, setMotion }}>

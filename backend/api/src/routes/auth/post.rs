@@ -5,7 +5,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use axum::extract::{Multipart, Path};
+use axum::extract::{Multipart};
 use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set, IntoActiveModel};
 
 use serde::{Deserialize, Serialize};

@@ -21,7 +21,7 @@ use mark_allocator::mark_allocator_routes;
 use submissions::submission_routes;
 
 use crate::{auth::guards::{
-    require_assigned_to_module, require_lecturer, require_lecturer_or_admin, require_lecturer_or_tutor
+    require_assigned_to_module, require_lecturer, require_lecturer_or_admin
 }, routes::modules::assignments::{get::list_tasks, post::create_task}};
 
 /// Expects a module ID

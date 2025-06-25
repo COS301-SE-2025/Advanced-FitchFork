@@ -12,9 +12,9 @@ import type { UploadProps } from 'antd';
 import PageHeader from '@/components/PageHeader';
 import SettingsGroup from '@/components/SettingsGroup';
 import { useAuth } from '@/context/AuthContext';
-import { API_BASE_URL } from '@/utils/api';
 import useNotImplemented from '@/hooks/useNotImplemented';
 import { uploadProfilePicture } from '@/services/auth';
+import { API_BASE_URL } from '@/config/api';
 
 const Account = () => {
   const notImplemented = useNotImplemented();

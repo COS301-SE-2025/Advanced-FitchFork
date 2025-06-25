@@ -1,9 +1,5 @@
+import { API_BASE_URL } from "@/config/api";
 import type { ApiResponse } from "@/types/common";
-
-/**
- * Base URL used for all API requests.
- */
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 
 /**
  * Serializes a flat or semi-structured object into a query string.
@@ -88,37 +84,48 @@ export async function apiFetch<T>(
     headers,
   };
 
-  // Log outgoing request
-  console.log('[apiFetch] →', {
-    url,
-    method: finalOptions.method || 'GET',
-    headers: finalOptions.headers,
-    body: finalOptions.body,
-  });
+  // // Log outgoing request
+  // console.log('[apiFetch] →', {
+  //   url,
+  //   method: finalOptions.method || 'GET',
+  //   headers: finalOptions.headers,
+  //   body: finalOptions.body,
+  // });
 
   // Perform fetch request
   const res = await fetch(url, finalOptions);
-
+  const contentType = res.headers.get('content-type');
   let data: ApiResponse<T>;
 
-  // Attempt to parse JSON response
   try {
-    data = await res.json();
+    if (contentType && contentType.includes('application/json')) {
+      data = await res.json();
+    } else {
+      const text = await res.text();
+      data = {
+        success: false,
+        data: null,
+        message: text || 'Unknown error',
+      };
+    }
   } catch (err) {
-    console.error('[apiFetch] Failed to parse JSON response', err);
-    throw new Error('Failed to parse response from server.');
+    console.error('[apiFetch] Failed to parse response', err);
+    data = {
+      success: false,
+      data: null,
+      message: 'Failed to parse response from server.',
+    };
   }
 
-  // Log incoming response
-  console.log('[apiFetch] ←', {
-    status: res.status,
-    ok: res.ok,
-    data,
-  });
+  // // Log incoming response
+  // console.log('[apiFetch] ←', {
+  //   status: res.status,
+  //   ok: res.ok,
+  //   data,
+  // });
 
   return data;
 }
-
 
 /**
  * Upload files using a FormData payload.

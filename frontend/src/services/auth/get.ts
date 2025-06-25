@@ -1,3 +1,5 @@
+
+import { API_BASE_URL } from "@/config/api";
 import type { GetAuthenticatedUserResponse, GetHasRoleResponse } from "@/types/auth";
 import type { ModuleRole } from "@/types/modules";
 import { apiDownload, apiFetch } from "@/utils/api";
@@ -18,7 +20,7 @@ export const downloadProfilePicture = async (): Promise<void> => {
 };
 
 export const getProfilePictureBlobUrl = async (): Promise<string | null> => {
-  const url = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'}/auth/avatar/me`;
+  const url = `${API_BASE_URL}/auth/avatar/me`;
 
   const stored = localStorage.getItem('auth');
   let token: string | null = null;

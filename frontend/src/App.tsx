@@ -27,7 +27,7 @@ import SettingsLayout from './layouts/SettingsLayout';
 import Account from './pages/settings/Account';
 import Security from './pages/settings/Security';
 import Appearance from './pages/settings/Appearance';
-import AssignmentLayout from './layouts/AssigmentLayout';
+import AssignmentLayout from './layouts/AssignmentLayout';
 import SubmissionView from './pages/modules/assignments/submissions/show/SubmissionView';
 import Submissions from './pages/modules/assignments/submissions/index/Submissions';
 import SubmissionLayout from './layouts/SubmissionLayout';
@@ -93,6 +93,8 @@ export default function App() {
             <Route path="assignments" element={<Assignments />} />
             <Route path="assignments/:assignment_id" element={<AssignmentLayout />}>
               <Route path="submissions" element={<Submissions />} />
+              <Route path="tasks" element={<UnderConstruction />} />
+              <Route path="config" element={<UnderConstruction />} />
               <Route path="stats" element={<UnderConstruction />} />
             </Route>
             <Route path="assignments/:assignment_id" element={<SubmissionLayout />}>

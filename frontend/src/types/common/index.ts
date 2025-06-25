@@ -8,7 +8,7 @@ export interface ApiResponse<T> {
   success: boolean;
 
   /** The actual response data from the server. */
-  data: T;
+  data: T | null;
 
   /** A human-readable message from the server. */
   message: string;

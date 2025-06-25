@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Outlet, useParams } from 'react-router-dom';
 import { Tabs, Spin, Alert } from 'antd';
 
 import { useModule } from '@/context/ModuleContext';
+import { useAuth } from '@/context/AuthContext';
 import { AssignmentProvider } from '@/context/AssignmentContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import PageHeader from '@/components/PageHeader';
@@ -15,6 +16,7 @@ interface AssignmentDetails extends Assignment {
 
 const AssignmentLayout = () => {
   const module = useModule();
+  const { isStudent, isLecturer, isAdmin } = useAuth();
   const { assignment_id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -27,9 +29,17 @@ const AssignmentLayout = () => {
   const assignmentIdNum = Number(assignment_id);
   const basePath = `/modules/${module.id}/assignments/${assignment_id}`;
 
+  const showTabs = !isStudent(module.id) || isAdmin; // hide all tabs if student
+
   const tabs = [
     { key: `${basePath}/submissions`, label: 'Submissions' },
-    { key: `${basePath}/stats`, label: 'Statistics' },
+    ...(isLecturer(module.id) || isAdmin
+      ? [
+          { key: `${basePath}/tasks`, label: 'Tasks' },
+          { key: `${basePath}/config`, label: 'Config' },
+          { key: `${basePath}/stats`, label: 'Statistics' },
+        ]
+      : []),
   ];
 
   const activeKey =
@@ -43,9 +53,7 @@ const AssignmentLayout = () => {
       if (res.success && res.data) {
         setAssignment(res.data);
         setError(null);
-        console.log(res);
         const breadcrumbKey = `modules/${module.id}/assignments/${res.data.id}`;
-        console.log(breadcrumbKey);
         setBreadcrumbLabel(breadcrumbKey, res.data.name);
       } else {
         setError(res.message || 'Failed to load assignment.');
@@ -83,13 +91,16 @@ const AssignmentLayout = () => {
         title={assignment.name}
         description={`Manage assignment #${assignment.id} in ${module.code}`}
       />
-      <Tabs
-        activeKey={activeKey}
-        onChange={(key) => navigate(key)}
-        items={tabs}
-        tabBarGutter={16}
-        className="!mb-4"
-      />
+
+      {showTabs && (
+        <Tabs
+          activeKey={activeKey}
+          onChange={(key) => navigate(key)}
+          items={tabs}
+          tabBarGutter={16}
+          className="!mb-4"
+        />
+      )}
 
       <AssignmentProvider value={{ assignment }}>
         <Outlet />
