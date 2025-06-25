@@ -893,7 +893,20 @@ pub struct StatResponse {
     pub late_submissions: i8,
     pub per_student_submission_count: Vec<PerStudentSubmission>
 }
-
+/// Returns submission statistics for a specific assignment.
+///
+/// Computes total submissions, late submissions, unique submitters,
+/// and submission counts per student with timestamps.
+///
+/// ### Returns:
+/// - `200 OK` with submission stats if successful
+/// - `404 Not Found` if the assignment does not exist
+/// - `500 Internal Server Error` on database errors
+///
+/// ### Example `curl` request:
+/// ```bash
+/// curl -X GET http://localhost:3000/modules/1/assignments/2/stats
+/// ```
 pub async fn stats(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
     let db = connect().await;
 
