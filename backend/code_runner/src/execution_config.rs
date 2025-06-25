@@ -2,40 +2,37 @@ use serde::Deserialize;
 use std::{env, fs, path::PathBuf};
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MarkingScheme {
+    Exact,
+    Percentage,
+    Regex,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FeedbackScheme {
+    Auto,
+    Manual,
+    Ai,
+}
 
 /// Configuration for resource-limited code execution environments.
 ///
 /// This struct is loaded from a JSON file per assignment, and passed to Docker
 /// to enforce memory, CPU, timeout, and process constraints.
+#[derive(Debug, Clone, Deserialize)]
 pub struct ExecutionConfig {
-    /// Maximum execution time (in seconds) for the container.
     pub timeout_secs: u64,
-
-    /// Maximum memory allocated to the container (e.g., "128m").
     pub max_memory: String,
-
-    /// Maximum number of CPU cores the container may use (e.g., "1.0").
     pub max_cpus: String,
-
-    /// Maximum total size of decompressed files from zip archives.
     pub max_uncompressed_size: u64,
-
-    /// Maximum number of processes allowed within the container.
     pub max_processes: u32,
-
-    /// Programming language identifier (used to choose execution method).
-    pub language: String,
+    pub marking_scheme: MarkingScheme,
+    pub feedback_scheme: FeedbackScheme,
 }
 
-/// Resolves the storage root directory from the `ASSIGNMENT_STORAGE_ROOT` environment variable,
-/// or falls back to a default path relative to the backend root.
-///
-/// Ensures the path is absolute for consistent access in tests and Docker builds.
 impl ExecutionConfig {
-    /// Resolves the storage root directory from the `ASSIGNMENT_STORAGE_ROOT` environment variable,
-    /// or falls back to a default path relative to the backend root.
-    ///
-    /// Ensures the path is absolute for consistent access in tests and Docker builds.
     fn resolve_storage_root() -> PathBuf {
         if let Ok(p) = env::var("ASSIGNMENT_STORAGE_ROOT") {
             let path = PathBuf::from(p);
@@ -48,17 +45,10 @@ impl ExecutionConfig {
                 path
             }
         } else {
-            PathBuf::from("../data/assignment_files") // fallback with correct relative path
+            PathBuf::from("../data/assignment_files")
         }
     }
 
-    /// Loads an execution config from a JSON file located at:
-    /// `<base_path>/module_<module_id>/assignment_<assignment_id>/config/*.json`
-    ///
-    /// If `base_path` is not provided, uses the default resolved storage root.
-    ///
-    /// Returns `Err` if the config directory cannot be read, no config file is found,
-    /// or the JSON is invalid.
     pub fn get_execution_config_with_base(
         module_id: i64,
         assignment_id: i64,
@@ -127,7 +117,8 @@ mod tests {
             "max_cpus": "1.5",
             "max_uncompressed_size": 10485760,
             "max_processes": 64,
-            "language": "python"
+            "marking_scheme": "exact",
+            "feedback_scheme": "auto"
         }
         "#;
 
@@ -148,7 +139,8 @@ mod tests {
         assert_eq!(cfg.max_cpus, "1.5");
         assert_eq!(cfg.max_uncompressed_size, 10 * 1024 * 1024);
         assert_eq!(cfg.max_processes, 64);
-        assert_eq!(cfg.language, "python");
+        assert!(matches!(cfg.marking_scheme, MarkingScheme::Exact));
+        assert!(matches!(cfg.feedback_scheme, FeedbackScheme::Auto));
     }
 
     #[test]

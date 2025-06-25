@@ -21,17 +21,17 @@ import {
 } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
-import { UsersService } from '@/services/users';
 import type { User } from '@/types/users';
 import type { SortOption } from '@/types/common';
 import { useTableQuery } from '@/hooks/useTableQuery';
 import TableControlBar from '@/components/TableControlBar';
 import TableTagSummary from '@/components/TableTagSummary';
 import TableCreateModal from '@/components/TableCreateModal';
-import { AuthService } from '@/services/auth';
 import { useNotifier } from '@/components/Notifier';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/PageHeader';
+import { listUsers, editUser, deleteUser } from '@/services/users';
+import { register } from '@/services/auth';
 
 const UsersList = () => {
   // ======================================================================
@@ -76,7 +76,7 @@ const UsersList = () => {
 
     const sort: SortOption[] = sorterState.map(({ field, order }) => ({ field, order }));
 
-    const res = await UsersService.listUsers({
+    const res = await listUsers({
       page: pagination.current,
       per_page: pagination.pageSize,
       query: searchTerm || undefined,
@@ -119,11 +119,7 @@ const UsersList = () => {
     const { student_number, email } = formValues;
 
     try {
-      const res = await AuthService.register({
-        student_number,
-        email,
-        password: 'changeme123',
-      });
+      const res = await register(student_number, email, 'changeme123');
 
       if (res.success) {
         notifySuccess('User registered successfully', res.message);
@@ -154,7 +150,7 @@ const UsersList = () => {
       updated_at: new Date().toISOString(),
     };
 
-    const res = await UsersService.editUser(updated.id, updated);
+    const res = await editUser(updated.id, updated);
     if (res.success) {
       notifySuccess('User updated successfully', res.message);
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? res.data : u)));
@@ -166,7 +162,7 @@ const UsersList = () => {
   };
 
   const handleDelete = async (id: number) => {
-    const res = await UsersService.deleteUser(id);
+    const res = await deleteUser(id);
     if (res.success) {
       setUsers((prev) => prev.filter((u) => u.id !== id));
       setSelectedRowKeys((prev) => prev.filter((k) => k !== id));

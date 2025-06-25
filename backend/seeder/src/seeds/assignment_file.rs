@@ -10,7 +10,6 @@ pub struct AssignmentFileSeeder;
 #[async_trait::async_trait]
 impl Seeder for AssignmentFileSeeder {
     async fn seed(&self, db: &DatabaseConnection) {
-        // Existing seed logic
         let assignments = assignment::Entity::find()
             .all(db)
             .await
@@ -28,7 +27,7 @@ impl Seeder for AssignmentFileSeeder {
         ];
 
         for a in &assignments {
-            if a.module_id == 9999 {
+            if a.module_id == 9999 || a.module_id == 9998 {
                 continue;
             }
             for &(ref file_type, filename_fn) in &file_types {
@@ -206,7 +205,8 @@ task3:
   "max_cpus": "2",
   "max_processes": 256,
   "max_uncompressed_size": 50000000,
-  "language": "java"
+  "marking_scheme": "exact",
+  "feedback_scheme": "auto"
 }
 "#;
 
@@ -226,6 +226,228 @@ task3:
                 db,
                 special_assignment_id,
                 special_module_id,
+                file_type,
+                filename,
+                &content,
+            )
+            .await;
+        }
+
+        let cpp_module_id = 9998;
+        let cpp_assignment_id = 9998;
+
+        fn create_main_zip_cpp() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = FileOptions::default().unix_permissions(0o644);
+
+                let main_cpp = r#"
+#include <iostream>
+#include <string>
+#include "HelperOne.h"
+#include "HelperTwo.h"
+#include "HelperThree.h"
+
+void runTask1() {
+    std::cout << "&-=-&Task1Subtask1\n" << HelperOne::subtaskA() << std::endl;
+    std::cout << "&-=-&Task1Subtask2\n" << HelperTwo::subtaskB() << std::endl;
+    std::cout << "&-=-&Task1Subtask3\n" << HelperThree::subtaskC() << std::endl;
+}
+
+void runTask2() {
+    std::cout << "&-=-&Task2Subtask1\n" << HelperTwo::subtaskX() << std::endl;
+    std::cout << "&-=-&Task2Subtask2\n" << HelperThree::subtaskY() << std::endl;
+    std::cout << "&-=-&Task2Subtask3\n" << HelperOne::subtaskZ() << std::endl;
+}
+
+void runTask3() {
+    std::cout << "&-=-&Task3Subtask1\n" << HelperThree::subtaskAlpha() << std::endl;
+    std::cout << "&-=-&Task3Subtask2\n" << HelperOne::subtaskBeta() << std::endl;
+    std::cout << "&-=-&Task3Subtask3\n" << HelperTwo::subtaskGamma() << std::endl;
+}
+
+int main(int argc, char* argv[]) {
+    std::string task = argc > 1 ? argv[1] : "task1";
+
+    if (task == "task1") runTask1();
+    else if (task == "task2") runTask2();
+    else if (task == "task3") runTask3();
+    else std::cout << task << " is not a valid task" << std::endl;
+
+    return 0;
+}
+"#;
+
+                let helper_one_h = r#"
+#ifndef HELPERONE_H
+#define HELPERONE_H
+#include <string>
+struct HelperOne {
+    static std::string subtaskA();
+    static std::string subtaskZ();
+    static std::string subtaskBeta();
+};
+#endif
+"#;
+
+                let helper_two_h = r#"
+#ifndef HELPERTWO_H
+#define HELPERTWO_H
+#include <string>
+struct HelperTwo {
+    static std::string subtaskB();
+    static std::string subtaskX();
+    static std::string subtaskGamma();
+};
+#endif
+"#;
+
+                let helper_three_h = r#"
+#ifndef HELPERTHREE_H
+#define HELPERTHREE_H
+#include <string>
+struct HelperThree {
+    static std::string subtaskC();
+    static std::string subtaskY();
+    static std::string subtaskAlpha();
+};
+#endif
+"#;
+
+                zip.start_file("Main.cpp", options).unwrap();
+                zip.write_all(main_cpp.as_bytes()).unwrap();
+
+                zip.start_file("HelperOne.h", options).unwrap();
+                zip.write_all(helper_one_h.as_bytes()).unwrap();
+
+                zip.start_file("HelperTwo.h", options).unwrap();
+                zip.write_all(helper_two_h.as_bytes()).unwrap();
+
+                zip.start_file("HelperThree.h", options).unwrap();
+                zip.write_all(helper_three_h.as_bytes()).unwrap();
+
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        fn create_memo_zip_cpp() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = FileOptions::default().unix_permissions(0o644);
+
+                let helper_one_cpp = r#"
+#include "HelperOne.h"
+std::string HelperOne::subtaskA() {
+    return "HelperOne: Subtask for Task1\nThis as well\nAnd this";
+}
+std::string HelperOne::subtaskZ() {
+    return "HelperOne: Subtask for Task2\nThis as well\nAnd this";
+}
+std::string HelperOne::subtaskBeta() {
+    return "HelperOne: Subtask for Task3\nThis as well\nAnd this";
+}
+"#;
+
+                let helper_two_cpp = r#"
+#include "HelperTwo.h"
+std::string HelperTwo::subtaskB() {
+    return "HelperTwo: Subtask for Task1\nThis as well\nAnd this";
+}
+std::string HelperTwo::subtaskX() {
+    return "HelperTwo: Subtask for Task2\nThis as well\nAnd this";
+}
+std::string HelperTwo::subtaskGamma() {
+    return "HelperTwo: Subtask for Task3\nThis as well\nAnd this";
+}
+"#;
+
+                let helper_three_cpp = r#"
+#include "HelperThree.h"
+std::string HelperThree::subtaskC() {
+    return "HelperThree: Subtask for Task1\nThis as well\nAnd this";
+}
+std::string HelperThree::subtaskY() {
+    return "HelperThree: Subtask for Task2\nThis as well\nAnd this";
+}
+std::string HelperThree::subtaskAlpha() {
+    return "HelperThree: Subtask for Task3\nThis as well\nAnd this";
+}
+"#;
+
+                zip.start_file("HelperOne.cpp", options).unwrap();
+                zip.write_all(helper_one_cpp.as_bytes()).unwrap();
+
+                zip.start_file("HelperTwo.cpp", options).unwrap();
+                zip.write_all(helper_two_cpp.as_bytes()).unwrap();
+
+                zip.start_file("HelperThree.cpp", options).unwrap();
+                zip.write_all(helper_three_cpp.as_bytes()).unwrap();
+
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        fn create_makefile_zip_cpp() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = FileOptions::default().unix_permissions(0o644);
+
+                let makefile_content = r#"
+task1:
+	g++ -o /output/main Main.cpp HelperOne.cpp HelperTwo.cpp HelperThree.cpp && /output/main task1
+
+task2:
+	g++ -o /output/main Main.cpp HelperOne.cpp HelperTwo.cpp HelperThree.cpp && /output/main task2
+
+task3:
+	g++ -o /output/main Main.cpp HelperOne.cpp HelperTwo.cpp HelperThree.cpp && /output/main task3
+
+"#;
+
+                zip.start_file("Makefile", options).unwrap();
+                zip.write_all(makefile_content.as_bytes()).unwrap();
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        let config_json_cpp = r#"
+{
+  "timeout_secs": 15,
+  "max_memory": "768m",
+  "max_cpus": "2",
+  "max_processes": 256,
+  "max_uncompressed_size": 50000000,
+  "marking_scheme": "exact",
+  "feedback_scheme": "auto"
+}
+"#;
+
+        let zipped_files_cpp = vec![
+            (FileType::Main, "main.zip", create_main_zip_cpp()),
+            (FileType::Memo, "memo.zip", create_memo_zip_cpp()),
+            (
+                FileType::Makefile,
+                "makefile.zip",
+                create_makefile_zip_cpp(),
+            ),
+            (
+                FileType::Config,
+                "config.json",
+                config_json_cpp.as_bytes().to_vec(),
+            ),
+        ];
+
+        for (file_type, filename, content) in zipped_files_cpp {
+            let _ = Model::save_file(
+                db,
+                cpp_assignment_id,
+                cpp_module_id,
                 file_type,
                 filename,
                 &content,

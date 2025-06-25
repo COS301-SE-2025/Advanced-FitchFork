@@ -11,8 +11,8 @@ const config: Config = {
   transform: {
     '^.+\\.tsx?$': 'ts-jest',
   },
-  testMatch: ['<rootDir>/src/tests/**/*.(spec|test).ts?(x)'],
-  roots: ['<rootDir>/src/tests'],
+  testMatch: ['**/*.test.ts?(x)', '**/*.spec.ts?(x)'],
+  roots: ['<rootDir>/src'],
   setupFilesAfterEnv: ['<rootDir>/src/tests/setup.ts'],
 };
 

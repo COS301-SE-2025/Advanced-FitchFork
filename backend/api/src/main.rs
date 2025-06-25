@@ -28,6 +28,7 @@ async fn main() {
     let _log_guard = init_logging(&log_file, &log_level);
 
     info!("Starting {} on http://{}:{}", project_name, host, port);
+    println!("Server running at http://{}:{} ({})", host, port, project_name);
 
     // Setup CORS
     let cors = CorsLayer::very_permissive()
