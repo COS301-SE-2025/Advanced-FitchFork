@@ -131,12 +131,12 @@ pub struct ListSubmissionsQuery {
     pub query: Option<String>,
     pub user_id: Option<i64>,
     pub late: Option<bool>,
-    pub student_number: Option<String>,
+    pub username: Option<String>,
 }
 #[derive(Debug, Serialize, Clone)]
 pub struct UserResponse {
     user_id: i64,
-    student_number: String,
+    username: String,
     email: String,
 }
 
@@ -170,7 +170,7 @@ pub struct SubmissionsListResponse {
 ///   - `filename`
 ///   - `created_at`
 ///   - `user_id`
-///   - `student_number` filter by unique students
+///   - `username` filter by unique students
 /// ### Responses
 /// - `200 OK` with list of submissions
 /// - `403 Forbidden` (not a lecturer or tutor)
@@ -183,9 +183,9 @@ pub async fn get_list_submissions(
     params: ListSubmissionsQuery,
 ) -> impl IntoResponse {
     let db = connect().await;
-    if let Some(student_number) = &params.student_number {
+    if let Some(username) = &params.username {
         match user::Entity::find()
-            .filter(user::Column::StudentNumber.eq(student_number.clone()))
+            .filter(user::Column::Username.eq(username.clone()))
             .one(&db)
             .await
         {
@@ -322,7 +322,7 @@ pub async fn get_list_submissions(
                 u.id,
                 UserResponse {
                     user_id: u.id,
-                    student_number: u.student_number,
+                    username: u.username,
                     email: u.email,
                 },
             )
@@ -335,7 +335,7 @@ pub async fn get_list_submissions(
             id: s.id,
             user: user_map.get(&s.user_id).cloned().unwrap_or(UserResponse {
                 user_id: s.user_id,
-                student_number: "unkown student number".to_string(),
+                username: "unknown username".to_string(),
                 email: "unknown email".to_string(),
             }),
             filename: s.filename,
@@ -487,7 +487,7 @@ pub async fn get_submission(
             .unwrap_or(None)
             .map(|u| UserResponse {
                 user_id: u.id,
-                student_number: u.student_number,
+                username: u.username,
                 email: u.email,
             });
 
@@ -507,3 +507,4 @@ pub async fn get_submission(
     )
         .into_response()
 }
+

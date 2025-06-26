@@ -32,6 +32,10 @@ import SubmissionView from './pages/modules/assignments/submissions/show/Submiss
 import Submissions from './pages/modules/assignments/submissions/index/Submissions';
 import SubmissionLayout from './layouts/SubmissionLayout';
 import Assignments from './pages/modules/assignments/index/Assignments';
+import TasksLayout from './layouts/TasksLayout';
+import TasksIndex from './pages/modules/assignments/tasks/TasksIndex';
+import Config from './pages/modules/assignments/Config';
+import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
 
 export default function App() {
   const { user, isAdmin, loading, isExpired } = useAuth();
@@ -92,9 +96,16 @@ export default function App() {
             <Route index element={<ModuleOverview />} />
             <Route path="assignments" element={<Assignments />} />
             <Route path="assignments/:assignment_id" element={<AssignmentLayout />}>
+              <Route index element={<Navigate to="submissions" replace />} />
+              <Route path="files" element={<AssignmentFiles />} />
               <Route path="submissions" element={<Submissions />} />
-              <Route path="tasks" element={<UnderConstruction />} />
-              <Route path="config" element={<UnderConstruction />} />
+              <Route path="tasks" element={<TasksLayout />}>
+                <Route index element={<TasksIndex />} />
+                <Route path=":task_id" element={<UnderConstruction />} />
+              </Route>
+              <Route path="config" element={<Config />} />
+              <Route path="memo-output" element={<UnderConstruction />} />
+              <Route path="mark-allocator" element={<UnderConstruction />} />
               <Route path="stats" element={<UnderConstruction />} />
             </Route>
             <Route path="assignments/:assignment_id" element={<SubmissionLayout />}>

@@ -17,7 +17,7 @@ impl MigrationTrait for Migration {
                     .table(Alias::new("users"))
                     .if_not_exists()
                     .col(ColumnDef::new(Alias::new("id")).integer().not_null().auto_increment().primary_key())
-                    .col(ColumnDef::new(Alias::new("student_number")).string().not_null().unique_key())
+                    .col(ColumnDef::new(Alias::new("username")).string().not_null().unique_key())
                     .col(ColumnDef::new(Alias::new("email")).string().not_null().unique_key())
                     .col(ColumnDef::new(Alias::new("password_hash")).string().not_null())
                     .col(ColumnDef::new(Alias::new("admin")).boolean().not_null())

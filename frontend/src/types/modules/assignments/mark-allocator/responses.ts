@@ -6,3 +6,9 @@ import type { MarkAllocatorItem } from "./shared";
 // ─────────────────────────────────────────────────────────────
 
 export type GetMarkAllocatorResponse = ApiResponse<MarkAllocatorItem[]>;
+
+// ─────────────────────────────────────────────────────────────
+// POST Responses Types
+// ─────────────────────────────────────────────────────────────
+
+export type PostGenerateMarkAllcatorReponse = ApiResponse<null>;

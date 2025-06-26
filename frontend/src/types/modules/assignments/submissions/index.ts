@@ -1,2 +1,2 @@
-export * from "./submissionList"
-export * from "./submissionDetails"
+export * from "./shared"
+export * from "./responses";

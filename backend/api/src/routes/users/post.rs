@@ -11,7 +11,7 @@ use crate::services::email::EmailService;
 
 #[derive(Deserialize)]
 pub struct CreateUserRequest {
-    pub student_number: String,
+    pub username: String,
     pub email: String,
     pub admin: bool,
 }
@@ -19,7 +19,7 @@ pub struct CreateUserRequest {
 #[derive(Serialize)]
 pub struct MinimalUserResponse {
     pub id: i64,
-    pub student_number: String,
+    pub username: String,
     pub email: String,
     pub admin: bool,
 }
@@ -61,7 +61,7 @@ pub async fn create_user(
 
     // Student number check
     if user::Entity::find()
-        .filter(user::Column::StudentNumber.eq(req.student_number.clone()))
+        .filter(user::Column::Username.eq(req.username.clone()))
         .one(&db)
         .await
         .unwrap()
@@ -75,7 +75,7 @@ pub async fn create_user(
 
     let inserted = match UserModel::create(
         &db,
-        &req.student_number,
+        &req.username,
         &req.email,
         "changeme",
         req.admin,
@@ -101,7 +101,7 @@ pub async fn create_user(
 
     let response = MinimalUserResponse {
         id: inserted.id,
-        student_number: inserted.student_number,
+        username: inserted.username,
         email: inserted.email,
         admin: inserted.admin,
     };

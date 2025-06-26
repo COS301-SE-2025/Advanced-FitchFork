@@ -1,5 +1,5 @@
 
-import type { GetMarkAllocatorResponse } from "@/types/assignments/mark-allocator";
+import type { GetMarkAllocatorResponse } from "@/types/modules/assignments/mark-allocator";
 import { apiFetch } from "@/utils/api";
 
 export const getMarkAllocator = async (

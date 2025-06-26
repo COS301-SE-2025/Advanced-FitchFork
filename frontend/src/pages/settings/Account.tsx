@@ -149,10 +149,10 @@ const Account = () => {
         </div>
 
         <div>
-          <label className="block font-medium mb-1 mt-6">Student Number</label>
+          <label className="block font-medium mb-1 mt-6">Username</label>
           <Input
             size="large"
-            value={user?.student_number || 'u12345678'}
+            value={user?.username || 'u12345678'}
             readOnly
             prefix={<IdcardOutlined />}
             className="bg-gray-100 dark:bg-gray-800"

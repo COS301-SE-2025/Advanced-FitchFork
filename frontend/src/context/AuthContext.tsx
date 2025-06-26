@@ -25,12 +25,8 @@ interface AuthContextType {
   setProfilePictureUrl: (url: string | null) => void;
 
   // core actions
-  login: (student_number: string, password: string) => Promise<PostLoginResponse>;
-  register: (
-    student_number: string,
-    email: string,
-    password: string,
-  ) => Promise<PostRegisterResponse>;
+  login: (username: string, password: string) => Promise<PostLoginResponse>;
+  register: (username: string, email: string, password: string) => Promise<PostRegisterResponse>;
   logout: () => void;
   isExpired: () => boolean;
 
@@ -87,11 +83,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (
-    student_number: string,
+    username: string,
     password: string,
   ): Promise<ApiResponse<AuthUser | null>> => {
     try {
-      const res = await loginService(student_number, password);
+      const res = await loginService(username, password);
       if (!res.success || !res.data) return res;
 
       const { token, expires_at, ...user } = res.data;
@@ -120,12 +116,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (
-    student_number: string,
+    username: string,
     email: string,
     password: string,
   ): Promise<ApiResponse<AuthUser | null>> => {
     try {
-      return await registerService(student_number, email, password);
+      return await registerService(username, email, password);
     } catch (err: any) {
       return {
         success: false,

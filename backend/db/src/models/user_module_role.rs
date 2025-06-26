@@ -144,7 +144,7 @@ mod tests {
         // Insert fake user and module records manually
         user::ActiveModel {
             id: Set(1),
-            student_number: Set("s123456".to_string()),
+            username: Set("s123456".to_string()),
             email: Set("a@example.com".to_string()),
             password_hash: Set("hash".to_string()),
             admin: Set(false),
@@ -180,7 +180,7 @@ mod tests {
         // Create foreign keys
         user::ActiveModel {
             id: Set(2),
-            student_number: Set("s654321".to_string()),
+            username: Set("s654321".to_string()),
             email: Set("b@example.com".to_string()),
             password_hash: Set("hash".to_string()),
             admin: Set(false),

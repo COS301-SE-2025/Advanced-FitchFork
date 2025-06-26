@@ -29,11 +29,7 @@ use crate::auth::AuthUser;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
-    #[validate(regex(
-        path = "STUDENT_NUMBER_REGEX",
-        message = "Student number must be in format u12345678"
-    ))]
-    pub student_number: String,
+    pub username: String,
 
     #[validate(email(message = "Invalid email format"))]
     pub email: String,
@@ -47,16 +43,14 @@ pub struct RegisterRequest {
 #[derive(Debug, Serialize, Default)]
 pub struct UserResponse {
     pub id: i64,
-    pub student_number: String,
+    pub username: String,
     pub email: String,
     pub admin: bool,
     pub token: String,
     pub expires_at: String,
 }
 
-lazy_static::lazy_static! {
-    static ref STUDENT_NUMBER_REGEX: regex::Regex = regex::Regex::new("^u\\d{8}$").unwrap();
-}
+
 
 /// POST /auth/register
 ///
@@ -65,7 +59,7 @@ lazy_static::lazy_static! {
 /// ### Request Body
 /// ```json
 /// {
-///   "student_number": "u12345678",
+///   "username": "u12345678",
 ///   "email": "user@example.com",
 ///   "password": "strongpassword"
 /// }
@@ -79,7 +73,7 @@ lazy_static::lazy_static! {
 ///   "success": true,
 ///   "data": {
 ///     "id": 1,
-///     "student_number": "u12345678",
+///     "username": "u12345678",
 ///     "email": "user@example.com",
 ///     "admin": false,
 ///     "token": "jwt_token_here",
@@ -137,7 +131,7 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
     }
 
     let sn_exists = user::Entity::find()
-        .filter(user::Column::StudentNumber.eq(req.student_number.clone()))
+        .filter(user::Column::Username.eq(req.username.clone()))
         .one(&db)
         .await
         .unwrap();
@@ -151,7 +145,7 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
 
     let inserted_user = match UserModel::create(
         &db,
-        &req.student_number,
+        &req.username,
         &req.email,
         &req.password,
         false,
@@ -168,7 +162,7 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
     let (token, expiry) = generate_jwt(inserted_user.id, inserted_user.admin);
     let user_response = UserResponse {
         id: inserted_user.id,
-        student_number: inserted_user.student_number,
+        username: inserted_user.username,
         email: inserted_user.email,
         admin: inserted_user.admin,
         token,
@@ -184,7 +178,7 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct LoginRequest {
-    pub student_number: String,
+    pub username: String,
     pub password: String,
 }
 
@@ -195,7 +189,7 @@ pub struct LoginRequest {
 /// ### Request Body
 /// ```json
 /// {
-///   "student_number": "u12345678",
+///   "username": "u12345678",
 ///   "password": "strongpassword"
 /// }
 /// ```
@@ -208,7 +202,7 @@ pub struct LoginRequest {
 ///   "success": true,
 ///   "data": {
 ///     "id": 1,
-///     "student_number": "u12345678",
+///     "username": "u12345678",
 ///     "email": "user@example.com",
 ///     "admin": false,
 ///     "token": "jwt_token_here",
@@ -244,7 +238,7 @@ pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
 
     let db = connect().await;
 
-    let user = match UserModel::verify_credentials(&db, &req.student_number, &req.password).await {
+    let user = match UserModel::verify_credentials(&db, &req.username, &req.password).await {
         Ok(Some(u)) => u,
         Ok(None) => {
             return (
@@ -263,7 +257,7 @@ pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
     let (token, expiry) = generate_jwt(user.id, user.admin);
     let user_response = UserResponse {
         id: user.id,
-        student_number: user.student_number,
+        username: user.username,
         email: user.email,
         admin: user.admin,
         token,
@@ -753,7 +747,7 @@ mod tests {
         let db = setup_test_db().await;
 
         let register_req = RegisterRequest {
-            student_number: "u99999999".to_string(),
+            username: "u99999999".to_string(),
             email: "new@example.com".to_string(),
             password: "strongpassword".to_string(),
         };
@@ -764,7 +758,7 @@ mod tests {
         // Perform registration using SeaORM model directly
         let result = UserModel::create(
             &db,
-            &register_req.student_number,
+            &register_req.username,
             &register_req.email,
             &register_req.password,
             false,
@@ -774,24 +768,17 @@ mod tests {
         assert!(result.is_ok());
 
         let user = result.unwrap();
-        assert_eq!(user.student_number, "u99999999");
+        assert_eq!(user.username, "u99999999");
         assert_eq!(user.email, "new@example.com");
         assert!(!user.admin);
     }
 
     #[tokio::test]
     async fn test_register_validation() {
-        // Test invalid student number format
-        let invalid_sn = RegisterRequest {
-            student_number: "invalid".to_string(),
-            email: "valid@example.com".to_string(),
-            password: "strongpassword".to_string(),
-        };
-        assert!(invalid_sn.validate().is_err());
 
         // Test invalid email format
         let invalid_email = RegisterRequest {
-            student_number: "u12345678".to_string(),
+            username: "u12345678".to_string(),
             email: "not-an-email".to_string(),
             password: "strongpassword".to_string(),
         };
@@ -799,7 +786,7 @@ mod tests {
 
         // Test short password
         let short_password = RegisterRequest {
-            student_number: "u12345678".to_string(),
+            username: "u12345678".to_string(),
             email: "valid@example.com".to_string(),
             password: "short".to_string(),
         };
@@ -807,7 +794,7 @@ mod tests {
 
         // Test valid registration
         let valid_register = RegisterRequest {
-            student_number: "u12345678".to_string(),
+            username: "u12345678".to_string(),
             email: "valid@example.com".to_string(),
             password: "strongpassword".to_string(),
         };
@@ -833,7 +820,7 @@ mod tests {
 
         // Attempt to register with same email but different student number
         let register_req = RegisterRequest {
-            student_number: "u99999999".to_string(),
+            username: "u99999999".to_string(),
             email: existing_user.email.clone(),
             password: "strongpassword".to_string(),
         };
@@ -842,7 +829,7 @@ mod tests {
 
         let result = UserModel::create(
             &db,
-            &register_req.student_number,
+            &register_req.username,
             &register_req.email,
             &register_req.password,
             false,
@@ -861,7 +848,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_register_duplicate_student_number() {
+    async fn test_register_duplicate_username() {
         use db::models::user::Model as UserModel;
 
         let db = setup_test_db().await;
@@ -879,7 +866,7 @@ mod tests {
 
         // Attempt to register another user with same student number
         let register_req = RegisterRequest {
-            student_number: existing_user.student_number.clone(),
+            username: existing_user.username.clone(),
             email: "new@example.com".to_string(),
             password: "strongpassword".to_string(),
         };
@@ -888,7 +875,7 @@ mod tests {
 
         let result = UserModel::create(
             &db,
-            &register_req.student_number,
+            &register_req.username,
             &register_req.email,
             &register_req.password,
             false,
@@ -923,18 +910,18 @@ mod tests {
         .unwrap();
 
         let login_req = LoginRequest {
-            student_number: user.student_number.clone(),
+            username: user.username.clone(),
             password: "password1".to_string(),
         };
 
-        let result = UserModel::verify_credentials(&db, &login_req.student_number, &login_req.password).await;
+        let result = UserModel::verify_credentials(&db, &login_req.username, &login_req.password).await;
 
         assert!(result.is_ok());
 
         let logged_in_user = result.unwrap().unwrap(); // unwrap Result, then Option
 
         assert_eq!(logged_in_user.id, user.id);
-        assert_eq!(logged_in_user.student_number, user.student_number);
+        assert_eq!(logged_in_user.username, user.username);
         assert_eq!(logged_in_user.email, user.email);
         assert_eq!(logged_in_user.admin, user.admin);
     }
@@ -956,11 +943,11 @@ mod tests {
         .unwrap();
 
         let login_req = LoginRequest {
-            student_number: user.student_number.clone(),
+            username: user.username.clone(),
             password: "wrong_password".to_string(),
         };
 
-        let result = UserModel::verify_credentials(&db, &login_req.student_number, &login_req.password).await;
+        let result = UserModel::verify_credentials(&db, &login_req.username, &login_req.password).await;
 
         assert!(result.is_ok());
         assert!(
@@ -977,11 +964,11 @@ mod tests {
         let db = setup_test_db().await;
 
         let login_req = LoginRequest {
-            student_number: "u99999999".to_string(), // Not inserted
+            username: "u99999999".to_string(), // Not inserted
             password: "any_password".to_string(),
         };
 
-        let result = UserModel::verify_credentials(&db, &login_req.student_number, &login_req.password).await;
+        let result = UserModel::verify_credentials(&db, &login_req.username, &login_req.password).await;
 
         assert!(result.is_ok());
         assert!(
@@ -1134,7 +1121,7 @@ mod tests {
 
         let response = UserResponse {
             id: user.id,
-            student_number: user.student_number.clone(),
+            username: user.username.clone(),
             email: user.email.clone(),
             admin: user.admin,
             token: token.clone(),
@@ -1142,7 +1129,7 @@ mod tests {
         };
 
         assert_eq!(response.id, user.id);
-        assert_eq!(response.student_number, user.student_number);
+        assert_eq!(response.username, user.username);
         assert_eq!(response.email, user.email);
         assert_eq!(response.admin, user.admin);
         assert_eq!(response.token, token);

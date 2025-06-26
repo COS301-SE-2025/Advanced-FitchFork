@@ -1,9 +1,9 @@
 import { apiFetch } from "@/utils/api";
-import type { GetExecutionConfigResponse } from "@/types/assignments/config";
+import type { GetAssignmentConfigResponse } from "@/types/modules/assignments/config";
 
-export const getAssignmentConfig = async (
-  moduleId: number,
-  assignmentId: number
-): Promise<GetExecutionConfigResponse> => {
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/config`);
-};
+export async function getAssignmentConfig(moduleId: number, assignmentId: number) {
+  return await apiFetch<GetAssignmentConfigResponse>(
+    `/modules/${moduleId}/assignments/${assignmentId}/config`,
+    { method: 'GET' }
+  );
+}

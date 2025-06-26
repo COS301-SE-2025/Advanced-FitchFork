@@ -1,4 +1,5 @@
-import type { GetMemoOutputResponse } from "@/types/assignments/memo-output";
+
+import type { GetMemoOutputResponse } from "@/types/modules/assignments/memo-output/responses";
 import { apiFetch } from "@/utils/api";
 
 export const getMemoOutput = async (

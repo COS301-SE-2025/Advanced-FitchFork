@@ -21,10 +21,10 @@ use crate::auth::AuthUser;
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateUserRequest {
     #[validate(regex(
-        path = "STUDENT_NUMBER_REGEX",
+        path = "username_REGEX",
         message = "Student number must be in format u12345678"
     ))]
-    pub student_number: Option<String>,
+    pub username: Option<String>,
 
     #[validate(email(message = "Invalid email format"))]
     pub email: Option<String>,
@@ -35,7 +35,7 @@ pub struct UpdateUserRequest {
 #[derive(Debug, Serialize)]
 pub struct UpdateUserResponse {
     pub id: i64,
-    pub student_number: String,
+    pub username: String,
     pub email: String,
     pub admin: bool,
     pub created_at: String,
@@ -43,14 +43,14 @@ pub struct UpdateUserResponse {
 }
 
 lazy_static::lazy_static! {
-    static ref STUDENT_NUMBER_REGEX: regex::Regex = regex::Regex::new("^u\\d{8}$").unwrap();
+    static ref username_REGEX: regex::Regex = regex::Regex::new("^u\\d{8}$").unwrap();
 }
 
 impl From<user::Model> for UpdateUserResponse {
     fn from(user: user::Model) -> Self {
         Self {
             id: user.id,
-            student_number: user.student_number,
+            username: user.username,
             email: user.email,
             admin: user.admin,
             created_at: user.created_at.to_string(),
@@ -69,7 +69,7 @@ impl From<user::Model> for UpdateUserResponse {
 /// # Request Body
 /// ```json
 /// {
-///   "student_number": "u87654321",  // optional
+///   "username": "u87654321",  // optional
 ///   "email": "new@example.com",     // optional
 ///   "admin": true                   // optional
 /// }
@@ -83,7 +83,7 @@ impl From<user::Model> for UpdateUserResponse {
 ///   "success": true,
 ///   "data": {
 ///     "id": 1,
-///     "student_number": "u87654321",
+///     "username": "u87654321",
 ///     "email": "new@example.com",
 ///     "admin": true,
 ///     "created_at": "2025-05-23T18:00:00Z",
@@ -135,7 +135,7 @@ pub async fn update_user(
         );
     }
 
-    if req.student_number.is_none() && req.email.is_none() && req.admin.is_none() {
+    if req.username.is_none() && req.email.is_none() && req.admin.is_none() {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<UpdateUserResponse>::error("At least one field must be provided")),
@@ -203,13 +203,13 @@ pub async fn update_user(
         }
     }
 
-    // Check student_number conflict
-    if let Some(sn) = &req.student_number {
-        if sn != &current_user.student_number {
+    // Check username conflict
+    if let Some(sn) = &req.username {
+        if sn != &current_user.username {
             let exists_result = user::Entity::find()
                 .filter(
                     Condition::all()
-                        .add(user::Column::StudentNumber.eq(sn.clone()))
+                        .add(user::Column::Username.eq(sn.clone()))
                         .add(user::Column::Id.ne(user_id)),
                 )
                 .one(&db)
@@ -236,8 +236,8 @@ pub async fn update_user(
     }
 
     let mut active_model: user::ActiveModel = current_user.into();
-    if let Some(sn) = req.student_number {
-        active_model.student_number = Set(sn);
+    if let Some(sn) = req.username {
+        active_model.username = Set(sn);
     }
     if let Some(email) = req.email {
         active_model.email = Set(email);
@@ -382,7 +382,7 @@ mod tests {
     // Helper to create test users using SeaORM
     async fn create_test_users(db: &DatabaseConnection) -> (user::Model, user::Model) {
         let admin_user = user::ActiveModel {
-            student_number: Set("u12345678".to_string()),
+            username: Set("u12345678".to_string()),
             email: Set("admin@example.com".to_string()),
             password_hash: Set("hashed1".to_string()),
             admin: Set(true),
@@ -393,7 +393,7 @@ mod tests {
         .unwrap();
 
         let regular_user = user::ActiveModel {
-            student_number: Set("u87654321".to_string()),
+            username: Set("u87654321".to_string()),
             email: Set("user@example.com".to_string()),
             password_hash: Set("hashed2".to_string()),
             admin: Set(false),
@@ -413,7 +413,7 @@ mod tests {
         let (_, target_user) = create_test_users(&db).await;
 
         let update_req = UpdateUserRequest {
-            student_number: Some("u99999999".to_string()),
+            username: Some("u99999999".to_string()),
             email: Some("updated@example.com".to_string()),
             admin: Some(true),
         };
@@ -421,8 +421,8 @@ mod tests {
         assert!(update_req.validate().is_ok());
 
         let mut model = target_user.into_active_model();
-        if let Some(sn) = update_req.student_number.clone() {
-            model.student_number = Set(sn);
+        if let Some(sn) = update_req.username.clone() {
+            model.username = Set(sn);
         }
         if let Some(em) = update_req.email.clone() {
             model.email = Set(em);
@@ -433,7 +433,7 @@ mod tests {
 
         let updated = model.update(&db).await.unwrap();
 
-        assert_eq!(updated.student_number, "u99999999");
+        assert_eq!(updated.username, "u99999999");
         assert_eq!(updated.email, "updated@example.com");
         assert!(updated.admin);
     }
@@ -442,7 +442,7 @@ mod tests {
     async fn test_update_user_validation() {
         // Invalid student number
         let invalid_sn = UpdateUserRequest {
-            student_number: Some("invalid".to_string()),
+            username: Some("invalid".to_string()),
             email: None,
             admin: None,
         };
@@ -450,7 +450,7 @@ mod tests {
 
         // Invalid email
         let invalid_email = UpdateUserRequest {
-            student_number: None,
+            username: None,
             email: Some("not-an-email".to_string()),
             admin: None,
         };
@@ -458,7 +458,7 @@ mod tests {
 
         // Valid case
         let valid_update = UpdateUserRequest {
-            student_number: Some("u12345678".to_string()),
+            username: Some("u12345678".to_string()),
             email: Some("valid@example.com".to_string()),
             admin: Some(true),
         };
@@ -490,7 +490,7 @@ mod tests {
 
         let (user1, user2) = {
             let admin_user = user::ActiveModel {
-                student_number: Set("u12345678".to_string()),
+                username: Set("u12345678".to_string()),
                 email: Set("admin@example.com".to_string()),
                 password_hash: Set("hashed1".to_string()),
                 admin: Set(true),
@@ -501,7 +501,7 @@ mod tests {
             .unwrap();
 
             let regular_user = user::ActiveModel {
-                student_number: Set("u87654321".to_string()),
+                username: Set("u87654321".to_string()),
                 email: Set("user@example.com".to_string()),
                 password_hash: Set("hashed2".to_string()),
                 admin: Set(false),
@@ -530,7 +530,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_user_duplicate_student_number() {
+    async fn test_update_user_duplicate_username() {
         use sea_orm::{ActiveModelTrait, IntoActiveModel, Set};
         use db::models::user;
 
@@ -538,7 +538,7 @@ mod tests {
 
         let (user1, user2) = {
             let u1 = user::ActiveModel {
-                student_number: Set("u12345678".to_string()),
+                username: Set("u12345678".to_string()),
                 email: Set("admin@example.com".to_string()),
                 password_hash: Set("hashed1".to_string()),
                 admin: Set(true),
@@ -549,7 +549,7 @@ mod tests {
             .unwrap();
 
             let u2 = user::ActiveModel {
-                student_number: Set("u87654321".to_string()),
+                username: Set("u87654321".to_string()),
                 email: Set("user@example.com".to_string()),
                 password_hash: Set("hashed2".to_string()),
                 admin: Set(false),
@@ -563,7 +563,7 @@ mod tests {
         };
 
         let mut model = user2.into_active_model();
-        model.student_number = Set(user1.student_number.clone());
+        model.username = Set(user1.username.clone());
 
         let result = model.update(&db).await;
 
@@ -584,7 +584,7 @@ mod tests {
         let db = setup_test_db().await;
 
         let user = user::ActiveModel {
-            student_number: Set("u99999999".to_string()),
+            username: Set("u99999999".to_string()),
             email: Set("original@example.com".to_string()),
             password_hash: Set("secure".to_string()),
             admin: Set(false),
@@ -600,7 +600,7 @@ mod tests {
         let updated_user = model.update(&db).await.unwrap();
 
         assert_eq!(updated_user.email, "partial@example.com");
-        assert_eq!(updated_user.student_number, user.student_number); // unchanged
+        assert_eq!(updated_user.username, user.username); // unchanged
         assert_eq!(updated_user.admin, user.admin); // unchanged
     }
 
@@ -609,14 +609,14 @@ mod tests {
         use validator::Validate;
 
         let update_req = UpdateUserRequest {
-            student_number: None,
+            username: None,
             email: None,
             admin: None,
         };
 
         assert!(update_req.validate().is_ok());
 
-        let result = match (&update_req.student_number, &update_req.email, &update_req.admin) {
+        let result = match (&update_req.username, &update_req.email, &update_req.admin) {
             (None, None, None) => Err("At least one field must be provided for update"),
             _ => Ok(()),
         };
@@ -636,7 +636,7 @@ mod tests {
         let db = setup_test_db().await;
 
         let original = user::ActiveModel {
-            student_number: Set("u87654321".to_string()),
+            username: Set("u87654321".to_string()),
             email: Set("original@example.com".to_string()),
             password_hash: Set("test123".to_string()),
             admin: Set(false),
@@ -647,7 +647,7 @@ mod tests {
         .unwrap();
 
         let mut updated_model = original.clone().into_active_model();
-        updated_model.student_number = Set("u99999999".to_string());
+        updated_model.username = Set("u99999999".to_string());
         updated_model.email = Set("response@example.com".to_string());
         updated_model.admin = Set(true);
 
@@ -656,7 +656,7 @@ mod tests {
         let response = UpdateUserResponse::from(updated);
 
         assert_eq!(response.id, original.id);
-        assert_eq!(response.student_number, "u99999999");
+        assert_eq!(response.username, "u99999999");
         assert_eq!(response.email, "response@example.com");
         assert!(response.admin);
         assert!(!response.created_at.is_empty());

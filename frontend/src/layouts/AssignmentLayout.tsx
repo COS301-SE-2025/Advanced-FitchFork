@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet, useParams } from 'react-router-dom';
-import { Tabs, Spin, Alert } from 'antd';
-
+import { Tabs, Spin, Alert, message, Button } from 'antd';
 import { useModule } from '@/context/ModuleContext';
 import { useAuth } from '@/context/AuthContext';
 import { AssignmentProvider } from '@/context/AssignmentContext';
@@ -29,13 +28,35 @@ const AssignmentLayout = () => {
   const assignmentIdNum = Number(assignment_id);
   const basePath = `/modules/${module.id}/assignments/${assignment_id}`;
 
+  // const assignmentActions = [
+  //   {
+  //     key: 'generate_memo',
+  //     label: 'Generate Memo Output',
+  //     onClick: () => {
+  //       // Add logic here
+  //       message.success('Generated memo output');
+  //     },
+  //   },
+  //   {
+  //     key: 'generate_allocator',
+  //     label: 'Generate Mark Allocator',
+  //     onClick: () => {
+  //       // Add logic here
+  //       message.success('Generated mark allocator');
+  //     },
+  //   },
+  // ];
+
   const showTabs = !isStudent(module.id) || isAdmin; // hide all tabs if student
 
   const tabs = [
     { key: `${basePath}/submissions`, label: 'Submissions' },
     ...(isLecturer(module.id) || isAdmin
       ? [
+          { key: `${basePath}/files`, label: 'Files' },
           { key: `${basePath}/tasks`, label: 'Tasks' },
+          { key: `${basePath}/memo-output`, label: 'Memo Output' },
+          { key: `${basePath}/mark-allocator`, label: 'Mark Allocator' },
           { key: `${basePath}/config`, label: 'Config' },
           { key: `${basePath}/stats`, label: 'Statistics' },
         ]
@@ -90,6 +111,26 @@ const AssignmentLayout = () => {
       <PageHeader
         title={assignment.name}
         description={`Manage assignment #${assignment.id} in ${module.code}`}
+        extra={
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              size="middle"
+              onClick={() => {
+                message.success('Generated memo output');
+              }}
+            >
+              Generate Memo Output
+            </Button>
+            <Button
+              size="middle"
+              onClick={() => {
+                message.success('Generated mark allocator');
+              }}
+            >
+              Generate Mark Allocator
+            </Button>
+          </div>
+        }
       />
 
       {showTabs && (

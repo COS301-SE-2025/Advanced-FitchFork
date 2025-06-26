@@ -1,7 +1,7 @@
 import type { 
   PostAssignmentRequest, 
   PostAssignmentResponse, 
-  PostUploadAssignmentFilesResonse } from "@/types/modules/assignments";
+  PostUploadAssignmentFileResonse } from "@/types/modules/assignments";
 import { apiFetch, apiUpload } from "@/utils/api";
 
 export const createAssignment = async (
@@ -14,15 +14,15 @@ export const createAssignment = async (
   });
 };
 
-export const uploadAssignmentFiles = async (
+export const uploadAssignmentFile = async (
   moduleId: number,
   assignmentId: number,
-  files: File[]
-): Promise<PostUploadAssignmentFilesResonse> => {
+  fileType: string,
+  file: File
+): Promise<PostUploadAssignmentFileResonse> => {
   const form = new FormData();
-  for (const file of files) {
-    form.append("files[]", file);
-  }
+  form.append("file_type", fileType);
+  form.append("file", file);
 
   return apiUpload(`/modules/${moduleId}/assignments/${assignmentId}/files`, form);
 };

@@ -12,6 +12,7 @@ path = "src/main.rs"
 common = { path = "../common" }
 db = { path = "../db" }
 util = { path = "../util" }
+marker = { path = "../marker" }
 
 # Web framework and middleware
 axum = { version = "0.7", features = ["multipart"] }
@@ -59,3 +60,6 @@ tracing-appender = "0.2"
 lettre = { version = "0.10", features = ["tokio1", "tokio1-native-tls"] }
 once_cell = "1.8"
 mime_guess = "2.0.5"
+code-runner = { path = "../code_runner" }
+tokio-util = { version = "0.6" , features = ["io"]}
+md5 = "0.7"

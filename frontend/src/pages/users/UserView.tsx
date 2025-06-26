@@ -44,8 +44,8 @@ const UserView = () => {
     if (userRes.success) {
       setUser(userRes.data);
 
-      // Set custom breadcrumb label using the student number
-      setBreadcrumbLabel(`users/${userId}`, userRes.data.student_number);
+      // Set custom breadcrumb label using the username
+      setBreadcrumbLabel(`users/${userId}`, userRes.data.username);
     } else {
       notifyError('Failed to load user', userRes.message);
     }
@@ -115,7 +115,7 @@ const UserView = () => {
     <div className="p-4 sm:p-6">
       <Descriptions layout="vertical" bordered column={3} className="mb-8">
         <Descriptions.Item label="User ID">{user.id}</Descriptions.Item>
-        <Descriptions.Item label="Student Number">{user.student_number}</Descriptions.Item>
+        <Descriptions.Item label="Username">{user.username}</Descriptions.Item>
         <Descriptions.Item label="Email">{user.email}</Descriptions.Item>
         <Descriptions.Item label="Admin">
           <AdminTag isAdmin={user.admin} />

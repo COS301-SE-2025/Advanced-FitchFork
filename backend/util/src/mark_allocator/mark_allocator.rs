@@ -1,6 +1,7 @@
 use std::fs::{self, File};
 use serde_json::{Value, from_str, json};
 use std::io::{self, ErrorKind, Write};
+use chrono::prelude::*;
 
 pub enum SaveError {
     DirectoryNotFound,
@@ -115,7 +116,11 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
         task_index += 1;
     }
 
-    let final_json = json!({ "tasks": tasks_json });
+    let now = Utc::now().to_rfc3339();
+    let final_json = json!({
+        "generated_at": now,
+        "tasks": tasks_json
+    });
 
     fs::create_dir_all(&allocator_path)?;
     let output_path = format!("{}allocator.json", allocator_path);
