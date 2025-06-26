@@ -5,7 +5,8 @@ import type {
   Assignment, 
   AssignmentFile, 
   GetListAssignmentFilesResponse, 
-  AssignmentType} from "@/types/modules/assignments";
+  AssignmentType,
+  GetAssignmentReadinessResponse} from "@/types/modules/assignments";
 import { apiDownload, apiFetch, buildQuery } from "@/utils/api";
 
 export const listAssignments = async (
@@ -56,4 +57,11 @@ export const downloadAssignmentFile = async (
   fileId: number
 ): Promise<void> => {
   return apiDownload(`/modules/${moduleId}/assignments/${assignmentId}/file/${fileId}`);
+};
+
+export const getAssignmentReadiness = async (
+  moduleId: number,
+  assignmentId: number
+): Promise<GetAssignmentReadinessResponse> => {
+  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/readiness`);
 };

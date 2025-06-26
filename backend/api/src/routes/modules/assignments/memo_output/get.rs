@@ -1,31 +1,48 @@
 use axum::{
     extract::Path,
-    http::{header, StatusCode},
-    response::{IntoResponse, Response},
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
 };
 use std::{env, fs, path::PathBuf};
-use tokio::fs::File;
-use tokio_util::io::ReaderStream;
-use axum::body::Body;
+use tokio::fs as tokio_fs;
+use crate::response::ApiResponse;
+use serde::Serialize;
 
-/// Retrieves the generated memo output file for a given assignment.
+#[derive(Serialize)]
+struct MemoSubsection {
+    label: String,
+    output: String,
+}
+
+#[derive(Serialize)]
+struct MemoTaskOutput {
+    task_number: i32,
+    name: String,
+    subsections: Vec<MemoSubsection>,
+    raw: String, // NEW: full unformatted text from the file
+}
+
+/// Retrieves all memo output files for a given assignment and parses them into structured format.
 ///
-/// This endpoint looks for the first file in the `memo_output` directory located at:
-/// `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/memo_output`.
+/// This endpoint scans the `memo_output` directory for the assignment and parses all files into
+/// structured tasks, where each task contains labeled subsections and a raw file representation.
+///
+/// Directory structure:  
+/// `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/memo_output`
 ///
 /// ### Returns:
-/// - `200 OK` with the file stream as an attachment if a file is found
+/// - `200 OK` with a JSON array of `MemoTaskOutput`
 /// - `404 Not Found` if:
-///     - The `memo_output` directory doesn't exist
-///     - The directory exists but contains no files
-/// - `500 Internal Server Error` if reading the directory or opening the file fails
+///     - The memo output directory doesn't exist
+///     - No valid files are found in the directory
+/// - `500 Internal Server Error` if reading the directory fails
 ///
 /// ### Example `curl` request:
 /// ```bash
-/// curl -X GET http://localhost:3000/modules/1/assignments/2/memo/memo-output -OJ
+/// curl http://localhost:3000/api/modules/1/assignments/2/memo-output
 /// ```
-/// This will download the first file in the memo output directory for assignment 2 in module 1.
-pub async fn get_memo_output_file(
+pub async fn get_all_memo_outputs(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
     let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
@@ -39,9 +56,8 @@ pub async fn get_memo_output_file(
     if !output_dir.is_dir() {
         return (
             StatusCode::NOT_FOUND,
-            format!("Output directory does not exist for assignment {}", assignment_id),
-        )
-            .into_response();
+            Json(ApiResponse::<Vec<MemoTaskOutput>>::error("Memo output directory does not exist")),
+        );
     }
 
     let entries = match fs::read_dir(&output_dir) {
@@ -49,41 +65,52 @@ pub async fn get_memo_output_file(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to read output directory",
-            )
-                .into_response();
+                Json(ApiResponse::<Vec<MemoTaskOutput>>::error("Failed to read memo output directory")),
+            );
         }
     };
 
-    let Some(file_entry) = entries.iter().find(|e| e.path().is_file()) else {
+    let mut tasks: Vec<MemoTaskOutput> = Vec::new();
+
+    for (i, entry) in entries.iter().enumerate() {
+        let path = entry.path();
+        if path.is_file() {
+            let raw_content = match tokio_fs::read_to_string(&path).await {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+
+            let sections = raw_content.split("&-=-&").filter(|s| !s.trim().is_empty());
+
+            let subsections = sections
+                .map(|s| {
+                    let mut lines = s.lines();
+                    let label = lines.next().unwrap_or("").trim().to_string();
+                    let output = lines.collect::<Vec<_>>().join("\n");
+                    MemoSubsection { label, output }
+                })
+                .collect::<Vec<_>>();
+
+            if !subsections.is_empty() {
+                tasks.push(MemoTaskOutput {
+                    task_number: (i + 1) as i32,
+                    name: format!("Task {}", i + 1),
+                    subsections,
+                    raw: raw_content,
+                });
+            }
+        }
+    }
+
+    if tasks.is_empty() {
         return (
             StatusCode::NOT_FOUND,
-            "No output file found in memo_output directory",
-        )
-            .into_response();
-    };
-
-    let file_path = file_entry.path();
-
-    match File::open(&file_path).await {
-        Ok(file) => {
-            let stream = ReaderStream::new(file);
-            let filename = file_path
-                .file_name()
-                .and_then(|f| f.to_str())
-                .unwrap_or("output.txt");
-
-            Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, "application/octet-stream")
-                .header(header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", filename))
-                .body(Body::from_stream(stream))
-                .unwrap()
-        }
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to open output file",
-        )
-            .into_response(),
+            Json(ApiResponse::<Vec<MemoTaskOutput>>::error("No memo output found")),
+        );
     }
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(tasks, "Fetched memo output successfully")),
+    )
 }

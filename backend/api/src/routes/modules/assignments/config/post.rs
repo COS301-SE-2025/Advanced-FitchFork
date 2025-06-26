@@ -1,3 +1,5 @@
+use std::{env, fs, path::PathBuf};
+
 use axum::{
     extract::{Json, Path},
     http::StatusCode,
@@ -8,17 +10,10 @@ use sea_orm::{
     EntityTrait, ColumnTrait, QueryFilter, ActiveModelTrait, Set,
 };
 
-use crate::{
-    response::ApiResponse,
-};
-
+use crate::response::ApiResponse;
 use db::{
     connect,
-    models::{
-        assignment::{
-            Column as AssignmentColumn, Entity as AssignmentEntity,
-        },
-    },
+    models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
 };
 
 /// POST /assignments/:assignment_id/config
@@ -56,7 +51,6 @@ pub async fn set_assignment_config(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(config): Json<Value>,
 ) -> impl IntoResponse {
-   
     if !config.is_object() {
         return (
             StatusCode::BAD_REQUEST,
@@ -91,16 +85,47 @@ pub async fn set_assignment_config(
     };
 
     let mut active_model: db::models::assignment::ActiveModel = assignment.into();
-    active_model.config = Set(Some(config));
+    active_model.config = Set(Some(config.clone()));
 
     match active_model.update(&db).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(ApiResponse::<()>::success((), "Assignment configuration saved")),
-        )
-            .into_response(),
+        Ok(_) => {
+            // Write config to disk
+            let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
+                .unwrap_or_else(|_| "data/assignment_files".into());
+
+            let config_dir = PathBuf::from(&base_path)
+                .join(format!("module_{}", module_id))
+                .join(format!("assignment_{}", assignment_id))
+                .join("config");
+
+            if let Err(e) = fs::create_dir_all(&config_dir) {
+                eprintln!("Failed to create config directory: {:?}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Failed to create config directory")),
+                )
+                    .into_response();
+            }
+
+            let config_path = config_dir.join("config.json");
+
+            if let Err(e) = fs::write(&config_path, config.to_string()) {
+                eprintln!("Failed to write config file: {:?}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Failed to write config file")),
+                )
+                    .into_response();
+            }
+
+            (
+                StatusCode::OK,
+                Json(ApiResponse::<()>::success((), "Assignment configuration saved")),
+            )
+                .into_response()
+        }
         Err(err) => {
-            eprintln!("Failed to save config: {:?}", err);
+            eprintln!("Failed to save config to DB: {:?}", err);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Failed to save configuration")),

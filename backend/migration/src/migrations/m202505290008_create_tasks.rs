@@ -33,6 +33,12 @@ impl MigrationTrait for Migration {
                             .big_integer()
                             .not_null(),
                     )
+                    .col(
+                        ColumnDef::new(Alias::new("name"))
+                            .string()
+                            .not_null()
+                            .default("Untitled Task"),
+                    )
                     .col(ColumnDef::new(Alias::new("command")).string().not_null())
                     .col(
                         ColumnDef::new(Alias::new("created_at"))

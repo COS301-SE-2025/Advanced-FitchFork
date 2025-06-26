@@ -4,7 +4,6 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use tokio::task::spawn;
 use tracing::{error, info};
 
 use crate::response::ApiResponse;
@@ -54,6 +53,7 @@ pub async fn generate_memo_output(
             Json(ApiResponse::<()>::error("Required memo directory is missing or empty")),
         );
     }
+
     let config_dir = assignment_root.join("config");
     let config_valid = config_dir.is_dir()
         && fs::read_dir(&config_dir)
@@ -73,15 +73,20 @@ pub async fn generate_memo_output(
 
     let db = connect().await;
 
-    spawn(async move {
-        match create_memo_outputs_for_all_tasks(&db, assignment_id).await {
-            Ok(_) => info!("Task completed for assignment {}", assignment_id),
-            Err(e) => error!("Task failed for assignment {}: {:?}", assignment_id, e),
+    match create_memo_outputs_for_all_tasks(&db, assignment_id).await {
+        Ok(_) => {
+            info!("Memo output generation complete for assignment {}", assignment_id);
+            (
+                StatusCode::OK,
+                Json(ApiResponse::<()>::success((), "Memo output generation complete")),
+            )
         }
-    });
-
-    (
-        StatusCode::ACCEPTED,
-        Json(ApiResponse::<()>::success((), "Task started")),
-    )
+        Err(e) => {
+            error!("Memo output generation failed for assignment {}: {:?}", assignment_id, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to generate memo output")),
+            )
+        }
+    }
 }

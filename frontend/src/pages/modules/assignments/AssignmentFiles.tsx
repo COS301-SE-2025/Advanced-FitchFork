@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Segmented, Upload, Typography, message, Table, Button, Space, Tooltip } from 'antd';
 import {
   UploadOutlined,
@@ -8,63 +8,98 @@ import {
   FileAddOutlined,
   FileMarkdownOutlined,
   FileZipOutlined,
+  SettingOutlined,
+  CodeOutlined,
 } from '@ant-design/icons';
+
+import { useAssignment } from '@/context/AssignmentContext';
+import { useModule } from '@/context/ModuleContext';
+import { downloadAssignmentFile, uploadAssignmentFile } from '@/services/modules/assignments';
+
+import type { AssignmentFile, FileType } from '@/types/modules/assignments';
 
 const { Title, Text } = Typography;
 
-type FileType = 'Main File' | 'Makefile' | 'Memo File' | 'Specification';
-
-interface UploadedFile {
-  name: string;
-  type: FileType;
-}
+const fileTypeLabels: Record<FileType, string> = {
+  main: 'Main File',
+  makefile: 'Makefile',
+  memo: 'Memo File',
+  spec: 'Specification',
+  config: 'Config',
+  mark_allocator: 'Mark Allocator',
+};
 
 const fileIcons: Record<FileType, React.ReactNode> = {
-  'Main File': <FileTextOutlined />,
-  Makefile: <FileAddOutlined />,
-  'Memo File': <FileMarkdownOutlined />,
-  Specification: <FileZipOutlined />,
+  main: <FileTextOutlined />,
+  makefile: <FileAddOutlined />,
+  memo: <FileMarkdownOutlined />,
+  spec: <FileZipOutlined />,
+  config: <SettingOutlined />,
+  mark_allocator: <CodeOutlined />,
 };
 
 const AssignmentFiles = () => {
-  const [selectedType, setSelectedType] = useState<FileType>('Main File');
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const { assignment } = useAssignment();
+  const module = useModule();
+  const [selectedType, setSelectedType] = useState<FileType>('main');
+  const [files, setFiles] = useState<AssignmentFile[]>(assignment.files ?? []);
 
-  const handleUpload = (file: File) => {
-    message.success(`${selectedType} "${file.name}" uploaded`);
-    setUploadedFiles((prev) => {
-      const filtered = prev.filter((f) => f.type !== selectedType);
-      return [...filtered, { name: file.name, type: selectedType }];
-    });
+  useEffect(() => {
+    setFiles(assignment.files ?? []);
+  }, [assignment.files]);
+
+  const handleUpload = async (file: File) => {
+    try {
+      const res = await uploadAssignmentFile(module.id, assignment.id, selectedType, file);
+      message.success(`${fileTypeLabels[selectedType]} "${file.name}" uploaded`);
+      setFiles((prev) => [...prev.filter((f) => f.file_type !== selectedType), res.data]);
+    } catch (err) {
+      message.error('Upload failed');
+    }
     return false;
   };
 
   const handleReplace = (type: FileType) => ({
-    beforeUpload: (file: File) => {
-      message.success(`${type} "${file.name}" re-uploaded`);
-      setUploadedFiles((prev) =>
-        prev.map((f) => (f.type === type ? { name: file.name, type } : f)),
-      );
+    beforeUpload: async (file: File) => {
+      try {
+        const res = await uploadAssignmentFile(module.id, assignment.id, type, file);
+        message.success(`${fileTypeLabels[type]} "${file.name}" replaced`);
+        setFiles((prev) => prev.map((f) => (f.file_type === type ? res.data : f)));
+      } catch (err) {
+        message.error('Replacement failed');
+      }
       return false;
     },
   });
 
+  const handleDownload = async (id: number) => {
+    try {
+      await downloadAssignmentFile(module.id, assignment.id, id);
+    } catch {
+      message.error('Download failed');
+    }
+  };
+
   const columns = [
     {
       title: 'File Type',
-      dataIndex: 'type',
-      key: 'type',
-      render: (type: FileType) => (
-        <Space>
-          {fileIcons[type]}
-          {type}
-        </Space>
-      ),
+      dataIndex: 'file_type',
+      key: 'file_type',
+      render: (type: FileType) => {
+        const icon = fileIcons[type] ?? <FileTextOutlined />;
+        const label = fileTypeLabels[type] ?? type;
+        return (
+          <Space>
+            {icon}
+            {label}
+          </Space>
+        );
+      },
     },
     {
       title: 'Filename',
-      dataIndex: 'name',
-      key: 'name',
+      dataIndex: 'filename',
+      key: 'filename',
       render: (text: string) => (
         <Tooltip title={text}>
           <Text ellipsis style={{ maxWidth: 180, display: 'inline-block' }}>
@@ -76,16 +111,16 @@ const AssignmentFiles = () => {
     {
       title: 'Actions',
       key: 'actions',
-      render: (_: any, record: UploadedFile) => (
+      render: (_: any, record: AssignmentFile) => (
         <Space>
           <Button
             size="small"
             icon={<DownloadOutlined />}
-            onClick={() => message.info(`Downloading ${record.name}`)}
+            onClick={() => handleDownload(record.id)}
           >
             Download
           </Button>
-          <Upload {...handleReplace(record.type)} showUploadList={false}>
+          <Upload {...handleReplace(record.file_type)} showUploadList={false}>
             <Button size="small" icon={<ReloadOutlined />}>
               Replace
             </Button>
@@ -95,6 +130,16 @@ const AssignmentFiles = () => {
     },
   ];
 
+  const segmentedOptions = useMemo(
+    () =>
+      Object.entries(fileTypeLabels).map(([value, label]) => ({
+        value,
+        label,
+        icon: fileIcons[value as FileType],
+      })),
+    [],
+  );
+
   return (
     <div className="max-w-5xl space-y-12">
       {/* Upload Section */}
@@ -102,13 +147,8 @@ const AssignmentFiles = () => {
         <Segmented
           block
           value={selectedType}
-          onChange={(value) => setSelectedType(value as FileType)}
-          options={[
-            { label: 'Main File', value: 'Main File', icon: fileIcons['Main File'] },
-            { label: 'Makefile', value: 'Makefile', icon: fileIcons['Makefile'] },
-            { label: 'Memo File', value: 'Memo File', icon: fileIcons['Memo File'] },
-            { label: 'Specification', value: 'Specification', icon: fileIcons['Specification'] },
-          ]}
+          onChange={(val) => setSelectedType(val as FileType)}
+          options={segmentedOptions}
           className="!mb-2"
         />
 
@@ -121,12 +161,14 @@ const AssignmentFiles = () => {
           <p className="ant-upload-drag-icon">
             <UploadOutlined />
           </p>
-          <p className="text-sm text-gray-600">Click or drag {selectedType} to upload</p>
+          <p className="text-sm text-gray-600">
+            Click or drag {fileTypeLabels[selectedType]} to upload
+          </p>
         </Upload.Dragger>
       </div>
 
       {/* Uploaded Files Table */}
-      {uploadedFiles.length > 0 && (
+      {files.length > 0 && (
         <div className="!mt-12">
           <Title level={4} className="!mb-4">
             Uploaded Files
@@ -134,8 +176,8 @@ const AssignmentFiles = () => {
           <div className="border border-gray-200 dark:border-gray-800 rounded-md overflow-hidden">
             <Table
               columns={columns}
-              dataSource={uploadedFiles}
-              rowKey="type"
+              dataSource={files}
+              rowKey="file_type"
               pagination={false}
               size="small"
               className="!border-0"

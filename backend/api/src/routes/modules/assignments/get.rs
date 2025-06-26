@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::{env, fs, path::PathBuf};
 
 use axum::{
     extract::{Path, Query},
@@ -7,14 +7,12 @@ use axum::{
 };
 
 use chrono::{DateTime, Utc};
-use db::models::assignment_task::{Entity};
 use serde::{Deserialize, Serialize};
-
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
 
 use sea_orm::{
-    sea_query::Expr, ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait,
-    QueryFilter, QueryOrder,
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
+    QueryOrder, QuerySelect, sea_query::Expr,
 };
 
 use crate::response::ApiResponse;
@@ -24,7 +22,16 @@ use db::{
         assignment::{
             self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
             Model as AssignmentModel,
-        }, assignment_file::{self, Column as FileColumn, Entity as FileEntity}, assignment_submission, assignment_task::Column, user
+        },
+        assignment_file::{
+            self, Column as FileColumn, Entity as FileEntity, FileType,
+            Model as AssignmentFileModel,
+        },
+        assignment_submission,
+        assignment_task::{
+            Column as TaskColumn, Entity as TaskEntity,
+        },
+        user,
     },
 };
 
@@ -87,6 +94,7 @@ pub struct File {
     pub id: String,
     pub filename: String,
     pub path: String,
+    pub file_type: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -134,6 +142,7 @@ pub async fn get_assignment(
                             id: f.id.to_string(),
                             filename: f.filename,
                             path: f.path,
+                            file_type: f.file_type.to_string(),
                             created_at: f.created_at.to_rfc3339(),
                             updated_at: f.updated_at.to_rfc3339(),
                         })
@@ -320,6 +329,7 @@ pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)>) -> R
                     id: f.id.to_string(),
                     filename: f.filename,
                     path: f.path,
+                    file_type: f.file_type.to_string(),
                     created_at: f.created_at.to_rfc3339(),
                     updated_at: f.updated_at.to_rfc3339(),
                 })
@@ -775,6 +785,7 @@ pub async fn stats(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl I
 pub struct TaskResponse {
     id: i64,
     task_number: i64,
+    name: String, 
     command: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>
@@ -832,9 +843,9 @@ pub async fn list_tasks(
     }
 
 
-    match Entity::find()
-        .filter(Column::AssignmentId.eq(assignment_id))
-        .order_by_asc(Column::TaskNumber)
+    match TaskEntity::find()
+        .filter(TaskColumn::AssignmentId.eq(assignment_id))
+        .order_by_asc(TaskColumn::TaskNumber)
         .all(&db)
         .await
     {
@@ -844,6 +855,7 @@ pub async fn list_tasks(
                 .map(|task| TaskResponse {
                     id: task.id,
                     task_number: task.task_number,
+                    name: task.name, 
                     command: task.command,
                     created_at: task.created_at,
                     updated_at: task.updated_at,
@@ -862,4 +874,132 @@ pub async fn list_tasks(
         )
             .into_response(),
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct AssignmentReadiness {
+    pub config_present: bool,
+    pub tasks_present: bool,
+    pub main_present: bool,
+    pub memo_present: bool,
+    pub makefile_present: bool,
+    pub memo_output_present: bool,
+    pub mark_allocator_present: bool,
+    pub is_ready: bool,
+}
+
+/// GET /api/modules/:module_id/assignments/:assignment_id/readiness
+pub async fn get_assignment_readiness(
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+) -> (StatusCode, Json<ApiResponse<AssignmentReadiness>>) {
+    let db = connect().await;
+
+    // Check if config file is present
+    let config_present = {
+        let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Config);
+        fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
+    };
+
+    // Check if at least one task exists
+    let tasks_present = match TaskEntity::find()
+        .filter(TaskColumn::AssignmentId.eq(assignment_id))
+        .limit(1)
+        .all(&db)
+        .await
+    {
+        Ok(tasks) => !tasks.is_empty(),
+        Err(_) => false,
+    };
+
+    // Check for main file(s)
+    let main_present = {
+        let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Main);
+        fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
+    };
+
+    // Check for memo file(s)
+    let memo_present = {
+        let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Memo);
+        fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
+    };
+
+    // Check for makefile(s)
+    let makefile_present = {
+        let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Makefile);
+        fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
+    };
+
+    let memo_output_present = {
+        let base_path = AssignmentFileModel::storage_root()
+            .join(format!("module_{}", module_id))
+            .join(format!("assignment_{}", assignment_id))
+            .join("memo_output");
+
+        if let Ok(entries) = fs::read_dir(&base_path) {
+            entries.flatten().any(|entry| entry.path().is_file())
+        } else {
+            false
+        }
+    };
+
+    // Check for allocator.json
+    let mark_allocator_present = {
+        let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::MarkAllocator);
+        if let Ok(files) = fs::read_dir(dir) {
+            files.flatten().any(|f| {
+                f.path().extension().map(|ext| ext == "json").unwrap_or(false)
+            })
+        } else {
+            false
+        }
+    };
+
+    let is_ready = config_present
+        && tasks_present
+        && main_present
+        && memo_present
+        && makefile_present
+        && memo_output_present
+        && mark_allocator_present;
+
+    send_ok(
+        is_ready,
+        config_present,
+        tasks_present,
+        main_present,
+        memo_present,
+        makefile_present,
+        memo_output_present,
+        mark_allocator_present,
+    )
+}
+
+fn send_ok(
+    is_ready: bool,
+    config_present: bool,
+    tasks_present: bool,
+    main_present: bool,
+    memo_present: bool,
+    makefile_present: bool,
+    memo_output_present: bool,
+    mark_allocator_present: bool,
+) -> (StatusCode, Json<ApiResponse<AssignmentReadiness>>) {
+    let status = AssignmentReadiness {
+        config_present,
+        tasks_present,
+        main_present,
+        memo_present,
+        makefile_present,
+        memo_output_present,
+        mark_allocator_present,
+        is_ready,
+    };
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            status,
+            "Assignment readiness checked successfully",
+        )),
+    )
 }

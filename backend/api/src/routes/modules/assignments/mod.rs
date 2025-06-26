@@ -17,7 +17,7 @@ use axum::{
 
 use config::config_routes;
 use delete::{delete_assignment, delete_files, delete_task};
-use get::{download_file, get_assignment, get_assignments, list_files, stats};
+use get::{download_file, get_assignment, get_assignments, list_files, stats, get_assignment_readiness};
 use mark_allocator::mark_allocator_routes;
 use post::{create, upload_files};
 use put::edit_assignment;
@@ -120,6 +120,12 @@ pub fn assignment_routes() -> Router {
             "/:assignment_id/memo-output",
             memo_output::memo_output_routes().layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
                 require_lecturer_or_admin(Path((assignment_id,)), req, next)
+            })),
+        )
+        .route(
+            "/:assignment_id/readiness",
+            get(get_assignment_readiness).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer_or_admin(Path(params), req, next)
             })),
         )
         
