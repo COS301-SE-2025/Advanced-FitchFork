@@ -391,6 +391,27 @@ pub async fn list_submissions(
         .into_response()
 }
 
+/// Get a specific submission report for a given assignment.
+///
+/// Validates that the submission belongs to the specified assignment and module, then reads the
+/// `submission_report.json` file associated with it. If the requesting user is not a student,
+/// user metadata is included in the response.
+///
+/// ### Path Parameters
+/// - `module_id`: ID of the module
+/// - `assignment_id`: ID of the assignment
+/// - `submission_id`: ID of the submission
+///
+/// ### Behavior
+/// - Validates assignment and module linkage
+/// - Reads and parses `submission_report.json` from disk
+/// - If requester is not a student, adds user info (`user_id`, `student_number`, `email`) to the response
+///
+/// ### Responses
+/// - `200 OK` with the submission report
+/// - `404 Not Found` if submission, assignment, or module mismatch
+/// - `500 Internal Server Error` if database or file read fails
+
 pub async fn get_submission(
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
