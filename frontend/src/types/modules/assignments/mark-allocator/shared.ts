@@ -1,14 +1,14 @@
-export interface SubsectionAllocator {
+export interface MarkAllocatorSubsection {
   name: string;
   value: number;
 }
 
-export interface TaskAllocator {
+export interface MarkAllocatorTask {
   name: string;
   value: number;
-  subsections?: SubsectionAllocator[];
+  subsections?: MarkAllocatorSubsection[];
 }
 
 export type MarkAllocatorItem = {
-  [taskKey: string]: TaskAllocator;
+  [taskKey: string]: MarkAllocatorTask;
 };

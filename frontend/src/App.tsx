@@ -104,6 +104,7 @@ export default function App() {
                 <Route path=":task_id" element={<UnderConstruction />} />
               </Route>
               <Route path="config" element={<Config />} />
+              <Route path="memo-output" element={<UnderConstruction />} />
               <Route path="mark-allocator" element={<UnderConstruction />} />
               <Route path="stats" element={<UnderConstruction />} />
             </Route>

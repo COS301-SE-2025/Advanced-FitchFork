@@ -117,7 +117,7 @@ pub fn assignment_routes() -> Router {
             })),
         )
         .nest(
-            "/:assignment_id/memo_output",
+            "/:assignment_id/memo-output",
             memo_output::memo_output_routes().layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
                 require_lecturer_or_admin(Path((assignment_id,)), req, next)
             })),
