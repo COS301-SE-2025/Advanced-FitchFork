@@ -3,7 +3,7 @@ import type { Timestamp, ApiResponse } from "@/types/common";
 export interface SubmissionListUserInfo {
   id: number;
   email: string;
-  student_number: string;
+  username: string;
 }
 
 export interface SubmissionListItemBase extends Timestamp {

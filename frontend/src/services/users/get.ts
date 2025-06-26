@@ -1,11 +1,11 @@
 import type { PaginationRequest } from "@/types/common";
-import type { GetListUsersResponse, GetUserModulesReponse, GetUserResponse } from "@/types/users";
+import type { GetListUsersResponse, GetUserResponse, GetUserModulesReponse } from "@/types/users";
 import { apiFetch, buildQuery } from "@/utils/api";
 
 export const listUsers = async (
   options: {
     email?: string;
-    student_number?: string;
+    username?: string;
     admin?: boolean;
   } & PaginationRequest
 ): Promise<GetListUsersResponse> => {

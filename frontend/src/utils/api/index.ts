@@ -84,13 +84,13 @@ export async function apiFetch<T>(
     headers,
   };
 
-  // // Log outgoing request
-  // console.log('[apiFetch] →', {
-  //   url,
-  //   method: finalOptions.method || 'GET',
-  //   headers: finalOptions.headers,
-  //   body: finalOptions.body,
-  // });
+  // Log outgoing request
+  console.log('[apiFetch] →', {
+    url,
+    method: finalOptions.method || 'GET',
+    headers: finalOptions.headers,
+    body: finalOptions.body,
+  });
 
   // Perform fetch request
   const res = await fetch(url, finalOptions);
@@ -104,7 +104,7 @@ export async function apiFetch<T>(
       const text = await res.text();
       data = {
         success: false,
-        data: null,
+        data: {} as T,
         message: text || 'Unknown error',
       };
     }
@@ -112,17 +112,17 @@ export async function apiFetch<T>(
     console.error('[apiFetch] Failed to parse response', err);
     data = {
       success: false,
-      data: null,
+      data: {} as T,
       message: 'Failed to parse response from server.',
     };
   }
 
-  // // Log incoming response
-  // console.log('[apiFetch] ←', {
-  //   status: res.status,
-  //   ok: res.ok,
-  //   data,
-  // });
+  // Log incoming response
+  console.log('[apiFetch] ←', {
+    status: res.status,
+    ok: res.ok,
+    data,
+  });
 
   return data;
 }
