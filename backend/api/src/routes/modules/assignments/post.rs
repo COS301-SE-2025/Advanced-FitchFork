@@ -28,6 +28,8 @@ use serde::{Deserialize, Serialize};
 
 use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter};
 
+use crate::response::ApiResponse;
+use db::models::assignment_task::{ActiveModel, Column, Entity};
 use db::{
     connect,
     models::{
@@ -35,11 +37,9 @@ use db::{
             AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
             Model as AssignmentModel,
         },
-        assignment_file::{FileType, Model as FileModel},
+        assignment_file::Model as FileModel,
     },
 };
-use db::models::assignment_task::{ActiveModel, Column, Entity};
-use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
 pub struct UploadedFileMetadata {
@@ -64,31 +64,35 @@ pub struct AssignmentSubmissionMetadata {
 
 /// POST /api/modules/:module_id/assignments/:assignment_id/files
 ///
-/// Upload one or more files for a given assignment (Admin or Lecturer only).
+/// Upload a single assignment-related file (Admin or Lecturer only).
 ///
 /// ### Multipart Body (form-data)
-/// - files[] (one or more)
+/// - `file_type` (string) — one of: `spec`, `main`, `memo`, etc.
+/// - `file` (file) — exactly one file must be uploaded
 ///
 /// ### Example curl
 /// ```bash
 /// curl -X POST http://localhost:3000/api/modules/1/assignments/2/files \
 ///   -H "Authorization: Bearer <token>" \
-///   -F "files[]=@brief.pdf" \
-///   -F "files[]=@rubric.xlsx"
+///   -F "file_type=spec" \
+///   -F "file=@brief.pdf"
 /// ```
 ///
 /// ### Responses
-/// - `201 Created`
-/// - `400 Bad Request` (no files or invalid format)
-/// - `403 Forbidden` (unauthorized)
-/// - `404 Not Found` (assignment/module not found)
+/// - `201 Created` – File successfully uploaded
+/// - `400 Bad Request` – Missing/invalid file_type, multiple files, or file missing
+/// - `403 Forbidden` – User not authorized (must be Admin or Lecturer)
+/// - `404 Not Found` – Assignment or module not found
+/// - `422 Unprocessable Entity` – File rejected due to invalid format
 pub async fn upload_files(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
+    use crate::response::ApiResponse;
+    use db::models::assignment_file::FileType;
+
     let db = connect().await;
 
-    // 1. Check if the assignment exists
     let assignment_exists = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
@@ -100,83 +104,140 @@ pub async fn upload_files(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
+                Json(ApiResponse::<UploadedFileMetadata>::error(
                     "Assignment not found",
                 )),
             )
                 .into_response();
         }
-        Err(err) => {
-            eprintln!("DB error checking assignment: {:?}", err);
+        Err(e) => {
+            eprintln!("DB error checking assignment: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
-                    "Database error",
-                )),
+                Json(ApiResponse::<UploadedFileMetadata>::error("Database error")),
             )
                 .into_response();
         }
     }
 
-    // 2. Save files
-    let mut saved_files = vec![];
+    let mut file_type: Option<FileType> = None;
+    let mut file_name: Option<String> = None;
+    let mut file_bytes: Option<Vec<u8>> = None;
+    let mut file_count = 0;
 
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
-        let file_name = match field.file_name().map(|s| s.to_string()) {
-            Some(name) => name,
-            None => continue,
-        };
+        let name = field.name().unwrap_or("");
 
-        let file_bytes = field.bytes().await.unwrap_or_default();
-        if file_bytes.is_empty() {
-            continue;
+        match name {
+            "file_type" => {
+                if let Ok(ftype_str) = field.text().await {
+                    match ftype_str.parse::<FileType>() {
+                        Ok(ftype) => file_type = Some(ftype),
+                        Err(_) => {
+                            return (
+                                StatusCode::BAD_REQUEST,
+                                Json(ApiResponse::<UploadedFileMetadata>::error(
+                                    "Invalid file_type",
+                                )),
+                            )
+                                .into_response();
+                        }
+                    }
+                }
+            }
+            "file" => {
+                if file_count > 0 {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiResponse::<UploadedFileMetadata>::error(
+                            "Only one file may be uploaded per request",
+                        )),
+                    )
+                        .into_response();
+                }
+                file_name = field.file_name().map(|s| s.to_string());
+                file_bytes = Some(field.bytes().await.unwrap_or_default().to_vec());
+                file_count += 1;
+            }
+            _ => continue,
         }
+    }
 
-        let file_type = FileType::Spec; // Or dynamically assign based on form field
+    let file_type = match file_type {
+        Some(ft) => ft,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<UploadedFileMetadata>::error(
+                    "Missing required field: file_type",
+                )),
+            )
+                .into_response();
+        }
+    };
 
-        match FileModel::save_file(
-            &db,
-            assignment_id,
-            module_id,
-            file_type,
-            &file_name,
-            &file_bytes,
-        )
-        .await
-        {
-            Ok(saved) => saved_files.push(UploadedFileMetadata {
+    let file_name = match file_name {
+        Some(name) => name,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<UploadedFileMetadata>::error(
+                    "Missing file upload",
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    let file_bytes = match file_bytes {
+        Some(bytes) if !bytes.is_empty() => bytes,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<UploadedFileMetadata>::error(
+                    "Empty file provided",
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    match FileModel::save_file(
+        &db,
+        assignment_id,
+        module_id,
+        file_type.clone(),
+        &file_name,
+        &file_bytes,
+    )
+    .await
+    {
+        Ok(saved) => {
+            let metadata = UploadedFileMetadata {
                 id: saved.id,
                 assignment_id: saved.assignment_id,
                 filename: saved.filename,
                 path: saved.path,
                 created_at: saved.created_at.to_rfc3339(),
                 updated_at: saved.updated_at.to_rfc3339(),
-            }),
-            Err(e) => {
-                eprintln!("Error saving file '{}': {:?}", file_name, e);
-                continue;
-            }
+            };
+            (
+                StatusCode::CREATED,
+                Json(ApiResponse::success(metadata, "File uploaded successfully")),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            eprintln!("File save error: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<UploadedFileMetadata>::error(
+                    "Failed to save file",
+                )),
+            )
+                .into_response()
         }
     }
-
-    if saved_files.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<Vec<UploadedFileMetadata>>::error(
-                "No files were uploaded",
-            )),
-        )
-            .into_response();
-    }
-
-    (
-        StatusCode::CREATED,
-        Json(ApiResponse::success(
-            saved_files,
-            "Files uploaded successfully",
-        )),
-    )
-        .into_response()
 }
 
 #[derive(Debug, Serialize)]
@@ -512,7 +573,7 @@ pub struct TaskResponse {
     task_number: i64,
     command: String,
     created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>
+    updated_at: DateTime<Utc>,
 }
 
 /// POST /api/modules/:module_id/assignments/:assignment_id/tasks
@@ -630,8 +691,6 @@ pub async fn create_task(
             .into_response(),
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
