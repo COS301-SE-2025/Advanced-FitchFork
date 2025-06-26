@@ -459,7 +459,7 @@ pub async fn get_submission(
     let content = fs::read_to_string(&path).unwrap();
     let mut parsed: Value = serde_json::from_str(&content).unwrap();
 
-    if is_student(module_id, claims.sub, db.clone()).await {
+    if !is_student(module_id, claims.sub, db.clone()).await {
         let user = user::Entity::find_by_id(user_id)
             .one(&db)
             .await
