@@ -347,7 +347,7 @@ const ModulePersonnel = () => {
   };
 
   return (
-    <div className="bg-white p-4 sm:p-6 h-full overflow-y-auto">
+    <div className="bg-white dark:bg-gray-950 p-4 sm:p-6 h-full overflow-y-auto">
       <div className="mb-4">
         <PageHeader
           title="Module Personnel"
@@ -355,7 +355,7 @@ const ModulePersonnel = () => {
         />
       </div>
 
-      <div className="bg-white dark:bg-gray-900">
+      <div className="bg-white dark:bg-gray-950">
         <div className="flex flex-col gap-4">
           <Segmented
             options={MODULE_ROLES}

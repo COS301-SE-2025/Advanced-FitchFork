@@ -8,7 +8,3 @@ export interface MemoTaskOutput {
   name: string;
   subsections: MemoSubsection[];
 }
-
-export interface MemoOutputData {
-  tasks: MemoTaskOutput[];
-}

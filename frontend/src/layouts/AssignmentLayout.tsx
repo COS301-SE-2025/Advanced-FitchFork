@@ -55,6 +55,7 @@ const AssignmentLayout = () => {
       ? [
           { key: `${basePath}/files`, label: 'Files' },
           { key: `${basePath}/tasks`, label: 'Tasks' },
+          { key: `${basePath}/memo-output`, label: 'Memo Output' },
           { key: `${basePath}/mark-allocator`, label: 'Mark Allocator' },
           { key: `${basePath}/config`, label: 'Config' },
           { key: `${basePath}/stats`, label: 'Statistics' },
