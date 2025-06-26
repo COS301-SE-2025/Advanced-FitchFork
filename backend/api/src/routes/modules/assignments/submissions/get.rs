@@ -1,3 +1,5 @@
+use std::fs;
+
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
@@ -9,12 +11,17 @@ use db::{
     connect,
     models::{
         assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-        assignment_submission, user,
-        user_module_role::{self, Role},
+        assignment_submission::{self, Entity as SubmissionEntity},
+        user,
+        user_module_role::{self, Entity as UserEntity, Role},
     },
 };
-use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
+use sea_orm::{
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
+    QueryOrder,
+};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{auth::AuthUser, response::ApiResponse};
 
@@ -354,6 +361,17 @@ pub async fn get_list_submissions(
         .into_response()
 }
 
+pub async fn is_student(module_id: i64, user_id: i64, db: DatabaseConnection) -> bool {
+    UserEntity::find()
+        .filter(user_module_role::Column::UserId.eq(user_id))
+        .filter(user_module_role::Column::ModuleId.eq(module_id))
+        .filter(user_module_role::Column::Role.eq(Role::Student))
+        .one(&db)
+        .await
+        .map(|opt| opt.is_some())
+        .unwrap_or(false)
+}
+
 pub async fn list_submissions(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
@@ -361,15 +379,8 @@ pub async fn list_submissions(
 ) -> axum::response::Response {
     let user_id = claims.sub;
     let db = connect().await;
-    let is_student = user_module_role::Entity::find()
-        .filter(user_module_role::Column::UserId.eq(user_id))
-        .filter(user_module_role::Column::ModuleId.eq(module_id))
-        .filter(user_module_role::Column::Role.eq(Role::Student))
-        .one(&db)
-        .await
-        .map(|opt| opt.is_some())
-        .unwrap_or(false);
-    if is_student {
+
+    if is_student(module_id, user_id, db).await {
         return get_user_submissions(module_id, assignment_id, user_id)
             .await
             .into_response();
@@ -379,3 +390,121 @@ pub async fn list_submissions(
         .await
         .into_response()
 }
+
+/// Get a specific submission report for a given assignment.
+///
+/// Validates that the submission belongs to the specified assignment and module, then reads the
+/// `submission_report.json` file associated with it. If the requesting user is not a student,
+/// user metadata is included in the response.
+///
+/// ### Path Parameters
+/// - `module_id`: ID of the module
+/// - `assignment_id`: ID of the assignment
+/// - `submission_id`: ID of the submission
+///
+/// ### Behavior
+/// - Validates assignment and module linkage
+/// - Reads and parses `submission_report.json` from disk
+/// - If requester is not a student, adds user info (`user_id`, `student_number`, `email`) to the response
+///
+/// ### Responses
+/// - `200 OK` with the submission report
+/// - `404 Not Found` if submission, assignment, or module mismatch
+/// - `500 Internal Server Error` if database or file read fails
+
+pub async fn get_submission(
+    Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+) -> impl IntoResponse {
+    let db = connect().await;
+    let submission = match SubmissionEntity::find_by_id(submission_id).one(&db).await {
+        Ok(Some(sub)) => sub,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Submission not found")),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            eprintln!("DB error loading submission: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response();
+        }
+    };
+
+    if submission.assignment_id != assignment_id {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error(
+                "Submission does not belong to the specified assignment",
+            )),
+        )
+            .into_response();
+    }
+
+    let assignment = match AssignmentEntity::find_by_id(assignment_id).one(&db).await {
+        Ok(Some(assignment)) => assignment,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment not found")),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            eprintln!("DB error checking assignment: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response();
+        }
+    };
+
+    if assignment.module_id != module_id {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error(
+                "Assignment does not belong to the specified module",
+            )),
+        )
+            .into_response();
+    }
+    let user_id = submission.user_id;
+    let attempt = submission.attempt;
+    let path = format!("./data/assignment_files/module_{}/assignment_{}/assignment_submissions/user_{}/attempt_{}/submission_report.json", module_id, assignment_id, user_id, attempt);
+    let content = fs::read_to_string(&path).unwrap();
+    let mut parsed: Value = serde_json::from_str(&content).unwrap();
+
+    if !is_student(module_id, claims.sub, db.clone()).await {
+        let user = user::Entity::find_by_id(user_id)
+            .one(&db)
+            .await
+            .unwrap_or(None)
+            .map(|u| UserResponse {
+                user_id: u.id,
+                username: u.username,
+                email: u.email,
+            });
+
+        if let Some(user) = user {
+            let user_value = serde_json::to_value(user).unwrap();
+            if let Some(obj) = parsed.as_object_mut() {
+                obj.insert("user".to_string(), user_value);
+            }
+        }
+    }
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            parsed,
+            "Submission details retrieved successfully",
+        )),
+    )
+        .into_response()
+}
+
