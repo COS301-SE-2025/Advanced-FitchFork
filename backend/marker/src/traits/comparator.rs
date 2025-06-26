@@ -3,7 +3,7 @@ use crate::types::{TaskResult, Subsection};
 /// OutputComparator is a strategy trait for comparing outputs.
 /// Each implementation provides a specific logic for comparing a single subsection
 /// of a student's output against the reference output.
-pub trait OutputComparator {
+pub trait OutputComparator: Send + Sync {
     /// Compare one subsection (pattern) of a task, producing a full TaskResult.
     ///
     /// - `section`: contains `name`, `value`.

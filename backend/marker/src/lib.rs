@@ -53,7 +53,7 @@ pub struct MarkingJob<'a> {
     allocation_json: PathBuf,
     coverage_report: Option<PathBuf>,
     complexity_report: Option<PathBuf>,
-    comparator: Box<dyn OutputComparator + 'a>,
+    comparator: Box<dyn OutputComparator + Send + Sync + 'a>,
     feedback: Box<dyn Feedback + Send + Sync + 'a>,
 }
 
