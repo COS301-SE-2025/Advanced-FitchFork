@@ -21,7 +21,7 @@ export type GetListAssignmentFilesResponse = ApiResponse<AssignmentFile[]>;
 
 export type PostAssignmentResponse = ApiResponse<Assignment>;
 
-export type PostUploadAssignmentFilesResonse = ApiResponse<AssignmentFile[]>;
+export type PostUploadAssignmentFileResonse = ApiResponse<AssignmentFile>;
 
 
 // ─────────────────────────────────────────────────────────────
