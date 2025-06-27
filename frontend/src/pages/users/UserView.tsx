@@ -1,27 +1,22 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import {
-  Typography,
-  Table,
-  Spin,
-  Descriptions,
-  Select,
-  Button,
-  Popconfirm,
-  Space,
-  Breadcrumb,
-} from 'antd';
+import { Typography, Table, Spin, Descriptions, Select, Button, Popconfirm, Space } from 'antd';
 import { EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
-import AppLayout from '@/layouts/AppLayout';
-import { UsersService } from '@/services/users';
-import { ModulesService } from '@/services/modules';
 import ModuleRoleTag from '@/components/ModuleRoleTag';
 import AdminTag from '@/components/AdminTag';
-import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
 import { useNotifier } from '@/components/Notifier';
 import type { User } from '@/types/users';
-import type { ModuleRole, Module } from '@/types/modules';
+import { type ModuleRole, type Module, MODULE_ROLES } from '@/types/modules';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import {
+  removeLecturers,
+  removeTutors,
+  removeStudents,
+  assignLecturers,
+  assignTutors,
+  enrollStudents,
+} from '@/services/modules';
+import { getUser, getUserModules } from '@/services/users';
 
 const { Title } = Typography;
 
@@ -30,9 +25,7 @@ interface UserModule {
   role: ModuleRole;
 }
 
-const ROLE_OPTIONS: ModuleRole[] = ['lecturer', 'tutor', 'student'];
-
-export default function UserView() {
+const UserView = () => {
   const { id } = useParams();
   const userId = Number(id);
   const [user, setUser] = useState<User | null>(null);
@@ -45,14 +38,14 @@ export default function UserView() {
 
   const fetchUserData = async () => {
     setLoading(true);
-    const userRes = await UsersService.getUser(userId);
-    const moduleRes = await UsersService.getUserModules(userId);
+    const userRes = await getUser(userId);
+    const moduleRes = await getUserModules(userId);
 
     if (userRes.success) {
       setUser(userRes.data);
 
-      // Set custom breadcrumb label using the student number
-      setBreadcrumbLabel(`users/${userId}`, userRes.data.student_number);
+      // Set custom breadcrumb label using the username
+      setBreadcrumbLabel(`users/${userId}`, userRes.data.username);
     } else {
       notifyError('Failed to load user', userRes.message);
     }
@@ -86,17 +79,13 @@ export default function UserView() {
     if (oldRole === newRole) return;
 
     try {
-      if (oldRole === 'lecturer')
-        await ModulesService.removeLecturers(moduleId, { user_ids: [userId] });
-      if (oldRole === 'tutor') await ModulesService.removeTutors(moduleId, { user_ids: [userId] });
-      if (oldRole === 'student')
-        await ModulesService.removeStudents(moduleId, { user_ids: [userId] });
+      if (oldRole === 'Lecturer') await removeLecturers(moduleId, { user_ids: [userId] });
+      if (oldRole === 'Tutor') await removeTutors(moduleId, { user_ids: [userId] });
+      if (oldRole === 'Student') await removeStudents(moduleId, { user_ids: [userId] });
 
-      if (newRole === 'lecturer')
-        await ModulesService.assignLecturers(moduleId, { user_ids: [userId] });
-      if (newRole === 'tutor') await ModulesService.assignTutors(moduleId, { user_ids: [userId] });
-      if (newRole === 'student')
-        await ModulesService.enrollStudents(moduleId, { user_ids: [userId] });
+      if (newRole === 'Lecturer') await assignLecturers(moduleId, { user_ids: [userId] });
+      if (newRole === 'Tutor') await assignTutors(moduleId, { user_ids: [userId] });
+      if (newRole === 'Student') await enrollStudents(moduleId, { user_ids: [userId] });
 
       notifySuccess('Role updated', 'The user’s role was successfully updated.');
       setEditingModuleId(null);
@@ -109,10 +98,9 @@ export default function UserView() {
 
   const handleRemove = async (moduleId: number, role: ModuleRole) => {
     try {
-      if (role === 'lecturer')
-        await ModulesService.removeLecturers(moduleId, { user_ids: [userId] });
-      if (role === 'tutor') await ModulesService.removeTutors(moduleId, { user_ids: [userId] });
-      if (role === 'student') await ModulesService.removeStudents(moduleId, { user_ids: [userId] });
+      if (role === 'Lecturer') await removeLecturers(moduleId, { user_ids: [userId] });
+      if (role === 'Tutor') await removeTutors(moduleId, { user_ids: [userId] });
+      if (role === 'Student') await removeStudents(moduleId, { user_ids: [userId] });
 
       notifySuccess('User removed', 'The user was removed from this module.');
       fetchUserData();
@@ -124,13 +112,10 @@ export default function UserView() {
   if (loading || !user) return <Spin className="mt-12 ml-6" />;
 
   return (
-    <AppLayout
-      title={user.student_number}
-      description="This is a user view showing profile and module involvement."
-    >
+    <div className="p-4 sm:p-6">
       <Descriptions layout="vertical" bordered column={3} className="mb-8">
         <Descriptions.Item label="User ID">{user.id}</Descriptions.Item>
-        <Descriptions.Item label="Student Number">{user.student_number}</Descriptions.Item>
+        <Descriptions.Item label="Username">{user.username}</Descriptions.Item>
         <Descriptions.Item label="Email">{user.email}</Descriptions.Item>
         <Descriptions.Item label="Admin">
           <AdminTag isAdmin={user.admin} />
@@ -170,7 +155,7 @@ export default function UserView() {
                 <Select
                   value={editedRole ?? role}
                   onChange={(value) => setEditedRole(value)}
-                  options={ROLE_OPTIONS.map((r) => ({
+                  options={MODULE_ROLES.map((r) => ({
                     value: r,
                     label: r.charAt(0).toUpperCase() + r.slice(1),
                   }))}
@@ -233,6 +218,8 @@ export default function UserView() {
           },
         ]}
       />
-    </AppLayout>
+    </div>
   );
-}
+};
+
+export default UserView;

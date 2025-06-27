@@ -1,4 +1,15 @@
-import { Table, Space, Button, Input, Popconfirm, Select, Empty, Tooltip, Tag } from 'antd';
+import {
+  Table,
+  Space,
+  Button,
+  Input,
+  Popconfirm,
+  Select,
+  Empty,
+  Tooltip,
+  Tag,
+  Dropdown,
+} from 'antd';
 import {
   EditOutlined,
   DeleteOutlined,
@@ -6,22 +17,23 @@ import {
   CloseOutlined,
   ReloadOutlined,
   EyeOutlined,
+  MoreOutlined,
 } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
-import { UsersService } from '@/services/users';
 import type { User } from '@/types/users';
 import type { SortOption } from '@/types/common';
 import { useTableQuery } from '@/hooks/useTableQuery';
 import TableControlBar from '@/components/TableControlBar';
 import TableTagSummary from '@/components/TableTagSummary';
-import AppLayout from '@/layouts/AppLayout';
 import TableCreateModal from '@/components/TableCreateModal';
-import { AuthService } from '@/services/auth';
 import { useNotifier } from '@/components/Notifier';
 import { useNavigate } from 'react-router-dom';
+import PageHeader from '@/components/PageHeader';
+import { listUsers, editUser, deleteUser } from '@/services/users';
+import { register } from '@/services/auth';
 
-export default function UsersList() {
+const UsersList = () => {
   // ======================================================================
   // =========================== State & Hooks ============================
   // ======================================================================
@@ -50,7 +62,7 @@ export default function UsersList() {
   const [editCache, setEditCache] = useState<Partial<User>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newUser, setNewUser] = useState({
-    student_number: '',
+    username: '',
     email: '',
     admin: false,
   });
@@ -64,12 +76,12 @@ export default function UsersList() {
 
     const sort: SortOption[] = sorterState.map(({ field, order }) => ({ field, order }));
 
-    const res = await UsersService.listUsers({
+    const res = await listUsers({
       page: pagination.current,
       per_page: pagination.pageSize,
       query: searchTerm || undefined,
       email: filterState.email?.[0],
-      student_number: filterState.student_number?.[0],
+      username: filterState.username?.[0],
       admin:
         filterState.admin?.[0] === 'true'
           ? true
@@ -99,19 +111,15 @@ export default function UsersList() {
   // ======================================================================
 
   const handleAddUser = () => {
-    setNewUser({ student_number: '', email: '', admin: false });
+    setNewUser({ username: '', email: '', admin: false });
     setIsAddModalOpen(true);
   };
 
   const handleSubmitNewUser = async (formValues: Record<string, any>) => {
-    const { student_number, email } = formValues;
+    const { username, email } = formValues;
 
     try {
-      const res = await AuthService.register({
-        student_number,
-        email,
-        password: 'changeme123',
-      });
+      const res = await register(username, email, 'changeme123');
 
       if (res.success) {
         notifySuccess('User registered successfully', res.message);
@@ -131,7 +139,7 @@ export default function UsersList() {
 
   const handleEditSave = async () => {
     const user = users.find((u) => u.id === editingRowId);
-    if (!user || !editCache.email || !editCache.student_number) {
+    if (!user || !editCache.email || !editCache.username) {
       notifyError('Incomplete user info');
       return;
     }
@@ -142,7 +150,7 @@ export default function UsersList() {
       updated_at: new Date().toISOString(),
     };
 
-    const res = await UsersService.editUser(updated.id, updated);
+    const res = await editUser(updated.id, updated);
     if (res.success) {
       notifySuccess('User updated successfully', res.message);
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? res.data : u)));
@@ -154,7 +162,7 @@ export default function UsersList() {
   };
 
   const handleDelete = async (id: number) => {
-    const res = await UsersService.deleteUser(id);
+    const res = await deleteUser(id);
     if (res.success) {
       setUsers((prev) => prev.filter((u) => u.id !== id));
       setSelectedRowKeys((prev) => prev.filter((k) => k !== id));
@@ -183,26 +191,26 @@ export default function UsersList() {
 
   const columns: ColumnsType<User> = [
     {
-      title: 'Student Number',
-      dataIndex: 'student_number',
-      key: 'student_number',
+      title: 'Username',
+      dataIndex: 'username',
+      key: 'username',
       render: (_, record) =>
         editingRowId === record.id ? (
           <Input
-            value={editCache.student_number}
-            onChange={(e) => setEditCache((prev) => ({ ...prev, student_number: e.target.value }))}
+            value={editCache.username}
+            onChange={(e) => setEditCache((prev) => ({ ...prev, username: e.target.value }))}
           />
         ) : (
-          record.student_number
+          record.username
         ),
       sorter: { multiple: 1 },
-      sortOrder: sorterState.find((s) => s.field === 'student_number')?.order ?? null,
-      filteredValue: filterState.student_number || null,
+      sortOrder: sorterState.find((s) => s.field === 'username')?.order ?? null,
+      filteredValue: filterState.username || null,
       onFilter: () => true,
       filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
         <div className="flex flex-col gap-2 p-2 w-56">
           <Input
-            placeholder="Search student number"
+            placeholder="Search username"
             value={selectedKeys[0]}
             onChange={(e) => setSelectedKeys([e.target.value])}
             onPressEnter={() => confirm()}
@@ -296,62 +304,99 @@ export default function UsersList() {
       title: 'Actions',
       key: 'actions',
       align: 'right',
-      width: 120,
-      render: (_, record) =>
-        editingRowId === record.id ? (
-          <Space>
-            <Tooltip title="Save">
-              <Button
-                icon={<CheckOutlined />}
-                type="primary"
-                shape="circle"
-                onClick={handleEditSave}
-                size="small"
-              />
-            </Tooltip>
-            <Tooltip title="Cancel">
-              <Button
-                icon={<CloseOutlined />}
-                shape="circle"
-                onClick={() => setEditingRowId(null)}
-                size="small"
-              />
-            </Tooltip>
-          </Space>
-        ) : (
-          <Space>
-            <Tooltip title="View">
-              <Button
-                icon={<EyeOutlined />}
-                size="small"
-                type="text"
-                onClick={() => navigate(`/users/${record.id}`)}
-              />
-            </Tooltip>
-            <Tooltip title="Edit">
-              <Button
-                icon={<EditOutlined />}
-                size="small"
-                type="text"
-                onClick={() => {
-                  setEditingRowId(record.id);
-                  setEditCache(record);
-                }}
-              />
-            </Tooltip>
+      width: 100,
+      render: (_, record) => {
+        if (editingRowId === record.id) {
+          return (
+            <Space>
+              <Tooltip title="Save">
+                <Button
+                  type="primary"
+                  shape="default"
+                  icon={<CheckOutlined />}
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEditSave();
+                  }}
+                />
+              </Tooltip>
+              <Tooltip title="Cancel">
+                <Button
+                  shape="default"
+                  icon={<CloseOutlined />}
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingRowId(null);
+                  }}
+                />
+              </Tooltip>
+            </Space>
+          );
+        }
 
-            <Tooltip title="Delete">
-              <Popconfirm
-                title="Delete this user?"
-                onConfirm={() => handleDelete(record.id)}
-                okText="Yes"
-                cancelText="No"
-              >
-                <Button icon={<DeleteOutlined />} danger type="text" size="small" />
-              </Popconfirm>
-            </Tooltip>
-          </Space>
-        ),
+        return (
+          <div
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent row navigation when interacting with the dropdown
+            }}
+          >
+            <Dropdown
+              trigger={['click']}
+              menu={{
+                items: [
+                  {
+                    key: 'view',
+                    icon: <EyeOutlined />,
+                    label: 'View',
+                  },
+                  {
+                    key: 'edit',
+                    icon: <EditOutlined />,
+                    label: 'Edit',
+                  },
+                  {
+                    key: 'delete',
+                    icon: <DeleteOutlined />,
+                    danger: true,
+                    label: (
+                      <Popconfirm
+                        title="Delete this user?"
+                        onConfirm={(e) => {
+                          e?.stopPropagation();
+                          handleDelete(record.id);
+                        }}
+                        onCancel={(e) => e?.stopPropagation()}
+                        okText="Yes"
+                        cancelText="No"
+                      >
+                        <span onClick={(e) => e.stopPropagation()}>Delete</span>
+                      </Popconfirm>
+                    ),
+                  },
+                ],
+                onClick: ({ key, domEvent }) => {
+                  domEvent.preventDefault();
+                  domEvent.stopPropagation();
+
+                  if (key === 'view') navigate(`/users/${record.id}`);
+                  else if (key === 'edit') {
+                    setEditingRowId(record.id);
+                    setEditCache(record);
+                  }
+                },
+              }}
+            >
+              <Button
+                icon={<MoreOutlined />}
+                style={{ borderRadius: 6 }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </Dropdown>
+          </div>
+        );
+      },
     },
   ];
 
@@ -360,7 +405,8 @@ export default function UsersList() {
   // ======================================================================
 
   return (
-    <AppLayout title="Users" description="Manage all registered users in the system.">
+    <div className="bg-white dark:bg-gray-950 p-4 sm:p-6 h-full">
+      <PageHeader title="Users" description="Manage all registered users in the system." />
       <TableControlBar
         handleSearch={setSearchTerm}
         searchTerm={searchTerm}
@@ -374,7 +420,7 @@ export default function UsersList() {
           { key: 'clear-filters', label: 'Clear Filters', onClick: clearFilters },
           { key: 'clear-all', label: 'Clear All', onClick: clearAll },
         ]}
-        searchPlaceholder="Search email or student number"
+        searchPlaceholder="Search email or username"
         bulkDeleteConfirmMessage="Delete selected users?"
       />
 
@@ -399,6 +445,13 @@ export default function UsersList() {
           selectedRowKeys,
           onChange: setSelectedRowKeys,
         }}
+        onRow={(record) => ({
+          onClick: () => {
+            if (editingRowId === null) {
+              navigate(`/users/${record.id}`);
+            }
+          },
+        })}
         loading={loading}
         pagination={{
           ...pagination,
@@ -443,11 +496,13 @@ export default function UsersList() {
         onCreate={handleSubmitNewUser} // now gets the modal form values
         title="Add User"
         fields={[
-          { name: 'student_number', label: 'Student Number', type: 'text', required: true },
+          { name: 'username', label: 'Username', type: 'text', required: true },
           { name: 'email', label: 'Email', type: 'email', required: true },
         ]}
         initialValues={newUser}
       />
-    </AppLayout>
+    </div>
   );
-}
+};
+
+export default UsersList;

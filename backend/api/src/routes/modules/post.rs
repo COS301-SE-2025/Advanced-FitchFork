@@ -1,12 +1,32 @@
-use axum::{http::StatusCode, response::IntoResponse, Json};
-use db::{
-    models::module::Module,
-    pool,
+use axum::{
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
 };
+
+use chrono::{Datelike, Utc};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-use chrono::{Utc, Datelike};
+
+use db::{
+    connect,
+    models::{
+        module::{Entity as ModuleEntity, Model as Module},
+        user::Entity as UserEntity,
+        user_module_role::{
+            ActiveModel as RoleActiveModel,
+            Column as RoleCol,
+            Entity as RoleEntity,
+            Role,
+        },
+    },
+};
+
 use crate::response::ApiResponse;
+
+lazy_static::lazy_static! {
+    static ref MODULE_CODE_REGEX: regex::Regex = regex::Regex::new("^[A-Z]{3}\\d{3}$").unwrap();
+}
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateModuleRequest {
@@ -26,7 +46,6 @@ pub struct CreateModuleRequest {
     pub credits: i32,
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct ModifyUsersModuleRequest {
     pub user_ids: Vec<i64>,
@@ -34,28 +53,28 @@ pub struct ModifyUsersModuleRequest {
 
 #[derive(Debug, Serialize)]
 pub struct ConflictData {
-    pub already_assigned: Vec<i64>,
+    pub already_assigned: Vec<i32>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct PersonnelResponse {
     pub id: i64,
-    pub student_number: String,
+    pub username: String,
     pub email: String,
     pub admin: bool,
     pub created_at: String,
     pub updated_at: String,
 }
 
-impl From<db::models::user::User> for PersonnelResponse {
-    fn from(user: db::models::user::User) -> Self {
+impl From<db::models::user::Model> for PersonnelResponse {
+    fn from(user: db::models::user::Model) -> Self {
         Self {
             id: user.id,
-            student_number: user.student_number,
+            username: user.username,
             email: user.email,
             admin: user.admin,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
+            created_at: user.created_at.to_rfc3339(),
+            updated_at: user.updated_at.to_rfc3339(),
         }
     }
 }
@@ -79,14 +98,10 @@ impl From<Module> for ModuleResponse {
             year: module.year,
             description: module.description,
             credits: module.credits,
-            created_at: module.created_at,
-            updated_at: module.updated_at,
+            created_at: module.created_at.to_rfc3339(),
+            updated_at: module.updated_at.to_rfc3339(),
         }
     }
-}
-
-lazy_static::lazy_static! {
-    static ref MODULE_CODE_REGEX: regex::Regex = regex::Regex::new("^[A-Z]{3}\\d{3}$").unwrap();
 }
 
 /// POST /api/modules
@@ -179,10 +194,10 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
         );
     }
 
-    let pool = pool::get();
+    let db = connect().await;
 
     match Module::create(
-        Some(pool),
+        &db,
         &req.code,
         req.year,
         req.description.as_deref(),
@@ -198,9 +213,8 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
             )
         }
         Err(e) => {
-            if let Some(db_err) = e.as_database_error() {
-                let msg = db_err.message();
-                if msg.contains("modules.code") {
+            if let sea_orm::DbErr::Exec(err) = &e {
+                if err.to_string().contains("UNIQUE constraint failed: modules.code") {
                     return (
                         StatusCode::CONFLICT,
                         Json(ApiResponse::<ModuleResponse>::error(
@@ -283,11 +297,12 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
 ///   "message": "Some users are already lecturers for this module"
 /// }
 /// ```
-
 pub async fn assign_lecturers(
     axum::extract::Path(module_id): axum::extract::Path<i64>,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
+    use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, Set, ActiveModelTrait};
+
     if body.user_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
@@ -295,17 +310,11 @@ pub async fn assign_lecturers(
         );
     }
 
-    let pool = pool::get();
+    let db = connect().await;
 
-    let module_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)"
-    )
-    .bind(module_id)
-    .fetch_one(pool)
-    .await
-    .unwrap_or(false);
-
-    if !module_exists {
+    // Check if module exists
+    let module = ModuleEntity::find_by_id(module_id).one(&db).await;
+    if let Ok(None) | Err(_) = module {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Module not found")),
@@ -315,40 +324,64 @@ pub async fn assign_lecturers(
     let mut already_assigned = Vec::new();
 
     for &user_id in &body.user_ids {
-        let user_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)"
-        )
-        .bind(user_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
-
-        if !user_exists {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", user_id))),
-            );
+        // Check if user exists
+        match UserEntity::find_by_id(user_id).one(&db).await {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<()>::error(&format!(
+                        "User with ID {} does not exist",
+                        user_id
+                    ))),
+                );
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Database error while checking user")),
+                );
+            }
         }
 
-        let is_already: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM module_lecturers WHERE module_id = ? AND user_id = ?)"
-        )
-        .bind(module_id)
-        .bind(user_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
-
-        if is_already {
-            already_assigned.push(user_id);
-        } else {
-            let _ = sqlx::query(
-                "INSERT OR IGNORE INTO module_lecturers (module_id, user_id) VALUES (?, ?)"
+        // Check if already assigned as lecturer
+        let exists = RoleEntity::find()
+            .filter(
+                Condition::all()
+                    .add(RoleCol::UserId.eq(user_id))
+                    .add(RoleCol::ModuleId.eq(module_id))
+                    .add(RoleCol::Role.eq(Role::Lecturer)),
             )
-            .bind(module_id)
-            .bind(user_id)
-            .execute(pool)
+            .one(&db)
             .await;
+
+        match exists {
+            Ok(Some(_)) => {
+                already_assigned.push(user_id);
+                continue;
+            }
+            Ok(None) => {
+                // Insert assignment
+                let new_role = RoleActiveModel {
+                    user_id: Set(user_id),
+                    module_id: Set(module_id),
+                    role: Set(Role::Lecturer),
+                    ..Default::default()
+                };
+
+                if let Err(_) = new_role.insert(&db).await {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<()>::error("Failed to assign lecturer")),
+                    );
+                }
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Failed to query role assignment")),
+                );
+            }
         }
     }
 
@@ -427,11 +460,12 @@ pub async fn assign_lecturers(
 ///   "message": "Some users are already students for this module"
 /// }
 /// ```
-
 pub async fn assign_students(
     axum::extract::Path(module_id): axum::extract::Path<i64>,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
+    use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, Set, ActiveModelTrait};
+
     if body.user_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
@@ -439,17 +473,11 @@ pub async fn assign_students(
         );
     }
 
-    let pool = pool::get();
+    let db = connect().await;
 
-    let module_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)"
-    )
-    .bind(module_id)
-    .fetch_one(pool)
-    .await
-    .unwrap_or(false);
-
-    if !module_exists {
+    // Check if module exists
+    let module = ModuleEntity::find_by_id(module_id).one(&db).await;
+    if let Ok(None) | Err(_) = module {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Module not found")),
@@ -457,41 +485,66 @@ pub async fn assign_students(
     }
 
     let mut already_assigned = Vec::new();
-    for &user_id in &body.user_ids {
-        let user_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)"
-        )
-        .bind(user_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
 
-        if !user_exists {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", user_id))),
-            );
+    for &user_id in &body.user_ids {
+        // Check if user exists
+        match UserEntity::find_by_id(user_id).one(&db).await {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<()>::error(&format!(
+                        "User with ID {} does not exist",
+                        user_id
+                    ))),
+                );
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Database error while checking user")),
+                );
+            }
         }
 
-        let is_already: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM module_students WHERE module_id = ? AND user_id = ?)"
-        )
-        .bind(module_id)
-        .bind(user_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
-
-        if is_already {
-            already_assigned.push(user_id);
-        } else {
-            let _ = sqlx::query(
-                "INSERT OR IGNORE INTO module_students (module_id, user_id) VALUES (?, ?)"
+        // Check if already assigned as student
+        let exists = RoleEntity::find()
+            .filter(
+                Condition::all()
+                    .add(RoleCol::UserId.eq(user_id))
+                    .add(RoleCol::ModuleId.eq(module_id))
+                    .add(RoleCol::Role.eq(Role::Student)),
             )
-            .bind(module_id)
-            .bind(user_id)
-            .execute(pool)
+            .one(&db)
             .await;
+
+        match exists {
+            Ok(Some(_)) => {
+                already_assigned.push(user_id);
+                continue;
+            }
+            Ok(None) => {
+                // Insert assignment
+                let new_role = RoleActiveModel {
+                    user_id: Set(user_id),
+                    module_id: Set(module_id),
+                    role: Set(Role::Student),
+                    ..Default::default()
+                };
+
+                if let Err(_) = new_role.insert(&db).await {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<()>::error("Failed to assign student")),
+                    );
+                }
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Failed to query role assignment")),
+                );
+            }
         }
     }
 
@@ -570,11 +623,11 @@ pub async fn assign_students(
 ///   "message": "Some users are already tutors for this module"
 /// }
 /// ```
-
 pub async fn assign_tutors(
     axum::extract::Path(module_id): axum::extract::Path<i64>,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl axum::response::IntoResponse {
+    use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, Set, ActiveModelTrait};
 
     if body.user_ids.is_empty() {
         return (
@@ -583,15 +636,11 @@ pub async fn assign_tutors(
         );
     }
 
-    let pool = db::pool::get();
+    let db = connect().await;
 
-    let module_exists = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM modules WHERE id = ?)")
-        .bind(module_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
-
-    if !module_exists {
+    // Check if module exists
+    let module = ModuleEntity::find_by_id(module_id).one(&db).await;
+    if let Ok(None) | Err(_) = module {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Module not found")),
@@ -601,38 +650,64 @@ pub async fn assign_tutors(
     let mut already_assigned = Vec::new();
 
     for &user_id in &body.user_ids {
-        let user_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)")
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-            .unwrap_or(false);
-
-        if !user_exists {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", user_id))),
-            );
+        // Check if user exists
+        match UserEntity::find_by_id(user_id).one(&db).await {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<()>::error(&format!(
+                        "User with ID {} does not exist",
+                        user_id
+                    ))),
+                );
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Database error while checking user")),
+                );
+            }
         }
 
-        let is_already = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM module_tutors WHERE module_id = ? AND user_id = ?)",
-        )
-        .bind(module_id)
-        .bind(user_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(false);
-
-        if is_already {
-            already_assigned.push(user_id);
-        } else {
-            let _ = sqlx::query(
-                "INSERT OR IGNORE INTO module_tutors (module_id, user_id) VALUES (?, ?)",
+        // Check if already assigned as tutor
+        let exists = RoleEntity::find()
+            .filter(
+                Condition::all()
+                    .add(RoleCol::UserId.eq(user_id))
+                    .add(RoleCol::ModuleId.eq(module_id))
+                    .add(RoleCol::Role.eq(Role::Tutor)),
             )
-            .bind(module_id)
-            .bind(user_id)
-            .execute(pool)
+            .one(&db)
             .await;
+
+        match exists {
+            Ok(Some(_)) => {
+                already_assigned.push(user_id);
+                continue;
+            }
+            Ok(None) => {
+                // Insert new tutor role
+                let new_role = RoleActiveModel {
+                    user_id: Set(user_id),
+                    module_id: Set(module_id),
+                    role: Set(Role::Tutor),
+                    ..Default::default()
+                };
+
+                if let Err(_) = new_role.insert(&db).await {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<()>::error("Failed to assign tutor")),
+                    );
+                }
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Failed to query tutor assignment")),
+                );
+            }
         }
     }
 

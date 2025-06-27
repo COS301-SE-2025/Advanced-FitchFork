@@ -1,0 +1,11 @@
+pub mod m202505290001_create_users;
+pub mod m202505290002_create_modules;
+pub mod m202505290003_create_user_module_roles;
+pub mod m202505290004_create_assignments;
+pub mod m202505290005_create_assignment_files;
+pub mod m202505290006_create_assignment_submissions;
+pub mod m202505290007_create_password_reset_tokens;
+pub mod m202505290008_create_tasks;
+pub mod m202505290009_create_memo_outputs;
+pub mod m202505290010_create_submission_outputs;
+pub mod m202505290011_create_overwrite_files;

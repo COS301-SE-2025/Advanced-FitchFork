@@ -1,23 +1,30 @@
+use std::path::PathBuf;
 use axum::{
     extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use db::models::user::User;
-use db::pool;
-use crate::response::ApiResponse;
-use common::format_validation_errors;
+use axum::extract::Multipart;
+use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter, Set};
+
 use serde::{Deserialize, Serialize};
+use tokio::fs;
+use tokio::io::AsyncWriteExt;
 use validator::Validate;
+
+use crate::{response::ApiResponse};
+use common::format_validation_errors;
+use db::{connect, models::user};
+use crate::auth::AuthUser;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateUserRequest {
     #[validate(regex(
-        path = "STUDENT_NUMBER_REGEX",
+        path = "username_REGEX",
         message = "Student number must be in format u12345678"
     ))]
-    pub student_number: Option<String>,
+    pub username: Option<String>,
 
     #[validate(email(message = "Invalid email format"))]
     pub email: Option<String>,
@@ -28,7 +35,7 @@ pub struct UpdateUserRequest {
 #[derive(Debug, Serialize)]
 pub struct UpdateUserResponse {
     pub id: i64,
-    pub student_number: String,
+    pub username: String,
     pub email: String,
     pub admin: bool,
     pub created_at: String,
@@ -36,18 +43,18 @@ pub struct UpdateUserResponse {
 }
 
 lazy_static::lazy_static! {
-    static ref STUDENT_NUMBER_REGEX: regex::Regex = regex::Regex::new("^u\\d{8}$").unwrap();
+    static ref username_REGEX: regex::Regex = regex::Regex::new("^u\\d{8}$").unwrap();
 }
 
-impl From<User> for UpdateUserResponse {
-    fn from(user: User) -> Self {
+impl From<user::Model> for UpdateUserResponse {
+    fn from(user: user::Model) -> Self {
         Self {
             id: user.id,
-            student_number: user.student_number,
+            username: user.username,
             email: user.email,
             admin: user.admin,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
+            created_at: user.created_at.to_string(),
+            updated_at: user.updated_at.to_string(),
         }
     }
 }
@@ -62,7 +69,7 @@ impl From<User> for UpdateUserResponse {
 /// # Request Body
 /// ```json
 /// {
-///   "student_number": "u87654321",  // optional
+///   "username": "u87654321",  // optional
 ///   "email": "new@example.com",     // optional
 ///   "admin": true                   // optional
 /// }
@@ -76,7 +83,7 @@ impl From<User> for UpdateUserResponse {
 ///   "success": true,
 ///   "data": {
 ///     "id": 1,
-///     "student_number": "u87654321",
+///     "username": "u87654321",
 ///     "email": "new@example.com",
 ///     "admin": true,
 ///     "created_at": "2025-05-23T18:00:00Z",
@@ -118,37 +125,37 @@ impl From<User> for UpdateUserResponse {
 /// }
 /// ```
 pub async fn update_user(
-    Path(user_id): Path<i64>,
+    Path(user_id): Path<i32>,
     Json(req): Json<UpdateUserRequest>,
 ) -> impl IntoResponse {
-    if let Err(validation_errors) = req.validate() {
-        let error_message = format_validation_errors(&validation_errors);
+    if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<UpdateUserResponse>::error(error_message)),
+            Json(ApiResponse::<UpdateUserResponse>::error(format_validation_errors(&e))),
         );
     }
 
-    if req.student_number.is_none() && req.email.is_none() && req.admin.is_none() {
+    if req.username.is_none() && req.email.is_none() && req.admin.is_none() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<UpdateUserResponse>::error(
-                "At least one field must be provided for update"
-            )),
+            Json(ApiResponse::<UpdateUserResponse>::error("At least one field must be provided")),
         );
     }
 
-    let pool = pool::get();
+    let db: DatabaseConnection = connect().await;
 
-    let existing_user = match User::get_by_id(Some(pool), user_id).await {
-        Ok(Some(user)) => user,
+    let user_entity = user::Entity::find_by_id(user_id)
+        .one(&db)
+        .await;
+
+    let current_user = match user_entity {
+        Ok(Some(u)) => u,
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<UpdateUserResponse>::error("User not found")),
             );
         }
-
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -157,25 +164,67 @@ pub async fn update_user(
         }
     };
 
-    if let Some(ref email) = req.email {
-        if email != &existing_user.email {
-            match sqlx::query("SELECT id FROM users WHERE email = ? AND id != ?")
-                .bind(email)
-                .bind(user_id)
-                .fetch_optional(pool)
-                .await
-            {
+    // TODO: Should probably make a more robust system with a super admin
+    // Prevent changing your own admin status or changing others' admin status
+    if let Some(_) = req.admin {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<UpdateUserResponse>::error("Changing admin status is not allowed")),
+        );
+    }
+
+    // Check email conflict
+    if let Some(email) = &req.email {
+        if email != &current_user.email {
+            let exists_result = user::Entity::find()
+                .filter(
+                    Condition::all()
+                        .add(user::Column::Email.eq(email.clone()))
+                        .add(user::Column::Id.ne(user_id)),
+                )
+                .one(&db)
+                .await;
+
+            match exists_result {
+                Ok(Some(_)) => {
+                    return (
+                        StatusCode::CONFLICT,
+                        Json(ApiResponse::<UpdateUserResponse>::error("A user with this email already exists")),
+                    );
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<UpdateUserResponse>::error(format!("Database error: {}", e))),
+                    );
+                }
+            }
+        }
+    }
+
+    // Check username conflict
+    if let Some(sn) = &req.username {
+        if sn != &current_user.username {
+            let exists_result = user::Entity::find()
+                .filter(
+                    Condition::all()
+                        .add(user::Column::Username.eq(sn.clone()))
+                        .add(user::Column::Id.ne(user_id)),
+                )
+                .one(&db)
+                .await;
+
+            match exists_result {
                 Ok(Some(_)) => {
                     return (
                         StatusCode::CONFLICT,
                         Json(ApiResponse::<UpdateUserResponse>::error(
-                            "A user with this email already exists"
+                            "A user with this student number already exists",
                         )),
                     );
                 }
-
                 Ok(None) => {}
-
                 Err(e) => {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
@@ -186,247 +235,230 @@ pub async fn update_user(
         }
     }
 
-    if let Some(ref student_number) = req.student_number {
-        if student_number != &existing_user.student_number {
-            match User::get_by_student_number(Some(pool), student_number).await {
-                Ok(Some(conflicting_user)) if conflicting_user.id != user_id => {
-                    return (
-                        StatusCode::CONFLICT,
-                        Json(ApiResponse::<UpdateUserResponse>::error(
-                            "A user with this student number already exists"
-                        )),
-                    );
-                }
-
-                Ok(_) => {}
-
-                Err(e) => {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<UpdateUserResponse>::error(format!("Database error: {}", e))),
-                    );
-                }
-            }
-        }
+    let mut active_model: user::ActiveModel = current_user.into();
+    if let Some(sn) = req.username {
+        active_model.username = Set(sn);
+    }
+    if let Some(email) = req.email {
+        active_model.email = Set(email);
+    }
+    if let Some(admin) = req.admin {
+        active_model.admin = Set(admin);
     }
 
-    let result = match (&req.student_number, &req.email, &req.admin) {
-        (Some(sn), Some(em), Some(ad)) => {
-            sqlx::query_as::<_, User>(
-                "UPDATE users SET student_number = ?, email = ?, admin = ?, updated_at = CURRENT_TIMESTAMP 
-                 WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-            )
-            .bind(sn)
-            .bind(em)
-            .bind(ad)
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-        }
-
-        (Some(sn), Some(em), None) => {
-            sqlx::query_as::<_, User>(
-                "UPDATE users SET student_number = ?, email = ?, updated_at = CURRENT_TIMESTAMP 
-                 WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-            )
-            .bind(sn)
-            .bind(em)
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-        }
-        
-        (Some(sn), None, Some(ad)) => {
-            sqlx::query_as::<_, User>(
-                "UPDATE users SET student_number = ?, admin = ?, updated_at = CURRENT_TIMESTAMP 
-                 WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-            )
-            .bind(sn)
-            .bind(ad)
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-        }
-        
-        (None, Some(em), Some(ad)) => {
-            sqlx::query_as::<_, User>(
-                "UPDATE users SET email = ?, admin = ?, updated_at = CURRENT_TIMESTAMP 
-                 WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-            )
-            .bind(em)
-            .bind(ad)
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-        }
-        
-        (Some(sn), None, None) => {
-            sqlx::query_as::<_, User>(
-                "UPDATE users SET student_number = ?, updated_at = CURRENT_TIMESTAMP 
-                 WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-            )
-            .bind(sn)
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-        }
-        
-        (None, Some(em), None) => {
-            sqlx::query_as::<_, User>(
-                "UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP 
-                 WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-            )
-            .bind(em)
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-        }
-        
-        (None, None, Some(ad)) => {
-            sqlx::query_as::<_, User>(
-                "UPDATE users SET admin = ?, updated_at = CURRENT_TIMESTAMP 
-                 WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-            )
-            .bind(ad)
-            .bind(user_id)
-            .fetch_one(pool)
-            .await
-        }
-        
-        (None, None, None) => unreachable!(),
-    };
-
-    match result {
-        Ok(updated_user) => {
-            let response = UpdateUserResponse::from(updated_user);
-            (
-                StatusCode::OK,
-                Json(ApiResponse::success(response, "User updated successfully")),
-            )
-        }
-
-        Err(sqlx::Error::RowNotFound) => {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<UpdateUserResponse>::error("User not found")),
-            )
-        }
-
-        Err(e) => {
-            if let Some(db_err) = e.as_database_error() {
-                let msg = db_err.message();
-                if msg.contains("users.email") {
-                    return (
-                        StatusCode::CONFLICT,
-                        Json(ApiResponse::<UpdateUserResponse>::error(
-                            "A user with this email already exists"
-                        )),
-                    );
-                }
-                
-                if msg.contains("users.student_number") {
-                    return (
-                        StatusCode::CONFLICT,
-                        Json(ApiResponse::<UpdateUserResponse>::error(
-                            "A user with this student number already exists"
-                        )),
-                    );
-                }
-            }
-
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UpdateUserResponse>::error(format!("Database error: {}", e))),
-            )
-        }
+    match active_model.update(&db).await {
+        Ok(updated) => (
+            StatusCode::OK,
+            Json(ApiResponse::success(
+                UpdateUserResponse::from(updated),
+                "User updated successfully",
+            )),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<UpdateUserResponse>::error(format!("Database error: {}", e))),
+        ),
     }
 }
+
+#[derive(serde::Serialize)]
+struct ProfilePictureResponse {
+    profile_picture_path: String,
+}
+
+pub async fn upload_user_avatar(AuthUser(claims): AuthUser, Path(user_id): Path<i64>, mut multipart: Multipart, ) -> impl IntoResponse {
+    if !claims.admin {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<ProfilePictureResponse>::error("Only admins may upload avatars for other users")),
+        )
+    }
+
+    const MAX_SIZE: u64 = 2 * 1024 * 1024;
+    const ALLOWED_MIME: &[&str] = &["image/jpeg", "image/png", "image/gif"];
+
+    let mut content_type = None;
+    let mut file_data = None;
+
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        if field.name() == Some("file") {
+            content_type = field.content_type().map(|ct| ct.to_string());
+
+            if let Some(ct) = &content_type {
+                if !ALLOWED_MIME.contains(&ct.as_str()) {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiResponse::<ProfilePictureResponse>::error("File type not supported.")),
+                    )
+                }
+            }
+
+            let bytes = field.bytes().await.unwrap();
+            if bytes.len() as u64 > MAX_SIZE {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<ProfilePictureResponse>::error("File too large.")),
+                )
+            }
+
+            file_data = Some(bytes);
+        }
+    }
+
+    let Some(file_bytes) = file_data else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<ProfilePictureResponse>::error("No file uploaded.")),
+        )
+    };
+
+    let ext = match content_type.as_deref() {
+        Some("image/png") => "png",
+        Some("image/jpeg") => "jpg",
+        Some("image/gif") => "gif",
+        _ => "bin",
+    };
+
+    let root = std::env::var("USER_PROFILE_STORAGE_ROOT")
+        .unwrap_or_else(|_| "data/user_profile_pictures".to_string());
+
+    let user_dir = PathBuf::from(&root).join(format!("user_{}", user_id));
+    let _ = fs::create_dir_all(&user_dir);
+
+    let filename = format!("avatar.{}", ext);
+    let path = user_dir.join(&filename);
+    let mut file = tokio::fs::File::create(&path).await.unwrap();
+    file.write_all(&file_bytes).await.unwrap();
+
+    let relative_path = path
+        .strip_prefix(&root)
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+
+    let db = connect().await;
+
+    let current = match user::Entity::find_by_id(user_id).one(&db).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<ProfilePictureResponse>::error("User not found.")),
+            )
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ProfilePictureResponse>::error("Database error.")),
+            )
+        }
+    };
+
+    let mut model = current.into_active_model();
+    model.profile_picture_path = Set(Some(relative_path.clone()));
+    model.update(&db).await.unwrap();
+
+    let response = ProfilePictureResponse {
+        profile_picture_path: relative_path,
+    };
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(response, "Avatar uploaded for user.")),
+    )
+}
+
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use db::models::user::User;
-    use sqlx::SqlitePool;
-    use db::{create_test_db, delete_database};
+    use sea_orm::{
+        ActiveModelTrait, IntoActiveModel, Set, DatabaseConnection,
+    };
+    use db::{models::user};
+    use validator::Validate;
+    use db::test_utils::setup_test_db;
 
-    // Helper function to create test users
-    async fn create_test_users(pool: &SqlitePool) -> (User, User) {
-        let admin_user = User::create(Some(pool), "u12345678", "admin@example.com", "password1", true)
-            .await
-            .unwrap();
+    // Helper to create test users using SeaORM
+    async fn create_test_users(db: &DatabaseConnection) -> (user::Model, user::Model) {
+        let admin_user = user::ActiveModel {
+            username: Set("u12345678".to_string()),
+            email: Set("admin@example.com".to_string()),
+            password_hash: Set("hashed1".to_string()),
+            admin: Set(true),
+            ..Default::default()
+        }
+        .insert(db)
+        .await
+        .unwrap();
 
-        let regular_user = User::create(Some(pool), "u87654321", "user@example.com", "password2", false)
-            .await
-            .unwrap();
+        let regular_user = user::ActiveModel {
+            username: Set("u87654321".to_string()),
+            email: Set("user@example.com".to_string()),
+            password_hash: Set("hashed2".to_string()),
+            admin: Set(false),
+            ..Default::default()
+        }
+        .insert(db)
+        .await
+        .unwrap();
 
         (admin_user, regular_user)
     }
 
     #[tokio::test]
     async fn test_update_user_success() {
-        let pool = create_test_db(Some("test_update_user_success.db")).await;
-        
-        let (_, target_user) = create_test_users(&pool).await;
-        let target_id = target_user.id;
+        let db = setup_test_db().await;
 
-        // Test updating all fields
+        let (_, target_user) = create_test_users(&db).await;
+
         let update_req = UpdateUserRequest {
-            student_number: Some("u99999999".to_string()),
+            username: Some("u99999999".to_string()),
             email: Some("updated@example.com".to_string()),
             admin: Some(true),
         };
 
-        // Verify validation passes
         assert!(update_req.validate().is_ok());
 
-        // Test the update logic
-        let result = match (&update_req.student_number, &update_req.email, &update_req.admin) {
-            (Some(sn), Some(em), Some(ad)) => {
-                sqlx::query_as::<_, User>(
-                    "UPDATE users SET student_number = ?, email = ?, admin = ?, updated_at = CURRENT_TIMESTAMP 
-                     WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-                )
-                .bind(sn)
-                .bind(em)
-                .bind(ad)
-                .bind(target_id)
-                .fetch_one(&pool)
-                .await
-            }
-            _ => unreachable!(),
-        };
+        let mut model = target_user.into_active_model();
+        if let Some(sn) = update_req.username.clone() {
+            model.username = Set(sn);
+        }
+        if let Some(em) = update_req.email.clone() {
+            model.email = Set(em);
+        }
+        if let Some(ad) = update_req.admin {
+            model.admin = Set(ad);
+        }
 
-        assert!(result.is_ok());
-        let updated_user = result.unwrap();
-        assert_eq!(updated_user.student_number, "u99999999");
-        assert_eq!(updated_user.email, "updated@example.com");
-        assert!(updated_user.admin);
+        let updated = model.update(&db).await.unwrap();
 
-        pool.close().await;
-        delete_database("test_update_user_success.db");
+        assert_eq!(updated.username, "u99999999");
+        assert_eq!(updated.email, "updated@example.com");
+        assert!(updated.admin);
     }
 
     #[tokio::test]
     async fn test_update_user_validation() {
-        // Test invalid student number format
+        // Invalid student number
         let invalid_sn = UpdateUserRequest {
-            student_number: Some("invalid".to_string()),
+            username: Some("invalid".to_string()),
             email: None,
             admin: None,
         };
         assert!(invalid_sn.validate().is_err());
 
-        // Test invalid email format
+        // Invalid email
         let invalid_email = UpdateUserRequest {
-            student_number: None,
+            username: None,
             email: Some("not-an-email".to_string()),
             admin: None,
         };
         assert!(invalid_email.validate().is_err());
 
-        // Test valid formats
+        // Valid case
         let valid_update = UpdateUserRequest {
-            student_number: Some("u12345678".to_string()),
+            username: Some("u12345678".to_string()),
             email: Some("valid@example.com".to_string()),
             admin: Some(true),
         };
@@ -435,215 +467,200 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_user_not_found() {
-        let pool = create_test_db(Some("test_update_not_found.db")).await;
-        
-        let non_existent_id = 99999i64;
+        use sea_orm::{EntityTrait};
+        use db::models::user;
 
-        // Verify user doesn't exist
-        let found_user = User::get_by_id(Some(&pool), non_existent_id).await.unwrap();
-        assert!(found_user.is_none());
+        let db = setup_test_db().await;
+        let non_existent_id = 99999i32;
 
-        pool.close().await;
-        delete_database("test_update_not_found.db");
+        let result = user::Entity::find_by_id(non_existent_id)
+            .one(&db)
+            .await
+            .unwrap();
+
+        assert!(result.is_none());
     }
 
     #[tokio::test]
     async fn test_update_user_duplicate_email() {
-        let pool = create_test_db(Some("test_update_duplicate_email.db")).await;
-        
-        let (user1, user2) = create_test_users(&pool).await;
+        use sea_orm::{ActiveModelTrait, IntoActiveModel, Set};
+        use db::models::user;
 
-        // Try to update user2's email to user1's email
-        let update_req = UpdateUserRequest {
-            student_number: None,
-            email: Some(user1.email.clone()),
-            admin: None,
-        };
+        let db = setup_test_db().await;
 
-        // Verify validation passes
-        assert!(update_req.validate().is_ok());
-
-        // Test the update logic
-        let result = match (&update_req.student_number, &update_req.email, &update_req.admin) {
-            (None, Some(em), None) => {
-                sqlx::query_as::<_, User>(
-                    "UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP 
-                     WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-                )
-                .bind(em)
-                .bind(user2.id)
-                .fetch_one(&pool)
-                .await
+        let (user1, user2) = {
+            let admin_user = user::ActiveModel {
+                username: Set("u12345678".to_string()),
+                email: Set("admin@example.com".to_string()),
+                password_hash: Set("hashed1".to_string()),
+                admin: Set(true),
+                ..Default::default()
             }
-            _ => unreachable!(),
+            .insert(&db)
+            .await
+            .unwrap();
+
+            let regular_user = user::ActiveModel {
+                username: Set("u87654321".to_string()),
+                email: Set("user@example.com".to_string()),
+                password_hash: Set("hashed2".to_string()),
+                admin: Set(false),
+                ..Default::default()
+            }
+            .insert(&db)
+            .await
+            .unwrap();
+
+            (admin_user, regular_user)
         };
 
-        // Should fail due to duplicate email
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(e.to_string().contains("UNIQUE constraint failed"));
-        }
+        // Attempt to update user2's email to user1's email
+        let mut model = user2.into_active_model();
+        model.email = Set(user1.email.clone());
 
-        pool.close().await;
-        delete_database("test_update_duplicate_email.db");
+        let result = model.update(&db).await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("UNIQUE constraint failed") || err_msg.contains("constraint"),
+            "Expected duplicate email error, got: {}",
+            err_msg
+        );
     }
 
     #[tokio::test]
-    async fn test_update_user_duplicate_student_number() {
-        let pool = create_test_db(Some("test_update_duplicate_sn.db")).await;
-        
-        let (user1, user2) = create_test_users(&pool).await;
+    async fn test_update_user_duplicate_username() {
+        use sea_orm::{ActiveModelTrait, IntoActiveModel, Set};
+        use db::models::user;
 
-        // Try to update user2's student number to user1's student number
-        let update_req = UpdateUserRequest {
-            student_number: Some(user1.student_number.clone()),
-            email: None,
-            admin: None,
-        };
+        let db = setup_test_db().await;
 
-        // Verify validation passes
-        assert!(update_req.validate().is_ok());
-
-        // Test the update logic
-        let result = match (&update_req.student_number, &update_req.email, &update_req.admin) {
-            (Some(sn), None, None) => {
-                sqlx::query_as::<_, User>(
-                    "UPDATE users SET student_number = ?, updated_at = CURRENT_TIMESTAMP 
-                     WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-                )
-                .bind(sn)
-                .bind(user2.id)
-                .fetch_one(&pool)
-                .await
+        let (user1, user2) = {
+            let u1 = user::ActiveModel {
+                username: Set("u12345678".to_string()),
+                email: Set("admin@example.com".to_string()),
+                password_hash: Set("hashed1".to_string()),
+                admin: Set(true),
+                ..Default::default()
             }
-            _ => unreachable!(),
+            .insert(&db)
+            .await
+            .unwrap();
+
+            let u2 = user::ActiveModel {
+                username: Set("u87654321".to_string()),
+                email: Set("user@example.com".to_string()),
+                password_hash: Set("hashed2".to_string()),
+                admin: Set(false),
+                ..Default::default()
+            }
+            .insert(&db)
+            .await
+            .unwrap();
+
+            (u1, u2)
         };
 
-        // Should fail due to duplicate student number
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(e.to_string().contains("UNIQUE constraint failed"));
-        }
+        let mut model = user2.into_active_model();
+        model.username = Set(user1.username.clone());
 
-        pool.close().await;
-        delete_database("test_update_duplicate_sn.db");
+        let result = model.update(&db).await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("UNIQUE constraint failed") || err_msg.contains("constraint"),
+            "Expected duplicate student number error, got: {}",
+            err_msg
+        );
     }
 
     #[tokio::test]
     async fn test_update_user_partial_fields() {
-        let pool = create_test_db(Some("test_update_partial.db")).await;
-        
-        let (_, target_user) = create_test_users(&pool).await;
-        let target_id = target_user.id;
+        use sea_orm::{ActiveModelTrait, Set};
+        use db::models::user;
 
-        // Test updating only email
-        let update_req = UpdateUserRequest {
-            student_number: None,
-            email: Some("partial@example.com".to_string()),
-            admin: None,
-        };
+        let db = setup_test_db().await;
 
-        // Verify validation passes
-        assert!(update_req.validate().is_ok());
+        let user = user::ActiveModel {
+            username: Set("u99999999".to_string()),
+            email: Set("original@example.com".to_string()),
+            password_hash: Set("secure".to_string()),
+            admin: Set(false),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .unwrap();
 
-        // Test the update logic
-        let result = match (&update_req.student_number, &update_req.email, &update_req.admin) {
-            (None, Some(em), None) => {
-                sqlx::query_as::<_, User>(
-                    "UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP 
-                     WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-                )
-                .bind(em)
-                .bind(target_id)
-                .fetch_one(&pool)
-                .await
-            }
-            _ => unreachable!(),
-        };
+        let mut model = user.clone().into_active_model();
+        model.email = Set("partial@example.com".to_string());
 
-        assert!(result.is_ok());
-        let updated_user = result.unwrap();
+        let updated_user = model.update(&db).await.unwrap();
+
         assert_eq!(updated_user.email, "partial@example.com");
-        assert_eq!(updated_user.student_number, target_user.student_number); // Unchanged
-        assert_eq!(updated_user.admin, target_user.admin); // Unchanged
-
-        pool.close().await;
-        delete_database("test_update_partial.db");
+        assert_eq!(updated_user.username, user.username); // unchanged
+        assert_eq!(updated_user.admin, user.admin); // unchanged
     }
 
     #[tokio::test]
     async fn test_update_user_no_fields() {
-        let pool = create_test_db(Some("test_update_no_fields.db")).await;
-        
-        let (_, _target_user) = create_test_users(&pool).await;
+        use validator::Validate;
 
-        // Test updating with no fields
         let update_req = UpdateUserRequest {
-            student_number: None,
+            username: None,
             email: None,
             admin: None,
         };
 
-        // Verify validation passes
         assert!(update_req.validate().is_ok());
 
-        // Test that at least one field must be provided
-        let result = match (&update_req.student_number, &update_req.email, &update_req.admin) {
+        let result = match (&update_req.username, &update_req.email, &update_req.admin) {
             (None, None, None) => Err("At least one field must be provided for update"),
             _ => Ok(()),
         };
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "At least one field must be provided for update");
-
-        pool.close().await;
-        delete_database("test_update_no_fields.db");
+        assert_eq!(
+            result.unwrap_err(),
+            "At least one field must be provided for update"
+        );
     }
 
     #[tokio::test]
     async fn test_update_user_response_format() {
-        let pool = create_test_db(Some("test_update_response.db")).await;
-        
-        let (_, target_user) = create_test_users(&pool).await;
-        let target_id = target_user.id;
+        use sea_orm::{ActiveModelTrait, Set};
+        use db::models::user;
 
-        // Test updating user
-        let update_req = UpdateUserRequest {
-            student_number: Some("u99999999".to_string()),
-            email: Some("response@example.com".to_string()),
-            admin: Some(true),
-        };
+        let db = setup_test_db().await;
 
-        // Test the update logic
-        let result = match (&update_req.student_number, &update_req.email, &update_req.admin) {
-            (Some(sn), Some(em), Some(ad)) => {
-                sqlx::query_as::<_, User>(
-                    "UPDATE users SET student_number = ?, email = ?, admin = ?, updated_at = CURRENT_TIMESTAMP 
-                     WHERE id = ? RETURNING id, student_number, email, password_hash, admin, created_at, updated_at"
-                )
-                .bind(sn)
-                .bind(em)
-                .bind(ad)
-                .bind(target_id)
-                .fetch_one(&pool)
-                .await
-            }
-            _ => unreachable!(),
-        };
+        let original = user::ActiveModel {
+            username: Set("u87654321".to_string()),
+            email: Set("original@example.com".to_string()),
+            password_hash: Set("test123".to_string()),
+            admin: Set(false),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .unwrap();
 
-        assert!(result.is_ok());
-        let updated_user = result.unwrap();
-        let response = UpdateUserResponse::from(updated_user);
+        let mut updated_model = original.clone().into_active_model();
+        updated_model.username = Set("u99999999".to_string());
+        updated_model.email = Set("response@example.com".to_string());
+        updated_model.admin = Set(true);
 
-        // Verify response format
-        assert_eq!(response.id, target_id);
-        assert_eq!(response.student_number, "u99999999");
+        let updated = updated_model.update(&db).await.unwrap();
+
+        let response = UpdateUserResponse::from(updated);
+
+        assert_eq!(response.id, original.id);
+        assert_eq!(response.username, "u99999999");
         assert_eq!(response.email, "response@example.com");
         assert!(response.admin);
         assert!(!response.created_at.is_empty());
         assert!(!response.updated_at.is_empty());
-
-        pool.close().await;
-        delete_database("test_update_response.db");
     }
+
 }

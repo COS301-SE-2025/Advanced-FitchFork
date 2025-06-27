@@ -1,43 +1,99 @@
+use api::auth::middleware::log_request;
 use api::routes::routes;
+use axum::middleware::from_fn;
 use axum::Router;
-use axum::http::header;
-use common::{config::Config, logger::init_logger};
-use log::info;
+use dotenvy::dotenv;
+use std::env;
 use std::net::SocketAddr;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
+use tracing::info;
+use tracing_appender::rolling;
+use axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
 
 #[tokio::main]
 async fn main() {
-    let config = Config::init(".env");
-    init_logger(&config.log_level, &config.log_file);
-    db::init(&config.database_url, true).await;
-    db::seed_db().await;
-    // docker_example::run_assignment_code("docker_example/src/files/good_java_example.zip", "java").await;
+    dotenv().ok();
 
-    info!(
-        "Starting {} on http://{}:{}",
-        config.project_name, config.host, config.port
-    );
+    // Read env vars
+    let project_name = env::var("PROJECT_NAME").unwrap_or_else(|_| "unknown-project".to_string());
+    let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let port = env::var("PORT")
+        .unwrap_or_else(|_| "3000".to_string())
+        .parse::<u16>()
+        .expect("PORT must be a valid number");
+    let log_level = env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
+    let log_file = env::var("LOG_FILE").unwrap_or_else(|_| "api.log".to_string());
 
-    // CORS setup (allow frontend origin)
-    let cors = CorsLayer::new()
-        .allow_origin(axum::http::HeaderValue::from_static(
-            "http://localhost:5173",
-        ))
-        .allow_methods(Any)
-        .allow_headers(Any)
-        .expose_headers([header::CONTENT_DISPOSITION]);
+    // Important: hold the guard to flush logs
+    let _log_guard = init_logging(&log_file, &log_level);
 
-    // Compose routes and apply middleware
-    let app = Router::new().nest("/api", routes()).layer(cors);
+    info!("Starting {} on http://{}:{}", project_name, host, port);
+    println!("Server running at http://{}:{} ({})", host, port, project_name);
 
-    // Bind and serve
-    let addr: SocketAddr = format!("{}:{}", config.host, config.port)
+    // Setup CORS
+    let cors = CorsLayer::very_permissive()
+      .expose_headers([CONTENT_DISPOSITION, CONTENT_TYPE]);
+
+    // Setup Axum app
+    let app = Router::new()
+        .nest("/api", routes())
+        .layer(cors)
+        .layer(from_fn(log_request));
+
+    let addr: SocketAddr = format!("{}:{}", host, port)
         .parse()
         .expect("Invalid address");
+
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .expect("Failed to bind");
 
-    axum::serve(listener, app).await.expect("Server crashed");
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .expect("Server crashed");
+}
+
+fn init_logging(log_file: &str, _log_level: &str) -> tracing_appender::non_blocking::WorkerGuard {
+    use std::{env, fs};
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+    fs::create_dir_all("logs").ok();
+
+    let file_appender = rolling::daily("logs", log_file);
+    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
+
+    let file_layer = fmt::layer()
+        .with_writer(file_writer)
+        .with_ansi(false)
+        .with_target(true)
+        .with_thread_ids(true);
+
+    let log_to_stdout = env::var("LOG_TO_STDOUT")
+        .unwrap_or_else(|_| "false".to_string())
+        .to_lowercase()
+        == "true";
+
+    let stdout_layer = fmt::layer()
+        .with_writer(std::io::stdout)
+        .with_ansi(true)
+        .with_target(true)
+        .with_thread_ids(true);
+
+    let env_filter =
+        EnvFilter::try_from_env("LOG_LEVEL").unwrap_or_else(|_| EnvFilter::new("api=info"));
+
+    let registry = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(file_layer);
+
+    if log_to_stdout {
+        registry.with(stdout_layer).init();
+    } else {
+        registry.init();
+    }
+
+    guard
 }

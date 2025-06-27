@@ -1,0 +1,22 @@
+[package]
+name = "code-runner"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+zip = "0.6"
+uuid = { version = "1", features = ["v4"] }
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+db = { path = "../db" }
+common = { path = "../common" }
+sea-orm = { version = "0.12", features = [
+    "macros",
+    "runtime-tokio-rustls",
+    "sqlx-sqlite",
+    "chrono",
+] }
+dotenv = "0.15"
+chrono = { version = "0.4", features = ["serde"] }

@@ -1,8 +1,5 @@
 use validator::ValidationErrors;
 
-pub mod config;
-pub mod logger;
-
 pub fn format_validation_errors(errors: &ValidationErrors) -> String {
     errors
         .field_errors()

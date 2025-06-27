@@ -1,0 +1,23 @@
+[config]
+skip_core_tasks = true
+default_to_workspace = false
+
+[tasks.migrate]
+description = "Run DB migrations and seed the DB"
+script = ["cargo run -p migration"]
+
+[tasks.clean]
+description = "Delete DB file only"
+script = ["cargo run -p migration -- clean"]
+
+[tasks.fresh]
+description = "Drop DB and re-run migrations, then seed"
+script = ["cargo run -p migration -- fresh", "cargo run -p seeder --quiet"]
+
+[tasks.seed]
+description = "Seed the DB"
+script = ["cargo run -p seeder --quiet"]
+
+[tasks.api]
+description = "Run the API server"
+script = ["cargo run -p api"]

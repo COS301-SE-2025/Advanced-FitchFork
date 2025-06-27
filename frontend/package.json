@@ -10,16 +10,22 @@
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write .",
+    "test": "jest",
+    "test:unit": "jest --testPathIgnorePatterns=integration",
+    "test:integration": "jest --testMatch \"**/*.integration.test.ts\"",
+    "test:watch": "jest --watch",
     "test:e2e": "cypress open",
-    "test": "jest"
+    "test:e2e:run": "cypress run"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.7",
     "@types/react-router-dom": "^5.3.3",
+    "antd": "^5.25.3",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.13",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-responsive": "^10.0.1",
     "react-router-dom": "^7.6.0"
   },
   "devDependencies": {
@@ -48,7 +54,6 @@
     "postcss": "^8.5.3",
     "prettier": "^3.5.3",
     "tailwindcss": "^4.1.7",
-    "ts-jest": "^29.3.4",
     "ts-node": "^10.9.2",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.30.1",

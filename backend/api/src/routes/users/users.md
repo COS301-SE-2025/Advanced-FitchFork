@@ -14,9 +14,9 @@ Retrieve a paginated list of users with optional filtering and sorting.
 **Query Parameters:**
 - `page` (optional): Page number (default: 1, min: 1)
 - `per_page` (optional): Items per page (default: 20, min: 1, max: 100)
-- `query` (optional): Case-insensitive partial match against email OR student_number
+- `query` (optional): Case-insensitive partial match against email OR username
 - `email` (optional): Case-insensitive partial match on email (ignored if query is provided)
-- `student_number` (optional): Case-insensitive partial match on student number (ignored if query is provided)
+- `username` (optional): Case-insensitive partial match on student number (ignored if query is provided)
 - `admin` (optional): Filter by admin status (true/false)
 - `sort` (optional): Comma-separated sort fields. Use `-` prefix for descending
 
@@ -25,7 +25,7 @@ Retrieve a paginated list of users with optional filtering and sorting.
 GET /users?page=2&per_page=10
 GET /users?query=u1234
 GET /users?email=@example.com
-GET /users?student_number=u1234
+GET /users?username=u1234
 GET /users?admin=true
 GET /users?sort=email,-created_at
 GET /users?page=1&per_page=10&admin=false&query=jacques&sort=-email
@@ -40,7 +40,7 @@ GET /users?page=1&per_page=10&admin=false&query=jacques&sort=-email
       {
         "id": "uuid",
         "email": "user@example.com",
-        "student_number": "u12345678",
+        "username": "u12345678",
         "admin": false,
         "created_at": "2025-05-23T18:00:00Z",
         "updated_at": "2025-05-23T18:00:00Z"
@@ -74,7 +74,7 @@ Update a user's information.
 **Request Body:**
 ```json
 {
-  "student_number": "u87654321",  // optional
+  "username": "u87654321",  // optional
   "email": "new@example.com",     // optional
   "admin": true                   // optional
 }
@@ -91,7 +91,7 @@ Update a user's information.
   "success": true,
   "data": {
     "id": 1,
-    "student_number": "u87654321",
+    "username": "u87654321",
     "email": "new@example.com",
     "admin": true,
     "created_at": "2025-05-23T18:00:00Z",

@@ -12,3 +12,4 @@ fern = "0.6"
 chrono = "0.4"
 colored = "2"
 validator = { version = "0.16", features = ["derive"] }
+axum-extra = "0.9"

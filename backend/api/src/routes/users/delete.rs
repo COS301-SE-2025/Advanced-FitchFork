@@ -1,13 +1,21 @@
 use axum::{
-    extract::{Path, Extension},
+    extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use db::models::user::User;
-use db::pool;
-use crate::response::ApiResponse;
-use crate::auth::claims::AuthUser;
+
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+use crate::{
+    auth::claims::AuthUser,
+    response::ApiResponse,
+};
+
+use db::{
+    connect,
+    models::user::{self, Entity as UserEntity},
+};
 
 /// DELETE /users/:id
 ///
@@ -79,11 +87,15 @@ pub async fn delete_user(
         );
     }
 
-    let pool = pool::get();
+    let db = connect().await;
 
-    match User::get_by_id(Some(pool), user_id).await {
+    match UserEntity::find()
+        .filter(user::Column::Id.eq(user_id))
+        .one(&db)
+        .await
+    {
         Ok(Some(_)) => {
-            match User::delete_by_id(Some(pool), user_id).await {
+            match UserEntity::delete_by_id(user_id).exec(&db).await {
                 Ok(_) => (
                     StatusCode::OK,
                     Json(ApiResponse::success_without_data("User deleted successfully")),
@@ -94,87 +106,75 @@ pub async fn delete_user(
                 ),
             }
         }
-
-        Ok(None) => {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("User not found")),
-            )
-        }
-
-        Err(e) => {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
-            )
-        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("User not found")),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+        ),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use db::models::user::User;
-    use crate::auth::claims::Claims;
-    use sqlx::SqlitePool;
-    use db::{create_test_db, delete_database};
+    use crate::auth::claims::{ Claims};
+    use db::{models::user};
+    use db::test_utils::{setup_test_db};
+    use sea_orm::{EntityTrait, ActiveModelTrait, Set};
+    use db::models::user::{Entity as UserEntity, ActiveModel as UserActiveModel};
 
-    // Helper function to create test users
-    async fn create_test_users(pool: &SqlitePool) -> (User, User) {
-        let admin_user = User::create(Some(pool), "u12345678", "admin@example.com", "password1", true)
-            .await
-            .unwrap();
+    // Seed admin and regular user
+    async fn create_test_users(db: &sea_orm::DatabaseConnection) -> (user::Model, user::Model) {
+        let admin_user = UserActiveModel {
+            username: Set("u12345678".into()),
+            email: Set("admin@example.com".into()),
+            password_hash: Set("hashed1".into()),
+            admin: Set(true),
+            ..Default::default()
+        }
+        .insert(db)
+        .await
+        .unwrap();
 
-        let regular_user = User::create(Some(pool), "u87654321", "user@example.com", "password2", false)
-            .await
-            .unwrap();
+        let regular_user = UserActiveModel {
+            username: Set("u87654321".into()),
+            email: Set("user@example.com".into()),
+            password_hash: Set("hashed2".into()),
+            admin: Set(false),
+            ..Default::default()
+        }
+        .insert(db)
+        .await
+        .unwrap();
 
         (admin_user, regular_user)
     }
 
-    // Helper function to create mock claims
+    // Mock Claims
     fn create_mock_claims(user_id: i64, admin: bool) -> Claims {
         Claims {
             sub: user_id,
             admin,
-            exp: 9999999999, // Far future timestamp
+            exp: 9999999999,
         }
     }
 
     #[tokio::test]
     async fn test_delete_user_success() {
-        let pool = create_test_db(Some("test_delete_user_success.db")).await;
-        
-        let (admin_user, target_user) = create_test_users(&pool).await;
-        let target_id = target_user.id;
+        let db = setup_test_db().await;
+        let (admin_user, target_user) = create_test_users(&db).await;
 
-        // Verify user exists before deletion
-        let found_user = User::get_by_id(Some(&pool), target_id).await.unwrap();
+        assert_ne!(target_user.id, admin_user.id); // Not self-deletion
+
+        let found_user = UserEntity::find_by_id(target_user.id).one(&db).await.unwrap();
         assert!(found_user.is_some());
 
-        // Create mock claims for admin user
-        let claims = create_mock_claims(admin_user.id, true);
-        let auth_user = AuthUser(claims);
+        UserEntity::delete_by_id(target_user.id).exec(&db).await.unwrap();
 
-        // Test the core deletion logic (simulating the handler)
-        let user_id_str = target_id.to_string();
-        let user_id_parsed = user_id_str.parse::<i64>().unwrap();
-        
-        // Verify it's not self-deletion
-        assert_ne!(user_id_parsed, auth_user.0.sub);
-
-        // Perform deletion
-        let user_exists = User::get_by_id(Some(&pool), user_id_parsed).await.unwrap();
-        assert!(user_exists.is_some());
-
-        User::delete_by_id(Some(&pool), user_id_parsed).await.unwrap();
-
-        // Verify user was deleted
-        let deleted_user = User::get_by_id(Some(&pool), target_id).await.unwrap();
-        assert!(deleted_user.is_none());
-
-        pool.close().await;
-        delete_database("test_delete_user_success.db");
+        let after = UserEntity::find_by_id(target_user.id).one(&db).await.unwrap();
+        assert!(after.is_none());
     }
 
     #[tokio::test]
@@ -214,166 +214,210 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+      #[tokio::test]
     async fn test_delete_user_self_deletion_prevention() {
-        let pool = create_test_db(Some("test_self_deletion.db")).await;
-        
-        let (admin_user, _) = create_test_users(&pool).await;
-        let admin_id = admin_user.id;
+        let db = setup_test_db().await;
 
-        // Create claims for the admin user
-        let claims = create_mock_claims(admin_id, true);
+        let admin_user = UserActiveModel {
+            username: Set("u99999999".into()),
+            email: Set("admin_self@example.com".into()),
+            password_hash: Set("hashed".into()),
+            admin: Set(true),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .unwrap();
 
-        // Test attempting to delete own account
-        let self_deletion_check = admin_id == claims.sub;
-        assert!(self_deletion_check, "Should detect self-deletion attempt");
-
-        // Verify user still exists (since deletion should be prevented)
-        let user_still_exists = User::get_by_id(Some(&pool), admin_id).await.unwrap();
-        assert!(user_still_exists.is_some());
-
-        pool.close().await;
-        delete_database("test_self_deletion.db");
-    }
-
-    #[tokio::test]
-    async fn test_delete_user_not_found() {
-        let pool = create_test_db(Some("test_delete_not_found.db")).await;
-        
-        let (admin_user, _) = create_test_users(&pool).await;
-        
-        // Try to find a non-existent user
-        let non_existent_id = 99999i64;
-        let found_user = User::get_by_id(Some(&pool), non_existent_id).await.unwrap();
-        assert!(found_user.is_none());
-
-        // Verify it's not self-deletion
         let claims = create_mock_claims(admin_user.id, true);
-        assert_ne!(non_existent_id, claims.sub);
+        assert_eq!(claims.sub, admin_user.id); // Should detect self-deletion
 
-        pool.close().await;
-        delete_database("test_delete_not_found.db");
+        let user_exists = UserEntity::find_by_id(admin_user.id).one(&db).await.unwrap();
+        assert!(user_exists.is_some());
     }
 
-    #[tokio::test]
+      #[tokio::test]
+    async fn test_delete_user_not_found() {
+        let db = setup_test_db().await;
+
+        let admin_user = UserActiveModel {
+            username: Set("u11111111".into()),
+            email: Set("admin_nf@example.com".into()),
+            password_hash: Set("hashed".into()),
+            admin: Set(true),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .unwrap();
+
+        let claims = create_mock_claims(admin_user.id, true);
+
+        let nonexistent_id = 99999;
+        assert_ne!(claims.sub, nonexistent_id);
+
+        let user = UserEntity::find_by_id(nonexistent_id).one(&db).await.unwrap();
+        assert!(user.is_none());
+    }
+
+   #[tokio::test]
     async fn test_delete_user_database_operations() {
-        let pool = create_test_db(Some("test_delete_db_ops.db")).await;
-        
-        let (_admin_user, target_user) = create_test_users(&pool).await;
-        let target_id = target_user.id;
+        use db::models::user::{Entity as UserEntity, ActiveModel as UserActiveModel};
+        use sea_orm::{EntityTrait, ActiveModelTrait, Set};
 
-        // Test get_by_id operation
-        let get_result = User::get_by_id(Some(&pool), target_id).await;
-        assert!(get_result.is_ok());
-        assert!(get_result.unwrap().is_some());
+        let db = db::test_utils::setup_test_db().await;
 
-        // Test delete_by_id operation
-        let delete_result = User::delete_by_id(Some(&pool), target_id).await;
+        // Insert a user
+        let user = UserActiveModel {
+            username: Set("u32132132".into()),
+            email: Set("target@dbops.com".into()),
+            password_hash: Set("pass".into()),
+            admin: Set(false),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .unwrap();
+
+        let user_id = user.id;
+
+        // Confirm user exists
+        let before = UserEntity::find_by_id(user_id).one(&db).await.unwrap();
+        assert!(before.is_some());
+
+        // Delete user
+        let delete_result = UserEntity::delete_by_id(user_id).exec(&db).await;
         assert!(delete_result.is_ok());
 
-        // Verify deletion worked
-        let get_after_delete = User::get_by_id(Some(&pool), target_id).await;
-        assert!(get_after_delete.is_ok());
-        assert!(get_after_delete.unwrap().is_none());
+        // Confirm deletion
+        let after = UserEntity::find_by_id(user_id).one(&db).await.unwrap();
+        assert!(after.is_none());
 
-        // Test deleting already deleted user (should not error)
-        let delete_again_result = User::delete_by_id(Some(&pool), target_id).await;
-        assert!(delete_again_result.is_ok()); // SQLite DELETE is idempotent
-
-        pool.close().await;
-        delete_database("test_delete_db_ops.db");
+        // Delete again (should still succeed)
+        let second_delete = UserEntity::delete_by_id(user_id).exec(&db).await;
+        assert!(second_delete.is_ok());
     }
 
     #[tokio::test]
     async fn test_delete_user_edge_cases() {
-        let pool = create_test_db(Some("test_delete_edge_cases.db")).await;
-        
-        // Test with edge case IDs
-        let edge_case_ids = vec![0i64, -1i64, 1i64];
-        
-        for test_id in edge_case_ids {
-            // These should not exist in our test database
-            let found_user = User::get_by_id(Some(&pool), test_id).await.unwrap();
-            assert!(found_user.is_none());
+        use db::models::user::Entity as UserEntity;
+        use sea_orm::{EntityTrait};
+
+        let db = db::test_utils::setup_test_db().await;
+
+        // Edge case IDs that shouldn't exist
+        let edge_ids: Vec<i32> = vec![0, -1, 1, i32::MAX];
+
+        for id in edge_ids {
+            let found = UserEntity::find_by_id(id).one(&db).await.unwrap();
+            assert!(found.is_none(), "User with ID {} should not exist", id);
         }
-
-        // Test with maximum i64 value
-        let max_id = i64::MAX;
-        let found_max = User::get_by_id(Some(&pool), max_id).await.unwrap();
-        assert!(found_max.is_none());
-
-        pool.close().await;
-        delete_database("test_delete_edge_cases.db");
     }
 
     #[tokio::test]
     async fn test_claims_structure() {
-        // Test Claims structure and AuthUser wrapper
-        let claims = create_mock_claims(123, true);
+        use crate::auth::claims::{AuthUser, Claims};
+
+        // Admin claims
+        let claims = Claims {
+            sub: 123,
+            admin: true,
+            exp: 9999999999,
+        };
         assert_eq!(claims.sub, 123);
-        assert_eq!(claims.admin, true);
+        assert!(claims.admin);
         assert_eq!(claims.exp, 9999999999);
 
         let auth_user = AuthUser(claims);
         assert_eq!(auth_user.0.sub, 123);
-        assert_eq!(auth_user.0.admin, true);
+        assert!(auth_user.0.admin);
 
-        // Test non-admin claims
-        let non_admin_claims = create_mock_claims(456, false);
-        assert_eq!(non_admin_claims.admin, false);
+        // Non-admin claims
+        let non_admin_claims = Claims {
+            sub: 456,
+            admin: false,
+            exp: 9999999999,
+        };
+        assert!(!non_admin_claims.admin);
     }
 
-    #[tokio::test]
+   #[tokio::test]
     async fn test_multiple_user_deletion_scenario() {
-        let pool = create_test_db(Some("test_multiple_deletion.db")).await;
-        
-        // Create multiple users
-        let user1 = User::create(Some(&pool), "u11111111", "user1@test.com", "pass1", false).await.unwrap();
-        let user2 = User::create(Some(&pool), "u22222222", "user2@test.com", "pass2", false).await.unwrap();
-        let user3 = User::create(Some(&pool), "u33333333", "user3@test.com", "pass3", false).await.unwrap();
-        let admin = User::create(Some(&pool), "u99999999", "admin@test.com", "admin_pass", true).await.unwrap();
+        use db::test_utils::setup_test_db;
+        use db::models::user::{Entity as UserEntity, ActiveModel as UserActiveModel};
+        use crate::auth::claims::Claims;
+        use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 
-        let admin_claims = create_mock_claims(admin.id, true);
+        let db = setup_test_db().await;
 
-        // Delete users one by one (simulating the deletion logic)
-        let users_to_delete = vec![user1.id, user2.id, user3.id];
-        
-        for user_id in users_to_delete {
-            // Verify not self-deletion
-            assert_ne!(user_id, admin_claims.sub);
-            
-            // Verify user exists
-            let exists = User::get_by_id(Some(&pool), user_id).await.unwrap();
+        // Create users
+        let user1 = UserActiveModel {
+            username: Set("u11111111".into()),
+            email: Set("user1@test.com".into()),
+            password_hash: Set("pass1".into()),
+            admin: Set(false),
+            ..Default::default()
+        }.insert(&db).await.unwrap();
+
+        let user2 = UserActiveModel {
+            username: Set("u22222222".into()),
+            email: Set("user2@test.com".into()),
+            password_hash: Set("pass2".into()),
+            admin: Set(false),
+            ..Default::default()
+        }.insert(&db).await.unwrap();
+
+        let user3 = UserActiveModel {
+            username: Set("u33333333".into()),
+            email: Set("user3@test.com".into()),
+            password_hash: Set("pass3".into()),
+            admin: Set(false),
+            ..Default::default()
+        }.insert(&db).await.unwrap();
+
+        let admin = UserActiveModel {
+            username: Set("u99999999".into()),
+            email: Set("admin@test.com".into()),
+            password_hash: Set("admin_pass".into()),
+            admin: Set(true),
+            ..Default::default()
+        }.insert(&db).await.unwrap();
+
+        let admin_claims = Claims {
+            sub: admin.id,
+            admin: true,
+            exp: 9999999999,
+        };
+
+        // Deleting users
+        for user_id in &[user1.id, user2.id, user3.id] {
+            assert_ne!(*user_id, admin_claims.sub);
+
+            let exists = UserEntity::find_by_id(*user_id).one(&db).await.unwrap();
             assert!(exists.is_some());
-            
-            // Delete user
-            User::delete_by_id(Some(&pool), user_id).await.unwrap();
-            
-            // Verify deletion
-            let deleted = User::get_by_id(Some(&pool), user_id).await.unwrap();
+
+            UserEntity::delete_by_id(*user_id).exec(&db).await.unwrap();
+
+            let deleted = UserEntity::find_by_id(*user_id).one(&db).await.unwrap();
             assert!(deleted.is_none());
         }
 
-        // Verify admin still exists
-        let admin_exists = User::get_by_id(Some(&pool), admin.id).await.unwrap();
+        // Ensure admin still exists
+        let admin_exists = UserEntity::find_by_id(admin.id).one(&db).await.unwrap();
         assert!(admin_exists.is_some());
-
-        pool.close().await;
-        delete_database("test_multiple_deletion.db");
     }
 
     #[tokio::test]
     async fn test_id_parsing_boundary_values() {
-        // Test boundary values for i64 parsing
         let boundary_tests = vec![
-            ("9223372036854775807", true),  // i64::MAX
-            ("9223372036854775808", false), // i64::MAX + 1 (should overflow)
-            ("-9223372036854775808", true), // i64::MIN
-            ("-9223372036854775809", false), // i64::MIN - 1 (should overflow)
+            ("2147483647", true),   // i32::MAX
+            ("2147483648", false),  // Overflow
+            ("-2147483648", true),  // i32::MIN
+            ("-2147483649", false), // Underflow
         ];
 
         for (id_str, should_succeed) in boundary_tests {
-            let result = id_str.parse::<i64>();
+            let result = id_str.parse::<i32>();
             if should_succeed {
                 assert!(result.is_ok(), "Expected '{}' to parse successfully", id_str);
             } else {
@@ -382,75 +426,111 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+   #[tokio::test]
     async fn test_deletion_logic_flow() {
-        let pool = create_test_db(Some("test_deletion_flow.db")).await;
-        
-        let (admin_user, target_user) = create_test_users(&pool).await;
-        let target_id = target_user.id;
-        let target_id_str = target_id.to_string();
+        use db::test_utils::setup_test_db;
+        use db::models::user::{ActiveModel as UserActiveModel, Entity as UserEntity};
+        use crate::auth::claims::Claims;
+        use sea_orm::{EntityTrait, Set, ActiveModelTrait};
 
-        // Simulate the complete handler flow
-        
+        let db = setup_test_db().await;
+
+        let admin_user = UserActiveModel {
+            username: Set("u00000001".into()),
+            email: Set("admin@example.com".into()),
+            password_hash: Set("adminhash".into()),
+            admin: Set(true),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .unwrap();
+
+        let target_user = UserActiveModel {
+            username: Set("u00000002".into()),
+            email: Set("target@example.com".into()),
+            password_hash: Set("targethash".into()),
+            admin: Set(false),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .unwrap();
+
+        let target_id_str = target_user.id.to_string();
+
         // Step 1: Parse ID
         let parsed_id = target_id_str.parse::<i64>();
         assert!(parsed_id.is_ok());
         let user_id = parsed_id.unwrap();
 
-        // Step 2: Check self-deletion
-        let admin_claims = create_mock_claims(admin_user.id, true);
-        let is_self_deletion = user_id == admin_claims.sub;
-        assert!(!is_self_deletion);
+        // Step 2: Self-deletion check
+        let claims = Claims {
+            sub: admin_user.id,
+            admin: true,
+            exp: 9999999999,
+        };
+        assert_ne!(user_id, claims.sub);
 
         // Step 3: Check if user exists
-        let user_lookup = User::get_by_id(Some(&pool), user_id).await;
-        assert!(user_lookup.is_ok());
-        let user_exists = user_lookup.unwrap().is_some();
-        assert!(user_exists);
+        let user_exists = UserEntity::find_by_id(user_id).one(&db).await.unwrap();
+        assert!(user_exists.is_some());
 
         // Step 4: Delete user
-        let deletion_result = User::delete_by_id(Some(&pool), user_id).await;
-        assert!(deletion_result.is_ok());
+        let delete_result = UserEntity::delete_by_id(user_id).exec(&db).await;
+        assert!(delete_result.is_ok());
 
         // Step 5: Verify deletion
-        let verification = User::get_by_id(Some(&pool), user_id).await.unwrap();
-        assert!(verification.is_none());
-
-        pool.close().await;
-        delete_database("test_deletion_flow.db");
+        let deleted = UserEntity::find_by_id(user_id).one(&db).await.unwrap();
+        assert!(deleted.is_none());
     }
+
 
     #[tokio::test]
     async fn test_error_conditions() {
-        let pool = create_test_db(Some("test_error_conditions.db")).await;
-        
-        // Test various error conditions that could occur
-        
-        // 1. Invalid ID format (covered in other tests, but let's be thorough)
+        use db::test_utils::setup_test_db;
+        use db::models::user::{ Entity as UserEntity, ActiveModel as UserActiveModel};
+        use sea_orm::{EntityTrait, Set, ActiveModelTrait};
+        use crate::auth::claims::Claims;
+
+        let db = setup_test_db().await;
+
+        // 1. Invalid ID format
         let invalid_ids = vec!["", "abc", "12.5", "∞"];
         for invalid_id in invalid_ids {
             assert!(invalid_id.parse::<i64>().is_err());
         }
 
         // 2. Self-deletion attempt
-        let user = User::create(Some(&pool), "u12345678", "test@example.com", "password", true).await.unwrap();
-        let self_claims = create_mock_claims(user.id, true);
-        assert_eq!(user.id, self_claims.sub); // This would trigger the forbidden response
+        let user = UserActiveModel {
+            username: Set("u12345678".into()),
+            email: Set("test@example.com".into()),
+            password_hash: Set("hashed".into()),
+            admin: Set(true),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .unwrap();
+
+        let self_claims = Claims {
+            sub: user.id,
+            admin: true,
+            exp: 9999999999,
+        };
+
+        assert_eq!(user.id, self_claims.sub); // Should trigger self-deletion logic
 
         // 3. Non-existent user
-        let non_existent_result = User::get_by_id(Some(&pool), 99999).await.unwrap();
-        assert!(non_existent_result.is_none());
-
-        pool.close().await;
-        delete_database("test_error_conditions.db");
+        let non_existent = UserEntity::find_by_id(99999).one(&db).await.unwrap();
+        assert!(non_existent.is_none());
     }
 
     // Test the response structure expectations (without actually calling the handler)
     #[tokio::test]
     async fn test_response_format_expectations() {
-        // This test validates that our logic aligns with the expected response formats
-        // documented in the handler's docstring
-        
+        // Simulate handler flow checks without DB access
+
         // Test ID parsing for bad request scenario
         let bad_id = "not_a_number";
         let parse_result = bad_id.parse::<i64>();
