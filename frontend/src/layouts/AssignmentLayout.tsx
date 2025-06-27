@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet, useParams } from 'react-router-dom';
-import { Tabs, Spin, Alert, message, Button } from 'antd';
+import { Tabs, Alert, message, Button } from 'antd';
 import { useModule } from '@/context/ModuleContext';
 import { useAuth } from '@/context/AuthContext';
 import { AssignmentProvider } from '@/context/AssignmentContext';
@@ -99,13 +99,14 @@ const AssignmentLayout = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="p-6">
-        <Spin tip="Loading assignment..." />
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!loading && readiness && !readiness.is_ready) {
+      const isInSteps = location.pathname.includes('/steps/');
+      if (!isInSteps) {
+        navigate(`${basePath}/steps/config`, { replace: true });
+      }
+    }
+  }, [loading, readiness, location.pathname]);
 
   if (error || !assignment) {
     return (
@@ -122,6 +123,9 @@ const AssignmentLayout = () => {
         description={`Manage assignment #${assignment.id} in ${module.code}`}
         extra={
           <div className="flex gap-2 flex-wrap">
+            <Button type="default" onClick={() => navigate(`${basePath}/steps/config`)}>
+              Setup Assignment
+            </Button>
             <Button
               onClick={async () => {
                 const res = await generateMemoOutput(module.id, assignment.id);
@@ -152,15 +156,13 @@ const AssignmentLayout = () => {
         }
       />
 
-      {showTabs && (
-        <Tabs
-          activeKey={activeKey}
-          onChange={(key) => navigate(key)}
-          items={tabs}
-          tabBarGutter={16}
-          className="!mb-4"
-        />
-      )}
+      <Tabs
+        activeKey={activeKey}
+        onChange={(key) => navigate(key)}
+        items={showTabs ? tabs : []}
+        tabBarGutter={16}
+        className="!mb-4"
+      />
 
       <AssignmentProvider value={{ assignment, refreshReadiness, readiness }}>
         <Outlet />

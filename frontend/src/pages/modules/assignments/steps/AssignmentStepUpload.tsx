@@ -1,10 +1,12 @@
 // src/pages/modules/assignments/steps/AssignmentStepUpload.tsx
+
 import { Upload, Typography, message } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import { useAssignment } from '@/context/AssignmentContext';
 import { useModule } from '@/context/ModuleContext';
 import { uploadAssignmentFile } from '@/services/modules/assignments';
 import type { FileType } from '@/types/modules/assignments';
+import { useStepNavigator } from '@/context/StepNavigatorContext';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -17,19 +19,34 @@ const friendlyLabels: Record<FileType, string> = {
   mark_allocator: 'Mark Allocator',
 };
 
+const nextStepByFileType: Record<FileType, string> = {
+  config: 'main',
+  main: 'memo',
+  memo: 'makefile',
+  makefile: 'tasks',
+  spec: 'tasks',
+  mark_allocator: 'submissions', // go to final destination when done
+};
+
 const AssignmentStepUpload = ({ fileType }: { fileType: FileType }) => {
   const { assignment, refreshReadiness } = useAssignment();
   const module = useModule();
+  const { goToStep } = useStepNavigator();
 
   const handleUpload = async (file: File) => {
     try {
       await uploadAssignmentFile(module.id, assignment.id, fileType, file);
       message.success(`Uploaded ${file.name}`);
-      refreshReadiness?.();
+      await refreshReadiness?.();
+      const next = nextStepByFileType[fileType];
+      if (next) {
+        goToStep(next);
+      }
     } catch (err) {
+      console.error(err);
       message.error('Upload failed');
     }
-    return false;
+    return false; // prevents default upload behavior
   };
 
   return (
