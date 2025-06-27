@@ -11,6 +11,16 @@ _Developed by Team OWCA for COS 301 Capstone Project_
 
 This project is developed for the COS 301 Capstone Project at the University of Pretoria in collaboration with the Computer Science Department of University of Pretoria.
 
+[![Coverage Status](https://img.shields.io/codecov/c/github/COS301-SE-2025/Advanced-FitchFork.svg)](https://codecov.io/gh/COS301-SE-2025/Advanced-FitchFork)
+[![Build Status](https://github.com/COS301-SE-2025/Advanced-FitchFork/actions/workflows/ci.yml/badge.svg)](https://github.com/COS301-SE-2025/Advanced-FitchFork/actions)
+[![Requirements](https://img.shields.io/badge/requirements-up%20to%20date-brightgreen.svg)](https://shields.io/)
+[![Issues](https://img.shields.io/github/issues/COS301-SE-2025/Advanced-FitchFork.svg)](https://github.com/COS301-SE-2025/Advanced-FitchFork/issues)
+
+![Rust](https://img.shields.io/badge/Rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
+![React](https://img.shields.io/badge/React-%2320232A.svg?style=for-the-badge&logo=react&logoColor=white)
+![SeaORM](https://img.shields.io/crates/v/sea-orm.svg?style=for-the-badge&logo=rust&logoColor=white&label=SeaORM)
+![Docker](https://img.shields.io/badge/Docker-%232496ED.svg?style=for-the-badge&logo=docker&logoColor=white)
+
 **Core Functional Highlights:**
 
 - Authentication with role-based access (Admin, Tutor, Student)
