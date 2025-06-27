@@ -1,8 +1,8 @@
 import { AssignmentProvider } from '@/context/AssignmentContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useModule } from '@/context/ModuleContext';
-import { getAssignmentDetails } from '@/services/modules/assignments';
-import type { Assignment, AssignmentFile } from '@/types/modules/assignments';
+import { getAssignmentDetails, getAssignmentReadiness } from '@/services/modules/assignments';
+import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
 import { Alert, Spin } from 'antd';
 import { useEffect, useState } from 'react';
 import { Outlet, useParams } from 'react-router-dom';
@@ -11,13 +11,13 @@ interface AssignmentDetails extends Assignment {
   files: AssignmentFile[];
 }
 
-// TODO Add submission provider for context of submission for nested routes
 const SubmissionLayout = () => {
   const module = useModule();
   const { assignment_id } = useParams();
   const { setBreadcrumbLabel } = useBreadcrumbContext();
 
   const [assignment, setAssignment] = useState<AssignmentDetails | null>(null);
+  const [readiness, setReadiness] = useState<AssignmentReadiness | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,23 +30,35 @@ const SubmissionLayout = () => {
       if (res.success && res.data) {
         setAssignment(res.data);
         setError(null);
-        console.log(res);
-        const breadcrumbKey = `modules/${module.id}/assignments/${res.data.id}`;
-        console.log(breadcrumbKey);
-        setBreadcrumbLabel(breadcrumbKey, res.data.name);
+        setBreadcrumbLabel(`modules/${module.id}/assignments/${res.data.id}`, res.data.name);
       } else {
         setError(res.message || 'Failed to load assignment.');
       }
       setLoading(false);
     };
 
+    const loadReadiness = async () => {
+      const res = await getAssignmentReadiness(module.id, assignmentIdNum);
+      if (res.success) {
+        setReadiness(res.data);
+      }
+    };
+
     if (!isNaN(assignmentIdNum)) {
       loadAssignment();
+      loadReadiness();
     } else {
       setError('Invalid assignment ID');
       setLoading(false);
     }
   }, [module.id, assignmentIdNum]);
+
+  const refreshReadiness = async () => {
+    const res = await getAssignmentReadiness(module.id, assignmentIdNum);
+    if (res.success) {
+      setReadiness(res.data);
+    }
+  };
 
   if (loading) {
     return (
@@ -65,7 +77,7 @@ const SubmissionLayout = () => {
   }
 
   return (
-    <AssignmentProvider value={{ assignment }}>
+    <AssignmentProvider value={{ assignment, readiness, refreshReadiness }}>
       <Outlet />
     </AssignmentProvider>
   );

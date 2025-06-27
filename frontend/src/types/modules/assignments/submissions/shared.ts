@@ -1,9 +1,20 @@
-import type { Score, Timestamp } from "@/types/common";
+import type { Timestamp } from "@/types/common";
+
+// ─────────────────────────────────────────────────────────────
+// Shared Types
+// ─────────────────────────────────────────────────────────────
 
 export interface Submission extends Timestamp {
   id: number;
   attempt: number;
   filename: string;
+  hash: string;
+  mark: SubmissionMark;
+  is_practice: boolean;
+  is_late: boolean;
+  tasks?: TaskBreakdown[];
+  code_coverage?: CodeCoverageEntry[];
+  user?: SubmissionUserInfo;
 }
 
 export interface SubmissionMark {
@@ -11,15 +22,17 @@ export interface SubmissionMark {
   total: number;
 }
 
-export interface SubsectionBreakdown extends Score {
+export interface SubsectionBreakdown {
   label: string;
   status: string;
+  earned: number;
+  total: number;
 }
 
 export interface TaskBreakdown {
   task_number: number;
   name: string;
-  score: Score;
+  score: SubmissionMark;
   feedback: string;
   subsections: SubsectionBreakdown[];
 }
@@ -33,13 +46,4 @@ export interface SubmissionUserInfo {
   id: number;
   email: string;
   username: string;
-}
-
-export interface SubmissionDetail extends Submission {
-  hash: string;
-  mark: SubmissionMark;
-  is_practice: boolean;
-  is_late: boolean;
-  tasks: TaskBreakdown[];
-  code_coverage: CodeCoverageEntry[];
 }

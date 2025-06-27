@@ -1,6 +1,6 @@
 // src/pages/modules/assignments/steps/AssignmentSteps.tsx
 
-import { Outlet, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { Steps } from 'antd';
 import { StepNavigatorProvider } from '@/context/StepNavigatorContext';
 import { useModule } from '@/context/ModuleContext';

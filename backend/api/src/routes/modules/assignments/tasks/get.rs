@@ -157,24 +157,6 @@ pub async fn get_task_details(
             .into_response();
     }
 
-    let allocator_json: Option<Value> = load_allocator(module_id, assignment_id).await.ok();
-    let task_key = format!("task{}", task.task_number);
-
-    let (_task_name, _task_value, subsections) = if let Some(tasks) = allocator_json.as_ref().and_then(|v| v.as_array()) {
-        tasks.iter().find_map(|obj| {
-            obj.as_object().and_then(|map| {
-                let task_obj = map.get(&task_key)?.as_object()?;
-                let name = task_obj.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
-                let value = task_obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
-                let subsections = task_obj.get("subsections")?.as_array()?.clone();
-                Some((name, value, subsections))
-            })
-        }).unwrap_or_else(|| ("".to_string(), 0, vec![]))
-    } else {
-        ("".to_string(), 0, vec![])
-    };
-
-
     let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
         .unwrap_or_else(|_| "data/assignment_files".into());
     let memo_path = PathBuf::from(&base_path)
@@ -212,33 +194,27 @@ pub async fn get_task_details(
 
     let parsed_outputs: Vec<Option<String>> = outputs.into_iter().skip(1).collect();
 
-    if allocator_json.is_none() || subsections.is_empty() {
-        let generated_subsections: Vec<SubsectionDetail> = parsed_outputs
-            .iter()
-            .enumerate()
-            .map(|(i, output)| SubsectionDetail {
-                name: format!("Subsection {}", i + 1),
-                mark_value: 0,
-                memo_output: output.clone(),
+    let allocator_json: Option<Value> = load_allocator(module_id, assignment_id).await.ok();
+    let task_key = format!("task{}", task.task_number);
+
+    let (_task_name, _task_value, subsections) = if let Some(tasks) = allocator_json
+        .as_ref()
+        .and_then(|v| v.get("tasks"))
+        .and_then(|t| t.as_array())
+    {
+        tasks.iter().find_map(|obj| {
+            obj.as_object().and_then(|map| {
+                let task_obj = map.get(&task_key)?.as_object()?;
+                let name = task_obj.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                let value = task_obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
+                let subsections = task_obj.get("subsections")?.as_array()?.clone();
+                Some((name, value, subsections))
             })
-            .collect();
+        }).unwrap_or_else(|| ("".to_string(), 0, vec![]))
+    } else {
+        ("".to_string(), 0, vec![])
+    };
 
-        let resp = TaskDetailResponse {
-            id: task.id,
-            task_id: task.id,
-            name: task.name.clone(), 
-            command: task.command,
-            created_at: task.created_at.to_rfc3339(),
-            updated_at: task.updated_at.to_rfc3339(),
-            subsections: generated_subsections,
-        };
-
-        return (
-            StatusCode::OK,
-            Json(ApiResponse::success(resp, "Task details retrieved without allocator")),
-        )
-            .into_response();
-    }
 
     let mut subsection_outputs = parsed_outputs;
     subsection_outputs.resize(subsections.len(), None);
@@ -247,18 +223,36 @@ pub async fn get_task_details(
         .iter()
         .enumerate()
         .filter_map(|(i, s)| {
-            let obj = s.as_object()?;
-            let name = obj.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
-            let value = obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
+            let obj = match s.as_object() {
+                Some(obj) => obj,
+                None => {
+                    eprintln!("Subsection {} is not a JSON object: {:?}", i, s);
+                    return None;
+                }
+            };
+
+            let name = obj.get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("<unnamed>")
+                .to_string();
+
+            let mark_value = obj.get("value")
+                .and_then(|v| v.as_i64())
+                .unwrap_or_else(|| {
+                    eprintln!("Missing or invalid value for subsection '{}'", name);
+                    0
+                });
+
             let memo_output = subsection_outputs.get(i).cloned().flatten();
 
             Some(SubsectionDetail {
                 name,
-                mark_value: value,
+                mark_value,
                 memo_output,
             })
         })
         .collect();
+
 
     let resp = TaskDetailResponse {
         id: task.id,

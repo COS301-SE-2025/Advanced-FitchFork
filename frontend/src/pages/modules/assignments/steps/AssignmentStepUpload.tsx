@@ -23,7 +23,7 @@ const AssignmentStepUpload = ({ fileType }: { fileType: FileType }) => {
 
   const handleUpload = async (file: File) => {
     try {
-      const res = await uploadAssignmentFile(module.id, assignment.id, fileType, file);
+      await uploadAssignmentFile(module.id, assignment.id, fileType, file);
       message.success(`Uploaded ${file.name}`);
       refreshReadiness?.();
     } catch (err) {
