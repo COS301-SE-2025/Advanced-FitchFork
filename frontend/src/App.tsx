@@ -34,7 +34,6 @@ import SubmissionLayout from './layouts/SubmissionLayout';
 import Assignments from './pages/modules/assignments/index/Assignments';
 import TasksLayout from './layouts/TasksLayout';
 import TasksIndex from './pages/modules/assignments/tasks/TasksIndex';
-import Config from './pages/modules/assignments/Config';
 import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
 import MemoOutput from './pages/modules/assignments/MemoOutput';
 import MarkAllocator from './pages/modules/assignments/MarkAllocator';
@@ -47,6 +46,12 @@ import HelpContact from './pages/help/HelpContact';
 import HelpSubmissions from './pages/help/HelpSubmissions';
 import HelpTroubleshooting from './pages/help/HelpTroubleshooting';
 import Landing from './pages/Landing';
+import AssignmentLayoutWrapper from './layouts/AssignmentLayoutWrapper';
+import ConfigStep from './pages/modules/assignments/steps/ConfigStep';
+import TaskStep from './pages/modules/assignments/steps/TaskStep';
+import GenerateMemoOutputStep from './pages/modules/assignments/steps/GenerateMemoOutputStep';
+import GenerateMarkAllocatorStep from './pages/modules/assignments/steps/GenerateMarkAllocatorStep';
+import Config from './pages/modules/assignments/Config';
 
 export default function App() {
   const { user, isAdmin, loading, isExpired } = useAuth();
@@ -93,7 +98,6 @@ export default function App() {
             <Route path="account" element={<Account />} />
             <Route path="security" element={<Security />} />
             <Route path="appearance" element={<Appearance />} />
-            {/* Add others here */}
           </Route>
           <Route path="/calendar" element={<CalendarPage />} />
 
@@ -108,6 +112,30 @@ export default function App() {
           {/* Module Layout Wrapper */}
           <Route path="/modules/:id" element={<ModuleLayout />}>
             <Route index element={<ModuleOverview />} />
+
+            {/* STEPS: only declared here to avoid duplicate renders */}
+            <Route
+              path="assignments/:assignment_id/steps"
+              element={
+                <AssignmentLayoutWrapper>
+                  <AssignmentSteps />
+                </AssignmentLayoutWrapper>
+              }
+            >
+              <Route path="config" element={<ConfigStep />} />
+              <Route path="main" element={<AssignmentStepUpload fileType="main" />} />
+              <Route path="memo" element={<AssignmentStepUpload fileType="memo" />} />
+              <Route path="makefile" element={<AssignmentStepUpload fileType="makefile" />} />
+              {/* <Route path="tasks" element={<TasksLayout />}>
+                <Route index element={<TasksIndex />} />
+                <Route path=":task_id" element={<UnderConstruction />} />
+              </Route> */}
+              <Route path="tasks" element={<TaskStep />}></Route>
+              <Route path="tasks/:task_id" element={<TaskStep />} />
+              <Route path="memo-output" element={<GenerateMemoOutputStep />} />
+              <Route path="mark-allocator" element={<GenerateMarkAllocatorStep />} />
+            </Route>
+
             <Route path="assignments" element={<Assignments />} />
             <Route path="assignments/:assignment_id" element={<AssignmentLayout />}>
               <Route index element={<Navigate to="submissions" replace />} />
@@ -117,36 +145,22 @@ export default function App() {
                 <Route index element={<TasksIndex />} />
                 <Route path=":task_id" element={<UnderConstruction />} />
               </Route>
-              <Route path="steps" element={<AssignmentSteps />}>
-                <Route path="config" element={<Config />} />
-                <Route path="main" element={<AssignmentStepUpload fileType="main" />} />
-                <Route path="memo" element={<AssignmentStepUpload fileType="memo" />} />
-                <Route path="makefile" element={<AssignmentStepUpload fileType="makefile" />} />
-                <Route path="tasks" element={<TasksLayout />}>
-                  <Route index element={<TasksIndex />} />
-                  <Route path=":task_id" element={<UnderConstruction />} />
-                </Route>
-                <Route path="memo-output" element={<MemoOutput />} />
-                <Route path="mark-allocator" element={<MarkAllocator />} />
-              </Route>
-
-              <Route path="config" element={<Config />} />
-              <Route path="main" element={<AssignmentStepUpload fileType="main" />} />
-              <Route path="memo" element={<AssignmentStepUpload fileType="memo" />} />
-              <Route path="makefile" element={<AssignmentStepUpload fileType="makefile" />} />
               <Route path="memo-output" element={<MemoOutput />} />
               <Route path="mark-allocator" element={<MarkAllocator />} />
               <Route path="stats" element={<UnderConstruction />} />
+              <Route path="config" element={<Config />} />
             </Route>
+
             <Route path="assignments/:assignment_id" element={<SubmissionLayout />}>
               <Route path="submissions/:submission_id" element={<SubmissionView />} />
             </Route>
+
             <Route path="grades" element={<UnderConstruction />} />
             <Route path="resources" element={<UnderConstruction />} />
             <Route path="personnel" element={<ModulePersonnel />} />
           </Route>
 
-          {/* Fallback for assignment routes not implemented */}
+          {/* Fallbacks */}
           <Route path="/modules/:module_id/assignments" element={<Unauthorized />} />
           <Route path="/modules/:module_id/assignments/:assignment_id" element={<Unauthorized />} />
 
