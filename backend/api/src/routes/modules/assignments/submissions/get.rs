@@ -6,6 +6,7 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
+use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use db::{
     connect,
@@ -91,27 +92,44 @@ pub async fn get_user_submissions(
         .await
     {
         Ok(submissions) => {
+            let base = match std::env::var("ASSIGNMENT_STORAGE_ROOT") {
+                Ok(val) => val,
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<Vec<SubmissionResponse>>::error(
+                            "ASSIGNMENT_STORAGE_ROOT not set",
+                        )),
+                    )
+                    .into_response();
+                }
+            };
+
             let response: Vec<SubmissionResponse> = submissions
                 .into_iter()
                 .map(|s| {
-                    let (mark, is_practice) = {
-                        let path = format!(
-                            "./data/assignment_files/module_{}/assignment_{}/assignment_submissions/user_{}/attempt_{}/submission_report.json",
-                            module_id, assignment_id, s.user_id, s.attempt
-                        );
+                    let path = PathBuf::from(&base)
+                        .join(format!("module_{}", module_id))
+                        .join(format!("assignment_{}", assignment_id))
+                        .join("assignment_submissions")
+                        .join(format!("user_{}", s.user_id))
+                        .join(format!("attempt_{}", s.attempt))
+                        .join("submission_report.json");
 
-                        match fs::read_to_string(&path) {
-                            Ok(content) => {
-                                if let Ok(json) = serde_json::from_str::<Value>(&content) {
-                                    let mark = json.get("mark").and_then(|m| serde_json::from_value(m.clone()).ok());
-                                    let is_practice = json.get("is_practice").and_then(|p| p.as_bool()).unwrap_or(false);
-                                    (mark, is_practice)
-                                } else {
-                                    (None, false)
-                                }
+                    let (mark, is_practice) = match fs::read_to_string(&path) {
+                        Ok(content) => {
+                            if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                                let mark = json
+                                    .get("mark")
+                                    .and_then(|m| serde_json::from_value(m.clone()).ok());
+                                let is_practice =
+                                    json.get("is_practice").and_then(|p| p.as_bool()).unwrap_or(false);
+                                (mark, is_practice)
+                            } else {
+                                (None, false)
                             }
-                            Err(_) => (None, false),
                         }
+                        Err(_) => (None, false),
                     };
 
                     SubmissionResponse {
@@ -363,27 +381,46 @@ pub async fn get_list_submissions(
         })
         .collect();
 
+    let base = match std::env::var("ASSIGNMENT_STORAGE_ROOT") {
+        Ok(val) => val,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<Vec<SubmissionListItem>>::error(
+                    "ASSIGNMENT_STORAGE_ROOT not set",
+                )),
+            )
+            .into_response();
+        }
+    };
+
     let response: Vec<SubmissionListItem> = submissions
         .into_iter()
         .map(|s| {
-            let (mark, is_practice) = {
-                let path = format!(
-                    "./data/assignment_files/module_{}/assignment_{}/assignment_submissions/user_{}/attempt_{}/submission_report.json",
-                    module_id, assignment_id, s.user_id, s.attempt
-                );
+            let path = PathBuf::from(&base)
+                .join(format!("module_{}", module_id))
+                .join(format!("assignment_{}", assignment_id))
+                .join("assignment_submissions")
+                .join(format!("user_{}", s.user_id))
+                .join(format!("attempt_{}", s.attempt))
+                .join("submission_report.json");
 
-                match fs::read_to_string(&path) {
-                    Ok(content) => {
-                        if let Ok(json) = serde_json::from_str::<Value>(&content) {
-                            let mark = json.get("mark").and_then(|m| serde_json::from_value(m.clone()).ok());
-                            let is_practice = json.get("is_practice").and_then(|p| p.as_bool()).unwrap_or(false);
-                            (mark, is_practice)
-                        } else {
-                            (None, false)
-                        }
+            let (mark, is_practice) = match fs::read_to_string(&path) {
+                Ok(content) => {
+                    if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                        let mark = json
+                            .get("mark")
+                            .and_then(|m| serde_json::from_value(m.clone()).ok());
+                        let is_practice = json
+                            .get("is_practice")
+                            .and_then(|p| p.as_bool())
+                            .unwrap_or(false);
+                        (mark, is_practice)
+                    } else {
+                        (None, false)
                     }
-                    Err(_) => (None, false),
                 }
+                Err(_) => (None, false),
             };
 
             SubmissionListItem {
@@ -528,7 +565,7 @@ pub async fn get_submission(
                 .into_response();
         }
     };
-
+    
     if assignment.module_id != module_id {
         return (
             StatusCode::NOT_FOUND,
@@ -536,32 +573,77 @@ pub async fn get_submission(
                 "Assignment does not belong to the specified module",
             )),
         )
-            .into_response();
+        .into_response();
     }
+
     let user_id = submission.user_id;
     let attempt = submission.attempt;
-    let path = format!("./data/assignment_files/module_{}/assignment_{}/assignment_submissions/user_{}/attempt_{}/submission_report.json", module_id, assignment_id, user_id, attempt);
-    let content = fs::read_to_string(&path).unwrap();
-    let mut parsed: Value = serde_json::from_str(&content).unwrap();
 
+    // Safely get ASSIGNMENT_STORAGE_ROOT
+    let base = match std::env::var("ASSIGNMENT_STORAGE_ROOT") {
+        Ok(val) => val,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(
+                    "ASSIGNMENT_STORAGE_ROOT not set",
+                )),
+            )
+            .into_response();
+        }
+    };
+
+    // Build the full path to submission_report.json
+    let path = PathBuf::from(&base)
+        .join(format!("module_{}", module_id))
+        .join(format!("assignment_{}", assignment_id))
+        .join("assignment_submissions")
+        .join(format!("user_{}", user_id))
+        .join(format!("attempt_{}", attempt))
+        .join("submission_report.json");
+
+    // Try reading the file content
+    let content = match fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error(
+                    "Submission report not found",
+                )),
+            )
+            .into_response();
+        }
+    };
+
+    // Try parsing the JSON
+    let mut parsed: Value = match serde_json::from_str(&content) {
+        Ok(val) => val,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to parse submission report")),
+            )
+            .into_response();
+        }
+    };
+
+    // Optionally inject user info for non-students
     if !is_student(module_id, claims.sub, &db).await {
-        let user = user::Entity::find_by_id(user_id)
-            .one(&db)
-            .await
-            .unwrap_or(None)
-            .map(|u| UserResponse {
+        if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(&db).await {
+            let user_value = serde_json::to_value(UserResponse {
                 user_id: u.id,
                 username: u.username,
                 email: u.email,
-            });
+            })
+            .unwrap(); // safe since UserResponse is serializable
 
-        if let Some(user) = user {
-            let user_value = serde_json::to_value(user).unwrap();
             if let Some(obj) = parsed.as_object_mut() {
                 obj.insert("user".to_string(), user_value);
             }
         }
     }
+
     (
         StatusCode::OK,
         Json(ApiResponse::success(
@@ -569,6 +651,7 @@ pub async fn get_submission(
             "Submission details retrieved successfully",
         )),
     )
-        .into_response()
+    .into_response()
+
 }
 
