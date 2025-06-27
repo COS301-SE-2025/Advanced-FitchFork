@@ -40,6 +40,12 @@ import MemoOutput from './pages/modules/assignments/MemoOutput';
 import MarkAllocator from './pages/modules/assignments/MarkAllocator';
 import AssignmentStepUpload from './pages/modules/assignments/steps/AssignmentStepUpload';
 import AssignmentSteps from './pages/modules/assignments/steps/AssignmentSteps';
+import HelpPageLayout from './layouts/HelpPageLayout';
+import HelpAccount from './pages/help/HelpAccount';
+import HelpAssignments from './pages/help/HelpAssignments';
+import HelpContact from './pages/help/HelpContact';
+import HelpSubmissions from './pages/help/HelpSubmissions';
+import HelpTroubleshooting from './pages/help/HelpTroubleshooting';
 
 export default function App() {
   const { user, isAdmin, loading, isExpired } = useAuth();
@@ -141,6 +147,15 @@ export default function App() {
           <Route path="/modules/:module_id/assignments/:assignment_id" element={<Unauthorized />} />
 
           <Route path="/reports" element={<UnderConstruction />} />
+
+          <Route path="/help" element={<HelpPageLayout />}>
+            <Route path="account" element={<HelpAccount />} />
+            <Route path="assignments" element={<HelpAssignments />} />
+            <Route path="submissions" element={<HelpSubmissions />} />
+            <Route path="troubleshooting" element={<HelpTroubleshooting />} />
+            <Route path="contact" element={<HelpContact />} />
+            <Route index element={<Navigate to="account" replace />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<NotFound />} />

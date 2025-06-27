@@ -6,6 +6,7 @@ import {
   AppstoreOutlined,
   BarChartOutlined,
   CalendarOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons';
 import React from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -89,5 +90,10 @@ export const BOTTOM_MENU_ITEMS: MenuItem[] = [
     key: 'logout',
     icon: React.createElement(LogoutOutlined),
     label: 'Logout',
+  },
+    {
+    key: '/help',
+    label: 'Help',
+    icon: React.createElement(QuestionCircleOutlined),
   },
 ];
