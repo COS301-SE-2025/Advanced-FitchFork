@@ -35,7 +35,7 @@ This project is developed for the COS 301 Capstone Project at the University of 
 
 ## Key Features
 
-Please refer to our detailed [Functional and Non-Functional Requirements](#functional-and-non-functional-requirements) section below.
+Please refer to our detailed [Functional and Non-Functional Requirements](#additional-resources) section below.
 
 ---
 
@@ -154,19 +154,6 @@ cargo test
 
 - Email: [owcaheadquarters@protonmail.com](mailto:owcaheadquarters@protonmail.com)
 - Course: COS 301, University of Pretoria
-
----
-
-## Functional and Non-Functional Requirements
-
-Refer to the full specification in the [requirement_specification.pdf](./docs/requirement_specification.pdf) file.
-
-**Highlights:**
-
-- FR1–FR17: Role-based access, module/assignment setup, grammar input, code upload, execution sandbox, plagiarism tools, AI feedback, gamification, stats, security, support.
-- NFR1–NFR7: Performance (<3s), scalability, 99.9% uptime, 3-click UX, RBAC, TLS, modular plugin architecture.
-
-> Full requirement list available in `docs/` folder or internal documentation.
 
 ---
 
