@@ -45,6 +45,7 @@ import HelpAssignments from './pages/help/HelpAssignments';
 import HelpContact from './pages/help/HelpContact';
 import HelpSubmissions from './pages/help/HelpSubmissions';
 import HelpTroubleshooting from './pages/help/HelpTroubleshooting';
+import Landing from './pages/Landing';
 import AssignmentLayoutWrapper from './layouts/AssignmentLayoutWrapper';
 import ConfigStep from './pages/modules/assignments/steps/ConfigStep';
 import TaskStep from './pages/modules/assignments/steps/TaskStep';
@@ -75,7 +76,10 @@ export default function App() {
     <Router>
       <Routes>
         {/* Public Auth Routes */}
-        <Route path="/" element={<Navigate to={user ? '/home' : '/login'} />} />
+        <Route
+          path="/"
+          element={user && !isExpired() ? <Navigate to="/home" replace /> : <Landing />}
+        />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/forgot-password" element={<RequestPasswordResetPage />} />

@@ -72,7 +72,7 @@ export default function Home() {
   const { notifyInfo, notifyError, notifySuccess } = useNotifier();
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 bg-white dark:bg-gray-950">
       <PageHeader
         title="Admin Dashboard"
         description="Manage modules, users, assignments, and submissions efficiently."
