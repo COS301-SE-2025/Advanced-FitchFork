@@ -136,7 +136,7 @@ const SubmissionView = () => {
 
           <Tabs defaultActiveKey="tasks" size="large">
             <Tabs.TabPane tab="Tasks" key="tasks">
-              <SubmissionTasks tasks={tasks} />
+              <SubmissionTasks tasks={tasks ?? []} />
             </Tabs.TabPane>
 
             {code_coverage && code_coverage.length > 0 && (
