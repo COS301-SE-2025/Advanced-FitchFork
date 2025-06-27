@@ -1,5 +1,5 @@
-export const LANGUAGE_OPTIONS = ['python', 'cpp', 'java'] as const;
-export type Language = typeof LANGUAGE_OPTIONS[number];
+// export const LANGUAGE_OPTIONS = ['python', 'cpp', 'java'] as const;
+// export type Language = typeof LANGUAGE_OPTIONS[number];
 
 export type MarkingScheme = 'exact' | 'percentage' | 'regex';
 export type FeedbackScheme = 'auto' | 'manual' | 'ai';
@@ -12,7 +12,4 @@ export interface AssignmentConfig {
   max_processes: number;
   marking_scheme: MarkingScheme;
   feedback_scheme: FeedbackScheme;
-
-  // Optional frontend extension
-  languages?: Language[];
 }

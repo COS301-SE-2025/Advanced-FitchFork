@@ -1,5 +1,5 @@
 import type { ApiResponse } from "@/types/common";
-import type { Task } from "./shared";
+import type { SubsectionDetail, Task } from "./shared";
 
 // ─────────────────────────────────────────────────────────────
 // GET Responses Types
@@ -7,11 +7,14 @@ import type { Task } from "./shared";
 
 export type GetListTasksResponse = ApiResponse<Task[]>;
 
-export type GetTaskResponse = ApiResponse<{
-  name: string;
-  mark_value: number;
-  memo_output: string;
-} & Task>;
+export type GetTaskResponse = ApiResponse<
+  {
+    name?: string;
+    mark_value?: number;
+    memo_output?: string;
+    subsections: SubsectionDetail[];
+  } & Task
+>;
 
 // ─────────────────────────────────────────────────────────────
 // POST Responses Types

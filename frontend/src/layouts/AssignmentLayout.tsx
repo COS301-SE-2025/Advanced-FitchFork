@@ -6,8 +6,10 @@ import { useAuth } from '@/context/AuthContext';
 import { AssignmentProvider } from '@/context/AssignmentContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import PageHeader from '@/components/PageHeader';
-import { getAssignmentDetails } from '@/services/modules/assignments';
-import type { Assignment, AssignmentFile } from '@/types/modules/assignments';
+import { getAssignmentDetails, getAssignmentReadiness } from '@/services/modules/assignments';
+import { generateMemoOutput } from '@/services/modules/assignments/memo-output';
+import { generateMarkAllocator } from '@/services/modules/assignments/mark-allocator/post';
+import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
 
 interface AssignmentDetails extends Assignment {
   files: AssignmentFile[];
@@ -24,41 +26,34 @@ const AssignmentLayout = () => {
   const [assignment, setAssignment] = useState<AssignmentDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [readiness, setReadiness] = useState<AssignmentReadiness | null>(null);
 
   const assignmentIdNum = Number(assignment_id);
   const basePath = `/modules/${module.id}/assignments/${assignment_id}`;
-
-  // const assignmentActions = [
-  //   {
-  //     key: 'generate_memo',
-  //     label: 'Generate Memo Output',
-  //     onClick: () => {
-  //       // Add logic here
-  //       message.success('Generated memo output');
-  //     },
-  //   },
-  //   {
-  //     key: 'generate_allocator',
-  //     label: 'Generate Mark Allocator',
-  //     onClick: () => {
-  //       // Add logic here
-  //       message.success('Generated mark allocator');
-  //     },
-  //   },
-  // ];
-
-  const showTabs = !isStudent(module.id) || isAdmin; // hide all tabs if student
+  const showTabs = !isStudent(module.id) || isAdmin;
 
   const tabs = [
-    { key: `${basePath}/submissions`, label: 'Submissions' },
+    { key: `${basePath}/submissions`, label: 'Submissions', disabled: false },
     ...(isLecturer(module.id) || isAdmin
       ? [
-          { key: `${basePath}/files`, label: 'Files' },
-          { key: `${basePath}/tasks`, label: 'Tasks' },
-          { key: `${basePath}/memo-output`, label: 'Memo Output' },
-          { key: `${basePath}/mark-allocator`, label: 'Mark Allocator' },
-          { key: `${basePath}/config`, label: 'Config' },
-          { key: `${basePath}/stats`, label: 'Statistics' },
+          { key: `${basePath}/files`, label: 'Files', disabled: !readiness?.config_present },
+          { key: `${basePath}/tasks`, label: 'Tasks', disabled: !readiness?.config_present },
+          {
+            key: `${basePath}/memo-output`,
+            label: 'Memo Output',
+            disabled: !readiness?.config_present || !readiness?.tasks_present,
+          },
+          {
+            key: `${basePath}/mark-allocator`,
+            label: 'Mark Allocator',
+            disabled: !readiness?.memo_output_present,
+          },
+          { key: `${basePath}/config`, label: 'Config', disabled: false },
+          {
+            key: `${basePath}/stats`,
+            label: 'Statistics',
+            disabled: !readiness?.is_ready,
+          },
         ]
       : []),
   ];
@@ -74,21 +69,35 @@ const AssignmentLayout = () => {
       if (res.success && res.data) {
         setAssignment(res.data);
         setError(null);
-        const breadcrumbKey = `modules/${module.id}/assignments/${res.data.id}`;
-        setBreadcrumbLabel(breadcrumbKey, res.data.name);
+        setBreadcrumbLabel(`modules/${module.id}/assignments/${res.data.id}`, res.data.name);
       } else {
         setError(res.message || 'Failed to load assignment.');
       }
       setLoading(false);
     };
 
+    const loadReadiness = async () => {
+      const res = await getAssignmentReadiness(module.id, assignmentIdNum);
+      if (res.success) {
+        setReadiness(res.data);
+      }
+    };
+
     if (!isNaN(assignmentIdNum)) {
       loadAssignment();
+      loadReadiness();
     } else {
       setError('Invalid assignment ID');
       setLoading(false);
     }
   }, [module.id, assignmentIdNum]);
+
+  const refreshReadiness = async () => {
+    const res = await getAssignmentReadiness(module.id, assignmentIdNum);
+    if (res.success) {
+      setReadiness(res.data);
+    }
+  };
 
   if (loading) {
     return (
@@ -114,17 +123,27 @@ const AssignmentLayout = () => {
         extra={
           <div className="flex gap-2 flex-wrap">
             <Button
-              size="middle"
-              onClick={() => {
-                message.success('Generated memo output');
+              onClick={async () => {
+                const res = await generateMemoOutput(module.id, assignment.id);
+                if (res.success) {
+                  message.success('Memo output generated successfully.');
+                  await refreshReadiness();
+                } else {
+                  message.error(`Failed to generate memo: ${res.message}`);
+                }
               }}
             >
               Generate Memo Output
             </Button>
             <Button
-              size="middle"
-              onClick={() => {
-                message.success('Generated mark allocator');
+              onClick={async () => {
+                const res = await generateMarkAllocator(module.id, assignment.id);
+                if (res.success) {
+                  message.success('Mark allocator generated successfully.');
+                  await refreshReadiness();
+                } else {
+                  message.error(`Failed to generate mark allocator: ${res.message}`);
+                }
               }}
             >
               Generate Mark Allocator
@@ -143,7 +162,7 @@ const AssignmentLayout = () => {
         />
       )}
 
-      <AssignmentProvider value={{ assignment }}>
+      <AssignmentProvider value={{ assignment, refreshReadiness, readiness }}>
         <Outlet />
       </AssignmentProvider>
     </div>

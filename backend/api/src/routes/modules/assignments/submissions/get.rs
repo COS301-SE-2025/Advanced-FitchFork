@@ -13,12 +13,12 @@ use db::{
         assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
         assignment_submission::{self, Entity as SubmissionEntity},
         user,
-        user_module_role::{self, Entity as UserEntity, Role},
+        user_module_role::{self, Role},
     },
 };
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder,
+    QueryOrder,  QuerySelect, JoinType, RelationTrait
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -44,6 +44,8 @@ pub struct SubmissionResponse {
     pub created_at: String,
     pub updated_at: String,
     pub is_late: bool,
+    pub is_practice: bool,
+    pub mark: Option<Mark>,
 }
 
 pub async fn get_user_submissions(
@@ -91,13 +93,37 @@ pub async fn get_user_submissions(
         Ok(submissions) => {
             let response: Vec<SubmissionResponse> = submissions
                 .into_iter()
-                .map(|s| SubmissionResponse {
-                    id: s.id,
-                    filename: s.filename,
-                    attempt: s.attempt,
-                    created_at: s.created_at.to_rfc3339(),
-                    updated_at: s.updated_at.to_rfc3339(),
-                    is_late: is_late(s.created_at, assignment.due_date),
+                .map(|s| {
+                    let (mark, is_practice) = {
+                        let path = format!(
+                            "./data/assignment_files/module_{}/assignment_{}/assignment_submissions/user_{}/attempt_{}/submission_report.json",
+                            module_id, assignment_id, s.user_id, s.attempt
+                        );
+
+                        match fs::read_to_string(&path) {
+                            Ok(content) => {
+                                if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                                    let mark = json.get("mark").and_then(|m| serde_json::from_value(m.clone()).ok());
+                                    let is_practice = json.get("is_practice").and_then(|p| p.as_bool()).unwrap_or(false);
+                                    (mark, is_practice)
+                                } else {
+                                    (None, false)
+                                }
+                            }
+                            Err(_) => (None, false),
+                        }
+                    };
+
+                    SubmissionResponse {
+                        id: s.id,
+                        filename: s.filename,
+                        attempt: s.attempt,
+                        created_at: s.created_at.to_rfc3339(),
+                        updated_at: s.updated_at.to_rfc3339(),
+                        is_late: is_late(s.created_at, assignment.due_date),
+                        is_practice,
+                        mark,
+                    }
                 })
                 .collect();
 
@@ -148,7 +174,15 @@ pub struct SubmissionListItem {
     pub filename: String,
     pub created_at: String,
     pub updated_at: String,
+    pub is_practice: bool,
     pub is_late: bool,
+    pub mark: Option<Mark>, 
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Mark {
+    pub earned: i32,
+    pub total: i32,
 }
 
 #[derive(Debug, Serialize)]
@@ -331,18 +365,42 @@ pub async fn get_list_submissions(
 
     let response: Vec<SubmissionListItem> = submissions
         .into_iter()
-        .map(|s| SubmissionListItem {
-            id: s.id,
-            user: user_map.get(&s.user_id).cloned().unwrap_or(UserResponse {
-                user_id: s.user_id,
-                username: "unknown username".to_string(),
-                email: "unknown email".to_string(),
-            }),
-            filename: s.filename,
-            attempt: s.attempt,
-            created_at: s.created_at.to_rfc3339(),
-            updated_at: s.updated_at.to_rfc3339(),
-            is_late: is_late(s.created_at, assignment.due_date),
+        .map(|s| {
+            let (mark, is_practice) = {
+                let path = format!(
+                    "./data/assignment_files/module_{}/assignment_{}/assignment_submissions/user_{}/attempt_{}/submission_report.json",
+                    module_id, assignment_id, s.user_id, s.attempt
+                );
+
+                match fs::read_to_string(&path) {
+                    Ok(content) => {
+                        if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                            let mark = json.get("mark").and_then(|m| serde_json::from_value(m.clone()).ok());
+                            let is_practice = json.get("is_practice").and_then(|p| p.as_bool()).unwrap_or(false);
+                            (mark, is_practice)
+                        } else {
+                            (None, false)
+                        }
+                    }
+                    Err(_) => (None, false),
+                }
+            };
+
+            SubmissionListItem {
+                id: s.id,
+                user: user_map.get(&s.user_id).cloned().unwrap_or(UserResponse {
+                    user_id: s.user_id,
+                    username: "unknown username".to_string(),
+                    email: "unknown email".to_string(),
+                }),
+                filename: s.filename,
+                attempt: s.attempt,
+                created_at: s.created_at.to_rfc3339(),
+                updated_at: s.updated_at.to_rfc3339(),
+                is_practice,
+                is_late: is_late(s.created_at, assignment.due_date),
+                mark,
+            }
         })
         .collect();
 
@@ -361,16 +419,22 @@ pub async fn get_list_submissions(
         .into_response()
 }
 
-pub async fn is_student(module_id: i64, user_id: i64, db: DatabaseConnection) -> bool {
-    UserEntity::find()
+pub async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bool {
+    user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user_id))
         .filter(user_module_role::Column::ModuleId.eq(module_id))
         .filter(user_module_role::Column::Role.eq(Role::Student))
-        .one(&db)
+        .join(
+        JoinType::InnerJoin,
+        user_module_role::Relation::User.def(),
+        )
+        .filter(user::Column::Admin.eq(false))
+        .one(db)
         .await
         .map(|opt| opt.is_some())
         .unwrap_or(false)
 }
+
 
 pub async fn list_submissions(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
@@ -380,7 +444,7 @@ pub async fn list_submissions(
     let user_id = claims.sub;
     let db = connect().await;
 
-    if is_student(module_id, user_id, db).await {
+    if is_student(module_id, user_id, &db).await {
         return get_user_submissions(module_id, assignment_id, user_id)
             .await
             .into_response();
@@ -480,7 +544,7 @@ pub async fn get_submission(
     let content = fs::read_to_string(&path).unwrap();
     let mut parsed: Value = serde_json::from_str(&content).unwrap();
 
-    if !is_student(module_id, claims.sub, db.clone()).await {
+    if !is_student(module_id, claims.sub, &db).await {
         let user = user::Entity::find_by_id(user_id)
             .one(&db)
             .await

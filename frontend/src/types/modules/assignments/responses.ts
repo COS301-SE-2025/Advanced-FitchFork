@@ -1,4 +1,4 @@
-import type { Assignment, AssignmentFile } from ".";
+import type { Assignment, AssignmentFile, AssignmentReadiness } from ".";
 import type { ApiResponse, PaginationResponse } from "@/types/common";
 
 // ─────────────────────────────────────────────────────────────
@@ -14,6 +14,8 @@ export type GetAssignmentResponse = ApiResponse<{
 } & Assignment>
 
 export type GetListAssignmentFilesResponse = ApiResponse<AssignmentFile[]>;
+
+export type GetAssignmentReadinessResponse = ApiResponse<AssignmentReadiness>;
 
 // ─────────────────────────────────────────────────────────────
 // POST Responses Types

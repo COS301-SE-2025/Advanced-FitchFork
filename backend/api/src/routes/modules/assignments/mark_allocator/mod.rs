@@ -32,7 +32,7 @@ use crate::auth::guards::require_lecturer;
 pub fn mark_allocator_routes() -> Router {
     Router::new()
         .route(
-            "/",
+            "/generate",
             post(generate).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),

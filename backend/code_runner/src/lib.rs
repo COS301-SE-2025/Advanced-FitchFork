@@ -1,17 +1,28 @@
-use db::models::assignment_memo_output::Model as MemoOutputModel;
-use db::models::assignment_task::Model as AssignmentTask;
-use sea_orm::DatabaseConnection;
-use std::env;
-use std::{fs::File, io::Cursor, path::PathBuf, process::Stdio};
-use tempfile::tempdir;
-use tokio::{
-    process::Command,
-    time::{Duration, timeout},
-};
+// Core dependencies
+use std::{env, fs, path::PathBuf, process::Stdio};
+use std::fs::File;
+use std::io::Cursor;
+
+// Async, process, and timing
+use tokio::process::Command;
+use tokio::time::{timeout, Duration};
+
+// External crates
 use zip::ZipArchive;
+use tempfile::tempdir;
+use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
+
+// Your own modules
+use crate::execution_config::ExecutionConfig;
+use crate::validate_files::validate_memo_files;
+
+// Models
+use db::models::assignment::Entity as Assignment;
+use db::models::assignment_memo_output::{Entity as MemoOutputEntity, Column as MemoOutputColumn};
+use db::models::assignment_task::Model as AssignmentTask;
+
 
 pub mod execution_config;
-use crate::execution_config::ExecutionConfig;
 pub mod validate_files;
 
 /// Returns the first `.zip` file found in the given directory.
@@ -48,11 +59,6 @@ pub async fn create_memo_outputs_for_all_tasks(
     db: &DatabaseConnection,
     assignment_id: i64,
 ) -> Result<(), String> {
-    use crate::execution_config::ExecutionConfig;
-    use crate::validate_files::validate_memo_files;
-    use db::models::assignment::Entity as Assignment;
-    use sea_orm::EntityTrait;
-
     // Fetch the assignment to get module_id
     let assignment = Assignment::find_by_id(assignment_id)
         .one(db)
@@ -62,6 +68,7 @@ pub async fn create_memo_outputs_for_all_tasks(
 
     let module_id = assignment.module_id;
 
+    // Validate required input files
     validate_memo_files(module_id, assignment_id)?;
 
     let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
@@ -74,6 +81,22 @@ pub async fn create_memo_outputs_for_all_tasks(
         .join(format!("module_{}", module_id))
         .join(format!("assignment_{}", assignment_id));
 
+    let memo_output_dir = base_path.join("memo_output");
+
+    // Delete old files from disk
+    if memo_output_dir.exists() {
+        fs::remove_dir_all(&memo_output_dir)
+            .map_err(|e| format!("Failed to delete old memo_output dir: {}", e))?;
+    }
+
+    // Delete old entries from DB
+    MemoOutputEntity::delete_many()
+        .filter(MemoOutputColumn::AssignmentId.eq(assignment_id))
+        .exec(db)
+        .await
+        .map_err(|e| format!("Failed to delete old memo outputs: {}", e))?;
+
+    // Load zips
     let zip_paths = vec![
         first_zip_in(&base_path.join("memo"))?,
         first_zip_in(&base_path.join("makefile"))?,
@@ -101,7 +124,7 @@ pub async fn create_memo_outputs_for_all_tasks(
                 }
             };
 
-        if let Err(e) = MemoOutputModel::save_file(
+        if let Err(e) = db::models::assignment_memo_output::Model::save_file(
             db,
             assignment_id,
             task.task_number,
@@ -116,6 +139,7 @@ pub async fn create_memo_outputs_for_all_tasks(
 
     Ok(())
 }
+
 
 use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 

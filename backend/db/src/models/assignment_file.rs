@@ -93,15 +93,6 @@ impl Model {
             .join(file_type.to_string())
     }
 
-    /// Saves a file and returns the corresponding Model.
-    ///
-    /// # Arguments
-    /// * `db` - Database connection
-    /// * `assignment_id` - ID of the assignment
-    /// * `module_id` - ID of the parent module
-    /// * `file_type` - Category of the file
-    /// * `filename` - Original filename
-    /// * `bytes` - File contents
     pub async fn save_file(
         db: &DatabaseConnection,
         assignment_id: i64,
@@ -112,11 +103,30 @@ impl Model {
     ) -> Result<Self, DbErr> {
         let now = Utc::now();
 
-        // Step 1: Insert placeholder record with dummy path
+        // Step 1: Delete existing file record of the same type (if any)
+        use sea_orm::EntityTrait;
+        use sea_orm::QueryFilter;
+        use sea_orm::ColumnTrait;
+
+        use crate::models::assignment_file::{Entity as AssignmentFile, Column};
+
+        if let Some(existing) = AssignmentFile::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .filter(Column::FileType.eq(file_type.clone()))
+            .one(db)
+            .await?
+        {
+            let existing_path = Self::storage_root().join(&existing.path);
+            let _ = fs::remove_file(existing_path); // Silently ignore failure
+
+            existing.delete(db).await?;
+        }
+
+        // Step 2: Insert placeholder record with dummy path
         let partial = ActiveModel {
             assignment_id: Set(assignment_id),
             filename: Set(filename.to_string()),
-            path: Set("".to_string()), // temporary dummy to satisfy NOT NULL
+            path: Set("".to_string()), // will be updated after write
             file_type: Set(file_type.clone()),
             created_at: Set(now),
             updated_at: Set(now),
@@ -125,7 +135,7 @@ impl Model {
 
         let inserted: Model = partial.insert(db).await?;
 
-        // Step 2: Extract extension
+        // Step 3: Build deterministic file path (e.g., 42.json)
         let ext = PathBuf::from(filename)
             .extension()
             .map(|e| e.to_string_lossy().to_string());
@@ -149,13 +159,14 @@ impl Model {
         fs::write(&file_path, bytes)
             .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
 
-        // Step 3: Update the row with correct path
+        // Step 4: Update DB row with the actual file path
         let mut model: ActiveModel = inserted.into();
         model.path = Set(relative_path);
         model.updated_at = Set(Utc::now());
 
         model.update(db).await
     }
+
 
     /// Loads the file contents from disk based on the path stored in the model.
     pub fn load_file(&self) -> Result<Vec<u8>, std::io::Error> {

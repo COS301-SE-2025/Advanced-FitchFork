@@ -14,6 +14,8 @@ use sea_orm::{EntityTrait, DbErr};
 pub struct EditTaskRequest {
     /// The new command string for the task. Must be non-empty.
     command: String,
+    /// The new name for the task. Must be non-empty.
+    name: String,
 }
 
 /// The response structure for a task, including its updated details.
@@ -23,6 +25,8 @@ struct TaskResponse {
     id: i64,
     /// The task's number (as used in the allocator and memo files).
     task_number: i64,
+    /// The name for the task.
+    name: String,
     /// The command associated with this task.
     command: String,
     /// The creation timestamp of the task (RFC3339 format).
@@ -59,10 +63,10 @@ pub async fn edit_task(
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<EditTaskRequest>,
 ) -> impl IntoResponse {
-    if payload.command.trim().is_empty() {
+    if payload.command.trim().is_empty() || payload.name.trim().is_empty() {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<()>::error("'command' must be a non-empty string")),
+            Json(ApiResponse::<()>::error("'name' and 'command' must be non-empty strings")),
         ).into_response();
     }
 
@@ -131,7 +135,7 @@ pub async fn edit_task(
         ).into_response();
     }
 
-    let updated = match assignment_task::Model::edit_command(&db, task_id, &payload.command).await {
+    let updated = match assignment_task::Model::edit_command_and_name(&db, task_id, &payload.name, &payload.command).await {
         Ok(t) => t,
         Err(DbErr::RecordNotFound(_)) => {
             return (
@@ -150,6 +154,7 @@ pub async fn edit_task(
     let resp = TaskResponse {
         id: updated.id,
         task_number: updated.task_number,
+        name: updated.name,
         command: updated.command,
         created_at: updated.created_at.to_rfc3339(),
         updated_at: updated.updated_at.to_rfc3339(),

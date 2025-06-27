@@ -1,28 +1,23 @@
 import type { ApiResponse, PaginationResponse } from "@/types/common";
-import type { Submission, SubmissionDetail, SubmissionUserInfo } from "./shared";
+import type { Submission } from "./shared";
 
 // ─────────────────────────────────────────────────────────────
 // GET Responses Types
 // ─────────────────────────────────────────────────────────────
 
-export type GetSubmissionDetailResponse = ApiResponse<
-  (
-    ({user: SubmissionUserInfo} & SubmissionDetail) // For Student
-    |
-    SubmissionDetail                                // For Staff
-  )
->;
+export type GetSubmissionDetailResponse = ApiResponse<Submission>;
 
 export type GetSubmissionListResponse = ApiResponse<
-  (
-    ({user: SubmissionUserInfo} & Submission) // For Student
-    |
-    Submission                                // For Staff
-  ) & PaginationResponse
+  ({
+    submissions: Submission[];
+  } & PaginationResponse)
+  |
+  Submission[]
 >;
+
 
 // ─────────────────────────────────────────────────────────────
 // POST Responses Types
 // ─────────────────────────────────────────────────────────────
 
-export type PostSubmitAssignmentResponse = ApiResponse<SubmissionDetail>;
+export type PostSubmitAssignmentResponse = ApiResponse<Submission>;

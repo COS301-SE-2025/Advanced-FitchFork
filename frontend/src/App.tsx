@@ -36,6 +36,10 @@ import TasksLayout from './layouts/TasksLayout';
 import TasksIndex from './pages/modules/assignments/tasks/TasksIndex';
 import Config from './pages/modules/assignments/Config';
 import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
+import MemoOutput from './pages/modules/assignments/MemoOutput';
+import MarkAllocator from './pages/modules/assignments/MarkAllocator';
+import AssignmentStepUpload from './pages/modules/assignments/steps/AssignmentStepUpload';
+import AssignmentSteps from './pages/modules/assignments/steps/AssignmentSteps';
 
 export default function App() {
   const { user, isAdmin, loading, isExpired } = useAuth();
@@ -103,9 +107,25 @@ export default function App() {
                 <Route index element={<TasksIndex />} />
                 <Route path=":task_id" element={<UnderConstruction />} />
               </Route>
+              <Route path="steps" element={<AssignmentSteps />}>
+                <Route path="config" element={<Config />} />
+                <Route path="main" element={<AssignmentStepUpload fileType="main" />} />
+                <Route path="memo" element={<AssignmentStepUpload fileType="memo" />} />
+                <Route path="makefile" element={<AssignmentStepUpload fileType="makefile" />} />
+                <Route path="tasks" element={<TasksLayout />}>
+                  <Route index element={<TasksIndex />} />
+                  <Route path=":task_id" element={<UnderConstruction />} />
+                </Route>
+                <Route path="memo-output" element={<MemoOutput />} />
+                <Route path="mark-allocator" element={<MarkAllocator />} />
+              </Route>
+
               <Route path="config" element={<Config />} />
-              <Route path="memo-output" element={<UnderConstruction />} />
-              <Route path="mark-allocator" element={<UnderConstruction />} />
+              <Route path="main" element={<AssignmentStepUpload fileType="main" />} />
+              <Route path="memo" element={<AssignmentStepUpload fileType="memo" />} />
+              <Route path="makefile" element={<AssignmentStepUpload fileType="makefile" />} />
+              <Route path="memo-output" element={<MemoOutput />} />
+              <Route path="mark-allocator" element={<MarkAllocator />} />
               <Route path="stats" element={<UnderConstruction />} />
             </Route>
             <Route path="assignments/:assignment_id" element={<SubmissionLayout />}>

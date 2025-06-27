@@ -13,6 +13,7 @@ use std::fs;
 use std::path::PathBuf;
 use sea_orm::EntityTrait;
 use chrono::DateTime;
+use serde_json::Value;
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
 #[derive(Serialize)]
@@ -32,6 +33,8 @@ pub struct TaskDetailResponse {
     pub id: i64,
     /// The task's ID (may be the same as `id`).
     pub task_id: i64,
+    /// The display name assigned to a task
+    pub name: String,  
     /// The command associated with this task.
     pub command: String,
     /// The creation timestamp of the task (RFC3339 format).
@@ -81,6 +84,8 @@ pub async fn get_task_details(
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
     let db = connect().await;
+
+    // Validate module
     let module_exists = match module::Entity::find_by_id(module_id).one(&db).await {
         Ok(Some(_)) => true,
         Ok(None) => false,
@@ -88,44 +93,46 @@ pub async fn get_task_details(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Database error retrieving module")),
-            ).into_response();
+            )
+                .into_response();
         }
     };
-
     if !module_exists {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Module not found")),
-        ).into_response();
+        )
+            .into_response();
     }
 
+    // Validate assignment
     let assignment_model = match assignment::Entity::find_by_id(assignment_id).one(&db).await {
         Ok(Some(a)) => a,
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::error("Assignment not found")),
-            ).into_response();
+            )
+                .into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Database error retrieving assignment")),
-            ).into_response();
+            )
+                .into_response();
         }
     };
-
     if assignment_model.module_id != module_id {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Assignment does not belong to this module")),
-        ).into_response();
+        )
+            .into_response();
     }
 
-    let task = match assignment_task::Entity::find_by_id(task_id)
-        .one(&db)
-        .await
-    {
+    // Validate task
+    let task = match assignment_task::Entity::find_by_id(task_id).one(&db).await {
         Ok(Some(t)) => t,
         Ok(None) => {
             return (
@@ -142,7 +149,6 @@ pub async fn get_task_details(
                 .into_response();
         }
     };
-
     if task.assignment_id != assignment_id {
         return (
             StatusCode::NOT_FOUND,
@@ -151,105 +157,113 @@ pub async fn get_task_details(
             .into_response();
     }
 
-    let allocator_json = match load_allocator(module_id, assignment_id).await {
-        Ok(val) => val,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Failed to load mark allocator")),
-            )
-                .into_response();
-        }
-    };
-
-    let tasks = allocator_json.get("tasks").and_then(|t| t.as_array());
-    let task_alloc = match tasks.and_then(|arr| {
-        arr.iter().find(|obj| {
-            obj.as_object()
-                .and_then(|o| o.values().next())
-                .and_then(|v| v.get("name"))
-                .and_then(|name| name.as_str())
-                .and_then(|name| {
-                    if let Some(num_str) = name.strip_prefix("Task ") {
-                        num_str.parse::<i64>().ok()
-                    } else {
-                        None
-                    }
-                }) == Some(task.task_number)
-        })
-    }) {
-        Some(obj) => obj,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Task not found in allocator")),
-            )
-                .into_response();
-        }
-    };
-    let task_obj = task_alloc.as_object().unwrap();
-    let (_task_key, task_val) = task_obj.iter().next().unwrap();
-    let empty_vec = Vec::new();
-    let subsections = task_val.get("subsections").and_then(|s| s.as_array()).unwrap_or(&empty_vec);
-
-    let base_path = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
+    let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
+        .unwrap_or_else(|_| "data/assignment_files".into());
     let memo_path = PathBuf::from(&base_path)
         .join(format!("module_{}", module_id))
         .join(format!("assignment_{}", assignment_id))
         .join("memo_output")
         .join(format!("task_{}.txt", task.task_number));
-    let memo_content = fs::read_to_string(&memo_path).ok();
 
-    let memo_content = memo_content.or_else(|| {
-        let dir = memo_path.parent()?;
-        let entry = fs::read_dir(dir).ok()?.filter_map(|e| e.ok()).find(|e| e.path().is_file() && e.path().extension().map(|x| x == "txt").unwrap_or(false));
-        entry.and_then(|e| fs::read_to_string(e.path()).ok())
+    let memo_content = fs::read_to_string(&memo_path).ok().or_else(|| {
+        fs::read_dir(memo_path.parent()?).ok()?.filter_map(Result::ok).find_map(|entry| {
+            if entry.path().extension().map_or(false, |ext| ext == "txt") {
+                fs::read_to_string(entry.path()).ok()
+            } else {
+                None
+            }
+        })
     });
 
-    let mut subsection_outputs: Vec<Option<String>> = vec![None; subsections.len()];
-    if let Some(ref memo) = memo_content {
-
-        let sep = "&-=-&";
-        let mut current_idx = 0;
-        let mut buf = String::new();
-        for line in memo.lines() {
-            if line.contains(sep) {
-                if current_idx < subsection_outputs.len() {
-                    if !buf.trim().is_empty() {
-                        subsection_outputs[current_idx] = Some(buf.trim().to_string());
-                    }
-                    buf.clear();
-                    current_idx += 1;
+    let outputs: Vec<Option<String>> = if let Some(ref memo) = memo_content {
+        let parts: Vec<&str> = memo.split("&-=-&").collect();
+        parts
+            .into_iter()
+            .map(|part| {
+                let trimmed = part.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
                 }
-            } else {
-                buf.push_str(line);
-                buf.push('\n');
-            }
-        }
-        if current_idx < subsection_outputs.len() && !buf.trim().is_empty() {
-            subsection_outputs[current_idx] = Some(buf.trim().to_string());
-        }
-    }
+            })
+            .collect()
+    } else {
+        vec![]
+    };
 
-    let subsections: Vec<SubsectionDetail> = subsections
+    let parsed_outputs: Vec<Option<String>> = outputs.into_iter().skip(1).collect();
+
+    let allocator_json: Option<Value> = load_allocator(module_id, assignment_id).await.ok();
+    let task_key = format!("task{}", task.task_number);
+
+    let (_task_name, _task_value, subsections) = if let Some(tasks) = allocator_json
+        .as_ref()
+        .and_then(|v| v.get("tasks"))
+        .and_then(|t| t.as_array())
+    {
+        tasks.iter().find_map(|obj| {
+            obj.as_object().and_then(|map| {
+                let task_obj = map.get(&task_key)?.as_object()?;
+                let name = task_obj.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                let value = task_obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
+                let subsections = task_obj.get("subsections")?.as_array()?.clone();
+                Some((name, value, subsections))
+            })
+        }).unwrap_or_else(|| ("".to_string(), 0, vec![]))
+    } else {
+        ("".to_string(), 0, vec![])
+    };
+
+
+    let mut subsection_outputs = parsed_outputs;
+    subsection_outputs.resize(subsections.len(), None);
+
+    let detailed_subsections: Vec<SubsectionDetail> = subsections
         .iter()
         .enumerate()
-        .map(|(i, s)| SubsectionDetail {
-            name: s.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string(),
-            mark_value: s.get("value").and_then(|v| v.as_i64()).unwrap_or(0),
-            memo_output: subsection_outputs.get(i).and_then(|o| o.clone()),
+        .filter_map(|(i, s)| {
+            let obj = match s.as_object() {
+                Some(obj) => obj,
+                None => {
+                    eprintln!("Subsection {} is not a JSON object: {:?}", i, s);
+                    return None;
+                }
+            };
+
+            let name = obj.get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("<unnamed>")
+                .to_string();
+
+            let mark_value = obj.get("value")
+                .and_then(|v| v.as_i64())
+                .unwrap_or_else(|| {
+                    eprintln!("Missing or invalid value for subsection '{}'", name);
+                    0
+                });
+
+            let memo_output = subsection_outputs.get(i).cloned().flatten();
+
+            Some(SubsectionDetail {
+                name,
+                mark_value,
+                memo_output,
+            })
         })
         .collect();
+
 
     let resp = TaskDetailResponse {
         id: task.id,
         task_id: task.id,
+        name: task.name.clone(), 
         command: task.command,
         created_at: task.created_at.to_rfc3339(),
         updated_at: task.updated_at.to_rfc3339(),
-        subsections,
+        subsections: detailed_subsections,
     };
-    
+
     (
         StatusCode::OK,
         Json(ApiResponse::success(resp, "Task details retrieved successfully")),

@@ -7,4 +7,5 @@ export interface MemoTaskOutput {
   task_number: number;
   name: string;
   subsections: MemoSubsection[];
+  raw: string;
 }

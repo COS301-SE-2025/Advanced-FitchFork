@@ -1,76 +1,16 @@
-import { Table, Typography, Tag, Button, Dropdown } from 'antd';
-import { MoreOutlined, EyeOutlined, DownloadOutlined } from '@ant-design/icons';
+import { Table, Typography, Tag, Button, Dropdown, Checkbox, message, Modal, Upload } from 'antd';
+import { MoreOutlined, EyeOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
+import { useEffect, useState } from 'react';
+import { submitAssignment } from '@/services/modules/assignments/submissions/post';
+import { getSubmissions } from '@/services/modules/assignments/submissions';
+import type { Submission } from '@/types/modules/assignments/submissions';
 
 const { Title, Text } = Typography;
-
-type SubmissionStatus = 'Pending' | 'Graded';
-
-type StudentSubmission = {
-  id: number;
-  attempt: number;
-  filename: string;
-  path: string;
-  created_at: string;
-  updated_at: string;
-  status: SubmissionStatus;
-  mark?: number;
-};
-
-const mockSubmissions: StudentSubmission[] = [
-  {
-    id: 1,
-    attempt: 1,
-    filename: 'assignment1_draft.pdf',
-    path: '/submissions/assignment1_draft.pdf',
-    created_at: '2025-06-10T09:00:00Z',
-    updated_at: '2025-06-10T09:00:00Z',
-    status: 'Pending',
-  },
-  {
-    id: 2,
-    attempt: 2,
-    filename: 'assignment1_final.pdf',
-    path: '/submissions/assignment1_final.pdf',
-    created_at: '2025-06-12T18:30:00Z',
-    updated_at: '2025-06-12T18:45:00Z',
-    status: 'Graded',
-    mark: 82,
-  },
-  {
-    id: 3,
-    attempt: 3,
-    filename: 'assignment1_revised.pdf',
-    path: '/submissions/assignment1_revised.pdf',
-    created_at: '2025-06-13T08:15:00Z',
-    updated_at: '2025-06-13T08:16:00Z',
-    status: 'Graded',
-    mark: 49,
-  },
-  {
-    id: 4,
-    attempt: 4,
-    filename: 'assignment1_best.pdf',
-    path: '/submissions/assignment1_best.pdf',
-    created_at: '2025-06-14T14:00:00Z',
-    updated_at: '2025-06-14T14:05:00Z',
-    status: 'Graded',
-    mark: 95,
-  },
-  {
-    id: 5,
-    attempt: 5,
-    filename: 'assignment1_pending_review.pdf',
-    path: '/submissions/assignment1_pending_review.pdf',
-    created_at: '2025-06-15T10:30:00Z',
-    updated_at: '2025-06-15T10:31:00Z',
-    status: 'Pending',
-  },
-];
 
 const getMarkColor = (mark: number): string => {
   if (mark >= 75) return 'green';
@@ -78,10 +18,60 @@ const getMarkColor = (mark: number): string => {
   return 'red';
 };
 
+type StudentSubmission = Submission & {
+  status: 'Pending' | 'Graded';
+  path: string;
+  percentageMark?: number;
+};
+
 const SubmissionsList = () => {
   const navigate = useNavigate();
   const module = useModule();
-  const assignment = useAssignment();
+  const { assignment } = useAssignment();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isPractice, setIsPractice] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchSubmissions = async () => {
+    if (!module.id || !assignment.id) return;
+    setLoading(true);
+    try {
+      const query = new URLSearchParams({ page: '1', per_page: '50' });
+      const res = await getSubmissions(module.id, assignment.id, query);
+      let raw: Submission[] = [];
+
+      if (Array.isArray(res.data)) {
+        raw = res.data;
+      } else if ('submissions' in res.data) {
+        raw = res.data.submissions;
+      }
+
+      const items = raw.map(
+        (s): StudentSubmission => ({
+          ...s,
+          status: 'mark' in s ? 'Graded' : 'Pending',
+          percentageMark:
+            'mark' in s && s.mark && typeof s.mark === 'object' && 'earned' in s.mark
+              ? Math.round(((s.mark as any).earned / (s.mark as any).total) * 100)
+              : undefined,
+          path: `/api/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}/file`,
+        }),
+      );
+
+      setSubmissions(items);
+    } catch (err) {
+      message.error('Failed to load submissions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSubmissions();
+  }, [module.id, assignment.id]);
 
   const columns: ColumnsType<StudentSubmission> = [
     {
@@ -109,16 +99,13 @@ const SubmissionsList = () => {
     },
     {
       title: 'Mark (%)',
-      dataIndex: 'mark',
-      key: 'mark',
-      render: (_, record) => {
-        if (record.status === 'Graded' && typeof record.mark === 'number') {
-          const color = getMarkColor(record.mark);
-          return <Tag color={color}>{record.mark}%</Tag>;
-        } else {
-          return <Tag color="default">Not marked</Tag>;
-        }
-      },
+      key: 'percentageMark',
+      render: (_, record) =>
+        record.status === 'Graded' && typeof record.percentageMark === 'number' ? (
+          <Tag color={getMarkColor(record.percentageMark)}>{record.percentageMark}%</Tag>
+        ) : (
+          <Tag color="default">Not marked</Tag>
+        ),
     },
     {
       title: 'Actions',
@@ -171,25 +158,68 @@ const SubmissionsList = () => {
             Below are your attempts for this assignment.
           </Text>
         </div>
-        <Button
-          type="primary"
-          onClick={() => navigate(`/modules/${module.id}/assignments/${assignment.id}/submit`)}
-        >
+        <Button type="primary" onClick={() => setModalOpen(true)}>
           New Submission
         </Button>
       </div>
 
       <Table<StudentSubmission>
         columns={columns}
-        dataSource={mockSubmissions}
+        dataSource={submissions}
         rowKey="id"
         pagination={{ pageSize: 5 }}
+        loading={loading}
         className="border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
         onRow={(record) => ({
           onClick: () =>
             navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${record.id}`),
         })}
       />
+
+      <Modal
+        title="Submit Assignment"
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        onOk={async () => {
+          if (!selectedFile) {
+            message.error('Please select a file to submit.');
+            return;
+          }
+          try {
+            setUploading(true);
+            await submitAssignment(module.id, assignment.id, selectedFile, isPractice);
+            message.success('Submission successful', 3);
+            setModalOpen(false);
+            setSelectedFile(null);
+            setIsPractice(false);
+            await fetchSubmissions(); // <- re-fetch submissions after success
+          } catch (err) {
+            message.error('Submission failed');
+          } finally {
+            setUploading(false);
+          }
+        }}
+        okButtonProps={{ loading: uploading }}
+        okText="Submit"
+      >
+        <Upload
+          maxCount={1}
+          beforeUpload={(file) => {
+            setSelectedFile(file);
+            return false;
+          }}
+          accept=".zip,.tar,.gz,.tgz"
+        >
+          <Button icon={<UploadOutlined />}>Click to select file</Button>
+        </Upload>
+        <Checkbox
+          checked={isPractice}
+          onChange={(e) => setIsPractice(e.target.checked)}
+          style={{ marginTop: 16 }}
+        >
+          This is a practice submission
+        </Checkbox>
+      </Modal>
     </div>
   );
 };

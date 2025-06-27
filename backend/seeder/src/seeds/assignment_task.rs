@@ -39,7 +39,7 @@ impl Seeder for AssignmentTaskSeeder {
                     .unwrap_or(&"echo 'Hello World'")
                     .to_string();
 
-                match AssignmentTaskModel::create(db, assignment.id, task_number, &command).await {
+                match AssignmentTaskModel::create(db, assignment.id, task_number, "Untitled Task", &command).await {
                     Ok(_task) => {
                         // Optionally log or handle success
                     }
@@ -61,6 +61,7 @@ impl Seeder for AssignmentTaskSeeder {
                 db,
                 special_assignment_id,
                 task_number,
+                "Untitled Task",
                 command,
             )
             .await
@@ -82,6 +83,7 @@ impl Seeder for AssignmentTaskSeeder {
                 db,
                 special_assignment_id2,
                 task_number,
+                "Untitled Task",
                 command,
             )
             .await
