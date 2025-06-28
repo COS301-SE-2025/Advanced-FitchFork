@@ -301,10 +301,13 @@ pub async fn submit_assignment(
             }
         }
     }
-    let memo_outputs: Vec<_> = match std::fs::read_dir(&memo_output_dir) {
+    student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+    let mut memo_outputs: Vec<_> = match std::fs::read_dir(&memo_output_dir) {
         Ok(rd) => rd.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.is_file()).collect(),
         Err(_) => Vec::new(),
     };
+    memo_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     let marking_job = MarkingJob::new(
         memo_outputs,

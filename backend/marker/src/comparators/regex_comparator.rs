@@ -1,8 +1,8 @@
-//! A comparator that uses regular expressions to find matches and award marks proportionally.
+//! A comparator that uses regular expressions to find matches and award marks proportionally, where **line order matters**.
 //!
 //! The `RegexComparator` is a flexible tool that allows for pattern matching using regex.
 //! It calculates the ratio of matches found in the student's output against the memo's output
-//! and awards marks based on this percentage.
+//! and awards marks based on this percentage. **Lines are compared in order; only lines at the same position are considered a match.**
 
 use crate::traits::comparator::OutputComparator;
 use crate::types::{TaskResult, Subsection};
@@ -13,6 +13,8 @@ use regex::Regex;
 /// This comparator is ideal for tasks where the correctness of the output can be verified with
 /// a regular expression. It provides a powerful way to validate complex patterns. Marks are awarded
 /// based on the ratio of matches in the student's output compared to the memo's output. **Extra lines in the student output are penalized: the score is multiplied by the ratio of memo lines to student lines if student_lines > memo_lines.**
+///
+/// **Note:** Line order matters. Only lines at the same index in both memo and student outputs are considered for matching.
 pub struct RegexComparator;
 
 impl OutputComparator for RegexComparator {
