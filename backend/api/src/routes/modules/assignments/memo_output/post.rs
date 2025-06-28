@@ -26,7 +26,7 @@ use code_runner::create_memo_outputs_for_all_tasks;
 ///
 /// ### Example `curl` request:
 /// ```bash
-/// curl -X POST http://localhost:3000/modules/1/assignments/2/memo/generate
+/// curl -X POST http://localhost:3000/api/modules/1/assignments/2/memo-output/generate
 /// ```
 pub async fn generate_memo_output(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
