@@ -55,5 +55,5 @@ export const downloadAssignmentFile = async (
   assignmentId: number,
   fileId: number
 ): Promise<void> => {
-  return apiDownload(`/modules/${moduleId}/assignments/${assignmentId}/file/${fileId}`);
+  return apiDownload(`/modules/${moduleId}/assignments/${assignmentId}/files/${fileId}`);
 };

@@ -11,9 +11,15 @@ use get::get_memo_output_file;
 ///
 /// Routes:
 /// - `POST /generate`      → Start async memo output generation for an assignment
-/// - `GET  /memo-output`   → Retrieve the generated memo output file for an assignment
+/// - `GET  /`   → Retrieve the generated memo output file for an assignment
 pub fn memo_output_routes() -> Router {
     Router::new()
-        .route("/generate", post(generate_memo_output))
-        .route("/memo-output", get(get_memo_output_file))
+        .route(
+            "/generate",
+            post(generate_memo_output)
+        )
+        .route(
+            "/",
+            get(get_memo_output_file)
+        )
 }

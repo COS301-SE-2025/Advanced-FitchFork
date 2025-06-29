@@ -1,50 +1,26 @@
-//! # Assignment Submission Endpoint
-//!
-//! This module implements the POST endpoint for submitting assignment solutions in FitchFork.
-//! It handles file uploads, validates and stores submissions, triggers code execution and marking,
-//! and returns a detailed grading report. The same report is also saved as a JSON file for auditing.
-//!
-//! ## Endpoint
-//! - **POST** `/modules/:module_id/assignments/:assignment_id/submissions`
-//!
-//! ## Request
-//! - Multipart form data with fields:
-//!   - `file`: The assignment submission archive (.tgz, .gz, .tar, .zip)
-//!   - `is_practice`: Optional, whether this is a practice submission
-//!
-//! ## Response
-//! - On success: JSON with detailed grading report (see [`SubmissionDetailResponse`])
-//! - On error: JSON with error message
-//!
-//! ## Logic Flow
-//! 1. Validate assignment and user
-//! 2. Parse and validate uploaded file
-//! 3. Store the file and create a DB record
-//! 4. Run code runner to generate outputs
-//! 5. Load marking schema (allocator)
-//! 6. Collect memo and student outputs
-//! 7. Run marking logic (see marker crate)
-//! 8. Build and return a detailed grading report
-//! 9. Save the same report as `submission_report.json` in the attempt folder
-//!
-//! ## Filesystem Layout
-//! - `assignment_submissions/user_{id}/attempt_{n}/submission_output/` (per-task outputs)
-//! - `assignment_submissions/user_{id}/attempt_{n}/submission_report.json` (grading report)
-//! - `assignment_submissions/user_{id}/attempt_{n}/...zip` (uploaded file)
-
-use axum::{extract::{Path, Multipart, Extension}, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    extract::{Path, Multipart, Extension},
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
 use serde::Serialize;
-use crate::auth::AuthUser;
-use crate::response::ApiResponse;
-use db::connect;
-use db::models::assignment_submission::Model as AssignmentSubmissionModel;
-use db::models::assignment_submission;
-use db::models::assignment::{Entity as AssignmentEntity, Column as AssignmentColumn};
+use db::{
+    connect,
+    models::{
+        assignment_submission::{self, Model as AssignmentSubmissionModel},
+        assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
+    },
+};
 use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, QueryOrder};
+use crate::{
+    auth::AuthUser,
+    response::ApiResponse,
+    routes::modules::assignments::get::is_late,
+};
 use code_runner;
 use util::mark_allocator::mark_allocator::load_allocator;
 use marker::MarkingJob;
-use crate::routes::modules::assignments::get::is_late;
 use md5;
 
 /// Summary of marks for a submission.
@@ -65,7 +41,7 @@ pub struct CodeComplexitySummary {
 #[derive(Debug, Serialize)]
 pub struct CodeComplexity {
     pub summary: CodeComplexitySummary,
-    pub metrics: Vec<serde_json::Value>, // Placeholder, adjust as needed
+    pub metrics: Vec<serde_json::Value>,
 }
 
 /// The full response returned after a submission is processed and graded.
@@ -93,38 +69,115 @@ pub struct SubmissionDetailResponse {
     pub mark: MarkSummary,
     pub is_practice: bool,
     pub is_late: bool,
-    pub tasks: Vec<serde_json::Value>, // Placeholder, adjust as needed
+    pub tasks: Vec<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_coverage: Option<Vec<serde_json::Value>>, // Placeholder, adjust as needed
+    pub code_coverage: Option<Vec<serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code_complexity: Option<CodeComplexity>,
 }
 
-/// Handles assignment submission uploads, grading, and report generation.
+/// POST /api/modules/:module_id/assignments/:assignment_id/submissions
 ///
-/// # Arguments
-/// - `Path((module_id, assignment_id))`: Module and assignment IDs from the URL
-/// - `Extension(AuthUser(claims))`: Authenticated user context
-/// - `multipart`: Multipart form data (file upload)
+/// Submit an assignment file for grading. Accessible to authenticated students assigned to the module.
 ///
-/// # Returns
-/// - On success: `(StatusCode::OK, Json(ApiResponse<SubmissionDetailResponse>))`
-/// - On error: Appropriate error status and message
+/// This endpoint accepts a multipart form upload containing the assignment file and optional flags.
+/// The file is saved, graded, and a detailed grading report is returned. The grading process includes
+/// code execution, mark allocation, and optional code coverage/complexity analysis.
 ///
-/// # Side Effects
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment to submit to
+///
+/// ### Request (multipart/form-data)
+/// - `file` (required): The assignment file to upload (`.tgz`, `.gz`, `.tar`, or `.zip` only)
+/// - `is_practice` (optional): If set to `true` or `1`, marks this as a practice submission
+///
+/// ### Example Request
+/// ```bash
+/// curl -X POST http://localhost:3000/api/modules/1/assignments/2/submissions \
+///   -H "Authorization: Bearer <token>" \
+///   -F "file=@solution.zip" \
+///   -F "is_practice=true"
+/// ```
+///
+/// ### Success Response (200 OK)
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Submission received and graded",
+///   "data": {
+///     "id": 123,
+///     "attempt": 2,
+///     "filename": "solution.zip",
+///     "hash": "d41d8cd98f00b204e9800998ecf8427e",
+///     "created_at": "2024-01-15T10:30:00Z",
+///     "updated_at": "2024-01-15T10:30:00Z",
+///     "mark": { "earned": 85, "total": 100 },
+///     "is_practice": true,
+///     "is_late": false,
+///     "tasks": [ ... ],
+///     "code_coverage": [ ... ],
+///     "code_complexity": {
+///       "summary": { "earned": 10, "total": 15 },
+///       "metrics": [ ... ]
+///     }
+///   }
+/// }
+/// ```
+///
+/// ### Error Responses
+///
+/// **404 Not Found** - Assignment not found
+/// ```json
+/// { "success": false, "message": "Assignment not found" }
+/// ```
+///
+/// **422 Unprocessable Entity** - File missing, invalid, or empty
+/// ```json
+/// { "success": false, "message": "No file provided" }
+/// ```
+/// or
+/// ```json
+/// { "success": false, "message": "Only .tgz, .gz, .tar, and .zip files are allowed" }
+/// ```
+/// or
+/// ```json
+/// { "success": false, "message": "Empty file provided" }
+/// ```
+///
+/// **500 Internal Server Error** - Grading or system error
+/// ```json
+/// { "success": false, "message": "Failed to save submission" }
+/// ```
+/// or
+/// ```json
+/// { "success": false, "message": "Failed to run code for submission" }
+/// ```
+/// or
+/// ```json
+/// { "success": false, "message": "Failed to load mark allocator" }
+/// ```
+/// or
+/// ```json
+/// { "success": false, "message": "Failed to mark submission" }
+/// ```
+///
+/// ### Side Effects
 /// - Saves the uploaded file and generated outputs to disk
 /// - Triggers code execution and marking
 /// - Saves a copy of the grading report as `submission_report.json` in the attempt folder
 ///
-/// # Filesystem
+/// ### Filesystem
 /// - Uploaded file and outputs are stored under:
-///   `data/assignment_files/module_{module_id}/assignment_{assignment_id}/assignment_submissions/user_{user_id}/attempt_{n}/`
+///   `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/assignment_submissions/user_{user_id}/attempt_{n}/`
 ///
-/// # Errors
-/// - Returns 404 if assignment not found
-/// - Returns 422 if file is missing or invalid
-/// - Returns 500 for internal errors (DB, marking, etc)
-#[allow(clippy::too_many_lines)]
+/// ### Notes
+/// - Each submission increments the attempt number for the user/assignment
+/// - Only one file per submission is accepted
+/// - Practice submissions are marked and reported but may not count toward final grade
+/// - The returned report includes detailed per-task grading, code coverage, and complexity if available
+/// - The endpoint is restricted to authenticated students assigned to the module
+/// - All errors are returned in a consistent JSON format
 pub async fn submit_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
@@ -382,3 +435,31 @@ pub async fn submit_assignment(
 
     (StatusCode::OK, Json(ApiResponse::<SubmissionDetailResponse>::success(resp, "Submission received and graded")))
 }
+
+/*
+Testing plan
+
+Happy Path (Success) Test Cases
+1. Valid submission (zip file): Upload a valid .zip file as a student assigned to the module. Expect 200 OK, grading report returned.
+2. Valid submission (tar file): Upload a valid .tar file as a student assigned to the module. Expect 200 OK, grading report returned.
+3. Valid submission (tgz file): Upload a valid .tgz file as a student assigned to the module. Expect 200 OK, grading report returned.
+4. Valid submission (gz file): Upload a valid .gz file as a student assigned to the module. Expect 200 OK, grading report returned.
+5. Practice submission: Upload a valid file with is_practice=true. Expect 200 OK, is_practice field is true in response.
+6. Multiple attempts: Submit twice as the same student; verify attempt increments. Expect 200 OK, attempt increases by 1.
+7. Submission with code coverage and complexity: Upload a file that triggers code coverage and complexity analysis. Expect 200 OK, code_coverage and code_complexity fields present.
+8. Submission exactly at due date: Submit a file with a timestamp exactly matching the assignment due date. Expect 200 OK, is_late is false.
+9. Submission just after due date: Submit a file just after the due date. Expect 200 OK, is_late is true.
+10. Submission with large file (within allowed size): Upload a large but valid file. Expect 200 OK, grading report returned.
+
+Unhappy Path (Error) Test Cases
+11. Missing file: Submit without a file in the form. Expect 422 Unprocessable Entity, error message about missing file.
+12. Empty file: Submit an empty file. Expect 422 Unprocessable Entity, error message about empty file.
+13. Invalid file extension: Submit a file with an unsupported extension (e.g., .exe). Expect 422 Unprocessable Entity, error message about allowed extensions.
+14. Corrupted archive: Submit a corrupted .zip file. Expect 500 Internal Server Error, error message about failed extraction or grading.
+15. Assignment not found: Submit to a non-existent assignment ID. Expect 404 Not Found, error message about assignment not found.
+16. User not assigned to module: Submit as a user not assigned to the module. Expect 403 Forbidden or 404 Not Found, error message about permissions.
+17. Database error during save: Simulate a database failure when saving the submission. Expect 500 Internal Server Error, error message about failed to save submission.
+18. Failure in code runner: Simulate a failure in the code runner after file upload. Expect 500 Internal Server Error, error message about failed to run code.
+19. Failure to load mark allocator: Simulate missing or invalid mark allocator. Expect 500 Internal Server Error, error message about failed to load mark allocator.
+20. Failure in marking: Simulate a marking error (e.g., invalid memo output). Expect 500 Internal Server Error, error message about failed to mark submission.
+*/

@@ -22,7 +22,7 @@ use get::{get_me, get_avatar, has_role_in_module};
 
 // # Auth Routes Module
 //
-// This module defines and wires up routes under the `/auth` endpoint group.
+// This module defines and wires up routes under the `/api/auth` endpoint group.
 //
 // ## Structure
 // - `post.rs` — POST handlers for authentication actions like registration, login, and password reset.

@@ -11,23 +11,91 @@ use crate::response::ApiResponse;
 use db::connect;
 use code_runner::create_memo_outputs_for_all_tasks;
 
-/// Starts asynchronous generation of memo outputs for all tasks in the specified assignment.
+/// POST /api/modules/:module_id/assignments/:assignment_id/memo_output/generate
 ///
-/// Validates the presence of the `memo` and `config` directories under:
-/// `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}`
+/// Start asynchronous generation of memo outputs for all tasks in the specified assignment. Accessible
+/// to users with Lecturer or Admin roles assigned to the module.
 ///
-/// ### Returns:
-/// - `202 Accepted` if validation passes and the background task is spawned
-/// - `422 Unprocessable Entity` if either:
-///     - `memo/` directory is missing or empty
-///     - `config/` directory is missing or empty
+/// This endpoint validates the presence of required directories and starts a background task to
+/// generate memo outputs for all tasks in the assignment. The memo outputs are used by the grading
+/// system to evaluate student submissions against expected results.
 ///
-/// The actual memo generation is performed in a background task and does not block the response.
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment to generate memo outputs for
 ///
-/// ### Example `curl` request:
+/// ### Example Request
 /// ```bash
-/// curl -X POST http://localhost:3000/api/modules/1/assignments/2/memo-output/generate
+/// curl -X POST http://localhost:3000/api/modules/1/assignments/2/memo_output/generate \
+///   -H "Authorization: Bearer <token>"
 /// ```
+///
+/// ### Success Response (202 Accepted)
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Task started",
+///   "data": null
+/// }
+/// ```
+///
+/// ### Error Responses
+///
+/// **422 Unprocessable Entity** - Required directories missing or empty
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Required memo directory is missing or empty"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Config file not valid"
+/// }
+/// ```
+///
+/// **403 Forbidden** - Insufficient permissions
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Access denied"
+/// }
+/// ```
+///
+/// **404 Not Found** - Assignment or module not found
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Assignment or module not found"
+/// }
+/// ```
+///
+/// ### Directory Requirements
+/// The endpoint validates the presence of required directories under:
+/// `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/`
+///
+/// - `memo/` directory: Must exist and contain at least one file
+///   - Contains memo files that define expected outputs for each task
+///   - Used as reference for evaluating student submissions
+/// - `config/` directory: Must exist and contain at least one file
+///   - Contains configuration files for task execution
+///   - Defines test parameters and evaluation criteria
+///
+/// ### Background Processing
+/// - Memo generation is performed asynchronously in a background task
+/// - The response is returned immediately after validation
+/// - Processing continues even if the client disconnects
+/// - Task completion is logged with success/failure status
+/// - Generated memo outputs are stored in the assignment directory
+///
+/// ### Notes
+/// - This endpoint only starts the generation process; it does not wait for completion
+/// - Memo outputs are essential for the grading system to function properly
+/// - The background task processes all tasks defined in the assignment
+/// - Generation is restricted to users with appropriate module permissions
+/// - Check server logs for detailed progress and error information
 pub async fn generate_memo_output(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {

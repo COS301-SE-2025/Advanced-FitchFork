@@ -12,10 +12,8 @@ use crate::auth::guards::{require_assigned_to_module};
 /// Defines routes related to assignment submissions.
 ///
 /// # Routes
-/// - `GET  /submissions`  
-///   → List all submissions for the assignment (lecturer or tutor access only)
-/// - `POST /submissions`
-///   → Submit a new assignment (student access only)
+/// - `GET  /`   → List all submissions for the assignment (lecturer or tutor access only)
+/// - `POST /`   → Submit a new assignment (student access only)
 
 pub fn submission_routes() -> Router {
     Router::new()

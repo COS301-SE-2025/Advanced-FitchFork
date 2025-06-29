@@ -1,0 +1,62 @@
+//! File Routes Module
+//!
+//! This module defines the routing for assignment file-related endpoints, including uploading, listing, downloading, and deleting files. It applies access control middleware to ensure appropriate permissions for each operation.
+
+pub mod get;
+pub mod post;
+pub mod delete;
+
+use axum::{
+    extract::Path,
+    middleware::from_fn,
+    routing::{get, post, delete},
+    Router,
+};
+
+use crate::auth::guards::{require_assigned_to_module, require_lecturer};
+use get::{list_files, download_file};
+use post::upload_files;
+use delete::delete_files;
+
+/// Registers the routes for assignment file endpoints.
+///
+/// This function sets up the following endpoints under the current router:
+///
+/// - `POST /`: Upload files to an assignment. Access is restricted to lecturers assigned to the module.
+/// - `GET /`: List all files for an assignment. Access is restricted to users assigned to the module.
+/// - `GET /:file_id`: Download a specific file from an assignment. Access is restricted to users assigned to the module.
+/// - `DELETE /`: Delete files from an assignment. Access is restricted to lecturers assigned to the module.
+///
+/// Routes apply appropriate middleware based on the operation:
+/// - Upload and delete operations require lecturer permissions
+/// - List and download operations require module assignment
+///
+/// # Returns
+/// An [`axum::Router`] with the file endpoints and their associated middleware.
+pub fn files_routes() -> Router {
+    Router::new()
+        .route(
+            "/",
+            post(upload_files).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
+                require_lecturer(Path((assignment_id,)), req, next)
+            })),
+        )
+        .route(
+            "/",
+            get(list_files).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
+                require_assigned_to_module(Path((assignment_id,)), req, next)
+            })),
+        )
+        .route(
+            "/",
+            delete(delete_files).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
+                require_lecturer(Path((assignment_id,)), req, next)
+            })),
+        )
+        .route(
+            "/:file_id",
+            get(download_file).layer(from_fn(|Path((assignment_id, _file_id)): Path<(i64, i64)>, req, next| {
+                require_assigned_to_module(Path((assignment_id,)), req, next)
+            })),
+        )
+}

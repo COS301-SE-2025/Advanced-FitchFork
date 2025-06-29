@@ -8,6 +8,7 @@ use db::models::{assignment_task, assignment, module};
 use serde::Deserialize;
 use crate::response::ApiResponse;
 use sea_orm::{EntityTrait, DbErr};
+use crate::routes::modules::assignments::tasks::common::TaskResponse;
 
 /// The request payload for editing a task's command.
 #[derive(Deserialize)]
@@ -16,45 +17,142 @@ pub struct EditTaskRequest {
     command: String,
 }
 
-/// The response structure for a task, including its updated details.
-#[derive(serde::Serialize)]
-struct TaskResponse {
-    /// The unique database ID of the task.
-    id: i64,
-    /// The task's number (as used in the allocator and memo files).
-    task_number: i64,
-    /// The command associated with this task.
-    command: String,
-    /// The creation timestamp of the task (RFC3339 format).
-    created_at: String,
-    /// The last update timestamp of the task (RFC3339 format).
-    updated_at: String,
-}
-
-/// Edits the command of a specific task within an assignment and module.
+/// PUT /api/modules/:module_id/assignments/:assignment_id/tasks/:task_id
 ///
-/// This handler performs the following steps:
-/// 1. Validates that the provided command is non-empty.
-/// 2. Checks for the existence of the module, assignment, and task in the database.
-/// 3. Ensures the assignment belongs to the module, and the task belongs to the assignment.
-/// 4. Updates the command of the specified task in the database.
-/// 5. Returns the updated task details in the response.
+/// Edit the command of a specific task within an assignment. Accessible to users with Lecturer or Admin roles
+/// assigned to the module.
 ///
-/// # Path Parameters
-/// - `module_id`: The ID of the module.
-/// - `assignment_id`: The ID of the assignment.
-/// - `task_id`: The ID of the task.
+/// This endpoint allows updating the command that will be executed during task evaluation. The command
+/// can be any shell command that can be executed in the evaluation environment.
 ///
-/// # Request Body
-/// - `command`: The new command string for the task (must be non-empty).
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment containing the task
+/// - `task_id` (i64): The ID of the task to edit
 ///
-/// # Returns
-/// - `200 OK` with updated task information if successful.
-/// - `404 Not Found` if the module, assignment, or task does not exist or does not belong.
-/// - `422 Unprocessable Entity` if the command is empty.
-/// - `500 Internal Server Error` for database errors.
+/// ### Request Body
+/// ```json
+/// {
+///   "command": "cargo test --lib --release"
+/// }
+/// ```
 ///
-/// The response includes the updated task details.
+/// ### Request Body Fields
+/// - `command` (string, required): The new command to execute for this task (e.g., test commands, build scripts)
+///
+/// ### Example Request
+/// ```bash
+/// curl -X PUT http://localhost:3000/api/modules/1/assignments/2/tasks/3 \
+///   -H "Authorization: Bearer <token>" \
+///   -H "Content-Type: application/json" \
+///   -d '{
+///     "command": "cargo test --lib --release"
+///   }'
+/// ```
+///
+/// ### Success Response (200 OK)
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Task updated successfully",
+///   "data": {
+///     "id": 3,
+///     "task_number": 1,
+///     "command": "cargo test --lib --release",
+///     "created_at": "2024-01-01T00:00:00Z",
+///     "updated_at": "2024-01-01T12:30:00Z"
+///   }
+/// }
+/// ```
+///
+/// ### Error Responses
+///
+/// **400 Bad Request** - Invalid JSON body
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Invalid JSON body"
+/// }
+/// ```
+///
+/// **403 Forbidden** - Insufficient permissions
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Access denied"
+/// }
+/// ```
+///
+/// **404 Not Found** - Resource not found
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Module not found"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Assignment not found"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Task not found"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Assignment does not belong to this module"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Task does not belong to this assignment"
+/// }
+/// ```
+///
+/// **422 Unprocessable Entity** - Validation error
+/// ```json
+/// {
+///   "success": false,
+///   "message": "'command' must be a non-empty string"
+/// }
+/// ```
+///
+/// **500 Internal Server Error** - Database or server error
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Database error retrieving module"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to update task"
+/// }
+/// ```
+///
+/// ### Validation Rules
+/// - `command` must not be empty or whitespace-only
+/// - Module must exist
+/// - Assignment must exist and belong to the specified module
+/// - Task must exist and belong to the specified assignment
+///
+/// ### Notes
+/// - Only the command field can be updated; task_number and other fields remain unchanged
+/// - The updated task will be used in future assignment evaluations
+/// - Task editing is restricted to users with appropriate module permissions
+/// - The `updated_at` timestamp is automatically set when the task is modified
 pub async fn edit_task(
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<EditTaskRequest>,
@@ -151,8 +249,8 @@ pub async fn edit_task(
         id: updated.id,
         task_number: updated.task_number,
         command: updated.command,
-        created_at: updated.created_at.to_rfc3339(),
-        updated_at: updated.updated_at.to_rfc3339(),
+        created_at: updated.created_at,
+        updated_at: updated.updated_at,
     };
 
     (

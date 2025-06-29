@@ -6,5 +6,5 @@ export const getMarkAllocator = async (
   moduleId: number,
   assignmentId: number
 ): Promise<GetMarkAllocatorResponse> => {
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/mark-allocator`);
+  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/mark_allocator`);
 };
