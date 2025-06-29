@@ -30,7 +30,7 @@ const getColor = (value: number) => {
 
 const SystemOverviewPanel = () => {
   const [view, setView] = useState<'Performance' | 'Summary' | 'Logs'>('Performance');
-  const [range, setRange] = useState<'now' | 'day' | 'week' | 'month'>('now');
+  const [range, setRange] = useState<'now' | 'today' | 'week' | 'month'>('now');
   const [usageData, setUsageData] = useState([62, 75, 45, 30, 12]);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -110,7 +110,7 @@ const SystemOverviewPanel = () => {
           onChange={(val) => setRange(val as typeof range)}
           options={[
             { label: 'Now', value: 'now', icon: <CalendarOutlined /> },
-            { label: 'Day', value: 'day', icon: <CalendarOutlined /> },
+            { label: 'Today', value: 'today', icon: <CalendarOutlined /> },
             { label: 'Week', value: 'week', icon: <CalendarOutlined /> },
             { label: 'Month', value: 'month', icon: <CalendarOutlined /> },
           ]}
@@ -151,7 +151,7 @@ const SystemOverviewPanel = () => {
         </div>
       )}
 
-      {view === 'Performance' && range === 'day' && (
+      {view === 'Performance' && range === 'today' && (
         <div className="overflow-x-auto">
           <LineChart
             height={300}

@@ -12,7 +12,7 @@ const { Title } = Typography;
 
 const SubmissionsPanel = () => {
   const [view, setView] = useState<'chart' | 'summary'>('chart');
-  const [range, setRange] = useState<'day' | 'week' | 'month'>('day');
+  const [range, setRange] = useState<'today' | 'week' | 'month'>('today');
   const [data, setData] = useState<number[]>([]);
   const [xAxisLabels, setXAxisLabels] = useState<string[]>([]);
   const [isMobile, setIsMobile] = useState(false);
@@ -20,8 +20,8 @@ const SubmissionsPanel = () => {
   const generateRandomData = (count: number) =>
     Array.from({ length: count }, () => Math.floor(Math.random() * 150));
 
-  const getXAxisLabels = (range: 'day' | 'week' | 'month') => {
-    if (range === 'day') return Array.from({ length: 24 }, (_, i) => `${i}:00`);
+  const getXAxisLabels = (range: 'today' | 'week' | 'month') => {
+    if (range === 'today') return Array.from({ length: 24 }, (_, i) => `${i}:00`);
     if (range === 'week') return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return Array.from({ length: 30 }, (_, i) => `${i + 1}`);
   };
@@ -81,9 +81,9 @@ const SubmissionsPanel = () => {
       <Segmented
         size="middle"
         value={range}
-        onChange={(val) => setRange(val as 'day' | 'week' | 'month')}
+        onChange={(val) => setRange(val as 'today' | 'week' | 'month')}
         options={[
-          { label: 'Day', value: 'day', icon: <CalendarOutlined /> },
+          { label: 'Today', value: 'today', icon: <CalendarOutlined /> },
           { label: 'Week', value: 'week', icon: <CalendarOutlined /> },
           { label: 'Month', value: 'month', icon: <CalendarOutlined /> },
         ]}
@@ -100,7 +100,7 @@ const SubmissionsPanel = () => {
               scaleType: 'point',
               valueFormatter: (value) => {
                 const index = xAxisLabels.indexOf(value);
-                if (range === 'day' || range === 'month') {
+                if (range === 'today' || range === 'month') {
                   return index % 2 === 0 ? value : '';
                 }
                 return value;
