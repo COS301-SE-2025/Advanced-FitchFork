@@ -11,7 +11,6 @@ import Forbidden from './pages/shared/status/Forbidden';
 import Unauthorized from './pages/shared/status/Unauthorized';
 import NotFound from './pages/shared/status/NotFound';
 
-import Home from './pages/Home';
 import UsersList from './pages/users/UsersList';
 import UserView from './pages/users/UserView';
 import UnderConstruction from './pages/shared/status/UnderConstruction';
@@ -52,6 +51,7 @@ import TaskStep from './pages/modules/assignments/steps/TaskStep';
 import GenerateMemoOutputStep from './pages/modules/assignments/steps/GenerateMemoOutputStep';
 import GenerateMarkAllocatorStep from './pages/modules/assignments/steps/GenerateMarkAllocatorStep';
 import Config from './pages/modules/assignments/Config';
+import Dashboard from './pages/Dashboard';
 
 export default function App() {
   const { user, isAdmin, loading, isExpired } = useAuth();
@@ -78,7 +78,7 @@ export default function App() {
         {/* Public Auth Routes */}
         <Route
           path="/"
-          element={user && !isExpired() ? <Navigate to="/home" replace /> : <Landing />}
+          element={user && !isExpired() ? <Navigate to="/dashboard" replace /> : <Landing />}
         />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
@@ -92,7 +92,7 @@ export default function App() {
 
         {/* AppLayout-wrapped Authenticated Routes */}
         <Route element={requireAuth(<AppLayout />)}>
-          <Route path="/home" element={<Home />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="account" replace />} />
             <Route path="account" element={<Account />} />

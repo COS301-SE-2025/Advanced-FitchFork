@@ -31,7 +31,7 @@ export default function Signup() {
     const res = await register(values.username, values.email, values.password);
 
     if (res.success) {
-      navigate('/home');
+      navigate('/dashboard');
     } else {
       setFormError(res.message || 'Registration failed');
     }

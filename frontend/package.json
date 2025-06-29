@@ -18,6 +18,10 @@
     "test:e2e:run": "cypress run"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.1.2",
+    "@mui/x-charts": "^8.6.0",
     "@tailwindcss/vite": "^4.1.7",
     "@types/react-router-dom": "^5.3.3",
     "antd": "^5.25.3",

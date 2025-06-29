@@ -26,7 +26,7 @@ export default function Login() {
     setFormError(null);
     const res = await login(values.username, values.password);
     if (res.success) {
-      navigate('/home');
+      navigate('/dashboard');
     } else {
       setFormError(res.message);
     }
