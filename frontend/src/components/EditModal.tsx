@@ -69,6 +69,14 @@ const EditModal = ({
         {fields.map(({ name, label, type, placeholder, options, required }) => {
           const rules = required ? [{ required: true, message: `Please enter ${label}` }] : [];
 
+          if (type === 'boolean') {
+            return (
+              <Form.Item key={name} name={name} label={label} valuePropName="checked" rules={rules}>
+                <Checkbox>{placeholder || 'Yes'}</Checkbox>
+              </Form.Item>
+            );
+          }
+
           return (
             <Form.Item key={name} name={name} label={label} rules={rules}>
               {type === 'text' || type === 'email' || type === 'password' || type === 'number' ? (
@@ -83,8 +91,6 @@ const EditModal = ({
                   format="YYYY-MM-DD HH:mm"
                   style={{ width: '100%' }}
                 />
-              ) : type === 'boolean' ? (
-                <Checkbox>{placeholder || 'Yes'}</Checkbox>
               ) : null}
             </Form.Item>
           );
