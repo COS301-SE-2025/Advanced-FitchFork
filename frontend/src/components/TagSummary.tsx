@@ -6,7 +6,7 @@ import {
   CloseOutlined,
 } from '@ant-design/icons';
 
-interface TableTagSummaryProps {
+interface Props {
   searchTerm: string;
   onClearSearch: () => void;
   filters: Record<string, any>;
@@ -15,7 +15,7 @@ interface TableTagSummaryProps {
   onClearSorter: (key: string) => void;
 }
 
-const TableTagSummary: React.FC<TableTagSummaryProps> = ({
+const TagSummary: React.FC<Props> = ({
   searchTerm,
   onClearSearch,
   filters,
@@ -82,4 +82,4 @@ const TableTagSummary: React.FC<TableTagSummaryProps> = ({
   );
 };
 
-export default TableTagSummary;
+export default TagSummary;

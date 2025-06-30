@@ -11,6 +11,8 @@ interface Props {
   module: { role: ModuleRole } & Module;
   isFavorite: boolean;
   onToggleFavorite: (moduleId: number) => void;
+  actions?: React.ReactNode[];
+  showFavorite?: boolean;
 }
 
 const roleColorMap: Record<ModuleRole, string> = {
@@ -25,7 +27,13 @@ const roleLabelMap: Record<ModuleRole, string> = {
   Lecturer: 'Lecturing',
 };
 
-const ModuleCard = ({ module, isFavorite, onToggleFavorite }: Props) => {
+const ModuleCard = ({
+  module,
+  isFavorite,
+  onToggleFavorite,
+  actions,
+  showFavorite = true,
+}: Props) => {
   const navigate = useNavigate();
 
   const handleClick = () => {
@@ -45,16 +53,19 @@ const ModuleCard = ({ module, isFavorite, onToggleFavorite }: Props) => {
       cover={
         <div className="h-[140px] !flex items-center justify-center bg-gray-100 dark:bg-neutral-700 relative">
           <BookOutlined className="text-5xl !text-gray-400 dark:!text-neutral-400" />
-          <Tooltip title={isFavorite ? 'Unfavorite' : 'Favorite'}>
-            <div
-              onClick={handleStarClick}
-              className="absolute top-2 right-2 text-xl text-yellow-400"
-            >
-              {isFavorite ? <StarFilled /> : <StarOutlined />}
-            </div>
-          </Tooltip>
+          {showFavorite && (
+            <Tooltip title={isFavorite ? 'Unfavorite' : 'Favorite'}>
+              <div
+                onClick={handleStarClick}
+                className="absolute top-2 right-2 text-xl text-yellow-400"
+              >
+                {isFavorite ? <StarFilled /> : <StarOutlined />}
+              </div>
+            </Tooltip>
+          )}
         </div>
       }
+      actions={actions}
     >
       <Meta
         avatar={<Avatar icon={<BookOutlined />} style={{ backgroundColor: '#1890ff' }} />}
@@ -76,5 +87,4 @@ const ModuleCard = ({ module, isFavorite, onToggleFavorite }: Props) => {
     </Card>
   );
 };
-
 export default ModuleCard;

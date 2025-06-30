@@ -1,12 +1,12 @@
 import { useAuth } from '@/context/AuthContext';
-import ModulesAdmin from './ModulesTable';
+import ModulesList from './ModulesList';
 import ModulesUser from './ModulesGrid';
 
 const Modules = () => {
   const { isAdmin, modules } = useAuth();
 
   if (isAdmin) {
-    return <ModulesAdmin />;
+    return <ModulesList />;
   }
 
   return <ModulesUser title="My Modules" modules={modules} />;

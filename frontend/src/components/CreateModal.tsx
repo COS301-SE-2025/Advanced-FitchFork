@@ -11,7 +11,7 @@ export interface TableCreateModalField {
   options?: { label: string; value: string }[]; // only for 'select'
 }
 
-export interface TableCreateModalProps {
+interface Props {
   open: boolean;
   onCancel: () => void;
   onCreate: (values: Record<string, any>) => void;
@@ -21,7 +21,7 @@ export interface TableCreateModalProps {
   title?: string;
 }
 
-export default function TableCreateModal({
+const CreateModal = ({
   open,
   onCancel,
   onCreate,
@@ -29,7 +29,7 @@ export default function TableCreateModal({
   fields,
   initialValues,
   title = 'Create Item',
-}: TableCreateModalProps) {
+}: Props) => {
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -101,4 +101,6 @@ export default function TableCreateModal({
       </Form>
     </Modal>
   );
-}
+};
+
+export default CreateModal;
