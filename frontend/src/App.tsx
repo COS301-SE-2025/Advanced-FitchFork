@@ -155,6 +155,7 @@ export default function App() {
               <Route path="submissions/:submission_id" element={<SubmissionView />} />
             </Route>
 
+            <Route path="bookings" element={<UnderConstruction />}></Route>
             <Route path="grades" element={<UnderConstruction />} />
             <Route path="resources" element={<UnderConstruction />} />
             <Route path="personnel" element={<ModulePersonnel />} />

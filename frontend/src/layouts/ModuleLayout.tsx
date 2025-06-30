@@ -7,6 +7,7 @@ import {
   BarChartOutlined,
   BookOutlined,
   UserOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import { useMediaQuery } from 'react-responsive';
 import { useAuth } from '@/context/AuthContext';
@@ -56,6 +57,7 @@ const ModuleLayout = () => {
   const moduleMenu = [
     { key: `/modules/${moduleId}`, icon: <HomeOutlined />, label: 'Overview' },
     { key: `/modules/${moduleId}/assignments`, icon: <FileTextOutlined />, label: 'Assignments' },
+    { key: `/modules/${moduleId}/bookings`, icon: <CalendarOutlined />, label: 'Bookings' },
     { key: `/modules/${moduleId}/grades`, icon: <BarChartOutlined />, label: 'Grades' },
     { key: `/modules/${moduleId}/resources`, icon: <BookOutlined />, label: 'Resources' },
     ...(showPersonnel
@@ -120,7 +122,7 @@ const ModuleLayout = () => {
 
       <ModuleProvider value={{ module }}>
         <Layout className="!bg-transparent">
-          <Content className="overflow-y-auto min-h-full">
+          <Content className="bg-gray-50 dark:bg-gray-950 overflow-y-auto min-h-full">
             <Outlet />
           </Content>
         </Layout>

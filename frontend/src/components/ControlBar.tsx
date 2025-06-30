@@ -87,7 +87,7 @@ const ControlBar: React.FC<Props> = ({
   const [filterModalOpen, setFilterModalOpen] = useState(false);
 
   return (
-    <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="bg-white dark:bg-gray-950 p-2 rounded-lg border border-gray-200 dark:border-gray-800 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       {/* Left: View mode + search (shared) */}
       <div className="flex flex-row items-center gap-2 w-full sm:w-auto">
         {typeof window !== 'undefined' && window.innerWidth >= 640 && (
