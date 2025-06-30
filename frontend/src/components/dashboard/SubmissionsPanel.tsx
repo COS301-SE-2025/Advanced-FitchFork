@@ -58,7 +58,7 @@ const SubmissionsPanel = () => {
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         {/* Title + range (on small screens: stacked) */}
         <div className="flex flex-col gap-2">
-          <Title level={3}>Submissions Overview</Title>
+          <Title level={4}>Submissions Overview</Title>
         </div>
 
         {/* Controls on right */}

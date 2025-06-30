@@ -12,7 +12,7 @@ const { Title } = Typography;
 const QuickActionsPanel = () => {
   return (
     <div className="h-full bg-white dark:bg-gray-950 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
-      <Title level={3} className="mb-4">
+      <Title level={4} className="mb-4">
         Quick Actions
       </Title>
 

@@ -84,7 +84,7 @@ const SystemOverviewPanel = () => {
     <div className="bg-white dark:bg-gray-950 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div className="flex flex-col gap-2">
-          <Title level={3}>System Overview</Title>
+          <Title level={4}>System Overview</Title>
         </div>
         <div className="flex items-center gap-2">
           <Button

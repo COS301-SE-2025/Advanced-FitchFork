@@ -35,7 +35,7 @@ const insights = [
 const ModuleAssignmentsPanel = () => {
   return (
     <div className="bg-white dark:bg-gray-950 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
-      <Title level={3}>Module & Assignment Insights</Title>
+      <Title level={4}>Module & Assignment Insights</Title>
       <Row gutter={[16, 16]}>
         {insights.map(({ icon, label, value }, index) => (
           <Col key={index} xs={24} sm={12} md={12} lg={6}>

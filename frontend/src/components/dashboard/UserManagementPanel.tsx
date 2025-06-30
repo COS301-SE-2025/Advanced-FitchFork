@@ -33,7 +33,7 @@ const UserManagementPanel = () => {
   return (
     <div className="h-full bg-white dark:bg-gray-950 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-4">
-        <Title level={3}>User Management</Title>
+        <Title level={4}>User Management</Title>
         <div>
           <Dropdown.Button
             type="primary"
