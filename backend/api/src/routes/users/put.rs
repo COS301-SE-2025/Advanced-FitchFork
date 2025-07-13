@@ -8,7 +8,7 @@ use axum::{
 use axum::extract::Multipart;
 use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter, Set};
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use validator::Validate;
@@ -17,6 +17,7 @@ use crate::{response::ApiResponse};
 use common::format_validation_errors;
 use db::{connect, models::user};
 use crate::auth::AuthUser;
+use crate::routes::common::UserResponse;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateUserRequest {
@@ -32,31 +33,8 @@ pub struct UpdateUserRequest {
     pub admin: Option<bool>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct UpdateUserResponse {
-    pub id: i64,
-    pub username: String,
-    pub email: String,
-    pub admin: bool,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
 lazy_static::lazy_static! {
     static ref username_REGEX: regex::Regex = regex::Regex::new("^u\\d{8}$").unwrap();
-}
-
-impl From<user::Model> for UpdateUserResponse {
-    fn from(user: user::Model) -> Self {
-        Self {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            admin: user.admin,
-            created_at: user.created_at.to_string(),
-            updated_at: user.updated_at.to_string(),
-        }
-    }
 }
 
 /// PUT /api/users/:id
@@ -131,14 +109,14 @@ pub async fn update_user(
     if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<UpdateUserResponse>::error(format_validation_errors(&e))),
+            Json(ApiResponse::<UserResponse>::error(format_validation_errors(&e))),
         );
     }
 
     if req.username.is_none() && req.email.is_none() && req.admin.is_none() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<UpdateUserResponse>::error("At least one field must be provided")),
+            Json(ApiResponse::<UserResponse>::error("At least one field must be provided")),
         );
     }
 
@@ -153,13 +131,13 @@ pub async fn update_user(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<UpdateUserResponse>::error("User not found")),
+                Json(ApiResponse::<UserResponse>::error("User not found")),
             );
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UpdateUserResponse>::error(format!("Database error: {}", e))),
+                Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
             );
         }
     };
@@ -169,11 +147,10 @@ pub async fn update_user(
     if let Some(_) = req.admin {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<UpdateUserResponse>::error("Changing admin status is not allowed")),
+            Json(ApiResponse::<UserResponse>::error("Changing admin status is not allowed")),
         );
     }
 
-    // Check email conflict
     if let Some(email) = &req.email {
         if email != &current_user.email {
             let exists_result = user::Entity::find()
@@ -189,21 +166,20 @@ pub async fn update_user(
                 Ok(Some(_)) => {
                     return (
                         StatusCode::CONFLICT,
-                        Json(ApiResponse::<UpdateUserResponse>::error("A user with this email already exists")),
+                        Json(ApiResponse::<UserResponse>::error("A user with this email already exists")),
                     );
                 }
                 Ok(None) => {}
                 Err(e) => {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<UpdateUserResponse>::error(format!("Database error: {}", e))),
+                        Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
                     );
                 }
             }
         }
     }
 
-    // Check username conflict
     if let Some(sn) = &req.username {
         if sn != &current_user.username {
             let exists_result = user::Entity::find()
@@ -219,7 +195,7 @@ pub async fn update_user(
                 Ok(Some(_)) => {
                     return (
                         StatusCode::CONFLICT,
-                        Json(ApiResponse::<UpdateUserResponse>::error(
+                        Json(ApiResponse::<UserResponse>::error(
                             "A user with this student number already exists",
                         )),
                     );
@@ -228,7 +204,7 @@ pub async fn update_user(
                 Err(e) => {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<UpdateUserResponse>::error(format!("Database error: {}", e))),
+                        Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
                     );
                 }
             }
@@ -250,13 +226,13 @@ pub async fn update_user(
         Ok(updated) => (
             StatusCode::OK,
             Json(ApiResponse::success(
-                UpdateUserResponse::from(updated),
+                UserResponse::from(updated),
                 "User updated successfully",
             )),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<UpdateUserResponse>::error(format!("Database error: {}", e))),
+            Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
         ),
     }
 }
@@ -266,7 +242,65 @@ struct ProfilePictureResponse {
     profile_picture_path: String,
 }
 
-pub async fn upload_user_avatar(AuthUser(claims): AuthUser, Path(user_id): Path<i64>, mut multipart: Multipart, ) -> impl IntoResponse {
+/// PUT /api/users/:id/avatar
+///
+/// Upload a profile picture (avatar) for a user. Only admins may upload avatars for other users.
+///
+/// # Path Parameters
+/// - `id` - The ID of the user to upload the avatar for
+///
+/// # Request (multipart/form-data)
+/// - `file` (required): The image file to upload.  
+///   Allowed types: `image/jpeg`, `image/png`, `image/gif`  
+///   Max size: 2MB
+///
+/// # Responses
+///
+/// - `200 OK`  
+///   ```json
+///   {
+///     "success": true,
+///     "data": {
+///       "profile_picture_path": "user_1/avatar.jpg"
+///     },
+///     "message": "Avatar uploaded for user."
+///   }
+///   ```
+///
+/// - `400 Bad Request`  
+///   - No file uploaded
+///   - File too large
+///   - File type not supported
+///
+/// - `403 Forbidden`  
+///   ```json
+///   {
+///     "success": false,
+///     "message": "Only admins may upload avatars for other users"
+///   }
+///   ```
+///
+/// - `404 Not Found`  
+///   ```json
+///   {
+///     "success": false,
+///     "message": "User not found."
+///   }
+///   ```
+///
+/// - `500 Internal Server Error`  
+///   ```json
+///   {
+///     "success": false,
+///     "message": "Database error."
+///   }
+///   ```
+///
+pub async fn upload_user_avatar(
+    AuthUser(claims): AuthUser,
+    Path(user_id): Path<i64>,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
     if !claims.admin {
         return (
             StatusCode::FORBIDDEN,
@@ -367,7 +401,6 @@ pub async fn upload_user_avatar(AuthUser(claims): AuthUser, Path(user_id): Path<
         Json(ApiResponse::success(response, "Avatar uploaded for user.")),
     )
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -653,7 +686,7 @@ mod tests {
 
         let updated = updated_model.update(&db).await.unwrap();
 
-        let response = UpdateUserResponse::from(updated);
+        let response = UserResponse::from(updated);
 
         assert_eq!(response.id, original.id);
         assert_eq!(response.username, "u99999999");

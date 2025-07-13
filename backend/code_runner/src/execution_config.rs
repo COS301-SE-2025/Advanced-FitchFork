@@ -37,8 +37,12 @@ impl ExecutionConfig {
         if let Ok(p) = env::var("ASSIGNMENT_STORAGE_ROOT") {
             let path = PathBuf::from(p);
             if path.is_relative() {
-                let mut adjusted = env::current_dir().unwrap();
-                adjusted.pop();
+                let mut adjusted = env::current_dir().expect("failed to get current dir");
+
+                if !cfg!(windows) {
+                    adjusted.pop();
+                }
+
                 adjusted.push(path);
                 adjusted
             } else {

@@ -20,6 +20,7 @@ pub mod example;
 pub mod auth;
 pub mod users;
 pub mod modules;
+pub mod common;
 
 use axum::Router;
 use axum::middleware::from_fn;

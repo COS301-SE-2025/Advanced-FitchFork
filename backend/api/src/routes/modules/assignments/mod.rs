@@ -5,8 +5,10 @@ pub mod post;
 pub mod put;
 pub mod mark_allocator;
 pub mod submissions;
+pub mod files;
 pub mod memo_output;
 pub mod tasks;
+pub mod common;
 
 use axum::{
     extract::Path,
@@ -16,70 +18,63 @@ use axum::{
 };
 
 use config::config_routes;
-use delete::{delete_assignment, delete_files, delete_task};
-use get::{download_file, get_assignment, get_assignments, list_files, stats, get_assignment_readiness};
+use memo_output::memo_output_routes;
+use delete::delete_assignment;
+use get::{get_assignment, get_assignments, stats, get_assignment_readiness};
 use mark_allocator::mark_allocator_routes;
-use post::{create, upload_files};
+use post::create;
 use put::edit_assignment;
 use submissions::submission_routes;
+use files::files_routes;
 use tasks::tasks_routes;
 
 use crate::{
-    auth::guards::{require_assigned_to_module, require_lecturer, require_lecturer_or_admin},
-    routes::modules::assignments::{get::list_tasks, post::create_task},
+    auth::guards::{require_lecturer, require_lecturer_or_admin},
 };
 
 /// Expects a module ID
 /// If an assignment ID is included it will be deleted
-/// - `POST /` → `create`
-/// - `DELETE /:assignment_id` → `delete_assignment`
+/// - `POST /`                      → `create`
+/// - `DELETE /:assignment_id`      → `delete_assignment`
 /// Builds and returns the `/assignments` route group.
 ///
 /// Routes:
-/// - `POST /assignments`                         → Create a new assignment
-/// - `GET  /assignments`                         → List assignments
-/// - `GET  /assignments/:assignment_id`          → Get assignment details
-/// - `PUT  /assignments/:assignment_id`          → Edit assignment
-/// - `POST /assignments/:assignment_id/files`    → Upload files
-/// - `GET  /assignments/:assignment_id/files`    → List files
-/// - `GET  /assignments/:assignment_id/file/:file_id` → Download a file
-/// - `DELETE /assignments/:assignment_id/files`  → Delete files
-/// - `DELETE /assignments/:assignment_id`        → Delete assignment
-/// - `POST /assignments/:assignment_id/submissions` → Submit assignment
-/// - `GET  /assignments/:assignment_id/stats`         → Assignment statistics (lecturer only)
-/// - `POST /assignments/:assignment_id/tasks`         → Create a new task (lecturer/admin only)
-/// - `GET  /assignments/:assignment_id/tasks`         → List tasks (lecturer/admin only)
-/// - `DELETE  /assignments/:assignment_id/tasks/:task_id`   → Delete a task (lecturer/admin only)
-/// - `GET  /assignments/:assignment_id/tasks/:task_id` → Get task details (lecturer/admin only)
+/// - `POST /assignments`                               → Create a new assignment
+/// - `GET  /assignments`                               → List assignments
+/// - `GET  /assignments/:assignment_id`                → Get assignment details
+/// - `PUT  /assignments/:assignment_id`                → Edit assignment
+/// - `DELETE /assignments/:assignment_id`              → Delete assignment
+/// - `GET  /assignments/:assignment_id/stats`          → Assignment statistics (lecturer only)
+/// - `GET  /assignments/:assignment_id/readiness`      → Assignment readiness (lecturer or admin only)
+///
+/// Nested routes:
+/// - Tasks routes              → `tasks_routes`
+/// - Config routes             → `config_routes`
+/// - Memo output routes        → `memo_output_routes`
+/// - Mark allocator routes     → `mark_allocator_routes`
+/// - Submissions routes        → `submission_routes`
+/// - Files routes              → `files_routes`
 pub fn assignment_routes() -> Router {
     Router::new()
-        .route("/", post(create))
-        .route("/", get(get_assignments))
-        .route("/:assignment_id", get(get_assignment))
-        .route("/:assignment_id", put(edit_assignment))
         .route(
-            "/:assignment_id/files",
-            post(upload_files).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_lecturer(Path(params), req, next)
-            })),
+            "/",
+            post(create)
         )
         .route(
-            "/:assignment_id/files",
-            get(list_files).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_assigned_to_module(Path(params), req, next)
-            })),
+            "/",
+            get(get_assignments)
         )
         .route(
-            "/:assignment_id/files",
-            delete(delete_files).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_lecturer(Path(params), req, next)
-            })),
+            "/:assignment_id",
+            get(get_assignment)
         )
         .route(
-            "/:assignment_id/file/:file_id",
-            get(download_file).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_assigned_to_module(Path(params), req, next)
-            })),
+            "/:assignment_id",
+            put(edit_assignment)
+        )
+        .route(
+            "/:assignment_id",
+            delete(delete_assignment)
         )
         .route(
             "/:assignment_id/stats",
@@ -88,20 +83,8 @@ pub fn assignment_routes() -> Router {
             })),
         )
         .route(
-            "/:assignment_id/tasks",
-            post(create_task).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_lecturer_or_admin(Path(params), req, next)
-            })),
-        )
-        .route(
-            "/:assignment_id/tasks",
-            get(list_tasks).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_lecturer_or_admin(Path(params), req, next)
-            })),
-        )
-        .route(
-            "/:assignment_id/tasks/:task_id",
-            delete(delete_task).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            "/:assignment_id/readiness",
+            get(get_assignment_readiness).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer_or_admin(Path(params), req, next)
             })),
         )
@@ -109,7 +92,6 @@ pub fn assignment_routes() -> Router {
             "/:assignment_id/tasks",
             tasks_routes()
         )
-        .route("/:assignment_id", delete(delete_assignment))
         .nest(
             "/:assignment_id/config",
             config_routes().layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
@@ -117,25 +99,21 @@ pub fn assignment_routes() -> Router {
             })),
         )
         .nest(
-            "/:assignment_id/memo-output",
-            memo_output::memo_output_routes().layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
+            "/:assignment_id/memo_output",
+            memo_output_routes().layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
                 require_lecturer_or_admin(Path((assignment_id,)), req, next)
             })),
         )
-        .route(
-            "/:assignment_id/readiness",
-            get(get_assignment_readiness).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_lecturer_or_admin(Path(params), req, next)
-            })),
+        .nest(
+            "/:assignment_id/mark_allocator",
+            mark_allocator_routes()
         )
-        
-    // TODO: The following route is commented out:
-    // .route(
-    //     "/:assignment_id/submissions",
-    //     post(submit_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-    //         require_assigned_to_module(Path(params), req, next)
-    //     })),
-    // )
-        .nest("/:assignment_id/mark-allocator", mark_allocator_routes())
-        .nest("/:assignment_id/submissions", submission_routes())
+        .nest(
+            "/:assignment_id/submissions",
+            submission_routes()
+        )
+        .nest(
+            "/:assignment_id/files",
+            files_routes()
+        )
 }

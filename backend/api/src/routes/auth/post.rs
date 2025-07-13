@@ -50,9 +50,7 @@ pub struct UserResponse {
     pub expires_at: String,
 }
 
-
-
-/// POST /auth/register
+/// POST /api/auth/register
 ///
 /// Register a new user.
 ///
@@ -182,7 +180,7 @@ pub struct LoginRequest {
     pub password: String,
 }
 
-/// POST /auth/login
+/// POST /api/auth/login
 ///
 /// Authenticate an existing user and issue a JWT.
 ///
@@ -276,7 +274,7 @@ pub struct RequestPasswordResetRequest {
     pub email: String,
 }
 
-/// POST /auth/request-password-reset
+/// POST /api/auth/request-password-reset
 ///
 /// Request a password reset token for a user.
 ///
@@ -424,7 +422,7 @@ pub struct VerifyResetTokenResponse {
     pub email_hint: String,
 }
 
-/// POST /auth/verify-reset-token
+/// POST /api/auth/verify-reset-token
 ///
 /// Verify the validity of a password reset token.
 ///
@@ -523,7 +521,7 @@ pub struct ResetPasswordRequest {
     pub new_password: String,
 }
 
-/// POST /auth/reset-password
+/// POST /api/auth/reset-password
 ///
 /// Reset a user's password using a valid reset token.
 ///
@@ -631,7 +629,64 @@ struct ProfilePictureResponse {
     profile_picture_path: String,
 }
 
-pub async fn upload_profile_picture(AuthUser(claims): AuthUser, mut multipart: Multipart, ) -> impl IntoResponse {
+/// POST /api/auth/upload-profile-picture
+///
+/// Upload a profile picture for the authenticated user.
+///
+/// This endpoint accepts a `multipart/form-data` request containing a single file field named `file`.
+/// Only JPEG, PNG, and GIF images are allowed, and the file size must not exceed 2MB.
+/// The uploaded file is stored in a user-specific directory, and the user's profile in the database
+/// is updated with the relative path to the profile picture.
+///
+/// # Request (multipart/form-data)
+/// - `file`: The image file to upload (JPEG, PNG, or GIF, max 2MB)
+///
+/// # Responses
+///
+/// - `200 OK`  
+///   ```json
+///   {
+///     "success": true,
+///     "data": {
+///       "profile_picture_path": "user_1/avatar.jpg"
+///     },
+///     "message": "Profile picture uploaded."
+///   }
+///   ```
+///
+/// - `400 Bad Request` (invalid file type, too large, or missing file)  
+///   ```json
+///   {
+///     "success": false,
+///     "message": "File type not supported."
+///   }
+///   ```
+///   or
+///   ```json
+///   {
+///     "success": false,
+///     "message": "File too large."
+///   }
+///   ```
+///   or
+///   ```json
+///   {
+///     "success": false,
+///     "message": "No file uploaded."
+///   }
+///   ```
+///
+/// - `500 Internal Server Error`  
+///   ```json
+///   {
+///     "success": false,
+///     "message": "Database error: detailed error here"
+///   }
+///   ```
+pub async fn upload_profile_picture(
+    AuthUser(claims): AuthUser,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
     const MAX_SIZE: u64 = 2 * 1024 * 1024;
     const ALLOWED_MIME: &[&str] = &["image/jpeg", "image/png", "image/gif"];
 
@@ -717,7 +772,6 @@ mod tests {
     use crate::auth::claims::Claims;
     use db::models::user::Model as UserModel;
     use db::test_utils::setup_test_db;
-
 
     // Helper function to create test users with unique emails
     async fn create_test_users(db: &DatabaseConnection, test_name: &str) -> (UserModel, UserModel) {
@@ -1136,4 +1190,3 @@ mod tests {
         assert_eq!(response.expires_at, expiry);
     }
 }
-

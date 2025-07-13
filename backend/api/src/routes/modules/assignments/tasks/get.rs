@@ -3,17 +3,21 @@
 //! This module provides the endpoint handler for retrieving detailed information about a specific assignment task within a module, including its subsections and associated memo outputs. It interacts with the database to validate module, assignment, and task existence, loads the mark allocator configuration, and parses memo output files to provide detailed feedback for each subsection of the task.
 
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-use db::connect;
-use db::models::{assignment_task, assignment, module};
-use util::mark_allocator::mark_allocator::load_allocator;
-use crate::response::ApiResponse;
 use serde::Serialize;
-use std::env;
-use std::fs;
-use std::path::PathBuf;
-use sea_orm::EntityTrait;
-use chrono::DateTime;
 use serde_json::Value;
+use sea_orm::{EntityTrait, QueryFilter, QueryOrder, ColumnTrait};
+use std::{env, fs, path::PathBuf};
+
+use crate::response::ApiResponse;
+use crate::routes::modules::assignments::tasks::common::TaskResponse;
+use db::connect;
+use db::models::{
+    assignment,
+    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
+    assignment_task::{Column, Entity},
+    module,
+};
+use util::mark_allocator::mark_allocator::load_allocator;
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
 #[derive(Serialize)]
@@ -45,41 +49,60 @@ pub struct TaskDetailResponse {
     pub subsections: Vec<SubsectionDetail>,
 }
 
-/// A minimal response structure for a task, used for listing or summary purposes.
-#[derive(Debug, Serialize)]
-pub struct TaskResponse {
-    /// The unique database ID of the task.
-    id: i64,
-    /// The task's number (as used in the allocator and memo files).
-    task_number: i64,
-    /// The command associated with this task.
-    command: String,
-    /// The creation timestamp of the task.
-    created_at: DateTime<chrono::Utc>,
-    /// The last update timestamp of the task.
-    updated_at: DateTime<chrono::Utc>,
-}
-
-/// Retrieves detailed information about a specific task within an assignment and module.
+/// GET /api/modules/:module_id/assignments/:assignment_id/tasks/:task_id
 ///
-/// This handler performs the following steps:
-/// 1. Validates the existence of the module, assignment, and task in the database.
-/// 2. Ensures the assignment belongs to the module, and the task belongs to the assignment.
-/// 3. Loads the mark allocator JSON for the assignment to get task and subsection structure.
-/// 4. Attempts to read the memo output file for the task, splitting it into subsection outputs.
-/// 5. Constructs a detailed response including subsection names, mark values, and memo outputs.
+/// Retrieve detailed information about a specific task within an assignment. Only accessible by lecturers or admins assigned to the module.
 ///
-/// # Path Parameters
-/// - `module_id`: The ID of the module.
-/// - `assignment_id`: The ID of the assignment.
-/// - `task_id`: The ID of the task.
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment containing the task
+/// - `task_id` (i64): The ID of the task to retrieve details for
 ///
-/// # Returns
-/// - `200 OK` with detailed task information if found.
-/// - `404 Not Found` if the module, assignment, or task does not exist or does not belong.
-/// - `500 Internal Server Error` for database or file system errors.
+/// ### Responses
 ///
-/// The response includes subsection details and memo outputs, if available.
+/// - `200 OK`
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Task details retrieved successfully",
+///   "data": {
+///     "id": 123,
+///     "task_id": 123,
+///     "command": "java -cp . Main",
+///     "created_at": "2024-01-01T00:00:00Z",
+///     "updated_at": "2024-01-01T00:00:00Z",
+///     "subsections": [
+///       {
+///         "name": "Compilation",
+///         "mark_value": 10,
+///         "memo_output": "Code compiles successfully without errors."
+///       },
+///       {
+///         "name": "Output",
+///         "mark_value": 15,
+///         "memo_output": "Program produces correct output for all test cases."
+///       }
+///     ]
+///   }
+/// }
+/// ```
+///
+/// - `404 Not Found`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Module not found" // or "Assignment not found" or "Task not found" or "Assignment does not belong to this module" or "Task does not belong to this assignment" or "Task not found in allocator"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Database error retrieving module" // or "Database error retrieving assignment" or "Database error retrieving task" or "Failed to load mark allocator"
+/// }
+/// ```
+///
 pub async fn get_task_details(
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
@@ -131,8 +154,7 @@ pub async fn get_task_details(
             .into_response();
     }
 
-    // Validate task
-    let task = match assignment_task::Entity::find_by_id(task_id).one(&db).await {
+    let task = match Entity::find_by_id(task_id).one(&db).await {
         Ok(Some(t)) => t,
         Ok(None) => {
             return (
@@ -269,4 +291,118 @@ pub async fn get_task_details(
         Json(ApiResponse::success(resp, "Task details retrieved successfully")),
     )
         .into_response()
+}
+
+/// GET /api/modules/:module_id/assignments/:assignment_id/tasks
+///
+/// Retrieve all tasks for a specific assignment. Only accessible by lecturers or admins assigned to the module.
+///
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment to list tasks for
+///
+/// ### Responses
+///
+/// - `200 OK`
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Tasks retrieved successfully",
+///   "data": [
+///     {
+///       "id": 123,
+///       "task_number": 1,
+///       "command": "java -cp . Main",
+///       "created_at": "2024-01-01T00:00:00Z",
+///       "updated_at": "2024-01-01T00:00:00Z"
+///     },
+///     {
+///       "id": 124,
+///       "task_number": 2,
+///       "command": "python main.py",
+///       "created_at": "2024-01-01T00:00:00Z",
+///       "updated_at": "2024-01-01T00:00:00Z"
+///     }
+///   ]
+/// }
+/// ```
+///
+/// - `404 Not Found`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Assignment or module not found"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Database error" // or "Failed to retrieve tasks"
+/// }
+/// ```
+///
+pub async fn list_tasks(
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    let db = connect().await;
+
+    let assignment_exists = AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
+        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
+        .one(&db)
+        .await;
+
+    match assignment_exists {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<Vec<TaskResponse>>::error(
+                    "Assignment or module not found",
+                )),
+            )
+                .into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<Vec<TaskResponse>>::error("Database error")),
+            )
+                .into_response();
+        }
+    }
+
+    match Entity::find()
+        .filter(Column::AssignmentId.eq(assignment_id))
+        .order_by_asc(Column::TaskNumber)
+        .all(&db)
+        .await
+    {
+        Ok(tasks) => {
+            let data = tasks
+                .into_iter()
+                .map(|task| TaskResponse {
+                    id: task.id,
+                    task_number: task.task_number,
+                    name: task.name,
+                    command: task.command,
+                    created_at: task.created_at,
+                    updated_at: task.updated_at,
+                })
+                .collect::<Vec<_>>();
+
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(data, "Tasks retrieved successfully")),
+            )
+                .into_response()
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<Vec<TaskResponse>>::error("Failed to retrieve tasks")),
+        )
+            .into_response(),
+    }
 }

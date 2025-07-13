@@ -1,6 +1,6 @@
 //! # Users Routes Module
 //!
-//! This module defines and wires up routes for the `/users` endpoint group.
+//! This module defines and wires up routes for the `/api/users` endpoint group.
 //!
 //! ## Structure
 //! - `get.rs` — GET handlers (e.g., list users)
