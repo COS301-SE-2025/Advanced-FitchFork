@@ -191,7 +191,7 @@ export default function AppLayout() {
   );
 
   return (
-    <Layout className="min-h-screen bg-gray-100 dark:bg-gray-950">
+    <Layout className="min-h-screen bg-gray-100 dark:bg-gray-950  !overflow-hidden">
       {isMobile ? (
         <Drawer
           placement="right"

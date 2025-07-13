@@ -11,6 +11,16 @@ _Developed by Team OWCA for COS 301 Capstone Project_
 
 This project is developed for the COS 301 Capstone Project at the University of Pretoria in collaboration with the Computer Science Department of University of Pretoria.
 
+[![Coverage Status](https://img.shields.io/codecov/c/github/COS301-SE-2025/Advanced-FitchFork.svg)](https://codecov.io/gh/COS301-SE-2025/Advanced-FitchFork)
+[![Build Status](https://github.com/COS301-SE-2025/Advanced-FitchFork/actions/workflows/ci.yml/badge.svg)](https://github.com/COS301-SE-2025/Advanced-FitchFork/actions)
+[![Requirements](https://img.shields.io/badge/requirements-up%20to%20date-brightgreen.svg)](https://shields.io/)
+[![Issues](https://img.shields.io/github/issues/COS301-SE-2025/Advanced-FitchFork.svg)](https://github.com/COS301-SE-2025/Advanced-FitchFork/issues)
+
+![Rust](https://img.shields.io/badge/Rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
+![React](https://img.shields.io/badge/React-%2320232A.svg?style=for-the-badge&logo=react&logoColor=white)
+![SeaORM](https://img.shields.io/crates/v/sea-orm.svg?style=for-the-badge&logo=rust&logoColor=white&label=SeaORM)
+![Docker](https://img.shields.io/badge/Docker-%232496ED.svg?style=for-the-badge&logo=docker&logoColor=white)
+
 **Core Functional Highlights:**
 
 - Authentication with role-based access (Admin, Tutor, Student)
@@ -25,7 +35,7 @@ This project is developed for the COS 301 Capstone Project at the University of 
 
 ## Key Features
 
-Please refer to our detailed [Functional and Non-Functional Requirements](#functional-and-non-functional-requirements) section below.
+Please refer to our detailed [Functional and Non-Functional Requirements](#additional-resources) section below.
 
 ---
 
@@ -109,10 +119,10 @@ cargo make api
 
 > **Note:** This project uses [`cargo-make`](https://sagiegurari.github.io/cargo-make/).  
 > Make sure to install it first with:
+>
 > ```bash
 > cargo install cargo-make
 > ```
-
 
 ---
 
@@ -147,38 +157,18 @@ cargo test
 
 ---
 
-## Functional and Non-Functional Requirements
-
-Refer to the full specification in the [requirement_specification.pdf](./docs/requirement_specification.pdf) file.
-
-**Highlights:**
-
-- FR1–FR17: Role-based access, module/assignment setup, grammar input, code upload, execution sandbox, plagiarism tools, AI feedback, gamification, stats, security, support.
-- NFR1–NFR7: Performance (<3s), scalability, 99.9% uptime, 3-click UX, RBAC, TLS, modular plugin architecture.
-
-> Full requirement list available in `docs/` folder or internal documentation.
-
----
-
 ## Additional Resources
 
-- **[Project Board (GitHub)](https://github.com/orgs/COS301-SE-2025/projects/199)**
-  Track issues, iterations, and overall project progress.
-
-- **[Domain Model Diagram](./docs/domain_model.png)**
-  Visual design of system architecture and module relationships.
-
-- **[User Stories](./docs/user_stories.pdf)**
-  Detailed user-focused functionality and workflow requirements.
-
-- **[Use Cases](./docs/use_cases.pdf)**
-  Descriptions of system interactions from the perspective of different roles.
-
-- **[Software Requirements Specification (SRS)](./docs/srs.pdf)**
-  Full formal specification of system-level requirements and constraints.
-
-- **[Functional and Non-Functional Requirements Summary](./docs/requirement_specification.pdf)**
-  Concise document highlighting core features, performance expectations, and architectural principles.
+| Resource                                                                          | Demo 1                                             | Demo 2                                             |
+| --------------------------------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
+| **[Project Board (GitHub)](https://github.com/orgs/COS301-SE-2025/projects/199)** | —                                                  | —                                                  |
+| **Domain Model Diagram**                                                          | [View](./docs/demo1/domain_model.png)              | [View](./docs/demo2/domain_model.png)              |
+| **User Stories**                                                                  | [View](./docs/demo1/user_stories.pdf)              | [View](./docs/demo2/user_stories.pdf)              |
+| **Use Cases**                                                                     | [View](./docs/demo1/use_cases.pdf)                 | [View](./docs/demo2/use_cases.pdf)                 |
+| **Software Requirements Specification (SRS)**                                     | [View](./docs/demo1/srs.pdf)                       | [View](./docs/demo2/srs.pdf)                       |
+| **Functional and Non-Functional Requirements Summary**                            | [View](./docs/demo1/requirement_specification.pdf) | [View](./docs/demo2/requirement_specification.pdf) |
+| **User Manual**                                                                   | —                                                  | [View](./docs/demo2/user_manual.pdf)               |
+| **Code Standards**                                                                | —                                                  | [View](./docs/demo2/code_standards.pdf)            |
 
 ---
 
@@ -194,6 +184,12 @@ cargo doc --open
 This will generate and open the documentation in your default web browser. It includes all public modules, functions, and type definitions used throughout the backend.
 
 > Ensure you have Rust installed and configured properly before running the above command.
+
+---
+
+## Demo Video Links
+
+- **[Demo 2](https://drive.google.com/file/d/1HH14M2B5bdTDQUfJQkwJvmMiMGzrWq66/view?usp=sharing)**
 
 ---
 
