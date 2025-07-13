@@ -21,9 +21,9 @@ use crate::auth::guards::{require_assigned_to_module};
 /// - `GET /:submission_id`  
 ///   Returns a specific submission by ID:
 ///   - Access is restricted to users assigned to the module.
-/// - `POST /submissions`
-///   → Submit a new assignment (student access only)
-
+/// 
+/// - `POST /`
+///   - Submit a new assignment (student access only)
 pub fn submission_routes() -> Router {
     Router::new()
         .route(
@@ -38,7 +38,6 @@ pub fn submission_routes() -> Router {
                 require_assigned_to_module(Path(params), req, next)
             })),
         )
-
         .route(
             "/",
             post(submit_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {

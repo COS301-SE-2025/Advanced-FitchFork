@@ -51,11 +51,6 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
         .join(format!("assignment_{}", assignment))
         .join("memo_output");
 
-    let allocator_dir_path = PathBuf::from(&base)
-        .join(format!("module_{}", module))
-        .join(format!("assignment_{}", assignment))
-        .join("mark_allocator");
-
     let paths = fs::read_dir(&memo_output_path).map_err(|err| {
         if err.kind() == ErrorKind::NotFound {
             SaveError::DirectoryNotFound
@@ -63,6 +58,17 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
             SaveError::IoError(err)
         }
     })?;
+
+    // Prepare the mark_allocator directory path
+    let allocator_dir_path = PathBuf::from(&base)
+        .join(format!("module_{}", module))
+        .join(format!("assignment_{}", assignment))
+        .join("mark_allocator");
+
+    // If it doesn't exist, try to create it (and any parents)
+    if let Err(err) = fs::create_dir_all(&allocator_dir_path) {
+        return Err(SaveError::IoError(err));
+    }
 
     let mut task_index = 1;
     let mut tasks_json: Vec<Value> = vec![];

@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::response::ApiResponse;
+use crate::routes::common::UserModule;
 
 use db::{
     connect,
@@ -261,19 +262,6 @@ pub async fn get_user(Path(id): Path<String>) -> impl IntoResponse {
             Json(ApiResponse::<UserListItem>::error(format!("Database error: {}", err))),
         ),
     }
-}
-
-
-#[derive(Debug, Serialize)]
-pub struct UserModule {
-    pub id: i64,
-    pub code: String,
-    pub year: i32,
-    pub description: String,
-    pub credits: i32,
-    pub role: String,
-    pub created_at: String,
-    pub updated_at: String,
 }
 
 /// GET /api/users/:id/modules

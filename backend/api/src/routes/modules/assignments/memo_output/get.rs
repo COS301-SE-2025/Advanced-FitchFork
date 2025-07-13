@@ -20,27 +20,41 @@ struct MemoTaskOutput {
     task_number: i32,
     name: String,
     subsections: Vec<MemoSubsection>,
-    raw: String, // NEW: full unformatted text from the file
+    raw: String,
 }
 
-/// Retrieves all memo output files for a given assignment and parses them into structured format.
+/// GET /api/modules/:module_id/assignments/:assignment_id/memo_output
 ///
-/// This endpoint scans the `memo_output` directory for the assignment and parses all files into
-/// structured tasks, where each task contains labeled subsections and a raw file representation.
+/// Retrieve all memo output files for a given assignment, parsed into structured format.
 ///
-/// Directory structure:  
-/// `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/memo_output`
+/// Scans the `memo_output` directory for the specified assignment and parses each file into a
+/// `MemoTaskOutput` object, which contains labeled subsections and the raw file content.
 ///
-/// ### Returns:
-/// - `200 OK` with a JSON array of `MemoTaskOutput`
-/// - `404 Not Found` if:
-///     - The memo output directory doesn't exist
-///     - No valid files are found in the directory
+/// **Path Parameters**
+/// - `module_id` (i64): The ID of the module
+/// - `assignment_id` (i64): The ID of the assignment
+///
+/// **Success Response (200 OK)**
+/// ```json
+/// [
+///   {
+///     "task_number": 1,
+///     "name": "Task 1",
+///     "subsections": [
+///       { "label": "Section A", "output": "..." }
+///     ],
+///     "raw": "..."
+///   }
+/// ]
+/// ```
+///
+/// **Error Responses**
+/// - `404 Not Found` if the memo output directory does not exist or contains no valid files
 /// - `500 Internal Server Error` if reading the directory fails
 ///
-/// ### Example `curl` request:
+/// **Example Request**
 /// ```bash
-/// curl http://localhost:3000/api/modules/1/assignments/2/memo-output
+/// curl http://localhost:3000/api/modules/1/assignments/2/memo_output
 /// ```
 pub async fn get_all_memo_outputs(
     Path((module_id, assignment_id)): Path<(i64, i64)>,

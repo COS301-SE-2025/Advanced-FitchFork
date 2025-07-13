@@ -20,46 +20,128 @@ use db::{
 
 use crate::response::ApiResponse;
 
-
 #[derive(Debug, Deserialize)]
 pub struct PartialConfigUpdate {
     #[serde(flatten)]
     pub fields: serde_json::Map<String, Value>,
 }
-/// PUT /assignments/:assignment_id/config
+/// PUT /api/modules/:module_id/assignments/:assignment_id/config
 ///
-/// Partially update specific fields of an assignment's configuration.
+/// Partially update specific fields of an assignment's configuration. Accessible to users with
+/// Lecturer or Admin roles assigned to the module.
 ///
-/// This endpoint merges the provided fields into the existing JSON configuration,
-/// validating known keys. Only a subset of configuration keys are currently supported.
-/// Unrecognized keys will result in a `400 Bad Request`.
+/// This endpoint merges the provided fields into the existing JSON configuration object, allowing
+/// selective updates without replacing the entire configuration. Only specific configuration keys
+/// are currently supported for partial updates. Unrecognized keys will result in a validation error.
 ///
-/// ### JSON Body
-/// A JSON object containing only the fields to update.
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment to update configuration for
+///
+/// ### Request Body
+/// A JSON object containing only the fields to update:
 /// ```json
 /// {
-///   "timeout_seconds": 20,
+///   "timeout_seconds": 300,
 ///   "max_processors": 4
 /// }
 /// ```
 ///
-/// ### Allowed Fields
-/// - `timeout_seconds` (integer)
-/// - `max_processors` (integer)
+/// ### Supported Fields
+/// The following fields can be updated via this endpoint:
+/// - `timeout_seconds` (integer): Maximum execution time for tests (in seconds)
+/// - `max_processors` (integer): Maximum number of processors allowed for test execution
 ///
-/// ### Example curl
+/// ### Example Request
 /// ```bash
-/// curl -X PUT http://localhost:3000/assignments/1/config \
+/// curl -X PUT http://localhost:3000/api/modules/1/assignments/2/config \
 ///   -H "Authorization: Bearer <token>" \
 ///   -H "Content-Type: application/json" \
-///   -d '{"timeout_seconds": 20, "max_processors": 4}'
+///   -d '{
+///     "timeout_seconds": 300,
+///     "max_processors": 4
+///   }'
 /// ```
 ///
-/// ### Responses
-/// - `200 OK` if the config was updated successfully
-/// - `400 Bad Request` if the request includes unknown or invalid fields
-/// - `404 Not Found` if the assignment or module does not exist
-/// - `500 Internal Server Error` on database failure
+/// ### Success Response (200 OK)
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Assignment configuration updated successfully",
+///   "data": null
+/// }
+/// ```
+///
+/// ### Error Responses
+///
+/// **400 Bad Request** - Validation errors
+/// ```json
+/// {
+///   "success": false,
+///   "message": "timeout_seconds must be an integer"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "max_processors must be an integer"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Unknown field: unsupported_field"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Invalid existing config format"
+/// }
+/// ```
+///
+/// **403 Forbidden** - Insufficient permissions
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Access denied"
+/// }
+/// ```
+///
+/// **404 Not Found** - Assignment or module not found
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Assignment or module not found"
+/// }
+/// ```
+///
+/// **500 Internal Server Error** - Database or server error
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to update configuration"
+/// }
+/// ```
+///
+/// ### Validation Rules
+/// - Request body must be a valid JSON object
+/// - Only supported fields (`timeout_seconds`, `max_processors`) are allowed
+/// - Field values must be integers for both supported fields
+/// - Assignment must exist and belong to the specified module
+/// - User must have appropriate permissions for the module
+/// - Existing configuration must be a valid JSON object (if present)
+///
+/// ### Notes
+/// - This endpoint performs a partial update, merging new values with existing configuration
+/// - Only the specified fields are updated; other configuration fields remain unchanged
+/// - If no configuration exists, a new configuration object is created with the provided fields
+/// - For complete configuration replacement, use the POST endpoint instead
+/// - Partial updates are restricted to users with appropriate module permissions
+/// - The `timeout_seconds` and `max_processors` fields are validated to ensure they are integers
 pub async fn update_assignment_config(Path((module_id, assignment_id)) : Path<(i64, i64)>, Json(payload): Json<PartialConfigUpdate>) -> impl IntoResponse {
     let db = connect().await;
 
@@ -128,7 +210,6 @@ pub async fn update_assignment_config(Path((module_id, assignment_id)) : Path<(i
             }
         }
     }
-
 
     existing_config.extend(payload.fields.clone());
     let mut assignment_model: assignment::ActiveModel = assignment.into();
