@@ -6,7 +6,7 @@ use crate::response::ApiResponse;
 
 use db::{
     connect,
-    models::assignment::{self, AssignmentType},
+    models::assignment::{self, AssignmentType, Status},
 };
 use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
 
@@ -112,15 +112,28 @@ pub async fn edit_assignment(
         }
     };
 
+    let status = match req.status.parse::<Status>() {
+        Ok(s) => s,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error(
+                    "status must be one of: setup, ready, open, closed, archived",
+                )),
+            );
+        }
+    };
+
     match assignment::Model::edit(
         &db,
         assignment_id,
         module_id,
         &req.name,
         req.description.as_deref(),
-        assignment_type, // pass enum here
+        assignment_type,
         available_from,
         due_date,
+        status,
     )
     .await
     {

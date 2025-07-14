@@ -45,6 +45,7 @@ pub struct AssignmentRequest {
     pub name: String,
     pub description: Option<String>,
     pub assignment_type: String,
+    pub status: String,
     pub available_from: String,
     pub due_date: String,
 }

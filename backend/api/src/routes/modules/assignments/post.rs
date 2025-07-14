@@ -72,37 +72,38 @@ use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentR
 /// }
 /// ```
 ///
+
 pub async fn create(
     Path(module_id): Path<i64>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
     let db = connect().await;
 
-    let available_from =
-        match DateTime::parse_from_rfc3339(&req.available_from).map(|dt| dt.with_timezone(&Utc)) {
-            Ok(date) => date,
-            Err(_) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<AssignmentResponse>::error(
-                        "Invalid available_from datetime",
-                    )),
-                );
-            }
-        };
+    let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
+        .map(|dt| dt.with_timezone(&Utc)) {
+        Ok(date) => date,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error(
+                    "Invalid available_from datetime",
+                )),
+            );
+        }
+    };
 
-    let due_date =
-        match DateTime::parse_from_rfc3339(&req.due_date).map(|dt| dt.with_timezone(&Utc)) {
-            Ok(date) => date,
-            Err(_) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<AssignmentResponse>::error(
-                        "Invalid due_date datetime",
-                    )),
-                );
-            }
-        };
+    let due_date = match DateTime::parse_from_rfc3339(&req.due_date)
+        .map(|dt| dt.with_timezone(&Utc)) {
+        Ok(date) => date,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error(
+                    "Invalid due_date datetime",
+                )),
+            );
+        }
+    };
 
     let assignment_type = match req.assignment_type.parse::<AssignmentType>() {
         Ok(t) => t,
@@ -124,6 +125,7 @@ pub async fn create(
         assignment_type,
         available_from,
         due_date,
+        None,
     )
     .await
     {
