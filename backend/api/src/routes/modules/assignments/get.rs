@@ -39,6 +39,7 @@ impl From<AssignmentModel> for AssignmentFileResponse {
                 module_id: assignment.module_id as i64,
                 name: assignment.name,
                 description: assignment.description,
+                status: assignment.status.to_string(),
                 assignment_type: assignment.assignment_type.to_string(),
                 available_from: assignment.available_from.to_rfc3339(),
                 due_date: assignment.due_date.to_rfc3339(),
