@@ -1,6 +1,10 @@
 use crate::seed::Seeder;
 use chrono::Utc;
-use db::models::{assignment, assignment::AssignmentType, module};
+use db::models::{
+    assignment,
+    assignment::{AssignmentType, Status},
+    module,
+};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 pub struct AssignmentSeeder;
@@ -23,6 +27,7 @@ impl Seeder for AssignmentSeeder {
                     name: Set(format!("Assignment {i}")),
                     description: Set(Some("Auto seeded".to_string())),
                     assignment_type: Set(AssignmentType::Practical),
+                    status: Set(Status::Setup),
                     available_from: Set(Utc::now()),
                     due_date: Set(Utc::now()),
                     created_at: Set(Utc::now()),
@@ -39,6 +44,7 @@ impl Seeder for AssignmentSeeder {
             name: Set("Special Assignment".to_string()),
             description: Set(Some("Used for test zip execution".to_string())),
             assignment_type: Set(AssignmentType::Practical),
+            status: Set(Status::Setup),
             available_from: Set(Utc::now()),
             due_date: Set(Utc::now() + chrono::Duration::days(7)),
             created_at: Set(Utc::now()),
@@ -54,6 +60,7 @@ impl Seeder for AssignmentSeeder {
             name: Set("Special Assignment".to_string()),
             description: Set(Some("Used for test zip execution".to_string())),
             assignment_type: Set(AssignmentType::Practical),
+            status: Set(Status::Setup),
             available_from: Set(Utc::now()),
             due_date: Set(Utc::now() + chrono::Duration::days(7)),
             created_at: Set(Utc::now()),
