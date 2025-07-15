@@ -104,11 +104,11 @@ impl Model {
         let now = Utc::now();
 
         // Step 1: Delete existing file record of the same type (if any)
+        use sea_orm::ColumnTrait;
         use sea_orm::EntityTrait;
         use sea_orm::QueryFilter;
-        use sea_orm::ColumnTrait;
 
-        use crate::models::assignment_file::{Entity as AssignmentFile, Column};
+        use crate::models::assignment_file::{Column, Entity as AssignmentFile};
 
         if let Some(existing) = AssignmentFile::find()
             .filter(Column::AssignmentId.eq(assignment_id))
@@ -167,7 +167,6 @@ impl Model {
         model.update(db).await
     }
 
-
     /// Loads the file contents from disk based on the path stored in the model.
     pub fn load_file(&self) -> Result<Vec<u8>, std::io::Error> {
         let full_path = Self::storage_root().join(&self.path);
@@ -184,7 +183,7 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::assignment::AssignmentType;
+    use crate::models::assignment::{AssignmentType, Status};
     use crate::test_utils::setup_test_db;
     use chrono::Utc;
     use sea_orm::Set;
@@ -248,6 +247,7 @@ mod tests {
             AssignmentType::Practical,
             Utc::now(),
             Utc::now(),
+            Some(Status::Setup),
         )
         .await
         .expect("Insert assignment failed");
