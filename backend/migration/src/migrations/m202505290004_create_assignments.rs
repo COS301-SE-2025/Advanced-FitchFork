@@ -1,4 +1,4 @@
-use sea_orm_migration::{prelude::*};
+use sea_orm_migration::prelude::*;
 
 pub struct Migration;
 
@@ -8,7 +8,6 @@ impl MigrationName for Migration {
     }
 }
 
-#[async_trait::async_trait]
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
@@ -21,17 +20,47 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Alias::new("module_id")).integer().not_null())
                     .col(ColumnDef::new(Alias::new("name")).string().not_null())
                     .col(ColumnDef::new(Alias::new("description")).string().null())
-                    .col(ColumnDef::new(Alias::new("assignment_type"))
-                        .string().not_null())
-                    .col(ColumnDef::new(Alias::new("status"))
-                        .string().not_null().default("setup"))
+                    .col(
+                        ColumnDef::new(Alias::new("assignment_type"))
+                            .enumeration(
+                                Alias::new("assignment_type_enum"),
+                                vec![
+                                    Alias::new("assignment"),
+                                    Alias::new("practical"),
+                                ],
+                            )
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("status"))
+                            .enumeration(
+                                Alias::new("status_enum"),
+                                vec![
+                                    Alias::new("setup"),
+                                    Alias::new("ready"),
+                                    Alias::new("open"),
+                                    Alias::new("closed"),
+                                    Alias::new("archived"),
+                                ],
+                            )
+                            .not_null()
+                            .default("setup"),
+                    )
                     .col(ColumnDef::new(Alias::new("available_from")).timestamp().not_null())
                     .col(ColumnDef::new(Alias::new("due_date")).timestamp().not_null())
                     .col(ColumnDef::new(Alias::new("config")).json().null())
-                    .col(ColumnDef::new(Alias::new("created_at"))
-                        .timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
-                    .col(ColumnDef::new(Alias::new("updated_at"))
-                        .timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
+                    .col(
+                        ColumnDef::new(Alias::new("created_at"))
+                            .timestamp()
+                            .not_null()
+                            .default(Expr::cust("CURRENT_TIMESTAMP")),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("updated_at"))
+                            .timestamp()
+                            .not_null()
+                            .default(Expr::cust("CURRENT_TIMESTAMP")),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .from(Alias::new("assignments"), Alias::new("module_id"))
@@ -46,7 +75,6 @@ impl MigrationTrait for Migration {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .drop_table(Table::drop().table(Alias::new("assignments")).to_owned())
-            .await?;
-        Ok(())
+            .await
     }
 }
