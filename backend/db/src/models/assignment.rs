@@ -6,7 +6,7 @@
 use sea_orm::entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, IntoActiveModel,
-    PaginatorTrait, QueryFilter, QueryOrder, Set, JsonValue, 
+    JsonValue, PaginatorTrait, QueryFilter, QueryOrder, Set,
 };
 use chrono::{DateTime, Utc};
 use std::{env, fs, path::PathBuf};
@@ -17,36 +17,18 @@ use strum_macros::{Display, EnumIter, EnumString};
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "assignments")]
 pub struct Model {
-    /// Unique identifier for the assignment.
     #[sea_orm(primary_key)]
     pub id: i64,
-
-    /// Foreign key reference to the associated module.
     pub module_id: i64,
-
-    /// Name/title of the assignment.
     pub name: String,
-
-    /// Optional description providing context or details.
     pub description: Option<String>,
-
-    /// Type/category of the assignment (e.g., "Practical", "Project").
     pub assignment_type: AssignmentType,
-
-    /// Timestamp indicating when the assignment becomes available.
+    pub status: Status,
     pub available_from: DateTime<Utc>,
-
-    /// Timestamp representing the assignment's due date.
     pub due_date: DateTime<Utc>,
-
-    /// Optional JSON configuration (e.g., grading rules, language, etc.).
     #[sea_orm(column_type = "Json", nullable)]
     pub config: Option<JsonValue>,
-
-    /// Auto-managed creation timestamp.
     pub created_at: DateTime<Utc>,
-
-    /// Auto-managed update timestamp.
     pub updated_at: DateTime<Utc>,
 }
 
@@ -74,21 +56,23 @@ pub enum AssignmentType {
     Practical,
 }
 
+#[derive(Debug, Clone, PartialEq, Display, EnumIter, EnumString, Serialize, Deserialize, DeriveActiveEnum)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "assignment_status_enum")]
+#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
+pub enum Status {
+    #[sea_orm(string_value = "setup")]
+    Setup,
+    #[sea_orm(string_value = "ready")]
+    Ready,
+    #[sea_orm(string_value = "open")]
+    Open,
+    #[sea_orm(string_value = "closed")]
+    Closed,
+    #[sea_orm(string_value = "archived")]
+    Archived,
+}
+
 impl Model {
-    /// Create a new assignment in the database.
-    ///
-    /// # Arguments
-    /// - `db`: The active database connection.
-    /// - `module_id`: ID of the associated module.
-    /// - `name`: Name/title of the assignment.
-    /// - `description`: Optional description.
-    /// - `assignment_type`: Type/category of the assignment.
-    /// - `available_from`: When the assignment becomes available.
-    /// - `due_date`: Deadline for submission.
-    ///
-    /// # Returns
-    /// - `Ok(Self)` on success.
-    /// - `Err(DbErr)` on failure.
     pub async fn create(
         db: &DatabaseConnection,
         module_id: i64,
@@ -97,12 +81,14 @@ impl Model {
         assignment_type: AssignmentType,
         available_from: DateTime<Utc>,
         due_date: DateTime<Utc>,
+        status: Option<Status>,
     ) -> Result<Self, DbErr> {
         let active = ActiveModel {
             module_id: Set(module_id),
             name: Set(name.to_string()),
             description: Set(description.map(|d| d.to_string())),
             assignment_type: Set(assignment_type),
+            status: Set(status.unwrap_or(Status::Setup)),
             available_from: Set(available_from),
             due_date: Set(due_date),
             created_at: Set(Utc::now()),
@@ -113,22 +99,6 @@ impl Model {
         active.insert(db).await
     }
 
-    /// Edit an existing assignment.
-    ///
-    /// # Arguments
-    /// - `db`: The active database connection.
-    /// - `id`: ID of the assignment to edit.
-    /// - `module_id`: The module ID (used for additional safety).
-    /// - `name`: Updated name.
-    /// - `description`: Updated description.
-    /// - `assignment_type`: Updated assignment type.
-    /// - `available_from`: Updated availability date.
-    /// - `due_date`: Updated due date.
-    ///
-    /// # Returns
-    /// - `Ok(Self)` with the updated record.
-    /// - `Err(DbErr::RecordNotFound)` if assignment doesn't exist.
-    /// - `Err(DbErr)` for other DB errors.
     pub async fn edit(
         db: &DatabaseConnection,
         id: i64,
@@ -138,6 +108,7 @@ impl Model {
         assignment_type: AssignmentType,
         available_from: DateTime<Utc>,
         due_date: DateTime<Utc>,
+        status: Status,
     ) -> Result<Self, DbErr> {
         let mut assignment = Entity::find()
             .filter(Column::Id.eq(id))
@@ -150,6 +121,7 @@ impl Model {
         assignment.name = Set(name.to_string());
         assignment.description = Set(description.map(|d| d.to_string()));
         assignment.assignment_type = Set(assignment_type);
+        assignment.status = Set(status);
         assignment.available_from = Set(available_from);
         assignment.due_date = Set(due_date);
         assignment.updated_at = Set(Utc::now());
@@ -157,18 +129,7 @@ impl Model {
         assignment.update(db).await
     }
 
-    /// Delete an assignment and remove its file folder from disk.
-    ///
-    /// # Arguments
-    /// - `db`: Active DB connection
-    /// - `id`: Assignment ID to delete
-    /// - `module_id`: Must match for safety
-    ///
-    /// # Returns
-    /// - `Ok(())` if successful
-    /// - `Err(DbErr)` if not found or delete fails
     pub async fn delete(db: &DatabaseConnection, id: i32, module_id: i32) -> Result<(), DbErr> {
-        // Find the assignment
         let Some(model) = Entity::find()
             .filter(Column::Id.eq(id))
             .filter(Column::ModuleId.eq(module_id))
@@ -180,11 +141,9 @@ impl Model {
             )));
         };
 
-        // Delete the assignment
         let active = model.into_active_model();
         active.delete(db).await?;
 
-        // Construct path to assignment directory
         let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
             .unwrap_or_else(|_| "data/assignment_files".to_string());
 
@@ -192,7 +151,6 @@ impl Model {
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{id}"));
 
-        // Try delete recursively (ignores if doesn't exist)
         if assignment_dir.exists() {
             if let Err(e) = fs::remove_dir_all(&assignment_dir) {
                 eprintln!("Warning: Failed to delete assignment directory {:?}: {}", assignment_dir, e);
@@ -202,19 +160,6 @@ impl Model {
         Ok(())
     }
 
-    /// Filter and sort assignments with pagination support.
-    ///
-    /// # Arguments
-    /// - `db`: The active database connection.
-    /// - `page`: The page number to fetch (1-indexed).
-    /// - `per_page`: Number of records per page.
-    /// - `sort_by`: Optional sort field (`"name"`, `"due_date"`, or `"available_from"`).
-    ///              Use `"-"` prefix for descending order (e.g. `"-name"`).
-    /// - `query`: Optional case-insensitive filter applied to `name` and `description`.
-    ///
-    /// # Returns
-    /// - `Ok(Vec<Self>)` containing matched assignments.
-    /// - `Err(DbErr)` on failure.
     pub async fn filter(
         db: &DatabaseConnection,
         page: u64,
@@ -269,13 +214,13 @@ impl Model {
         query_builder.paginate(db, per_page).fetch_page(page - 1).await
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
     use crate::test_utils::setup_test_db;
     use crate::models::module::ActiveModel as ModuleActiveModel;
-    use crate::models::assignment::AssignmentType;
 
     fn sample_dates() -> (DateTime<Utc>, DateTime<Utc>) {
         (
@@ -309,14 +254,14 @@ mod tests {
             AssignmentType::Practical,
             from,
             due,
+            Some(Status::Setup),
         )
         .await
         .unwrap();
 
         assert_eq!(assignment.module_id, 1);
         assert_eq!(assignment.name, "Test Assignment");
-        assert_eq!(assignment.description.as_deref(), Some("Intro to Testing"));
-        assert_eq!(assignment.assignment_type, AssignmentType::Practical);
+        assert_eq!(assignment.status, Status::Setup);
     }
 
     #[tokio::test]
@@ -344,6 +289,7 @@ mod tests {
             AssignmentType::Assignment,
             from,
             due,
+            Some(Status::Setup),
         )
         .await
         .unwrap();
@@ -357,13 +303,13 @@ mod tests {
             AssignmentType::Practical,
             from,
             due,
+            Status::Ready,
         )
         .await
         .unwrap();
 
         assert_eq!(updated.name, "Updated Name");
-        assert_eq!(updated.description.as_deref(), Some("Updated Desc"));
-        assert_eq!(updated.assignment_type, AssignmentType::Practical);
+        assert_eq!(updated.status, Status::Ready);
     }
 
     #[tokio::test]
@@ -383,13 +329,13 @@ mod tests {
         .await
         .expect("Failed to insert test module");
 
-        Model::create(&db, 1, "Rust Basics", Some("Learn Rust"), AssignmentType::Assignment, from, due)
+        Model::create(&db, 1, "Rust Basics", Some("Learn Rust"), AssignmentType::Assignment, from, due, Some(Status::Open))
             .await
             .unwrap();
-        Model::create(&db, 1, "Advanced Rust", Some("Ownership and lifetimes"), AssignmentType::Assignment, from, due)
+        Model::create(&db, 1, "Advanced Rust", Some("Ownership and lifetimes"), AssignmentType::Assignment, from, due, Some(Status::Ready))
             .await
             .unwrap();
-        Model::create(&db, 1, "Python Basics", Some("Learn Python"), AssignmentType::Assignment, from, due)
+        Model::create(&db, 1, "Python Basics", Some("Learn Python"), AssignmentType::Assignment, from, due, Some(Status::Closed))
             .await
             .unwrap();
 

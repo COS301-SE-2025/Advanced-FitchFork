@@ -1,5 +1,4 @@
 use std::fs;
-
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
@@ -23,17 +22,9 @@ use sea_orm::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
 use crate::{auth::AuthUser, response::ApiResponse};
 
-/// Get a list of the current user's submissions for a specific assignment.
-///
-/// ### Responses
-/// - `200 OK` with list of submissions
-/// - `404 Not Found` (assignment not found)
-/// - `500 Internal Server Error` (database error)
-///
-pub fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
+fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
 }
 
@@ -49,7 +40,7 @@ pub struct SubmissionResponse {
     pub mark: Option<Mark>,
 }
 
-pub async fn get_user_submissions(
+async fn get_user_submissions(
     module_id: i64,
     assignment_id: i64,
     user_id: i64,
@@ -211,25 +202,7 @@ pub struct SubmissionsListResponse {
     pub total: u64,
 }
 
-///
-/// ### Query Parameters
-/// - `page` (optional): Page number (default: 1, min: 1)
-/// - `per_page` (optional): Items per page (default: 20, min: 1, max: 100)
-/// - `query` (optional): Case-insensitive partial match against filename
-/// - `user_id` (optional): Filter by user ID
-/// - `late` (optional): Filter by late status (true/false)
-/// - `sort` (optional): Sort by field. Prefix with `-` for descending. Allowed fields:
-///   - `filename`
-///   - `created_at`
-///   - `user_id`
-///   - `username` filter by unique students
-/// ### Responses
-/// - `200 OK` with list of submissions
-/// - `403 Forbidden` (not a lecturer or tutor)
-/// - `404 Not Found` (assignment not found)
-/// - `500 Internal Server Error` (database error)
-///
-pub async fn get_list_submissions(
+async fn get_list_submissions(
     module_id: i64,
     assignment_id: i64,
     params: ListSubmissionsQuery,
@@ -267,7 +240,7 @@ pub async fn get_list_submissions(
             }
         }
     }
-    // Check if assignment exists and get due date
+
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
@@ -296,11 +269,9 @@ pub async fn get_list_submissions(
         }
     };
 
-    // Pagination
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
 
-    // Build filter condition
     let mut condition =
         Condition::all().add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32));
 
@@ -323,10 +294,8 @@ pub async fn get_list_submissions(
         condition = condition.add(assignment_submission::Column::Filename.contains(&pattern));
     }
 
-    // Build query
     let mut query = assignment_submission::Entity::find().filter(condition);
 
-    // Sorting
     if let Some(ref sort) = params.sort {
         for sort_field in sort.split(',') {
             let (field, dir) = if sort_field.starts_with('-') {
@@ -351,7 +320,6 @@ pub async fn get_list_submissions(
         );
     }
 
-    // Pagination
     let paginator = query.paginate(&db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
     let submissions = paginator
@@ -456,7 +424,7 @@ pub async fn get_list_submissions(
         .into_response()
 }
 
-pub async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bool {
+async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bool {
     user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user_id))
         .filter(user_module_role::Column::ModuleId.eq(module_id))
@@ -472,7 +440,147 @@ pub async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -
         .unwrap_or(false)
 }
 
-
+/// GET /api/modules/:module_id/assignments/:assignment_id/submissions
+///
+/// List submissions for a specific assignment. Accessible to users assigned to the module with
+/// appropriate permissions.
+///
+/// This endpoint provides different behavior based on the user's role:
+/// - **Students**: Can only view their own submissions for the assignment
+/// - **Lecturers/Tutors**: Can view all submissions with filtering and pagination options
+///
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment to list submissions for
+///
+/// ### Query Parameters
+/// - `page` (optional, u32): Page number (default: 1, min: 1)
+/// - `per_page` (optional, u32): Items per page (default: 20, min: 1, max: 100)
+/// - `query` (optional, string): Case-insensitive partial match against filename
+/// - `user_id` (optional, i64): Filter by specific user ID
+/// - `late` (optional, boolean): Filter by late status (true/false)
+/// - `username` (optional, string): Filter by username (returns only that user's submissions)
+/// - `sort` (optional, string): Sort by field. Prefix with `-` for descending. Allowed fields:
+///   - `filename` - Sort by submission filename
+///   - `created_at` - Sort by submission timestamp
+///   - `user_id` - Sort by user ID
+///
+/// ### Example Request - Student View
+/// ```bash
+/// curl -X GET "http://localhost:3000/api/modules/1/assignments/2/submissions" \
+///   -H "Authorization: Bearer <token>"
+/// ```
+///
+/// ### Example Request - Lecturer View with Filters
+/// ```bash
+/// curl -X GET "http://localhost:3000/api/modules/1/assignments/2/submissions?page=1&per_page=10&late=true&sort=-created_at" \
+///   -H "Authorization: Bearer <token>"
+/// ```
+///
+/// ### Success Response (200 OK) - Student View
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Submissions retrieved successfully",
+///   "data": [
+///     {
+///       "id": 123,
+///       "attempt": 1,
+///       "filename": "assignment1.java",
+///       "created_at": "2024-01-15T10:30:00Z",
+///       "updated_at": "2024-01-15T10:30:00Z",
+///       "is_late": false
+///     },
+///     {
+///       "id": 124,
+///       "attempt": 2,
+///       "filename": "assignment1_v2.java",
+///       "created_at": "2024-01-16T14:45:00Z",
+///       "updated_at": "2024-01-16T14:45:00Z",
+///       "is_late": true
+///     }
+///   ]
+/// }
+/// ```
+///
+/// ### Success Response (200 OK) - Lecturer View
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Submissions retrieved successfully",
+///   "data": {
+///     "submissions": [
+///       {
+///         "id": 123,
+///         "user": {
+///           "user_id": 456,
+///           "username": "student1",
+///           "email": "student1@example.com"
+///         },
+///         "attempt": 1,
+///         "filename": "assignment1.java",
+///         "created_at": "2024-01-15T10:30:00Z",
+///         "updated_at": "2024-01-15T10:30:00Z",
+///         "is_late": false
+///       }
+///     ],
+///     "page": 1,
+///     "per_page": 10,
+///     "total": 25
+///   }
+/// }
+/// ```
+///
+/// ### Error Responses
+///
+/// **403 Forbidden** - Insufficient permissions
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Access denied"
+/// }
+/// ```
+///
+/// **404 Not Found** - Assignment or student not found
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Assignment not found"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Student not found"
+/// }
+/// ```
+///
+/// **500 Internal Server Error** - Database error
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Database error"
+/// }
+/// ```
+///
+/// ### Role-Based Access
+/// - **Students**: Can only view their own submissions for the assignment
+/// - **Lecturers/Tutors**: Can view all submissions with full filtering and pagination
+/// - **Admins**: Have the same access as lecturers/tutors
+///
+/// ### Late Submission Detection
+/// Submissions are marked as late if they are submitted after the assignment's due date.
+/// The `is_late` field is calculated by comparing the submission timestamp with the assignment's
+/// `due_date` field.
+///
+/// ### Notes
+/// - Students automatically see only their own submissions regardless of query parameters
+/// - Lecturers and tutors can use all filtering and pagination options
+/// - The `username` parameter overrides other filters and returns only that user's submissions
+/// - Sorting defaults to `created_at` in descending order (newest first)
+/// - Pagination is applied only for lecturer/tutor views
+/// - File information includes attempt numbers for tracking multiple submissions
 pub async fn list_submissions(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
@@ -492,27 +600,115 @@ pub async fn list_submissions(
         .into_response()
 }
 
-/// Get a specific submission report for a given assignment.
+/// GET /api/modules/:module_id/assignments/:assignment_id/submissions/:submission_id
 ///
-/// Validates that the submission belongs to the specified assignment and module, then reads the
-/// `submission_report.json` file associated with it. If the requesting user is not a student,
-/// user metadata is included in the response.
+/// Retrieve a specific submission report for a given assignment. Accessible to users assigned to
+/// the module with appropriate permissions.
+///
+/// This endpoint validates that the submission belongs to the specified assignment and module, then
+/// reads the `submission_report.json` file associated with it. If the requesting user is not a
+/// student, user metadata is included in the response.
 ///
 /// ### Path Parameters
-/// - `module_id`: ID of the module
-/// - `assignment_id`: ID of the assignment
-/// - `submission_id`: ID of the submission
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment containing the submission
+/// - `submission_id` (i64): The ID of the submission to retrieve
 ///
-/// ### Behavior
-/// - Validates assignment and module linkage
-/// - Reads and parses `submission_report.json` from disk
-/// - If requester is not a student, adds user info (`user_id`, `student_number`, `email`) to the response
+/// ### Example Request
+/// ```bash
+/// curl -X GET "http://localhost:3000/api/modules/1/assignments/2/submissions/123" \
+///   -H "Authorization: Bearer <token>"
+/// ```
 ///
-/// ### Responses
-/// - `200 OK` with the submission report
-/// - `404 Not Found` if submission, assignment, or module mismatch
-/// - `500 Internal Server Error` if database or file read fails
-
+/// ### Success Response (200 OK)
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Submission details retrieved successfully",
+///   "data": {
+///     "id": 123,
+///     "attempt": 1,
+///     "filename": "assignment1.java",
+///     "created_at": "2024-01-15T10:30:00Z",
+///     "updated_at": "2024-01-15T10:30:00Z",
+///     "mark": {
+///       "earned": 85,
+///       "total": 100
+///     },
+///     "is_practice": false,
+///     "is_late": false,
+///     "tasks": [...],
+///     "code_coverage": [...],
+///     "code_complexity": {...},
+///     "user": {
+///       "user_id": 456,
+///       "username": "student1",
+///       "email": "student1@example.com"
+///     }
+///   }
+/// }
+/// ```
+///
+/// ### Error Responses
+///
+/// **404 Not Found** - Submission, assignment, or module not found
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Submission not found"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Assignment not found"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Assignment does not belong to the specified module"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Submission report not found"
+/// }
+/// ```
+///
+/// **500 Internal Server Error** - Database or file read error
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Database error"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to parse submission report"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "ASSIGNMENT_STORAGE_ROOT not set"
+/// }
+/// ```
+///
+/// ### Notes
+/// - The submission report is read from the filesystem at:
+///   `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/assignment_submissions/user_{user_id}/attempt_{attempt}/submission_report.json`
+/// - User metadata is only included for non-student users (lecturers, tutors, admins)
+/// - The response contains the complete grading report including marks, tasks, and optional
+///   code coverage/complexity analysis
+/// - Access is restricted to users with appropriate permissions for the module
 pub async fn get_submission(
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
@@ -579,7 +775,6 @@ pub async fn get_submission(
     let user_id = submission.user_id;
     let attempt = submission.attempt;
 
-    // Safely get ASSIGNMENT_STORAGE_ROOT
     let base = match std::env::var("ASSIGNMENT_STORAGE_ROOT") {
         Ok(val) => val,
         Err(_) => {
@@ -593,7 +788,6 @@ pub async fn get_submission(
         }
     };
 
-    // Build the full path to submission_report.json
     let path = PathBuf::from(&base)
         .join(format!("module_{}", module_id))
         .join(format!("assignment_{}", assignment_id))
@@ -602,7 +796,6 @@ pub async fn get_submission(
         .join(format!("attempt_{}", attempt))
         .join("submission_report.json");
 
-    // Try reading the file content
     let content = match fs::read_to_string(&path) {
         Ok(c) => c,
         Err(_) => {
@@ -616,7 +809,6 @@ pub async fn get_submission(
         }
     };
 
-    // Try parsing the JSON
     let mut parsed: Value = match serde_json::from_str(&content) {
         Ok(val) => val,
         Err(_) => {
@@ -628,7 +820,6 @@ pub async fn get_submission(
         }
     };
 
-    // Optionally inject user info for non-students
     if !is_student(module_id, claims.sub, &db).await {
         if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(&db).await {
             let user_value = serde_json::to_value(UserResponse {
@@ -652,6 +843,4 @@ pub async fn get_submission(
         )),
     )
     .into_response()
-
 }
-

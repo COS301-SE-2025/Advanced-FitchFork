@@ -2,76 +2,77 @@ use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 
 use chrono::{DateTime, Utc};
 
-use serde::{Deserialize, Serialize};
-
 use crate::response::ApiResponse;
 
 use db::{
     connect,
-    models::assignment::{self, Model as Assignment, AssignmentType},
+    models::assignment::{self, AssignmentType, Status},
 };
+use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
 
-#[derive(Debug, Serialize)]
-pub struct AssignmentResponse {
-    pub id: i64,
-    pub module_id: i64,
-    pub name: String,
-    pub description: Option<String>,
-    pub assignment_type: String,
-    pub available_from: String,
-    pub due_date: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-impl From<Assignment> for AssignmentResponse {
-    fn from(assignment: Assignment) -> Self {
-        Self {
-            id: assignment.id,
-            module_id: assignment.module_id,
-            name: assignment.name,
-            description: assignment.description,
-            assignment_type: assignment.assignment_type.to_string(),
-            available_from: assignment.available_from.to_rfc3339(),
-            due_date: assignment.due_date.to_rfc3339(),
-            created_at: assignment.created_at.to_rfc3339(),
-            updated_at: assignment.updated_at.to_rfc3339(),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct EditAssignmentRequest {
-    pub name: String,
-    pub description: Option<String>,
-    pub assignment_type: String,
-    pub available_from: String,
-    pub due_date: String,
-}
-
-/// Edits a specific assignment by its ID and module ID.
+/// PUT /api/modules/:module_id/assignments/:assignment_id
 ///
-/// # Arguments
+/// Edit an existing assignment in a module. Only accessible by lecturers or admins assigned to the module.
 ///
-/// The arguments are extracted automatically from the HTTP request:
-/// - Path parameters `(module_id, assignment_id)` identify the assignment to edit.
-/// - JSON body with the following fields:
-///   - `name` (string, required): The new name of the assignment.
-///   - `description` (string, optional): The new description of the assignment.
-///   - `assignment_type` (string, required): The type of the assignment. Must be either `"Assignment"` or `"Practical"`.
-///   - `available_from` (string, required): The new availability date (ISO 8601 format).
-///   - `due_date` (string, required): The new due date (ISO 8601 format).
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment to edit
 ///
-/// # Returns
+/// ### Request Body (JSON)
+/// - `name` (string, required): The new name of the assignment
+/// - `description` (string, optional): The new description of the assignment
+/// - `assignment_type` (string, required): The type of assignment. Must be either "assignment" or "practical"
+/// - `available_from` (string, required): The new date/time from which the assignment is available (ISO 8601 format)
+/// - `due_date` (string, required): The new due date/time for the assignment (ISO 8601 format)
 ///
-/// Returns an HTTP response indicating the result:
-/// - `200 OK` with the updated assignment data if successful.
-/// - `400 BAD REQUEST` if any required fields are missing or malformed (e.g., invalid dates).
-/// - `404 NOT FOUND` if no assignment was found matching the given `module_id` and `assignment_id`.
-/// - `500 INTERNAL SERVER ERROR` if the update operation fails for other reasons.
+/// ### Responses
+///
+/// - `200 OK`
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Assignment updated successfully",
+///   "data": {
+///     "id": 123,
+///     "module_id": 456,
+///     "name": "Updated Assignment Name",
+///     "description": "Updated assignment description",
+///     "assignment_type": "Assignment",
+///     "available_from": "2024-01-01T00:00:00Z",
+///     "due_date": "2024-01-31T23:59:59Z",
+///     "created_at": "2024-01-01T00:00:00Z",
+///     "updated_at": "2024-01-15T12:30:00Z"
+///   }
+/// }
+/// ```
+///
+/// - `400 Bad Request`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Invalid available_from datetime format" // or "Invalid due_date datetime format" or "assignment_type must be 'assignment' or 'practical'"
+/// }
+/// ```
+///
+/// - `404 Not Found`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Assignment not found"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to update assignment"
+/// }
+/// ```
+///
 pub async fn edit_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
-    Json(req): Json<EditAssignmentRequest>,
+    Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
     let db = connect().await;
 
@@ -111,15 +112,28 @@ pub async fn edit_assignment(
         }
     };
 
+    let status = match req.status.parse::<Status>() {
+        Ok(s) => s,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error(
+                    "status must be one of: setup, ready, open, closed, archived",
+                )),
+            );
+        }
+    };
+
     match assignment::Model::edit(
         &db,
         assignment_id,
         module_id,
         &req.name,
         req.description.as_deref(),
-        assignment_type, // pass enum here
+        assignment_type,
         available_from,
         due_date,
+        status,
     )
     .await
     {

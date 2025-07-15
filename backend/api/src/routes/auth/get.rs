@@ -20,6 +20,7 @@ use db::{
     models::{user, module, user_module_role},
 };
 use db::models::user_module_role::Role;
+use crate::routes::common::UserModule;
 
 #[derive(Debug, Serialize)]
 pub struct MeResponse {
@@ -29,19 +30,7 @@ pub struct MeResponse {
     pub admin: bool,
     pub created_at: String,
     pub updated_at: String,
-    pub modules: Vec<UserModuleRoleResponse>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct UserModuleRoleResponse {
-    pub module_id: i64,
-    pub module_code: String,
-    pub module_year: i32,
-    pub module_description: Option<String>,
-    pub module_credits: i32,
-    pub module_created_at: String,
-    pub module_updated_at: String,
-    pub role: String,
+    pub modules: Vec<UserModule>,
 }
 
 #[derive(Deserialize)]
@@ -54,7 +43,6 @@ pub struct HasRoleQuery {
 pub struct HasRoleResponse {
     pub has_role: bool,
 }
-
 
 /// GET /api/auth/me
 ///
@@ -104,10 +92,9 @@ pub struct HasRoleResponse {
 /// - `404 Not Found` – User not found
 /// - `500 Internal Server Error` – Database failure
 pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
-    let db = connect().await;
+    let db: sea_orm::DatabaseConnection = connect().await;
     let user_id = claims.sub;
 
-    // Find the user directly
     let user = match user::Entity::find()
         .filter(user::Column::Id.eq(user_id))
         .one(&db)
@@ -128,7 +115,6 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
         }
     };
 
-    // Join user_module_roles with modules
     let roles = match user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user.id))
         .find_also_related(module::Entity)
@@ -144,17 +130,17 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
         }
     };
 
-    let modules: Vec<UserModuleRoleResponse> = roles
+    let modules: Vec<UserModule> = roles
         .into_iter()
         .filter_map(|(role, maybe_module)| {
-            maybe_module.map(|m| UserModuleRoleResponse {
-                module_id: m.id,
-                module_code: m.code,
-                module_year: m.year,
-                module_description: m.description,
-                module_credits: m.credits,
-                module_created_at: m.created_at.to_rfc3339(),
-                module_updated_at: m.updated_at.to_rfc3339(),
+            maybe_module.map(|m| UserModule {
+                id: m.id,
+                code: m.code,
+                year: m.year,
+                description: m.description.unwrap_or_default(),
+                credits: m.credits,
+                created_at: m.created_at.to_rfc3339(),
+                updated_at: m.updated_at.to_rfc3339(),
                 role: role.role.to_string(),
             })
         })
@@ -176,7 +162,7 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
     )
 }
 
-/// GET /auth/avatar/:user_id
+/// GET /api/auth/avatar/:user_id
 ///
 /// Returns the avatar image for a specific user ID.
 ///
@@ -189,7 +175,7 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
 ///
 /// ### Example Request
 /// ```http
-/// GET /auth/avatar/42
+/// GET /api/auth/avatar/42
 /// ```
 ///
 /// ### Example Response Headers
@@ -221,7 +207,6 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
 /// }
 /// ```
 pub async fn get_avatar(Path(user_id): Path<i64>) -> impl IntoResponse {
-    // Find user by ID
     let db = connect().await;
     let user = match user::Entity::find_by_id(user_id).one(&db).await {
         Ok(Some(u)) => u,
@@ -287,7 +272,31 @@ pub async fn get_avatar(Path(user_id): Path<i64>) -> impl IntoResponse {
     (StatusCode::OK, headers, buffer).into_response()
 }
 
-
+/// GET /api/auth/has-role
+///
+/// Checks if the authenticated user has a specific role in a module.
+///
+/// ### Authorization
+/// This endpoint requires a valid bearer token in the `Authorization` header.
+///
+/// ### Request Parameters
+/// - `module_id`: The ID of the module to check role for
+/// - `role`: The role to check for (case-insensitive: "lecturer", "tutor", "student")
+///
+/// ### Response: 200 OK
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Role check completed",
+///   "data": {
+///     "has_role": true
+/// }
+/// ```
+///
+/// ### Error Responses
+/// - `400 Bad Request` – Invalid role specified
+/// - `403 Forbidden` – Missing or invalid token
+/// - `500 Internal Server Error` – Database failure
 pub async fn has_role_in_module(AuthUser(claims): AuthUser, Query(params): Query<HasRoleQuery>, ) -> impl IntoResponse {
     let db = connect().await;
 
