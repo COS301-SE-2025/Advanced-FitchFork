@@ -1,32 +1,32 @@
 import { useState } from 'react';
 import { Typography, Button, Alert } from 'antd';
 import { CheckOutlined, WarningOutlined } from '@ant-design/icons';
+
 import { useModule } from '@/context/ModuleContext';
-import { useAssignment } from '@/context/AssignmentContext';
+import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
 import { useNotifier } from '@/components/Notifier';
 import { generateMarkAllocator } from '@/services/modules/assignments/mark-allocator';
-import { useNavigate } from 'react-router-dom';
 
 const { Title, Paragraph } = Typography;
 
-const GenerateMarkAllocatorStep = () => {
+const StepMarkAllocator = () => {
   const module = useModule();
-  const { assignment, refreshReadiness, readiness } = useAssignment();
+  const { assignmentId, refreshAssignment } = useAssignmentSetup();
   const { notifyError, notifySuccess } = useNotifier();
-  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
   const handleGenerate = async () => {
-    if (!module.id || !assignment.id) return;
+    if (!assignmentId) return;
+
     setLoading(true);
     try {
-      const res = await generateMarkAllocator(module.id, assignment.id);
+      const res = await generateMarkAllocator(module.id, assignmentId);
       if (res.success) {
         notifySuccess('Mark allocator generated', res.message);
         setDone(true);
-        await refreshReadiness?.();
+        await refreshAssignment?.();
       } else {
         notifyError('Failed to generate mark allocator', res.message);
       }
@@ -38,7 +38,7 @@ const GenerateMarkAllocatorStep = () => {
     }
   };
 
-  const canGenerate = readiness?.memo_output_present;
+  const canGenerate = true; // optionally check readiness
 
   return (
     <div className="max-w-3xl space-y-6 px-6 py-8 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-black/10">
@@ -61,7 +61,7 @@ const GenerateMarkAllocatorStep = () => {
         <Alert
           type="success"
           icon={<CheckOutlined />}
-          message="Mark allocator successfully generated. You may proceed to the next step."
+          message="Mark allocator successfully generated. You may now finish setup."
           showIcon
         />
       )}
@@ -75,16 +75,9 @@ const GenerateMarkAllocatorStep = () => {
         >
           Generate Mark Allocator
         </Button>
-        <Button
-          type="primary"
-          disabled={!done}
-          onClick={() => navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions`)}
-        >
-          Finish Setup
-        </Button>
       </div>
     </div>
   );
 };
 
-export default GenerateMarkAllocatorStep;
+export default StepMarkAllocator;

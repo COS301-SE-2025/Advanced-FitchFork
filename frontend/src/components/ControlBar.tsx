@@ -60,6 +60,8 @@ interface Props {
   filterGroups?: FilterGroup[];
   activeFilters?: string[];
   onFilterChange?: (values: string[]) => void;
+
+  actions?: React.ReactNode;
 }
 
 const ControlBar: React.FC<Props> = ({
@@ -82,6 +84,7 @@ const ControlBar: React.FC<Props> = ({
   filterGroups = [],
   activeFilters = [],
   onFilterChange,
+  actions,
 }) => {
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
@@ -121,6 +124,8 @@ const ControlBar: React.FC<Props> = ({
         </div>
       )}
       <Row gutter={8} align="middle" wrap={false}>
+        {actions && <Col>{actions}</Col>}
+
         {(sortOptions.length > 0 || filterGroups.length > 0) && (
           <Col flex="1">
             <Dropdown

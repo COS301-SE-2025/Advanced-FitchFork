@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet, useParams } from 'react-router-dom';
-import { Tabs, Alert, message, Button } from 'antd';
+import { Tabs, Spin, Button } from 'antd';
 import { useModule } from '@/context/ModuleContext';
 import { useAuth } from '@/context/AuthContext';
 import { AssignmentProvider } from '@/context/AssignmentContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import PageHeader from '@/components/PageHeader';
 import { getAssignmentDetails, getAssignmentReadiness } from '@/services/modules/assignments';
-import { generateMemoOutput } from '@/services/modules/assignments/memo-output';
-import { generateMarkAllocator } from '@/services/modules/assignments/mark-allocator/post';
 import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
+import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
 
 interface AssignmentDetails extends Assignment {
   files: AssignmentFile[];
@@ -25,8 +24,8 @@ const AssignmentLayout = () => {
 
   const [assignment, setAssignment] = useState<AssignmentDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [readiness, setReadiness] = useState<AssignmentReadiness | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   const assignmentIdNum = Number(assignment_id);
   const basePath = `/modules/${module.id}/assignments/${assignment_id}`;
@@ -68,93 +67,47 @@ const AssignmentLayout = () => {
       const res = await getAssignmentDetails(module.id, assignmentIdNum);
       if (res.success && res.data) {
         setAssignment(res.data);
-        setError(null);
         setBreadcrumbLabel(`modules/${module.id}/assignments/${res.data.id}`, res.data.name);
-      } else {
-        setError(res.message || 'Failed to load assignment.');
       }
       setLoading(false);
     };
 
     const loadReadiness = async () => {
       const res = await getAssignmentReadiness(module.id, assignmentIdNum);
-      if (res.success) {
-        setReadiness(res.data);
-      }
+      if (res.success) setReadiness(res.data);
     };
 
     if (!isNaN(assignmentIdNum)) {
       loadAssignment();
       loadReadiness();
     } else {
-      setError('Invalid assignment ID');
       setLoading(false);
     }
   }, [module.id, assignmentIdNum]);
 
   const refreshReadiness = async () => {
     const res = await getAssignmentReadiness(module.id, assignmentIdNum);
-    if (res.success) {
-      setReadiness(res.data);
-    }
+    if (res.success) setReadiness(res.data);
   };
 
-  useEffect(() => {
-    if (!loading && readiness && !readiness.is_ready) {
-      const isInSteps = location.pathname.includes('/steps/');
-      if (!isInSteps) {
-        navigate(`${basePath}/steps/config`, { replace: true });
-      }
-    }
-  }, [loading, readiness, location.pathname]);
-
-  if (error || !assignment) {
-    return (
-      <div className="p-6">
-        <Alert type="error" message="Error" description={error} showIcon />
-      </div>
-    );
+  if (loading || !assignment) {
+    return <Spin className="p-6" tip="Loading assignment..." />;
   }
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
-      <PageHeader
-        title={assignment.name}
-        description={`Manage assignment #${assignment.id} in ${module.code}`}
-        extra={
-          <div className="flex gap-2 flex-wrap">
-            <Button type="default" onClick={() => navigate(`${basePath}/steps/config`)}>
-              Setup Assignment
-            </Button>
-            <Button
-              onClick={async () => {
-                const res = await generateMemoOutput(module.id, assignment.id);
-                if (res.success) {
-                  message.success('Memo output generated successfully.');
-                  await refreshReadiness();
-                } else {
-                  message.error(`Failed to generate memo: ${res.message}`);
-                }
-              }}
-            >
-              Generate Memo Output
-            </Button>
-            <Button
-              onClick={async () => {
-                const res = await generateMarkAllocator(module.id, assignment.id);
-                if (res.success) {
-                  message.success('Mark allocator generated successfully.');
-                  await refreshReadiness();
-                } else {
-                  message.error(`Failed to generate mark allocator: ${res.message}`);
-                }
-              }}
-            >
-              Generate Mark Allocator
-            </Button>
-          </div>
-        }
-      />
+      <div className="flex justify-between flex-wrap gap-4 m-0">
+        <PageHeader
+          title={assignment.name}
+          description={`Manage assignment #${assignment.id} in ${module.code}`}
+        />
+
+        {readiness && !readiness.is_ready && (
+          <Button type="primary" onClick={() => setSetupOpen(true)}>
+            Complete Setup
+          </Button>
+        )}
+      </div>
 
       <Tabs
         activeKey={activeKey}
@@ -167,6 +120,13 @@ const AssignmentLayout = () => {
       <AssignmentProvider value={{ assignment, refreshReadiness, readiness }}>
         <Outlet />
       </AssignmentProvider>
+
+      <AssignmentSetup
+        open={setupOpen}
+        onClose={() => setSetupOpen(false)}
+        assignmentId={assignment.id}
+        module={module}
+      />
     </div>
   );
 };

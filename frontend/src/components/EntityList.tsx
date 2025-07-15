@@ -70,6 +70,8 @@ type EntityListProps<T> = {
     type: 'text' | 'select';
     options?: { label: string; value: string }[];
   }[];
+
+  actions?: React.ReactNode;
 };
 
 /**
@@ -323,6 +325,7 @@ export function EntityList<T>(props: EntityListProps<T>) {
           });
           setFilterState(grouped);
         }}
+        actions={props.actions}
       />
 
       {/* Current filters and sort tags */}

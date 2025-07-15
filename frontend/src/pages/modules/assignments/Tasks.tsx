@@ -17,11 +17,11 @@ import { useAssignment } from '@/context/AssignmentContext';
 
 const { Panel } = Collapse;
 
-const TasksLayout = () => {
+const Tasks = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const module = useModule();
-  const { assignment, readiness } = useAssignment();
+  const { assignment } = useAssignment();
   const { notifyError, notifySuccess } = useNotifier();
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -150,13 +150,6 @@ const TasksLayout = () => {
     label: `Task ${task.task_number}`,
   }));
 
-  const onClickNextStep = async () => {
-    // Optionally trigger a refresh or call a backend readiness endpoint
-    // await refreshReadiness(); // if available
-
-    navigate(`/modules/${module.id}/assignments/${assignment.id}/memo-output`);
-  };
-
   return (
     <div>
       <PageHeader
@@ -166,7 +159,7 @@ const TasksLayout = () => {
 
       <div className="flex">
         {/* Sidebar */}
-        <div className="w-[240px] bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-4">
+        <div className="w-[240px]  dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-4">
           <Menu
             mode="inline"
             theme="light"
@@ -315,16 +308,10 @@ const TasksLayout = () => {
           ) : (
             <div className="text-gray-400">No task selected.</div>
           )}
-
-          <div className="flex justify-end mt-6">
-            <Button type="primary" disabled={!readiness?.tasks_present} onClick={onClickNextStep}>
-              Next Step: Memo Output
-            </Button>
-          </div>
         </div>
       </div>
     </div>
   );
 };
 
-export default TasksLayout;
+export default Tasks;

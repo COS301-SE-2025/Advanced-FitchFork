@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
+import { Button } from 'antd';
+
 import PageHeader from '@/components/PageHeader';
 import { useNotifier } from '@/components/Notifier';
 import { useModule } from '@/context/ModuleContext';
@@ -7,18 +10,13 @@ import { EntityList } from '@/components/EntityList';
 import AssignmentTypeTag from '@/components/assignments/AssignmentTypeTag';
 import AssignmentStatusTag from '@/components/assignments/AssignmentStatusTag';
 import AssignmentCard from '@/components/assignments/AssignmentCard';
+import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
 
-import {
-  listAssignments,
-  createAssignment,
-  editAssignment,
-  deleteAssignment,
-} from '@/services/modules/assignments';
+import { listAssignments, editAssignment, deleteAssignment } from '@/services/modules/assignments';
 
 import {
   type Assignment,
   type AssignmentType,
-  type PostAssignmentRequest,
   ASSIGNMENT_TYPES,
 } from '@/types/modules/assignments';
 import { getRandomAssignmentStatus } from '@/constants/mock/assignment';
@@ -28,6 +26,8 @@ const AssignmentsList = () => {
   const module = useModule();
   const navigate = useNavigate();
   const { notifySuccess, notifyError } = useNotifier();
+
+  const [setupOpen, setSetupOpen] = useState(false);
 
   const fetchAssignments = async ({
     page,
@@ -62,22 +62,6 @@ const AssignmentsList = () => {
     } else {
       notifyError('Failed to fetch assignments', res.message);
       return { items: [], total: 0 };
-    }
-  };
-
-  const handleCreate = async (values: Partial<PostAssignmentRequest>) => {
-    const res = await createAssignment(module.id, {
-      name: values.name!,
-      assignment_type: values.assignment_type!,
-      available_from: dayjs(values.available_from).toISOString(),
-      due_date: dayjs(values.due_date).toISOString(),
-      description: values.description ?? '',
-    });
-
-    if (res.success) {
-      notifySuccess('Created', 'Assignment successfully created');
-    } else {
-      notifyError('Create failed', res.message);
     }
   };
 
@@ -120,28 +104,6 @@ const AssignmentsList = () => {
         renderGridItem={(assignment, actions) => (
           <AssignmentCard key={assignment.id} assignment={assignment} actions={actions} />
         )}
-        createModal={{
-          title: 'Create Assignment',
-          onCreate: handleCreate,
-          getInitialValues: () => ({
-            name: '',
-            assignment_type: 'assignment',
-            available_from: dayjs().toISOString(),
-            due_date: dayjs().toISOString(),
-          }),
-          fields: [
-            { name: 'name', label: 'Assignment Name', type: 'text', required: true },
-            {
-              name: 'assignment_type',
-              label: 'Type',
-              type: 'select',
-              required: true,
-              options: ASSIGNMENT_TYPES.map((t) => ({ label: t, value: t })),
-            },
-            { name: 'available_from', label: 'Available From', type: 'datetime', required: true },
-            { name: 'due_date', label: 'Due Date', type: 'datetime', required: true },
-          ],
-        }}
         editModal={{
           title: 'Edit Assignment',
           onEdit: handleEdit,
@@ -213,7 +175,14 @@ const AssignmentsList = () => {
             type: 'text',
           },
         ]}
+        actions={
+          <Button type="primary" onClick={() => setSetupOpen(true)}>
+            Create Assignment
+          </Button>
+        }
       />
+
+      <AssignmentSetup open={setupOpen} onClose={() => setSetupOpen(false)} module={module} />
     </div>
   );
 };
