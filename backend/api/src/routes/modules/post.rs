@@ -24,7 +24,7 @@ lazy_static::lazy_static! {
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateModuleRequest {
     #[validate(regex(
-        path = "MODULE_CODE_REGEX",
+        path = &*MODULE_CODE_REGEX,
         message = "Module code must be in format ABC123"
     ))]
     pub code: String,

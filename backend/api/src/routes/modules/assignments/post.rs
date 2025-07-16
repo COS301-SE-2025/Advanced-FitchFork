@@ -21,7 +21,7 @@ use db::{
 };
 use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
 
-/// POST /api/modules/:module_id/assignments
+/// POST /api/modules/{module_id}/assignments
 ///
 /// Create a new assignment in a module. Only accessible by lecturers or admins assigned to the module.
 ///

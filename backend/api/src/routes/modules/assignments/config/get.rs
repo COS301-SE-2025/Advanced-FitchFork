@@ -20,7 +20,7 @@ use db::{
 };
 use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 
-/// GET /api/modules/:module_id/assignments/:assignment_id/config
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
 /// Retrieve the JSON configuration object associated with a specific assignment. Accessible to users
 /// assigned to the module with appropriate permissions.

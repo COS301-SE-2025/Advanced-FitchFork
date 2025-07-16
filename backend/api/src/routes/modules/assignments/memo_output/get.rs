@@ -23,7 +23,7 @@ struct MemoTaskOutput {
     raw: String,
 }
 
-/// GET /api/modules/:module_id/assignments/:assignment_id/memo_output
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/memo_output
 ///
 /// Retrieve all memo output files for a given assignment, parsed into structured format.
 ///

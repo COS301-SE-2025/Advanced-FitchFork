@@ -47,14 +47,14 @@ use put::edit_module;
 /// Routes:
 /// - `GET    /modules`                 → list all modules
 /// - `POST   /modules`                 → create a new module (admin only)
-/// - `GET    /modules/:module_id`     → get a single module by ID
-/// - `PUT    /modules/:module_id`     → edit module details (admin only)
-/// - `DELETE /modules/:module_id`     → delete a module entirely (admin only)
+/// - `GET    /modules/{module_id}`     → get a single module by ID
+/// - `PUT    /modules/{module_id}`     → edit module details (admin only)
+/// - `DELETE /modules/{module_id}`     → delete a module entirely (admin only)
 ///
-/// - Nested assignments routes under `/modules/:module_id/assignments`
-/// - Nested lecturers routes under `/modules/:module_id/lecturers`
-/// - Nested tutors routes under `/modules/:module_id/tutors`
-/// - Nested students routes under `/modules/:module_id/students`
+/// - Nested assignments routes under `/modules/{module_id}/assignments`
+/// - Nested lecturers routes under `/modules/{module_id}/lecturers`
+/// - Nested tutors routes under `/modules/{module_id}/tutors`
+/// - Nested students routes under `/modules/{module_id}/students`
 ///
 /// All modifying routes are protected by `require_admin` middleware.
 pub fn modules_routes() -> Router {
@@ -68,11 +68,11 @@ pub fn modules_routes() -> Router {
             get(get_my_details)
         )
         .route(
-            "/:module_id/eligible-users",
+            "/{module_id}/eligible-users",
             get(get_eligible_users_for_module).route_layer(from_fn(require_admin)),
         )
         .route(
-            "/:module_id",
+            "/{module_id}",
             get(get_module)
         )
         .route(
@@ -80,27 +80,27 @@ pub fn modules_routes() -> Router {
             post(create).route_layer(from_fn(require_admin))
         )
         .route(
-            "/:module_id",
+            "/{module_id}",
             put(edit_module).route_layer(from_fn(require_admin))
         )
         .route(
-            "/:module_id",
+            "/{module_id}",
             delete(delete_module).route_layer(from_fn(require_admin))
         )
         .nest(
-            "/:module_id/assignments",
+            "/{module_id}/assignments",
             assignment_routes()
         )
         .nest(
-            "/:module_id/lecturers",
+            "/{module_id}/lecturers",
             lecturer_routes()
         )
         .nest(
-            "/:module_id/tutors",
+            "/{module_id}/tutors",
             tutor_routes()
         )
         .nest(
-            "/:module_id/students",
+            "/{module_id}/students",
             student_routes()
         )
 }

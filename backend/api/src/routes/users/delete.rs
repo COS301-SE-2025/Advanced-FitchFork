@@ -17,7 +17,7 @@ use db::{
     models::user::{self, Entity as UserEntity},
 };
 
-/// DELETE /users/:id
+/// DELETE /users/{id}
 ///
 /// Delete a user by their ID. Only admins can access this endpoint.
 /// Users cannot delete their own account.

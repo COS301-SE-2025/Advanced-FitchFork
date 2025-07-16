@@ -17,7 +17,7 @@ use db::{
 use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, Set, ActiveModelTrait, DatabaseConnection, TransactionTrait, IntoActiveModel};
 use crate::routes::modules::common::EditRoleRequest;
 
-/// PUT /api/modules/:module_id/tutors
+/// PUT /api/modules/{module_id}/tutors
 ///
 /// Update the role of users already assigned to a module to Tutor. This endpoint will overwrite
 /// existing role assignments for the specified users in this module, setting their

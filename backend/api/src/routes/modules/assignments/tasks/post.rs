@@ -23,7 +23,7 @@ pub struct CreateTaskRequest {
     command: String,
 }
 
-/// POST /api/modules/:module_id/assignments/:assignment_id/tasks
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/tasks
 ///
 /// Create a new task for a given assignment. Accessible to users with Lecturer or Admin roles
 /// assigned to the module.

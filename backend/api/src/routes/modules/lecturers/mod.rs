@@ -15,16 +15,16 @@ use post::assign_lecturers;
 use put::edit_lecturers;
 use delete::remove_lecturers;
 
-/// Builds and returns the `/api/modules/:module_id/lecturers` route group.
+/// Builds and returns the `/api/modules/{module_id}/lecturers` route group.
 ///
 /// - `GET` is accessible to lecturers assigned to the module.
 /// - `POST`, `PUT`, and `DELETE` are admin-only.
 ///
 /// # Routes
-/// - `GET    /modules/:module_id/lecturers`     → get lecturers assigned to module
-/// - `POST   /modules/:module_id/lecturers`     → assign lecturers
-/// - `PUT    /modules/:module_id/lecturers`     → set lecturers (overwrites existing roles)
-/// - `DELETE /modules/:module_id/lecturers`     → remove lecturers from module
+/// - `GET    /modules/{module_id}/lecturers`     → get lecturers assigned to module
+/// - `POST   /modules/{module_id}/lecturers`     → assign lecturers
+/// - `PUT    /modules/{module_id}/lecturers`     → set lecturers (overwrites existing roles)
+/// - `DELETE /modules/{module_id}/lecturers`     → remove lecturers from module
 pub fn lecturer_routes() -> Router {
     Router::new()
         .route(

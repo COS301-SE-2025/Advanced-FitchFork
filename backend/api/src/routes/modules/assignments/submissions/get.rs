@@ -440,7 +440,7 @@ async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bo
         .unwrap_or(false)
 }
 
-/// GET /api/modules/:module_id/assignments/:assignment_id/submissions
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/submissions
 ///
 /// List submissions for a specific assignment. Accessible to users assigned to the module with
 /// appropriate permissions.
@@ -600,7 +600,7 @@ pub async fn list_submissions(
         .into_response()
 }
 
-/// GET /api/modules/:module_id/assignments/:assignment_id/submissions/:submission_id
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}
 ///
 /// Retrieve a specific submission report for a given assignment. Accessible to users assigned to
 /// the module with appropriate permissions.

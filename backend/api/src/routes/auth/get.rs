@@ -162,7 +162,7 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
     )
 }
 
-/// GET /api/auth/avatar/:user_id
+/// GET /api/auth/avatar/{user_id}
 ///
 /// Returns the avatar image for a specific user ID.
 ///

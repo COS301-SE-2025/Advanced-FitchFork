@@ -14,7 +14,7 @@ use db::{
     models::{assignment::{self}},
 };
 
-/// DELETE /api/modules/:module_id/assignments/:assignment_id
+/// DELETE /api/modules/{module_id}/assignments/{assignment_id}
 ///
 /// Delete a specific assignment and its associated files and folder.
 /// Only accessible by lecturers or admins assigned to the module.

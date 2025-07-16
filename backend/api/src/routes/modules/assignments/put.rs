@@ -10,7 +10,7 @@ use db::{
 };
 use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
 
-/// PUT /api/modules/:module_id/assignments/:assignment_id
+/// PUT /api/modules/{module_id}/assignments/{assignment_id}
 ///
 /// Edit an existing assignment in a module. Only accessible by lecturers or admins assigned to the module.
 ///

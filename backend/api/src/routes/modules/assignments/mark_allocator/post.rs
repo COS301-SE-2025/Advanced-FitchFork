@@ -4,7 +4,7 @@ use util::mark_allocator::mark_allocator::{generate_allocator, SaveError};
 
 use crate::response::ApiResponse;
 
-/// POST /api/modules/:module_id/assignments/:assignment_id/mark_allocator
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
 /// Generate a new mark allocator configuration for a specific assignment. Accessible to users with
 /// Lecturer roles assigned to the module.

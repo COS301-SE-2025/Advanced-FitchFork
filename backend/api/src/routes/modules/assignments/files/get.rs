@@ -27,7 +27,7 @@ use db::models::{
 };
 use crate::routes::modules::assignments::common::File;
 
-/// GET /api/modules/:module_id/assignments/:assignment_id/files/:file_id
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/files/{file_id}
 ///
 /// Download a specific file from an assignment. Accessible to users assigned to the module.
 ///
@@ -134,7 +134,7 @@ pub async fn download_file(
     (StatusCode::OK, headers, buffer).into_response()
 }
 
-/// GET /api/modules/:module_id/assignments/:assignment_id/files
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/files
 ///
 /// List all files associated with an assignment. Accessible to users assigned to the module.
 ///

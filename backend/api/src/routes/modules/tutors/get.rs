@@ -16,7 +16,7 @@ use db::{
 use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, JoinType, QuerySelect, QueryOrder, PaginatorTrait};
 use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleResponse};
 
-/// GET /api/modules/:module_id/tutors
+/// GET /api/modules/{module_id}/tutors
 ///
 /// Retrieve a paginated, filtered, and sorted list of users assigned as tutors to the specified module.
 ///

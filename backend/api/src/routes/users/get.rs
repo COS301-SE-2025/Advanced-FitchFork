@@ -220,7 +220,7 @@ pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoRespons
     )
 }
 
-/// GET /api/users/:id
+/// GET /api/users/{id}
 ///
 /// Fetch a single user by ID. Requires admin privileges.
 ///
@@ -264,7 +264,7 @@ pub async fn get_user(Path(id): Path<String>) -> impl IntoResponse {
     }
 }
 
-/// GET /api/users/:id/modules
+/// GET /api/users/{id}/modules
 ///
 /// Retrieve all modules that a specific user is involved in, including their role in each module.
 /// Requires admin privileges.

@@ -219,7 +219,9 @@ mod tests {
     }
 
     fn override_storage_dir(temp: &TempDir) {
-        env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
+        unsafe {
+            env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
+        }
     }
 
     #[tokio::test]

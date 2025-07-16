@@ -22,7 +22,7 @@ use crate::routes::common::UserResponse;
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateUserRequest {
     #[validate(regex(
-        path = "username_REGEX",
+        path = &*username_REGEX,
         message = "Student number must be in format u12345678"
     ))]
     pub username: Option<String>,
@@ -37,7 +37,7 @@ lazy_static::lazy_static! {
     static ref username_REGEX: regex::Regex = regex::Regex::new("^u\\d{8}$").unwrap();
 }
 
-/// PUT /api/users/:id
+/// PUT /api/users/{id}
 ///
 /// Update a user's information. Only admins can access this endpoint.
 ///
@@ -242,7 +242,7 @@ struct ProfilePictureResponse {
     profile_picture_path: String,
 }
 
-/// PUT /api/users/:id/avatar
+/// PUT /api/users/{id}/avatar
 ///
 /// Upload a profile picture (avatar) for a user. Only admins may upload avatars for other users.
 ///

@@ -10,7 +10,7 @@ use crate::response::ApiResponse;
 use db::connect;
 use code_runner::create_memo_outputs_for_all_tasks;
 
-/// POST /api/modules/:module_id/assignments/:assignment_id/memo_output/generate
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/memo_output/generate
 ///
 /// Start asynchronous generation of memo outputs for all tasks in the specified assignment. Accessible
 /// to users with Lecturer or Admin roles assigned to the module.
