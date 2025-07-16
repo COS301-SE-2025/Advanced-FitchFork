@@ -14,7 +14,7 @@ use db::{
 use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait, Condition, Set};
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
-/// POST /api/modules/:module_id/tutors
+/// POST /api/modules/{module_id}/tutors
 ///
 /// Assign one or more users as tutors to a module. Admin only.
 ///

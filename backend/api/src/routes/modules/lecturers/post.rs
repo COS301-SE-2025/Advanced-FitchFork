@@ -10,7 +10,7 @@ use db::{
 };
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
-/// POST /api/modules/:module_id/lecturers
+/// POST /api/modules/{module_id}/lecturers
 ///
 /// Assign one or more users as lecturers to a module. Admin only.
 ///

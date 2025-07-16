@@ -19,7 +19,7 @@ use db::{
 
 use crate::response::ApiResponse;
 
-/// DELETE /api/modules/:module_id/assignments/:assignment_id/tasks/:task_id
+/// DELETE /api/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}
 ///
 /// Delete a specific task from an assignment. Only accessible by lecturers or admins assigned to the module.
 ///

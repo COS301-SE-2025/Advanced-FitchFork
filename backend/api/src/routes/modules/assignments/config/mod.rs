@@ -2,7 +2,7 @@ pub mod post;
 pub mod put;
 pub mod get;
 
-/// Routes under `/assignments/:assignment_id/config`:
+/// Routes under `/assignments/{assignment_id}/config`:
 ///
 /// - `POST /` → Set or replace the full assignment configuration (must be a JSON object)
 /// - `GET /`  → Retrieve the current assignment configuration (returns object or empty)

@@ -1,22 +1,19 @@
 [package]
 name = "seeder"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
-sea-orm = { version = "0.12", features = [
-    "sqlx-sqlite",
-    "runtime-tokio-rustls",
-] }
+tokio = { version = "1.0", features = ["full"] }
+sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 migration = { path = "../migration" }
-db = { path = "../db" } # assuming your main SeaORM entity crate is in `../db`
+db = { path = "../db" }
 chrono = "0.4"
 dotenvy = "0.15"
 async-trait = "0.1"
-fake = "2"
-fastrand = "2"
-colored = "2"
+fake = "4.3"
+fastrand = "2.0"
+colored = "3.0"
 futures = "0.3"
-rand = "0.8"
-zip = "0.6"
+rand = "0.8" # Using older version of rand because sqlx and other packages are behind
+zip = "4.3"

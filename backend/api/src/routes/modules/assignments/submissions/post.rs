@@ -76,7 +76,7 @@ pub struct SubmissionDetailResponse {
     pub code_complexity: Option<CodeComplexity>,
 }
 
-/// POST /api/modules/:module_id/assignments/:assignment_id/submissions
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions
 ///
 /// Submit an assignment file for grading. Accessible to authenticated students assigned to the module.
 ///

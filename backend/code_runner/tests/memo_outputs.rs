@@ -90,7 +90,7 @@ async fn setup_test_db_with_seeded_tasks(
 #[tokio::test]
 #[ignore]
 async fn test_create_memo_outputs_for_all_tasks_9999_java() {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     let db = setup_test_db_with_seeded_tasks(9999, 9999, "COS999").await;
 
@@ -105,7 +105,7 @@ async fn test_create_memo_outputs_for_all_tasks_9999_java() {
 #[tokio::test]
 #[ignore]
 async fn test_create_memo_outputs_for_all_tasks_9998_cpp() {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     let db = setup_test_db_with_seeded_tasks(9998, 9998, "COS998").await;
 

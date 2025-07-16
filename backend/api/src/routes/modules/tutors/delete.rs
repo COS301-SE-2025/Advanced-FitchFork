@@ -17,7 +17,7 @@ use db::{
 use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, ActiveModelTrait};
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
-/// DELETE /api/modules/:module_id/tutors
+/// DELETE /api/modules/{module_id}/tutors
 ///
 /// Remove one or more users from the tutor list of a module.  
 /// Only accessible by admin users.

@@ -2,7 +2,7 @@ use crate::seed::Seeder;
 use db::models::{assignment, assignment_submission::Model as AssignmentSubmissionModel, user};
 use sea_orm::{DatabaseConnection, EntityTrait};
 use std::io::{Cursor, Write};
-use zip::write::FileOptions;
+use zip::write::SimpleFileOptions;
 
 pub struct AssignmentSubmissionSeeder;
 
@@ -57,7 +57,7 @@ impl Seeder for AssignmentSubmissionSeeder {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let helper_one = r#"
 public class HelperOne {
@@ -119,7 +119,7 @@ public class HelperThree {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let helper_one_cpp = r#"
 #include "HelperOne.h"

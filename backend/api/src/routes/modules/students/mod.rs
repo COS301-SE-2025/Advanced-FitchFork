@@ -15,7 +15,7 @@ use post::assign_students;
 use put::edit_students;
 use delete::remove_students;
 
-/// Builds and returns the `/api/modules/:module_id/students` route group.
+/// Builds and returns the `/api/modules/{module_id}/students` route group.
 ///
 /// - `GET` is accessible to students assigned to the module.
 /// - `POST`, `PUT`, and `DELETE` are admin-only.

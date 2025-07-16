@@ -1,6 +1,6 @@
 use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, DeleteResult};
-use strum_macros::{Display, EnumString};
+use strum::{Display, EnumString};
 
 /// The central table for user-module-role relationships.
 /// Replaces old `module_lecturers`, `module_tutors`, and `module_students`.

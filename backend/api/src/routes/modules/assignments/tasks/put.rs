@@ -19,7 +19,7 @@ pub struct EditTaskRequest {
     name: String,
 }
 
-/// PUT /api/modules/:module_id/assignments/:assignment_id/tasks/:task_id
+/// PUT /api/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}
 ///
 /// Edit the command of a specific task within an assignment. Accessible to users with Lecturer or Admin roles
 /// assigned to the module.

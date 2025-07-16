@@ -12,7 +12,7 @@ use db::models::{
 };
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
-/// DELETE /api/modules/:module_id/students
+/// DELETE /api/modules/{module_id}/students
 ///
 /// Remove one or more users from a module's student list.  
 /// Only accessible by admin users.

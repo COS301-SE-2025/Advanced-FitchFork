@@ -77,7 +77,7 @@ pub struct EligibleUserListResponse {
     pub total: u64,
 }
 
-/// GET /api/modules/:module_id/eligible-users
+/// GET /api/modules/{module_id}/eligible-users
 ///
 /// Retrieves a paginated list of users who are eligible to be assigned to a specific module role.
 ///
@@ -233,7 +233,7 @@ pub async fn get_eligible_users_for_module(
         .into_response()
 }
 
-/// GET /api/modules/:module_id
+/// GET /api/modules/{module_id}
 ///
 /// Retrieves detailed information about a specific module, including assigned lecturers, tutors, and students.
 ///

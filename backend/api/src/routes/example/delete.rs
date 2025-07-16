@@ -1,7 +1,7 @@
 use axum::{extract::Path, Json, response::IntoResponse};
 use crate::response::ApiResponse;
 
-/// DELETE /example/:id
+/// DELETE /example/{id}
 ///
 /// Deletes an example resource by ID. This route is protected by the `dummy_auth` middleware.
 ///

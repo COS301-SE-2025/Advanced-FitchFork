@@ -14,7 +14,7 @@ use db::{
     models::module
 };
 
-/// DELETE /api/modules/:module_id
+/// DELETE /api/modules/{module_id}
 ///
 /// Permanently deletes a module by ID, including all its assignments and assignment files.  
 /// Only accessible by admin users.

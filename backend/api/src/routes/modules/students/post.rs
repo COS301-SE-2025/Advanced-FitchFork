@@ -11,7 +11,7 @@ use db::{
 };
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
-/// POST /api/modules/:module_id/students
+/// POST /api/modules/{module_id}/students
 ///
 /// Assign one or more users as students to a module. Admin only.
 ///

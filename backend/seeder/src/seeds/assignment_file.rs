@@ -3,7 +3,7 @@ use db::models::assignment;
 use db::models::assignment_file::{FileType, Model};
 use sea_orm::{DatabaseConnection, EntityTrait};
 use std::io::{Cursor, Write};
-use zip::write::FileOptions;
+use zip::write::SimpleFileOptions;
 
 pub struct AssignmentFileSeeder;
 
@@ -53,7 +53,7 @@ impl Seeder for AssignmentFileSeeder {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let main_java = r#"
 public class Main {
@@ -115,7 +115,7 @@ public class Main {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let helper_one = r#"
 public class HelperOne {
@@ -177,7 +177,7 @@ public class HelperThree {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let makefile_content = r#"
 task1:
@@ -240,7 +240,7 @@ task3:
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let main_cpp = r#"
 #include <iostream>
@@ -336,7 +336,7 @@ struct HelperThree {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let helper_one_cpp = r#"
 #include "HelperOne.h"
@@ -395,7 +395,7 @@ std::string HelperThree::subtaskAlpha() {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let makefile_content = r#"
 CXX = g++

@@ -4,7 +4,7 @@ use util::mark_allocator::mark_allocator::{load_allocator, SaveError};
 
 use crate::response::ApiResponse;
 
-/// GET /api/modules/:module_id/assignments/:assignment_id/mark_allocator
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
 /// Load the mark allocator JSON configuration for a specific assignment. Accessible to users with
 /// appropriate permissions assigned to the module.

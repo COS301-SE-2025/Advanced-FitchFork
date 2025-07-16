@@ -28,7 +28,7 @@
 //! - `GET /example/admin` – requires JWT with `admin = true`
 //! - `GET /example/admin-auth` – requires both `require_authenticated` and `require_admin` middleware (redundant by design, for demonstration)
 //! - `POST /example` – creates a new item (public route)
-//! - `DELETE /example/:id` – placeholder route (middleware not yet applied)
+//! - `DELETE /example/{id}` – placeholder route (middleware not yet applied)
 
 pub mod get;
 pub mod post;
@@ -64,7 +64,7 @@ use delete::delete_example;
 /// - `POST /`  
 ///   → `create` — public route, no authentication required
 ///
-/// - `DELETE /:id`  
+/// - `DELETE /{id}`  
 ///   → `delete_example` — placeholder for protected delete route (middleware not yet applied)
 pub fn example_routes() -> Router {
     Router::new()
@@ -78,5 +78,5 @@ pub fn example_routes() -> Router {
                 .layer(middleware::from_fn(require_admin)),
         )
         .route("/", post(create))
-        .route("/:id", delete(delete_example))
+        .route("/{id}", delete(delete_example))
 }

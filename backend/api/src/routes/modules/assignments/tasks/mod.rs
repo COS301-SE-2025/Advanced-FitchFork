@@ -27,9 +27,9 @@ use delete::delete_task;
 ///
 /// - `GET /`: Lists all tasks for the assignment. Access is restricted to users with lecturer or admin roles for the assignment.
 /// - `POST /`: Creates a new task for the assignment. Access is restricted to users with lecturer or admin roles for the assignment.
-/// - `GET /:task_id`: Retrieves detailed information about a specific task. Access is restricted to users with lecturer or admin roles for the assignment.
-/// - `PUT /:task_id`: Edits the command of a specific task. Access is restricted to users with lecturer or admin roles for the assignment.
-/// - `DELETE /:task_id`: Deletes a specific task from the assignment. Access is restricted to users with lecturer or admin roles for the assignment.
+/// - `GET /{task_id}`: Retrieves detailed information about a specific task. Access is restricted to users with lecturer or admin roles for the assignment.
+/// - `PUT /{task_id}`: Edits the command of a specific task. Access is restricted to users with lecturer or admin roles for the assignment.
+/// - `DELETE /{task_id}`: Deletes a specific task from the assignment. Access is restricted to users with lecturer or admin roles for the assignment.
 ///
 /// All routes apply the `require_lecturer_or_admin` middleware, which checks the user's role for the assignment before allowing access.
 ///
@@ -50,19 +50,19 @@ pub fn tasks_routes() -> Router {
             })),
         )
         .route(
-            "/:task_id",
+            "/{task_id}",
             get(get_task_details).layer(from_fn(|Path((assignment_id, _task_id)): Path<(i64, i64)>, req, next| {
                 require_lecturer_or_admin(Path((assignment_id,)), req, next)
             })),
         )
         .route(
-            "/:task_id",
+            "/{task_id}",
             put(edit_task).layer(from_fn(|Path((assignment_id, _task_id)): Path<(i64, i64)>, req, next| {
                 require_lecturer_or_admin(Path((assignment_id,)), req, next)
             })),
         )
         .route(
-            "/:task_id",
+            "/{task_id}",
             delete(delete_task).layer(from_fn(|Path((assignment_id, _task_id)): Path<(i64, i64)>, req, next| {
                 require_lecturer_or_admin(Path((assignment_id,)), req, next)
             })),
