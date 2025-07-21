@@ -23,7 +23,6 @@ mod delete;
 /// - `DELETE /`     → remove students from module
 pub fn student_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
-        .with_state(db.clone())
         .route("/", get(get_students).route_layer(from_fn_with_state(db.clone(), require_student)))
         .route("/", post(assign_students).route_layer(from_fn(require_admin)))
         .route("/", put(edit_students).route_layer(from_fn(require_admin)))

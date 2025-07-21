@@ -38,9 +38,8 @@ pub mod common;
 /// An Axum `Router` ready to be passed into the main app.
 pub fn routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
-        .with_state(db.clone())
         .nest("/health", health_routes())
-        .nest("/auth", auth_routes(db.clone()))
-        .nest("/users", users_routes(db.clone()).route_layer(from_fn(require_admin)))
+        .nest("/auth", auth_routes())
+        .nest("/users", users_routes().route_layer(from_fn(require_admin)))
         .nest("/modules", modules_routes(db.clone()).route_layer(from_fn(require_authenticated)))
 }

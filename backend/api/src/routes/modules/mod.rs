@@ -51,7 +51,6 @@ pub mod common;
 /// All modifying routes are protected by `require_admin` middleware.
 pub fn modules_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
-        .with_state(db.clone())
         .route("/", get(get_modules))
         .route("/me", get(get_my_details))
         .route("/{module_id}/eligible-users", get(get_eligible_users_for_module).route_layer(from_fn(require_admin)))

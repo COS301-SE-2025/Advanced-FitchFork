@@ -21,9 +21,8 @@ pub mod post;
 /// 
 /// - `POST /`
 ///   - Submit a new assignment (student access only)
-pub fn submission_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
+pub fn submission_routes() -> Router<DatabaseConnection> {
     Router::new()
-        .with_state(db.clone())
         .route("/", get(list_submissions))
         .route("/{submission_id}", get(get_submission))
         .route("/", post(submit_assignment))

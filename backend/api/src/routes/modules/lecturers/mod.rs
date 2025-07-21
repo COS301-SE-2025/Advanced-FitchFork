@@ -23,7 +23,6 @@ mod delete;
 /// - `DELETE /modules/{module_id}/lecturers`     → remove lecturers from module
 pub fn lecturer_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
-        .with_state(db.clone())
         .route("/", get(get_lecturers).route_layer(from_fn_with_state(db.clone(), require_lecturer)))
         .route("/", post(assign_lecturers).route_layer(from_fn(require_admin)))
         .route("/", put(edit_lecturers).route_layer(from_fn(require_admin)))

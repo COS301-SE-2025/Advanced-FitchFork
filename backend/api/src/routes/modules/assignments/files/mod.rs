@@ -30,7 +30,6 @@ pub mod delete;
 /// An [`axum::Router`] with the file endpoints and their associated middleware.
 pub fn files_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
-        .with_state(db.clone())
         .route("/", post(upload_files).route_layer(from_fn_with_state(db.clone(), require_lecturer)))
         .route("/", get(list_files).route_layer(from_fn_with_state(db.clone(), require_assigned_to_module)))
         .route("/", delete(delete_files).route_layer(from_fn_with_state(db.clone(), require_lecturer)))

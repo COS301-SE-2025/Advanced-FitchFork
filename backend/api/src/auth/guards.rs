@@ -212,11 +212,59 @@ async fn check_assignment_exists(id: i32, db: &DatabaseConnection) -> Result<(),
     }
 }
 
+async fn check_user_exists(id: i32, db: &DatabaseConnection) -> Result<(), StatusCode> {
+    let found = db::models::user::Entity::find_by_id(id)
+        .one(db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if found.is_some() {
+        Ok(())
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn check_task_exists(id: i32, db: &DatabaseConnection) -> Result<(), StatusCode> {
+    let found = db::models::assignment_task::Entity::find_by_id(id)
+        .one(db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if found.is_some() {
+        Ok(())
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn check_submission_exists(id: i32, db: &DatabaseConnection) -> Result<(), StatusCode> {
+    let found = db::models::assignment_submission::Entity::find_by_id(id)
+        .one(db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if found.is_some() {
+        Ok(())
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn check_file_exists(id: i32, db: &DatabaseConnection) -> Result<(), StatusCode> {
+    let found = db::models::assignment_file::Entity::find_by_id(id)
+        .one(db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if found.is_some() {
+        Ok(())
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
 pub async fn validate_known_ids(
     State(db): State<DatabaseConnection>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
-    next: Next<Body>,
+    next: Next,
 ) -> Result<Response, Response> {
     for (key, raw_val) in params {
         let id: i32 = raw_val.parse().map_err(|_| {
@@ -226,6 +274,10 @@ pub async fn validate_known_ids(
         let res: Result<(), StatusCode> = match key.as_str() {
             "module_id"     => check_module_exists(id, &db).await,
             "assignment_id" => check_assignment_exists(id, &db).await,
+            "user_id"       => check_user_exists(id, &db).await,
+            "task_id"       => check_task_exists(id, &db).await,
+            "submission_id" => check_submission_exists(id, &db).await,
+            "file_id"       => check_file_exists(id, &db).await,
             other => {
                 return Err((
                     StatusCode::BAD_REQUEST,

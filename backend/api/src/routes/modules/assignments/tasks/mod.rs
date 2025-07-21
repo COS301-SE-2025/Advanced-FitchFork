@@ -29,9 +29,8 @@ pub mod common;
 ///
 /// # Returns
 /// An [`axum::Router`] with the task endpoints and their associated middleware.
-pub fn tasks_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
-    Router::new()
-        .with_state(db.clone())
+pub fn tasks_routes() -> Router<DatabaseConnection> {
+    Router::new()        
         .route("/", get(list_tasks))
         .route("/", post(create_task))
         .route("/{task_id}", get(get_task_details))

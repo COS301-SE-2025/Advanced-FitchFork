@@ -1,6 +1,8 @@
 use api::auth::middleware::log_request;
+use api::auth::guards::validate_known_ids;
 use api::routes::routes;
 use axum::middleware::from_fn;
+use axum::middleware::from_fn_with_state;
 use axum::Router;
 use dotenvy::dotenv;
 use std::env;
@@ -43,7 +45,8 @@ async fn main() {
         .nest("/api", routes(db.clone()))
         .layer(cors)
         .layer(from_fn(log_request))
-        .with_state(db);
+        .with_state(db.clone())
+        .layer(from_fn_with_state(db.clone(), validate_known_ids));
 
     let addr: SocketAddr = format!("{}:{}", host, port)
         .parse()

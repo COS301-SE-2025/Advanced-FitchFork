@@ -14,9 +14,8 @@ pub mod post;
 pub mod put;
 pub mod get;
 
-pub fn config_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
+pub fn config_routes() -> Router<DatabaseConnection> {
     Router::new()
-        .with_state(db.clone())
         .route("/", post(set_assignment_config))
         .route("/", get(get_assignment_config))
         .route("/", put(update_assignment_config))

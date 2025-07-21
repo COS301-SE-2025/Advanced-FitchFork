@@ -39,9 +39,8 @@ pub mod get;
 // ## Usage
 // Use the `auth_routes()` function to mount all `/auth` endpoints under the main application router.
 
-pub fn auth_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
-    Router::new()
-        .with_state(db.clone())
+pub fn auth_routes() -> Router<DatabaseConnection> {
+    Router::new()        
         .route("/register", post(register))
         .route("/login", post(login))
         .route("/request-password-reset", post(request_password_reset))

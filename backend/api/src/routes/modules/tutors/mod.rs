@@ -23,7 +23,6 @@ mod delete;
 /// - `DELETE /`     → remove tutors from module
 pub fn tutor_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
-        .with_state(db.clone())
         .route("/", get(get_tutors).route_layer(from_fn_with_state(db.clone(), require_tutor)))
         .route("/", post(assign_tutors).route_layer(from_fn(require_admin)))
         .route("/", put(edit_tutors).route_layer(from_fn(require_admin)))
