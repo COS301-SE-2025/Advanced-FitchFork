@@ -29,7 +29,6 @@ import Appearance from './pages/settings/Appearance';
 import AssignmentLayout from './layouts/AssignmentLayout';
 import SubmissionView from './pages/modules/assignments/submissions/show/SubmissionView';
 import Submissions from './pages/modules/assignments/submissions/index/Submissions';
-import SubmissionLayout from './layouts/SubmissionLayout';
 import Assignments from './pages/modules/assignments/index/Assignments';
 import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
 import MemoOutput from './pages/modules/assignments/MemoOutput';
@@ -110,6 +109,7 @@ export default function App() {
               <Route index element={<Navigate to="submissions" replace />} />
               <Route path="files" element={<AssignmentFiles />} />
               <Route path="submissions" element={<Submissions />} />
+              <Route path="submissions/:submission_id" element={<SubmissionView />} />
               <Route path="tasks" element={<Tasks />}>
                 <Route index element={<> </>} />
                 <Route path=":task_id" element={<> </>} />
@@ -118,10 +118,6 @@ export default function App() {
               <Route path="mark-allocator" element={<MarkAllocator />} />
               <Route path="stats" element={<UnderConstruction />} />
               <Route path="config" element={<Config />} />
-            </Route>
-
-            <Route path="assignments/:assignment_id" element={<SubmissionLayout />}>
-              <Route path="submissions/:submission_id" element={<SubmissionView />} />
             </Route>
 
             <Route path="bookings" element={<UnderConstruction />} />

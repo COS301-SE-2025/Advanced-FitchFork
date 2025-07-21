@@ -19,7 +19,6 @@ import {
   type AssignmentType,
   ASSIGNMENT_TYPES,
 } from '@/types/modules/assignments';
-import { getRandomAssignmentStatus } from '@/constants/mock/assignment';
 import type { SortOption } from '@/types/common';
 
 const AssignmentsList = () => {
@@ -53,10 +52,7 @@ const AssignmentsList = () => {
 
     if (res.success) {
       return {
-        items: res.data.assignments.map((a) => ({
-          ...a,
-          status: getRandomAssignmentStatus(),
-        })),
+        items: res.data.assignments,
         total: res.data.total,
       };
     } else {
@@ -153,7 +149,7 @@ const AssignmentsList = () => {
           {
             title: 'Status',
             key: 'status',
-            render: () => <AssignmentStatusTag status={getRandomAssignmentStatus()} />,
+            render: (_, record) => <AssignmentStatusTag status={record.status} />,
           },
         ]}
         sortOptions={[

@@ -170,7 +170,7 @@ pub struct ListSubmissionsQuery {
 }
 #[derive(Debug, Serialize, Clone)]
 pub struct UserResponse {
-    user_id: i64,
+    id: i64,
     username: String,
     email: String,
 }
@@ -341,7 +341,7 @@ async fn get_list_submissions(
             (
                 u.id,
                 UserResponse {
-                    user_id: u.id,
+                    id: u.id,
                     username: u.username,
                     email: u.email,
                 },
@@ -394,7 +394,7 @@ async fn get_list_submissions(
             SubmissionListItem {
                 id: s.id,
                 user: user_map.get(&s.user_id).cloned().unwrap_or(UserResponse {
-                    user_id: s.user_id,
+                    id: s.user_id,
                     username: "unknown username".to_string(),
                     email: "unknown email".to_string(),
                 }),
@@ -823,7 +823,7 @@ pub async fn get_submission(
     if !is_student(module_id, claims.sub, &db).await {
         if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(&db).await {
             let user_value = serde_json::to_value(UserResponse {
-                user_id: u.id,
+                id: u.id,
                 username: u.username,
                 email: u.email,
             })

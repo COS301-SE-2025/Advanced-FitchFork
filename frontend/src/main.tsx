@@ -9,6 +9,7 @@ import { BreadcrumbProvider } from './context/BreadcrumbContext.tsx';
 import { UIProvider } from './context/UIContext.tsx';
 import { ThemeProvider } from './context/ThemeContext.tsx';
 import { AppMuiTheme } from './context/AppMuiTheme.tsx';
+import { MessageContextHolder } from './utils/message.tsx';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -17,6 +18,7 @@ createRoot(document.getElementById('root')!).render(
         <UIProvider>
           <AuthProvider>
             <AntApp>
+              <MessageContextHolder />
               <BreadcrumbProvider>
                 <App />
               </BreadcrumbProvider>

@@ -6,7 +6,6 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import type { Assignment } from '@/types/modules/assignments';
 import { useModule } from '@/context/ModuleContext';
 import { useNavigate } from 'react-router-dom';
-import { getRandomAssignmentStatus } from '@/constants/mock/assignment';
 import AssignmentStatusTag from './AssignmentStatusTag';
 import AssignmentTypeTag from './AssignmentTypeTag';
 dayjs.extend(relativeTime);
@@ -39,7 +38,7 @@ const AssignmentCard = ({ assignment, actions }: Props) => {
 
           <div className="flex items-center gap-1">
             <AssignmentTypeTag type={assignment.assignment_type} />
-            <AssignmentStatusTag status={getRandomAssignmentStatus()} />
+            <AssignmentStatusTag status={assignment.status} />
           </div>
         </div>
       }

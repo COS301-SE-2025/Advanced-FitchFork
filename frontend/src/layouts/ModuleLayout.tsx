@@ -84,7 +84,7 @@ const ModuleLayout = () => {
       .sort((a, b) => b.length - a.length)[0] ?? '';
 
   return (
-    <Layout className="!bg-white dark:!bg-gray-950 h-full">
+    <Layout className="h-full !bg-transparent">
       {isMobile ? (
         <div className="w-full px-4 pt-4 bg-white dark:bg-gray-950">
           <Tabs
@@ -122,7 +122,7 @@ const ModuleLayout = () => {
 
       <ModuleProvider value={{ module }}>
         <Layout className="!bg-transparent">
-          <Content className="bg-gray-50 dark:bg-gray-950 overflow-y-auto min-h-full">
+          <Content className="!bg-transparent overflow-y-auto min-h-full">
             <Outlet />
           </Content>
         </Layout>

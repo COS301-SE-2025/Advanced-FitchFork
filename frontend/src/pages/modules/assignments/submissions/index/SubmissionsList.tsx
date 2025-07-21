@@ -1,16 +1,16 @@
-import { Table, Typography, Tag, Button, Dropdown, Checkbox, message, Modal, Upload } from 'antd';
-import { MoreOutlined, EyeOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { Tag, Button, message, Upload, Checkbox, Modal } from 'antd';
+import { UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import type { ColumnsType } from 'antd/es/table';
+import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
+import type { ColumnsType } from 'antd/es/table';
+
+import { EntityList } from '@/components/EntityList';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
-import { useEffect, useState } from 'react';
-import { submitAssignment } from '@/services/modules/assignments/submissions/post';
 import { getSubmissions } from '@/services/modules/assignments/submissions';
+import { submitAssignment } from '@/services/modules/assignments/submissions/post';
 import type { Submission } from '@/types/modules/assignments/submissions';
-
-const { Title, Text } = Typography;
 
 const getMarkColor = (mark: number): string => {
   if (mark >= 75) return 'green';
@@ -24,56 +24,71 @@ type StudentSubmission = Submission & {
   percentageMark?: number;
 };
 
-const SubmissionsList = () => {
+export default function SubmissionsList() {
   const navigate = useNavigate();
   const module = useModule();
   const { assignment } = useAssignment();
+
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isPractice, setIsPractice] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const fetchSubmissions = async () => {
-    if (!module.id || !assignment.id) return;
-    setLoading(true);
-    try {
-      const query = new URLSearchParams({ page: '1', per_page: '50' });
-      const res = await getSubmissions(module.id, assignment.id, query);
-      let raw: Submission[] = [];
-
-      if (Array.isArray(res.data)) {
-        raw = res.data;
-      } else if ('submissions' in res.data) {
-        raw = res.data.submissions;
-      }
-
-      const items = raw.map(
-        (s): StudentSubmission => ({
-          ...s,
-          status: 'mark' in s ? 'Graded' : 'Pending',
-          percentageMark:
-            'mark' in s && s.mark && typeof s.mark === 'object' && 'earned' in s.mark
-              ? Math.round(((s.mark as any).earned / (s.mark as any).total) * 100)
-              : undefined,
-          path: `/api/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}/file`,
-        }),
-      );
-
-      setSubmissions(items);
-    } catch (err) {
-      message.error('Failed to load submissions');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [hasUsername, setHasUsername] = useState(false);
 
   useEffect(() => {
-    fetchSubmissions();
-  }, [module.id, assignment.id]);
+    setSelectedFile(null);
+    setIsPractice(false);
+  }, [modalOpen]);
+
+  const fetchItems = async ({ page, per_page }: { page: number; per_page: number }) => {
+    if (!module.id || !assignment.id) {
+      setHasUsername(false);
+      return { items: [], total: 0 };
+    }
+
+    const query = new URLSearchParams({
+      page: String(page),
+      per_page: String(per_page),
+    });
+
+    const res = await getSubmissions(module.id, assignment.id, query);
+
+    let raw: Submission[] = [];
+
+    if (Array.isArray(res.data)) {
+      raw = res.data;
+    } else if ('submissions' in res.data) {
+      raw = res.data.submissions;
+    }
+
+    const hasAnyUsername = raw.some((s) => s.user && s.user.username);
+    setHasUsername(hasAnyUsername);
+
+    const items: StudentSubmission[] = raw.map(
+      (s): StudentSubmission => ({
+        ...s,
+        status: 'mark' in s ? 'Graded' : 'Pending',
+        percentageMark:
+          'mark' in s && s.mark && typeof s.mark === 'object' && 'earned' in s.mark
+            ? Math.round(((s.mark as any).earned / (s.mark as any).total) * 100)
+            : undefined,
+        path: `/api/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}/file`,
+      }),
+    );
+
+    return { items, total: items.length };
+  };
 
   const columns: ColumnsType<StudentSubmission> = [
+    ...(hasUsername
+      ? [
+          {
+            title: 'Username',
+            dataIndex: ['user', 'username'],
+            key: 'username',
+          },
+        ]
+      : []),
     {
       title: 'Attempt',
       dataIndex: 'attempt',
@@ -107,73 +122,18 @@ const SubmissionsList = () => {
           <Tag color="default">Not marked</Tag>
         ),
     },
-    {
-      title: 'Actions',
-      key: 'actions',
-      align: 'right',
-      render: (_, record) => ({
-        children: (
-          <Dropdown
-            trigger={['click']}
-            menu={{
-              items: [
-                {
-                  key: 'view',
-                  icon: <EyeOutlined />,
-                  label: 'View',
-                },
-                {
-                  key: 'download',
-                  icon: <DownloadOutlined />,
-                  label: 'Download',
-                },
-              ],
-              onClick: ({ key, domEvent }) => {
-                domEvent.stopPropagation();
-                if (key === 'view') {
-                  navigate(
-                    `/modules/${module.id}/assignments/${assignment.id}/submissions/${record.id}`,
-                  );
-                } else if (key === 'download') {
-                  window.open(record.path, '_blank');
-                }
-              },
-            }}
-          >
-            <Button icon={<MoreOutlined />} onClick={(e) => e.stopPropagation()} />
-          </Dropdown>
-        ),
-      }),
-    },
   ];
 
   return (
-    <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <Title level={4} className="mb-0">
-            Your Submissions
-          </Title>
-          <Text className="text-gray-500 dark:text-gray-400">
-            Below are your attempts for this assignment.
-          </Text>
-        </div>
-        <Button type="primary" onClick={() => setModalOpen(true)}>
-          New Submission
-        </Button>
-      </div>
-
-      <Table<StudentSubmission>
+    <div>
+      <EntityList<StudentSubmission>
+        name="Submissions"
+        fetchItems={fetchItems}
         columns={columns}
-        dataSource={submissions}
-        rowKey="id"
-        pagination={{ pageSize: 5 }}
-        loading={loading}
-        className="border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
-        onRow={(record) => ({
-          onClick: () =>
-            navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${record.id}`),
-        })}
+        getRowKey={(item) => item.id}
+        onRowClick={(item) =>
+          navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${item.id}`)
+        }
       />
 
       <Modal
@@ -190,9 +150,6 @@ const SubmissionsList = () => {
             await submitAssignment(module.id, assignment.id, selectedFile, isPractice);
             message.success('Submission successful', 3);
             setModalOpen(false);
-            setSelectedFile(null);
-            setIsPractice(false);
-            await fetchSubmissions(); // <- re-fetch submissions after success
           } catch (err) {
             message.error('Submission failed');
           } finally {
@@ -222,6 +179,4 @@ const SubmissionsList = () => {
       </Modal>
     </div>
   );
-};
-
-export default SubmissionsList;
+}

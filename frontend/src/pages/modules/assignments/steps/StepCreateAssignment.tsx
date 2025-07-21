@@ -1,4 +1,6 @@
+import dayjs from 'dayjs';
 import { Typography, Input, Select, DatePicker } from 'antd';
+
 const { Title, Paragraph, Text } = Typography;
 const { Option } = Select;
 
@@ -45,16 +47,20 @@ const StepCreateAssignment = ({ draft, setDraft }: Props) => {
           <Text strong>Available From</Text>
           <DatePicker
             className="w-full mt-1"
-            showTime
-            onChange={(val) => setDraft({ ...draft, available_from: val?.toISOString() ?? '' })}
+            showTime={{ format: 'HH:mm' }}
+            format="YYYY-MM-DD HH:mm"
+            value={draft.available_from ? dayjs(draft.available_from) : null}
+            onChange={(val) => setDraft({ ...draft, available_from: val ? val.toISOString() : '' })}
           />
         </div>
         <div>
           <Text strong>Due Date</Text>
           <DatePicker
             className="w-full mt-1"
-            showTime
-            onChange={(val) => setDraft({ ...draft, due_date: val?.toISOString() ?? '' })}
+            showTime={{ format: 'HH:mm' }}
+            format="YYYY-MM-DD HH:mm"
+            value={draft.due_date ? dayjs(draft.due_date) : null}
+            onChange={(val) => setDraft({ ...draft, due_date: val ? val.toISOString() : '' })}
           />
         </div>
       </div>

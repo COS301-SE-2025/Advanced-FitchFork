@@ -1,14 +1,29 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet, useParams } from 'react-router-dom';
-import { Tabs, Spin, Button } from 'antd';
+import { Spin, Dropdown, Segmented, Button, Alert, Modal, Upload, Checkbox } from 'antd';
+import type { MenuProps } from 'antd';
+import { UploadOutlined } from '@ant-design/icons';
+
 import { useModule } from '@/context/ModuleContext';
 import { useAuth } from '@/context/AuthContext';
 import { AssignmentProvider } from '@/context/AssignmentContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
-import PageHeader from '@/components/PageHeader';
+
+import { message } from '@/utils/message';
+
 import { getAssignmentDetails, getAssignmentReadiness } from '@/services/modules/assignments';
+import { generateMemoOutput, getMemoOutput } from '@/services/modules/assignments/memo-output';
+import {
+  generateMarkAllocator,
+  getMarkAllocator,
+} from '@/services/modules/assignments/mark-allocator';
+import { submitAssignment } from '@/services/modules/assignments/submissions/post';
+
 import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
 import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
+import AssignmentStatusTag from '@/components/assignments/AssignmentStatusTag';
+import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
+import type { MarkAllocatorItem } from '@/types/modules/assignments/mark-allocator';
 
 interface AssignmentDetails extends Assignment {
   files: AssignmentFile[];
@@ -23,33 +38,47 @@ const AssignmentLayout = () => {
   const { setBreadcrumbLabel } = useBreadcrumbContext();
 
   const [assignment, setAssignment] = useState<AssignmentDetails | null>(null);
+  const [memoOutput, setMemoOutput] = useState<MemoTaskOutput[]>([]);
+  const [markAllocator, setMarkAllocator] = useState<MarkAllocatorItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [readiness, setReadiness] = useState<AssignmentReadiness | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isPractice, setIsPractice] = useState(false);
 
   const assignmentIdNum = Number(assignment_id);
   const basePath = `/modules/${module.id}/assignments/${assignment_id}`;
   const showTabs = !isStudent(module.id) || isAdmin;
 
-  const tabs = [
-    { key: `${basePath}/submissions`, label: 'Submissions', disabled: false },
+  const segments = [
+    { value: `${basePath}/submissions`, label: 'Submissions' },
     ...(isLecturer(module.id) || isAdmin
       ? [
-          { key: `${basePath}/files`, label: 'Files', disabled: !readiness?.config_present },
-          { key: `${basePath}/tasks`, label: 'Tasks', disabled: !readiness?.config_present },
           {
-            key: `${basePath}/memo-output`,
+            value: `${basePath}/files`,
+            label: 'Files',
+            disabled: !readiness?.config_present,
+          },
+          {
+            value: `${basePath}/tasks`,
+            label: 'Tasks',
+            disabled: !readiness?.config_present,
+          },
+          {
+            value: `${basePath}/memo-output`,
             label: 'Memo Output',
             disabled: !readiness?.config_present || !readiness?.tasks_present,
           },
           {
-            key: `${basePath}/mark-allocator`,
+            value: `${basePath}/mark-allocator`,
             label: 'Mark Allocator',
             disabled: !readiness?.memo_output_present,
           },
-          { key: `${basePath}/config`, label: 'Config', disabled: false },
+          { value: `${basePath}/config`, label: 'Config' },
           {
-            key: `${basePath}/stats`,
+            value: `${basePath}/stats`,
             label: 'Statistics',
             disabled: !readiness?.is_ready,
           },
@@ -58,66 +87,210 @@ const AssignmentLayout = () => {
   ];
 
   const activeKey =
-    tabs.find((tab) => location.pathname === tab.key || location.pathname.startsWith(tab.key + '/'))
-      ?.key || `${basePath}/submissions`;
+    segments.find(
+      (seg) => location.pathname === seg.value || location.pathname.startsWith(seg.value + '/'),
+    )?.value || `${basePath}/submissions`;
+
+  const refreshAssignment = async () => {
+    const [detailsRes, readinessRes, memoOutputRes, allocatorRes] = await Promise.all([
+      getAssignmentDetails(module.id, assignmentIdNum),
+      getAssignmentReadiness(module.id, assignmentIdNum),
+      getMemoOutput(module.id, assignmentIdNum),
+      getMarkAllocator(module.id, assignmentIdNum),
+    ]);
+
+    if (detailsRes.success && detailsRes.data) {
+      setAssignment(detailsRes.data);
+      setBreadcrumbLabel(
+        `modules/${module.id}/assignments/${detailsRes.data.id}`,
+        detailsRes.data.name,
+      );
+    }
+
+    if (readinessRes.success) {
+      setReadiness(readinessRes.data);
+    }
+
+    if (memoOutputRes.success && memoOutputRes.data) {
+      setMemoOutput(memoOutputRes.data);
+    }
+
+    if (allocatorRes.success && allocatorRes.data) {
+      setMarkAllocator(allocatorRes.data.tasks);
+    }
+  };
 
   useEffect(() => {
-    const loadAssignment = async () => {
-      setLoading(true);
-      const res = await getAssignmentDetails(module.id, assignmentIdNum);
-      if (res.success && res.data) {
-        setAssignment(res.data);
-        setBreadcrumbLabel(`modules/${module.id}/assignments/${res.data.id}`, res.data.name);
-      }
-      setLoading(false);
-    };
-
-    const loadReadiness = async () => {
-      const res = await getAssignmentReadiness(module.id, assignmentIdNum);
-      if (res.success) setReadiness(res.data);
-    };
-
     if (!isNaN(assignmentIdNum)) {
-      loadAssignment();
-      loadReadiness();
+      refreshAssignment().finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
   }, [module.id, assignmentIdNum]);
 
-  const refreshReadiness = async () => {
-    const res = await getAssignmentReadiness(module.id, assignmentIdNum);
-    if (res.success) setReadiness(res.data);
+  const handleGenerateMemoOutput = async () => {
+    setLoading(true);
+    const hide = message.loading('Generating memo ouptut...');
+    try {
+      const res = await generateMemoOutput(module.id, assignmentIdNum);
+      hide();
+      if (res.success) {
+        await refreshAssignment();
+        message.success('Memo output generated');
+      } else {
+        message.error(res.message || 'Failed to generate memo output');
+      }
+    } catch {
+      hide();
+      message.error('An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (loading || !assignment) {
+  const handleGenerateMarkAllocator = async () => {
+    setLoading(true);
+    const hide = message.loading('Generating mark allocator...');
+    try {
+      const res = await generateMarkAllocator(module.id, assignmentIdNum);
+      hide(); // close the loading message
+      if (res.success) {
+        await refreshAssignment();
+        message.success('Mark allocator generated');
+      } else {
+        message.error(res.message || 'Failed to generate mark allocator');
+      }
+    } catch {
+      hide();
+      message.error('Failed to generate mark allocator');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmitAssignment = async () => {
+    if (!selectedFile) {
+      message.error('Please select a file to submit.');
+      return;
+    }
+    setModalOpen(false);
+    setLoading(true);
+    const hide = message.loading('Submitting assignment...');
+    try {
+      await submitAssignment(module.id, assignmentIdNum, selectedFile, isPractice);
+      await refreshAssignment();
+      message.success('Submission successful');
+    } catch {
+      message.error('Submission failed');
+    } finally {
+      hide();
+      setLoading(false);
+      setSelectedFile(null);
+      setIsPractice(false);
+    }
+  };
+
+  const menuItems: MenuProps['items'] = [
+    {
+      key: 'memo',
+      label: 'Generate Memo Output',
+      onClick: handleGenerateMemoOutput,
+      disabled: loading,
+    },
+    {
+      key: 'mark',
+      label: 'Generate Mark Allocator',
+      onClick: handleGenerateMarkAllocator,
+      disabled: loading,
+    },
+    {
+      type: 'divider',
+    },
+    {
+      key: 'archive',
+      label: 'Archive Assignment',
+      disabled: loading,
+    },
+    {
+      key: 'delete',
+      label: 'Delete Assignment',
+      danger: true,
+      disabled: loading,
+    },
+  ];
+
+  if (!assignment) {
     return <Spin className="p-6" tip="Loading assignment..." />;
   }
 
-  return (
-    <div className="p-4 sm:p-6 space-y-6">
-      <div className="flex justify-between flex-wrap gap-4 m-0">
-        <PageHeader
-          title={assignment.name}
-          description={`Manage assignment #${assignment.id} in ${module.code}`}
-        />
+  const isSetupIncomplete = !readiness?.is_ready;
 
-        {readiness && !readiness.is_ready && (
-          <Button type="primary" onClick={() => setSetupOpen(true)}>
-            Complete Setup
-          </Button>
-        )}
+  return (
+    <div className="p-4 space-y-6">
+      <div className="bg-white dark:bg-gray-950 rounded border border-gray-200 dark:border-gray-700 px-4 py-4 mb-4">
+        <div className="flex justify-between items-start gap-3">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 !m-0">
+                {assignment.name}
+              </h1>
+              <AssignmentStatusTag status={assignment.status} />
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Manage assignment #{assignment.id} in {module.code}
+            </p>
+          </div>
+
+          <div>
+            {isSetupIncomplete ? (
+              <Button
+                type="primary"
+                onClick={() => setSetupOpen(true)}
+                disabled={loading}
+                loading={loading}
+              >
+                Complete Setup
+              </Button>
+            ) : (
+              <Dropdown.Button
+                menu={{ items: menuItems }}
+                type="primary"
+                disabled={loading}
+                onClick={() => setModalOpen(true)}
+                loading={loading}
+              >
+                Submit Assignment
+              </Dropdown.Button>
+            )}
+          </div>
+        </div>
       </div>
 
-      <Tabs
-        activeKey={activeKey}
-        onChange={(key) => navigate(key)}
-        items={showTabs ? tabs : []}
-        tabBarGutter={16}
-        className="!mb-4"
-      />
+      {assignment.due_date && new Date() > new Date(assignment.due_date) && (
+        <Alert
+          message="Past Due Date - Practice submissions only"
+          description="Practice submissions won't be considered for your final mark."
+          type="warning"
+          showIcon
+          className="!mb-4"
+        />
+      )}
 
-      <AssignmentProvider value={{ assignment, refreshReadiness, readiness }}>
+      {showTabs && (
+        <div className="mb-4">
+          <Segmented
+            options={segments}
+            value={activeKey}
+            onChange={(key) => navigate(key as string)}
+            size="middle"
+            block
+          />
+        </div>
+      )}
+
+      <AssignmentProvider
+        value={{ assignment, memoOutput, markAllocator, readiness, refreshAssignment }}
+      >
         <Outlet />
       </AssignmentProvider>
 
@@ -127,6 +300,37 @@ const AssignmentLayout = () => {
         assignmentId={assignment.id}
         module={module}
       />
+
+      <Modal
+        title="Submit Assignment"
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        onOk={handleSubmitAssignment}
+        okButtonProps={{ loading }}
+        okText="Submit"
+      >
+        <Upload
+          maxCount={1}
+          beforeUpload={(file) => {
+            setSelectedFile(file);
+            return false;
+          }}
+          accept=".zip,.tar,.gz,.tgz"
+          disabled={loading}
+        >
+          <Button icon={<UploadOutlined />} disabled={loading}>
+            Click to select file
+          </Button>
+        </Upload>
+        <Checkbox
+          checked={isPractice}
+          onChange={(e) => setIsPractice(e.target.checked)}
+          style={{ marginTop: 16 }}
+          disabled={loading}
+        >
+          This is a practice submission
+        </Checkbox>
+      </Modal>
     </div>
   );
 };

@@ -21,8 +21,21 @@ import StepMarkAllocator from './StepMarkAllocator';
 import type { Module } from '@/types/modules';
 import type { PostAssignmentRequest, AssignmentReadiness } from '@/types/modules/assignments';
 import type { AssignmentDetails } from '@/context/AssignmentSetupContext';
+import dayjs from 'dayjs';
 
 const { Step } = Steps;
+
+const getDefaultDates = () => {
+  const now = dayjs();
+
+  const availableFrom = now.add(7, 'day').startOf('day').toISOString(); // 7 days from now at 00:00:00Z
+  const dueDate = now.add(14, 'day').endOf('day').toISOString(); // 14 days from now at 23:59:59Z
+
+  return {
+    available_from: availableFrom,
+    due_date: dueDate,
+  };
+};
 
 const AssignmentSetup = ({
   open,
@@ -37,12 +50,15 @@ const AssignmentSetup = ({
 }) => {
   const [current, setCurrent] = useState(0);
 
+  const defaultDates = getDefaultDates();
+
   const [assignmentDraft, setAssignmentDraft] = useState<PostAssignmentRequest>({
     name: '',
     assignment_type: 'assignment',
-    available_from: '',
-    due_date: '',
+    available_from: defaultDates.available_from, // full ISO timestamp with time
+    due_date: defaultDates.due_date, // full ISO timestamp with time
     description: '',
+    status: 'setup',
   });
 
   const [assignment, setAssignment] = useState<AssignmentDetails | null>(null);

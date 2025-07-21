@@ -383,7 +383,7 @@ export function EntityList<T>(props: EntityListProps<T>) {
               </Empty>
             ),
           }}
-          className="bg-white dark:bg-gray-950 border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
+          className="bg-white dark:bg-gray-900 border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
         />
       ) : items.length === 0 ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data found." className="mt-10">

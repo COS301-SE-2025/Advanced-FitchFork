@@ -95,7 +95,7 @@ const AppLayout = () => {
   };
 
   return (
-    <Layout className="min-h-screen bg-gray-100 dark:bg-gray-950 !overflow-hidden">
+    <Layout className="min-h-screen !bg-gray-50 dark:!bg-gray-900 !overflow-hidden">
       {isMobile ? (
         <Drawer
           placement="right"
@@ -122,8 +122,8 @@ const AppLayout = () => {
         </Sider>
       )}
 
-      <Layout className="flex flex-col w-full h-screen !bg-white dark:!bg-gray-950">
-        <Header className="!bg-transparent border-b border-gray-200 dark:border-gray-800 !px-4 sm:px-6">
+      <Layout className="!bg-transparent flex flex-col w-full h-screen">
+        <Header className="border-b !bg-white dark:!bg-gray-950 dark:!bg-gray border-gray-200 dark:border-gray-800 !px-4 sm:px-6">
           <HeaderBar
             breadcrumbs={breadcrumbs}
             notifications={notifications}
@@ -132,7 +132,7 @@ const AppLayout = () => {
           />
         </Header>
 
-        <Content className="flex-1 min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-950">
+        <Content className="flex-1 min-h-0 overflow-y-auto !bg-transparent">
           <Outlet />
         </Content>
       </Layout>

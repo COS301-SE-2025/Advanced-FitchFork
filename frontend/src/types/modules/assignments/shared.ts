@@ -31,7 +31,7 @@ export interface Assignment extends Timestamp {
   assignment_type: AssignmentType;
   available_from: string; // ISO
   due_date: string;
-  status?: AssignmentStatus,
+  status: AssignmentStatus,
 }
 
 

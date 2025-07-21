@@ -89,7 +89,7 @@ const ModulesList = () => {
   };
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-950 p-4 sm:p-6 h-full">
+    <div className="p-4 sm:p-6 h-full">
       <PageHeader title="Modules" description="All the modules in the COS department" />
 
       <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
