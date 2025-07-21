@@ -1,10 +1,9 @@
-use axum::{extract::{Path, Query}, http::StatusCode, response::{Response, IntoResponse}, Json};
-use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, JoinType, Order, PaginatorTrait, QuerySelect, QueryOrder};
+use axum::{extract::{State, Path, Query}, http::StatusCode, response::{Response, IntoResponse}, Json};
+use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, DatabaseConnection, JoinType, Order, PaginatorTrait, QuerySelect, QueryOrder};
 use crate::{
     response::ApiResponse,
 };
 use db::{
-    connect,
     models::{
         user,
         user_module_role::{Column as RoleCol, Entity as RoleEntity, Role},
@@ -48,11 +47,10 @@ use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleRespo
 /// - `403 Forbidden` – if user is not admin or assigned to module
 /// - `404 Not Found` – if the module does not exist
 pub async fn get_students(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i32>,
     Query(params): Query<RoleQuery>,
 ) -> Response {
-    let db = connect().await;
-
     let module_exists = db::models::module::Entity::find_by_id(module_id)
         .one(&db)
         .await

@@ -1,14 +1,12 @@
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use crate::response::ApiResponse;
-use db::{
-    connect,
-    models::{
-        user::{Entity as UserEntity},
-        module::{Entity as ModuleEntity},
-        user_module_role::{Entity as RoleEntity, Column as RoleCol, Role, ActiveModel as RoleActiveModel},
-    },
+use db::models::{
+    user::{Entity as UserEntity},
+    module::{Entity as ModuleEntity},
+    user_module_role::{Entity as RoleEntity, Column as RoleCol, Role, ActiveModel as RoleActiveModel},
 };
 use crate::routes::modules::common::ModifyUsersModuleRequest;
+use sea_orm::DatabaseConnection;
 
 /// POST /api/modules/{module_id}/lecturers
 ///
@@ -73,6 +71,7 @@ use crate::routes::modules::common::ModifyUsersModuleRequest;
 /// }
 /// ```
 pub async fn assign_lecturers(
+    State(db): State<DatabaseConnection>,
     axum::extract::Path(module_id): axum::extract::Path<i64>,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
@@ -84,8 +83,6 @@ pub async fn assign_lecturers(
             Json(ApiResponse::<()>::error("Request must include a non-empty list of user_ids")),
         );
     }
-
-    let db = connect().await;
 
     let module = ModuleEntity::find_by_id(module_id).one(&db).await;
     if let Ok(None) | Err(_) = module {

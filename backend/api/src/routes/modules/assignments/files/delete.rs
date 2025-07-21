@@ -1,23 +1,18 @@
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
 use sea_orm::{
     ActiveModelTrait,
     ColumnTrait,
     EntityTrait,
     QueryFilter,
+    DatabaseConnection,
 };
-
 use serde_json::json;
-
-use db::{
-    connect,
-    models::{assignment, assignment_file},
-};
+use db::models::{assignment, assignment_file};
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/files
 ///
@@ -65,11 +60,10 @@ use db::{
 /// ```
 ///
 pub async fn delete_files(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
     match assignment::Entity::find()
         .filter(assignment::Column::Id.eq(assignment_id as i32))
         .filter(assignment::Column::ModuleId.eq(module_id as i32))

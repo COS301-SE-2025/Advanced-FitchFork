@@ -3,22 +3,15 @@
 /// This module defines HTTP routes for generating, loading, and saving mark allocator data.
 /// Each route is protected with middleware that ensures only lecturers can access them.
 
-pub mod get;
-pub mod post;
-pub mod put;
-
-use axum::{
-    extract::Path,
-    middleware::from_fn,
-    routing::{get, post, put},
-    Router,
-};
-
+use axum::{Router, routing::{get, post, put}};
 use get::load;
 use post::generate;
 use put::save;
+use sea_orm::DatabaseConnection;
 
-use crate::auth::guards::require_lecturer;
+pub mod get;
+pub mod post;
+pub mod put;
 
 /// Registers routes related to the mark allocator system.
 ///
@@ -29,24 +22,9 @@ use crate::auth::guards::require_lecturer;
 /// - `PUT  /` → `save` updated allocator data to disk.
 ///
 /// All routes require lecturer authentication using the `require_lecturer` middleware.
-pub fn mark_allocator_routes() -> Router {
+pub fn mark_allocator_routes() -> Router<DatabaseConnection> {
     Router::new()
-        .route(
-            "/generate",
-            post(generate).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_lecturer(Path(params), req, next)
-            })),
-        )
-        .route(
-            "/",
-            get(load).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_lecturer(Path(params), req, next)
-            })),
-        )
-        .route(
-            "/",
-            put(save).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_lecturer(Path(params), req, next)
-            })),
-        )
+        .route("/generate", post(generate))
+        .route("/", get(load))
+        .route("/", put(save))
 }

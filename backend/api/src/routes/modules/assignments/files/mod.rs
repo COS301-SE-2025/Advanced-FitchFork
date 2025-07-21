@@ -2,21 +2,16 @@
 //!
 //! This module defines the routing for assignment file-related endpoints, including uploading, listing, downloading, and deleting files. It applies access control middleware to ensure appropriate permissions for each operation.
 
-pub mod get;
-pub mod post;
-pub mod delete;
-
-use axum::{
-    extract::Path,
-    middleware::from_fn,
-    routing::{get, post, delete},
-    Router,
-};
-
+use axum::{middleware::from_fn_with_state, Router, routing::{get, post, delete}};
 use crate::auth::guards::{require_assigned_to_module, require_lecturer};
 use get::{list_files, download_file};
 use post::upload_files;
 use delete::delete_files;
+use sea_orm::DatabaseConnection;
+
+pub mod get;
+pub mod post;
+pub mod delete;
 
 /// Registers the routes for assignment file endpoints.
 ///
@@ -33,30 +28,11 @@ use delete::delete_files;
 ///
 /// # Returns
 /// An [`axum::Router`] with the file endpoints and their associated middleware.
-pub fn files_routes() -> Router {
+pub fn files_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
-        .route(
-            "/",
-            post(upload_files).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
-                require_lecturer(Path((assignment_id,)), req, next)
-            })),
-        )
-        .route(
-            "/",
-            get(list_files).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
-                require_assigned_to_module(Path((assignment_id,)), req, next)
-            })),
-        )
-        .route(
-            "/",
-            delete(delete_files).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
-                require_lecturer(Path((assignment_id,)), req, next)
-            })),
-        )
-        .route(
-            "/{file_id}",
-            get(download_file).layer(from_fn(|Path((assignment_id, _file_id)): Path<(i64, i64)>, req, next| {
-                require_assigned_to_module(Path((assignment_id,)), req, next)
-            })),
-        )
+        .with_state(db.clone())
+        .route("/", post(upload_files).route_layer(from_fn_with_state(db.clone(), require_lecturer)))
+        .route("/", get(list_files).route_layer(from_fn_with_state(db.clone(), require_assigned_to_module)))
+        .route("/", delete(delete_files).route_layer(from_fn_with_state(db.clone(), require_lecturer)))
+        .route("/{file_id}", get(download_file).route_layer(from_fn_with_state(db.clone(), require_assigned_to_module)))
 }

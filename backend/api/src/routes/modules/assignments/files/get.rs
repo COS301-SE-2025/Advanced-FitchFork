@@ -1,19 +1,16 @@
 use std::{env, path::PathBuf};
-
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Json, Response},
 };
-
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
-
 use sea_orm::{
     ColumnTrait,
     EntityTrait,
     QueryFilter,
+    DatabaseConnection,
 };
-
 use crate::response::ApiResponse;
 use db::models::{
     assignment::{
@@ -56,10 +53,9 @@ use crate::routes::modules::assignments::common::File;
 /// ```
 ///
 pub async fn download_file(
+    State(db): State<DatabaseConnection>,
     Path((_module_id, assignment_id, file_id)): Path<(i64, i64, i64)>,
 ) -> Response {
-    let db = db::connect().await;
-
     let file = match FileEntity::find()
         .filter(FileColumn::Id.eq(file_id as i32))
         .filter(FileColumn::AssignmentId.eq(assignment_id as i32))
@@ -177,9 +173,10 @@ pub async fn download_file(
 /// }
 /// ```
 ///
-pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)>) -> Response {
-    let db = db::connect().await;
-
+pub async fn list_files(
+    State(db): State<DatabaseConnection>,
+    Path((module_id, assignment_id)): Path<(i64, i64)>
+) -> Response {
     match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))

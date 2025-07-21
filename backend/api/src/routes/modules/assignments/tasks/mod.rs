@@ -2,24 +2,18 @@
 //!
 //! This module defines the routing for assignment task-related endpoints, including retrieving, editing, creating, and deleting task details. It applies access control middleware to ensure only lecturers or admins can access these endpoints.
 
+use axum::{Router, routing::{get, post, put, delete}};
+use get::{get_task_details, list_tasks};
+use put::edit_task;
+use post::create_task;
+use delete::delete_task;
+use sea_orm::DatabaseConnection;
+
 pub mod get;
 pub mod put;
 pub mod post;
 pub mod delete;
 pub mod common;
-
-use axum::{
-    extract::Path,
-    middleware::from_fn,
-    routing::{get, put, post, delete},
-    Router,
-};
-
-use crate::auth::guards::require_lecturer_or_admin;
-use get::{get_task_details, list_tasks};
-use put::edit_task;
-use post::create_task;
-use delete::delete_task;
 
 /// Registers the routes for assignment task endpoints.
 ///
@@ -35,36 +29,12 @@ use delete::delete_task;
 ///
 /// # Returns
 /// An [`axum::Router`] with the task endpoints and their associated middleware.
-pub fn tasks_routes() -> Router {
+pub fn tasks_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
-        .route(
-            "/",
-            get(list_tasks).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
-                require_lecturer_or_admin(Path((assignment_id,)), req, next)
-            })),
-        )
-        .route(
-            "/",
-            post(create_task).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
-                require_lecturer_or_admin(Path((assignment_id,)), req, next)
-            })),
-        )
-        .route(
-            "/{task_id}",
-            get(get_task_details).layer(from_fn(|Path((assignment_id, _task_id)): Path<(i64, i64)>, req, next| {
-                require_lecturer_or_admin(Path((assignment_id,)), req, next)
-            })),
-        )
-        .route(
-            "/{task_id}",
-            put(edit_task).layer(from_fn(|Path((assignment_id, _task_id)): Path<(i64, i64)>, req, next| {
-                require_lecturer_or_admin(Path((assignment_id,)), req, next)
-            })),
-        )
-        .route(
-            "/{task_id}",
-            delete(delete_task).layer(from_fn(|Path((assignment_id, _task_id)): Path<(i64, i64)>, req, next| {
-                require_lecturer_or_admin(Path((assignment_id,)), req, next)
-            })),
-        )
+        .with_state(db.clone())
+        .route("/", get(list_tasks))
+        .route("/", post(create_task))
+        .route("/{task_id}", get(get_task_details))
+        .route("/{task_id}", put(edit_task))
+        .route("/{task_id}", delete(delete_task))
 }

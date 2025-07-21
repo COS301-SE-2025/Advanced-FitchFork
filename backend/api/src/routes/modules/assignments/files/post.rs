@@ -1,18 +1,16 @@
 use axum::{
-    extract::{Multipart, Path},
+    extract::{State, Multipart, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
 use serde::Serialize;
-
 use sea_orm::{
     ColumnTrait,
     EntityTrait,
     QueryFilter,
+    DatabaseConnection,
 };
-
 use db::models::{
     assignment::{
         Column as AssignmentColumn,
@@ -23,7 +21,6 @@ use db::models::{
         Model as FileModel,
     },
 };
-
 use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
@@ -102,11 +99,10 @@ pub struct AssignmentSubmissionMetadata {
 /// ```
 ///
 pub async fn upload_files(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = db::connect().await;
-
     let assignment_exists = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))

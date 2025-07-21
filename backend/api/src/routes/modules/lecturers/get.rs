@@ -1,13 +1,7 @@
-use axum::{extract::{Path, Query}, http::StatusCode, response::{Response, IntoResponse}, Json};
+use axum::{extract::{Path, Query, State}, http::StatusCode, response::{Response, IntoResponse}, Json};
 use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, JoinType, PaginatorTrait, DatabaseConnection, QuerySelect, QueryOrder};
 use crate::response::ApiResponse;
-use db::{
-    connect,
-    models::{
-        user,
-        user_module_role::{self, Column as RoleCol, Role},
-    },
-};
+use db::models::{user, user_module_role::{self, Column as RoleCol, Role}};
 use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleResponse};
 
 /// GET /api/modules/{module_id}/lecturers
@@ -93,11 +87,10 @@ use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleRespo
 /// }
 /// ```
 pub async fn get_lecturers(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i32>,
     Query(params): Query<RoleQuery>,
 ) -> Response {
-    let db: DatabaseConnection = connect().await;
-
     let module_exists = user_module_role::Entity::find()
         .filter(RoleCol::ModuleId.eq(module_id))
         .one(&db)

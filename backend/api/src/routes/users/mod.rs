@@ -13,20 +13,18 @@
 //! ## Usage
 //! The `users_routes()` function returns a `Router` which is nested under `/users` in the main application.
 
-pub mod get;
-pub mod put;
-pub mod delete;
-
-use axum::{
-    Router,
-    routing::{get, put, delete},
-};
+use axum::{middleware::from_fn, Router, routing::{get, put, delete}};
 use crate::auth::guards::require_admin;
 use get::list_users;
 use get::{get_user_modules, get_user};
 use put::update_user;
 use delete::delete_user;
 use crate::routes::users::put::upload_user_avatar;
+use sea_orm::DatabaseConnection;
+
+pub mod get;
+pub mod put;
+pub mod delete;
 
 /// Builds the `/users` route group, mapping HTTP methods to handlers.
 ///
@@ -37,13 +35,13 @@ use crate::routes::users::put::upload_user_avatar;
 ///
 /// # Returns
 /// A configured `Router` instance to be nested in the main app.
-pub fn users_routes() -> Router {
+pub fn users_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
+        .with_state(db.clone())
         .route("/", get(list_users))
         .route("/{id}/modules", get(get_user_modules))
         .route("/{id}", get(get_user))
         .route("/{id}", put(update_user))
         .route("/{id}", delete(delete_user))
-        .route("/{id}/avatar", put(upload_user_avatar))
-        .route_layer(axum::middleware::from_fn(require_admin))
+        .route("/{id}/avatar", put(upload_user_avatar)).route_layer(from_fn(require_admin))
 }

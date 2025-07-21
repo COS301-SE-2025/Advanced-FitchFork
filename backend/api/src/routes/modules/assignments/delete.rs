@@ -1,16 +1,12 @@
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
-use sea_orm::DbErr;
-
+use sea_orm::{DatabaseConnection, DbErr};
 use serde_json::json;
-
 use db::{
-    connect,
     models::{assignment::{self}},
 };
 
@@ -49,10 +45,9 @@ use db::{
 /// }
 /// ```
 pub async fn delete_assignment(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
     match assignment::Model::delete(&db, assignment_id as i32, module_id as i32).await {
         Ok(()) => (
             StatusCode::OK,

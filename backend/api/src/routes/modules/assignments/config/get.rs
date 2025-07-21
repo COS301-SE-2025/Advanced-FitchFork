@@ -1,24 +1,21 @@
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     Json,
     http::StatusCode,
     response::IntoResponse,
 };
 use serde_json::{Value, Map};
-
 use crate::{
     response::ApiResponse,
 };
-
 use db::{
-    connect,
     models::{
         assignment::{
             Column as AssignmentColumn, Entity as AssignmentEntity,
         },
     },
 };
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, DatabaseConnection};
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -112,9 +109,10 @@ use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 /// - The configuration object is used by the evaluation system to customize assignment behavior
 /// - Only valid JSON objects are accepted as configuration; arrays, primitives, or null values are rejected
 /// - Configuration retrieval is restricted to users with appropriate module permissions
-pub async fn get_assignment_config( Path((module_id, assignment_id)): Path<(i64, i64)>,) -> impl IntoResponse {
-    let db = connect().await;
-
+pub async fn get_assignment_config(
+    State(db): State<DatabaseConnection>,
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
     let result = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))

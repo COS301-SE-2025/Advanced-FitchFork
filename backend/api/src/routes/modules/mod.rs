@@ -12,6 +12,18 @@
 //! ## Usage
 //! Call `modules_routes()` to get a configured `Router` for `/modules` to be mounted in the main app.
 
+use axum::{middleware::from_fn, Router, routing::{delete, get, post, put}};
+use delete::delete_module;
+use get::{get_eligible_users_for_module, get_module, get_modules, get_my_details};
+use post::create;
+use put::edit_module;
+use sea_orm::DatabaseConnection;
+use assignments::assignment_routes;
+use lecturers::lecturer_routes;
+use tutors::tutor_routes;
+use students::student_routes;
+use crate::auth::guards::require_admin;
+
 pub mod assignments;
 pub mod lecturers;
 pub mod tutors;
@@ -21,26 +33,6 @@ pub mod get;
 pub mod post;
 pub mod put;
 pub mod common;
-
-use crate::auth::guards::require_admin;
-use assignments::assignment_routes;
-use lecturers::lecturer_routes;
-use tutors::tutor_routes;
-use students::student_routes;
-use axum::{
-    middleware::from_fn,
-    routing::{delete, get, post, put},
-    Router,
-};
-use delete::delete_module;
-use get::{
-    get_eligible_users_for_module,
-    get_module,
-    get_modules,
-    get_my_details,
-};
-use post::create;
-use put::edit_module;
 
 /// Builds and returns the `/modules` route group.
 ///
@@ -57,50 +49,18 @@ use put::edit_module;
 /// - Nested students routes under `/modules/{module_id}/students`
 ///
 /// All modifying routes are protected by `require_admin` middleware.
-pub fn modules_routes() -> Router {
+pub fn modules_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
-        .route(
-            "/",
-            get(get_modules)
-        )
-        .route(
-            "/me",
-            get(get_my_details)
-        )
-        .route(
-            "/{module_id}/eligible-users",
-            get(get_eligible_users_for_module).route_layer(from_fn(require_admin)),
-        )
-        .route(
-            "/{module_id}",
-            get(get_module)
-        )
-        .route(
-            "/",
-            post(create).route_layer(from_fn(require_admin))
-        )
-        .route(
-            "/{module_id}",
-            put(edit_module).route_layer(from_fn(require_admin))
-        )
-        .route(
-            "/{module_id}",
-            delete(delete_module).route_layer(from_fn(require_admin))
-        )
-        .nest(
-            "/{module_id}/assignments",
-            assignment_routes()
-        )
-        .nest(
-            "/{module_id}/lecturers",
-            lecturer_routes()
-        )
-        .nest(
-            "/{module_id}/tutors",
-            tutor_routes()
-        )
-        .nest(
-            "/{module_id}/students",
-            student_routes()
-        )
+        .with_state(db.clone())
+        .route("/", get(get_modules))
+        .route("/me", get(get_my_details))
+        .route("/{module_id}/eligible-users", get(get_eligible_users_for_module).route_layer(from_fn(require_admin)))
+        .route("/{module_id}", get(get_module))
+        .route("/", post(create).route_layer(from_fn(require_admin)))
+        .route("/{module_id}", put(edit_module).route_layer(from_fn(require_admin)))
+        .route("/{module_id}", delete(delete_module).route_layer(from_fn(require_admin)))
+        .nest("/{module_id}/assignments", assignment_routes(db.clone()))
+        .nest("/{module_id}/lecturers", lecturer_routes(db.clone()))
+        .nest("/{module_id}/tutors", tutor_routes(db.clone()))
+        .nest("/{module_id}/students", student_routes(db.clone()))
 }

@@ -1,28 +1,13 @@
-use std::fs;
-use axum::{
-    extract::{Path, Query},
-    http::StatusCode,
-    response::IntoResponse,
-    Extension, Json,
-};
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
+use axum::{extract::{Path, Query}, http::StatusCode, response::IntoResponse, Extension, Json};
 use chrono::{DateTime, Utc};
-use db::{
-    connect,
-    models::{
-        assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-        assignment_submission::{self, Entity as SubmissionEntity},
-        user,
-        user_module_role::{self, Role},
-    },
-};
-use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder,  QuerySelect, JoinType, RelationTrait
-};
+use db::models::{assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, assignment_submission::{self, Entity as SubmissionEntity}, user, user_module_role::{self, Role}};
+use sea_orm::{ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,  QuerySelect, JoinType, RelationTrait};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use crate::{auth::AuthUser, response::ApiResponse};
+
+use db::connect;
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date

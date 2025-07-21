@@ -1,11 +1,8 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-
+use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
 use chrono::{DateTime, Utc};
-
+use sea_orm::DatabaseConnection;
 use crate::response::ApiResponse;
-
 use db::{
-    connect,
     models::assignment::{self, AssignmentType, Status},
 };
 use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
@@ -69,13 +66,11 @@ use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentR
 ///   "message": "Failed to update assignment"
 /// }
 /// ```
-///
 pub async fn edit_assignment(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
     let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
         .map(|dt| dt.with_timezone(&Utc))
     {

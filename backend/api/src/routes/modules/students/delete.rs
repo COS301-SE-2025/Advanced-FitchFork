@@ -1,10 +1,9 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
 };
-use db::connect;
-use sea_orm::{EntityTrait, QueryFilter, Condition, ModelTrait, ColumnTrait};
+use sea_orm::{EntityTrait, QueryFilter, Condition, ModelTrait, ColumnTrait, DatabaseConnection};
 use db::models::{
     module,
     user,
@@ -75,6 +74,7 @@ use crate::routes::modules::common::ModifyUsersModuleRequest;
 /// }
 /// ```
 pub async fn remove_students(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i32>,
     AuthUser(claims): AuthUser,
     Json(body): Json<ModifyUsersModuleRequest>,
@@ -92,8 +92,6 @@ pub async fn remove_students(
             Json(ApiResponse::<()>::error("Request must include a non-empty list of user_ids")),
         );
     }
-
-    let db = connect().await;
 
     let module_exists = module::Entity::find_by_id(module_id)
         .one(&db)

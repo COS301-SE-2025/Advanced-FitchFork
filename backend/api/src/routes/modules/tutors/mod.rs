@@ -1,19 +1,15 @@
-mod get;
-mod post;
-mod put;
-mod delete;
-
-use axum::{
-    middleware::from_fn,
-    routing::{get, post, put, delete},
-    extract::Path,
-    Router,
-};
+use axum::{middleware::from_fn, middleware::from_fn_with_state, Router, routing::{get, post, put, delete}};
 use crate::auth::guards::{require_admin, require_tutor};
 use get::get_tutors;
 use post::assign_tutors;
 use put::edit_tutors;
 use delete::remove_tutors;
+use sea_orm::DatabaseConnection;
+
+mod get;
+mod post;
+mod put;
+mod delete;
 
 /// Builds and returns the `/api/modules/{module_id}/tutors` route group.
 ///
@@ -25,24 +21,11 @@ use delete::remove_tutors;
 /// - `POST   /`     → assign tutors
 /// - `PUT    /`     → set tutors (overwrites existing roles)
 /// - `DELETE /`     → remove tutors from module
-pub fn tutor_routes() -> Router {
+pub fn tutor_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
-        .route(
-            "/",
-            get(get_tutors).route_layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_tutor(Path(params), req, next)
-            })),
-        )
-        .route(
-            "/",
-            post(assign_tutors).route_layer(from_fn(require_admin))
-        )
-        .route(
-            "/",
-            put(edit_tutors).route_layer(from_fn(require_admin))
-        )
-        .route(
-            "/",
-            delete(remove_tutors).route_layer(from_fn(require_admin))
-        )
+        .with_state(db.clone())
+        .route("/", get(get_tutors).route_layer(from_fn_with_state(db.clone(), require_tutor)))
+        .route("/", post(assign_tutors).route_layer(from_fn(require_admin)))
+        .route("/", put(edit_tutors).route_layer(from_fn(require_admin)))
+        .route("/", delete(remove_tutors).route_layer(from_fn(require_admin)))
 }

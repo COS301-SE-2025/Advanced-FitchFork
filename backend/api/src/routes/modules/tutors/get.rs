@@ -1,19 +1,18 @@
 use axum::{
-    extract::{Path, Query},
+    extract::{State, Path, Query},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
 use crate::response::ApiResponse;
 use db::{
-    connect,
     models::{
         user,
         user_module_role,
         user_module_role::{Column as RoleCol, Role},
     },
 };
-use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, JoinType, QuerySelect, QueryOrder, PaginatorTrait};
+use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, JoinType, QuerySelect, QueryOrder, DatabaseConnection, PaginatorTrait};
 use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleResponse};
 
 /// GET /api/modules/{module_id}/tutors
@@ -99,11 +98,10 @@ use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleRespo
 /// }
 /// ```
 pub async fn get_tutors(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i32>,
     Query(params): Query<RoleQuery>,
 ) -> Response {
-    let db = connect().await;
-
     let exists = db::models::module::Entity::find_by_id(module_id)
         .one(&db)
         .await

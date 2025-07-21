@@ -5,6 +5,7 @@
 /target
 /data
 /logs
+/tmp
 
 .env
 

@@ -1,20 +1,15 @@
 use std::{env, fs, path::PathBuf};
-
 use axum::{
-    extract::{Json, Path},
+    extract::{State, Json, Path},
     http::StatusCode,
     response::IntoResponse,
 };
 use serde_json::Value;
 use sea_orm::{
-    EntityTrait, ColumnTrait, QueryFilter, ActiveModelTrait, Set,
+    EntityTrait, ColumnTrait, QueryFilter, DatabaseConnection, ActiveModelTrait, Set,
 };
-
 use crate::response::ApiResponse;
-use db::{
-    connect,
-    models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-};
+use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -125,6 +120,7 @@ use db::{
 /// - Only valid JSON objects are accepted; arrays, primitives, or null values are rejected
 /// - Configuration setting is restricted to users with appropriate module permissions
 pub async fn set_assignment_config(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(config): Json<Value>,
 ) -> impl IntoResponse {
@@ -135,8 +131,6 @@ pub async fn set_assignment_config(
         )
             .into_response();
     }
-
-    let db = connect().await;
 
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))

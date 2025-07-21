@@ -1,9 +1,8 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
 use validator::Validate;
 use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, Set, ActiveModelTrait, DatabaseConnection, TransactionTrait, IntoActiveModel};
 use crate::response::ApiResponse;
 use db::{
-    connect,
     models::{
         user::{Entity as UserEntity},
         module::{Entity as ModuleEntity},
@@ -88,6 +87,7 @@ use crate::routes::modules::common::EditRoleRequest;
 /// }
 /// ```
 pub async fn edit_students(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(req): Json<EditRoleRequest>,
 ) -> impl IntoResponse {
@@ -98,8 +98,6 @@ pub async fn edit_students(
             Json(ApiResponse::<()>::error(error_message)),
         );
     }
-
-    let db: DatabaseConnection = connect().await;
 
     let module = ModuleEntity::find_by_id(module_id).one(&db).await;
     if let Ok(None) | Err(_) = module {

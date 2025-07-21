@@ -1,17 +1,13 @@
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
 use chrono::{DateTime, Utc};
-
-use sea_orm::DbErr;
-
+use sea_orm::{DatabaseConnection, DbErr};
 use crate::response::ApiResponse;
 use db::{
-    connect,
     models::{
         assignment::{
             AssignmentType,
@@ -71,14 +67,11 @@ use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentR
 ///   "message": "Assignment could not be inserted" // or "Database error"
 /// }
 /// ```
-///
-
-pub async fn create(
+pub async fn create_assignment(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
     let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
         .map(|dt| dt.with_timezone(&Utc)) {
         Ok(date) => date,
