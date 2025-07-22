@@ -11,7 +11,7 @@ const { Title, Paragraph } = Typography;
 
 const StepMemoOutput = () => {
   const module = useModule();
-  const { assignmentId, refreshAssignment } = useAssignmentSetup();
+  const { assignmentId, refreshAssignment, onStepComplete } = useAssignmentSetup();
   const { notifySuccess, notifyError } = useNotifier();
 
   const [loading, setLoading] = useState(false);
@@ -28,6 +28,7 @@ const StepMemoOutput = () => {
         setDone(true);
         notifySuccess('Memo output generated', res.message);
         await refreshAssignment?.();
+        onStepComplete?.();
       } else {
         notifyError('Failed to generate memo output', res.message);
       }

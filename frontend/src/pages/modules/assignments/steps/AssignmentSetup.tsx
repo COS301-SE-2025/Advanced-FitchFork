@@ -28,8 +28,8 @@ const { Step } = Steps;
 const getDefaultDates = () => {
   const now = dayjs();
 
-  const availableFrom = now.add(7, 'day').startOf('day').toISOString(); // 7 days from now at 00:00:00Z
-  const dueDate = now.add(14, 'day').endOf('day').toISOString(); // 14 days from now at 23:59:59Z
+  const availableFrom = now.add(7, 'day').startOf('day').toISOString();
+  const dueDate = now.add(14, 'day').endOf('day').toISOString();
 
   return {
     available_from: availableFrom,
@@ -42,11 +42,13 @@ const AssignmentSetup = ({
   onClose,
   assignmentId,
   module,
+  onStepComplete,
 }: {
   open: boolean;
   onClose: () => void;
   assignmentId?: number;
   module: Module;
+  onStepComplete?: () => void;
 }) => {
   const [current, setCurrent] = useState(0);
 
@@ -55,8 +57,8 @@ const AssignmentSetup = ({
   const [assignmentDraft, setAssignmentDraft] = useState<PostAssignmentRequest>({
     name: '',
     assignment_type: 'assignment',
-    available_from: defaultDates.available_from, // full ISO timestamp with time
-    due_date: defaultDates.due_date, // full ISO timestamp with time
+    available_from: defaultDates.available_from,
+    due_date: defaultDates.due_date,
     description: '',
     status: 'setup',
   });
@@ -75,13 +77,13 @@ const AssignmentSetup = ({
   };
 
   const determineStep = (r: AssignmentReadiness | null) => {
-    if (!assignment?.id) return 1; // create step if no assignment yet
-    if (!r?.config_present) return 2;
-    if (!r?.main_present || !r?.memo_present || !r?.makefile_present) return 3;
-    if (!r?.tasks_present) return 4;
-    if (!r?.memo_output_present) return 5;
-    if (!r?.mark_allocator_present) return 6;
-    return 0; // welcome
+    if (!r) return 1;
+    if (!r.config_present) return 2;
+    if (!r.main_present || !r.memo_present || !r.makefile_present) return 3;
+    if (!r.tasks_present) return 4;
+    if (!r.memo_output_present) return 5;
+    if (!r.mark_allocator_present) return 6;
+    return 0;
   };
 
   const next = async () => {
@@ -97,14 +99,22 @@ const AssignmentSetup = ({
         const newAssignment: AssignmentDetails = { ...res.data, files: [] };
         setAssignment(newAssignment);
         notifySuccess('Assignment created', 'You can now continue setup.');
-        await refreshAssignment(newAssignment.id, false);
+        await refreshAssignment(newAssignment.id, true);
+        if (onStepComplete) onStepComplete();
+        return;
       } else {
         notifyError('Failed to create assignment', res.message);
         return;
       }
     }
 
-    setCurrent((prev) => Math.min(prev + 1, steps.length - 1));
+    if (assignment?.id) {
+      await refreshAssignment(assignment.id, true);
+      if (onStepComplete) onStepComplete();
+    } else {
+      setCurrent((prev) => Math.min(prev + 1, steps.length - 1));
+      if (onStepComplete) onStepComplete();
+    }
   };
 
   const prev = () => setCurrent((prev) => Math.max(prev - 1, 0));
@@ -153,7 +163,7 @@ const AssignmentSetup = ({
         } else if (assignment?.id) {
           await refreshAssignment(assignment.id, true);
         } else {
-          setCurrent(1); // default to create if nothing
+          setCurrent(0);
         }
       })();
     }
@@ -190,6 +200,7 @@ const AssignmentSetup = ({
           setStepSaveHandler,
           refreshAssignment,
           readiness,
+          onStepComplete,
         }}
       >
         <div className="!space-y-10 pt-4">

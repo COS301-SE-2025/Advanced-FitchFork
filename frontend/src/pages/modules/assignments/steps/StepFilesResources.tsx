@@ -50,7 +50,8 @@ const fileTypeLabels: Record<RequiredFileType, string> = {
 
 const StepFilesResources = () => {
   const module = useModule();
-  const { assignmentId, assignment, refreshAssignment, readiness } = useAssignmentSetup();
+  const { assignmentId, assignment, refreshAssignment, readiness, onStepComplete } =
+    useAssignmentSetup();
 
   const [selectedType, setSelectedType] = useState<RequiredFileType>('main');
   const [files, setFiles] = useState<AssignmentFile[]>(assignment?.files ?? []);
@@ -69,6 +70,7 @@ const StepFilesResources = () => {
       if (res.success) {
         message.success(`${file.name} uploaded as ${fileTypeLabels[selectedType]}`);
         await refreshAssignment?.();
+        onStepComplete?.();
       } else {
         message.error(`Upload failed: ${res.message}`);
       }

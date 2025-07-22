@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet, useParams } from 'react-router-dom';
 import { Spin, Dropdown, Segmented, Button, Alert, Modal, Upload, Checkbox } from 'antd';
 import type { MenuProps } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
+import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  DownloadOutlined,
+  UploadOutlined,
+} from '@ant-design/icons';
 
 import { useModule } from '@/context/ModuleContext';
 import { useAuth } from '@/context/AuthContext';
@@ -24,6 +29,7 @@ import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
 import AssignmentStatusTag from '@/components/assignments/AssignmentStatusTag';
 import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
 import type { MarkAllocatorItem } from '@/types/modules/assignments/mark-allocator';
+import EventBus from '@/utils/EventBus';
 
 interface AssignmentDetails extends Assignment {
   files: AssignmentFile[];
@@ -180,6 +186,7 @@ const AssignmentLayout = () => {
       await submitAssignment(module.id, assignmentIdNum, selectedFile, isPractice);
       await refreshAssignment();
       message.success('Submission successful');
+      EventBus.emit('submission:updated');
     } catch {
       message.error('Submission failed');
     } finally {
@@ -188,6 +195,11 @@ const AssignmentLayout = () => {
       setSelectedFile(null);
       setIsPractice(false);
     }
+  };
+
+  // TODO: Implement download of assignment specification file
+  const handleDownloadSpec = () => {
+    message.info('Download Specification: feature not yet implemented.');
   };
 
   const menuItems: MenuProps['items'] = [
@@ -239,6 +251,15 @@ const AssignmentLayout = () => {
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Manage assignment #{assignment.id} in {module.code}
             </p>
+            <Button
+              type="default"
+              onClick={handleDownloadSpec}
+              icon={<DownloadOutlined />}
+              size="small"
+              className="mt-2"
+            >
+              Download Specification
+            </Button>
           </div>
 
           <div>
@@ -276,29 +297,83 @@ const AssignmentLayout = () => {
         />
       )}
 
-      {showTabs && (
-        <div className="mb-4">
-          <Segmented
-            options={segments}
-            value={activeKey}
-            onChange={(key) => navigate(key as string)}
-            size="middle"
-            block
-          />
-        </div>
-      )}
+      {isSetupIncomplete ? (
+        <div className="flex flex-col items-center justify-center text-center bg-white dark:bg-gray-950 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-12 mt-8 space-y-6">
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+            Assignment setup incomplete
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 max-w-xl">
+            This assignment is not yet ready for use. Please complete the setup process to configure
+            the necessary files, tasks, and settings before students can submit or view it.
+          </p>
 
-      <AssignmentProvider
-        value={{ assignment, memoOutput, markAllocator, readiness, refreshAssignment }}
-      >
-        <Outlet />
-      </AssignmentProvider>
+          <div className="space-y-2 w-full max-w-2xl text-left">
+            {[
+              { key: 'config_present', label: 'Configuration file' },
+              { key: 'main_present', label: 'Main file' },
+              { key: 'makefile_present', label: 'Makefile' },
+              { key: 'memo_present', label: 'Memo file' },
+              { key: 'tasks_present', label: 'Tasks' },
+              { key: 'memo_output_present', label: 'Memo Output' },
+              { key: 'mark_allocator_present', label: 'Mark Allocator' },
+            ].map((item) => {
+              const complete = readiness?.[item.key as keyof AssignmentReadiness];
+              return (
+                <div
+                  key={item.key}
+                  className="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
+                >
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                    {item.label}
+                  </span>
+
+                  <span
+                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
+                      complete
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                        : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                    }`}
+                  >
+                    {complete ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+                    {complete ? 'Complete' : 'Incomplete'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <Button type="primary" size="large" onClick={() => setSetupOpen(true)} loading={loading}>
+            Complete Setup
+          </Button>
+        </div>
+      ) : (
+        <>
+          {showTabs && (
+            <div className="mb-4">
+              <Segmented
+                options={segments}
+                value={activeKey}
+                onChange={(key) => navigate(key as string)}
+                size="middle"
+                block
+              />
+            </div>
+          )}
+
+          <AssignmentProvider
+            value={{ assignment, memoOutput, markAllocator, readiness, refreshAssignment }}
+          >
+            <Outlet />
+          </AssignmentProvider>
+        </>
+      )}
 
       <AssignmentSetup
         open={setupOpen}
         onClose={() => setSetupOpen(false)}
         assignmentId={assignment.id}
         module={module}
+        onStepComplete={refreshAssignment}
       />
 
       <Modal

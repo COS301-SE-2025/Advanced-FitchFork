@@ -41,8 +41,8 @@ interface FilterGroup {
 interface Props {
   handleSearch: (key: string) => void;
   searchTerm: string;
-  viewMode: 'table' | 'grid';
-  onViewModeChange: (val: 'table' | 'grid') => void;
+  viewMode?: 'table' | 'grid';
+  onViewModeChange?: (val: 'table' | 'grid') => void;
   handleAdd?: () => void;
   handleBulkDelete?: () => void;
   clearMenuItems?: MenuProps['items'];
@@ -93,17 +93,20 @@ const ControlBar: React.FC<Props> = ({
     <div className="bg-white dark:bg-gray-950 p-2 rounded-lg border border-gray-200 dark:border-gray-800 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       {/* Left: View mode + search (shared) */}
       <div className="flex flex-row items-center gap-2 w-full sm:w-auto">
-        {typeof window !== 'undefined' && window.innerWidth >= 640 && (
-          <Segmented
-            size="middle"
-            value={viewMode}
-            onChange={(val) => onViewModeChange(val as 'table' | 'grid')}
-            options={[
-              { value: 'table', icon: <TableOutlined /> },
-              { value: 'grid', icon: <AppstoreOutlined /> },
-            ]}
-          />
-        )}
+        {viewMode &&
+          onViewModeChange &&
+          typeof window !== 'undefined' &&
+          window.innerWidth >= 640 && (
+            <Segmented
+              size="middle"
+              value={viewMode}
+              onChange={(val) => onViewModeChange(val as 'table' | 'grid')}
+              options={[
+                { value: 'table', icon: <TableOutlined /> },
+                { value: 'grid', icon: <AppstoreOutlined /> },
+              ]}
+            />
+          )}
 
         <Search
           placeholder={searchPlaceholder}

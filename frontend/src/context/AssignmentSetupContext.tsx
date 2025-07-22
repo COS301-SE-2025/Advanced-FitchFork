@@ -12,6 +12,7 @@ export interface AssignmentSetupContextValue {
   setStepSaveHandler?: (step: number, handler: () => Promise<boolean>) => void;
   refreshAssignment?: () => Promise<void>;
   readiness?: AssignmentReadiness | null;
+  onStepComplete?: () => void;
 }
 
 const AssignmentSetupContext = createContext<AssignmentSetupContextValue | null>(null);

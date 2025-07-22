@@ -18,7 +18,7 @@ const defaultConfig = {
 
 const StepConfig = () => {
   const module = useModule();
-  const { assignmentId, setStepSaveHandler } = useAssignmentSetup();
+  const { assignmentId, setStepSaveHandler, onStepComplete } = useAssignmentSetup();
   const [form] = Form.useForm();
   const [, setLoading] = useState(false);
 
@@ -45,6 +45,11 @@ const StepConfig = () => {
       const res = await uploadAssignmentFile(module.id, assignmentId, 'config', file);
       if (res.success) {
         message.success('Configuration uploaded successfully.');
+
+        if (onStepComplete) {
+          onStepComplete();
+        }
+
         return true;
       } else {
         message.error(`Upload failed: ${res.message}`);

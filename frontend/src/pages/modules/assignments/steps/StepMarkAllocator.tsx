@@ -11,7 +11,7 @@ const { Title, Paragraph } = Typography;
 
 const StepMarkAllocator = () => {
   const module = useModule();
-  const { assignmentId, refreshAssignment } = useAssignmentSetup();
+  const { assignmentId, refreshAssignment, onStepComplete } = useAssignmentSetup();
   const { notifyError, notifySuccess } = useNotifier();
 
   const [loading, setLoading] = useState(false);
@@ -27,6 +27,7 @@ const StepMarkAllocator = () => {
         notifySuccess('Mark allocator generated', res.message);
         setDone(true);
         await refreshAssignment?.();
+        onStepComplete?.();
       } else {
         notifyError('Failed to generate mark allocator', res.message);
       }

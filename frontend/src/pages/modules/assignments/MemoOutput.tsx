@@ -1,11 +1,21 @@
 import { Typography, Collapse } from 'antd';
 import { useAssignment } from '@/context/AssignmentContext';
 import CodeEditor from '@/components/CodeEditor';
+import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { useEffect } from 'react';
 const { Text } = Typography;
 const { Panel } = Collapse;
 
 const MemoOutput = () => {
   const { memoOutput } = useAssignment();
+  const { customLabels, setBreadcrumbLabel } = useBreadcrumbContext();
+
+  useEffect(() => {
+    const pathKey = location.pathname.replace(/^\//, '');
+    if (customLabels[pathKey] !== 'Memo Output') {
+      setBreadcrumbLabel(pathKey, 'Memo Output');
+    }
+  }, [location.pathname, setBreadcrumbLabel, customLabels]);
 
   return (
     <div className="space-y-6">

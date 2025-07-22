@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getSubmissionDetails } from '@/services/modules/assignments/submissions';
 import type { Submission } from '@/types/modules/assignments/submissions';
+import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -17,6 +18,7 @@ const SubmissionView = () => {
   const module = useModule();
   const { assignment } = useAssignment();
   const { submission_id } = useParams();
+  const { setBreadcrumbLabel } = useBreadcrumbContext();
 
   useEffect(() => {
     const fetch = async () => {
@@ -26,6 +28,10 @@ const SubmissionView = () => {
         const res = await getSubmissionDetails(module.id, assignment.id, Number(submission_id));
         if (res.success && res.data) {
           setSubmission(res.data);
+          setBreadcrumbLabel(
+            `modules/${module.id}/assignments/${assignment.id}/submissions/${res.data.id}`,
+            `Attempt #${res.data.attempt}`,
+          );
         }
       } catch (err) {
         console.error('Failed to load submission details', err);
@@ -59,7 +65,7 @@ const SubmissionView = () => {
     <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-700 rounded-sm p-4 xl:col-span-3 space-y-6">
       <div className="flex justify-between items-center mb-2">
         <Title level={4} className="mb-0">
-          Submission #{attempt}
+          Attempt #{attempt}
         </Title>
       </div>
 

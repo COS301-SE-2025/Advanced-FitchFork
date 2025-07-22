@@ -6,7 +6,7 @@ import {
   MoreOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
-import { useEffect, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import type { ItemType } from 'antd/es/menu/interface';
 import type { SortOption } from '@/types/common';
@@ -74,12 +74,19 @@ type EntityListProps<T> = {
   actions?: React.ReactNode;
 };
 
+export type EntityListHandle = {
+  refresh: () => void;
+};
+
 /**
  * A generic, reusable entity list component that supports
  * table and grid views, filtering, sorting, pagination,
  * inline and dropdown actions, and modals for create/edit.
  */
-export function EntityList<T>(props: EntityListProps<T>) {
+const EntityList = forwardRef(function <T>(
+  props: EntityListProps<T>,
+  ref: React.Ref<EntityListHandle>,
+) {
   const {
     name,
     fetchItems,
@@ -152,6 +159,10 @@ export function EntityList<T>(props: EntityListProps<T>) {
 
     setLoading(false);
   };
+
+  useImperativeHandle(ref, () => ({
+    refresh: fetchData,
+  }));
 
   /**
    * Fetch immediately on search, filter, sort, or pagination changes.
@@ -290,8 +301,8 @@ export function EntityList<T>(props: EntityListProps<T>) {
       <ControlBar
         handleSearch={setSearchTerm}
         searchTerm={searchTerm}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
+        viewMode={renderGridItem ? viewMode : undefined}
+        onViewModeChange={renderGridItem ? setViewMode : undefined}
         handleAdd={createModal ? () => setIsAddModalOpen(true) : undefined}
         addButtonText={createModal ? `Add ${name.slice(0, -1)}` : undefined}
         selectedRowKeys={selectedRowKeys}
@@ -450,4 +461,6 @@ export function EntityList<T>(props: EntityListProps<T>) {
       )}
     </div>
   );
-}
+}) as <T>(props: EntityListProps<T> & { ref?: React.Ref<EntityListHandle> }) => JSX.Element;
+
+export { EntityList };

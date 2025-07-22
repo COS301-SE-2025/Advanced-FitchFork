@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import { Button } from 'antd';
@@ -6,7 +6,6 @@ import { Button } from 'antd';
 import PageHeader from '@/components/PageHeader';
 import { useNotifier } from '@/components/Notifier';
 import { useModule } from '@/context/ModuleContext';
-import { EntityList } from '@/components/EntityList';
 import AssignmentTypeTag from '@/components/assignments/AssignmentTypeTag';
 import AssignmentStatusTag from '@/components/assignments/AssignmentStatusTag';
 import AssignmentCard from '@/components/assignments/AssignmentCard';
@@ -20,6 +19,7 @@ import {
   ASSIGNMENT_TYPES,
 } from '@/types/modules/assignments';
 import type { SortOption } from '@/types/common';
+import { type EntityListHandle, EntityList } from '@/components/EntityList';
 
 const AssignmentsList = () => {
   const module = useModule();
@@ -27,6 +27,7 @@ const AssignmentsList = () => {
   const { notifySuccess, notifyError } = useNotifier();
 
   const [setupOpen, setSetupOpen] = useState(false);
+  const listRef = useRef<EntityListHandle>(null);
 
   const fetchAssignments = async ({
     page,
@@ -92,6 +93,7 @@ const AssignmentsList = () => {
       <PageHeader title="Assignments" description={`All the assignments for ${module.code}`} />
 
       <EntityList<Assignment>
+        ref={listRef}
         name="Assignments"
         fetchItems={fetchAssignments}
         getRowKey={(a) => a.id}
@@ -178,7 +180,14 @@ const AssignmentsList = () => {
         }
       />
 
-      <AssignmentSetup open={setupOpen} onClose={() => setSetupOpen(false)} module={module} />
+      <AssignmentSetup
+        open={setupOpen}
+        onClose={() => {
+          setSetupOpen(false);
+          listRef.current?.refresh();
+        }}
+        module={module}
+      />
     </div>
   );
 };

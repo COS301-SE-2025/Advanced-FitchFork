@@ -18,6 +18,7 @@ import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
 import { message } from '@/utils/message';
 import CodeEditor from '@/components/CodeEditor';
+import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 
 const { Panel } = Collapse;
 
@@ -26,6 +27,7 @@ const Tasks = () => {
   const location = useLocation();
   const module = useModule();
   const { assignment } = useAssignment();
+  const { setBreadcrumbLabel } = useBreadcrumbContext();
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<GetTaskResponse['data'] | null>(null);
@@ -75,6 +77,12 @@ const Tasks = () => {
           setSelectedTask(res.data);
           setEditedCommand(res.data.command);
           setEditedName(res.data.name ?? '');
+
+          // Set breadcrumb label
+          setBreadcrumbLabel(
+            `modules/${module.id}/assignments/${assignment.id}/tasks/${res.data.id}`,
+            res.data.name ?? `Task #${res.data.id}`,
+          );
         } else {
           message.error(res.message);
         }

@@ -20,226 +20,58 @@ use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
     QueryOrder,  QuerySelect, JoinType, RelationTrait
 };
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use crate::{auth::AuthUser, response::ApiResponse};
+use super::common::{
+    ListSubmissionsQuery, UserResponse, SubmissionListItem,
+    SubmissionsListResponse,
+};
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
 }
 
-#[derive(Debug, Serialize)]
-pub struct SubmissionResponse {
-    pub id: i64,
-    pub attempt: i64,
-    pub filename: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub is_late: bool,
-    pub is_practice: bool,
-    pub mark: Option<Mark>,
-}
-
+/// GET /api/modules/:module_id/assignments/:assignment_id/submissions
+///
+/// Retrieve the list of submissions for a specific assignment **belonging to the authenticated student only**.
+/// This endpoint enforces access control such that the user only sees their own submissions, regardless of query params.
+///
+/// ### When to use
+/// - Called when a student views their own submissions for an assignment.
+/// - Similar to `get_list_submissions` but limited to `user_id`.
+///
+/// ### Path Parameters
+/// - `module_id` (i64): ID of the module.
+/// - `assignment_id` (i64): ID of the assignment.
+/// - `user_id` (i64): ID of the student (extracted from JWT claims).
+///
+/// ### Query Parameters
+/// - `page` (optional): Page number (default 1, min 1).
+/// - `per_page` (optional): Items per page (default 20, max 100).
+/// - `query` (optional): Case-insensitive partial match on filename.
+/// - `sort` (optional): Comma-separated sort fields (`created_at`, `filename`, `attempt`, `mark`).
+///
+/// ### Sorting
+/// - DB-backed sorting is available on `created_at`, `filename`, `attempt`.
+/// - In-memory sorting is applied for `mark` after file is read.
+///
+/// ### Output
+/// - Returns a paginated `SubmissionsListResponse` for this student, including `is_late`, `mark`, `is_practice`.
+/// - Late status is computed relative to assignment `due_date`.
+///
+/// ### Errors
+/// - `404`: Assignment not found.
+/// - `500`: DB error.
+///
+/// ### Notes
+/// - No filtering on other students or usernames is possible in this endpoint.
 async fn get_user_submissions(
     module_id: i64,
     assignment_id: i64,
     user_id: i64,
+    Query(params): Query<ListSubmissionsQuery>,
 ) -> impl IntoResponse {
     let db = connect().await;
-
-    let assignment = match AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await
-    {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<Vec<SubmissionResponse>>::error(
-                    "Assignment not found",
-                )),
-            )
-                .into_response();
-        }
-        Err(err) => {
-            eprintln!("DB error checking assignment: {:?}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<SubmissionResponse>>::error(
-                    "Database error",
-                )),
-            )
-                .into_response();
-        }
-    };
-
-    match assignment_submission::Entity::find()
-        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
-        .filter(assignment_submission::Column::UserId.eq(user_id))
-        .order_by_desc(assignment_submission::Column::CreatedAt)
-        .all(&db)
-        .await
-    {
-        Ok(submissions) => {
-            let base = match std::env::var("ASSIGNMENT_STORAGE_ROOT") {
-                Ok(val) => val,
-                Err(_) => {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<Vec<SubmissionResponse>>::error(
-                            "ASSIGNMENT_STORAGE_ROOT not set",
-                        )),
-                    )
-                    .into_response();
-                }
-            };
-
-            let response: Vec<SubmissionResponse> = submissions
-                .into_iter()
-                .map(|s| {
-                    let path = PathBuf::from(&base)
-                        .join(format!("module_{}", module_id))
-                        .join(format!("assignment_{}", assignment_id))
-                        .join("assignment_submissions")
-                        .join(format!("user_{}", s.user_id))
-                        .join(format!("attempt_{}", s.attempt))
-                        .join("submission_report.json");
-
-                    let (mark, is_practice) = match fs::read_to_string(&path) {
-                        Ok(content) => {
-                            if let Ok(json) = serde_json::from_str::<Value>(&content) {
-                                let mark = json
-                                    .get("mark")
-                                    .and_then(|m| serde_json::from_value(m.clone()).ok());
-                                let is_practice =
-                                    json.get("is_practice").and_then(|p| p.as_bool()).unwrap_or(false);
-                                (mark, is_practice)
-                            } else {
-                                (None, false)
-                            }
-                        }
-                        Err(_) => (None, false),
-                    };
-
-                    SubmissionResponse {
-                        id: s.id,
-                        filename: s.filename,
-                        attempt: s.attempt,
-                        created_at: s.created_at.to_rfc3339(),
-                        updated_at: s.updated_at.to_rfc3339(),
-                        is_late: is_late(s.created_at, assignment.due_date),
-                        is_practice,
-                        mark,
-                    }
-                })
-                .collect();
-
-            (
-                StatusCode::OK,
-                Json(ApiResponse::success(
-                    response,
-                    "Submissions retrieved successfully",
-                )),
-            )
-                .into_response()
-        }
-        Err(err) => {
-            eprintln!("DB error fetching submissions: {:?}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<SubmissionResponse>>::error(
-                    "Failed to retrieve submissions",
-                )),
-            )
-                .into_response()
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ListSubmissionsQuery {
-    pub page: Option<u32>,
-    pub per_page: Option<u32>,
-    pub sort: Option<String>,
-    pub query: Option<String>,
-    pub user_id: Option<i64>,
-    pub late: Option<bool>,
-    pub username: Option<String>,
-}
-#[derive(Debug, Serialize, Clone)]
-pub struct UserResponse {
-    id: i64,
-    username: String,
-    email: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SubmissionListItem {
-    pub id: i64,
-    pub user: UserResponse,
-    pub attempt: i64,
-    pub filename: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub is_practice: bool,
-    pub is_late: bool,
-    pub mark: Option<Mark>, 
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Mark {
-    pub earned: i32,
-    pub total: i32,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SubmissionsListResponse {
-    pub submissions: Vec<SubmissionListItem>,
-    pub page: u32,
-    pub per_page: u32,
-    pub total: u64,
-}
-
-async fn get_list_submissions(
-    module_id: i64,
-    assignment_id: i64,
-    params: ListSubmissionsQuery,
-) -> impl IntoResponse {
-    let db = connect().await;
-    if let Some(username) = &params.username {
-        match user::Entity::find()
-            .filter(user::Column::Username.eq(username.clone()))
-            .one(&db)
-            .await
-        {
-            Ok(Some(user)) => {
-                return get_user_submissions(module_id, assignment_id, user.id)
-                    .await
-                    .into_response();
-            }
-            Ok(None) => {
-                return (
-                    StatusCode::NOT_FOUND,
-                    Json(ApiResponse::<SubmissionsListResponse>::error(
-                        "Student not found",
-                    )),
-                )
-                    .into_response();
-            }
-            Err(err) => {
-                eprintln!("DB error looking up student_number: {:?}", err);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<SubmissionsListResponse>::error(
-                        "Database error",
-                    )),
-                )
-                    .into_response();
-            }
-        }
-    }
 
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
@@ -257,8 +89,7 @@ async fn get_list_submissions(
             )
                 .into_response();
         }
-        Err(err) => {
-            eprintln!("DB error checking assignment: {:?}", err);
+        Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<SubmissionsListResponse>::error(
@@ -273,107 +104,74 @@ async fn get_list_submissions(
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
 
     let mut condition =
-        Condition::all().add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32));
+        Condition::all().add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
+                        .add(assignment_submission::Column::UserId.eq(user_id));
 
-    if let Some(user_id) = params.user_id {
-        condition = condition.add(assignment_submission::Column::UserId.eq(user_id as i32));
-    }
-
-    if let Some(late) = params.late {
-        if late {
-            condition =
-                condition.add(assignment_submission::Column::CreatedAt.gt(assignment.due_date));
-        } else {
-            condition =
-                condition.add(assignment_submission::Column::CreatedAt.lte(assignment.due_date));
-        }
-    }
-
-    if let Some(ref query) = params.query {
+    if let Some(query) = &params.query {
         let pattern = format!("%{}%", query.to_lowercase());
         condition = condition.add(assignment_submission::Column::Filename.contains(&pattern));
     }
 
-    let mut query = assignment_submission::Entity::find().filter(condition);
+    let mut query = assignment_submission::Entity::find()
+        .filter(condition);
 
     if let Some(ref sort) = params.sort {
-        for sort_field in sort.split(',') {
-            let (field, dir) = if sort_field.starts_with('-') {
-                (&sort_field[1..], sea_orm::Order::Desc)
+        for field in sort.split(',') {
+            let (field, dir) = if field.starts_with('-') {
+                (&field[1..], sea_orm::Order::Desc)
             } else {
-                (sort_field, sea_orm::Order::Asc)
+                (field, sea_orm::Order::Asc)
             };
 
             match field {
+                "created_at" => query = query.order_by(assignment_submission::Column::CreatedAt, dir),
                 "filename" => query = query.order_by(assignment_submission::Column::Filename, dir),
-                "created_at" => {
-                    query = query.order_by(assignment_submission::Column::CreatedAt, dir)
-                }
-                "user_id" => query = query.order_by(assignment_submission::Column::UserId, dir),
+                "attempt" => query = query.order_by(assignment_submission::Column::Attempt, dir),
                 _ => {}
             }
         }
     } else {
-        query = query.order_by(
-            assignment_submission::Column::CreatedAt,
-            sea_orm::Order::Desc,
-        );
+        query = query.order_by(assignment_submission::Column::CreatedAt, sea_orm::Order::Desc);
     }
 
     let paginator = query.paginate(&db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
-    let submissions = paginator
-        .fetch_page((page - 1).into())
+    let rows = paginator
+        .fetch_page((page - 1) as u64)
         .await
         .unwrap_or_default();
 
-    let user_ids: Vec<i64> = submissions.iter().map(|s| s.user_id).collect();
+    let base = std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
 
-    let users = user::Entity::find()
-        .filter(user::Column::Id.is_in(user_ids.clone()))
-        .all(&db)
-        .await
-        .unwrap_or_default();
-
-    let user_map: std::collections::HashMap<i64, UserResponse> = users
-        .into_iter()
-        .map(|u| {
-            (
-                u.id,
-                UserResponse {
-                    id: u.id,
-                    username: u.username,
-                    email: u.email,
-                },
-            )
-        })
-        .collect();
-
-    let base = match std::env::var("ASSIGNMENT_STORAGE_ROOT") {
-        Ok(val) => val,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<SubmissionListItem>>::error(
-                    "ASSIGNMENT_STORAGE_ROOT not set",
-                )),
-            )
-            .into_response();
+    let user_resp = {
+        let u = user::Entity::find_by_id(user_id).one(&db).await.ok().flatten();
+        if let Some(u) = u {
+            UserResponse {
+                id: u.id,
+                username: u.username,
+                email: u.email,
+            }
+        } else {
+            UserResponse {
+                id: user_id,
+                username: "unknown".to_string(),
+                email: "unknown".to_string(),
+            }
         }
     };
 
-    let response: Vec<SubmissionListItem> = submissions
+    let mut items: Vec<SubmissionListItem> = rows
         .into_iter()
         .map(|s| {
-            let path = PathBuf::from(&base)
-                .join(format!("module_{}", module_id))
-                .join(format!("assignment_{}", assignment_id))
+            let report_path = PathBuf::from(&base)
+                .join(format!("module_{module_id}"))
+                .join(format!("assignment_{assignment_id}"))
                 .join("assignment_submissions")
                 .join(format!("user_{}", s.user_id))
                 .join(format!("attempt_{}", s.attempt))
                 .join("submission_report.json");
 
-            let (mark, is_practice) = match fs::read_to_string(&path) {
+            let (mark, is_practice) = match fs::read_to_string(&report_path) {
                 Ok(content) => {
                     if let Ok(json) = serde_json::from_str::<Value>(&content) {
                         let mark = json
@@ -393,11 +191,7 @@ async fn get_list_submissions(
 
             SubmissionListItem {
                 id: s.id,
-                user: user_map.get(&s.user_id).cloned().unwrap_or(UserResponse {
-                    id: s.user_id,
-                    username: "unknown username".to_string(),
-                    email: "unknown email".to_string(),
-                }),
+                user: user_resp.clone(),
                 filename: s.filename,
                 attempt: s.attempt,
                 created_at: s.created_at.to_rfc3339(),
@@ -409,11 +203,33 @@ async fn get_list_submissions(
         })
         .collect();
 
+    if let Some(ref sort) = params.sort {
+        for field in sort.split(',').rev() {
+            let (field, desc) = if field.starts_with('-') {
+                (&field[1..], true)
+            } else {
+                (field, false)
+            };
+
+            match field {
+                "mark" => {
+                    items.sort_by(|a, b| {
+                        let a_mark = a.mark.as_ref().map(|m| m.earned).unwrap_or(0);
+                        let b_mark = b.mark.as_ref().map(|m| m.earned).unwrap_or(0);
+                        let ord = a_mark.cmp(&b_mark);
+                        if desc { ord.reverse() } else { ord }
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+
     (
         StatusCode::OK,
         Json(ApiResponse::success(
             SubmissionsListResponse {
-                submissions: response,
+                submissions: items,
                 page,
                 per_page,
                 total,
@@ -423,6 +239,276 @@ async fn get_list_submissions(
     )
         .into_response()
 }
+
+/// GET /api/modules/:module_id/assignments/:assignment_id/submissions
+///
+/// Retrieve the full list of submissions for a specific assignment.  
+/// Accessible to lecturers, tutors, and admins who have permission on the module.  
+/// Supports advanced filtering, sorting, and pagination over all students.
+///
+/// ### When to use
+/// - Called when a lecturer or tutor wants to review or grade submissions from all students.
+///
+/// ### Path Parameters
+/// - `module_id` (i64): ID of the module.
+/// - `assignment_id` (i64): ID of the assignment.
+///
+/// ### Query Parameters
+/// - `page` (optional): Page number (default 1, min 1).
+/// - `per_page` (optional): Items per page (default 20, max 100).
+/// - `query` (optional): Case-insensitive partial match on filename or username.
+/// - `username` (optional): Filter submissions of a specific student.
+/// - `sort` (optional): Comma-separated sort fields. Prefix with `-` for descending. Allowed fields:
+///   - `username`
+///   - `attempt`
+///   - `filename`
+///   - `created_at`
+///   - `mark`
+///
+/// ### Sorting
+/// - DB-backed sorting for `created_at`, `filename`, `attempt`.
+/// - In-memory sorting for `username` and `mark`.
+///
+/// ### Filtering
+/// - If `query` is provided, applies to both `filename` and `username`.
+/// - If `username` is provided, restricts to that user.
+///
+/// ### Output
+/// - Returns paginated `SubmissionsListResponse` for all students, including `is_late`, `mark`, `is_practice`.
+///
+/// ### Errors
+/// - `404`: Assignment not found.
+/// - `500`: DB error.
+///
+/// ### Notes
+/// - Late submissions are computed relative to assignment `due_date`.
+/// - Defaults to sorting by `created_at DESC`.
+async fn get_list_submissions(
+    module_id: i64,
+    assignment_id: i64,
+    params: ListSubmissionsQuery,
+) -> impl IntoResponse {
+
+    let db = connect().await;
+
+    let assignment = match AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
+        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
+        .one(&db)
+        .await
+    {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<SubmissionsListResponse>::error(
+                    "Assignment not found",
+                )),
+            )
+                .into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionsListResponse>::error(
+                    "Database error",
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    let page = params.page.unwrap_or(1).max(1);
+    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
+
+    let mut condition =
+        Condition::all().add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32));
+
+    if let Some(query) = &params.query {
+        let pattern = format!("%{}%", query.to_lowercase());
+
+        // Build OR condition across multiple fields
+        let mut or_condition = Condition::any()
+            .add(assignment_submission::Column::Filename.contains(&pattern));
+
+        if let Ok(Some(user)) = user::Entity::find()
+            .filter(user::Column::Username.contains(&pattern))
+            .one(&db)
+            .await
+        {
+            or_condition = or_condition.add(assignment_submission::Column::UserId.eq(user.id));
+        }
+
+        condition = condition.add(or_condition);
+    }
+
+    if let Some(ref username) = params.username {
+        match user::Entity::find()
+            .filter(user::Column::Username.eq(username.clone()))
+            .one(&db)
+            .await
+        {
+            Ok(Some(user)) => {
+                condition = condition.add(assignment_submission::Column::UserId.eq(user.id));
+            }
+            Ok(None) => {
+                // No such user => return empty list
+                return (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(
+                        SubmissionsListResponse {
+                            submissions: vec![],
+                            page: 1,
+                            per_page,
+                            total: 0,
+                        },
+                        "No submissions found for the specified username",
+                    )),
+                )
+                    .into_response();
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<SubmissionsListResponse>::error("Database error")),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    let mut query = assignment_submission::Entity::find()
+        .filter(condition)
+        .find_also_related(user::Entity);
+
+    if let Some(ref sort) = params.sort {
+        for field in sort.split(',') {
+            let (field, dir) = if field.starts_with('-') {
+                (&field[1..], sea_orm::Order::Desc)
+            } else {
+                (field, sea_orm::Order::Asc)
+            };
+
+            match field {
+                "created_at" => query = query.order_by(assignment_submission::Column::CreatedAt, dir),
+                "filename" => query = query.order_by(assignment_submission::Column::Filename, dir),
+                "attempt" => query = query.order_by(assignment_submission::Column::Attempt, dir),
+                _ => {} // mark/status handled in-memory
+            }
+        }
+    } else {
+        query = query.order_by(assignment_submission::Column::CreatedAt, sea_orm::Order::Desc);
+    }
+
+    let paginator = query.paginate(&db, per_page.into());
+    let total = paginator.num_items().await.unwrap_or(0);
+    let rows = paginator
+        .fetch_page((page - 1) as u64)
+        .await
+        .unwrap_or_default();
+
+    let base = std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
+
+    let mut items: Vec<SubmissionListItem> = rows
+        .into_iter()
+        .map(|(s, u)| {
+            let user_resp = if let Some(u) = u {
+                UserResponse {
+                    id: u.id,
+                    username: u.username,
+                    email: u.email,
+                }
+            } else {
+                UserResponse {
+                    id: s.user_id,
+                    username: "unknown".to_string(),
+                    email: "unknown".to_string(),
+                }
+            };
+
+            let report_path = PathBuf::from(&base)
+                .join(format!("module_{module_id}"))
+                .join(format!("assignment_{assignment_id}"))
+                .join("assignment_submissions")
+                .join(format!("user_{}", s.user_id))
+                .join(format!("attempt_{}", s.attempt))
+                .join("submission_report.json");
+
+            let (mark, is_practice) = match fs::read_to_string(&report_path) {
+                Ok(content) => {
+                    if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                        let mark = json
+                            .get("mark")
+                            .and_then(|m| serde_json::from_value(m.clone()).ok());
+                        let is_practice = json
+                            .get("is_practice")
+                            .and_then(|p| p.as_bool())
+                            .unwrap_or(false);
+                        (mark, is_practice)
+                    } else {
+                        (None, false)
+                    }
+                }
+                Err(_) => (None, false),
+            };
+
+            SubmissionListItem {
+                id: s.id,
+                user: user_resp,
+                filename: s.filename,
+                attempt: s.attempt,
+                created_at: s.created_at.to_rfc3339(),
+                updated_at: s.updated_at.to_rfc3339(),
+                is_practice,
+                is_late: is_late(s.created_at, assignment.due_date),
+                mark,
+            }
+        })
+        .collect();
+
+    if let Some(ref sort) = params.sort {
+        for field in sort.split(',').rev() {
+            let (field, desc) = if field.starts_with('-') {
+                (&field[1..], true)
+            } else {
+                (field, false)
+            };
+
+            match field {
+                "username" => {
+                    items.sort_by(|a, b| {
+                        let ord = a.user.username.cmp(&b.user.username);
+                        if desc { ord.reverse() } else { ord }
+                    });
+                }
+                "mark" => {
+                    items.sort_by(|a, b| {
+                        let a_mark = a.mark.as_ref().map(|m| m.earned).unwrap_or(0);
+                        let b_mark = b.mark.as_ref().map(|m| m.earned).unwrap_or(0);
+                        let ord = a_mark.cmp(&b_mark);
+                        if desc { ord.reverse() } else { ord }
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            SubmissionsListResponse {
+                submissions: items,
+                page,
+                per_page,
+                total,
+            },
+            "Submissions retrieved successfully",
+        )),
+    )
+        .into_response()
+}
+
 
 async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bool {
     user_module_role::Entity::find()
@@ -442,145 +528,20 @@ async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bo
 
 /// GET /api/modules/:module_id/assignments/:assignment_id/submissions
 ///
-/// List submissions for a specific assignment. Accessible to users assigned to the module with
-/// appropriate permissions.
-///
-/// This endpoint provides different behavior based on the user's role:
-/// - **Students**: Can only view their own submissions for the assignment
-/// - **Lecturers/Tutors**: Can view all submissions with filtering and pagination options
+/// List submissions for a specific assignment.  
+/// - **Students**: Can only view their own submissions, with optional query, pagination, and sort.  
+/// - **Lecturers/Tutors/Admins**: Can view all submissions with full filters, pagination, sorting.
 ///
 /// ### Path Parameters
-/// - `module_id` (i64): The ID of the module containing the assignment
-/// - `assignment_id` (i64): The ID of the assignment to list submissions for
+/// - `module_id` (i64): The ID of the module
+/// - `assignment_id` (i64): The ID of the assignment
 ///
 /// ### Query Parameters
-/// - `page` (optional, u32): Page number (default: 1, min: 1)
-/// - `per_page` (optional, u32): Items per page (default: 20, min: 1, max: 100)
-/// - `query` (optional, string): Case-insensitive partial match against filename
-/// - `user_id` (optional, i64): Filter by specific user ID
-/// - `late` (optional, boolean): Filter by late status (true/false)
-/// - `username` (optional, string): Filter by username (returns only that user's submissions)
-/// - `sort` (optional, string): Sort by field. Prefix with `-` for descending. Allowed fields:
-///   - `filename` - Sort by submission filename
-///   - `created_at` - Sort by submission timestamp
-///   - `user_id` - Sort by user ID
-///
-/// ### Example Request - Student View
-/// ```bash
-/// curl -X GET "http://localhost:3000/api/modules/1/assignments/2/submissions" \
-///   -H "Authorization: Bearer <token>"
-/// ```
-///
-/// ### Example Request - Lecturer View with Filters
-/// ```bash
-/// curl -X GET "http://localhost:3000/api/modules/1/assignments/2/submissions?page=1&per_page=10&late=true&sort=-created_at" \
-///   -H "Authorization: Bearer <token>"
-/// ```
-///
-/// ### Success Response (200 OK) - Student View
-/// ```json
-/// {
-///   "success": true,
-///   "message": "Submissions retrieved successfully",
-///   "data": [
-///     {
-///       "id": 123,
-///       "attempt": 1,
-///       "filename": "assignment1.java",
-///       "created_at": "2024-01-15T10:30:00Z",
-///       "updated_at": "2024-01-15T10:30:00Z",
-///       "is_late": false
-///     },
-///     {
-///       "id": 124,
-///       "attempt": 2,
-///       "filename": "assignment1_v2.java",
-///       "created_at": "2024-01-16T14:45:00Z",
-///       "updated_at": "2024-01-16T14:45:00Z",
-///       "is_late": true
-///     }
-///   ]
-/// }
-/// ```
-///
-/// ### Success Response (200 OK) - Lecturer View
-/// ```json
-/// {
-///   "success": true,
-///   "message": "Submissions retrieved successfully",
-///   "data": {
-///     "submissions": [
-///       {
-///         "id": 123,
-///         "user": {
-///           "user_id": 456,
-///           "username": "student1",
-///           "email": "student1@example.com"
-///         },
-///         "attempt": 1,
-///         "filename": "assignment1.java",
-///         "created_at": "2024-01-15T10:30:00Z",
-///         "updated_at": "2024-01-15T10:30:00Z",
-///         "is_late": false
-///       }
-///     ],
-///     "page": 1,
-///     "per_page": 10,
-///     "total": 25
-///   }
-/// }
-/// ```
-///
-/// ### Error Responses
-///
-/// **403 Forbidden** - Insufficient permissions
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Access denied"
-/// }
-/// ```
-///
-/// **404 Not Found** - Assignment or student not found
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Assignment not found"
-/// }
-/// ```
-/// or
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Student not found"
-/// }
-/// ```
-///
-/// **500 Internal Server Error** - Database error
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Database error"
-/// }
-/// ```
-///
-/// ### Role-Based Access
-/// - **Students**: Can only view their own submissions for the assignment
-/// - **Lecturers/Tutors**: Can view all submissions with full filtering and pagination
-/// - **Admins**: Have the same access as lecturers/tutors
-///
-/// ### Late Submission Detection
-/// Submissions are marked as late if they are submitted after the assignment's due date.
-/// The `is_late` field is calculated by comparing the submission timestamp with the assignment's
-/// `due_date` field.
+/// - `page`, `per_page`, `query`, `username`, `sort` (see API docs above for details)
 ///
 /// ### Notes
-/// - Students automatically see only their own submissions regardless of query parameters
-/// - Lecturers and tutors can use all filtering and pagination options
-/// - The `username` parameter overrides other filters and returns only that user's submissions
-/// - Sorting defaults to `created_at` in descending order (newest first)
-/// - Pagination is applied only for lecturer/tutor views
-/// - File information includes attempt numbers for tracking multiple submissions
+/// - Students: `username` is ignored, only their own submissions returned.
+/// - Late submissions are calculated based on `due_date`.
 pub async fn list_submissions(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
@@ -590,7 +551,8 @@ pub async fn list_submissions(
     let db = connect().await;
 
     if is_student(module_id, user_id, &db).await {
-        return get_user_submissions(module_id, assignment_id, user_id)
+        // Pass params explicitly now
+        return get_user_submissions(module_id, assignment_id, user_id, Query(params))
             .await
             .into_response();
     }

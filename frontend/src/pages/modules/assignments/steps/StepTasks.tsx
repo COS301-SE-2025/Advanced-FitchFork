@@ -4,13 +4,13 @@ import { PlusOutlined, SaveOutlined, EditOutlined, DeleteOutlined } from '@ant-d
 
 import { useModule } from '@/context/ModuleContext';
 import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
-import { listTasks, createTask, editTask } from '@/services/modules/assignments/tasks';
+import { listTasks, createTask, editTask, deleteTask } from '@/services/modules/assignments/tasks';
 
 const { Title, Paragraph, Text } = Typography;
 
 const StepTasks = () => {
   const module = useModule();
-  const { assignmentId, refreshAssignment } = useAssignmentSetup();
+  const { assignmentId, refreshAssignment, onStepComplete } = useAssignmentSetup();
 
   const [tasks, setTasks] = useState<
     { id: number; task_number: number; name: string; command: string }[]
@@ -52,6 +52,7 @@ const StepTasks = () => {
       message.success('Task created');
       await fetchTasks();
       await refreshAssignment?.();
+      onStepComplete?.();
     } else {
       message.error(res.message);
     }
@@ -75,8 +76,24 @@ const StepTasks = () => {
     }
   };
 
-  const handleDeleteTask = (taskId: number) => {
-    message.info(`Delete task ${taskId} (not yet implemented)`);
+  const handleDeleteTask = async (taskId: number) => {
+    if (!assignmentId) return;
+
+    try {
+      const res = await deleteTask(module.id, assignmentId, taskId);
+
+      if (res.success) {
+        message.success(res.message || 'Task deleted');
+        await fetchTasks();
+        await refreshAssignment?.();
+        onStepComplete?.();
+      } else {
+        message.error(res.message || 'Failed to delete task');
+      }
+    } catch (err) {
+      message.error('Failed to delete task');
+      console.error(err);
+    }
   };
 
   return (

@@ -1,5 +1,8 @@
+import { useEffect } from 'react';
 import { Typography, InputNumber, Collapse, Alert, Button } from 'antd';
+
 import { useAssignment } from '@/context/AssignmentContext';
+import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 
 import type { MarkAllocatorTask } from '@/types/modules/assignments/mark-allocator';
 
@@ -8,6 +11,14 @@ const { Panel } = Collapse;
 
 const MarkAllocator = () => {
   const { markAllocator } = useAssignment();
+  const { customLabels, setBreadcrumbLabel } = useBreadcrumbContext();
+
+  useEffect(() => {
+    const pathKey = location.pathname.replace(/^\//, '');
+    if (customLabels[pathKey] !== 'Mark Allocator') {
+      setBreadcrumbLabel(pathKey, 'Mark Allocator');
+    }
+  }, [location.pathname, customLabels, setBreadcrumbLabel]);
 
   if (markAllocator.length === 0) {
     return <Alert type="info" message="No mark allocator found for this assignment." />;

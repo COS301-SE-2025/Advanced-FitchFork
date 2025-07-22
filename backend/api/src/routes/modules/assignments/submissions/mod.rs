@@ -1,8 +1,9 @@
-use axum::middleware::from_fn;
-use axum::{extract::Path, Router};
-
 pub mod get;
 pub mod post;
+pub mod common;
+
+use axum::middleware::from_fn;
+use axum::{extract::Path, Router};
 use get::{list_submissions, get_submission};
 use axum::routing::{get, post};
 use post::{submit_assignment};
