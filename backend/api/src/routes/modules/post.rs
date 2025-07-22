@@ -1,21 +1,15 @@
 use axum::{
+    extract::State,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
 use chrono::{Datelike, Utc};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-
-use db::{
-    connect,
-    models::{
-        module::{Model as Module}
-    },
-};
-
+use db::models::module::{Model as Module};
 use crate::response::ApiResponse;
+use sea_orm::DatabaseConnection;
 
 lazy_static::lazy_static! {
     static ref MODULE_CODE_REGEX: regex::Regex = regex::Regex::new("^[A-Z]{3}\\d{3}$").unwrap();
@@ -139,7 +133,10 @@ impl From<Module> for ModuleResponse {
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
+pub async fn create(
+    State(db): State<DatabaseConnection>,
+    Json(req): Json<CreateModuleRequest>
+) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -158,8 +155,6 @@ pub async fn create(Json(req): Json<CreateModuleRequest>) -> impl IntoResponse {
             ))),
         );
     }
-
-    let db = connect().await;
 
     match Module::create(
         &db,

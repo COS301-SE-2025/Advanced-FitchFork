@@ -3,11 +3,12 @@ mod tests {
     use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
-    use api::{routes::routes, auth::generate_jwt};
+    use api::auth::generate_jwt;
     use dotenvy;
     use chrono::{Utc, TimeZone};
     use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
     use axum::http::header::{CONTENT_TYPE, AUTHORIZATION};
+    use crate::test_helpers::make_app;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -60,7 +61,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -82,7 +83,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -104,7 +105,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, 9999);
@@ -126,7 +127,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let boundary = "----BoundaryTest".to_string();
         let mut body = Vec::new();
         body.extend(format!("--{}\r\n", boundary).as_bytes());
@@ -152,7 +153,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("spec", "spec.txt", b"");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -174,7 +175,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -194,7 +195,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("not_a_type", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -216,7 +217,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let (boundary1, body1) = multipart_body("spec", "spec1.txt", b"first content");

@@ -109,23 +109,6 @@ pub async fn get_assignment(
     State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let module_exists = db::models::module::Entity::find_by_id(module_id as i32).one(&db).await;
-    match module_exists {
-        Ok(Some(_)) => {},
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<AssignmentFileResponse>::error("Module not found")),
-            );
-        },
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<AssignmentFileResponse>::error("Database error checking module")),
-            );
-        }
-    }
-    
     let assignment_res = assignment::Entity::find()
         .filter(assignment::Column::Id.eq(assignment_id as i32))
         .filter(assignment::Column::ModuleId.eq(module_id as i32))
@@ -298,23 +281,6 @@ pub async fn get_assignments(
     Path(module_id): Path<i64>,
     Query(params): Query<FilterReq>,
 ) -> impl IntoResponse {
-    let module_exists = db::models::module::Entity::find_by_id(module_id as i32).one(&db).await;
-    match module_exists {
-        Ok(Some(_)) => {},
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<FilterResponse>::error("Module not found")),
-            );
-        },
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<FilterResponse>::error("Database error checking module")),
-            );
-        }
-    }
-
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100).max(1);
 
@@ -581,23 +547,6 @@ pub async fn get_assignment_stats(
     State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>
 ) -> impl IntoResponse {
-    let module_exists = db::models::module::Entity::find_by_id(module_id as i32).one(&db).await;
-    match module_exists {
-        Ok(Some(_)) => {},
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<StatResponse>::error("Module not found")),
-            ).into_response();
-        },
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<StatResponse>::error("Database error checking module")),
-            ).into_response();
-        }
-    }
-
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
@@ -732,50 +681,11 @@ pub async fn get_assignment_readiness(
     State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> (StatusCode, Json<ApiResponse<AssignmentReadiness>>) {
-    let module_exists = db::models::module::Entity::find_by_id(module_id as i32).one(&db).await;
-    match module_exists {
-        Ok(Some(_)) => {},
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<AssignmentReadiness>::error("Module not found")),
-            );
-        },
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<AssignmentReadiness>::error("Database error checking module")),
-            );
-        }
-    }
-
-    let assignment_exists = AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await;
-    match assignment_exists {
-        Ok(Some(_)) => {},
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<AssignmentReadiness>::error("Assignment not found")),
-            );
-        },
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<AssignmentReadiness>::error("Database error checking assignment")),
-            );
-        }
-    }
-    // Check if config file is present
     let config_present = {
         let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Config);
         fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
     };
 
-    // Check if at least one task exists
     let tasks_present = match TaskEntity::find()
         .filter(TaskColumn::AssignmentId.eq(assignment_id))
         .limit(1)
@@ -786,19 +696,16 @@ pub async fn get_assignment_readiness(
         Err(_) => false,
     };
 
-    // Check for main file(s)
     let main_present = {
         let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Main);
         fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
     };
 
-    // Check for memo file(s)
     let memo_present = {
         let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Memo);
         fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
     };
 
-    // Check for makefile(s)
     let makefile_present = {
         let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Makefile);
         fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
@@ -817,7 +724,6 @@ pub async fn get_assignment_readiness(
         }
     };
 
-    // Check for allocator.json
     let mark_allocator_present = {
         let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::MarkAllocator);
         if let Ok(files) = fs::read_dir(dir) {

@@ -2,12 +2,11 @@
 //!
 //! This module provides the endpoint handler for editing the command of a specific assignment task within a module. It validates the existence and relationships of the module, assignment, and task, and updates the task's command in the database. The endpoint returns detailed information about the updated task or appropriate error responses.
 
-use axum::{extract::{Path, Json}, http::StatusCode, response::IntoResponse};
-use db::connect;
-use db::models::{assignment_task, assignment, module};
+use axum::{extract::{State, Path, Json}, http::StatusCode, response::IntoResponse};
+use db::models::{assignment_task};
 use serde::Deserialize;
 use crate::response::ApiResponse;
-use sea_orm::{EntityTrait, DbErr};
+use sea_orm::DatabaseConnection;
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
 
 /// The request payload for editing a task's command.
@@ -156,7 +155,8 @@ pub struct EditTaskRequest {
 /// - Task editing is restricted to users with appropriate module permissions
 /// - The `updated_at` timestamp is automatically set when the task is modified
 pub async fn edit_task(
-    Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
+    State(db): State<DatabaseConnection>,
+    Path((_, _, task_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<EditTaskRequest>,
 ) -> impl IntoResponse {
     if payload.command.trim().is_empty() || payload.name.trim().is_empty() {
@@ -166,79 +166,8 @@ pub async fn edit_task(
         ).into_response();
     }
 
-    let db = connect().await;
-    let module_exists = match module::Entity::find_by_id(module_id).one(&db).await {
-        Ok(Some(_)) => true,
-        Ok(None) => false,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving module")),
-            ).into_response();
-        }
-    };
-    
-    if !module_exists {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module not found")),
-        ).into_response();
-    }
-
-    let assignment_model = match assignment::Entity::find_by_id(assignment_id).one(&db).await {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment not found")),
-            ).into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving assignment")),
-            ).into_response();
-        }
-    };
-
-    if assignment_model.module_id != module_id {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Assignment does not belong to this module")),
-        ).into_response();
-    }
-
-    let task = match assignment_task::Entity::find_by_id(task_id).one(&db).await {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Task not found")),
-            ).into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving task")),
-            ).into_response();
-        }
-    };
-
-    if task.assignment_id != assignment_id {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Task does not belong to this assignment")),
-        ).into_response();
-    }
-
     let updated = match assignment_task::Model::edit_command_and_name(&db, task_id, &payload.name, &payload.command).await {
         Ok(t) => t,
-        Err(DbErr::RecordNotFound(_)) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Task not found for update")),
-            ).into_response();
-        }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,

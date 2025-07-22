@@ -4,10 +4,11 @@ mod tests {
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::json;
-    use api::{routes::routes, auth::generate_jwt};
+    use api::auth::generate_jwt;
     use dotenvy;
     use chrono::{Utc, TimeZone};
     use sea_orm::DatabaseConnection;
+    use crate::test_helpers::make_app;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -77,7 +78,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -98,7 +99,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -119,7 +120,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, 9999);
         let req = Request::builder()
@@ -140,7 +141,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -161,7 +162,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("DELETE")
@@ -180,7 +181,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -192,7 +193,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
-        assert!(response.status() == StatusCode::OK || response.status() == StatusCode::NOT_FOUND);
+        assert!(response.status() == StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
@@ -201,7 +202,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -213,6 +214,6 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
-        assert!(response.status() == StatusCode::OK || response.status() == StatusCode::NOT_FOUND);
+        assert!(response.status() == StatusCode::NOT_FOUND);
     }
 }

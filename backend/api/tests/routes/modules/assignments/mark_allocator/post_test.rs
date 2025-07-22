@@ -3,11 +3,12 @@ mod tests {
     use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
-    use api::{routes::routes, auth::generate_jwt};
+    use api::auth::generate_jwt;
     use dotenvy;
     use chrono::{Utc, TimeZone};
     use std::{fs, path::PathBuf};
     use serial_test::serial;
+    use crate::test_helpers::make_app;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -59,7 +60,7 @@ mod tests {
         fs::create_dir_all(&memo_output_dir).unwrap();
         fs::write(memo_output_dir.join("task_1.txt"), "Test memo output").unwrap();
         
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator/generate", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -80,10 +81,11 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_not_found() {
         dotenvy::dotenv().expect("Failed to load .env");
+        unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator/generate", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -101,10 +103,11 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_forbidden_for_student() {
         dotenvy::dotenv().expect("Failed to load .env");
+        unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
         
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator/generate", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -122,10 +125,11 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_forbidden_for_unassigned_user() {
         dotenvy::dotenv().expect("Failed to load .env");
+        unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
         
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator/generate", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -143,10 +147,11 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_unauthorized() {
         dotenvy::dotenv().expect("Failed to load .env");
+        unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
         
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator/generate", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
@@ -162,10 +167,11 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_missing_memo_or_config() {
         dotenvy::dotenv().expect("Failed to load .env");
+        unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
         
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator/generate", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -183,10 +189,11 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_missing_memo_output() {
         dotenvy::dotenv().expect("Failed to load .env");
+        unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
         
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator/generate", data.module.id, data.assignment.id);
         let req = Request::builder()

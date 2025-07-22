@@ -1,18 +1,15 @@
 use axum::{
-    extract::{Path, Multipart, Extension},
+    extract::{State, Path, Multipart, Extension},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use serde::Serialize;
-use db::{
-    connect,
-    models::{
-        assignment_submission::{self, Model as AssignmentSubmissionModel},
-        assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
-    },
+use db::models::{
+    assignment_submission::{self, Model as AssignmentSubmissionModel},
+    assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
 };
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, QueryOrder};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, QueryOrder, DatabaseConnection};
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
@@ -179,32 +176,15 @@ pub struct SubmissionDetailResponse {
 /// - The endpoint is restricted to authenticated students assigned to the module
 /// - All errors are returned in a consistent JSON format
 pub async fn submit_assignment(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
-    let assignment = match AssignmentEntity::find()
+    let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await
-    {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<SubmissionDetailResponse> ::error("Assignment not found")),
-            )
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SubmissionDetailResponse> ::error("Database error")),
-            )
-        }
-    };
+        .one(&db).await.unwrap().unwrap();
 
     let mut is_practice = false;
     // let mut force_submit = false;
@@ -221,10 +201,6 @@ pub async fn submit_assignment(
                 let val = field.text().await.unwrap_or_default();
                 is_practice = val == "true" || val == "1";
             }
-            // Some("force_submit") => {
-            //     let val = field.text().await.unwrap_or_default();
-            //     force_submit = val == "true" || val == "1";
-            // }
             _ => {}
         }
     }

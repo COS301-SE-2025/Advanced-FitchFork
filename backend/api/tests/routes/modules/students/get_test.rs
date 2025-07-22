@@ -4,8 +4,9 @@ mod tests {
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::Value;
-    use api::{routes::routes, auth::generate_jwt};
+    use api::auth::generate_jwt;
     use dotenvy;
+    use crate::test_helpers::make_app;
 
     struct TestData {
         admin_user: UserModel,
@@ -43,7 +44,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db);
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/students", data.module.id);
         let req = Request::builder()
@@ -72,7 +73,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db);
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.student1.id, data.student1.admin);
         let uri = format!("/api/modules/{}/students", data.module.id);
         let req = Request::builder()
@@ -94,14 +95,14 @@ mod tests {
         assert!(usernames.contains(&"student3"));
     }
 
-    /// Test Case 3: Module Not Found
+    /// Test Case 3: Module 9999 not found.
     #[tokio::test]
     async fn test_get_students_not_found() {
         dotenvy::dotenv().expect("Failed to load .env");
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db);
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/students", 9999);
         let req = Request::builder()
@@ -115,7 +116,7 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Module not found");
+        assert_eq!(json["message"], "Module 9999 not found.");
     }
 
     /// Test Case 4: Forbidden Access
@@ -125,7 +126,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db);
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/students", data.module.id);
         let req = Request::builder()
@@ -145,7 +146,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db);
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/students?query=student&sort=-email", data.module.id);
         let req = Request::builder()
@@ -174,7 +175,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db);
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/students?page=2&per_page=2", data.module.id);
         let req = Request::builder()
@@ -205,7 +206,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
         
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db);
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/students", data.empty_module.id);
         let req = Request::builder()

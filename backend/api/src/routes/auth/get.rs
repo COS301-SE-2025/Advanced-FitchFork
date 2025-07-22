@@ -1,12 +1,11 @@
 use std::path::PathBuf;
 use axum::{
-    http::StatusCode,
+    extract::{State, Query, Path},
+    http::{StatusCode, header, HeaderMap, HeaderValue},
     response::IntoResponse,
     Json,
 };
-use axum::extract::{Query, Path};
-use axum::http::{header, HeaderMap, HeaderValue};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, DatabaseConnection};
 use tokio::fs::File as FsFile;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
@@ -14,12 +13,7 @@ use crate::{
     auth::claims::AuthUser,
     response::ApiResponse,
 };
-
-use db::{
-    connect,
-    models::{user, module, user_module_role},
-};
-use db::models::user_module_role::Role;
+use db::models::{user, module, user_module_role, user_module_role::Role};
 use crate::routes::common::UserModule;
 
 #[derive(Debug, Serialize)]
@@ -91,8 +85,10 @@ pub struct HasRoleResponse {
 /// - `403 Forbidden` – Missing or invalid token
 /// - `404 Not Found` – User not found
 /// - `500 Internal Server Error` – Database failure
-pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
-    let db: sea_orm::DatabaseConnection = connect().await;
+pub async fn get_me(
+    State(db): State<DatabaseConnection>,
+    AuthUser(claims): AuthUser
+) -> impl IntoResponse {
     let user_id = claims.sub;
 
     let user = match user::Entity::find()
@@ -114,7 +110,7 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
             );
         }
     };
-
+    
     let roles = match user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user.id))
         .find_also_related(module::Entity)
@@ -206,18 +202,11 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
 ///   "data": null
 /// }
 /// ```
-pub async fn get_avatar(Path(user_id): Path<i64>) -> impl IntoResponse {
-    let db = connect().await;
-    let user = match user::Entity::find_by_id(user_id).one(&db).await {
-        Ok(Some(u)) => u,
-        _ => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("User not found")),
-            )
-                .into_response();
-        }
-    };
+pub async fn get_avatar(
+    State(db): State<DatabaseConnection>,
+    Path(user_id): Path<i64>
+) -> impl IntoResponse {
+    let user = user::Entity::find_by_id(user_id).one(&db).await.unwrap().unwrap();
 
     let Some(path) = user.profile_picture_path else {
         return (
@@ -297,9 +286,11 @@ pub async fn get_avatar(Path(user_id): Path<i64>) -> impl IntoResponse {
 /// - `400 Bad Request` – Invalid role specified
 /// - `403 Forbidden` – Missing or invalid token
 /// - `500 Internal Server Error` – Database failure
-pub async fn has_role_in_module(AuthUser(claims): AuthUser, Query(params): Query<HasRoleQuery>, ) -> impl IntoResponse {
-    let db = connect().await;
-
+pub async fn has_role_in_module(
+    State(db): State<DatabaseConnection>,
+    AuthUser(claims): AuthUser,
+    Query(params): Query<HasRoleQuery>
+) -> impl IntoResponse {
     let role = match params.role.to_lowercase().as_str() {
         "lecturer" => Role::Lecturer,
         "tutor" => Role::Tutor,

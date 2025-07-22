@@ -12,7 +12,7 @@ use sea_orm::{
     DatabaseConnection,
 };
 use serde_json::json;
-use db::models::{assignment, assignment_file};
+use db::models::assignment_file;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/files
 ///
@@ -61,36 +61,9 @@ use db::models::{assignment, assignment_file};
 ///
 pub async fn delete_files(
     State(db): State<DatabaseConnection>,
-    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    Path((_, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    match assignment::Entity::find()
-        .filter(assignment::Column::Id.eq(assignment_id as i32))
-        .filter(assignment::Column::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await
-    {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({
-                    "success": false,
-                    "message": format!("No assignment found with ID {} in module {}", assignment_id, module_id)
-                })),
-            );
-        }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "success": false,
-                    "message": e.to_string()
-                })),
-            );
-        }
-    }
-
     let file_ids: Vec<i64> = req
         .get("file_ids")
         .and_then(|v| v.as_array())
@@ -107,7 +80,48 @@ pub async fn delete_files(
         );
     }
 
-    delete_all_files(&db, file_ids, assignment_id).await;
+    let found_models = match assignment_file::Entity::find()
+        .filter(assignment_file::Column::AssignmentId.eq(assignment_id as i32))
+        .filter(assignment_file::Column::Id.is_in(
+            file_ids.iter().copied().map(|id| id as i32).collect::<Vec<_>>(),
+        ))
+        .all(&db)
+        .await
+    {
+        Ok(models) => models,
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "success": false,
+                    "message": format!("File(s) not found: {:?}", file_ids)
+                })),
+            );
+        }
+    };
+
+    let found_ids: Vec<i64> = found_models.iter().map(|m| m.id as i64).collect();
+    let missing: Vec<i64> = file_ids
+        .iter()
+        .filter(|id| !found_ids.contains(id))
+        .copied()
+        .collect();
+
+    if !missing.is_empty() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "success": false,
+                "message": format!("File(s) not found: {:?}", missing)
+            })),
+        );
+    }
+
+    for file in found_models {
+        let _ = file.delete_file_only();
+        let am: assignment_file::ActiveModel = file.into();
+        let _ = am.delete(&db).await;
+    }
 
     (
         StatusCode::OK,
@@ -116,24 +130,4 @@ pub async fn delete_files(
             "message": "Files removed successfully"
         })),
     )
-}
-
-/// Helper method for [`delete_files`]. Deletes a list of files associated with a specific assignment.
-async fn delete_all_files(
-    db: &sea_orm::DatabaseConnection,
-    file_ids: Vec<i64>,
-    assignment_id: i64,
-) {
-    for file_id in file_ids {
-        if let Ok(Some(file)) = assignment_file::Entity::find()
-            .filter(assignment_file::Column::Id.eq(file_id as i32))
-            .filter(assignment_file::Column::AssignmentId.eq(assignment_id as i32))
-            .one(db)
-            .await
-        {
-            let _ = file.delete_file_only();
-            let model: assignment_file::ActiveModel = file.into();
-            let _ = model.delete(db).await;
-        }
-    }
 }

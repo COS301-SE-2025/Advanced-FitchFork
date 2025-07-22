@@ -1,13 +1,9 @@
 use axum::{extract::{State, Path, Query}, http::StatusCode, response::{Response, IntoResponse}, Json};
 use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, DatabaseConnection, JoinType, Order, PaginatorTrait, QuerySelect, QueryOrder};
-use crate::{
-    response::ApiResponse,
-};
-use db::{
-    models::{
-        user,
-        user_module_role::{Column as RoleCol, Entity as RoleEntity, Role},
-    },
+use crate::response::ApiResponse;
+use db::models::{
+    user,
+    user_module_role::{Column as RoleCol, Entity as RoleEntity, Role},
 };
 use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleResponse};
 
@@ -48,23 +44,9 @@ use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleRespo
 /// - `404 Not Found` – if the module does not exist
 pub async fn get_students(
     State(db): State<DatabaseConnection>,
-    Path(module_id): Path<i32>,
+    Path(module_id): Path<i64>,
     Query(params): Query<RoleQuery>,
 ) -> Response {
-    let module_exists = db::models::module::Entity::find_by_id(module_id)
-        .one(&db)
-        .await
-        .unwrap_or(None)
-        .is_some();
-
-    if !module_exists {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module not found")),
-        )
-            .into_response();
-    }
-
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
 

@@ -1,13 +1,14 @@
 #[cfg(test)]
 mod tests {
     use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
-    use axum::{body::Body, http::{Request, StatusCode}};
+    use axum::{body::{to_bytes, Body}, http::{Request, StatusCode}};
     use tower::ServiceExt;
-    use api::{routes::routes, auth::generate_jwt};
+    use api::auth::generate_jwt;
     use dotenvy;
     use chrono::{Utc, TimeZone};
     use std::{fs, path::PathBuf};
     use serial_test::serial;
+    use crate::test_helpers::make_app;
 
     struct TestData {
         admin_user: UserModel,
@@ -47,23 +48,22 @@ mod tests {
         }
     }
 
-    fn cleanup_tmp() {
-        let _ = fs::remove_dir_all("./tmp");
+    fn setup_input_dirs(module_id: i64, assignment_id: i64) {
+        let base = PathBuf::from("./tmp")
+            .join(format!("module_{}", module_id))
+            .join(format!("assignment_{}", assignment_id));
+        // memo dir
+        let memo_dir = base.join("memo");
+        fs::create_dir_all(&memo_dir).unwrap();
+        fs::write(memo_dir.join("stub.txt"), "stub memo").unwrap();
+        // config dir
+        let config_dir = base.join("config");
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::write(config_dir.join("stub.conf"), "stub config").unwrap();
     }
 
-    fn create_multipart_body(file_name: &str, file_content: &str) -> (Body, String) {
-        let boundary = "------------------------_boundary";
-        let body = format!(
-            "--{boundary}\r\n\
-            Content-Disposition: form-data; name=\"files\"; filename=\"{}\"\r\n\
-            Content-Type: text/plain\r\n\
-            \r\n\
-            {}\r\n\
-            --{boundary}--\r\n",
-            file_name, file_content
-        );
-        let content_type = format!("multipart/form-data; boundary={}", boundary);
-        (Body::from(body), content_type)
+    fn cleanup_tmp() {
+        let _ = fs::remove_dir_all("./tmp");
     }
 
     #[tokio::test]
@@ -73,18 +73,17 @@ mod tests {
         unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
+        setup_input_dirs(data.module.id, data.assignment.id);
 
-        let (body, content_type) = create_multipart_body("1.txt", "Memo for task 1");
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/memo_output", data.module.id, data.assignment.id);
+        let uri = format!("/api/modules/{}/assignments/{}/memo_output/generate", data.module.id, data.assignment.id);
         
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", &content_type)
-            .body(body)
+            .body(Body::empty())
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
@@ -108,22 +107,29 @@ mod tests {
         unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
+        setup_input_dirs(data.module.id, data.assignment.id);
 
-        let (body, content_type) = create_multipart_body("1.txt", "Admin memo");
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/memo_output", data.module.id, data.assignment.id);
-
+        let uri = format!("/api/modules/{}/assignments/{}/memo_output/generate", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", &content_type)
-            .body(body)
+            .body(Body::empty())
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+
+        // --- DEBUGGING: print status and body ---
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body_str = String::from_utf8(bytes.to_vec()).unwrap();
+        println!("Response status: {}", status);
+        println!("Response body: {}", body_str);
+        // ----------------------------------------
+
+        assert_eq!(status, StatusCode::OK);
 
         cleanup_tmp();
     }
@@ -135,17 +141,14 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let (body, content_type) = create_multipart_body("1.txt", "Student memo");
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/memo_output", data.module.id, data.assignment.id);
-
+        let uri = format!("/api/modules/{}/assignments/{}/memo_output/generate", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", &content_type)
-            .body(body)
+            .body(Body::empty())
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
@@ -159,17 +162,14 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let (body, content_type) = create_multipart_body("1.txt", "Forbidden memo");
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/memo_output", data.module.id, data.assignment.id);
-
+        let uri = format!("/api/modules/{}/assignments/{}/memo_output/generate", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", &content_type)
-            .body(body)
+            .body(Body::empty())
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
@@ -183,15 +183,12 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let (body, content_type) = create_multipart_body("1.txt", "Unauthorized memo");
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
-        let uri = format!("/api/modules/{}/assignments/{}/memo_output", data.module.id, data.assignment.id);
-
+        let app = make_app(db.clone());
+        let uri = format!("/api/modules/{}/assignments/{}/memo_output/generate", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
-            .header("Content-Type", &content_type)
-            .body(body)
+            .body(Body::empty())
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
@@ -205,17 +202,14 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let (body, content_type) = create_multipart_body("1.txt", "Bad memo");
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/memo_output", data.module.id, 9999);
-
+        let uri = format!("/api/modules/{}/assignments/{}/memo_output/generate", data.module.id, 9999);
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", &content_type)
-            .body(body)
+            .body(Body::empty())
             .unwrap();
         
         let response = app.oneshot(req).await.unwrap();
@@ -230,17 +224,14 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let (body, content_type) = create_multipart_body("invalid.txt", "Invalid");
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/memo_output", data.module.id, data.assignment.id);
-        
+        let uri = format!("/api/modules/{}/assignments/{}/memo_output/generate", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", &content_type)
-            .body(body)
+            .body(Body::empty())
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
@@ -248,4 +239,4 @@ mod tests {
 
         cleanup_tmp();
     }
-} 
+}

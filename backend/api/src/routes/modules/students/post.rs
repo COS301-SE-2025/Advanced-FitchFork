@@ -1,12 +1,9 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, DatabaseConnection, ActiveModelTrait, Condition, Set};
 use crate::response::ApiResponse;
-use db::{
-    models::{
-        user::{Entity as UserEntity},
-        module::{Entity as ModuleEntity},
-        user_module_role::{Entity as RoleEntity, Column as RoleCol, Role, ActiveModel as RoleActiveModel},
-    },
+use db::models::{
+    user::{Entity as UserEntity},
+    user_module_role::{Entity as RoleEntity, Column as RoleCol, Role, ActiveModel as RoleActiveModel},
 };
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
@@ -81,14 +78,6 @@ pub async fn assign_students(
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::error("Request must include a non-empty list of user_ids")),
-        );
-    }
-
-    let module = ModuleEntity::find_by_id(module_id).one(&db).await;
-    if let Ok(None) | Err(_) = module {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module not found")),
         );
     }
 

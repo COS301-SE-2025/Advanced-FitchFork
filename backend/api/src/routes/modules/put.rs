@@ -1,14 +1,12 @@
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-
 use sea_orm::{
     ActiveModelTrait,
     ColumnTrait,
@@ -18,19 +16,12 @@ use sea_orm::{
     QueryFilter,
     Set,
 };
-
-use db::{
-    connect,
-    models::{
-        module::{
-            ActiveModel as ModuleActiveModel,
-            Column as ModuleCol,
-            Entity as ModuleEntity,
-            Model as Module,
-        }
-    },
+use db::models::module::{
+    ActiveModel as ModuleActiveModel,
+    Column as ModuleCol,
+    Entity as ModuleEntity,
+    Model as Module,
 };
-
 use crate::response::ApiResponse;
 
 #[derive(Debug, Deserialize, Validate)]
@@ -155,6 +146,7 @@ lazy_static::lazy_static! {
 /// }
 /// ```
 pub async fn edit_module(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(req): Json<EditModuleRequest>,
 ) -> impl IntoResponse {
@@ -163,16 +155,6 @@ pub async fn edit_module(
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<ModuleResponse>::error(error_message)),
-        );
-    }
-
-    let db: DatabaseConnection = connect().await;
-
-    let module = ModuleEntity::find_by_id(module_id).one(&db).await;
-    if let Ok(None) | Err(_) = module {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<ModuleResponse>::error("Module not found")),
         );
     }
 

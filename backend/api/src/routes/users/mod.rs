@@ -13,13 +13,12 @@
 //! ## Usage
 //! The `users_routes()` function returns a `Router` which is nested under `/users` in the main application.
 
-use axum::{middleware::from_fn, Router, routing::{get, put, delete}};
-use crate::auth::guards::require_admin;
+use axum::{Router, routing::{get, put, delete}};
 use get::list_users;
 use get::{get_user_modules, get_user};
 use put::update_user;
 use delete::delete_user;
-use crate::routes::users::put::upload_user_avatar;
+use crate::routes::users::put::upload_avatar;
 use sea_orm::DatabaseConnection;
 
 pub mod get;
@@ -42,5 +41,5 @@ pub fn users_routes() -> Router<DatabaseConnection> {
         .route("/{user_id}", get(get_user))
         .route("/{user_id}", put(update_user))
         .route("/{user_id}", delete(delete_user))
-        .route("/{user_id}/avatar", put(upload_user_avatar)).route_layer(from_fn(require_admin))
+        .route("/{user_id}/avatar", put(upload_avatar))
 }

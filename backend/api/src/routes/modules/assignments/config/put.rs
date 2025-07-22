@@ -139,28 +139,11 @@ pub async fn update_assignment_config(
     Path((module_id, assignment_id)) : Path<(i64, i64)>,
     Json(payload): Json<PartialConfigUpdate>
 ) -> impl IntoResponse {
-    let assignment = match AssignmentEntity::find()
+    let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::ModuleId.eq(module_id))
         .filter(AssignmentColumn::Id.eq(assignment_id))
         .one(&db)
-        .await
-    {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment or module not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error")),
-            )
-                .into_response();
-        }
-    };
+        .await.unwrap().unwrap();
 
     let config = assignment.config.clone();
     let mut existing_config: serde_json::Map<String, Value> = match config {

@@ -15,6 +15,10 @@ mod tests {
         models::{
             module::Model as ModuleModel, user::Model as UserModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
+            assignment::{Model as AssignmentModel, AssignmentType, Status},
+            assignment_task::Model as TaskModel,
+            assignment_submission::Model as SubmissionModel,
+            assignment_file::{Model as FileModel, FileType},
         },
         test_utils::setup_test_db,
     };
@@ -23,7 +27,7 @@ mod tests {
             generate_jwt,
             guards::{
                 require_authenticated, require_admin, require_lecturer, require_tutor, require_student,
-                require_lecturer_or_tutor, require_assigned_to_module, Empty
+                require_lecturer_or_tutor, require_assigned_to_module, Empty, validate_known_ids
             }
         },
         response::ApiResponse
@@ -33,6 +37,7 @@ mod tests {
     use tower::ServiceExt;
     use std::future::Future;
     use std::collections::HashMap;
+    use chrono::Utc;
 
     struct TestContext {
         db: DatabaseConnection,
@@ -311,7 +316,6 @@ mod tests {
 
     mod test_multi_param {
         use super::*;
-        use std::collections::HashMap;
 
         fn create_multi_param_router<G, Fut>(db: DatabaseConnection, guard: G) -> Router
         where
@@ -353,6 +357,133 @@ mod tests {
             let req = build_request(&format!("/test/{}/other/42", ctx.module_id), Some(&ctx.admin_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
+        }
+    }
+
+    mod test_validate_known_ids {
+        use super::*;
+    
+        fn create_router(
+            db: DatabaseConnection,
+            path: &'static str,
+        ) -> Router {
+            async fn handler() -> &'static str { "OK" }
+            Router::new()
+                .route(path, get(handler))
+                .layer(middleware::from_fn(require_authenticated))
+                .with_state(db.clone())
+                .route_layer(middleware::from_fn_with_state(db, validate_known_ids))
+        }
+    
+        #[tokio::test]
+        async fn succeeds_when_module_exists() {
+            let ctx = setup().await;
+            let app = create_router(ctx.db.clone(), "/test/{module_id}");
+            let uri = format!("/test/{}", ctx.module_id);
+            let res = app.oneshot(build_request(&uri, Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn fails_with_not_found_when_module_missing() {
+            let ctx = setup().await;
+            let app = create_router(ctx.db.clone(), "/test/{module_id}");
+            let res = app.oneshot(build_request("/test/99999", Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::NOT_FOUND);
+        }
+
+        #[tokio::test]
+        async fn fails_with_bad_request_on_parse_error() {
+            let ctx = setup().await;
+            let app = create_router(ctx.db.clone(), "/test/{module_id}");
+            let res = app.oneshot(build_request("/test/abc", Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        }
+
+        #[tokio::test]
+        async fn fails_with_bad_request_on_unknown_param() {
+            let ctx = setup().await;
+            let app = create_router(ctx.db.clone(), "/test/{unknown_id}");
+            let res = app.oneshot(build_request("/test/123", Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        }
+
+        #[tokio::test]
+        async fn fails_when_assignment_not_in_module() {
+            let ctx = setup().await;
+            let other = ModuleModel::create(&ctx.db, "OTHER", 2025, None, 1).await.unwrap();
+            let assignment = AssignmentModel::create(&ctx.db, other.id, "A1", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let path = "/modules/{module_id}/assignments/{assignment_id}";
+            let app = create_router(ctx.db.clone(), path);
+            let uri = format!("/modules/{}/assignments/{}", ctx.module_id, assignment.id);
+            let res = app.oneshot(build_request(&uri, Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::NOT_FOUND);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_assignment_in_module() {
+            let ctx = setup().await;
+            let assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A2", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let path = "/modules/{module_id}/assignments/{assignment_id}";
+            let app = create_router(ctx.db.clone(), path);
+            let uri = format!("/modules/{}/assignments/{}", ctx.module_id, assignment.id);
+            let res = app.oneshot(build_request(&uri, Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_task_hierarchy() {
+            let ctx = setup().await;
+            let assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A3", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let task = TaskModel::create(&ctx.db, assignment.id, 1, "T1", "echo").await.unwrap();
+            let path = "/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}";
+            let app = create_router(ctx.db.clone(), path);
+            let uri = format!("/modules/{}/assignments/{}/tasks/{}", ctx.module_id, assignment.id, task.id);
+            let res = app.oneshot(build_request(&uri, Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn fails_for_task_not_in_assignment() {
+            let ctx = setup().await;
+            let assignment1 = AssignmentModel::create(&ctx.db, ctx.module_id, "A4", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let assignment2 = AssignmentModel::create(&ctx.db, ctx.module_id, "A5", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let task = TaskModel::create(&ctx.db, assignment2.id, 1, "T2", "echo").await.unwrap();
+            let path = "/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}";
+            let app = create_router(ctx.db.clone(), path);
+            let uri = format!("/modules/{}/assignments/{}/tasks/{}", ctx.module_id, assignment1.id, task.id);
+            let res = app.oneshot(build_request(&uri, Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::NOT_FOUND);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_submission_and_file_hierarchy() {
+            let ctx = setup().await;
+            let assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A6", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let submission = SubmissionModel::save_file(&ctx.db, assignment.id, 1, 1, "f.txt", b"test").await.unwrap();
+            let file = FileModel::save_file(&ctx.db, assignment.id, ctx.module_id, FileType::Spec, "f.txt", b"test").await.unwrap();
+
+            let sub_path = "/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}";
+            let sub_app = create_router(ctx.db.clone(), sub_path);
+            let sub_uri = format!("/modules/{}/assignments/{}/submissions/{}", ctx.module_id, assignment.id, submission.id);
+            assert_eq!(sub_app.oneshot(build_request(&sub_uri, Some(&ctx.admin_token))).await.unwrap().status(), StatusCode::OK);
+
+            let file_path = "/modules/{module_id}/assignments/{assignment_id}/files/{file_id}";
+            let file_app = create_router(ctx.db.clone(), file_path);
+            let file_uri = format!("/modules/{}/assignments/{}/files/{}", ctx.module_id, assignment.id, file.id);
+            assert_eq!(file_app.oneshot(build_request(&file_uri, Some(&ctx.admin_token))).await.unwrap().status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn fails_for_submission_not_in_assignment() {
+            let ctx = setup().await;
+            let other_assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A7", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let submission = SubmissionModel::save_file(&ctx.db, other_assignment.id, 1, 1, "f.txt", b"test").await.unwrap();
+            let path = "/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}";
+            let app = create_router(ctx.db.clone(), path);
+            let uri = format!("/modules/{}/assignments/{}/submissions/{}", ctx.module_id, 0, submission.id);
+            let res = app.oneshot(build_request(&uri, Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::NOT_FOUND);
         }
     }
 }

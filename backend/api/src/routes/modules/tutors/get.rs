@@ -5,12 +5,10 @@ use axum::{
     Json,
 };
 use crate::response::ApiResponse;
-use db::{
-    models::{
-        user,
-        user_module_role,
-        user_module_role::{Column as RoleCol, Role},
-    },
+use db::models::{
+    user,
+    user_module_role,
+    user_module_role::{Column as RoleCol, Role},
 };
 use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, JoinType, QuerySelect, QueryOrder, DatabaseConnection, PaginatorTrait};
 use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleResponse};
@@ -99,23 +97,9 @@ use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleRespo
 /// ```
 pub async fn get_tutors(
     State(db): State<DatabaseConnection>,
-    Path(module_id): Path<i32>,
+    Path(module_id): Path<i64>,
     Query(params): Query<RoleQuery>,
 ) -> Response {
-    let exists = db::models::module::Entity::find_by_id(module_id)
-        .one(&db)
-        .await
-        .unwrap_or(None)
-        .is_some();
-
-    if !exists {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module not found")),
-        )
-            .into_response();
-    }
-
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
 

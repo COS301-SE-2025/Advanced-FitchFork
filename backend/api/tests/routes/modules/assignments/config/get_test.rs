@@ -1,15 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::{Model as AssignmentModel, AssignmentType, Status}, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::{json, Value};
-    use api::{routes::routes, auth::generate_jwt};
+    use api::auth::generate_jwt;
     use dotenvy;
     use chrono::{Utc, TimeZone};
-    use db::models::assignment::{AssignmentType, Status};
-    use sea_orm::{IntoActiveModel, ActiveModelTrait};
-    use sea_orm::Set;
+    use sea_orm::{Set, IntoActiveModel, ActiveModelTrait};
+    use crate::test_helpers::make_app;
 
     struct TestData {
         admin_user: UserModel,
@@ -69,7 +68,7 @@ mod tests {
         assignment.config = Set(Some(json!({"test_timeout": 123, "allowed_languages": ["java"]})));
         assignment.update(&db).await.unwrap();
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
         let req = Request::builder()
@@ -98,7 +97,7 @@ mod tests {
         assignment.config = Set(Some(json!({"max_memory": "512MB"})));
         assignment.update(&db).await.unwrap();
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[1].id);
         let req = Request::builder()
@@ -122,7 +121,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
         let req = Request::builder()
@@ -141,7 +140,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
         let req = Request::builder()
@@ -160,7 +159,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/9999/config", data.module.id);
         let req = Request::builder()
@@ -179,7 +178,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
         let req = Request::builder()
             .uri(&uri)
@@ -196,7 +195,7 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
         let req = Request::builder()
@@ -224,7 +223,7 @@ mod tests {
         assignment.config = Set(Some(json!(12345)));
         assignment.update(&db).await.unwrap();
 
-        let app = axum::Router::new().nest("/api", routes(db.clone())).with_state(db.clone());
+        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
         let req = Request::builder()

@@ -1,20 +1,14 @@
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use chrono::Utc;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, DatabaseConnection};
 use serde::Deserialize;
 use crate::response::ApiResponse;
-use db::{
-    connect,
-    models::{
-        assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-        assignment_task::{ActiveModel, Column, Entity},
-    },
-};
+use db::models::assignment_task::{ActiveModel, Column, Entity};
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
 
 #[derive(Debug, Deserialize)]
@@ -133,7 +127,8 @@ pub struct CreateTaskRequest {
 /// - The `command` field supports any shell command that can be executed in the evaluation environment
 /// - Task creation is restricted to users with appropriate module permissions
 pub async fn create_task(
-    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    State(db): State<DatabaseConnection>,
+    Path((_, assignment_id)): Path<(i64, i64)>,
     Json(payload): Json<CreateTaskRequest>,
 ) -> impl IntoResponse {
     if payload.task_number <= 0 || payload.command.trim().is_empty() {
@@ -142,32 +137,6 @@ pub async fn create_task(
             Json(ApiResponse::<()>::error("Invalid task_number or command")),
         )
             .into_response();
-    }
-
-    let db = connect().await;
-
-    let assignment = AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await;
-
-    match assignment {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment or module not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error")),
-            )
-                .into_response();
-        }
     }
 
     let exists = Entity::find()

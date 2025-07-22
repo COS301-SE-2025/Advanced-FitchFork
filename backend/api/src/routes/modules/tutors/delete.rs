@@ -6,12 +6,9 @@ use axum::{
 };
 use crate::auth::AuthUser;
 use crate::response::ApiResponse;
-use db::{
-    models::{
-        module,
-        user,
-        user_module_role::{self, Column as RoleCol, Role},
-    },
+use db::models::{
+    user,
+    user_module_role::{self, Column as RoleCol, Role},
 };
 use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, DatabaseConnection, ActiveModelTrait};
 use crate::routes::modules::common::ModifyUsersModuleRequest;
@@ -80,7 +77,7 @@ use crate::routes::modules::common::ModifyUsersModuleRequest;
 /// ```
 pub async fn remove_tutors(
     State(db): State<DatabaseConnection>,
-    Path(module_id): Path<i32>,
+    Path(module_id): Path<i64>,
     AuthUser(claims): AuthUser,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
@@ -95,17 +92,6 @@ pub async fn remove_tutors(
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::error("Request must include a non-empty list of user_ids")),
-        );
-    }
-
-    let module_exists = module::Entity::find_by_id(module_id)
-        .one(&db)
-        .await;
-
-    if let Ok(None) | Err(_) = module_exists {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module not found")),
         );
     }
 

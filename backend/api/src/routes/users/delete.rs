@@ -1,23 +1,17 @@
 use axum::{
-    extract::{Extension, Path},
+    extract::{State, Extension, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-
+use sea_orm::{EntityTrait, DatabaseConnection};
 use crate::{
     auth::claims::AuthUser,
     response::ApiResponse,
 };
+use db::models::user::{Entity as UserEntity};
 
-use db::{
-    connect,
-    models::user::{self, Entity as UserEntity},
-};
-
-/// DELETE /users/{id}
+/// DELETE /users/{user_id}
 ///
 /// Delete a user by their ID. Only admins can access this endpoint.
 /// Users cannot delete their own account.
@@ -67,19 +61,10 @@ use db::{
 /// }
 /// ```
 pub async fn delete_user(
-    Path(id): Path<String>,
+    State(db): State<DatabaseConnection>,
+    Path(user_id): Path<i64>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let user_id = match id.parse::<i64>() {
-        Ok(id) => id,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error("Invalid user ID format")),
-            );
-        }
-    };
-
     if user_id == claims.sub {
         return (
             StatusCode::FORBIDDEN,
@@ -87,28 +72,10 @@ pub async fn delete_user(
         );
     }
 
-    let db = connect().await;
-
-    match UserEntity::find()
-        .filter(user::Column::Id.eq(user_id))
-        .one(&db)
-        .await
-    {
-        Ok(Some(_)) => {
-            match UserEntity::delete_by_id(user_id).exec(&db).await {
-                Ok(_) => (
-                    StatusCode::OK,
-                    Json(ApiResponse::success_without_data("User deleted successfully")),
-                ),
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
-                ),
-            }
-        }
-        Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("User not found")),
+    match UserEntity::delete_by_id(user_id).exec(&db).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::success_without_data("User deleted successfully")),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,

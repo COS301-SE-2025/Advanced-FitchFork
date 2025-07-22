@@ -1,24 +1,15 @@
 use axum::{
-    extract::{Path, Query},
+    extract::{State, Path, Query},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
-use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
-};
-
+use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, DatabaseConnection};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-
 use crate::response::ApiResponse;
 use crate::routes::common::UserModule;
-
-use db::{
-    connect,
-    models::user::{Entity as UserEntity, Model as UserModel, Column as UserColumn},
-};
+use db::models::user::{Entity as UserEntity, Model as UserModel, Column as UserColumn};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct ListUsersQuery {
@@ -118,7 +109,10 @@ impl From<UserModel> for UserListItem {
 /// - `401 Unauthorized` - Missing or invalid JWT
 /// - `403 Forbidden` - Authenticated but not admin user
 /// - `500 Internal Server Error` - Database error
-pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoResponse {
+pub async fn list_users(
+    State(db): State<DatabaseConnection>,
+    Query(query): Query<ListUsersQuery>
+) -> impl IntoResponse {
     if let Err(e) = query.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -128,7 +122,6 @@ pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoRespons
         );
     }
 
-    let db = connect().await;
     let page = query.page.unwrap_or(1);
     let per_page = query.per_page.unwrap_or(20);
 
@@ -220,7 +213,7 @@ pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoRespons
     )
 }
 
-/// GET /api/users/{id}
+/// GET /api/users/{user_id}
 ///
 /// Fetch a single user by ID. Requires admin privileges.
 ///
@@ -232,19 +225,10 @@ pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoRespons
 /// - `400 Bad Request`: Invalid ID format
 /// - `404 Not Found`: User does not exist
 /// - `500 Internal Server Error`: DB error
-pub async fn get_user(Path(id): Path<String>) -> impl IntoResponse {
-    let user_id: i32 = match id.parse() {
-        Ok(id) => id,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<UserListItem>::error("Invalid user ID format")),
-            );
-        }
-    };
-
-    let db = connect().await;
-
+pub async fn get_user(
+    State(db): State<DatabaseConnection>,
+    Path(user_id): Path<i64>
+) -> impl IntoResponse {
     match UserEntity::find_by_id(user_id).one(&db).await {
         Ok(Some(user)) => {
             let user_item = UserListItem::from(user);
@@ -264,7 +248,7 @@ pub async fn get_user(Path(id): Path<String>) -> impl IntoResponse {
     }
 }
 
-/// GET /api/users/{id}/modules
+/// GET /api/users/{user_id}/modules
 ///
 /// Retrieve all modules that a specific user is involved in, including their role in each module.
 /// Requires admin privileges.
@@ -318,36 +302,11 @@ pub async fn get_user(Path(id): Path<String>) -> impl IntoResponse {
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn get_user_modules(Path(id): Path<String>) -> impl IntoResponse {
-    let user_id: i64 = match id.parse() {
-        Ok(val) => val,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<Vec<UserModule>>::error("Invalid user ID format")),
-            );
-        }
-    };
-
-    let db = connect().await;
-
-    let user = match UserEntity::find_by_id(user_id).one(&db).await {
-        Ok(Some(user)) => user,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<Vec<UserModule>>::error("User not found")),
-            );
-        }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<UserModule>>::error(format!("Database error: {}", e))),
-            );
-        }
-    };
-
-    let roles = match UserModel::get_module_roles(&db, user.id).await {
+pub async fn get_user_modules(
+    State(db): State<DatabaseConnection>,
+    Path(user_id): Path<i64>
+) -> impl IntoResponse {
+    let roles = match UserModel::get_module_roles(&db, user_id).await {
         Ok(r) => r,
         Err(e) => {
             return (

@@ -4,11 +4,9 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use sea_orm::{DatabaseConnection, DbErr};
+use sea_orm::DatabaseConnection;
 use serde_json::json;
-use db::{
-    models::{assignment::{self}},
-};
+use db::models::assignment;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}
 ///
@@ -54,13 +52,6 @@ pub async fn delete_assignment(
             Json(json!({
                 "success": true,
                 "message": format!("Assignment {} deleted successfully", assignment_id),
-            })),
-        ),
-        Err(DbErr::RecordNotFound(_)) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({
-                "success": false,
-                "message": format!("No assignment found with ID {} in module {}", assignment_id, module_id),
             })),
         ),
         Err(e) => (

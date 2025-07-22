@@ -1,18 +1,12 @@
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, DatabaseConnection};
 use crate::response::ApiResponse;
-
-use db::{
-    connect,
-    models::module
-};
+use db::models::module;
 
 /// DELETE /api/modules/{module_id}
 ///
@@ -47,9 +41,10 @@ use db::{
 ///   "message": "Module not found"
 /// }
 /// ```
-pub async fn delete_module(Path(module_id): Path<i32>) -> impl IntoResponse {
-    let db = connect().await;
-
+pub async fn delete_module(
+    State(db): State<DatabaseConnection>,
+    Path(module_id): Path<i64>
+) -> impl IntoResponse {
     match module::Entity::find()
         .filter(module::Column::Id.eq(module_id))
         .one(&db)

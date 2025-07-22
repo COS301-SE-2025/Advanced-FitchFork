@@ -1,29 +1,22 @@
 use axum::{
-    extract::{Path, Query},
+    extract::{State, Path, Query},
     http::StatusCode,
     response::{IntoResponse, Response},
     Extension, Json,
 };
-
 use serde::{Deserialize, Serialize};
-
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, Order,
     PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
 };
-
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
 };
-
-use db::{
-    connect,
-    models::{
-        module::{Column as ModuleCol, Entity as ModuleEntity, Model as Module},
-        user::{self, Column as UserCol, Entity as UserEntity, Model as UserModel},
-        user_module_role::{self, Column as RoleCol, Entity as RoleEntity, Role},
-    },
+use db::models::{
+    module::{Column as ModuleCol, Entity as ModuleEntity, Model as Module},
+    user::{self, Column as UserCol, Entity as UserEntity, Model as UserModel},
+    user_module_role::{self, Column as RoleCol, Entity as RoleEntity, Role},
 };
 use crate::routes::common::UserResponse;
 
@@ -148,11 +141,10 @@ pub struct EligibleUserListResponse {
 /// }
 /// ```
 pub async fn get_eligible_users_for_module(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Query(params): Query<EligibleUserQuery>,
 ) -> Response {
-    let db = connect().await;
-
     if !["Lecturer", "Tutor", "Student"].contains(&params.role.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
@@ -317,26 +309,12 @@ pub async fn get_eligible_users_for_module(
 ///   "message": "Database error retrieving module"
 /// }
 /// ```
-pub async fn get_module(Path(module_id): Path<i32>) -> Response {
-    let db: DatabaseConnection = connect().await;
-
-    let module = match ModuleEntity::find_by_id(module_id).one(&db).await {
-        Ok(Some(m)) => m,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Module not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving module")),
-            )
-                .into_response();
-        }
-    };
+pub async fn get_module(
+    State(db): State<DatabaseConnection>,
+    Path(module_id): Path<i64>
+) -> Response {
+    let module = ModuleEntity::find_by_id(module_id)
+        .one(&db).await.unwrap().unwrap();
 
     let (lecturers, tutors, students) = tokio::join!(
         get_users_by_role(&db, module_id, Role::Lecturer),
@@ -366,7 +344,7 @@ pub async fn get_module(Path(module_id): Path<i32>) -> Response {
 
 async fn get_users_by_role(
     db: &DatabaseConnection,
-    module_id: i32,
+    module_id: i64,
     role: Role,
 ) -> Result<Vec<UserModel>, sea_orm::DbErr> {
     UserEntity::find()
@@ -511,9 +489,10 @@ impl From<(Vec<Module>, i32, i32, i32)> for FilterResponse {
 ///   "message": "An internal server error occurred"
 /// }
 /// ```
-pub async fn get_modules(Query(params): Query<FilterReq>) -> impl IntoResponse {
-    let db: DatabaseConnection = db::connect().await;
-
+pub async fn get_modules(
+    State(db): State<DatabaseConnection>,
+    Query(params): Query<FilterReq>
+) -> impl IntoResponse {
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100).max(1);
 
@@ -693,9 +672,9 @@ impl From<(Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsResponse {
 /// }
 /// ```
 pub async fn get_my_details(
+    State(db): State<DatabaseConnection>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db: DatabaseConnection = connect().await;
     let user_id = claims.sub;
 
     let (as_student, as_tutor, as_lecturer) = tokio::join!(

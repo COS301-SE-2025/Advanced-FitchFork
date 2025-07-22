@@ -1,10 +1,20 @@
 use axum::{extract::{Path, State, FromRequestParts}, http::{Request, StatusCode}, middleware::Next, body::Body, response::{Response, IntoResponse}, Json};
 use crate::auth::claims::AuthUser;
 use crate::response::ApiResponse;
-use db::models::user;
 use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
 use sea_orm::EntityTrait;
+use sea_orm::QueryFilter;
+use sea_orm::ColumnTrait;
+use db::models::{
+    module::Entity as ModuleEntity,
+    assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
+    assignment_task::{Entity as TaskEntity, Column as TaskColumn},
+    assignment_submission::{Entity as SubmissionEntity, Column as SubmissionColumn},
+    assignment_file::{Entity as FileEntity, Column as FileColumn},
+    user::Entity as UserEntity,
+    user
+};
 
 // --- Role Based Access Guards ---
 
@@ -188,76 +198,135 @@ pub async fn require_assigned_to_module(
 
 // --- Path ID Guards ---
 
-async fn check_module_exists(id: i32, db: &DatabaseConnection) -> Result<(), StatusCode> {
-    let found = db::models::module::Entity::find_by_id(id)
+async fn check_module_exists(
+    module_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    let found = ModuleEntity::find_by_id(module_id)
         .one(db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if found.is_some() {
-        Ok(())
-    } else {
-        Err(StatusCode::NOT_FOUND)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking module"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Module {} not found.", module_id))),
+        ));
     }
+    Ok(())
 }
 
-async fn check_assignment_exists(id: i32, db: &DatabaseConnection) -> Result<(), StatusCode> {
-    let found = db::models::assignment::Entity::find_by_id(id)
+async fn check_user_exists(
+    user_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    let found = UserEntity::find_by_id(user_id)
         .one(db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if found.is_some() {
-        Ok(())
-    } else {
-        Err(StatusCode::NOT_FOUND)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking user"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("User {} not found.", user_id))),
+        ));
     }
+    Ok(())
 }
 
-async fn check_user_exists(id: i32, db: &DatabaseConnection) -> Result<(), StatusCode> {
-    let found = db::models::user::Entity::find_by_id(id)
+async fn check_assignment_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_module_exists(module_id, db).await?;
+
+    let found = AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id))
+        .filter(AssignmentColumn::ModuleId.eq(module_id))
         .one(db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if found.is_some() {
-        Ok(())
-    } else {
-        Err(StatusCode::NOT_FOUND)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking assignment"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Assignment {} in Module {} not found.", assignment_id, module_id))),
+        ));
     }
+    Ok(())
 }
 
-async fn check_task_exists(id: i32, db: &DatabaseConnection) -> Result<(), StatusCode> {
-    let found = db::models::assignment_task::Entity::find_by_id(id)
+async fn check_task_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    task_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+
+    let found = TaskEntity::find()
+        .filter(TaskColumn::Id.eq(task_id))
+        .filter(TaskColumn::AssignmentId.eq(assignment_id))
         .one(db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if found.is_some() {
-        Ok(())
-    } else {
-        Err(StatusCode::NOT_FOUND)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking task"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Task {} in Assignment {} not found.", task_id, assignment_id))),
+        ));
     }
+    Ok(())
 }
 
-async fn check_submission_exists(id: i32, db: &DatabaseConnection) -> Result<(), StatusCode> {
-    let found = db::models::assignment_submission::Entity::find_by_id(id)
+async fn check_submission_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    submission_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+
+    let found = SubmissionEntity::find()
+        .filter(SubmissionColumn::Id.eq(submission_id))
+        .filter(SubmissionColumn::AssignmentId.eq(assignment_id))
         .one(db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if found.is_some() {
-        Ok(())
-    } else {
-        Err(StatusCode::NOT_FOUND)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking submission"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Submission {} in Assignment {} not found.", submission_id, assignment_id))),
+        ));
     }
+    Ok(())
 }
 
-async fn check_file_exists(id: i32, db: &DatabaseConnection) -> Result<(), StatusCode> {
-    let found = db::models::assignment_file::Entity::find_by_id(id)
+async fn check_file_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    file_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+
+    let found = FileEntity::find()
+        .filter(FileColumn::Id.eq(file_id))
+        .filter(FileColumn::AssignmentId.eq(assignment_id))
         .one(db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if found.is_some() {
-        Ok(())
-    } else {
-        Err(StatusCode::NOT_FOUND)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking file"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("File {} in Assignment {} not found.", file_id, assignment_id))),
+        ));
     }
+    Ok(())
 }
 
 pub async fn validate_known_ids(
@@ -266,30 +335,45 @@ pub async fn validate_known_ids(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, Response> {
-    for (key, raw_val) in params {
-        let id: i32 = raw_val.parse().map_err(|_| {
-            StatusCode::BAD_REQUEST.into_response()
+    let mut module_id: Option<i32>     = None;
+    let mut assignment_id: Option<i32> = None;
+    let mut task_id: Option<i32>       = None;
+    let mut submission_id: Option<i32> = None;
+    let mut file_id: Option<i32>       = None;
+    let mut user_id: Option<i32>       = None;
+
+    for (key, raw) in &params {
+        let id = raw.parse::<i32>().map_err(|_| {
+            (StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Invalid {}: '{}'. Must be an integer.", key, raw)))).into_response()
         })?;
-
-        let res: Result<(), StatusCode> = match key.as_str() {
-            "module_id"     => check_module_exists(id, &db).await,
-            "assignment_id" => check_assignment_exists(id, &db).await,
-            "user_id"       => check_user_exists(id, &db).await,
-            "task_id"       => check_task_exists(id, &db).await,
-            "submission_id" => check_submission_exists(id, &db).await,
-            "file_id"       => check_file_exists(id, &db).await,
-            other => {
-                return Err((
-                    StatusCode::BAD_REQUEST,
-                    format!("unknown path parameter `{}`", other),
-                )
-                    .into_response());
-            }
-        };
-
-        if let Err(status) = res {
-            return Err(status.into_response());
+        match key.as_str() {
+            "module_id"     => module_id = Some(id),
+            "assignment_id" => assignment_id = Some(id),
+            "task_id"       => task_id = Some(id),
+            "submission_id" => submission_id = Some(id),
+            "file_id"       => file_id = Some(id),
+            "user_id"       => user_id = Some(id),
+            _ => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Unexpected parameter: '{}'.", key)))).into_response()),
         }
+    }
+
+    if let Some(uid) = user_id {
+        check_user_exists(uid, &db).await.map_err(|e| e.into_response())?;
+    }
+    if let Some(mid) = module_id {
+        check_module_exists(mid, &db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid)) = (module_id, assignment_id) {
+        check_assignment_hierarchy(mid, aid, &db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, task_id) {
+        check_task_hierarchy(mid, aid, tid, &db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid), Some(sid)) = (module_id, assignment_id, submission_id) {
+        check_submission_hierarchy(mid, aid, sid, &db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid), Some(fid)) = (module_id, assignment_id, file_id) {
+        check_file_hierarchy(mid, aid, fid, &db).await.map_err(|e| e.into_response())?;
     }
 
     Ok(next.run(req).await)

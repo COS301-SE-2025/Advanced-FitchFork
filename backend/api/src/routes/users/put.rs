@@ -1,21 +1,19 @@
 use std::path::PathBuf;
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use axum::extract::Multipart;
 use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter, Set};
-
 use serde::Deserialize;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use validator::Validate;
-
 use crate::{response::ApiResponse};
 use common::format_validation_errors;
-use db::{connect, models::user};
+use db::models::user;
 use crate::auth::AuthUser;
 use crate::routes::common::UserResponse;
 
@@ -37,7 +35,7 @@ lazy_static::lazy_static! {
     static ref username_REGEX: regex::Regex = regex::Regex::new("^u\\d{8}$").unwrap();
 }
 
-/// PUT /api/users/{id}
+/// PUT /api/users/{user_id}
 ///
 /// Update a user's information. Only admins can access this endpoint.
 ///
@@ -103,7 +101,8 @@ lazy_static::lazy_static! {
 /// }
 /// ```
 pub async fn update_user(
-    Path(user_id): Path<i32>,
+    State(db): State<DatabaseConnection>,
+    Path(user_id): Path<i64>,
     Json(req): Json<UpdateUserRequest>,
 ) -> impl IntoResponse {
     if let Err(e) = req.validate() {
@@ -120,27 +119,8 @@ pub async fn update_user(
         );
     }
 
-    let db: DatabaseConnection = connect().await;
-
-    let user_entity = user::Entity::find_by_id(user_id)
-        .one(&db)
-        .await;
-
-    let current_user = match user_entity {
-        Ok(Some(u)) => u,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<UserResponse>::error("User not found")),
-            );
-        }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
-            );
-        }
-    };
+    let current_user = user::Entity::find_by_id(user_id)
+        .one(&db).await.unwrap().unwrap();
 
     // TODO: Should probably make a more robust system with a super admin
     // Prevent changing your own admin status or changing others' admin status
@@ -242,9 +222,9 @@ struct ProfilePictureResponse {
     profile_picture_path: String,
 }
 
-/// PUT /api/users/{id}/avatar
+/// PUT /api/users/{user_id}/avatar
 ///
-/// Upload a profile picture (avatar) for a user. Only admins may upload avatars for other users.
+/// Upload a avatar for a user. Only admins may upload avatars for other users.
 ///
 /// # Path Parameters
 /// - `id` - The ID of the user to upload the avatar for
@@ -296,7 +276,8 @@ struct ProfilePictureResponse {
 ///   }
 ///   ```
 ///
-pub async fn upload_user_avatar(
+pub async fn upload_avatar(
+    State(db): State<DatabaseConnection>,
     AuthUser(claims): AuthUser,
     Path(user_id): Path<i64>,
     mut multipart: Multipart,
@@ -370,23 +351,8 @@ pub async fn upload_user_avatar(
         .to_string_lossy()
         .to_string();
 
-    let db = connect().await;
-
-    let current = match user::Entity::find_by_id(user_id).one(&db).await {
-        Ok(Some(u)) => u,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<ProfilePictureResponse>::error("User not found.")),
-            )
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ProfilePictureResponse>::error("Database error.")),
-            )
-        }
-    };
+    let current = user::Entity::find_by_id(user_id)
+        .one(&db).await.unwrap().unwrap();
 
     let mut model = current.into_active_model();
     model.profile_picture_path = Set(Some(relative_path.clone()));

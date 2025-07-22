@@ -1,13 +1,12 @@
 use std::fs;
 use std::path::PathBuf;
 use axum::{
+    extract::{State, Multipart},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use axum::extract::{Multipart};
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set, IntoActiveModel};
-
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set, IntoActiveModel, DatabaseConnection};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 use chrono::{Utc, Duration};
@@ -17,13 +16,9 @@ use crate::{
     response::ApiResponse,
     services::email::EmailService,
 };
-
-use db::{
-    models::{
-        user::{self, Model as UserModel},
-        password_reset_token::{self, Model as PasswordResetTokenModel}
-    },
-    connect
+use db::models::{
+    user::{self, Model as UserModel},
+    password_reset_token::{self, Model as PasswordResetTokenModel}
 };
 use crate::auth::AuthUser;
 
@@ -104,7 +99,10 @@ pub struct UserResponse {
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
+pub async fn register(
+    State(db): State<DatabaseConnection>,
+    Json(req): Json<RegisterRequest>
+) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -112,8 +110,6 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
             Json(ApiResponse::<UserResponse>::error(error_message)),
         );
     }
-
-    let db = connect().await;
 
     let email_exists = user::Entity::find()
         .filter(user::Column::Email.eq(req.email.clone()))
@@ -225,7 +221,10 @@ pub struct LoginRequest {
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
+pub async fn login(
+    State(db): State<DatabaseConnection>,
+    Json(req): Json<LoginRequest>
+) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -233,8 +232,6 @@ pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
             Json(ApiResponse::<UserResponse>::error(error_message)),
         );
     }
-
-    let db = connect().await;
 
     let user = match UserModel::verify_credentials(&db, &req.username, &req.password).await {
         Ok(Some(u)) => u,
@@ -319,7 +316,10 @@ pub struct RequestPasswordResetRequest {
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn request_password_reset(Json(req): Json<RequestPasswordResetRequest>) -> impl IntoResponse {
+pub async fn request_password_reset(
+    State(db): State<DatabaseConnection>,
+    Json(req): Json<RequestPasswordResetRequest>
+) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -327,8 +327,6 @@ pub async fn request_password_reset(Json(req): Json<RequestPasswordResetRequest>
             Json(ApiResponse::<()>::error(error_message)),
         );
     }
-
-    let db = connect().await;
 
     let user = match user::Entity::find()
         .filter(user::Column::Email.eq(req.email.clone()))
@@ -461,7 +459,10 @@ pub struct VerifyResetTokenResponse {
 ///   "message": "Invalid or expired token."
 /// }
 /// ```
-pub async fn verify_reset_token(Json(req): Json<VerifyResetTokenRequest>) -> impl IntoResponse {
+pub async fn verify_reset_token(
+    State(db): State<DatabaseConnection>,
+    Json(req): Json<VerifyResetTokenRequest>
+) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -469,8 +470,6 @@ pub async fn verify_reset_token(Json(req): Json<VerifyResetTokenRequest>) -> imp
             Json(ApiResponse::<VerifyResetTokenResponse>::error(error_message)),
         );
     }
-
-    let db = connect().await;
 
     match PasswordResetTokenModel::find_valid_token(&db, &req.token).await {
         Ok(Some(token)) => {
@@ -559,7 +558,10 @@ pub struct ResetPasswordRequest {
 ///   "message": "Reset failed. The token may be invalid or expired."
 /// }
 /// ```
-pub async fn reset_password(Json(req): Json<ResetPasswordRequest>) -> impl IntoResponse {
+pub async fn reset_password(
+    State(db): State<DatabaseConnection>,
+    Json(req): Json<ResetPasswordRequest>
+) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -567,8 +569,6 @@ pub async fn reset_password(Json(req): Json<ResetPasswordRequest>) -> impl IntoR
             Json(ApiResponse::<()>::error(error_message)),
         );
     }
-
-    let db = connect().await;
 
     match PasswordResetTokenModel::find_valid_token(&db, &req.token).await {
         Ok(Some(token)) => {
@@ -684,6 +684,7 @@ struct ProfilePictureResponse {
 ///   }
 ///   ```
 pub async fn upload_profile_picture(
+    State(db): State<DatabaseConnection>,
     AuthUser(claims): AuthUser,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
@@ -749,7 +750,6 @@ pub async fn upload_profile_picture(
         .to_string_lossy()
         .to_string();
 
-    let db = connect().await;
     let current = user::Entity::find_by_id(claims.sub).one(&db).await.unwrap().unwrap();
     let mut model = current.into_active_model();
     model.profile_picture_path = Set(Some(relative_path.clone()));
