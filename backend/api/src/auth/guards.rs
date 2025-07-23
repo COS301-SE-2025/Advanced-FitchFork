@@ -192,7 +192,7 @@ pub async fn require_assigned_to_module(
         req,
         next,
         &["lecturer", "tutor", "student"],
-        "Access denied: Not assigned to this module"
+        "User not assigned to this module"
     ).await
 }
 

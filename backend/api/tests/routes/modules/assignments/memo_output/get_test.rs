@@ -29,29 +29,13 @@ mod tests {
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
-            .await
-            .unwrap();
-        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true)
-            .await
-            .unwrap();
-        let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
-            .await
-            .unwrap();
-        let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false)
-            .await
-            .unwrap();
-        let forbidden_user = UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false)
-            .await
-            .unwrap();
-
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
-            .await
-            .unwrap();
-
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true).await.unwrap();
+        let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
+        let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
+        let forbidden_user = UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
         let assignment = AssignmentModel::create(
             db,
             module.id,
@@ -75,7 +59,6 @@ mod tests {
         }
     }
 
-    /// Seeds a single memo output file under ./tmp
     fn setup_memo_output_file(module_id: i64, assignment_id: i64, task_number: i32) {
         let memo_output_path = PathBuf::from("./tmp")
             .join(format!("module_{}", module_id))
@@ -164,6 +147,7 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
         cleanup_tmp();
     }
 
@@ -209,6 +193,7 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        
         cleanup_tmp();
     }
 
@@ -222,7 +207,6 @@ mod tests {
 
         let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        // Use correct header name here
         let uri = format!("/api/modules/{}/assignments/{}/memo_output", data.module.id, 9999);
         let req = Request::builder()
             .uri(&uri)
@@ -232,6 +216,7 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
         cleanup_tmp();
     }
 
@@ -252,6 +237,7 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        
         cleanup_tmp();
     }
 }

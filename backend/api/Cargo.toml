@@ -60,3 +60,7 @@ sea-orm-migration = "1.1"
 
 [dev-dependencies]
 serial_test = "3.2"
+zip = "4.3.0"
+tar = "0.4.44"
+flate2 = "1.1.2"
+tempfile = "3.5.0"

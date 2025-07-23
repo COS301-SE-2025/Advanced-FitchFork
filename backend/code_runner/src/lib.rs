@@ -1,7 +1,7 @@
 // Core dependencies
-use std::{env, fs, path::PathBuf, process::Stdio};
+use std::{env, fs, path::{Path, PathBuf, Component}, process::Stdio};
 use std::fs::File;
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 
 // Async, process, and timing
 use tokio::process::Command;
@@ -9,7 +9,9 @@ use tokio::time::{timeout, Duration};
 
 // External crates
 use zip::ZipArchive;
+use tar::Archive as TarArchive;
 use tempfile::tempdir;
+use flate2::read::GzDecoder;
 use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
 
 // Your own modules
@@ -25,15 +27,24 @@ use db::models::assignment_task::Model as AssignmentTask;
 pub mod execution_config;
 pub mod validate_files;
 
-/// Returns the first `.zip` file found in the given directory.
-/// Returns an error if the directory does not exist or if no zip file is found.
-fn first_zip_in(dir: &PathBuf) -> Result<PathBuf, String> {
+/// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
+/// Returns an error if the directory does not exist or if no supported archive file is found.
+fn first_archive_in(dir: &PathBuf) -> Result<PathBuf, String> {
+    let allowed_exts = ["zip", "tar", "tgz", "gz"];
     std::fs::read_dir(dir)
         .map_err(|_| format!("Missing directory: {}", dir.display()))?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
-        .find(|p| p.extension().map(|ext| ext == "zip").unwrap_or(false))
-        .ok_or_else(|| format!("No .zip file found in {}", dir.display()))
+        .find(|p| {
+            if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                let ext = ext.to_ascii_lowercase();
+                if allowed_exts.contains(&ext.as_str()) {
+                    return true;
+                }
+            }
+            false
+        })
+        .ok_or_else(|| format!("No .zip, .tar, .tgz, or .gz file found in {}", dir.display()))
 }
 
 /// Resolves a potentially relative storage root path to an absolute path,
@@ -52,7 +63,7 @@ fn resolve_storage_root(storage_root: &str) -> PathBuf {
 
 /// Runs all configured tasks for a given assignment ID by:
 /// 1. Validating memo files
-/// 2. Extracting zip files
+/// 2. Extracting archive files
 /// 3. Running the configured commands inside Docker
 /// 4. Saving the resulting output as memo files in the database
 pub async fn create_memo_outputs_for_all_tasks(
@@ -96,11 +107,11 @@ pub async fn create_memo_outputs_for_all_tasks(
         .await
         .map_err(|e| format!("Failed to delete old memo outputs: {}", e))?;
 
-    // Load zips
-    let zip_paths = vec![
-        first_zip_in(&base_path.join("memo"))?,
-        first_zip_in(&base_path.join("makefile"))?,
-        first_zip_in(&base_path.join("main"))?,
+    // Load archives
+    let archive_paths = vec![
+        first_archive_in(&base_path.join("memo"))?,
+        first_archive_in(&base_path.join("makefile"))?,
+        first_archive_in(&base_path.join("main"))?,
     ];
 
     let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
@@ -116,7 +127,7 @@ pub async fn create_memo_outputs_for_all_tasks(
         let filename = format!("task_{}_output.txt", task.task_number);
 
         let output =
-            match run_all_zips_with_command(zip_paths.clone(), &config, &task.command).await {
+            match run_all_archives_with_command(archive_paths.clone(), &config, &task.command).await {
                 Ok(output) => output,
                 Err(err) => {
                     println!("Task {} failed:\n{}", task.task_number, err);
@@ -145,7 +156,7 @@ use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 
 /// Runs all configured tasks for a given assignment ID and student attempt by:
 /// 1. Validating submission files
-/// 2. Extracting zip files (submission, makefile, main)
+/// 2. Extracting archive files (submission, makefile, main)
 /// 3. Running the configured commands inside Docker
 /// 4. Saving the output to disk and database as `assignment_submission_output`
 pub async fn create_submission_outputs_for_all_tasks(
@@ -196,10 +207,10 @@ pub async fn create_submission_outputs_for_all_tasks(
         .join(format!("user_{}", user_id))
         .join(format!("attempt_{}", attempt_number));
 
-    let zip_paths = vec![
-        first_zip_in(&submission_path)?,
-        first_zip_in(&base_path.join("makefile"))?,
-        first_zip_in(&base_path.join("main"))?,
+    let archive_paths = vec![
+        first_archive_in(&submission_path)?,
+        first_archive_in(&base_path.join("makefile"))?,
+        first_archive_in(&base_path.join("main"))?,
     ];
 
     let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
@@ -218,7 +229,7 @@ pub async fn create_submission_outputs_for_all_tasks(
         );
 
         let output =
-            match run_all_zips_with_command(zip_paths.clone(), &config, &task.command).await {
+            match run_all_archives_with_command(archive_paths.clone(), &config, &task.command).await {
                 Ok(output) => output,
                 Err(err) => {
                     println!(
@@ -245,10 +256,10 @@ pub async fn create_submission_outputs_for_all_tasks(
     Ok(())
 }
 
-/// Executes a set of zip files inside a Docker container using the specified command.
+/// Executes a set of archive files inside a Docker container using the specified command.
 /// Captures and returns stdout output if successful, or full error output if not.
-pub async fn run_all_zips_with_command(
-    zip_paths: Vec<PathBuf>,
+pub async fn run_all_archives_with_command(
+    archive_paths: Vec<PathBuf>,
     config: &ExecutionConfig,
     custom_command: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
@@ -258,9 +269,9 @@ pub async fn run_all_zips_with_command(
     let code_path = temp_code_dir.path().to_path_buf();
     let output_path = temp_output_dir.path().to_path_buf();
 
-    for zip_path in zip_paths {
-        let zip_bytes = std::fs::read(&zip_path)?;
-        extract_zip_contents(&zip_bytes, config.max_uncompressed_size, &code_path)?;
+    for archive_path in archive_paths {
+        let archive_bytes = std::fs::read(&archive_path)?;
+        extract_archive_contents(&archive_bytes, config.max_uncompressed_size, &code_path)?;
     }
 
     let full_command = custom_command.to_string();
@@ -323,12 +334,54 @@ pub async fn run_all_zips_with_command(
     }
 }
 
-/// Extracts the contents of a zip archive into the given output directory,
-/// while checking for total uncompressed size and zip slip vulnerabilities.
-fn extract_zip_contents(
-    zip_bytes: &[u8],
+/// Extracts the contents of a archive archive into the given output directory,
+/// while checking for total uncompressed size and archive slip vulnerabilities.
+fn extract_archive_contents(
+    archive_bytes: &[u8],
     max_total_uncompressed: u64,
     output_dir: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if archive_bytes.starts_with(b"\x1F\x8B") {
+        let mut decoder = GzDecoder::new(archive_bytes);
+        let mut decompressed = Vec::new();
+        decoder.read_to_end(&mut decompressed)?;
+
+        if let Err(e) = extract_tar(
+            Cursor::new(&decompressed),
+            max_total_uncompressed,
+            output_dir,
+        ) {
+            if e.downcast_ref::<std::io::Error>()
+                .map(|ioe| ioe.kind() == std::io::ErrorKind::InvalidData)
+                .unwrap_or(false)
+            {
+                extract_single_file(
+                    &decompressed,
+                    max_total_uncompressed,
+                    output_dir,
+                    "decompressed",
+                )
+            } else {
+                Err(e)
+            }
+        } else {
+            Ok(())
+        }
+    } else if archive_bytes.starts_with(b"PK") {
+        extract_zip(archive_bytes, max_total_uncompressed, output_dir)
+    } else {
+        extract_tar(
+            Cursor::new(archive_bytes),
+            max_total_uncompressed,
+            output_dir,
+        )
+    }
+}
+
+fn extract_zip(
+    zip_bytes: &[u8],
+    max_total_uncompressed: u64,
+    output_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut archive = ZipArchive::new(Cursor::new(zip_bytes))?;
     let mut total_uncompressed = 0;
@@ -338,17 +391,17 @@ fn extract_zip_contents(
         total_uncompressed += file.size();
 
         if total_uncompressed > max_total_uncompressed {
-            return Err("Zip file too large when decompressed".into());
+            return Err("Archive too large when decompressed".into());
         }
 
         let raw_name = file.name();
 
-        if raw_name.contains("..") || raw_name.starts_with('/') || raw_name.contains('\\') {
-            return Err(format!("Invalid file path in zip: {}", raw_name).into());
-        }
-
-        if raw_name.contains("..") || raw_name.starts_with('/') || raw_name.contains('\\') {
-            return Err(format!("Invalid file path in zip: {}", raw_name).into());
+        if raw_name.contains("..")
+            || raw_name.starts_with('/')
+            || raw_name.starts_with('\\')
+            || raw_name.contains(':')
+        {
+            return Err(format!("Invalid file path in archive: {}", raw_name).into());
         }
 
         let outpath = output_dir.join(raw_name);
@@ -363,6 +416,63 @@ fn extract_zip_contents(
         }
     }
 
+    Ok(())
+}
+
+fn extract_tar<R: Read>(
+    reader: R,
+    max_total_uncompressed: u64,
+    output_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut archive = TarArchive::new(reader);
+    let mut total_uncompressed = 0;
+
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        let path = entry.path()?.into_owned();
+        let size = entry.size();
+
+        if path.is_absolute() {
+            return Err(format!("Absolute path in archive: {:?}", path).into());
+        }
+
+        if path.components().any(|c| matches!(c, Component::ParentDir)) {
+            return Err(format!("Path traversal attempt: {:?}", path).into());
+        }
+
+        total_uncompressed += size;
+        if total_uncompressed > max_total_uncompressed {
+            return Err("Archive too large when decompressed".into());
+        }
+
+        let outpath = output_dir.join(&path);
+        if entry.header().entry_type().is_dir() {
+            std::fs::create_dir_all(&outpath)?;
+        } else {
+            if let Some(parent) = outpath.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let mut outfile = File::create(&outpath)?;
+            std::io::copy(&mut entry, &mut outfile)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn extract_single_file(
+    contents: &[u8],
+    max_total_uncompressed: u64,
+    output_dir: &Path,
+    filename: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let size = contents.len() as u64;
+    if size > max_total_uncompressed {
+        return Err("File too large when decompressed".into());
+    }
+
+    let outpath = output_dir.join(filename);
+    std::fs::write(outpath, contents)?;
     Ok(())
 }
 
