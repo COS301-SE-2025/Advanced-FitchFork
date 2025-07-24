@@ -40,11 +40,12 @@ const ModulePersonnel = () => {
   const [eligibleUsers, setEligibleUsers] = useState<TableTransferItem[]>([]);
   const [assignedUsers, setAssignedUsers] = useState<TableTransferItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedRole, setSelectedRole] = useState<ModuleRole>('Student');
+  const [selectedRole, setSelectedRole] = useState<ModuleRole>('student');
   const [roleAssignments, setRoleAssignments] = useState<Record<ModuleRole, Key[]>>({
-    Lecturer: [],
-    Tutor: [],
-    Student: [],
+    lecturer: [],
+    tutor: [],
+    student: [],
+    assistant_lecturer: [],
   });
 
   const available = useTableQuery();
@@ -61,11 +62,14 @@ const ModulePersonnel = () => {
         username: available.filterState.username?.[0],
       });
 
-      const assignedRes = await {
-        Lecturer: getLecturers,
-        Tutor: getTutors,
-        Student: getStudents,
-      }[selectedRole](moduleId, {
+      const getFn = {
+        lecturer: getLecturers,
+        assistant_lecturer: getLecturers, // Use same service unless separate endpoint exists
+        tutor: getTutors,
+        student: getStudents,
+      }[selectedRole];
+
+      const assignedRes = await getFn(moduleId, {
         page: assigned.pagination.current,
         per_page: assigned.pagination.pageSize,
         query: assigned.searchTerm,
@@ -96,7 +100,7 @@ const ModulePersonnel = () => {
             email: u.email,
             title: u.email,
             description: u.username,
-            role: selectedRole, // <- add this line
+            role: selectedRole,
           })),
         );
         assigned.setPagination({ total: assignedRes.data.total });
@@ -143,15 +147,17 @@ const ModulePersonnel = () => {
     setRoleAssignments((prev) => ({ ...prev, [selectedRole]: nextKeys }));
 
     const assignFn = {
-      Lecturer: assignLecturers,
-      Tutor: assignTutors,
-      Student: enrollStudents,
+      lecturer: assignLecturers,
+      assistant_lecturer: assignLecturers,
+      tutor: assignTutors,
+      student: enrollStudents,
     }[selectedRole];
 
     const removeFn = {
-      Lecturer: removeLecturers,
-      Tutor: removeTutors,
-      Student: removeStudents,
+      lecturer: removeLecturers,
+      assistant_lecturer: removeLecturers,
+      tutor: removeTutors,
+      student: removeStudents,
     }[selectedRole];
 
     let assignRes = { success: true, message: '' };
@@ -267,8 +273,14 @@ const ModulePersonnel = () => {
           return <Tag color="default">None</Tag>;
         }
         const color =
-          record.role === 'Lecturer' ? 'volcano' : record.role === 'Tutor' ? 'geekblue' : 'green';
-        return <Tag color={color}>{record.role}</Tag>;
+          record.role === 'lecturer'
+            ? 'volcano'
+            : record.role === 'tutor'
+              ? 'geekblue'
+              : record.role === 'assistant_lecturer'
+                ? 'purple'
+                : 'green';
+        return <Tag color={color}>{record.role.replace('_', ' ')}</Tag>;
       },
     },
   ];
@@ -351,14 +363,14 @@ const ModulePersonnel = () => {
       <div className="mb-4">
         <PageHeader
           title="Module Personnel"
-          description="Use the segmented selector to assign Lecturers, Tutors, or Students."
+          description="Use the segmented selector to assign Lecturers, Tutors, Assistant Lecturers, or Students."
         />
       </div>
 
       <div className="bg-white dark:bg-gray-950">
         <div className="flex flex-col gap-4">
           <Segmented
-            options={MODULE_ROLES}
+            options={[...MODULE_ROLES]}
             value={selectedRole}
             onChange={(val) => {
               setSelectedRole(val as ModuleRole);
