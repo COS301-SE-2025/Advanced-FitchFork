@@ -139,7 +139,6 @@ pub async fn get_task_details(
     };
 
     let parsed_outputs: Vec<Option<String>> = outputs.into_iter().skip(1).collect();
-
     let allocator_json: Option<Value> = load_allocator(module_id, assignment_id).await.ok();
     let task_key = format!("task{}", task.task_number);
 
@@ -285,8 +284,8 @@ pub async fn list_tasks(
                     task_number: task.task_number,
                     name: task.name,
                     command: task.command,
-                    created_at: task.created_at,
-                    updated_at: task.updated_at,
+                    created_at: task.created_at.to_rfc3339(),
+                    updated_at: task.updated_at.to_rfc3339(),
                 })
                 .collect::<Vec<_>>();
 

@@ -181,8 +181,8 @@ pub async fn edit_task(
         task_number: updated.task_number,
         name: updated.name,
         command: updated.command,
-        created_at: updated.created_at,
-        updated_at: updated.updated_at,
+        created_at: updated.created_at.to_rfc3339(),
+        updated_at: updated.updated_at.to_rfc3339(),
     };
 
     (

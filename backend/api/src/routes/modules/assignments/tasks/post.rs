@@ -170,8 +170,8 @@ pub async fn create_task(
                 task_number: task.task_number,
                 name: task.name,
                 command: task.command,
-                created_at: task.created_at,
-                updated_at: task.updated_at,
+                created_at: task.created_at.to_rfc3339(),
+                updated_at: task.updated_at.to_rfc3339(),
             };
 
             (
