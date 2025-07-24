@@ -103,21 +103,12 @@ const ModuleGrades = () => {
     gradeListRef.current?.refresh();
   };
 
-  const handleEditStudent = ({ entity }: { entity?: GradeRecord }) => {
-    if (entity) message.info(`Edit grades for ${entity.studentNumber}`);
+  const handleEditStudent = () => {
+    message.notImplemented();
   };
 
-  const handleDeleteStudent = ({
-    entity,
-    refresh,
-  }: {
-    entity?: GradeRecord;
-    refresh: () => void;
-  }) => {
-    if (entity) {
-      message.success(`Deleted ${entity.studentNumber}`);
-      refresh();
-    }
+  const handleDeleteStudent = () => {
+    message.notImplemented();
   };
 
   const studentColumns: ColumnsType<GradeRecord> = [
@@ -230,9 +221,8 @@ const ModuleGrades = () => {
                 label: 'Export All to CSV',
                 icon: <DownloadOutlined />,
                 handler: ({ refresh }) => {
-                  console.log('Mock export all grades to CSV');
-                  message.success('Mock export: all grades would be exported');
-                  refresh(); // Optional, only if you want to simulate refreshing
+                  message.notImplemented();
+                  refresh();
                 },
               },
             ],
@@ -262,10 +252,7 @@ const ModuleGrades = () => {
                     return;
                   }
 
-                  console.log('Mock export selected grade IDs:', selected);
-                  message.success(
-                    `Mock export: ${selected.length} selected grades would be exported`,
-                  );
+                  message.notImplemented();
                 },
               },
             ],

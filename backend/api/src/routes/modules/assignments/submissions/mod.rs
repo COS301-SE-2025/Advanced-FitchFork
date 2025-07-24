@@ -29,19 +29,19 @@ pub fn submission_routes() -> Router {
     Router::new()
         .route(
             "/",
-            get(list_submissions).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            get(list_submissions).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_assigned_to_module(Path(params), req, next)
             })),
         )
           .route(
             "/{submission_id}",
-            get(get_submission).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            get(get_submission).layer(from_fn(|Path(params): Path<(i64, i64, i64)>, req, next| {
                 require_assigned_to_module(Path(params), req, next)
             })),
         )
         .route(
             "/",
-            post(submit_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            post(submit_assignment).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_assigned_to_module(Path(params), req, next)
             })),
         )

@@ -175,24 +175,6 @@ export default function SubmissionsList() {
               refresh();
             },
           },
-          {
-            key: 'remark2',
-            label: 'Re-mark',
-            icon: <ReloadOutlined />,
-            handler: ({ refresh }) => {
-              message.success(`Re-marked submission ${entity.id}`);
-              refresh();
-            },
-          },
-          {
-            key: 'remark3',
-            label: 'Re-mark',
-            icon: <ReloadOutlined />,
-            handler: ({ refresh }) => {
-              message.success(`Re-marked submission ${entity.id}`);
-              refresh();
-            },
-          },
         ],
         bulk: [
           {

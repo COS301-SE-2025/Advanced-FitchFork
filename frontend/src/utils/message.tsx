@@ -9,6 +9,7 @@ interface MessageApi {
   info: (content: string | ArgsProps) => MessageType;
   warning: (content: string | ArgsProps) => MessageType;
   loading: (content: string | ArgsProps) => MessageType;
+  notImplemented: () => MessageType;
 }
 
 const noop = Object.assign(() => {}, {
@@ -21,6 +22,7 @@ const fallback: MessageApi = {
   info: () => noop,
   warning: () => noop,
   loading: () => noop,
+  notImplemented: () => noop,
 };
 
 export let message: MessageApi = fallback;
@@ -39,6 +41,8 @@ export const MessageContextHolder = () => {
         typeof content === 'string' ? api.warning({ content }) : api.warning(content),
       loading: (content) =>
         typeof content === 'string' ? api.loading({ content }) : api.loading(content),
+      notImplemented: () =>
+        api.info({ content: 'This feature is not implemented yet.', duration: 2 }),
     };
   }, [api]);
 

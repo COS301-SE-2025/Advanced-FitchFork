@@ -75,25 +75,25 @@ pub fn assignment_routes() -> Router {
         )
         .route(
             "/{assignment_id}",
-            put(edit_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            put(edit_assignment).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )
         .route(
             "/{assignment_id}",
-            delete(delete_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            delete(delete_assignment).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )
         .route(
             "/{assignment_id}/open",
-            put(open_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            put(open_assignment).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )
         .route(
             "/{assignment_id}/close",
-            put(close_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            put(close_assignment).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )
@@ -111,13 +111,13 @@ pub fn assignment_routes() -> Router {
         )
         .route(
             "/{assignment_id}/stats",
-            get(stats).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            get(stats).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )
         .route(
             "/{assignment_id}/readiness",
-            get(get_assignment_readiness).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            get(get_assignment_readiness).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_lecturer_or_admin(Path(params), req, next)
             })),
         )
@@ -127,14 +127,14 @@ pub fn assignment_routes() -> Router {
         )
         .nest(
             "/{assignment_id}/config",
-            config_routes().layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            config_routes().layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_lecturer_or_admin(Path(params), req, next)
             })),
         )
         .nest(
             "/{assignment_id}/memo_output",
-            memo_output_routes().layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
-                require_lecturer_or_admin(Path((assignment_id,)), req, next)
+            memo_output_routes().layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
+                require_lecturer_or_admin(Path(params), req, next)
             })),
         )
         .nest(
