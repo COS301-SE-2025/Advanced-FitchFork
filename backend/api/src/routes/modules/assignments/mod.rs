@@ -74,25 +74,25 @@ pub fn assignment_routes() -> Router {
             get(get_assignment)
         )
         .route(
-            "/:assignment_id",
+            "/{assignment_id}",
             put(edit_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )
         .route(
-            "/:assignment_id",
+            "/{assignment_id}",
             delete(delete_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )
         .route(
-            "/:assignment_id/open",
+            "/{assignment_id}/open",
             put(open_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )
         .route(
-            "/:assignment_id/close",
+            "/{assignment_id}/close",
             put(close_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
