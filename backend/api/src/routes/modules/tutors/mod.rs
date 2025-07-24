@@ -15,7 +15,7 @@ use post::assign_tutors;
 use put::edit_tutors;
 use delete::remove_tutors;
 
-/// Builds and returns the `/api/modules/:module_id/tutors` route group.
+/// Builds and returns the `/api/modules/{module_id}/tutors` route group.
 ///
 /// - `GET` is accessible to tutors assigned to the module.
 /// - `POST`, `PUT`, and `DELETE` are admin-only.

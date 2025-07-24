@@ -21,7 +21,7 @@ use db::{
 };
 use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
 
-/// POST /api/modules/:module_id/assignments
+/// POST /api/modules/{module_id}/assignments
 ///
 /// Create a new assignment in a module.  
 /// The assignment is always created in the `setup` state by default.  

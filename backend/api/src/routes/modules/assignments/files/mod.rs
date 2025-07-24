@@ -24,7 +24,7 @@ use delete::delete_files;
 ///
 /// - `POST /`: Upload files to an assignment. Access is restricted to lecturers assigned to the module.
 /// - `GET /`: List all files for an assignment. Access is restricted to users assigned to the module.
-/// - `GET /:file_id`: Download a specific file from an assignment. Access is restricted to users assigned to the module.
+/// - `GET /{file_id}`: Download a specific file from an assignment. Access is restricted to users assigned to the module.
 /// - `DELETE /`: Delete files from an assignment. Access is restricted to lecturers assigned to the module.
 ///
 /// Routes apply appropriate middleware based on the operation:
@@ -54,7 +54,7 @@ pub fn files_routes() -> Router {
             })),
         )
         .route(
-            "/:file_id",
+            "/{file_id}",
             get(download_file).layer(from_fn(|Path((assignment_id, _file_id)): Path<(i64, i64)>, req, next| {
                 require_assigned_to_module(Path((assignment_id,)), req, next)
             })),

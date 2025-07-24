@@ -19,7 +19,7 @@ use crate::auth::guards::{require_assigned_to_module};
 ///   - **Lecturer/Tutor**: Returns all submissions for the assignment.
 ///   - **Student**: Returns only the student's own submission.
 ///
-/// - `GET /:submission_id`  
+/// - `GET /{submission_id}`  
 ///   Returns a specific submission by ID:
 ///   - Access is restricted to users assigned to the module.
 /// 
@@ -34,7 +34,7 @@ pub fn submission_routes() -> Router {
             })),
         )
           .route(
-            "/:submission_id",
+            "/{submission_id}",
             get(get_submission).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_assigned_to_module(Path(params), req, next)
             })),

@@ -4,7 +4,7 @@ use util::mark_allocator::mark_allocator::{save_allocator, SaveError};
 
 use crate::response::ApiResponse;
 
-/// PUT /api/modules/:module_id/assignments/:assignment_id/mark_allocator
+/// PUT /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
 /// Save the mark allocator JSON configuration for a specific assignment. Accessible to users with
 /// Lecturer roles assigned to the module.

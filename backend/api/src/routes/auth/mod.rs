@@ -36,7 +36,7 @@ use get::{get_me, get_avatar, has_role_in_module, get_module_role};
 // - `POST /auth/reset-password` — Complete password reset.
 // - `POST /auth/upload-profile-picture` — Upload a user profile picture.
 // - `GET /auth/me` — Retrieve info about the currently authenticated user.
-// - `GET /auth/avatar/:user_id` — Retrieve a user's profile picture.
+// - `GET /auth/avatar/{user_id}` — Retrieve a user's profile picture.
 // - `GET /auth/has-role` — Check if the current user has a role in a module.
 //
 // ## Usage
@@ -51,7 +51,7 @@ pub fn auth_routes() -> Router {
         .route("/reset-password", post(reset_password))
         .route("/me", get(get_me))
         .route("/upload-profile-picture", post(upload_profile_picture))
-        .route("/avatar/:user_id", get(get_avatar))
+        .route("/avatar/{user_id}", get(get_avatar))
         .route("/has-role", get(has_role_in_module))
         .route("/module-role", get(get_module_role))
 }

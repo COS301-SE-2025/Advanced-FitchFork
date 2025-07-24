@@ -25,7 +25,7 @@ pub struct PartialConfigUpdate {
     #[serde(flatten)]
     pub fields: serde_json::Map<String, Value>,
 }
-/// PUT /api/modules/:module_id/assignments/:assignment_id/config
+/// PUT /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
 /// Partially update specific fields of an assignment's configuration. Accessible to users with
 /// Lecturer or Admin roles assigned to the module.

@@ -12,7 +12,7 @@ use db::{
 };
 use crate::routes::modules::common::EditRoleRequest;
 
-/// PUT /api/modules/:module_id/students
+/// PUT /api/modules/{module_id}/students
 ///
 /// Update the role of users already assigned to a module to Student. This endpoint will overwrite
 /// existing role assignments for the specified users in this module, setting their

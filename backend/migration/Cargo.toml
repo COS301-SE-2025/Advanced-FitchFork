@@ -1,14 +1,15 @@
 [package]
 name = "migration"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 dotenvy = "0.15"
-sea-orm-migration = { version = "0.12", features = ["sqlx-sqlite", "runtime-tokio-native-tls"] }
-tokio = { version = "1", features = ["full"] }
-url = "2.5.0"
-colored = "2"
+sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
+sea-orm-migration = "1.1"
+tokio = { version = "1.0", features = ["full"] }
+url = "2.5"
+colored = "3.0"
 futures = "0.3"
 
 [lib]

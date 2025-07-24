@@ -31,19 +31,19 @@ use crate::routes::users::put::upload_user_avatar;
 /// Builds the `/users` route group, mapping HTTP methods to handlers.
 ///
 /// - `GET /users` → `list_users` (admin only)
-/// - `GET /users/:id/modules` → `get_user_modules` (admin only)
-/// - `PUT /users/:id` → `update_user` (admin only)
-/// - `DELETE /users/:id` → `delete_user` (admin only)
+/// - `GET /users/{id}/modules` → `get_user_modules` (admin only)
+/// - `PUT /users/{id}` → `update_user` (admin only)
+/// - `DELETE /users/{id}` → `delete_user` (admin only)
 ///
 /// # Returns
 /// A configured `Router` instance to be nested in the main app.
 pub fn users_routes() -> Router {
     Router::new()
         .route("/", get(list_users))
-        .route("/:id/modules", get(get_user_modules))
-        .route("/:id", get(get_user))
-        .route("/:id", put(update_user))
-        .route("/:id", delete(delete_user))
-        .route("/:id/avatar", put(upload_user_avatar))
+        .route("/{id}/modules", get(get_user_modules))
+        .route("/{id}", get(get_user))
+        .route("/{id}", put(update_user))
+        .route("/{id}", delete(delete_user))
+        .route("/{id}/avatar", put(upload_user_avatar))
         .route_layer(axum::middleware::from_fn(require_admin))
 }

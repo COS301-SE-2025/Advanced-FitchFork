@@ -16,7 +16,7 @@ use db::{
     models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
 };
 
-/// POST /api/modules/:module_id/assignments/:assignment_id/config
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
 /// Save or replace the JSON configuration object for a specific assignment. Accessible to users with
 /// Lecturer or Admin roles assigned to the module.

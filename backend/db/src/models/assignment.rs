@@ -13,7 +13,7 @@ use crate::models::assignment_task::{Entity as TaskEntity, Column as TaskColumn}
 use chrono::{DateTime, Utc};
 use std::{env, fs, path::PathBuf};
 use serde::{Serialize, Deserialize};
-use strum_macros::{Display, EnumIter, EnumString};
+use strum::{Display, EnumIter, EnumString};
 
 /// Assignment model representing the `assignments` table in the database.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]

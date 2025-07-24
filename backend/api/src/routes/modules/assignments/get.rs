@@ -49,7 +49,7 @@ impl From<AssignmentModel> for AssignmentFileResponse {
     }
 }
 
-/// GET /api/modules/:module_id/assignments/:assignment_id
+/// GET /api/modules/{module_id}/assignments/{assignment_id}
 ///
 /// Retrieve a specific assignment along with its associated files. Accessible to users assigned to the module.
 ///
@@ -212,7 +212,7 @@ impl FilterResponse {
     }
 }
 
-/// GET /api/modules/:module_id/assignments
+/// GET /api/modules/{module_id}/assignments
 ///
 /// Retrieve a paginated and optionally filtered list of assignments for a module. Accessible to users assigned to the module.
 ///
@@ -490,7 +490,7 @@ pub fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
 }
 
-/// GET /api/modules/:module_id/assignments/:assignment_id/stats
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/stats
 ///
 /// Retrieve submission statistics for a specific assignment. Only accessible by lecturers assigned to the module.
 ///

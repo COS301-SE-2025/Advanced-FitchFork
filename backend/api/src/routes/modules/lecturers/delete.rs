@@ -14,7 +14,7 @@ use db::{
 };
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
-/// DELETE /api/modules/:module_id/lecturers
+/// DELETE /api/modules/{module_id}/lecturers
 ///
 /// Remove one or more users from the list of lecturers assigned to a module.  
 /// Only accessible by admin users.

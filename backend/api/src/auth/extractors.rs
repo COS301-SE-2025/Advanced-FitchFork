@@ -1,5 +1,4 @@
 use axum::{
-    async_trait,
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
 };
@@ -29,7 +28,6 @@ use crate::auth::claims::{Claims, AuthUser};
 ///     format!("User ID: {}", user.0.sub)
 /// }
 /// ```
-#[async_trait]
 impl<S> FromRequestParts<S> for AuthUser
 where
     S: Send + Sync,
@@ -56,7 +54,7 @@ where
 /// Extracts the `module_id` from common Axum route parameter patterns.
 ///
 /// Useful when matching on routes with 1–3 integer path parameters,
-/// e.g. `/modules/:module_id`, `/modules/:module_id/assignments/:assignment_id`, etc.
+/// e.g. `/modules/{module_id}`, `/modules/{module_id}/assignments/{assignment_id}`, etc.
 ///
 /// # Returns
 /// - `Some(module_id)` if a valid first parameter is found.

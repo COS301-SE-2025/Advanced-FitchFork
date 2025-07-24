@@ -36,7 +36,7 @@ use crate::response::ApiResponse;
 #[derive(Debug, Deserialize, Validate)]
 pub struct EditModuleRequest {
     #[validate(regex(
-        path = "MODULE_CODE_REGEX",
+        path = &*MODULE_CODE_REGEX,
         message = "Module code must be in format ABC123"
     ))]
     pub code: String,
@@ -79,7 +79,7 @@ lazy_static::lazy_static! {
     static ref MODULE_CODE_REGEX: regex::Regex = regex::Regex::new("^[A-Z]{3}\\d{3}$").unwrap();
 }
 
-/// PUT /api/modules/:module_id
+/// PUT /api/modules/{module_id}
 ///
 /// Update the details of a specific module by its ID.  
 /// Only accessible by admin users.

@@ -10,7 +10,7 @@ use db::{
 };
 use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleResponse};
 
-/// GET /api/modules/:module_id/lecturers
+/// GET /api/modules/{module_id}/lecturers
 ///
 /// Retrieve a paginated, filtered, and sorted list of users assigned as lecturers to the specified module.
 ///

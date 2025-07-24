@@ -49,7 +49,7 @@ pub struct TaskDetailResponse {
     pub subsections: Vec<SubsectionDetail>,
 }
 
-/// GET /api/modules/:module_id/assignments/:assignment_id/tasks/:task_id
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}
 ///
 /// Retrieve detailed information about a specific task within an assignment. Only accessible by lecturers or admins assigned to the module.
 ///
@@ -293,7 +293,7 @@ pub async fn get_task_details(
         .into_response()
 }
 
-/// GET /api/modules/:module_id/assignments/:assignment_id/tasks
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/tasks
 ///
 /// Retrieve all tasks for a specific assignment. Only accessible by lecturers or admins assigned to the module.
 ///

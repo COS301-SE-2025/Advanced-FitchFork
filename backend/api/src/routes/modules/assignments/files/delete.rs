@@ -19,7 +19,7 @@ use db::{
     models::{assignment, assignment_file},
 };
 
-/// DELETE /api/modules/:module_id/assignments/:assignment_id/files
+/// DELETE /api/modules/{module_id}/assignments/{assignment_id}/files
 ///
 /// Delete one or more files from a specific assignment. Only accessible by lecturers assigned to the module.
 ///

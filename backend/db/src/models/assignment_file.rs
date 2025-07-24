@@ -7,7 +7,7 @@ use sea_orm::ActiveValue::Set;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use strum_macros::{Display, EnumIter, EnumString};
+use strum::{Display, EnumIter, EnumString};
 
 /// Represents a file associated with an assignment, such as a spec, main file, memo, or submission.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -195,7 +195,9 @@ mod tests {
     }
 
     fn override_storage_dir(temp: &TempDir) {
-        env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
+        unsafe {
+            env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
+        }
     }
 
     //TODO - this test failed on github and I don't know why

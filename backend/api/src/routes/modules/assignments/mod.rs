@@ -70,7 +70,7 @@ pub fn assignment_routes() -> Router {
             get(get_assignments)
         )
         .route(
-            "/:assignment_id",
+            "/{assignment_id}",
             get(get_assignment)
         )
         .route(
@@ -110,43 +110,43 @@ pub fn assignment_routes() -> Router {
             })),
         )
         .route(
-            "/:assignment_id/stats",
+            "/{assignment_id}/stats",
             get(stats).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )
         .route(
-            "/:assignment_id/readiness",
+            "/{assignment_id}/readiness",
             get(get_assignment_readiness).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer_or_admin(Path(params), req, next)
             })),
         )
         .nest(
-            "/:assignment_id/tasks",
+            "/{assignment_id}/tasks",
             tasks_routes()
         )
         .nest(
-            "/:assignment_id/config",
+            "/{assignment_id}/config",
             config_routes().layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
                 require_lecturer_or_admin(Path(params), req, next)
             })),
         )
         .nest(
-            "/:assignment_id/memo_output",
+            "/{assignment_id}/memo_output",
             memo_output_routes().layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
                 require_lecturer_or_admin(Path((assignment_id,)), req, next)
             })),
         )
         .nest(
-            "/:assignment_id/mark_allocator",
+            "/{assignment_id}/mark_allocator",
             mark_allocator_routes()
         )
         .nest(
-            "/:assignment_id/submissions",
+            "/{assignment_id}/submissions",
             submission_routes()
         )
         .nest(
-            "/:assignment_id/files",
+            "/{assignment_id}/files",
             files_routes()
         )
 }

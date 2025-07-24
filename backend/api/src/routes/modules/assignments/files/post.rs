@@ -47,7 +47,7 @@ pub struct AssignmentSubmissionMetadata {
     pub updated_at: String,
 }
 
-/// POST /api/modules/:module_id/assignments/:assignment_id/files
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/files
 ///
 /// Upload a single file to an assignment. Only accessible by lecturers assigned to the module.
 ///
