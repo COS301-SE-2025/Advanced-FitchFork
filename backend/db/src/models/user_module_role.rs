@@ -28,6 +28,9 @@ pub enum Role {
     #[sea_orm(string_value = "lecturer")]
     Lecturer,
 
+    #[sea_orm(string_value = "assistant_lecturer")]
+    AssistantLecturer,
+
     #[sea_orm(string_value = "tutor")]
     Tutor,
 

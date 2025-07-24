@@ -213,7 +213,6 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::Model;
-    use crate::models::assignment::Status;
     use crate::models::{assignment::AssignmentType, user::Model as UserModel};
     use crate::test_utils::setup_test_db;
     use chrono::Utc;
@@ -268,7 +267,6 @@ mod tests {
             AssignmentType::Practical,
             Utc::now(),
             Utc::now(),
-            Some(Status::Setup),
         )
         .await
         .expect("Failed to insert assignment");

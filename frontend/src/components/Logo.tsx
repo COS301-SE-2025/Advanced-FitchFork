@@ -1,6 +1,7 @@
 import { Typography } from 'antd';
 import clsx from 'clsx';
-import { Link } from 'react-router-dom'; // Import Link from React Router
+import { Link } from 'react-router-dom';
+import { useTheme } from '@/context/ThemeContext';
 
 const { Title } = Typography;
 
@@ -39,55 +40,39 @@ export default function Logo({
   variant = 'auto',
   shadow = false,
 }: LogoProps) {
+  const { isDarkMode } = useTheme();
+
   const { img: imgSize, text: textSize, shadow: shadowClass } = sizeMap[size];
 
-  const renderLogo = () => {
-    if (variant === 'light') {
-      return (
-        <img
-          src="/ff_logo_light.svg"
-          alt="FitchFork Logo (Light)"
-          className={clsx(imgSize, 'w-auto object-contain rounded-lg')}
-        />
-      );
-    }
-    if (variant === 'dark') {
-      return (
-        <img
-          src="/ff_logo_dark.svg"
-          alt="FitchFork Logo (Dark)"
-          className={clsx(imgSize, 'w-auto object-contain rounded-lg')}
-        />
-      );
-    }
-
-    return (
-      <>
-        <img
-          src="/ff_logo_light.svg"
-          alt="FitchFork Logo (Light)"
-          className={clsx(imgSize, 'w-auto object-contain rounded-lg block dark:hidden')}
-        />
-        <img
-          src="/ff_logo_dark.svg"
-          alt="FitchFork Logo (Dark)"
-          className={clsx(imgSize, 'w-auto object-contain rounded-lg hidden dark:block')}
-        />
-      </>
-    );
-  };
+  const logoSrc =
+    variant === 'light'
+      ? '/ff_logo_light.svg'
+      : variant === 'dark'
+        ? '/ff_logo_dark.svg'
+        : isDarkMode
+          ? '/ff_logo_dark.svg'
+          : '/ff_logo_light.svg';
 
   return (
-    <Link to="/" className="inline-flex items-center no-underline text-inherit">
+    <Link
+      to="/"
+      className={clsx(
+        'inline-flex items-center gap-4 no-underline text-inherit',
+        collapsed && 'scale-90',
+        shadow && shadowClass,
+        className,
+      )}
+    >
       <div
         className={clsx(
           'flex items-center gap-4 transition-all duration-300 ease-in-out rounded-md',
-          collapsed ? 'scale-90' : 'scale-100',
-          shadow && shadowClass,
-          className,
         )}
       >
-        {renderLogo()}
+        <img
+          src={logoSrc}
+          alt="FitchFork Logo"
+          className={clsx(imgSize, 'w-auto object-contain rounded-md')}
+        />
 
         {!collapsed && showText && (
           <Title

@@ -7,9 +7,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, sea_query::Expr,
+    QueryOrder, sea_query::Expr,
 };
-use std::fs;
 use crate::response::ApiResponse;
 use crate::routes::modules::assignments::common::{File, AssignmentResponse};
 use db::{
@@ -18,8 +17,7 @@ use db::{
         assignment::{
             self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity, Model as AssignmentModel
         }, 
-        assignment_file::{self, FileType, Model as AssignmentFileModel},
-        assignment_task::{Entity as TaskEntity, Column as TaskColumn},
+        assignment_file,
         assignment_submission, 
         user
     },
@@ -681,117 +679,91 @@ pub struct AssignmentReadiness {
 }
 
 /// GET /api/modules/:module_id/assignments/:assignment_id/readiness
+///
+/// Retrieve a detailed readiness report for a specific assignment.
+/// The report includes boolean flags indicating whether each required
+/// component of the assignment is present on disk or in the database.
+///
+/// This endpoint is useful to check if an assignment is fully set up
+/// and eligible to transition from `Setup` to `Ready` state.
+///
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment.
+/// - `assignment_id` (i64): The ID of the assignment to check readiness for.
+///
+/// ### Responses
+///
+/// - `200 OK`
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Assignment readiness checked successfully",
+///   "data": {
+///     "config_present": true,
+///     "tasks_present": true,
+///     "main_present": true,
+///     "memo_present": true,
+///     "makefile_present": true,
+///     "memo_output_present": true,
+///     "mark_allocator_present": true,
+///     "is_ready": true
+///   }
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to compute readiness: <error details>"
+/// }
+/// ```
+///
 pub async fn get_assignment_readiness(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> (StatusCode, Json<ApiResponse<AssignmentReadiness>>) {
     let db = connect().await;
 
-    // Check if config file is present
-    let config_present = {
-        let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Config);
-        fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
-    };
+    match AssignmentModel::compute_readiness_report(&db, module_id, assignment_id).await {
+        Ok(report) => {
+            // If fully ready, attempt to transition to Ready state
+            if report.is_ready() {
+                if let Err(e) =
+                    AssignmentModel::try_transition_to_ready(&db, module_id, assignment_id).await
+                {
+                    tracing::warn!(
+                        "Failed to transition assignment {} to Ready: {:?}",
+                        assignment_id,
+                        e
+                    );
+                }
+            }
 
-    // Check if at least one task exists
-    let tasks_present = match TaskEntity::find()
-        .filter(TaskColumn::AssignmentId.eq(assignment_id))
-        .limit(1)
-        .all(&db)
-        .await
-    {
-        Ok(tasks) => !tasks.is_empty(),
-        Err(_) => false,
-    };
+            let response = AssignmentReadiness {
+                config_present: report.config_present,
+                tasks_present: report.tasks_present,
+                main_present: report.main_present,
+                memo_present: report.memo_present,
+                makefile_present: report.makefile_present,
+                memo_output_present: report.memo_output_present,
+                mark_allocator_present: report.mark_allocator_present,
+                is_ready: report.is_ready(),
+            };
 
-    // Check for main file(s)
-    let main_present = {
-        let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Main);
-        fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
-    };
-
-    // Check for memo file(s)
-    let memo_present = {
-        let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Memo);
-        fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
-    };
-
-    // Check for makefile(s)
-    let makefile_present = {
-        let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Makefile);
-        fs::read_dir(dir).map(|mut it| it.any(|f| f.is_ok())).unwrap_or(false)
-    };
-
-    let memo_output_present = {
-        let base_path = AssignmentFileModel::storage_root()
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("memo_output");
-
-        if let Ok(entries) = fs::read_dir(&base_path) {
-            entries.flatten().any(|entry| entry.path().is_file())
-        } else {
-            false
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    response,
+                    "Assignment readiness checked successfully",
+                )),
+            )
         }
-    };
-
-    // Check for allocator.json
-    let mark_allocator_present = {
-        let dir = AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::MarkAllocator);
-        if let Ok(files) = fs::read_dir(dir) {
-            files.flatten().any(|f| {
-                f.path().extension().map(|ext| ext == "json").unwrap_or(false)
-            })
-        } else {
-            false
-        }
-    };
-
-    let is_ready = config_present
-        && tasks_present
-        && main_present
-        && memo_present
-        && makefile_present
-        && memo_output_present
-        && mark_allocator_present;
-
-    send_ok(
-        is_ready,
-        config_present,
-        tasks_present,
-        main_present,
-        memo_present,
-        makefile_present,
-        memo_output_present,
-        mark_allocator_present,
-    )
-}
-
-fn send_ok(
-    is_ready: bool,
-    config_present: bool,
-    tasks_present: bool,
-    main_present: bool,
-    memo_present: bool,
-    makefile_present: bool,
-    memo_output_present: bool,
-    mark_allocator_present: bool,
-) -> (StatusCode, Json<ApiResponse<AssignmentReadiness>>) {
-    let status = AssignmentReadiness {
-        config_present,
-        tasks_present,
-        main_present,
-        memo_present,
-        makefile_present,
-        memo_output_present,
-        mark_allocator_present,
-        is_ready,
-    };
-
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(
-            status,
-            "Assignment readiness checked successfully",
-        )),
-    )
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<AssignmentReadiness>::error(&format!(
+                "Failed to compute readiness: {}",
+                e
+            ))),
+        ),
+    }
 }

@@ -1,18 +1,25 @@
-import { Tag, Button, message, Upload, Checkbox, Modal, Input } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
+import { Tag } from 'antd';
+import { DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import dayjs from 'dayjs';
-import type { ColumnsType } from 'antd/es/table';
 
-import { EntityList, type EntityListHandle } from '@/components/EntityList';
+import {
+  EntityList,
+  type EntityListHandle,
+  type EntityColumnType,
+  type EntityAction,
+  type EntityListProps,
+} from '@/components/EntityList';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
+import { useAuth } from '@/context/AuthContext';
 import { getSubmissions } from '@/services/modules/assignments/submissions';
-import { submitAssignment } from '@/services/modules/assignments/submissions/post';
-import type { Submission } from '@/types/modules/assignments/submissions';
-import type { SortOption } from '@/types/common';
 import EventBus from '@/utils/EventBus';
+
+import type { Submission } from '@/types/modules/assignments/submissions';
+import SubmissionCard from '@/components/submissions/SubmissionCard';
+import { message } from '@/utils/message';
 
 const getMarkColor = (mark: number): string => {
   if (mark >= 75) return 'green';
@@ -30,17 +37,9 @@ export default function SubmissionsList() {
   const navigate = useNavigate();
   const module = useModule();
   const { assignment } = useAssignment();
+  const auth = useAuth();
+
   const entityListRef = useRef<EntityListHandle>(null);
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isPractice, setIsPractice] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  useEffect(() => {
-    setSelectedFile(null);
-    setIsPractice(false);
-  }, [modalOpen]);
 
   useEffect(() => {
     const listener = () => {
@@ -64,22 +63,17 @@ export default function SubmissionsList() {
     per_page: number;
     query?: string;
     filters: Record<string, string[]>;
-    sort: SortOption[];
+    sort: { field: string; order: 'ascend' | 'descend' }[];
   }) => {
     if (!module.id || !assignment.id) {
       return { items: [], total: 0 };
     }
 
-    const mappedSort = sort.map((s) => ({
-      field: s.field,
-      order: s.order,
-    }));
-
     const res = await getSubmissions(module.id, assignment.id, {
       page,
       per_page,
       query,
-      sort: mappedSort,
+      sort,
       username: filters['user.username']?.[0],
       status: filters['status']?.[0],
     });
@@ -101,73 +95,127 @@ export default function SubmissionsList() {
     return { items, total };
   };
 
-  const columns: ColumnsType<StudentSubmission> = [
+  const columns: EntityColumnType<StudentSubmission>[] = [
+    { title: 'ID', dataIndex: 'id', key: 'id', defaultHidden: true },
     {
       title: 'Username',
       dataIndex: ['user', 'username'],
       key: 'user.username',
       sorter: { multiple: 1 },
-      filters: [], // enable default funnel icon
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
-        <div style={{ padding: 8 }}>
-          <Input
-            placeholder="Search username"
-            value={selectedKeys[0]}
-            onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-            onPressEnter={() => confirm()}
-            style={{ width: 188, marginBottom: 8, display: 'block' }}
-          />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Button type="primary" onClick={() => confirm()} size="small" style={{ width: 90 }}>
-              Search
-            </Button>
-            <Button
-              onClick={() => {
-                clearFilters?.();
-                confirm();
-              }}
-              size="small"
-              style={{ width: 90 }}
-            >
-              Reset
-            </Button>
-          </div>
-        </div>
-      ),
     },
-
     {
       title: 'Attempt',
       dataIndex: 'attempt',
       key: 'attempt',
       sorter: { multiple: 2 },
-      render: (attempt: number) => <Tag color="blue">#{attempt}</Tag>,
+      render: (attempt) => <Tag color="blue">#{attempt}</Tag>,
     },
+    { title: 'Filename', dataIndex: 'filename', key: 'filename', defaultHidden: true },
     {
-      title: 'Filename',
-      dataIndex: 'filename',
-      key: 'filename',
-      sorter: { multiple: 3 },
-    },
-    {
-      title: 'Submitted At',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      sorter: { multiple: 4 },
-      render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+      title: 'Is Practice',
+      dataIndex: 'is_practice',
+      key: 'is_practice',
+      defaultHidden: true,
+      render: (val) => (val ? <Tag color="gold">Yes</Tag> : <Tag>No</Tag>),
     },
     {
       title: 'Mark (%)',
       key: 'percentageMark',
-      sorter: { multiple: 5 },
-      render: (_, record: StudentSubmission) =>
+      sorter: { multiple: 3 },
+      render: (_, record) =>
         record.status === 'Graded' && typeof record.percentageMark === 'number' ? (
           <Tag color={getMarkColor(record.percentageMark)}>{record.percentageMark}%</Tag>
         ) : (
           <Tag color="default">Not marked</Tag>
         ),
     },
+    {
+      title: 'Is Late',
+      dataIndex: 'is_late',
+      key: 'is_late',
+      defaultHidden: true,
+      render: (val) => (val ? <Tag color="red">Yes</Tag> : <Tag>On Time</Tag>),
+    },
+    {
+      title: 'Created At',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      defaultHidden: true,
+      render: (value) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+    },
+    {
+      title: 'Updated At',
+      dataIndex: 'updated_at',
+      key: 'updated_at',
+      defaultHidden: true,
+      render: (value) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+    },
   ];
+
+  const canManageSubmissions = auth.isLecturer(module.id) || auth.isAdmin;
+
+  const actions: EntityListProps<StudentSubmission>['actions'] = canManageSubmissions
+    ? {
+        entity: (entity: StudentSubmission): EntityAction<StudentSubmission>[] => [
+          {
+            key: 'delete',
+            label: 'Delete',
+            icon: <DeleteOutlined />,
+            handler: ({ refresh }) => {
+              message.success(`Deleted submission ${entity.id}`);
+              refresh();
+            },
+          },
+          {
+            key: 'remark',
+            label: 'Re-mark',
+            icon: <ReloadOutlined />,
+            handler: ({ refresh }) => {
+              message.success(`Re-marked submission ${entity.id}`);
+              refresh();
+            },
+          },
+          {
+            key: 'remark2',
+            label: 'Re-mark',
+            icon: <ReloadOutlined />,
+            handler: ({ refresh }) => {
+              message.success(`Re-marked submission ${entity.id}`);
+              refresh();
+            },
+          },
+          {
+            key: 'remark3',
+            label: 'Re-mark',
+            icon: <ReloadOutlined />,
+            handler: ({ refresh }) => {
+              message.success(`Re-marked submission ${entity.id}`);
+              refresh();
+            },
+          },
+        ],
+        bulk: [
+          {
+            key: 'bulk-delete',
+            label: 'Bulk Delete',
+            icon: <DeleteOutlined />,
+            handler: ({ selected, refresh }) => {
+              message.success(`Deleted ${selected?.length || 0} submissions`);
+              refresh();
+            },
+          },
+          {
+            key: 'bulk-remark',
+            label: 'Bulk Re-mark',
+            icon: <ReloadOutlined />,
+            handler: ({ selected, refresh }) => {
+              message.success(`Re-marked ${selected?.length || 0} submissions`);
+              refresh();
+            },
+          },
+        ],
+      }
+    : undefined;
 
   return (
     <div>
@@ -180,73 +228,12 @@ export default function SubmissionsList() {
         onRowClick={(item) =>
           navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${item.id}`)
         }
-        filterGroups={[
-          {
-            key: 'user.username',
-            label: 'Username',
-            type: 'text',
-          },
-          {
-            key: 'status',
-            label: 'Status',
-            type: 'select',
-            options: [
-              { label: 'Graded', value: 'Graded' },
-              { label: 'Pending', value: 'Pending' },
-            ],
-          },
-        ]}
-        sortOptions={[
-          { label: 'Username', field: 'username' },
-          { label: 'Attempt', field: 'attempt' },
-          { label: 'Filename', field: 'filename' },
-          { label: 'Submitted At', field: 'created_at' },
-          { label: 'Mark', field: 'mark' },
-          { label: 'Status', field: 'status' },
-        ]}
+        columnToggleEnabled
+        actions={actions}
+        renderGridItem={(item, itemActions) => (
+          <SubmissionCard submission={item} actions={itemActions} />
+        )}
       />
-
-      <Modal
-        title="Submit Assignment"
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={async () => {
-          if (!selectedFile) {
-            message.error('Please select a file to submit.');
-            return;
-          }
-          try {
-            setUploading(true);
-            await submitAssignment(module.id, assignment.id, selectedFile, isPractice);
-            message.success('Submission successful', 3);
-            setModalOpen(false);
-          } catch (err) {
-            message.error('Submission failed');
-          } finally {
-            setUploading(false);
-          }
-        }}
-        okButtonProps={{ loading: uploading }}
-        okText="Submit"
-      >
-        <Upload
-          maxCount={1}
-          beforeUpload={(file) => {
-            setSelectedFile(file);
-            return false;
-          }}
-          accept=".zip,.tar,.gz,.tgz"
-        >
-          <Button icon={<UploadOutlined />}>Click to select file</Button>
-        </Upload>
-        <Checkbox
-          checked={isPractice}
-          onChange={(e) => setIsPractice(e.target.checked)}
-          style={{ marginTop: 16 }}
-        >
-          This is a practice submission
-        </Checkbox>
-      </Modal>
     </div>
   );
 }

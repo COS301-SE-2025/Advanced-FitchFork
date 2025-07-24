@@ -27,7 +27,7 @@ const AssignmentCard = ({ assignment, actions }: Props) => {
 
   return (
     <Card
-      className="dark:bg-neutral-900 dark:border-none hover:shadow-lg cursor-pointer transition-shadow duration-200"
+      className="dark:!bg-gray-950 dark:border-none hover:shadow-lg cursor-pointer transition-shadow duration-200"
       onClick={handleClick}
       title={
         <div className="flex justify-between items-start">

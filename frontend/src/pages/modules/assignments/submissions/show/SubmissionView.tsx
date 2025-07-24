@@ -69,7 +69,7 @@ const SubmissionView = () => {
         </Title>
       </div>
 
-      <Descriptions bordered column={2} size="middle">
+      <Descriptions bordered column={1} size="middle">
         {submission.user && (
           <>
             <Descriptions.Item label="Username">{submission.user.username}</Descriptions.Item>

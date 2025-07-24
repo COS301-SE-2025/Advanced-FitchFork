@@ -21,6 +21,7 @@ export interface PaginationState extends TablePaginationConfig {
 export interface UseEntityViewStateOptions<T> {
   viewModeKey: string;
   getInitialNewItem: () => Partial<T>;
+  defaultViewMode?: 'table' | 'grid';
 }
 
 /**
@@ -85,28 +86,34 @@ export function useEntityViewState<T>(options: UseEntityViewStateOptions<T>) {
   // ===========================
 
   /** Current view mode: 'table' or 'grid' */
-  const [viewMode, setViewModeInternal] = useState<'table' | 'grid'>('table');
+  const [viewMode, setViewModeInternal] = useState<'table' | 'grid'>(
+    options.defaultViewMode || 'table',
+  );
 
   /** Load and auto-switch view mode based on screen size */
   useEffect(() => {
     const handleResize = () => {
       const width = window.innerWidth;
       if (width < 640) {
-        // Force grid view on small screens
         setViewModeInternal('grid');
       } else {
         const stored = localStorage.getItem(options.viewModeKey);
         if (stored === 'table' || stored === 'grid') {
           setViewModeInternal(stored);
+        } else if (options.defaultViewMode) {
+          setViewModeInternal(options.defaultViewMode);
+          localStorage.setItem(options.viewModeKey, options.defaultViewMode);
+        } else {
+          setViewModeInternal('table');
         }
       }
     };
 
     window.addEventListener('resize', handleResize);
-    handleResize(); // initialize
+    handleResize();
 
     return () => window.removeEventListener('resize', handleResize);
-  }, [options.viewModeKey]);
+  }, [options.viewModeKey, options.defaultViewMode]);
 
   /** Persist and set view mode */
   const setViewMode = (mode: 'table' | 'grid') => {

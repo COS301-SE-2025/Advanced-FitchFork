@@ -1,32 +1,33 @@
-import { Table, Empty, Button, Popconfirm, Tooltip, Dropdown, Pagination } from 'antd';
-import {
-  DeleteOutlined,
-  EditOutlined,
-  EyeOutlined,
-  MoreOutlined,
-  ReloadOutlined,
-} from '@ant-design/icons';
+import { Table, Empty, Button, Dropdown, Popconfirm, Space, Tooltip } from 'antd';
+import { ReloadOutlined, MoreOutlined } from '@ant-design/icons';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
-import type { ItemType } from 'antd/es/menu/interface';
 import type { SortOption } from '@/types/common';
 
 import ControlBar from '@/components/ControlBar';
 import TagSummary from '@/components/TagSummary';
-import CreateModal from '@/components/CreateModal';
-import EditModal from '@/components/EditModal';
 import { useNotifier } from '@/components/Notifier';
 import { useEntityViewState } from '@/hooks/useEntityViewState';
-import { PAGE_SIZE_OPTIONS } from '@/constants/pagination';
+import type { ModuleRole } from '@/types/modules';
 
-/**
- * Generic props for listing and managing entities.
- */
-type EntityListProps<T> = {
+export type EntityAction<T> = {
+  key: string;
+  label: string;
+  icon?: React.ReactNode;
+  isPrimary?: boolean;
+  confirm?: boolean;
+  handler: (context: { entity?: T; refresh: () => void; selected?: React.Key[] }) => void;
+};
+
+export type EntityColumnType<T> = ColumnsType<T>[number] & {
+  defaultHidden?: boolean;
+  hiddenFor?: ModuleRole[];
+};
+
+export type EntityListProps<T> = {
   name: string;
   viewModeKey?: string;
-
-  /** Fetch items based on query, filters, and pagination. */
+  defaultViewMode?: 'table' | 'grid';
   fetchItems: (params: {
     page: number;
     per_page: number;
@@ -34,75 +35,41 @@ type EntityListProps<T> = {
     sort: SortOption[];
     filters: Record<string, string[]>;
   }) => Promise<{ items: T[]; total: number }>;
-
-  columns: ColumnsType<T>;
+  columns: EntityColumnType<T>[];
   getRowKey: (item: T) => string | number;
   onRowClick?: (item: T) => void;
-
-  /** Render function for grid view items. */
   renderGridItem?: (item: T, actions: React.ReactNode[]) => React.ReactNode;
-
-  /** Modal for creating items. */
-  createModal?: {
-    title: string;
-    fields: any[];
-    onCreate: (values: any) => Promise<void>;
-    getInitialValues: () => Partial<T>;
+  actions?: {
+    entity?: (entity: T) => EntityAction<T>[];
+    control?: EntityAction<T>[];
+    bulk?: EntityAction<T>[];
   };
-
-  /** Modal for editing items. */
-  editModal?: {
-    title: string;
-    fields: any[];
-    onEdit: (item: T, values: any) => Promise<void>;
-  };
-
-  /** Optional delete handler. */
-  onDelete?: (item: T) => Promise<void>;
-
-  /** Sorting options for grid view. */
-  sortOptions?: { label: string; field: string }[];
-
-  /** Filtering groups for grid view. */
-  filterGroups?: {
-    key: string;
-    label: string;
-    type: 'text' | 'select';
-    options?: { label: string; value: string }[];
-  }[];
-
-  actions?: React.ReactNode;
+  columnToggleEnabled?: boolean;
 };
 
 export type EntityListHandle = {
   refresh: () => void;
+  clearSelection: () => void;
+  getSelectedRowKeys: () => React.Key[];
 };
 
-/**
- * A generic, reusable entity list component that supports
- * table and grid views, filtering, sorting, pagination,
- * inline and dropdown actions, and modals for create/edit.
- */
 const EntityList = forwardRef(function <T>(
   props: EntityListProps<T>,
   ref: React.Ref<EntityListHandle>,
 ) {
   const {
     name,
+    defaultViewMode = 'table',
     fetchItems,
     viewModeKey = `${name.toLowerCase().replace(/\s+/g, '_')}_view_mode`,
     columns,
     getRowKey,
     onRowClick,
     renderGridItem,
-    createModal,
-    editModal,
-    onDelete,
-    sortOptions,
-    filterGroups,
+    actions,
+    columnToggleEnabled = false,
   } = props;
 
-  // View state is managed via a custom hook
   const {
     viewMode,
     setViewMode,
@@ -116,30 +83,29 @@ const EntityList = forwardRef(function <T>(
     setFilterState,
     pagination,
     setPagination,
-    clearAll,
     clearSearch,
-    clearSorters,
-    clearFilters,
-    editModalOpen,
-    setEditModalOpen,
-    editingItem,
-    setEditingItem,
-    isAddModalOpen,
-    setIsAddModalOpen,
-    newItem,
-    setNewItem,
   } = useEntityViewState<T>({
     viewModeKey,
-    getInitialNewItem: () => createModal?.getInitialValues() ?? ({} as Partial<T>),
+    defaultViewMode,
+    getInitialNewItem: () => ({}) as Partial<T>,
   });
 
   const { notifyError } = useNotifier();
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<T[]>([]);
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
+    new Set(columns.filter((col) => col.defaultHidden).map((col) => col.key as string)),
+  );
 
-  /**
-   * Fetches item list based on current state.
-   */
+  const toggleColumn = (key: string) => {
+    setHiddenColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const fetchData = async () => {
     setLoading(true);
     const res = await fetchItems({
@@ -162,168 +128,167 @@ const EntityList = forwardRef(function <T>(
 
   useImperativeHandle(ref, () => ({
     refresh: fetchData,
+    clearSelection: () => setSelectedRowKeys([]),
+    getSelectedRowKeys: () => selectedRowKeys,
   }));
 
-  /**
-   * Fetch immediately on search, filter, sort, or pagination changes.
-   * No debounce – fetch runs instantly on every state change.
-   */
   useEffect(() => {
     fetchData();
   }, [searchTerm, filterState, sorterState, pagination.current, pagination.pageSize]);
 
-  /**
-   * Deletes an item and refetches data.
-   */
-  const handleDelete = async (item: T) => {
-    if (!onDelete) return;
-    await onDelete(item);
-    await fetchData();
-  };
+  const hasSearch = !!searchTerm.trim();
+  const hasSort = sorterState.length > 0;
+  const hasFilters = Object.keys(filterState).length > 0;
 
-  /**
-   * Inline icon-based actions for grid view.
-   */
-  const renderInlineActions = (item: T): React.ReactNode[] => {
-    const key = getRowKey(item);
-    return [
-      onRowClick && (
-        <Tooltip title="View" key={`${key}-view`}>
-          <EyeOutlined
-            onClick={(e) => {
-              e.stopPropagation();
-              onRowClick?.(item);
-            }}
-          />
-        </Tooltip>
-      ),
-      editModal && (
-        <Tooltip title="Edit" key={`${key}-edit`}>
-          <EditOutlined
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditingItem(item);
-              setEditModalOpen(true);
-            }}
-          />
-        </Tooltip>
-      ),
-      onDelete && (
-        <Tooltip title="Delete" key={`${key}-delete`}>
-          <Popconfirm
-            title="Delete this item?"
-            onConfirm={(e) => {
-              e?.stopPropagation();
-              handleDelete(item);
-            }}
-            onCancel={(e) => e?.stopPropagation()}
-            okText="Yes"
-            cancelText="No"
-          >
-            <DeleteOutlined onClick={(e) => e.stopPropagation()} />
-          </Popconfirm>
-        </Tooltip>
-      ),
-    ].filter(Boolean);
-  };
+  const clearMenuItems = [
+    hasSearch && {
+      key: 'clear-search',
+      label: 'Clear Search',
+      onClick: () => setSearchTerm(''),
+    },
+    hasSort && {
+      key: 'clear-sort',
+      label: 'Clear Sort',
+      onClick: () => setSorterState([]),
+    },
+    hasFilters && {
+      key: 'clear-filters',
+      label: 'Clear Filters',
+      onClick: () => setFilterState({}),
+    },
+  ].filter(Boolean) as {
+    key: string;
+    label: string;
+    onClick: () => void;
+  }[];
 
-  /**
-   * Adds an "Actions" column to the table if needed.
-   */
-  const extendedColumns: ColumnsType<T> =
-    (editModal || onDelete || onRowClick) && !columns.some((col) => col.key === 'actions')
-      ? [
-          ...columns,
-          {
-            title: 'Actions',
-            key: 'actions',
-            align: 'right',
-            width: 100,
-            render: (_, record: any) => (
-              <div onClick={(e) => e.stopPropagation()}>
-                <Dropdown
-                  trigger={['click']}
-                  menu={{
-                    items: [
-                      onRowClick && {
-                        key: 'view',
-                        icon: <EyeOutlined />,
-                        label: 'View',
-                      },
-                      editModal && {
-                        key: 'edit',
-                        icon: <EditOutlined />,
-                        label: 'Edit',
-                      },
-                      onDelete && {
-                        key: 'delete',
-                        icon: <DeleteOutlined />,
-                        danger: true,
-                        label: (
-                          <Popconfirm
-                            title="Delete this item?"
-                            onConfirm={(e) => {
-                              e?.stopPropagation();
-                              handleDelete(record);
-                            }}
-                            onCancel={(e) => e?.stopPropagation()}
-                            okText="Yes"
-                            cancelText="No"
-                          >
-                            <span onClick={(e) => e.stopPropagation()}>Delete</span>
-                          </Popconfirm>
-                        ),
-                      },
-                    ].filter(Boolean) as ItemType[],
-                    onClick: ({ key, domEvent }) => {
-                      domEvent.preventDefault();
-                      domEvent.stopPropagation();
+  if (clearMenuItems.length > 1) {
+    clearMenuItems.push({
+      key: 'clear-all',
+      label: 'Clear All',
+      onClick: () => {
+        setSearchTerm('');
+        setSorterState([]);
+        setFilterState({});
+      },
+    });
+  }
 
-                      if (key === 'view') onRowClick?.(record);
-                      else if (key === 'edit') {
-                        setEditingItem(record);
-                        setEditModalOpen(true);
-                      }
-                    },
-                  }}
+  const controlActions = actions?.control ?? [];
+  const bulkActions = actions?.bulk ?? [];
+
+  const controlledColumns: EntityColumnType<T>[] = columns.map((col) => {
+    const sortState = sorterState.find((s) => s.field === col.key);
+    const filterStateForCol = filterState[col.key as string];
+    return {
+      ...col,
+      sortOrder: sortState?.order,
+      filteredValue: filterStateForCol ?? null,
+    };
+  });
+
+  const extendedColumns: EntityColumnType<T>[] = controlledColumns.filter(
+    (col) => !hiddenColumns.has(col.key as string),
+  );
+
+  if (actions?.entity) {
+    extendedColumns.push({
+      title: 'Actions',
+      key: 'actions',
+      align: 'right',
+      width: 140,
+      render: (_, record) => {
+        const entityActions = actions.entity!(record);
+        if (!entityActions.length) return null;
+
+        const resolvedPrimary = entityActions.find((a) => a.isPrimary) ?? entityActions[0];
+        const secondaryActions = entityActions.filter((a) => a.key !== resolvedPrimary.key);
+
+        return (
+          <div onClick={(e) => e.stopPropagation()}>
+            {secondaryActions.length === 0 ? (
+              <Button
+                size="small"
+                icon={resolvedPrimary.icon}
+                onClick={() => resolvedPrimary.handler({ entity: record, refresh: fetchData })}
+              >
+                {resolvedPrimary.label}
+              </Button>
+            ) : (
+              <Space.Compact>
+                <Button
+                  size="small"
+                  icon={resolvedPrimary.icon}
+                  onClick={() => resolvedPrimary.handler({ entity: record, refresh: fetchData })}
                 >
-                  <Button icon={<MoreOutlined />} style={{ borderRadius: 6 }} />
+                  {resolvedPrimary.label}
+                </Button>
+                <Dropdown
+                  menu={{
+                    items: secondaryActions.map((a) => ({
+                      key: a.key,
+                      label: a.confirm ? (
+                        <Popconfirm
+                          title={`Are you sure you want to ${a.label.toLowerCase()}?`}
+                          okText="Yes"
+                          cancelText="No"
+                          onConfirm={() => a.handler({ entity: record, refresh: fetchData })}
+                        >
+                          <span>{a.label}</span>
+                        </Popconfirm>
+                      ) : (
+                        a.label
+                      ),
+                      icon: a.icon,
+                      onClick: a.confirm
+                        ? undefined
+                        : () => a.handler({ entity: record, refresh: fetchData }),
+                    })),
+                  }}
+                  placement="bottomRight"
+                >
+                  <Button size="small" icon={<MoreOutlined />} />
                 </Dropdown>
-              </div>
-            ),
-          },
-        ]
-      : columns;
+              </Space.Compact>
+            )}
+          </div>
+        );
+      },
+    });
+  }
 
   return (
     <div>
-      {/* Control bar with search, view mode, add, sort, filters */}
       <ControlBar
         handleSearch={setSearchTerm}
         searchTerm={searchTerm}
         viewMode={renderGridItem ? viewMode : undefined}
         onViewModeChange={renderGridItem ? setViewMode : undefined}
-        handleAdd={createModal ? () => setIsAddModalOpen(true) : undefined}
-        addButtonText={createModal ? `Add ${name.slice(0, -1)}` : undefined}
         selectedRowKeys={selectedRowKeys}
-        clearMenuItems={[
-          { key: 'clear-search', label: 'Clear Search', onClick: clearSearch },
-          { key: 'clear-sort', label: 'Clear Sort', onClick: clearSorters },
-          { key: 'clear-filters', label: 'Clear Filters', onClick: clearFilters },
-          { key: 'clear-all', label: 'Clear All', onClick: clearAll },
-        ]}
         searchPlaceholder={`Search ${name.toLowerCase()}`}
-        sortOptions={viewMode === 'grid' ? sortOptions : undefined}
+        sortOptions={columns
+          .filter((c) => c.sorter)
+          .map((c) => ({ label: c.title as string, field: c.key as string }))}
         currentSort={sorterState.map((s) => `${s.field}.${s.order}`)}
-        onSortChange={(vals) => {
+        onSortChange={(vals) =>
           setSorterState(
             vals.map((v) => {
               const [field, order] = v.split('.');
               return { field, order: order as 'ascend' | 'descend' };
             }),
-          );
-        }}
-        filterGroups={viewMode === 'grid' ? filterGroups : undefined}
+          )
+        }
+        filterGroups={columns
+          .filter((c) => c.filters)
+          .map((c) => ({
+            key: c.key as string,
+            label: c.title as string,
+            type: 'select',
+            options: (c.filters ?? []).map((f) => ({
+              label: f.text as string,
+              value: f.value as string,
+            })),
+          }))}
         activeFilters={Object.entries(filterState ?? {}).flatMap(([k, vals]) =>
           Array.isArray(vals) ? vals.map((v) => `${k}:${v}`) : [],
         )}
@@ -336,10 +301,21 @@ const EntityList = forwardRef(function <T>(
           });
           setFilterState(grouped);
         }}
-        actions={props.actions}
+        actions={controlActions}
+        bulkActions={bulkActions}
+        columnToggleEnabled={columnToggleEnabled && viewMode !== 'grid'}
+        columns={columns.map((col) => ({
+          key: col.key as string,
+          label:
+            typeof col.title === 'function'
+              ? String(col.key)
+              : (col.title as string) || String(col.key),
+          defaultHidden: !!col.defaultHidden,
+        }))}
+        hiddenColumns={hiddenColumns}
+        onToggleColumn={toggleColumn}
       />
 
-      {/* Current filters and sort tags */}
       <TagSummary
         searchTerm={searchTerm}
         onClearSearch={clearSearch}
@@ -353,8 +329,98 @@ const EntityList = forwardRef(function <T>(
         onClearSorter={(key) => setSorterState(sorterState.filter((s) => s.field !== key))}
       />
 
-      {/* Table View */}
-      {viewMode === 'table' ? (
+      {viewMode === 'grid' && renderGridItem ? (
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mt-4">
+          {items.map((item) => {
+            const allActions = actions?.entity?.(item) ?? [];
+            const inlineLimit = allActions.length >= 4 ? 2 : 3;
+            const inlineActions = allActions.slice(0, inlineLimit);
+            const dropdownActions = allActions.slice(inlineLimit);
+
+            const actionButtons = [
+              ...inlineActions.map((a) => (
+                <Tooltip title={a.label} key={a.key}>
+                  {a.confirm ? (
+                    <Popconfirm
+                      title={`Are you sure you want to ${a.label.toLowerCase()}?`}
+                      okText="Yes"
+                      cancelText="No"
+                      onConfirm={(e) => {
+                        e?.stopPropagation?.();
+                        a.handler({ entity: item, refresh: fetchData, selected: selectedRowKeys });
+                      }}
+                      onCancel={(e) => {
+                        e?.stopPropagation?.();
+                      }}
+                    >
+                      <Button icon={a.icon} type="text" onClick={(e) => e.stopPropagation()} />
+                    </Popconfirm>
+                  ) : (
+                    <Button
+                      icon={a.icon}
+                      type="text"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        a.handler({ entity: item, refresh: fetchData, selected: selectedRowKeys });
+                      }}
+                    />
+                  )}
+                </Tooltip>
+              )),
+            ];
+
+            if (dropdownActions.length > 0) {
+              actionButtons.push(
+                <Dropdown
+                  key="more"
+                  menu={{
+                    items: dropdownActions.map((a) => ({
+                      key: a.key,
+                      label: a.confirm ? (
+                        <Popconfirm
+                          title={`Are you sure you want to ${a.label.toLowerCase()}?`}
+                          okText="Yes"
+                          cancelText="No"
+                          onConfirm={() =>
+                            a.handler({
+                              entity: item,
+                              refresh: fetchData,
+                              selected: selectedRowKeys,
+                            })
+                          }
+                          onCancel={(e) => {
+                            e?.stopPropagation?.();
+                          }}
+                        >
+                          <span>{a.label}</span>
+                        </Popconfirm>
+                      ) : (
+                        <span
+                          onClick={() =>
+                            a.handler({
+                              entity: item,
+                              refresh: fetchData,
+                              selected: selectedRowKeys,
+                            })
+                          }
+                        >
+                          {a.label}
+                        </span>
+                      ),
+                      icon: a.icon,
+                    })),
+                  }}
+                  placement="bottomRight"
+                >
+                  <Button type="text" icon={<MoreOutlined />} />
+                </Dropdown>,
+              );
+            }
+
+            return <div key={getRowKey(item)}>{renderGridItem(item, actionButtons)}</div>;
+          })}
+        </div>
+      ) : (
         <Table<T>
           columns={extendedColumns}
           dataSource={items}
@@ -366,10 +432,14 @@ const EntityList = forwardRef(function <T>(
             showQuickJumper: true,
             onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
           }}
-          rowSelection={{
-            selectedRowKeys,
-            onChange: setSelectedRowKeys,
-          }}
+          rowSelection={
+            bulkActions.length > 0
+              ? {
+                  selectedRowKeys,
+                  onChange: setSelectedRowKeys,
+                }
+              : undefined
+          }
           onChange={(pagination, filters, sorter) => {
             const sorterArray = (Array.isArray(sorter) ? sorter : [sorter])
               .filter(
@@ -388,75 +458,27 @@ const EntityList = forwardRef(function <T>(
           locale={{
             emptyText: (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data found.">
-                <Button icon={<ReloadOutlined />} onClick={clearAll}>
-                  Clear All Filters
-                </Button>
+                {clearMenuItems.length === 1 ? (
+                  <Button icon={<ReloadOutlined />} onClick={clearMenuItems[0].onClick}>
+                    {clearMenuItems[0].label}
+                  </Button>
+                ) : (
+                  <Dropdown
+                    menu={{
+                      items: clearMenuItems.map((item) => ({
+                        key: item.key,
+                        label: item.label,
+                        onClick: item.onClick,
+                      })),
+                    }}
+                  >
+                    <Button icon={<ReloadOutlined />}>Clear</Button>
+                  </Dropdown>
+                )}
               </Empty>
             ),
           }}
-          className="bg-white dark:bg-gray-900 border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
-        />
-      ) : items.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data found." className="mt-10">
-          <Button icon={<ReloadOutlined />} onClick={clearAll}>
-            Clear All Filters
-          </Button>
-        </Empty>
-      ) : (
-        <>
-          {/* Grid View */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {items.map((item) =>
-              renderGridItem ? renderGridItem(item, renderInlineActions(item)) : null,
-            )}
-          </div>
-
-          <div className="mt-6 flex justify-center items-center w-full">
-            <Pagination
-              current={pagination.current}
-              pageSize={pagination.pageSize}
-              total={pagination.total}
-              showSizeChanger
-              showQuickJumper
-              pageSizeOptions={PAGE_SIZE_OPTIONS}
-              onChange={(page, pageSize) => setPagination({ current: page, pageSize })}
-            />
-          </div>
-        </>
-      )}
-
-      {/* Create Modal */}
-      {createModal && (
-        <CreateModal
-          open={isAddModalOpen}
-          onCancel={() => setIsAddModalOpen(false)}
-          onCreate={async (values) => {
-            await createModal.onCreate(values);
-            await fetchData();
-            setIsAddModalOpen(false);
-          }}
-          title={createModal.title}
-          fields={createModal.fields}
-          initialValues={newItem}
-          onChange={(values) => setNewItem(values as Partial<T>)}
-        />
-      )}
-
-      {/* Edit Modal */}
-      {editModal && editingItem && (
-        <EditModal
-          open={editModalOpen}
-          onCancel={() => setEditModalOpen(false)}
-          onEdit={async (values) => {
-            await editModal.onEdit(editingItem, values);
-            await fetchData();
-            setEditModalOpen(false);
-            setEditingItem(null);
-          }}
-          title={editModal.title}
-          fields={editModal.fields}
-          initialValues={editingItem}
-          onChange={(val) => setEditingItem({ ...editingItem, ...val })}
+          className="bg-white dark:bg-gray-950 border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
         />
       )}
     </div>

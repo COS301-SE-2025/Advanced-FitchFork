@@ -19,11 +19,11 @@ use axum::{
 
 use config::config_routes;
 use memo_output::memo_output_routes;
-use delete::delete_assignment;
+use delete::{delete_assignment, bulk_delete_assignments};
 use get::{get_assignment, get_assignments, stats, get_assignment_readiness};
 use mark_allocator::mark_allocator_routes;
 use post::create;
-use put::edit_assignment;
+use put::{edit_assignment, bulk_update_assignments, open_assignment, close_assignment};
 use submissions::submission_routes;
 use files::files_routes;
 use tasks::tasks_routes;
@@ -32,33 +32,38 @@ use crate::{
     auth::guards::{require_lecturer, require_lecturer_or_admin},
 };
 
-/// Expects a module ID
-/// If an assignment ID is included it will be deleted
-/// - `POST /`                      → `create`
-/// - `DELETE /:assignment_id`      → `delete_assignment`
+/// Expects a module ID.
+/// If an assignment ID is included it will be modified or deleted.
+///
 /// Builds and returns the `/assignments` route group.
 ///
 /// Routes:
-/// - `POST /assignments`                               → Create a new assignment
-/// - `GET  /assignments`                               → List assignments
-/// - `GET  /assignments/:assignment_id`                → Get assignment details
-/// - `PUT  /assignments/:assignment_id`                → Edit assignment
-/// - `DELETE /assignments/:assignment_id`              → Delete assignment
-/// - `GET  /assignments/:assignment_id/stats`          → Assignment statistics (lecturer only)
-/// - `GET  /assignments/:assignment_id/readiness`      → Assignment readiness (lecturer or admin only)
+/// - `POST   /assignments`                               → Create a new assignment (requires lecturer)
+/// - `GET    /assignments`                               → List assignments
+/// - `DELETE /assignments/bulk`                          → Bulk delete assignments (requires lecturer)
+/// - `PUT    /assignments/bulk`                          → Bulk edit assignments (requires lecturer, cannot edit status)
+/// - `GET    /assignments/:assignment_id`                → Get assignment details
+/// - `PUT    /assignments/:assignment_id`                → Edit assignment (requires lecturer, cannot edit status)
+/// - `PUT    /assignments/:assignment_id/open`           → Open assignment (requires lecturer, only if currently Ready, Closed, or Archived)
+/// - `PUT    /assignments/:assignment_id/close`          → Close assignment (requires lecturer, only if currently Open)
+/// - `DELETE /assignments/:assignment_id`                → Delete assignment (requires lecturer)
+/// - `GET    /assignments/:assignment_id/stats`          → Assignment statistics (lecturer only)
+/// - `GET    /assignments/:assignment_id/readiness`      → Assignment readiness (lecturer or admin only)
 ///
 /// Nested routes:
-/// - Tasks routes              → `tasks_routes`
-/// - Config routes             → `config_routes`
-/// - Memo output routes        → `memo_output_routes`
-/// - Mark allocator routes     → `mark_allocator_routes`
-/// - Submissions routes        → `submission_routes`
-/// - Files routes              → `files_routes`
+/// - Tasks routes                  → `tasks_routes`
+/// - Config routes                 → `config_routes`
+/// - Memo output routes            → `memo_output_routes`
+/// - Mark allocator routes         → `mark_allocator_routes`
+/// - Submissions routes            → `submission_routes`
+/// - Files routes                  → `files_routes`
 pub fn assignment_routes() -> Router {
     Router::new()
         .route(
             "/",
-            post(create)
+            post(create).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer(Path(params), req, next)
+            })),
         )
         .route(
             "/",
@@ -70,11 +75,39 @@ pub fn assignment_routes() -> Router {
         )
         .route(
             "/:assignment_id",
-            put(edit_assignment)
+            put(edit_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer(Path(params), req, next)
+            })),
         )
         .route(
             "/:assignment_id",
-            delete(delete_assignment)
+            delete(delete_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer(Path(params), req, next)
+            })),
+        )
+        .route(
+            "/:assignment_id/open",
+            put(open_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer(Path(params), req, next)
+            })),
+        )
+        .route(
+            "/:assignment_id/close",
+            put(close_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer(Path(params), req, next)
+            })),
+        )
+        .route(
+            "/bulk",
+            delete(bulk_delete_assignments).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer(Path(params), req, next)
+            })),
+        )
+        .route(
+            "/bulk",
+            put(bulk_update_assignments).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+                require_lecturer(Path(params), req, next)
+            })),
         )
         .route(
             "/:assignment_id/stats",

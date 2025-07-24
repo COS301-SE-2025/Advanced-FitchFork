@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet, useParams } from 'react-router-dom';
-import { Spin, Dropdown, Segmented, Button, Alert, Modal, Upload, Checkbox } from 'antd';
+import { Spin, Dropdown, Segmented, Button, Alert, Modal, Upload, Checkbox, Tag } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   CheckCircleOutlined,
@@ -16,7 +16,12 @@ import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 
 import { message } from '@/utils/message';
 
-import { getAssignmentDetails, getAssignmentReadiness } from '@/services/modules/assignments';
+import {
+  closeAssignment,
+  getAssignmentDetails,
+  getAssignmentReadiness,
+  openAssignment,
+} from '@/services/modules/assignments';
 import { generateMemoOutput, getMemoOutput } from '@/services/modules/assignments/memo-output';
 import {
   generateMarkAllocator,
@@ -37,7 +42,7 @@ interface AssignmentDetails extends Assignment {
 
 const AssignmentLayout = () => {
   const module = useModule();
-  const { isStudent, isLecturer, isAdmin } = useAuth();
+  const auth = useAuth();
   const { assignment_id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -56,11 +61,13 @@ const AssignmentLayout = () => {
 
   const assignmentIdNum = Number(assignment_id);
   const basePath = `/modules/${module.id}/assignments/${assignment_id}`;
-  const showTabs = !isStudent(module.id) || isAdmin;
+  const showTabs = !auth.isStudent(module.id) || auth.isAdmin;
+  const isLecturerOrAdmin = auth.isLecturer(module.id) || auth.isAdmin;
+  const isStudentOrTutor = auth.isStudent(module.id) || auth.isTutor(module.id);
 
   const segments = [
     { value: `${basePath}/submissions`, label: 'Submissions' },
-    ...(isLecturer(module.id) || isAdmin
+    ...(auth.isLecturer(module.id) || auth.isAdmin
       ? [
           {
             value: `${basePath}/files`,
@@ -133,6 +140,46 @@ const AssignmentLayout = () => {
       setLoading(false);
     }
   }, [module.id, assignmentIdNum]);
+
+  const handleOpenAssignment = async () => {
+    setLoading(true);
+    const hide = message.loading('Opening assignment...');
+    try {
+      const res = await openAssignment(module.id, assignmentIdNum);
+      hide();
+      if (res.success) {
+        await refreshAssignment();
+        message.success('Assignment opened successfully');
+      } else {
+        message.error(res.message || 'Failed to open assignment');
+      }
+    } catch {
+      hide();
+      message.error('Unexpected error while opening assignment');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCloseAssignment = async () => {
+    setLoading(true);
+    const hide = message.loading('Closing assignment...');
+    try {
+      const res = await closeAssignment(module.id, assignmentIdNum);
+      hide();
+      if (res.success) {
+        await refreshAssignment();
+        message.success('Assignment closed successfully');
+      } else {
+        message.error(res.message || 'Failed to close assignment');
+      }
+    } catch {
+      hide();
+      message.error('Unexpected error while closing assignment');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleGenerateMemoOutput = async () => {
     setLoading(true);
@@ -219,6 +266,21 @@ const AssignmentLayout = () => {
       type: 'divider',
     },
     {
+      key: 'open',
+      label: 'Open Assignment',
+      onClick: handleOpenAssignment,
+      disabled: loading || !['ready', 'closed', 'archived'].includes(assignment?.status ?? ''),
+    },
+    {
+      key: 'close',
+      label: 'Close Assignment',
+      onClick: handleCloseAssignment,
+      disabled: loading || assignment?.status !== 'open',
+    },
+    {
+      type: 'divider',
+    },
+    {
       key: 'archive',
       label: 'Archive Assignment',
       disabled: loading,
@@ -239,7 +301,7 @@ const AssignmentLayout = () => {
 
   return (
     <div className="p-4 space-y-6">
-      <div className="bg-white dark:bg-gray-950 rounded border border-gray-200 dark:border-gray-700 px-4 py-4 mb-4">
+      <div className="bg-white dark:bg-gray-950 rounded border border-gray-200 dark:border-gray-800 px-4 py-4 mb-4">
         <div className="flex justify-between items-start gap-3">
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -247,10 +309,18 @@ const AssignmentLayout = () => {
                 {assignment.name}
               </h1>
               <AssignmentStatusTag status={assignment.status} />
+              {auth.isStudent(module.id) && (
+                <Tag color="green">Best Mark: 85%</Tag>
+                // TODO: Replace dummy best mark with real backend data
+              )}
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Manage assignment #{assignment.id} in {module.code}
-            </p>
+
+            {assignment.description.length !== 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">{assignment.description}</p>
+            ) : (
+              <></>
+            )}
+
             <Button
               type="default"
               onClick={handleDownloadSpec}
@@ -263,26 +333,22 @@ const AssignmentLayout = () => {
           </div>
 
           <div>
-            {isSetupIncomplete ? (
-              <Button
-                type="primary"
-                onClick={() => setSetupOpen(true)}
-                disabled={loading}
-                loading={loading}
-              >
-                Complete Setup
-              </Button>
-            ) : (
-              <Dropdown.Button
-                menu={{ items: menuItems }}
-                type="primary"
-                disabled={loading}
-                onClick={() => setModalOpen(true)}
-                loading={loading}
-              >
-                Submit Assignment
-              </Dropdown.Button>
-            )}
+            {(!isSetupIncomplete || isStudentOrTutor) &&
+              (isStudentOrTutor ? (
+                <Button type="primary" onClick={() => setModalOpen(true)} loading={loading}>
+                  Submit Assignment
+                </Button>
+              ) : (
+                <Dropdown.Button
+                  menu={{ items: menuItems }}
+                  type="primary"
+                  disabled={loading}
+                  onClick={() => setModalOpen(true)}
+                  loading={loading}
+                >
+                  Submit Assignment
+                </Dropdown.Button>
+              ))}
           </div>
         </div>
       </div>
@@ -297,8 +363,14 @@ const AssignmentLayout = () => {
         />
       )}
 
-      {isSetupIncomplete ? (
-        <div className="flex flex-col items-center justify-center text-center bg-white dark:bg-gray-950 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-12 mt-8 space-y-6">
+      {isStudentOrTutor ? (
+        <AssignmentProvider
+          value={{ assignment, memoOutput, markAllocator, readiness, refreshAssignment }}
+        >
+          <Outlet />
+        </AssignmentProvider>
+      ) : isSetupIncomplete && isLecturerOrAdmin ? (
+        <div className="flex flex-col items-center justify-center text-center bg-white dark:bg-gray-950 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-12 space-y-6">
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
             Assignment setup incomplete
           </h2>
@@ -306,7 +378,6 @@ const AssignmentLayout = () => {
             This assignment is not yet ready for use. Please complete the setup process to configure
             the necessary files, tasks, and settings before students can submit or view it.
           </p>
-
           <div className="space-y-2 w-full max-w-2xl text-left">
             {[
               { key: 'config_present', label: 'Configuration file' },
@@ -356,6 +427,7 @@ const AssignmentLayout = () => {
                 onChange={(key) => navigate(key as string)}
                 size="middle"
                 block
+                className="dark:!bg-gray-950"
               />
             </div>
           )}

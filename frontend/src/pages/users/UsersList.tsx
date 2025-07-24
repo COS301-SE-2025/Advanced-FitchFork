@@ -1,17 +1,26 @@
-import PageHeader from '@/components/PageHeader';
-import { useNotifier } from '@/components/Notifier';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { User } from '@/types/users';
-import type { SortOption } from '@/types/common';
-import { listUsers, editUser, deleteUser } from '@/services/users';
-import { register } from '@/services/auth';
-import { EntityList } from '@/components/EntityList';
+import PageHeader from '@/components/PageHeader';
+import { message } from '@/utils/message';
+import { EntityList, type EntityListHandle, type EntityListProps } from '@/components/EntityList';
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import CreateModal from '@/components/CreateModal';
+import EditModal from '@/components/EditModal';
 import UserCard from '@/components/users/UserCard';
 import UserAdminTag from '@/components/users/UserAdminTag';
 
+import { listUsers, editUser, deleteUser } from '@/services/users';
+import { register } from '@/services/auth';
+import type { User } from '@/types/users';
+import dayjs from 'dayjs';
+
 const UsersList = () => {
   const navigate = useNavigate();
-  const { notifyError, notifySuccess } = useNotifier();
+  const listRef = useRef<EntityListHandle>(null);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<User | null>(null);
 
   const fetchUsers = async ({
     page,
@@ -23,7 +32,7 @@ const UsersList = () => {
     page: number;
     per_page: number;
     query?: string;
-    sort: SortOption[];
+    sort: { field: string; order: 'ascend' | 'descend' }[];
     filters: Record<string, string[]>;
   }) => {
     const res = await listUsers({
@@ -44,7 +53,7 @@ const UsersList = () => {
       };
     }
 
-    notifyError('Failed to fetch users', res.message);
+    message.error(`Failed to fetch users: ${res.message}`);
     return { items: [], total: 0 };
   };
 
@@ -53,50 +62,132 @@ const UsersList = () => {
 
     const res = await register(username, email, 'changeme123');
     if (res.success) {
-      notifySuccess('User registered successfully', res.message);
+      message.success(res.message || 'User registered successfully');
+      setCreateOpen(false);
+      listRef.current?.refresh();
     } else {
-      notifyError(res.message || 'Failed to register user', res.message);
+      message.error(`Failed to register user: ${res.message}`);
     }
   };
 
-  const handleEditUser = async (item: User, values: any) => {
+  const handleEditUser = async (values: Record<string, any>) => {
+    if (!editingItem) return;
+
     const updated: User = {
-      ...item,
+      ...editingItem,
       ...values,
       updated_at: new Date().toISOString(),
     };
 
-    const res = await editUser(item.id, updated);
+    const res = await editUser(editingItem.id, updated);
     if (res.success) {
-      notifySuccess('User updated successfully', res.message);
+      message.success(res.message || 'User updated successfully');
+      setEditOpen(false);
+      setEditingItem(null);
+      listRef.current?.refresh();
     } else {
-      notifyError('Failed to update user', res.message);
+      message.error(`Failed to update user: ${res.message}`);
     }
   };
 
-  const handleDeleteUser = async (user: User) => {
+  const handleDeleteUser = async (user: User, refresh: () => void) => {
     const res = await deleteUser(user.id);
     if (res.success) {
-      notifySuccess('User deleted successfully', res.message);
+      message.success(res.message || 'User deleted successfully');
+      refresh();
     } else {
-      notifyError('Failed to delete user', res.message);
+      message.error(`Failed to delete user: ${res.message}`);
     }
+  };
+
+  const actions: EntityListProps<User>['actions'] = {
+    control: [
+      {
+        key: 'create',
+        label: 'Add User',
+        icon: <PlusOutlined />,
+        isPrimary: true,
+        handler: ({ refresh }: { refresh: () => void }) => {
+          setCreateOpen(true);
+          refresh();
+        },
+      },
+    ],
+    entity: (user: User) => [
+      {
+        key: 'edit',
+        label: 'Edit',
+        icon: <EditOutlined />,
+        handler: ({ refresh }) => {
+          setEditingItem(user);
+          setEditOpen(true);
+          refresh();
+        },
+      },
+      {
+        key: 'delete',
+        label: 'Delete',
+        icon: <DeleteOutlined />,
+        confirm: true,
+        handler: ({ refresh }) => handleDeleteUser(user, refresh),
+      },
+    ],
+    bulk: [
+      {
+        key: 'bulk-delete',
+        label: 'Bulk Delete',
+        icon: <DeleteOutlined />,
+        isPrimary: true,
+        handler: ({ selected, refresh }) => {
+          if (!selected || selected.length === 0) {
+            message.warning('No users selected');
+            return;
+          }
+          message.info(`Bulk delete not implemented yet. ${selected.length} users selected.`);
+          refresh();
+        },
+      },
+      {
+        key: 'bulk-edit',
+        label: 'Bulk Edit',
+        icon: <EditOutlined />,
+        handler: ({ selected, refresh }) => {
+          if (!selected || selected.length === 0) {
+            message.warning('No users selected');
+            return;
+          }
+          message.info(`Bulk edit not implemented yet. ${selected.length} users selected.`);
+          refresh();
+        },
+      },
+    ],
   };
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-950 p-4 sm:p-6 h-full">
+    <div className="p-4 sm:p-6 h-full">
       <PageHeader title="Users" description="Manage all registered users in the system." />
+
       <EntityList<User>
+        ref={listRef}
         name="Users"
         fetchItems={fetchUsers}
         renderGridItem={(user, actions) => <UserCard user={user} actions={actions} />}
+        getRowKey={(item) => item.id}
+        onRowClick={(item) => navigate(`/users/${item.id}`)}
+        columnToggleEnabled
         columns={[
+          {
+            title: 'ID',
+            dataIndex: 'id',
+            key: 'id',
+            sorter: { multiple: 0 },
+            defaultHidden: true,
+          },
           {
             title: 'Username',
             dataIndex: 'username',
             key: 'username',
             sorter: { multiple: 1 },
-            render: (_, record) => record.username,
           },
           {
             title: 'Email',
@@ -110,60 +201,66 @@ const UsersList = () => {
             dataIndex: 'admin',
             key: 'admin',
             sorter: { multiple: 3 },
+            filters: [
+              { text: 'Admin', value: 'true' },
+              { text: 'Regular', value: 'false' },
+            ],
             render: (_, record) => <UserAdminTag admin={record.admin} />,
           },
+          {
+            title: 'Created At',
+            dataIndex: 'created_at',
+            key: 'created_at',
+            sorter: { multiple: 4 },
+            defaultHidden: true,
+            render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+          },
+          {
+            title: 'Updated At',
+            dataIndex: 'updated_at',
+            key: 'updated_at',
+            sorter: { multiple: 5 },
+            defaultHidden: true,
+            render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+          },
         ]}
-        sortOptions={[
-          { label: 'Username', field: 'username' },
-          { label: 'Email', field: 'email' },
-          { label: 'Admin', field: 'admin' },
-        ]}
-        getRowKey={(item) => item.id}
-        onRowClick={(item) => navigate(`/users/${item.id}`)}
-        createModal={{
-          title: 'Add User',
-          onCreate: handleAddUser,
-          fields: [
-            { name: 'username', label: 'Username', type: 'text', required: true },
-            { name: 'email', label: 'Email', type: 'email', required: true },
-          ],
-          getInitialValues: () => ({
-            username: '',
-            email: '',
-            admin: false,
-          }),
+        actions={actions}
+      />
+
+      <CreateModal
+        open={createOpen}
+        onCancel={() => setCreateOpen(false)}
+        onCreate={handleAddUser}
+        initialValues={{
+          username: '',
+          email: '',
+          admin: false,
         }}
-        editModal={{
-          title: 'Edit User',
-          onEdit: handleEditUser,
-          fields: [
-            { name: 'username', label: 'Username', type: 'text', required: true },
-            { name: 'email', label: 'Email', type: 'email', required: true },
-            { name: 'admin', label: 'Admin', type: 'boolean' },
-          ],
-        }}
-        onDelete={handleDeleteUser}
-        filterGroups={[
-          {
-            key: 'username',
-            label: 'Username',
-            type: 'text',
-          },
-          {
-            key: 'email',
-            label: 'Email',
-            type: 'text',
-          },
-          {
-            key: 'admin',
-            label: 'Admin Status',
-            type: 'select',
-            options: [
-              { label: 'Admin', value: 'true' },
-              { label: 'Regular', value: 'false' },
-            ],
-          },
+        fields={[
+          { name: 'username', label: 'Username', type: 'text', required: true },
+          { name: 'email', label: 'Email', type: 'email', required: true },
         ]}
+        title="Add User"
+      />
+
+      <EditModal
+        open={editOpen}
+        onCancel={() => {
+          setEditOpen(false);
+          setEditingItem(null);
+        }}
+        onEdit={handleEditUser}
+        initialValues={{
+          username: editingItem?.username ?? '',
+          email: editingItem?.email ?? '',
+          admin: editingItem?.admin ?? false,
+        }}
+        fields={[
+          { name: 'username', label: 'Username', type: 'text', required: true },
+          { name: 'email', label: 'Email', type: 'email', required: true },
+          { name: 'admin', label: 'Admin', type: 'boolean' },
+        ]}
+        title="Edit User"
       />
     </div>
   );

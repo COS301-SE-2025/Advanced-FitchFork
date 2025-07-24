@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Typography, Segmented, Upload, message, Table, Space, Button } from 'antd';
+import { useEffect, useState } from 'react';
+import { Typography, Upload, message, Button, List, Tooltip, Steps } from 'antd';
 import { UploadOutlined, DownloadOutlined, CheckCircleFilled } from '@ant-design/icons';
 
 import { useModule } from '@/context/ModuleContext';
@@ -7,6 +7,7 @@ import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
 import { uploadAssignmentFile, downloadAssignmentFile } from '@/services/modules/assignments';
 import type { AssignmentFile } from '@/types/modules/assignments';
 
+const { Step } = Steps;
 const { Title, Paragraph, Text } = Typography;
 
 type RequiredFileType = 'main' | 'memo' | 'makefile';
@@ -50,31 +51,49 @@ const fileTypeLabels: Record<RequiredFileType, string> = {
 
 const StepFilesResources = () => {
   const module = useModule();
-  const { assignmentId, assignment, refreshAssignment, readiness, onStepComplete } =
-    useAssignmentSetup();
+  const { assignmentId, assignment, refreshAssignment, readiness } = useAssignmentSetup();
 
   const [selectedType, setSelectedType] = useState<RequiredFileType>('main');
   const [files, setFiles] = useState<AssignmentFile[]>(assignment?.files ?? []);
 
+  const [uploadError, setUploadError] = useState<RequiredFileType | null>(null);
+
   useEffect(() => {
     setFiles(assignment?.files ?? []);
   }, [assignment?.files]);
+
+  useEffect(() => {
+    if (!readiness) return;
+
+    if (!readiness.main_present) {
+      setSelectedType('main');
+    } else if (!readiness.memo_present) {
+      setSelectedType('memo');
+    } else if (!readiness.makefile_present) {
+      setSelectedType('makefile');
+    } else {
+      setSelectedType('main');
+    }
+  }, [readiness]);
 
   const handleUpload = async (file: File) => {
     if (!assignmentId) {
       message.error('Assignment ID is missing. Please create the assignment first.');
       return false;
     }
+    setUploadError(null);
+
     try {
       const res = await uploadAssignmentFile(module.id, assignmentId, selectedType, file);
       if (res.success) {
         message.success(`${file.name} uploaded as ${fileTypeLabels[selectedType]}`);
         await refreshAssignment?.();
-        onStepComplete?.();
       } else {
+        setUploadError(selectedType);
         message.error(`Upload failed: ${res.message}`);
       }
     } catch {
+      setUploadError(selectedType);
       message.error('Unexpected error during upload.');
     }
     return false;
@@ -87,51 +106,6 @@ const StepFilesResources = () => {
       message.error('Download failed');
     }
   };
-
-  const columns = [
-    {
-      title: 'Filename',
-      dataIndex: 'filename',
-      key: 'filename',
-      render: (name: string) => <Text>{name}</Text>,
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: (_: any, record: AssignmentFile) => (
-        <Space>
-          <Button
-            size="small"
-            icon={<DownloadOutlined />}
-            onClick={() => handleDownload(record.id)}
-          >
-            Download
-          </Button>
-        </Space>
-      ),
-    },
-  ];
-
-  const segmentedOptions = useMemo(
-    () =>
-      fileConfigs.map((cfg) => {
-        const isUploaded =
-          (cfg.fileType === 'main' && readiness?.main_present) ||
-          (cfg.fileType === 'memo' && readiness?.memo_present) ||
-          (cfg.fileType === 'makefile' && readiness?.makefile_present);
-
-        return {
-          value: cfg.fileType,
-          label: (
-            <span>
-              {cfg.title}{' '}
-              {isUploaded && <CheckCircleFilled style={{ color: '#1890ff', fontSize: 14 }} />}
-            </span>
-          ),
-        };
-      }),
-    [readiness],
-  );
 
   const currentConfig = fileConfigs.find((cfg) => cfg.fileType === selectedType)!;
   const filteredFiles = files.filter((f) => f.file_type === selectedType);
@@ -148,12 +122,28 @@ const StepFilesResources = () => {
       </div>
 
       <div className="!space-y-4">
-        <Segmented
-          block
-          value={selectedType}
-          onChange={(val) => setSelectedType(val as RequiredFileType)}
-          options={segmentedOptions}
-        />
+        <Steps
+          current={fileConfigs.findIndex((cfg) => cfg.fileType === selectedType)}
+          onChange={(idx) => setSelectedType(fileConfigs[idx].fileType)}
+          direction="horizontal"
+          size="small"
+          status={uploadError ? 'error' : undefined}
+        >
+          {fileConfigs.map((cfg) => {
+            const isUploaded =
+              (cfg.fileType === 'main' && readiness?.main_present) ||
+              (cfg.fileType === 'memo' && readiness?.memo_present) ||
+              (cfg.fileType === 'makefile' && readiness?.makefile_present);
+
+            return (
+              <Step
+                key={cfg.fileType}
+                title={cfg.title}
+                icon={isUploaded ? <CheckCircleFilled style={{ color: '#1890ff' }} /> : undefined}
+              />
+            );
+          })}
+        </Steps>
 
         <Upload.Dragger
           multiple={currentConfig.multiple}
@@ -173,15 +163,31 @@ const StepFilesResources = () => {
 
         {filteredFiles.length > 0 && (
           <div>
-            <Title level={5} className="!mt-6 !mb-2">
-              Uploaded Files ({currentConfig.title})
-            </Title>
-            <Table
-              columns={columns}
+            <List
+              bordered
+              itemLayout="horizontal"
               dataSource={filteredFiles}
-              rowKey="id"
-              pagination={false}
-              size="small"
+              renderItem={(file) => (
+                <List.Item
+                  actions={[
+                    <Button
+                      key="download"
+                      size="small"
+                      icon={<DownloadOutlined />}
+                      onClick={() => handleDownload(file.id)}
+                    >
+                      Download
+                    </Button>,
+                  ]}
+                >
+                  <Tooltip title={file.filename}>
+                    <Text ellipsis style={{ maxWidth: 200 }}>
+                      {file.filename}
+                    </Text>
+                  </Tooltip>
+                </List.Item>
+              )}
+              className="!mt-4"
             />
           </div>
         )}

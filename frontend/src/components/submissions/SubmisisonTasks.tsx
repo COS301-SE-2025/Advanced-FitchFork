@@ -3,6 +3,8 @@ import { Collapse, Tag, Typography, Modal, Button } from 'antd';
 import type { CollapseProps } from 'antd';
 import type { TaskBreakdown } from '@/types/modules/assignments/submissions';
 import CodeDiffEditor from '@/components/CodeDiffEditor';
+import { useAuth } from '@/context/AuthContext';
+import { useModule } from '@/context/ModuleContext';
 
 const { Text } = Typography;
 
@@ -21,6 +23,10 @@ const getScoreTagColor = (earned: number, total: number): string => {
 const SubmissionTasks: React.FC<Props> = ({ tasks }) => {
   const [visible, setVisible] = useState(false);
   const [currentLabel, setCurrentLabel] = useState<string>('');
+  const auth = useAuth();
+  const module = useModule();
+
+  const isStudent = auth.isStudent(module.id);
 
   const handleViewDiff = (label: string) => {
     setCurrentLabel(label);
@@ -44,7 +50,7 @@ const SubmissionTasks: React.FC<Props> = ({ tasks }) => {
               <span>{sub.label}</span>
             </div>
 
-            {sub.earned !== sub.total && (
+            {!isStudent && sub.earned !== sub.total && (
               <Button type="link" size="small" onClick={() => handleViewDiff(sub.label)}>
                 View Diff
               </Button>
@@ -64,7 +70,7 @@ const SubmissionTasks: React.FC<Props> = ({ tasks }) => {
     );
 
     const extra =
-      score.earned !== score.total ? (
+      !isStudent && score.earned !== score.total ? (
         <Button
           type="link"
           size="small"

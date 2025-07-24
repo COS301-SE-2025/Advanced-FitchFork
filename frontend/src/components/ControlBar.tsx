@@ -1,26 +1,8 @@
 import React, { useState } from 'react';
-import {
-  Input,
-  Button,
-  Dropdown,
-  Popconfirm,
-  Segmented,
-  Select,
-  type MenuProps,
-  Modal,
-  Col,
-  Row,
-} from 'antd';
-import {
-  ReloadOutlined,
-  DeleteOutlined,
-  PlusOutlined,
-  TableOutlined,
-  AppstoreOutlined,
-  FilterOutlined,
-  SortAscendingOutlined,
-  ThunderboltOutlined,
-} from '@ant-design/icons';
+import { Input, Button, Dropdown, Segmented, Select, Modal, Col, Row, Space, Checkbox } from 'antd';
+import { ReloadOutlined, TableOutlined, AppstoreOutlined, MoreOutlined } from '@ant-design/icons';
+import type { MenuItemType } from 'antd/es/menu/interface';
+import type { EntityAction } from './EntityList';
 
 const { Search } = Input;
 
@@ -35,23 +17,17 @@ interface FilterGroup {
   key: string;
   label: string;
   type: FilterType;
-  options?: { label: string; value: string }[]; // for select and multi-select
+  options?: { label: string; value: string }[];
 }
 
-interface Props {
+interface Props<T> {
   handleSearch: (key: string) => void;
   searchTerm: string;
   viewMode?: 'table' | 'grid';
   onViewModeChange?: (val: 'table' | 'grid') => void;
-  handleAdd?: () => void;
-  handleBulkDelete?: () => void;
-  clearMenuItems?: MenuProps['items'];
+
   selectedRowKeys?: React.Key[];
   searchPlaceholder?: string;
-  addButtonText?: string;
-  addButtonVisible?: boolean;
-  bulkDeleteVisible?: boolean;
-  bulkDeleteConfirmMessage?: string;
 
   sortOptions?: SortOption[];
   currentSort?: string[];
@@ -61,37 +37,177 @@ interface Props {
   activeFilters?: string[];
   onFilterChange?: (values: string[]) => void;
 
-  actions?: React.ReactNode;
+  actions?: EntityAction<T>[];
+  bulkActions?: EntityAction<T>[];
+
+  columnToggleEnabled?: boolean;
+  columns?: { key: string; label: string; defaultHidden?: boolean }[];
+  hiddenColumns?: Set<string>;
+  onToggleColumn?: (key: string) => void;
 }
 
-const ControlBar: React.FC<Props> = ({
+const ControlBar = <T,>({
   handleSearch,
   searchTerm,
   viewMode,
   onViewModeChange,
-  handleAdd,
-  handleBulkDelete,
-  clearMenuItems = [],
   selectedRowKeys = [],
   searchPlaceholder = 'Search...',
-  addButtonText = 'Add',
-  addButtonVisible = true,
-  bulkDeleteVisible = true,
-  bulkDeleteConfirmMessage = 'Delete selected items?',
   sortOptions = [],
   currentSort = [],
   onSortChange,
   filterGroups = [],
   activeFilters = [],
   onFilterChange,
-  actions,
-}) => {
+  actions = [],
+  bulkActions = [],
+  columnToggleEnabled = false,
+  columns = [],
+  hiddenColumns = new Set(),
+  onToggleColumn = () => {},
+}: Props<T>) => {
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
 
+  const hasBulk = selectedRowKeys.length > 0 && bulkActions.length > 0;
+
+  const hasSearch = !!searchTerm.trim();
+  const hasSort = (currentSort?.length ?? 0) > 0;
+  const hasFilters = (activeFilters?.length ?? 0) > 0;
+
+  const hasActiveFilters = hasSearch || hasSort || hasFilters;
+
+  const clearMenuItems: MenuItemType[] = [
+    hasSearch && {
+      key: 'clear-search',
+      label: 'Clear Search',
+      onClick: () => handleSearch(''),
+    },
+    hasSort && {
+      key: 'clear-sort',
+      label: 'Clear Sort',
+      onClick: () => onSortChange?.([]),
+    },
+    hasFilters && {
+      key: 'clear-filters',
+      label: 'Clear Filters',
+      onClick: () => onFilterChange?.([]),
+    },
+  ].filter(Boolean) as MenuItemType[];
+
+  if (clearMenuItems.length > 1) {
+    clearMenuItems.push({
+      key: 'clear-all',
+      label: 'Clear All',
+      onClick: () => {
+        handleSearch('');
+        onSortChange?.([]);
+        onFilterChange?.([]);
+      },
+    });
+  }
+
+  const primaryAction = actions.find((a) => a.isPrimary) ?? actions[0] ?? null;
+  const secondaryActions = primaryAction ? actions.filter((a) => a.key !== primaryAction.key) : [];
+
+  const resolvedPrimaryBulk = bulkActions.find((a) => a.isPrimary) ?? bulkActions[0] ?? null;
+  const secondaryBulkActions = resolvedPrimaryBulk
+    ? bulkActions.filter((a) => a.key !== resolvedPrimaryBulk.key)
+    : [];
+
+  const columnToggleMenu = (
+    <Dropdown
+      trigger={['click']}
+      menu={{
+        items: [
+          ...columns?.map((col) => ({
+            key: col.key,
+            label: (
+              <div onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                  checked={!hiddenColumns?.has(col.key)}
+                  onChange={() => onToggleColumn?.(col.key)}
+                >
+                  {col.label}
+                </Checkbox>
+              </div>
+            ),
+          })),
+
+          { type: 'divider' },
+
+          {
+            key: 'showAll',
+            label: (
+              <Button
+                type="link"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  columns?.forEach((col) => {
+                    if (hiddenColumns?.has(col.key)) {
+                      onToggleColumn?.(col.key);
+                    }
+                  });
+                }}
+              >
+                Show All
+              </Button>
+            ),
+          },
+
+          {
+            key: 'hideAll',
+            label: (
+              <Button
+                type="link"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  columns?.forEach((col) => {
+                    if (!hiddenColumns?.has(col.key)) {
+                      onToggleColumn?.(col.key);
+                    }
+                  });
+                }}
+              >
+                Hide All
+              </Button>
+            ),
+          },
+
+          {
+            key: 'resetDefault',
+            label: (
+              <Button
+                type="link"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  columns?.forEach((col) => {
+                    const shouldBeHidden = !!(col as any).defaultHidden;
+                    const currentlyHidden = hiddenColumns?.has(col.key);
+
+                    // if current != default, toggle
+                    if (shouldBeHidden !== currentlyHidden) {
+                      onToggleColumn?.(col.key);
+                    }
+                  });
+                }}
+              >
+                Reset to Default
+              </Button>
+            ),
+          },
+        ],
+      }}
+    >
+      <Button icon={<MoreOutlined />}>Columns</Button>
+    </Dropdown>
+  );
+
   return (
     <div className="bg-white dark:bg-gray-950 p-2 rounded-lg border border-gray-200 dark:border-gray-800 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      {/* Left: View mode + search (shared) */}
       <div className="flex flex-row items-center gap-2 w-full sm:w-auto">
         {viewMode &&
           onViewModeChange &&
@@ -105,6 +221,7 @@ const ControlBar: React.FC<Props> = ({
                 { value: 'table', icon: <TableOutlined /> },
                 { value: 'grid', icon: <AppstoreOutlined /> },
               ]}
+              className="dark:!bg-gray-950"
             />
           )}
 
@@ -118,89 +235,126 @@ const ControlBar: React.FC<Props> = ({
         />
       </div>
 
-      {/* Mobile-only Add button row */}
-      {addButtonVisible && handleAdd && (
-        <div className="sm:hidden">
-          <Button type="primary" onClick={handleAdd} icon={<PlusOutlined />} className="w-full">
-            {addButtonText}
-          </Button>
-        </div>
-      )}
       <Row gutter={8} align="middle" wrap={false}>
-        {actions && <Col>{actions}</Col>}
-
-        {(sortOptions.length > 0 || filterGroups.length > 0) && (
-          <Col flex="1">
-            <Dropdown
-              menu={{
-                items: [
-                  ...(sortOptions.length > 0
-                    ? [
-                        {
-                          key: 'sort',
-                          label: 'Sort',
-                          icon: <SortAscendingOutlined />,
-                          onClick: () => setSortModalOpen(true),
-                        },
-                      ]
-                    : []),
-                  ...(filterGroups.length > 0
-                    ? [
-                        {
-                          key: 'filters',
-                          label: 'Filters',
-                          icon: <FilterOutlined />,
-                          onClick: () => setFilterModalOpen(true),
-                        },
-                      ]
-                    : []),
-                ],
-              }}
-            >
-              <Button block icon={<ThunderboltOutlined />}>
-                Actions
+        {primaryAction && (
+          <Col>
+            {secondaryActions.length === 0 ? (
+              <Button
+                type="primary"
+                onClick={() =>
+                  primaryAction.handler({
+                    selected: selectedRowKeys,
+                    refresh: () => {},
+                  })
+                }
+              >
+                {primaryAction.icon} {primaryAction.label}
               </Button>
-            </Dropdown>
+            ) : (
+              <Space.Compact>
+                <Button
+                  type="primary"
+                  onClick={() =>
+                    primaryAction.handler({
+                      selected: selectedRowKeys,
+                      refresh: () => {},
+                    })
+                  }
+                >
+                  {primaryAction.icon} {primaryAction.label}
+                </Button>
+
+                <Dropdown
+                  menu={{
+                    items: secondaryActions.map((a) => ({
+                      key: a.key,
+                      label: a.label,
+                      icon: a.icon,
+                      onClick: a.confirm
+                        ? undefined
+                        : () =>
+                            a.handler({
+                              selected: selectedRowKeys,
+                              refresh: () => {},
+                            }),
+                    })),
+                  }}
+                  placement="bottomRight"
+                >
+                  <Button type="primary" icon={<MoreOutlined />} />
+                </Dropdown>
+              </Space.Compact>
+            )}
           </Col>
         )}
 
-        {/* Desktop placement */}
-        {addButtonVisible && handleAdd && (
-          <div className="hidden sm:block">
-            <Button
-              type="primary"
-              onClick={handleAdd}
-              icon={<PlusOutlined />}
-              className="whitespace-nowrap"
-            >
-              {addButtonText}
-            </Button>
-          </div>
-        )}
-        {clearMenuItems.length > 0 && (
-          <Col flex="0 0 120px">
-            <Dropdown menu={{ items: clearMenuItems }}>
-              <Button block icon={<ReloadOutlined />}>
-                Clear
+        {hasBulk && resolvedPrimaryBulk && (
+          <Col>
+            {secondaryBulkActions.length === 0 ? (
+              <Button
+                onClick={() =>
+                  resolvedPrimaryBulk.handler({
+                    selected: selectedRowKeys,
+                    refresh: () => {},
+                  })
+                }
+              >
+                {resolvedPrimaryBulk.icon} {resolvedPrimaryBulk.label}
               </Button>
-            </Dropdown>
+            ) : (
+              <Space.Compact>
+                <Button
+                  onClick={() =>
+                    resolvedPrimaryBulk.handler({
+                      selected: selectedRowKeys,
+                      refresh: () => {},
+                    })
+                  }
+                >
+                  {resolvedPrimaryBulk.icon} {resolvedPrimaryBulk.label}
+                </Button>
+                <Dropdown
+                  menu={{
+                    items: secondaryBulkActions.map((a) => ({
+                      key: a.key,
+                      label: a.label,
+                      icon: a.icon,
+                      onClick: a.confirm
+                        ? undefined
+                        : () =>
+                            a.handler({
+                              selected: selectedRowKeys,
+                              refresh: () => {},
+                            }),
+                    })),
+                  }}
+                  placement="bottomRight"
+                >
+                  <Button icon={<MoreOutlined />} />
+                </Dropdown>
+              </Space.Compact>
+            )}
           </Col>
         )}
 
-        {bulkDeleteVisible && selectedRowKeys.length > 0 && handleBulkDelete && (
-          <Col flex="0 0 160px">
-            <Popconfirm
-              title={bulkDeleteConfirmMessage || 'Delete selected items?'}
-              onConfirm={handleBulkDelete}
-              okText="Yes"
-              cancelText="No"
-            >
-              <Button block danger icon={<DeleteOutlined />}>
-                Delete Selected
+        {hasActiveFilters && clearMenuItems.length > 0 && (
+          <Col>
+            {clearMenuItems.length === 1 ? (
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => clearMenuItems[0].onClick?.({ key: clearMenuItems[0].key } as any)}
+              >
+                {clearMenuItems[0].label}
               </Button>
-            </Popconfirm>
+            ) : (
+              <Dropdown menu={{ items: clearMenuItems }}>
+                <Button icon={<ReloadOutlined />}>Clear</Button>
+              </Dropdown>
+            )}
           </Col>
         )}
+
+        {columnToggleEnabled && columns?.length && <Col>{columnToggleMenu}</Col>}
       </Row>
 
       <Modal

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Typography, Form, InputNumber, Select, message } from 'antd';
+import { useState } from 'react';
+import { Typography, Button, Upload, Alert } from 'antd';
+import { UploadOutlined } from '@ant-design/icons';
 import { uploadAssignmentFile } from '@/services/modules/assignments';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
@@ -18,97 +19,83 @@ const defaultConfig = {
 
 const StepConfig = () => {
   const module = useModule();
-  const { assignmentId, setStepSaveHandler, onStepComplete } = useAssignmentSetup();
-  const [form] = Form.useForm();
-  const [, setLoading] = useState(false);
+  const { assignmentId, onStepComplete, refreshAssignment } = useAssignmentSetup();
+  const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    form.setFieldsValue(defaultConfig);
-
-    if (setStepSaveHandler) {
-      setStepSaveHandler(2, handleSave); // step index of Config
-    }
-  }, []);
-
-  const handleSave = async (): Promise<boolean> => {
+  const uploadDefaultConfig = async () => {
     if (!assignmentId) {
-      message.error('Assignment ID is missing — please create assignment first.');
-      return false;
+      setSuccessMessage(null);
+      return;
     }
 
-    const values = form.getFieldsValue();
-    const blob = new Blob([JSON.stringify(values, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(defaultConfig, null, 2)], { type: 'application/json' });
     const file = new File([blob], 'config.json', { type: 'application/json' });
 
     setLoading(true);
     try {
       const res = await uploadAssignmentFile(module.id, assignmentId, 'config', file);
       if (res.success) {
-        message.success('Configuration uploaded successfully.');
-
-        if (onStepComplete) {
-          onStepComplete();
-        }
-
-        return true;
+        setSuccessMessage('Default configuration uploaded successfully.');
+        await refreshAssignment?.();
+        onStepComplete?.();
       } else {
-        message.error(`Upload failed: ${res.message}`);
-        return false;
+        setSuccessMessage(null);
       }
-    } catch (err) {
-      console.error(err);
-      message.error('An unexpected error occurred during upload.');
-      return false;
+    } catch {
+      setSuccessMessage(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const uploadCustomConfig = async (file: File) => {
+    if (!assignmentId) {
+      setSuccessMessage(null);
+      return false;
+    }
+
+    const res = await uploadAssignmentFile(module.id, assignmentId, 'config', file);
+    if (res.success) {
+      setSuccessMessage('Custom configuration uploaded successfully.');
+      await refreshAssignment?.();
+      onStepComplete?.();
+      return true;
+    } else {
+      setSuccessMessage(null);
+      return false;
     }
   };
 
   return (
     <div className="space-y-6">
       <Title level={3}>Assignment Configuration</Title>
+
       <Paragraph type="secondary">
-        Define execution limits and grading behavior for this assignment, then save it to upload the
-        configuration to the server.
+        You can start with the default configuration or upload a custom JSON file. You will still be
+        able to edit the configuration later if needed.
       </Paragraph>
 
-      <Form form={form} layout="vertical" className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Form.Item label="Timeout (seconds)" name="timeout_secs">
-          <InputNumber min={1} />
-        </Form.Item>
+      {successMessage && (
+        <Alert message={successMessage} type="success" showIcon className="!mb-4" />
+      )}
 
-        <Form.Item label="Max Memory (e.g. 1024m)" name="max_memory">
-          <InputNumber addonAfter="MB" min={1} />
-        </Form.Item>
+      <div className="flex flex-col md:flex-row gap-4">
+        <Button type="primary" onClick={uploadDefaultConfig} loading={loading}>
+          Use Default Configuration
+        </Button>
 
-        <Form.Item label="Max CPUs" name="max_cpus">
-          <InputNumber min={1} />
-        </Form.Item>
-
-        <Form.Item label="Max Uncompressed Size (bytes)" name="max_uncompressed_size">
-          <InputNumber min={1} />
-        </Form.Item>
-
-        <Form.Item label="Max Processes" name="max_processes">
-          <InputNumber min={1} />
-        </Form.Item>
-
-        <Form.Item label="Marking Scheme" name="marking_scheme">
-          <Select>
-            <Select.Option value="exact">Exact Match</Select.Option>
-            <Select.Option value="percentage">Percentage Match</Select.Option>
-            <Select.Option value="regex">Regex Match</Select.Option>
-          </Select>
-        </Form.Item>
-
-        <Form.Item label="Feedback Scheme" name="feedback_scheme">
-          <Select>
-            <Select.Option value="auto">Auto</Select.Option>
-            <Select.Option value="manual">Manual</Select.Option>
-            <Select.Option value="ai">AI-Assisted</Select.Option>
-          </Select>
-        </Form.Item>
-      </Form>
+        <Upload
+          beforeUpload={(file) => {
+            uploadCustomConfig(file);
+            return false; // prevent default upload
+          }}
+          accept=".json"
+          showUploadList={false}
+        >
+          <Button icon={<UploadOutlined />}>Upload Custom Configuration</Button>
+        </Upload>
+      </div>
     </div>
   );
 };

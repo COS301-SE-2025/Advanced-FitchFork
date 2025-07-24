@@ -14,11 +14,10 @@ import NotFound from './pages/shared/status/NotFound';
 import UsersList from './pages/users/UsersList';
 import UserView from './pages/users/UserView';
 import UnderConstruction from './pages/shared/status/UnderConstruction';
-import Modules from './pages/modules/index/Modules';
 import CalendarPage from './pages/shared/CalendarPage';
 
-import ModuleOverview from './pages/modules/show/ModuleOverview';
-import ModulePersonnel from './pages/modules/show/ModulePersonnel';
+import ModuleOverview from './pages/modules/ModuleOverview';
+import ModulePersonnel from './pages/modules/ModulePersonnel';
 
 import AppLayout from './layouts/AppLayout';
 import ModuleLayout from './layouts/ModuleLayout';
@@ -29,7 +28,6 @@ import Appearance from './pages/settings/Appearance';
 import AssignmentLayout from './layouts/AssignmentLayout';
 import SubmissionView from './pages/modules/assignments/submissions/show/SubmissionView';
 import Submissions from './pages/modules/assignments/submissions/index/Submissions';
-import Assignments from './pages/modules/assignments/index/Assignments';
 import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
 import MemoOutput from './pages/modules/assignments/MemoOutput';
 import MarkAllocator from './pages/modules/assignments/MarkAllocator';
@@ -43,6 +41,10 @@ import Landing from './pages/Landing';
 import Config from './pages/modules/assignments/Config';
 import Dashboard from './pages/Dashboard';
 import Tasks from './pages/modules/assignments/Tasks';
+import AuthLayout from './layouts/AuthLayout';
+import ModulesList from './pages/modules/ModulesList';
+import ModuleGrades from './pages/modules/ModuleGrades';
+import AssignmentsList from './pages/modules/assignments/AssignmentsList';
 
 export default function App() {
   const { user, isAdmin, loading, isExpired } = useAuth();
@@ -71,11 +73,13 @@ export default function App() {
           path="/"
           element={user && !isExpired() ? <Navigate to="/dashboard" replace /> : <Landing />}
         />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/forgot-password" element={<RequestPasswordResetPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/password-reset-success" element={<PasswordResetSuccessPage />} />
+        <Route element={<AuthLayout />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<RequestPasswordResetPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/password-reset-success" element={<PasswordResetSuccessPage />} />
+        </Route>
 
         {/* Status + Fallback */}
         <Route path="/unauthorized" element={<Unauthorized />} />
@@ -98,13 +102,13 @@ export default function App() {
           <Route path="/users/:id/modules" element={requireAdmin(<Unauthorized />)} />
 
           {/* Modules Overview Pages */}
-          <Route path="/modules" element={<Modules />} />
+          <Route path="/modules" element={<ModulesList />} />
 
           {/* Module Layout Wrapper */}
           <Route path="/modules/:id" element={<ModuleLayout />}>
             <Route index element={<ModuleOverview />} />
 
-            <Route path="assignments" element={<Assignments />} />
+            <Route path="assignments" element={<AssignmentsList />} />
             <Route path="assignments/:assignment_id" element={<AssignmentLayout />}>
               <Route index element={<Navigate to="submissions" replace />} />
               <Route path="files" element={<AssignmentFiles />} />
@@ -121,7 +125,7 @@ export default function App() {
             </Route>
 
             <Route path="bookings" element={<UnderConstruction />} />
-            <Route path="grades" element={<UnderConstruction />} />
+            <Route path="grades" element={<ModuleGrades />} />
             <Route path="resources" element={<UnderConstruction />} />
             <Route path="personnel" element={<ModulePersonnel />} />
           </Route>
