@@ -6,10 +6,11 @@ import type { User } from '@/types/users';
 
 export interface UserModuleRole extends User {
   modules: {
-    Lecturer: Module[];
-    Tutor: Module[];
-    Student: Module[];
-    Flat: (Module & { role: ModuleRole })[];
+    lecturer: Module[];
+    assistant_lecturer: Module[];
+    tutor: Module[];
+    student: Module[];
+    flat: (Module & { role: ModuleRole })[];
   };
   profilePictureUrl: string;
 }
@@ -25,19 +26,21 @@ export const loadAuthSession = async (stored: any): Promise<UserModuleRole | nul
   const grouped = modRes.data;
 
   const flat = [
-    ...grouped.as_lecturer.map((m) => ({ ...m, role: 'Lecturer' as const })),
-    ...grouped.as_tutor.map((m) => ({ ...m, role: 'Tutor' as const })),
-    ...grouped.as_student.map((m) => ({ ...m, role: 'Student' as const })),
+    ...grouped.as_lecturer.map((m) => ({ ...m, role: 'lecturer' as const })),
+    ...grouped.as_assistant_lecturer.map((m) => ({ ...m, role: 'assistant_lecturer' as const })),
+    ...grouped.as_tutor.map((m) => ({ ...m, role: 'tutor' as const })),
+    ...grouped.as_student.map((m) => ({ ...m, role: 'student' as const })),
   ];
 
   const result: UserModuleRole = {
     ...userData,
     profilePictureUrl: `${API_BASE_URL}/auth/avatar/${userData.id}?bust=${Date.now()}`,
     modules: {
-      Lecturer: grouped.as_lecturer,
-      Tutor: grouped.as_tutor,
-      Student: grouped.as_student,
-      Flat: flat,
+      lecturer: grouped.as_lecturer,
+      assistant_lecturer: grouped.as_assistant_lecturer,
+      tutor: grouped.as_tutor,
+      student: grouped.as_student,
+      flat,
     },
   };
 

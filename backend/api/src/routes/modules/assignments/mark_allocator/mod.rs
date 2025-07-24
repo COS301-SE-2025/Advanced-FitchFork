@@ -33,19 +33,19 @@ pub fn mark_allocator_routes() -> Router {
     Router::new()
         .route(
             "/generate",
-            post(generate).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            post(generate).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )
         .route(
             "/",
-            get(load).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            get(load).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )
         .route(
             "/",
-            put(save).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
+            put(save).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
                 require_lecturer(Path(params), req, next)
             })),
         )

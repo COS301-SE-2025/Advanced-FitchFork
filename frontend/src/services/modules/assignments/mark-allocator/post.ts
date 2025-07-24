@@ -5,7 +5,7 @@ export const generateMarkAllocator = async (
   moduleId: number,
   assignmentId: number
 ): Promise<PostGenerateMarkAllcatorReponse> => {
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/mark-allocator/generate`, 
+  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/mark_allocator/generate`, 
     { method: "POST" }
   );
 }

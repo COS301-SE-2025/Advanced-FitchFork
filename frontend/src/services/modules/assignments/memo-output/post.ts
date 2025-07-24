@@ -5,7 +5,7 @@ export const generateMemoOutput = async (
 moduleId: number,
 assignmentId: number
 ): Promise<ApiResponse<null>> => {
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/memo-output/generate`,
+  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/memo_output/generate`,
     { method: "POST" }
   );
 }

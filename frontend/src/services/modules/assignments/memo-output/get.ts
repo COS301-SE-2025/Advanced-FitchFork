@@ -6,5 +6,5 @@ export const getMemoOutput = async (
   moduleId: number,
   assignmentId: number
 ): Promise<GetMemoOutputResponse> => {
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/memo-output`);
+  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/memo_output`);
 };

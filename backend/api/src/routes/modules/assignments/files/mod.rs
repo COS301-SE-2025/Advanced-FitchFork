@@ -37,26 +37,26 @@ pub fn files_routes() -> Router {
     Router::new()
         .route(
             "/",
-            post(upload_files).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
-                require_lecturer(Path((assignment_id,)), req, next)
+            post(upload_files).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
+                require_lecturer(Path(params), req, next)
             })),
         )
         .route(
             "/",
-            get(list_files).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
-                require_assigned_to_module(Path((assignment_id,)), req, next)
+            get(list_files).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
+                require_assigned_to_module(Path(params), req, next)
             })),
         )
         .route(
             "/",
-            delete(delete_files).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
-                require_lecturer(Path((assignment_id,)), req, next)
+            delete(delete_files).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
+                require_lecturer(Path(params), req, next)
             })),
         )
         .route(
             "/{file_id}",
-            get(download_file).layer(from_fn(|Path((assignment_id, _file_id)): Path<(i64, i64)>, req, next| {
-                require_assigned_to_module(Path((assignment_id,)), req, next)
+            get(download_file).layer(from_fn(|Path(params): Path<(i64, i64, i64)>, req, next| {
+                require_assigned_to_module(Path(params), req, next)
             })),
         )
 }

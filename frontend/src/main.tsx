@@ -8,19 +8,24 @@ import { App as AntApp } from 'antd';
 import { BreadcrumbProvider } from './context/BreadcrumbContext.tsx';
 import { UIProvider } from './context/UIContext.tsx';
 import { ThemeProvider } from './context/ThemeContext.tsx';
+import { AppMuiTheme } from './context/AppMuiTheme.tsx';
+import { MessageContextHolder } from './utils/message.tsx';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeProvider>
-      <UIProvider>
-        <AuthProvider>
-          <AntApp>
-            <BreadcrumbProvider>
-              <App />
-            </BreadcrumbProvider>
-          </AntApp>
-        </AuthProvider>
-      </UIProvider>
+      <AppMuiTheme>
+        <UIProvider>
+          <AuthProvider>
+            <AntApp>
+              <MessageContextHolder />
+              <BreadcrumbProvider>
+                <App />
+              </BreadcrumbProvider>
+            </AntApp>
+          </AuthProvider>
+        </UIProvider>
+      </AppMuiTheme>
     </ThemeProvider>
   </React.StrictMode>,
 );

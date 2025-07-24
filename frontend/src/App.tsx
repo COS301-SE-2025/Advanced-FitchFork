@@ -11,15 +11,13 @@ import Forbidden from './pages/shared/status/Forbidden';
 import Unauthorized from './pages/shared/status/Unauthorized';
 import NotFound from './pages/shared/status/NotFound';
 
-import Home from './pages/Home';
 import UsersList from './pages/users/UsersList';
 import UserView from './pages/users/UserView';
 import UnderConstruction from './pages/shared/status/UnderConstruction';
-import Modules from './pages/modules/index/Modules';
 import CalendarPage from './pages/shared/CalendarPage';
 
-import ModuleOverview from './pages/modules/show/ModuleOverview';
-import ModulePersonnel from './pages/modules/show/ModulePersonnel';
+import ModuleOverview from './pages/modules/ModuleOverview';
+import ModulePersonnel from './pages/modules/ModulePersonnel';
 
 import AppLayout from './layouts/AppLayout';
 import ModuleLayout from './layouts/ModuleLayout';
@@ -30,15 +28,9 @@ import Appearance from './pages/settings/Appearance';
 import AssignmentLayout from './layouts/AssignmentLayout';
 import SubmissionView from './pages/modules/assignments/submissions/show/SubmissionView';
 import Submissions from './pages/modules/assignments/submissions/index/Submissions';
-import SubmissionLayout from './layouts/SubmissionLayout';
-import Assignments from './pages/modules/assignments/index/Assignments';
-import TasksLayout from './layouts/TasksLayout';
-import TasksIndex from './pages/modules/assignments/tasks/TasksIndex';
 import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
 import MemoOutput from './pages/modules/assignments/MemoOutput';
 import MarkAllocator from './pages/modules/assignments/MarkAllocator';
-import AssignmentStepUpload from './pages/modules/assignments/steps/AssignmentStepUpload';
-import AssignmentSteps from './pages/modules/assignments/steps/AssignmentSteps';
 import HelpPageLayout from './layouts/HelpPageLayout';
 import HelpAccount from './pages/help/HelpAccount';
 import HelpAssignments from './pages/help/HelpAssignments';
@@ -46,12 +38,13 @@ import HelpContact from './pages/help/HelpContact';
 import HelpSubmissions from './pages/help/HelpSubmissions';
 import HelpTroubleshooting from './pages/help/HelpTroubleshooting';
 import Landing from './pages/Landing';
-import AssignmentLayoutWrapper from './layouts/AssignmentLayoutWrapper';
-import ConfigStep from './pages/modules/assignments/steps/ConfigStep';
-import TaskStep from './pages/modules/assignments/steps/TaskStep';
-import GenerateMemoOutputStep from './pages/modules/assignments/steps/GenerateMemoOutputStep';
-import GenerateMarkAllocatorStep from './pages/modules/assignments/steps/GenerateMarkAllocatorStep';
 import Config from './pages/modules/assignments/Config';
+import Dashboard from './pages/Dashboard';
+import Tasks from './pages/modules/assignments/Tasks';
+import AuthLayout from './layouts/AuthLayout';
+import ModulesList from './pages/modules/ModulesList';
+import ModuleGrades from './pages/modules/ModuleGrades';
+import AssignmentsList from './pages/modules/assignments/AssignmentsList';
 
 export default function App() {
   const { user, isAdmin, loading, isExpired } = useAuth();
@@ -78,13 +71,15 @@ export default function App() {
         {/* Public Auth Routes */}
         <Route
           path="/"
-          element={user && !isExpired() ? <Navigate to="/home" replace /> : <Landing />}
+          element={user && !isExpired() ? <Navigate to="/dashboard" replace /> : <Landing />}
         />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/forgot-password" element={<RequestPasswordResetPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/password-reset-success" element={<PasswordResetSuccessPage />} />
+        <Route element={<AuthLayout />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<RequestPasswordResetPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/password-reset-success" element={<PasswordResetSuccessPage />} />
+        </Route>
 
         {/* Status + Fallback */}
         <Route path="/unauthorized" element={<Unauthorized />} />
@@ -92,7 +87,7 @@ export default function App() {
 
         {/* AppLayout-wrapped Authenticated Routes */}
         <Route element={requireAuth(<AppLayout />)}>
-          <Route path="/home" element={<Home />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="account" replace />} />
             <Route path="account" element={<Account />} />
@@ -107,43 +102,21 @@ export default function App() {
           <Route path="/users/:id/modules" element={requireAdmin(<Unauthorized />)} />
 
           {/* Modules Overview Pages */}
-          <Route path="/modules" element={<Modules />} />
+          <Route path="/modules" element={<ModulesList />} />
 
           {/* Module Layout Wrapper */}
           <Route path="/modules/:id" element={<ModuleLayout />}>
             <Route index element={<ModuleOverview />} />
 
-            {/* STEPS: only declared here to avoid duplicate renders */}
-            <Route
-              path="assignments/:assignment_id/steps"
-              element={
-                <AssignmentLayoutWrapper>
-                  <AssignmentSteps />
-                </AssignmentLayoutWrapper>
-              }
-            >
-              <Route path="config" element={<ConfigStep />} />
-              <Route path="main" element={<AssignmentStepUpload fileType="main" />} />
-              <Route path="memo" element={<AssignmentStepUpload fileType="memo" />} />
-              <Route path="makefile" element={<AssignmentStepUpload fileType="makefile" />} />
-              {/* <Route path="tasks" element={<TasksLayout />}>
-                <Route index element={<TasksIndex />} />
-                <Route path=":task_id" element={<UnderConstruction />} />
-              </Route> */}
-              <Route path="tasks" element={<TaskStep />}></Route>
-              <Route path="tasks/:task_id" element={<TaskStep />} />
-              <Route path="memo-output" element={<GenerateMemoOutputStep />} />
-              <Route path="mark-allocator" element={<GenerateMarkAllocatorStep />} />
-            </Route>
-
-            <Route path="assignments" element={<Assignments />} />
+            <Route path="assignments" element={<AssignmentsList />} />
             <Route path="assignments/:assignment_id" element={<AssignmentLayout />}>
               <Route index element={<Navigate to="submissions" replace />} />
               <Route path="files" element={<AssignmentFiles />} />
               <Route path="submissions" element={<Submissions />} />
-              <Route path="tasks" element={<TasksLayout />}>
-                <Route index element={<TasksIndex />} />
-                <Route path=":task_id" element={<UnderConstruction />} />
+              <Route path="submissions/:submission_id" element={<SubmissionView />} />
+              <Route path="tasks" element={<Tasks />}>
+                <Route index element={<> </>} />
+                <Route path=":task_id" element={<> </>} />
               </Route>
               <Route path="memo-output" element={<MemoOutput />} />
               <Route path="mark-allocator" element={<MarkAllocator />} />
@@ -151,11 +124,8 @@ export default function App() {
               <Route path="config" element={<Config />} />
             </Route>
 
-            <Route path="assignments/:assignment_id" element={<SubmissionLayout />}>
-              <Route path="submissions/:submission_id" element={<SubmissionView />} />
-            </Route>
-
-            <Route path="grades" element={<UnderConstruction />} />
+            <Route path="bookings" element={<UnderConstruction />} />
+            <Route path="grades" element={<ModuleGrades />} />
             <Route path="resources" element={<UnderConstruction />} />
             <Route path="personnel" element={<ModulePersonnel />} />
           </Route>

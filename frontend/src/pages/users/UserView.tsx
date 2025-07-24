@@ -43,8 +43,6 @@ const UserView = () => {
 
     if (userRes.success) {
       setUser(userRes.data);
-
-      // Set custom breadcrumb label using the username
       setBreadcrumbLabel(`users/${userId}`, userRes.data.username);
     } else {
       notifyError('Failed to load user', userRes.message);
@@ -79,13 +77,15 @@ const UserView = () => {
     if (oldRole === newRole) return;
 
     try {
-      if (oldRole === 'Lecturer') await removeLecturers(moduleId, { user_ids: [userId] });
-      if (oldRole === 'Tutor') await removeTutors(moduleId, { user_ids: [userId] });
-      if (oldRole === 'Student') await removeStudents(moduleId, { user_ids: [userId] });
+      if (oldRole === 'lecturer' || oldRole === 'assistant_lecturer')
+        await removeLecturers(moduleId, { user_ids: [userId] });
+      if (oldRole === 'tutor') await removeTutors(moduleId, { user_ids: [userId] });
+      if (oldRole === 'student') await removeStudents(moduleId, { user_ids: [userId] });
 
-      if (newRole === 'Lecturer') await assignLecturers(moduleId, { user_ids: [userId] });
-      if (newRole === 'Tutor') await assignTutors(moduleId, { user_ids: [userId] });
-      if (newRole === 'Student') await enrollStudents(moduleId, { user_ids: [userId] });
+      if (newRole === 'lecturer' || newRole === 'assistant_lecturer')
+        await assignLecturers(moduleId, { user_ids: [userId] });
+      if (newRole === 'tutor') await assignTutors(moduleId, { user_ids: [userId] });
+      if (newRole === 'student') await enrollStudents(moduleId, { user_ids: [userId] });
 
       notifySuccess('Role updated', 'The user’s role was successfully updated.');
       setEditingModuleId(null);
@@ -98,9 +98,10 @@ const UserView = () => {
 
   const handleRemove = async (moduleId: number, role: ModuleRole) => {
     try {
-      if (role === 'Lecturer') await removeLecturers(moduleId, { user_ids: [userId] });
-      if (role === 'Tutor') await removeTutors(moduleId, { user_ids: [userId] });
-      if (role === 'Student') await removeStudents(moduleId, { user_ids: [userId] });
+      if (role === 'lecturer' || role === 'assistant_lecturer')
+        await removeLecturers(moduleId, { user_ids: [userId] });
+      if (role === 'tutor') await removeTutors(moduleId, { user_ids: [userId] });
+      if (role === 'student') await removeStudents(moduleId, { user_ids: [userId] });
 
       notifySuccess('User removed', 'The user was removed from this module.');
       fetchUserData();
@@ -155,9 +156,9 @@ const UserView = () => {
                 <Select
                   value={editedRole ?? role}
                   onChange={(value) => setEditedRole(value)}
-                  options={MODULE_ROLES.map((r) => ({
+                  options={[...MODULE_ROLES].map((r) => ({
                     value: r,
-                    label: r.charAt(0).toUpperCase() + r.slice(1),
+                    label: r.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()),
                   }))}
                   style={{ width: '100%' }}
                 />

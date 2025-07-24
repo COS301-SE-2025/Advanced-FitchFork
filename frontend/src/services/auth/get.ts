@@ -1,6 +1,6 @@
 
 import { API_BASE_URL } from "@/config/api";
-import type { GetAuthenticatedUserResponse, GetHasRoleResponse } from "@/types/auth";
+import type { GetAuthenticatedUserResponse, GetHasRoleResponse, GetModuleRoleResponse } from "@/types/auth";
 import type { ModuleRole } from "@/types/modules";
 import { apiDownload, apiFetch } from "@/utils/api";
 
@@ -13,6 +13,12 @@ export const hasRole = async (
   role: ModuleRole
 ): Promise<GetHasRoleResponse> => {
   return apiFetch(`/auth/has-role?module_id=${moduleId}&role=${role}`);
+};
+
+export const getModuleRole = async (
+  moduleId: number
+): Promise<GetModuleRoleResponse> => {
+  return apiFetch(`/auth/module-role?module_id=${moduleId}`);
 };
 
 export const downloadProfilePicture = async (): Promise<void> => {

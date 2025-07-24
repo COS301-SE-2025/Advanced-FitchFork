@@ -31,9 +31,9 @@ export const useTopMenuItems = (): MenuItem[] => {
 
   const items: MenuItem[] = [
     {
-      key: '/home',
+      key: '/dashboard',
       icon: React.createElement(HomeOutlined),
-      label: 'Home',
+      label: 'Dashboard',
     },
     {
       key: '/calendar',

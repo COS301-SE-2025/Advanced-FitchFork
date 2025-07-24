@@ -18,11 +18,18 @@
     "test:e2e:run": "cypress run"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@monaco-editor/react": "^4.7.0",
+    "@mui/material": "^7.1.2",
+    "@mui/x-charts": "^8.6.0",
     "@tailwindcss/vite": "^4.1.7",
     "@types/react-router-dom": "^5.3.3",
     "antd": "^5.25.3",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.13",
+    "diff": "^8.0.2",
+    "diff2html": "^3.4.52",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-responsive": "^10.0.1",

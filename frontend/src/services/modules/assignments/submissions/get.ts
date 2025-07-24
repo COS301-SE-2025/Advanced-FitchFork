@@ -1,13 +1,18 @@
+import type { PaginationRequest } from "@/types/common";
 import type { GetSubmissionListResponse, GetSubmissionDetailResponse } from "@/types/modules/assignments/submissions";
-import { apiFetch } from "@/utils/api";
+import { apiFetch, buildQuery } from "@/utils/api";
 
 
 export const getSubmissions = async (
   moduleId: number,
   assignmentId: number,
-  query: URLSearchParams
+  options: {
+    username?: string;
+    status?: string;
+  } & PaginationRequest
 ): Promise<GetSubmissionListResponse> => {
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/submissions?${query.toString()}`);
+  const query = buildQuery(options);
+  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/submissions?${query}`);
 };
 
 export const getSubmissionDetails = async (

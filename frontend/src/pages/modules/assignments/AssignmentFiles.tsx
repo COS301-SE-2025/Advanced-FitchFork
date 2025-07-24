@@ -1,16 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Segmented, Upload, Typography, message, Table, Button, Space, Tooltip } from 'antd';
-import {
-  UploadOutlined,
-  DownloadOutlined,
-  ReloadOutlined,
-  FileTextOutlined,
-  FileAddOutlined,
-  FileMarkdownOutlined,
-  FileZipOutlined,
-  SettingOutlined,
-  CodeOutlined,
-} from '@ant-design/icons';
+import { useEffect, useState } from 'react';
+import { Select, Upload, Typography, message, Button, Empty, List, Tooltip } from 'antd';
+import { UploadOutlined, DownloadOutlined } from '@ant-design/icons';
 
 import { useAssignment } from '@/context/AssignmentContext';
 import { useModule } from '@/context/ModuleContext';
@@ -29,15 +19,6 @@ const fileTypeLabels: Record<FileType, string> = {
   mark_allocator: 'Mark Allocator',
 };
 
-const fileIcons: Record<FileType, React.ReactNode> = {
-  main: <FileTextOutlined />,
-  makefile: <FileAddOutlined />,
-  memo: <FileMarkdownOutlined />,
-  spec: <FileZipOutlined />,
-  config: <SettingOutlined />,
-  mark_allocator: <CodeOutlined />,
-};
-
 const AssignmentFiles = () => {
   const { assignment } = useAssignment();
   const module = useModule();
@@ -53,24 +34,11 @@ const AssignmentFiles = () => {
       const res = await uploadAssignmentFile(module.id, assignment.id, selectedType, file);
       message.success(`${fileTypeLabels[selectedType]} "${file.name}" uploaded`);
       setFiles((prev) => [...prev.filter((f) => f.file_type !== selectedType), res.data]);
-    } catch (err) {
+    } catch {
       message.error('Upload failed');
     }
     return false;
   };
-
-  const handleReplace = (type: FileType) => ({
-    beforeUpload: async (file: File) => {
-      try {
-        const res = await uploadAssignmentFile(module.id, assignment.id, type, file);
-        message.success(`${fileTypeLabels[type]} "${file.name}" replaced`);
-        setFiles((prev) => prev.map((f) => (f.file_type === type ? res.data : f)));
-      } catch (err) {
-        message.error('Replacement failed');
-      }
-      return false;
-    },
-  });
 
   const handleDownload = async (id: number) => {
     try {
@@ -80,111 +48,88 @@ const AssignmentFiles = () => {
     }
   };
 
-  const columns = [
-    {
-      title: 'File Type',
-      dataIndex: 'file_type',
-      key: 'file_type',
-      render: (type: FileType) => {
-        const icon = fileIcons[type] ?? <FileTextOutlined />;
-        const label = fileTypeLabels[type] ?? type;
-        return (
-          <Space>
-            {icon}
-            {label}
-          </Space>
-        );
-      },
-    },
-    {
-      title: 'Filename',
-      dataIndex: 'filename',
-      key: 'filename',
-      render: (text: string) => (
-        <Tooltip title={text}>
-          <Text ellipsis style={{ maxWidth: 180, display: 'inline-block' }}>
-            {text}
-          </Text>
-        </Tooltip>
-      ),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: (_: any, record: AssignmentFile) => (
-        <Space>
-          <Button
-            size="small"
-            icon={<DownloadOutlined />}
-            onClick={() => handleDownload(record.id)}
-          >
-            Download
-          </Button>
-          <Upload {...handleReplace(record.file_type)} showUploadList={false}>
-            <Button size="small" icon={<ReloadOutlined />}>
-              Replace
-            </Button>
-          </Upload>
-        </Space>
-      ),
-    },
-  ];
-
-  const segmentedOptions = useMemo(
-    () =>
-      Object.entries(fileTypeLabels).map(([value, label]) => ({
-        value,
-        label,
-        icon: fileIcons[value as FileType],
-      })),
-    [],
-  );
+  const filesForSelectedType = files.filter((f) => f.file_type === selectedType);
 
   return (
-    <div className="max-w-5xl space-y-12">
-      {/* Upload Section */}
-      <div className="border border-gray-200 dark:border-gray-800 rounded-md p-6 space-y-6">
-        <Segmented
-          block
+    <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-700 rounded-md p-6 space-y-6 max-w-3xl">
+      <div className="flex flex-wrap gap-2 items-center">
+        <Title level={4} className="!m-0">
+          Manage
+        </Title>
+        <Select
           value={selectedType}
           onChange={(val) => setSelectedType(val as FileType)}
-          options={segmentedOptions}
-          className="!mb-2"
+          size="middle"
+          style={{ width: 'auto' }}
+          popupMatchSelectWidth={false}
+          options={Object.entries(fileTypeLabels).map(([value, label]) => ({
+            value,
+            label,
+          }))}
         />
-
-        <Upload.Dragger
-          accept=".txt,.pdf,.zip,.c,.cpp,.py,.java,.md,.tex"
-          showUploadList={false}
-          beforeUpload={handleUpload}
-          className="rounded border-gray-300 border-dashed p-6"
-        >
-          <p className="ant-upload-drag-icon">
-            <UploadOutlined />
-          </p>
-          <p className="text-sm text-gray-600">
-            Click or drag {fileTypeLabels[selectedType]} to upload
-          </p>
-        </Upload.Dragger>
+        <Title level={4} className="!m-0">
+          File
+        </Title>
       </div>
 
-      {/* Uploaded Files Table */}
-      {files.length > 0 && (
-        <div className="!mt-12">
-          <Title level={4} className="!mb-4">
-            Uploaded Files
-          </Title>
-          <div className="border border-gray-200 dark:border-gray-800 rounded-md overflow-hidden">
-            <Table
-              columns={columns}
-              dataSource={files}
-              rowKey="file_type"
-              pagination={false}
-              size="small"
-              className="!border-0"
-            />
-          </div>
+      <div className="!space-y-6">
+        <div>
+          <Upload.Dragger
+            accept=".txt,.pdf,.zip,.c,.cpp,.py,.java,.md,.tex"
+            showUploadList={false}
+            beforeUpload={handleUpload}
+            className="rounded border-gray-300 border-dashed p-6 dark:bg-black/10"
+          >
+            <p className="ant-upload-drag-icon">
+              <UploadOutlined />
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Click or drag {fileTypeLabels[selectedType]} here to upload
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Uploading a new file will overwrite the existing one (if any).
+            </p>
+          </Upload.Dragger>
         </div>
-      )}
+
+        <div>
+          {filesForSelectedType.length === 0 ? (
+            <Empty
+              description={
+                <div className="text-gray-700 dark:text-gray-300">
+                  No file uploaded for {fileTypeLabels[selectedType]}
+                </div>
+              }
+            />
+          ) : (
+            <List
+              bordered
+              itemLayout="horizontal"
+              dataSource={filesForSelectedType}
+              renderItem={(file) => (
+                <List.Item
+                  actions={[
+                    <Button
+                      key="download"
+                      size="small"
+                      icon={<DownloadOutlined />}
+                      onClick={() => handleDownload(file.id)}
+                    >
+                      Download
+                    </Button>,
+                  ]}
+                >
+                  <Tooltip title={file.filename}>
+                    <Text ellipsis style={{ maxWidth: 200 }}>
+                      {file.filename}
+                    </Text>
+                  </Tooltip>
+                </List.Item>
+              )}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 };

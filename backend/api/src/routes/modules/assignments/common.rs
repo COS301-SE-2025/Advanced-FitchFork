@@ -42,13 +42,38 @@ impl From<AssignmentModel> for AssignmentResponse {
     }
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct AssignmentRequest {
     pub name: String,
     pub description: Option<String>,
     pub assignment_type: String,
-    pub status: String,
     pub available_from: String,
     pub due_date: String,
+}
+
+#[derive(Deserialize)]
+pub struct BulkDeleteRequest {
+    pub assignment_ids: Vec<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BulkUpdateRequest {
+    pub assignment_ids: Vec<i64>,
+
+    // Optional fields to apply
+    pub status: Option<String>,
+    pub available_from: Option<String>,
+    pub due_date: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct BulkUpdateResult {
+    pub updated: usize,
+    pub failed: Vec<FailedUpdate>,
+}
+
+#[derive(Serialize)]
+pub struct FailedUpdate {
+    pub id: i64,
+    pub error: String,
 }

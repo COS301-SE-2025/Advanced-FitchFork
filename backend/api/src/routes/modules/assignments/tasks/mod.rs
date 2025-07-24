@@ -39,32 +39,32 @@ pub fn tasks_routes() -> Router {
     Router::new()
         .route(
             "/",
-            get(list_tasks).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
-                require_lecturer_or_admin(Path((assignment_id,)), req, next)
+            get(list_tasks).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
+                require_lecturer_or_admin(Path(params), req, next)
             })),
         )
         .route(
             "/",
-            post(create_task).layer(from_fn(|Path((assignment_id,)): Path<(i64,)>, req, next| {
-                require_lecturer_or_admin(Path((assignment_id,)), req, next)
+            post(create_task).layer(from_fn(|Path(params): Path<(i64, i64)>, req, next| {
+                require_lecturer_or_admin(Path(params), req, next)
             })),
         )
         .route(
             "/{task_id}",
-            get(get_task_details).layer(from_fn(|Path((assignment_id, _task_id)): Path<(i64, i64)>, req, next| {
-                require_lecturer_or_admin(Path((assignment_id,)), req, next)
+            get(get_task_details).layer(from_fn(|Path(params): Path<(i64, i64, i64)>, req, next| {
+                require_lecturer_or_admin(Path(params), req, next)
             })),
         )
         .route(
             "/{task_id}",
-            put(edit_task).layer(from_fn(|Path((assignment_id, _task_id)): Path<(i64, i64)>, req, next| {
-                require_lecturer_or_admin(Path((assignment_id,)), req, next)
+            put(edit_task).layer(from_fn(|Path(params): Path<(i64, i64, i64)>, req, next| {
+                require_lecturer_or_admin(Path(params), req, next)
             })),
         )
         .route(
             "/{task_id}",
-            delete(delete_task).layer(from_fn(|Path((assignment_id, _task_id)): Path<(i64, i64)>, req, next| {
-                require_lecturer_or_admin(Path((assignment_id,)), req, next)
+            delete(delete_task).layer(from_fn(|Path(params): Path<(i64, i64, i64)>, req, next| {
+                require_lecturer_or_admin(Path(params), req, next)
             })),
         )
 }

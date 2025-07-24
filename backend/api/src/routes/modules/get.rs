@@ -619,19 +619,31 @@ pub struct MyDetailsResponse {
     pub as_student: Vec<ModuleDetailsResponse>,
     pub as_tutor: Vec<ModuleDetailsResponse>,
     pub as_lecturer: Vec<ModuleDetailsResponse>,
+    pub as_assistant_lecturer: Vec<ModuleDetailsResponse>,
 }
 
-impl From<(Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsResponse {
-    fn from((as_student, as_tutor, as_lecturer): (Vec<Module>, Vec<Module>, Vec<Module>)) -> Self {
+impl From<(Vec<Module>, Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsResponse {
+    fn from(
+        (as_student, as_tutor, as_lecturer, as_assistant_lecturer): (
+            Vec<Module>,
+            Vec<Module>,
+            Vec<Module>,
+            Vec<Module>,
+        ),
+    ) -> Self {
         MyDetailsResponse {
             as_student: as_student.into_iter().map(ModuleDetailsResponse::from).collect(),
             as_tutor: as_tutor.into_iter().map(ModuleDetailsResponse::from).collect(),
             as_lecturer: as_lecturer.into_iter().map(ModuleDetailsResponse::from).collect(),
+            as_assistant_lecturer: as_assistant_lecturer
+                .into_iter()
+                .map(ModuleDetailsResponse::from)
+                .collect(),
         }
     }
 }
 
-/// GET /api/modules/my-details
+/// GET /api/modules/me
 ///
 /// Retrieves detailed information about the modules the authenticated user is assigned to.
 ///
@@ -649,6 +661,7 @@ impl From<(Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsResponse {
 /// - `as_student`: List of modules where the user is assigned as a student.
 /// - `as_tutor`: List of modules where the user is assigned as a tutor.
 /// - `as_lecturer`: List of modules where the user is assigned as a lecturer.
+/// - `as_assistant_lecturer`: List of modules where the user is assigned as an assistant lecturer.
 ///
 /// # Example Response
 ///
@@ -658,28 +671,13 @@ impl From<(Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsResponse {
 ///   "success": true,
 ///   "data": {
 ///     "as_student": [
-///       {
-///         "id": 1,
-///         "code": "CS101",
-///         "year": 2024,
-///         "description": "Introduction to Computer Science",
-///         "credits": 15,
-///         "created_at": "2024-01-15T10:00:00Z",
-///         "updated_at": "2024-01-15T10:00:00Z"
-///       }
+///       { "id": 1, "code": "CS101", "year": 2024, "description": "...", "credits": 15, "created_at": "...", "updated_at": "..." }
 ///     ],
 ///     "as_tutor": [
-///       {
-///         "id": 2,
-///         "code": "CS201",
-///         "year": 2024,
-///         "description": "Data Structures and Algorithms",
-///         "credits": 20,
-///         "created_at": "2024-01-15T10:00:00Z",
-///         "updated_at": "2024-01-15T10:00:00Z"
-///       }
+///       { "id": 2, "code": "CS201", "year": 2024, "description": "...", "credits": 20, "created_at": "...", "updated_at": "..." }
 ///     ],
-///     "as_lecturer": []
+///     "as_lecturer": [],
+///     "as_assistant_lecturer": []
 ///   },
 ///   "message": "My module details retrieved successfully"
 /// }
@@ -698,15 +696,16 @@ pub async fn get_my_details(
     let db: DatabaseConnection = connect().await;
     let user_id = claims.sub;
 
-    let (as_student, as_tutor, as_lecturer) = tokio::join!(
+    let (as_student, as_tutor, as_lecturer, as_assistant_lecturer) = tokio::join!(
         get_modules_by_user_and_role(&db, user_id, Role::Student),
         get_modules_by_user_and_role(&db, user_id, Role::Tutor),
         get_modules_by_user_and_role(&db, user_id, Role::Lecturer),
+        get_modules_by_user_and_role(&db, user_id, Role::AssistantLecturer),
     );
 
-    match (as_student, as_tutor, as_lecturer) {
-        (Ok(students), Ok(tutors), Ok(lecturers)) => {
-            let response = MyDetailsResponse::from((students, tutors, lecturers));
+    match (as_student, as_tutor, as_lecturer, as_assistant_lecturer) {
+        (Ok(students), Ok(tutors), Ok(lecturers), Ok(assistants)) => {
+            let response = MyDetailsResponse::from((students, tutors, lecturers, assistants));
             (
                 StatusCode::OK,
                 Json(ApiResponse::success(
@@ -723,6 +722,7 @@ pub async fn get_my_details(
         ),
     }
 }
+
 
 /// Helper to fetch modules by user_id and role using SeaORM relations
 async fn get_modules_by_user_and_role(
