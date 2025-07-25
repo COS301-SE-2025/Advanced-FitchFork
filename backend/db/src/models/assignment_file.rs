@@ -2,8 +2,8 @@
 
 use chrono::{DateTime, Utc};
 // use code_runner::{run_zip_files, ExecutionConfig};
-use sea_orm::entity::prelude::*;
 use sea_orm::ActiveValue::Set;
+use sea_orm::entity::prelude::*;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -59,6 +59,9 @@ pub enum FileType {
     #[strum(serialize = "config")]
     #[sea_orm(string_value = "config")]
     Config,
+    #[strum(serialize = "interpreter")]
+    #[sea_orm(string_value = "interpreter")]
+    Interpreter,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -103,7 +106,6 @@ impl Model {
     ) -> Result<Self, DbErr> {
         let now = Utc::now();
 
-        // Step 1: Delete existing file record of the same type (if any)
         use sea_orm::ColumnTrait;
         use sea_orm::EntityTrait;
         use sea_orm::QueryFilter;
@@ -122,7 +124,6 @@ impl Model {
             existing.delete(db).await?;
         }
 
-        // Step 2: Insert placeholder record with dummy path
         let partial = ActiveModel {
             assignment_id: Set(assignment_id),
             filename: Set(filename.to_string()),
@@ -135,7 +136,6 @@ impl Model {
 
         let inserted: Model = partial.insert(db).await?;
 
-        // Step 3: Build deterministic file path (e.g., 42.json)
         let ext = PathBuf::from(filename)
             .extension()
             .map(|e| e.to_string_lossy().to_string());
@@ -159,7 +159,6 @@ impl Model {
         fs::write(&file_path, bytes)
             .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
 
-        // Step 4: Update DB row with the actual file path
         let mut model: ActiveModel = inserted.into();
         model.path = Set(relative_path);
         model.updated_at = Set(Utc::now());
