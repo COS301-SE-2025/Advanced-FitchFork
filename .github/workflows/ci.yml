@@ -23,14 +23,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Build Docker image
-        run: docker build -t universal-runner:latest .
-
-      - name: Wait for service readiness
+      - name: Set up Docker Compose
         run: |
-          while ! curl --silent --fail localhost:12345; do
-            echo "Waiting for universal service…"
-            sleep 1
+          sudo apt-get update
+          sudo apt-get install -y docker-compose
+
+      - name: Build and start universal service
+        run: docker-compose up -d universal
+
+      - name: Wait until Docker container is healthy
+        run: |
+          until curl --silent --fail localhost:12345; do
+            echo "waiting…"; sleep 1
           done
 
       - name: Cache Cargo registry
@@ -58,3 +62,7 @@ jobs:
 
       - name: Run backend tests
         run: cargo test --workspace --all-features
+
+      - name: Tear down containers
+        if: always()
+        run: docker-compose down
