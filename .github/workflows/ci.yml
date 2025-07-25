@@ -13,29 +13,10 @@ jobs:
     defaults:
       run:
         working-directory: backend
-    services:
-      universal:
-        image: universal-runner:latest
-        ports:
-          - 12345:12345
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-
-      - name: Set up Docker Compose
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y docker-compose
-
-      - name: Build and start universal service
-        run: docker-compose up -d universal
-
-      - name: Wait until Docker container is healthy
-        run: |
-          until curl --silent --fail localhost:12345; do
-            echo "waiting…"; sleep 1
-          done
 
       - name: Cache Cargo registry
         uses: actions/cache@v3
@@ -60,9 +41,8 @@ jobs:
       - name: Copy .env file
         run: cp .env.example .env
 
+      - name: Build universal-runner image
+        run: docker build -t universal-runner:latest .
+
       - name: Run backend tests
         run: cargo test --workspace --all-features
-
-      - name: Tear down containers
-        if: always()
-        run: docker-compose down
