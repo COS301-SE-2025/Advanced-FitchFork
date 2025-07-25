@@ -11,9 +11,10 @@ interface UserModuleRole extends Module {
 }
 
 interface ModulesByRole {
-  Lecturer: Module[];
-  Tutor: Module[];
-  Student: Module[];
+  lecturer: Module[];
+  assistant_lecturer: Module[];
+  tutor: Module[];
+  student: Module[];
 }
 
 interface AuthContextType {
@@ -36,8 +37,11 @@ interface AuthContextType {
   getModuleRole: (moduleId: number) => ModuleRole | null;
   hasModuleRole: (moduleId: number, role: ModuleRole) => boolean;
   isLecturer: (moduleId: number) => boolean;
+  isAssistantLecturer: (moduleId: number) => boolean;
   isTutor: (moduleId: number) => boolean;
   isStudent: (moduleId: number) => boolean;
+
+  print: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -46,9 +50,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [modules, setModules] = useState<UserModuleRole[]>([]);
   const [modulesByRole, setModulesByRole] = useState<ModulesByRole>({
-    Lecturer: [],
-    Tutor: [],
-    Student: [],
+    lecturer: [],
+    assistant_lecturer: [],
+    tutor: [],
+    student: [],
   });
   const [loading, setLoading] = useState(true);
   const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
@@ -66,11 +71,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           setUser(session);
           setProfilePictureUrl(session.profilePictureUrl);
-          setModules(session.modules.Flat);
+          setModules(session.modules.flat);
           setModulesByRole({
-            Lecturer: session.modules.Lecturer,
-            Tutor: session.modules.Tutor,
-            Student: session.modules.Student,
+            lecturer: session.modules.lecturer,
+            assistant_lecturer: session.modules.assistant_lecturer,
+            tutor: session.modules.tutor,
+            student: session.modules.student,
           });
         } catch {
           logout();
@@ -97,11 +103,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (session) {
         setUser(session);
         setProfilePictureUrl(session.profilePictureUrl);
-        setModules(session.modules.Flat);
+        setModules(session.modules.flat);
         setModulesByRole({
-          Lecturer: session.modules.Lecturer,
-          Tutor: session.modules.Tutor,
-          Student: session.modules.Student,
+          lecturer: session.modules.lecturer,
+          assistant_lecturer: session.modules.assistant_lecturer,
+          tutor: session.modules.tutor,
+          student: session.modules.student,
         });
       }
 
@@ -135,7 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('auth');
     setUser(null);
     setModules([]);
-    setModulesByRole({ Lecturer: [], Tutor: [], Student: [] });
+    setModulesByRole({ lecturer: [], assistant_lecturer: [], tutor: [], student: [] });
     window.location.href = '/login';
   };
 
@@ -162,9 +169,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return getModuleRole(moduleId) === role;
   };
 
-  const isLecturer = (moduleId: number): boolean => getModuleRole(moduleId) === 'Lecturer';
-  const isTutor = (moduleId: number): boolean => getModuleRole(moduleId) === 'Tutor';
-  const isStudent = (moduleId: number): boolean => getModuleRole(moduleId) === 'Student';
+  const isLecturer = (moduleId: number): boolean => getModuleRole(moduleId) === 'lecturer';
+  const isAssistantLecturer = (moduleId: number): boolean =>
+    getModuleRole(moduleId) === 'assistant_lecturer';
+  const isTutor = (moduleId: number): boolean => getModuleRole(moduleId) === 'tutor';
+  const isStudent = (moduleId: number): boolean => getModuleRole(moduleId) === 'student';
+
+  const print = () => {
+    console.group('%c[AuthContext State]', 'color: #4CAF50; font-weight: bold;');
+
+    console.log('%cUser:', 'color: #2196F3; font-weight: bold;', user);
+    console.log('%cProfile Picture URL:', 'color: #2196F3;', profilePictureUrl);
+    console.log('%cLoading:', 'color: #2196F3;', loading);
+    console.log('%cIs Admin:', 'color: #2196F3;', isAdmin);
+    console.log('%cIs User:', 'color: #2196F3;', isUser);
+
+    console.groupCollapsed('%cModules (Flat):', 'color: #FF9800; font-weight: bold;');
+    console.table(modules);
+    console.groupEnd();
+
+    console.groupCollapsed('%cModules By Role:', 'color: #FF9800; font-weight: bold;');
+    console.log('Lecturer:', modulesByRole.lecturer);
+    console.log('Assistant Lecturer:', modulesByRole.assistant_lecturer);
+    console.log('Tutor:', modulesByRole.tutor);
+    console.log('Student:', modulesByRole.student);
+    console.groupEnd();
+
+    console.groupEnd();
+  };
 
   return (
     <AuthContext.Provider
@@ -184,8 +216,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         getModuleRole,
         hasModuleRole,
         isLecturer,
+        isAssistantLecturer,
         isTutor,
         isStudent,
+        print,
       }}
     >
       {children}

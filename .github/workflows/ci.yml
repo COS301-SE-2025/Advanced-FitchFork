@@ -13,10 +13,25 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      universal:
+        image: universal-runner:latest
+        ports:
+          - 12345:12345
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+
+      - name: Build Docker image
+        run: docker build -t universal-runner:latest .
+
+      - name: Wait for service readiness
+        run: |
+          while ! curl --silent --fail localhost:12345; do
+            echo "Waiting for universal service…"
+            sleep 1
+          done
 
       - name: Cache Cargo registry
         uses: actions/cache@v3

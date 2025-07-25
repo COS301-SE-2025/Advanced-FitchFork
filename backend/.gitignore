@@ -10,5 +10,3 @@
 .env
 
 *.db
-
-Cargo.lock

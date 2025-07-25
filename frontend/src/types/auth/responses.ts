@@ -1,7 +1,7 @@
 import type { AuthUser } from ".";
 import type { ApiResponse } from "@/types/common";
 import type { User } from "@/types/users";
-import type { Module } from "@/types/modules"
+import type { Module, ModuleRole } from "@/types/modules"
 
 // ─────────────────────────────────────────────────────────────
 // GET Response Types
@@ -9,6 +9,8 @@ import type { Module } from "@/types/modules"
 
 export type GetAuthenticatedUserResponse = ApiResponse<{ modules: Module[] } & User>;
 export type GetHasRoleResponse = ApiResponse<{ has_role: boolean }>;
+export type GetModuleRoleResponse = ApiResponse<{ role: ModuleRole | null }>;
+
 
 // ─────────────────────────────────────────────────────────────
 // POST Response Types

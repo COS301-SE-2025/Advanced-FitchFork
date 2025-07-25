@@ -6,7 +6,7 @@ mod tests {
     use serde_json::{json, Value};
     use api::auth::generate_jwt;
     use dotenvy;
-    use chrono::{Utc, TimeZone, Duration};
+    use chrono::{Duration, Utc};
     use std::{fs, path::PathBuf};
     use crate::test_helpers::make_app;
     use serial_test::serial;
@@ -39,9 +39,8 @@ mod tests {
             "Assignment 1",
             Some("Desc 1"),
             db::models::assignment::AssignmentType::Assignment,
-            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
-            Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-            Some(db::models::assignment::Status::Setup),
+            Utc::now(),
+            Utc::now() + Duration::days(30)
         ).await.unwrap();
 
         let sub1 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 1, "ontime.txt", b"ontime").await.unwrap();
@@ -137,7 +136,8 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        assert_eq!(json["data"].as_array().unwrap().len(), 3);
+        let submissions = &json["data"]["submissions"];
+        assert_eq!(submissions.as_array().unwrap().len(), 3);
     }
 
     #[tokio::test]

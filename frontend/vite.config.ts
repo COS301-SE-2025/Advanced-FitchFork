@@ -13,6 +13,7 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
     },
+    dedupe: ['@emotion/react', '@emotion/styled'],
   },
   build: {
     outDir: '/var/www/fitchfork.co.za',

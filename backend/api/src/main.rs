@@ -43,8 +43,8 @@ async fn main() {
     // Setup Axum app
     let app = Router::new()
         .nest("/api", routes(db.clone()))
-        .layer(cors)
         .layer(from_fn(log_request))
+        .layer(cors)
         .with_state(db.clone())
         .layer(from_fn_with_state(db.clone(), validate_known_ids));
 
@@ -56,7 +56,7 @@ async fn main() {
         .await
         .expect("Failed to bind");
 
-    axum::serve(listener, app)
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
         .await
         .expect("Server crashed");
 }

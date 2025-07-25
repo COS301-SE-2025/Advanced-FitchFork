@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::{Model as ModuleModel, ActiveModel as ModuleActiveModel}, assignment::{Model as AssignmentModel, AssignmentType, Status}, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::{Model as ModuleModel, ActiveModel as ModuleActiveModel}, assignment::{Model as AssignmentModel, AssignmentType}, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::json;
@@ -52,7 +52,6 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-            Some(Status::Setup),
         ).await.unwrap();
         let a2 = AssignmentModel::create(
             db,
@@ -62,7 +61,6 @@ mod tests {
             AssignmentType::Practical,
             Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 2, 28, 23, 59, 59).unwrap(),
-            Some(Status::Open),
         ).await.unwrap();
         let a3 = AssignmentModel::create(
             db,
@@ -72,7 +70,6 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 3, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 3, 31, 23, 59, 59).unwrap(),
-            Some(Status::Closed),
         ).await.unwrap();
 
         TestData {
@@ -88,42 +85,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_put_assignment_success_as_lecturer() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
-
-        let app = make_app(db.clone());
-        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
-        let body = json!({
-            "name": "Updated Assignment",
-            "description": "Updated description",
-            "assignment_type": "assignment",
-            "status": "open",
-            "available_from": "2024-01-05T00:00:00Z",
-            "due_date": "2024-01-25T23:59:59Z"
-        });
-        let req = Request::builder()
-            .method("PUT")
-            .uri(&uri)
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", "application/json")
-            .body(Body::from(body.to_string()))
-            .unwrap();
-
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["success"], true);
-        assert_eq!(json["data"]["name"], "Updated Assignment");
-        assert_eq!(json["data"]["status"], "open");
-    }
-
-    #[tokio::test]
-    async fn test_put_assignment_success_as_admin() {
+    async fn test_put_assignment_shouldnt_update_status() {
         dotenvy::dotenv().expect("Failed to load .env");
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
@@ -154,7 +116,7 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["name"], "Admin Updated");
-        assert_eq!(json["data"]["status"], "ready");
+        assert_eq!(json["data"]["status"], "setup");
     }
 
     #[tokio::test]
@@ -313,40 +275,6 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert!(json["message"].as_str().unwrap().contains("assignment_type"));
-    }
-
-    #[tokio::test]
-    async fn test_put_assignment_invalid_status() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
-
-        let app = make_app(db.clone());
-        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
-        let body = json!({
-            "name": "Invalid Status",
-            "description": "Invalid status",
-            "assignment_type": "assignment",
-            "status": "not_a_status",
-            "available_from": "2024-01-01T00:00:00Z",
-            "due_date": "2024-01-31T23:59:59Z"
-        });
-        let req = Request::builder()
-            .method("PUT")
-            .uri(&uri)
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", "application/json")
-            .body(Body::from(body.to_string()))
-            .unwrap();
-
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("status"));
     }
 
     #[tokio::test]

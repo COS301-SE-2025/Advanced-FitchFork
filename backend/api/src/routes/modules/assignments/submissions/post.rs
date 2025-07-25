@@ -4,7 +4,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde::Serialize;
 use db::models::{
     assignment_submission::{self, Model as AssignmentSubmissionModel},
     assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
@@ -19,59 +18,9 @@ use code_runner;
 use util::mark_allocator::mark_allocator::load_allocator;
 use marker::MarkingJob;
 use md5;
-
-/// Summary of marks for a submission.
-#[derive(Debug, Serialize)]
-pub struct MarkSummary {
-    pub earned: i64,
-    pub total: i64,
-}
-
-/// Summary of code complexity metrics.
-#[derive(Debug, Serialize)]
-pub struct CodeComplexitySummary {
-    pub earned: i64,
-    pub total: i64,
-}
-
-/// Code complexity details for a submission.
-#[derive(Debug, Serialize)]
-pub struct CodeComplexity {
-    pub summary: CodeComplexitySummary,
-    pub metrics: Vec<serde_json::Value>,
-}
-
-/// The full response returned after a submission is processed and graded.
-///
-/// Fields:
-/// - `id`: Submission DB ID
-/// - `attempt`: Attempt number for this user/assignment
-/// - `filename`: Name of the uploaded file
-/// - `hash`: MD5 hash of the uploaded file
-/// - `created_at`, `updated_at`: Timestamps
-/// - `mark`: Earned/total marks
-/// - `is_practice`: Whether this was a practice submission
-/// - `is_late`: Whether the submission was after the due date
-/// - `tasks`: Per-task grading details
-/// - `code_coverage`: Optional code coverage report (if available)
-/// - `code_complexity`: Optional code complexity report (if available)
-#[derive(Debug, Serialize)]
-pub struct SubmissionDetailResponse {
-    pub id: i64,
-    pub attempt: i64,
-    pub filename: String,
-    pub hash: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub mark: MarkSummary,
-    pub is_practice: bool,
-    pub is_late: bool,
-    pub tasks: Vec<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_coverage: Option<Vec<serde_json::Value>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_complexity: Option<CodeComplexity>,
-}
+use super::common::{
+    MarkSummary, CodeComplexitySummary, CodeComplexity, SubmissionDetailResponse,
+};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions
 ///

@@ -10,7 +10,7 @@ use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleRespo
 ///
 /// ### Access Control
 /// This endpoint is accessible to:
-/// - Admin users (`claims.admin == true`)
+/// - Admin users
 /// - Users assigned to the module (as Lecturer, Tutor, or Student)
 ///
 /// ### Path Parameters

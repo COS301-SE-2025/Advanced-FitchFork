@@ -24,9 +24,9 @@ export default function NotFound() {
           </Text>
         }
         extra={
-          <Link to="/home">
+          <Link to="/dashboard">
             <Button type="primary" size="large">
-              Back to Home
+              Back to Dashboard
             </Button>
           </Link>
         }

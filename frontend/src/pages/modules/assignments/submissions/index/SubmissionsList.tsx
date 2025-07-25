@@ -1,16 +1,25 @@
-import { Table, Typography, Tag, Button, Dropdown, Checkbox, message, Modal, Upload } from 'antd';
-import { MoreOutlined, EyeOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { Tag } from 'antd';
+import { DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import type { ColumnsType } from 'antd/es/table';
+import { useEffect, useRef } from 'react';
 import dayjs from 'dayjs';
+
+import {
+  EntityList,
+  type EntityListHandle,
+  type EntityColumnType,
+  type EntityAction,
+  type EntityListProps,
+} from '@/components/EntityList';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
-import { useEffect, useState } from 'react';
-import { submitAssignment } from '@/services/modules/assignments/submissions/post';
+import { useAuth } from '@/context/AuthContext';
 import { getSubmissions } from '@/services/modules/assignments/submissions';
-import type { Submission } from '@/types/modules/assignments/submissions';
+import EventBus from '@/utils/EventBus';
 
-const { Title, Text } = Typography;
+import type { Submission } from '@/types/modules/assignments/submissions';
+import SubmissionCard from '@/components/submissions/SubmissionCard';
+import { message } from '@/utils/message';
 
 const getMarkColor = (mark: number): string => {
   if (mark >= 75) return 'green';
@@ -24,82 +33,95 @@ type StudentSubmission = Submission & {
   percentageMark?: number;
 };
 
-const SubmissionsList = () => {
+export default function SubmissionsList() {
   const navigate = useNavigate();
   const module = useModule();
   const { assignment } = useAssignment();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isPractice, setIsPractice] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
-  const [loading, setLoading] = useState(false);
+  const auth = useAuth();
 
-  const fetchSubmissions = async () => {
-    if (!module.id || !assignment.id) return;
-    setLoading(true);
-    try {
-      const query = new URLSearchParams({ page: '1', per_page: '50' });
-      const res = await getSubmissions(module.id, assignment.id, query);
-      let raw: Submission[] = [];
-
-      if (Array.isArray(res.data)) {
-        raw = res.data;
-      } else if ('submissions' in res.data) {
-        raw = res.data.submissions;
-      }
-
-      const items = raw.map(
-        (s): StudentSubmission => ({
-          ...s,
-          status: 'mark' in s ? 'Graded' : 'Pending',
-          percentageMark:
-            'mark' in s && s.mark && typeof s.mark === 'object' && 'earned' in s.mark
-              ? Math.round(((s.mark as any).earned / (s.mark as any).total) * 100)
-              : undefined,
-          path: `/api/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}/file`,
-        }),
-      );
-
-      setSubmissions(items);
-    } catch (err) {
-      message.error('Failed to load submissions');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const entityListRef = useRef<EntityListHandle>(null);
 
   useEffect(() => {
-    fetchSubmissions();
-  }, [module.id, assignment.id]);
+    const listener = () => {
+      entityListRef.current?.refresh();
+    };
+    EventBus.on('submission:updated', listener);
 
-  const columns: ColumnsType<StudentSubmission> = [
+    return () => {
+      EventBus.off('submission:updated', listener);
+    };
+  }, []);
+
+  const fetchItems = async ({
+    page,
+    per_page,
+    query,
+    filters,
+    sort,
+  }: {
+    page: number;
+    per_page: number;
+    query?: string;
+    filters: Record<string, string[]>;
+    sort: { field: string; order: 'ascend' | 'descend' }[];
+  }) => {
+    if (!module.id || !assignment.id) {
+      return { items: [], total: 0 };
+    }
+
+    const res = await getSubmissions(module.id, assignment.id, {
+      page,
+      per_page,
+      query,
+      sort,
+      username: filters['user.username']?.[0],
+      status: filters['status']?.[0],
+    });
+
+    const { submissions, total } = res.data;
+
+    const items: StudentSubmission[] = submissions.map(
+      (s): StudentSubmission => ({
+        ...s,
+        status: s.mark ? 'Graded' : 'Pending',
+        percentageMark:
+          s.mark && typeof s.mark === 'object' && 'earned' in s.mark
+            ? Math.round(((s.mark as any).earned / (s.mark as any).total) * 100)
+            : undefined,
+        path: `/api/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}/file`,
+      }),
+    );
+
+    return { items, total };
+  };
+
+  const columns: EntityColumnType<StudentSubmission>[] = [
+    { title: 'ID', dataIndex: 'id', key: 'id', defaultHidden: true },
+    {
+      title: 'Username',
+      dataIndex: ['user', 'username'],
+      key: 'user.username',
+      sorter: { multiple: 1 },
+    },
     {
       title: 'Attempt',
       dataIndex: 'attempt',
       key: 'attempt',
+      sorter: { multiple: 2 },
       render: (attempt) => <Tag color="blue">#{attempt}</Tag>,
     },
+    { title: 'Filename', dataIndex: 'filename', key: 'filename', defaultHidden: true },
     {
-      title: 'Filename',
-      dataIndex: 'filename',
-      key: 'filename',
-    },
-    {
-      title: 'Submitted At',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      render: (value) => dayjs(value).format('YYYY-MM-DD HH:mm'),
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status) => <Tag color={status === 'Graded' ? 'green' : 'default'}>{status}</Tag>,
+      title: 'Is Practice',
+      dataIndex: 'is_practice',
+      key: 'is_practice',
+      defaultHidden: true,
+      render: (val) => (val ? <Tag color="gold">Yes</Tag> : <Tag>No</Tag>),
     },
     {
       title: 'Mark (%)',
       key: 'percentageMark',
+      sorter: { multiple: 3 },
       render: (_, record) =>
         record.status === 'Graded' && typeof record.percentageMark === 'number' ? (
           <Tag color={getMarkColor(record.percentageMark)}>{record.percentageMark}%</Tag>
@@ -108,120 +130,92 @@ const SubmissionsList = () => {
         ),
     },
     {
-      title: 'Actions',
-      key: 'actions',
-      align: 'right',
-      render: (_, record) => ({
-        children: (
-          <Dropdown
-            trigger={['click']}
-            menu={{
-              items: [
-                {
-                  key: 'view',
-                  icon: <EyeOutlined />,
-                  label: 'View',
-                },
-                {
-                  key: 'download',
-                  icon: <DownloadOutlined />,
-                  label: 'Download',
-                },
-              ],
-              onClick: ({ key, domEvent }) => {
-                domEvent.stopPropagation();
-                if (key === 'view') {
-                  navigate(
-                    `/modules/${module.id}/assignments/${assignment.id}/submissions/${record.id}`,
-                  );
-                } else if (key === 'download') {
-                  window.open(record.path, '_blank');
-                }
-              },
-            }}
-          >
-            <Button icon={<MoreOutlined />} onClick={(e) => e.stopPropagation()} />
-          </Dropdown>
-        ),
-      }),
+      title: 'Is Late',
+      dataIndex: 'is_late',
+      key: 'is_late',
+      defaultHidden: true,
+      render: (val) => (val ? <Tag color="red">Yes</Tag> : <Tag>On Time</Tag>),
+    },
+    {
+      title: 'Created At',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      defaultHidden: true,
+      render: (value) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+    },
+    {
+      title: 'Updated At',
+      dataIndex: 'updated_at',
+      key: 'updated_at',
+      defaultHidden: true,
+      render: (value) => dayjs(value).format('YYYY-MM-DD HH:mm'),
     },
   ];
 
+  const canManageSubmissions = auth.isLecturer(module.id) || auth.isAdmin;
+
+  const actions: EntityListProps<StudentSubmission>['actions'] = canManageSubmissions
+    ? {
+        entity: (entity: StudentSubmission): EntityAction<StudentSubmission>[] => [
+          {
+            key: 'delete',
+            label: 'Delete',
+            icon: <DeleteOutlined />,
+            handler: ({ refresh }) => {
+              message.success(`Deleted submission ${entity.id}`);
+              refresh();
+            },
+          },
+          {
+            key: 'remark',
+            label: 'Re-mark',
+            icon: <ReloadOutlined />,
+            handler: ({ refresh }) => {
+              message.success(`Re-marked submission ${entity.id}`);
+              refresh();
+            },
+          },
+        ],
+        bulk: [
+          {
+            key: 'bulk-delete',
+            label: 'Bulk Delete',
+            icon: <DeleteOutlined />,
+            handler: ({ selected, refresh }) => {
+              message.success(`Deleted ${selected?.length || 0} submissions`);
+              refresh();
+            },
+          },
+          {
+            key: 'bulk-remark',
+            label: 'Bulk Re-mark',
+            icon: <ReloadOutlined />,
+            handler: ({ selected, refresh }) => {
+              message.success(`Re-marked ${selected?.length || 0} submissions`);
+              refresh();
+            },
+          },
+        ],
+      }
+    : undefined;
+
   return (
-    <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <Title level={4} className="mb-0">
-            Your Submissions
-          </Title>
-          <Text className="text-gray-500 dark:text-gray-400">
-            Below are your attempts for this assignment.
-          </Text>
-        </div>
-        <Button type="primary" onClick={() => setModalOpen(true)}>
-          New Submission
-        </Button>
-      </div>
-
-      <Table<StudentSubmission>
+    <div>
+      <EntityList<StudentSubmission>
+        ref={entityListRef}
+        name="Submissions"
+        fetchItems={fetchItems}
         columns={columns}
-        dataSource={submissions}
-        rowKey="id"
-        pagination={{ pageSize: 5 }}
-        loading={loading}
-        className="border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
-        onRow={(record) => ({
-          onClick: () =>
-            navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${record.id}`),
-        })}
+        getRowKey={(item) => item.id}
+        onRowClick={(item) =>
+          navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${item.id}`)
+        }
+        columnToggleEnabled
+        actions={actions}
+        renderGridItem={(item, itemActions) => (
+          <SubmissionCard submission={item} actions={itemActions} />
+        )}
       />
-
-      <Modal
-        title="Submit Assignment"
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onOk={async () => {
-          if (!selectedFile) {
-            message.error('Please select a file to submit.');
-            return;
-          }
-          try {
-            setUploading(true);
-            await submitAssignment(module.id, assignment.id, selectedFile, isPractice);
-            message.success('Submission successful', 3);
-            setModalOpen(false);
-            setSelectedFile(null);
-            setIsPractice(false);
-            await fetchSubmissions(); // <- re-fetch submissions after success
-          } catch (err) {
-            message.error('Submission failed');
-          } finally {
-            setUploading(false);
-          }
-        }}
-        okButtonProps={{ loading: uploading }}
-        okText="Submit"
-      >
-        <Upload
-          maxCount={1}
-          beforeUpload={(file) => {
-            setSelectedFile(file);
-            return false;
-          }}
-          accept=".zip,.tar,.gz,.tgz"
-        >
-          <Button icon={<UploadOutlined />}>Click to select file</Button>
-        </Upload>
-        <Checkbox
-          checked={isPractice}
-          onChange={(e) => setIsPractice(e.target.checked)}
-          style={{ marginTop: 16 }}
-        >
-          This is a practice submission
-        </Checkbox>
-      </Modal>
     </div>
   );
-};
-
-export default SubmissionsList;
+}

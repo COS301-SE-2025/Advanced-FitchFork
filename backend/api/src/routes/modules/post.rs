@@ -5,63 +5,11 @@ use axum::{
     Json,
 };
 use chrono::{Datelike, Utc};
-use serde::{Deserialize, Serialize};
 use validator::Validate;
 use db::models::module::{Model as Module};
 use crate::response::ApiResponse;
 use sea_orm::DatabaseConnection;
-
-lazy_static::lazy_static! {
-    static ref MODULE_CODE_REGEX: regex::Regex = regex::Regex::new("^[A-Z]{3}\\d{3}$").unwrap();
-}
-
-#[derive(Debug, Deserialize, Validate)]
-pub struct CreateModuleRequest {
-    #[validate(regex(
-        path = &*MODULE_CODE_REGEX,
-        message = "Module code must be in format ABC123"
-    ))]
-    pub code: String,
-
-    #[validate(range(min = 2024, message = "Year must be current year or later"))]
-    pub year: i32,
-
-    #[validate(length(max = 1000, message = "Description must be at most 1000 characters"))]
-    pub description: Option<String>,
-
-    #[validate(range(min = 1, message = "Credits must be a positive number"))]
-    pub credits: i32,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ConflictData {
-    pub already_assigned: Vec<i32>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ModuleResponse {
-    pub id: i64,
-    pub code: String,
-    pub year: i32,
-    pub description: Option<String>,
-    pub credits: i32,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-impl From<Module> for ModuleResponse {
-    fn from(module: Module) -> Self {
-        Self {
-            id: module.id,
-            code: module.code,
-            year: module.year,
-            description: module.description,
-            credits: module.credits,
-            created_at: module.created_at.to_rfc3339(),
-            updated_at: module.updated_at.to_rfc3339(),
-        }
-    }
-}
+use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
 
 /// POST /api/modules
 ///
@@ -135,7 +83,7 @@ impl From<Module> for ModuleResponse {
 /// ```
 pub async fn create(
     State(db): State<DatabaseConnection>,
-    Json(req): Json<CreateModuleRequest>
+    Json(req): Json<ModuleRequest>
 ) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);

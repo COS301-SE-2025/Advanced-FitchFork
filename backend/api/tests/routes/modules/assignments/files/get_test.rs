@@ -35,7 +35,6 @@ mod tests {
             db::models::assignment::AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-            Some(db::models::assignment::Status::Setup),
         ).await.unwrap();
         let empty_assignment = AssignmentModel::create(
             &db,
@@ -45,7 +44,6 @@ mod tests {
             db::models::assignment::AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 2, 28, 23, 59, 59).unwrap(),
-            Some(db::models::assignment::Status::Setup),
         ).await.unwrap();
         let file = AssignmentFileModel::save_file(
             db,

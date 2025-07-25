@@ -15,7 +15,7 @@ mod tests {
         models::{
             module::Model as ModuleModel, user::Model as UserModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
-            assignment::{Model as AssignmentModel, AssignmentType, Status},
+            assignment::{Model as AssignmentModel, AssignmentType},
             assignment_task::Model as TaskModel,
             assignment_submission::Model as SubmissionModel,
             assignment_file::{Model as FileModel, FileType},
@@ -412,7 +412,7 @@ mod tests {
         async fn fails_when_assignment_not_in_module() {
             let ctx = setup().await;
             let other = ModuleModel::create(&ctx.db, "OTHER", 2025, None, 1).await.unwrap();
-            let assignment = AssignmentModel::create(&ctx.db, other.id, "A1", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let assignment = AssignmentModel::create(&ctx.db, other.id, "A1", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
             let path = "/modules/{module_id}/assignments/{assignment_id}";
             let app = create_router(ctx.db.clone(), path);
             let uri = format!("/modules/{}/assignments/{}", ctx.module_id, assignment.id);
@@ -423,7 +423,7 @@ mod tests {
         #[tokio::test]
         async fn succeeds_for_assignment_in_module() {
             let ctx = setup().await;
-            let assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A2", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A2", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
             let path = "/modules/{module_id}/assignments/{assignment_id}";
             let app = create_router(ctx.db.clone(), path);
             let uri = format!("/modules/{}/assignments/{}", ctx.module_id, assignment.id);
@@ -434,7 +434,7 @@ mod tests {
         #[tokio::test]
         async fn succeeds_for_task_hierarchy() {
             let ctx = setup().await;
-            let assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A3", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A3", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
             let task = TaskModel::create(&ctx.db, assignment.id, 1, "T1", "echo").await.unwrap();
             let path = "/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}";
             let app = create_router(ctx.db.clone(), path);
@@ -446,8 +446,8 @@ mod tests {
         #[tokio::test]
         async fn fails_for_task_not_in_assignment() {
             let ctx = setup().await;
-            let assignment1 = AssignmentModel::create(&ctx.db, ctx.module_id, "A4", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
-            let assignment2 = AssignmentModel::create(&ctx.db, ctx.module_id, "A5", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let assignment1 = AssignmentModel::create(&ctx.db, ctx.module_id, "A4", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
+            let assignment2 = AssignmentModel::create(&ctx.db, ctx.module_id, "A5", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
             let task = TaskModel::create(&ctx.db, assignment2.id, 1, "T2", "echo").await.unwrap();
             let path = "/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}";
             let app = create_router(ctx.db.clone(), path);
@@ -459,7 +459,7 @@ mod tests {
         #[tokio::test]
         async fn succeeds_for_submission_and_file_hierarchy() {
             let ctx = setup().await;
-            let assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A6", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A6", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
             let submission = SubmissionModel::save_file(&ctx.db, assignment.id, 1, 1, "f.txt", b"test").await.unwrap();
             let file = FileModel::save_file(&ctx.db, assignment.id, ctx.module_id, FileType::Spec, "f.txt", b"test").await.unwrap();
 
@@ -477,7 +477,7 @@ mod tests {
         #[tokio::test]
         async fn fails_for_submission_not_in_assignment() {
             let ctx = setup().await;
-            let other_assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A7", None, AssignmentType::Assignment, Utc::now(), Utc::now(), Some(Status::Setup)).await.unwrap();
+            let other_assignment = AssignmentModel::create(&ctx.db, ctx.module_id, "A7", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
             let submission = SubmissionModel::save_file(&ctx.db, other_assignment.id, 1, 1, "f.txt", b"test").await.unwrap();
             let path = "/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}";
             let app = create_router(ctx.db.clone(), path);

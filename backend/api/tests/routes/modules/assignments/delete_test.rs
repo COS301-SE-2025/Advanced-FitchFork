@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::{Model as ModuleModel, ActiveModel as ModuleActiveModel}, assignment::{Model as AssignmentModel, AssignmentType, Status}, user_module_role::{Model as UserModuleRoleModel, Role}, assignment_file::{Model as AssignmentFileModel, FileType}, assignment_task::Model as AssignmentTaskModel, assignment_memo_output::Model as AssignmentMemoOutputModel, assignment_submission::Model as AssignmentSubmissionModel}};
+    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::{Model as ModuleModel, ActiveModel as ModuleActiveModel}, assignment::{Model as AssignmentModel, AssignmentType}, user_module_role::{Model as UserModuleRoleModel, Role}, assignment_file::{Model as AssignmentFileModel, FileType}, assignment_task::Model as AssignmentTaskModel, assignment_memo_output::Model as AssignmentMemoOutputModel, assignment_submission::Model as AssignmentSubmissionModel}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::Value;
@@ -56,7 +56,6 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-            Some(Status::Setup),
         ).await.unwrap();
         let a2 = AssignmentModel::create(
             db,
@@ -66,7 +65,6 @@ mod tests {
             AssignmentType::Practical,
             Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 2, 28, 23, 59, 59).unwrap(),
-            Some(Status::Open),
         ).await.unwrap();
         let a3 = AssignmentModel::create(
             db,
@@ -76,7 +74,6 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 3, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 3, 31, 23, 59, 59).unwrap(),
-            Some(Status::Closed),
         ).await.unwrap();
         let file = AssignmentFileModel::save_file(db, a1.id, module.id, FileType::Spec, "spec.txt", b"spec").await.unwrap();
         let task = AssignmentTaskModel::create(db, a1.id, 1, "Task 1", "echo Hello").await.unwrap();

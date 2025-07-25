@@ -21,14 +21,21 @@ use db::models::{
 #[derive(serde::Serialize, Default)]
 pub struct Empty;
 
-/// Helper to extract and validate user from request extensions
-fn get_authenticated_user(req: &Request<Body>) -> Result<&AuthUser, (StatusCode, Json<ApiResponse<Empty>>)> {
-    req.extensions()
-        .get::<AuthUser>()
-        .ok_or((
+/// Helper to extract, validate user from request extensions and insert the back into the request
+async fn extract_and_insert_authuser(
+    mut req: Request<Body>
+) -> Result<(Request<Body>, AuthUser), (StatusCode, Json<ApiResponse<Empty>>)> {
+    let (mut parts, body) = req.into_parts();
+    let user = AuthUser::from_request_parts(&mut parts, &())
+        .await
+        .map_err(|_| (
             StatusCode::UNAUTHORIZED,
             Json(ApiResponse::error("Authentication required"))
-        ))
+        ))?;
+    
+    req = Request::from_parts(parts, body);
+    req.extensions_mut().insert(user.clone());
+    Ok((req, user))
 }
 
 /// Helper to check if user has any of the specified roles
@@ -48,20 +55,10 @@ async fn user_has_any_role(
 
 /// Basic guard to ensure the request is authenticated.
 pub async fn require_authenticated(
-    mut req: Request<Body>,
+    req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let (mut parts, body) = req.into_parts();
-
-    let user = AuthUser::from_request_parts(&mut parts, &())
-        .await
-        .map_err(|_| (
-            StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::error("Authentication required"))
-        ))?;
-
-    req = Request::from_parts(parts, body);
-    req.extensions_mut().insert(user);
+    let (req, _user) = extract_and_insert_authuser(req).await?;
 
     Ok(next.run(req).await)
 }
@@ -71,8 +68,8 @@ pub async fn require_admin(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let user = get_authenticated_user(&req)?;
-
+    let (req, user) = extract_and_insert_authuser(req).await?;
+    
     if !user.0.admin {
         return Err((
             StatusCode::FORBIDDEN,
@@ -92,7 +89,8 @@ async fn require_role_base(
     required_roles: &[&str],
     failure_msg: &str,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let user = get_authenticated_user(&req)?;
+    let (req, user) = extract_and_insert_authuser(req).await?;
+    
     let module_id = params.get("module_id")
         .and_then(|s| s.parse::<i64>().ok())
         .ok_or((

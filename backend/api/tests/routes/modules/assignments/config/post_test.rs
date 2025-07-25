@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::{Model as AssignmentModel, AssignmentType, Status}, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::{Model as AssignmentModel, AssignmentType}, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::{json, Value};
@@ -35,7 +35,6 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-            Some(Status::Setup),
         ).await.unwrap();
         let a2 = AssignmentModel::create(
             db,
@@ -45,7 +44,6 @@ mod tests {
             AssignmentType::Practical,
             Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 2, 28, 23, 59, 59).unwrap(),
-            Some(Status::Open),
         ).await.unwrap();
 
         TestData {

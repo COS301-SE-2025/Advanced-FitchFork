@@ -48,7 +48,6 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 12, 31, 23, 59, 59).unwrap(),
-            None,
         )
         .await
         .expect("Failed to create test assignment");
@@ -167,7 +166,6 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 12, 31, 23, 59, 59).unwrap(),
-            None,
         )
         .await
         .expect("Failed to create assignment in second module");

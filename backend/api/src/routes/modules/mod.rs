@@ -12,7 +12,7 @@
 //! ## Usage
 //! Call `modules_routes()` to get a configured `Router` for `/modules` to be mounted in the main app.
 
-use axum::{middleware::from_fn, Router, routing::{delete, get, post, put}};
+use axum::{middleware::{from_fn, from_fn_with_state}, routing::{delete, get, post, put}, Router};
 use delete::delete_module;
 use get::{get_eligible_users_for_module, get_module, get_modules, get_my_details};
 use post::create;
@@ -22,7 +22,7 @@ use assignments::assignment_routes;
 use lecturers::lecturer_routes;
 use tutors::tutor_routes;
 use students::student_routes;
-use crate::auth::guards::require_admin;
+use crate::auth::guards::{require_admin, require_assigned_to_module};
 
 pub mod assignments;
 pub mod lecturers;
@@ -54,7 +54,7 @@ pub fn modules_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
         .route("/", get(get_modules))
         .route("/me", get(get_my_details))
         .route("/{module_id}/eligible-users", get(get_eligible_users_for_module).route_layer(from_fn(require_admin)))
-        .route("/{module_id}", get(get_module))
+        .route("/{module_id}", get(get_module).route_layer(from_fn_with_state(db.clone(), require_assigned_to_module)))
         .route("/", post(create).route_layer(from_fn(require_admin)))
         .route("/{module_id}", put(edit_module).route_layer(from_fn(require_admin)))
         .route("/{module_id}", delete(delete_module).route_layer(from_fn(require_admin)))

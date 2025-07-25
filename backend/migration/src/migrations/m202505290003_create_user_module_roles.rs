@@ -18,15 +18,17 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Alias::new("user_id")).integer().not_null())
                     .col(ColumnDef::new(Alias::new("module_id")).integer().not_null())
                     .col(ColumnDef::new(Alias::new("role"))
-                        .enumeration(
-                            Alias::new("user_module_role_type"),
-                            vec![
-                                Alias::new("lecturer"),
-                                Alias::new("tutor"),
-                                Alias::new("student"),
-                            ],
-                        )
-                        .not_null())
+                            .enumeration(
+                                Alias::new("user_module_role_type"),
+                                vec![
+                                    Alias::new("lecturer"),
+                                    Alias::new("assistant_lecturer"),
+                                    Alias::new("tutor"),
+                                    Alias::new("student"),
+                                ],
+                            )
+                            .not_null()
+                    )
                     .primary_key(
                         Index::create()
                             .col(Alias::new("user_id"))

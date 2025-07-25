@@ -1,7 +1,10 @@
 import type { Timestamp } from "@/types/common";
 
-export type AssignmentType = 'Assignment' | 'Practical';
-export const ASSIGNMENT_TYPES: AssignmentType[] = ['Assignment', 'Practical'];
+export const ASSIGNMENT_TYPES = ['assignment', 'practical'] as const;
+export type AssignmentType = (typeof ASSIGNMENT_TYPES)[number];
+
+export const ASSIGNMENT_STATUSES = ['setup', 'ready', 'open', 'closed', 'archived'] as const;
+export type AssignmentStatus = (typeof ASSIGNMENT_STATUSES)[number];
 
 export type FileType =
   | 'spec'
@@ -28,7 +31,7 @@ export interface Assignment extends Timestamp {
   assignment_type: AssignmentType;
   available_from: string; // ISO
   due_date: string;
-  status?: string,
+  status: AssignmentStatus,
 }
 
 

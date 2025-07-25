@@ -10,55 +10,45 @@ pub struct UserRoleSeeder;
 #[async_trait::async_trait]
 impl Seeder for UserRoleSeeder {
     async fn seed(&self, db: &DatabaseConnection) {
-        let users = user::Entity::find().all(db).await.expect("Failed to fetch users");
-        let modules = module::Entity::find().all(db).await.expect("Failed to fetch modules");
+        let users = user::Entity::find()
+            .all(db)
+            .await
+            .expect("Failed to fetch users");
+        let modules = module::Entity::find()
+            .all(db)
+            .await
+            .expect("Failed to fetch modules");
 
         let mut rng = StdRng::from_rng(OsRng).expect("Failed to seed RNG");
 
         for u in users {
-            if u.username == "u00000002" {
-                if modules.len() < 10 {
-                    panic!("Need at least 10 modules to assign 10 to the normal user");
-                }
+            // Skip only `u00000001` (admin)
+            if u.username == "u00000001" {
+                continue;
+            }
 
-                // Select 10 unique modules
-                let mut selected = modules.choose_multiple(&mut rng, 10).cloned().collect::<Vec<_>>();
+            let role = match u.username.as_str() {
+                "u00000002" => Some(Role::Lecturer),
+                "u00000003" => Some(Role::AssistantLecturer),
+                "u00000004" => Some(Role::Tutor),
+                "u00000005" => Some(Role::Student),
+                _ => None,
+            };
 
-                // Assign 1 as Lecturer
-                let lecturer_mod = selected.pop().unwrap();
-                let _ = user_module_role::ActiveModel {
-                    user_id: Set(u.id),
-                    module_id: Set(lecturer_mod.id),
-                    role: Set(Role::Lecturer),
-                    ..Default::default()
-                }
-                .insert(db)
-                .await;
-
-                // Assign 1 as Tutor
-                let tutor_mod = selected.pop().unwrap();
-                let _ = user_module_role::ActiveModel {
-                    user_id: Set(u.id),
-                    module_id: Set(tutor_mod.id),
-                    role: Set(Role::Tutor),
-                    ..Default::default()
-                }
-                .insert(db)
-                .await;
-
-                // Assign remaining 8 as Student
-                for m in selected {
+            if let Some(role) = role {
+                // Assign ALL modules with the specific role
+                for m in &modules {
                     let _ = user_module_role::ActiveModel {
                         user_id: Set(u.id),
                         module_id: Set(m.id),
-                        role: Set(Role::Student),
+                        role: Set(role.clone()),
                         ..Default::default()
                     }
                     .insert(db)
                     .await;
                 }
             } else {
-                // Random users get 3–6 student modules
+                // Other users: random 3–6 modules as Student
                 let count = rng.gen_range(3..=6);
                 let assigned = modules
                     .choose_multiple(&mut rng, count)

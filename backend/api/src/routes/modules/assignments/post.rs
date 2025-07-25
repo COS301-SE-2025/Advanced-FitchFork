@@ -19,17 +19,19 @@ use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentR
 
 /// POST /api/modules/{module_id}/assignments
 ///
-/// Create a new assignment in a module. Only accessible by lecturers or admins assigned to the module.
+/// Create a new assignment in a module.  
+/// The assignment is always created in the `setup` state by default.  
+/// Only accessible by lecturers or admins assigned to the module.
 ///
 /// ### Path Parameters
-/// - `module_id` (i64): The ID of the module to create the assignment in
+/// - `module_id` (`i64`): The ID of the module to create the assignment in.
 ///
 /// ### Request Body (JSON)
-/// - `name` (string, required): The name of the assignment
-/// - `description` (string, optional): A description of the assignment
-/// - `assignment_type` (string, required): The type of assignment. Must be either "assignment" or "practical"
-/// - `available_from` (string, required): The date/time from which the assignment is available (ISO 8601 format)
-/// - `due_date` (string, required): The due date/time for the assignment (ISO 8601 format)
+/// - `name` (`string`, required): The name of the assignment.
+/// - `description` (`string`, optional): A description of the assignment.
+/// - `assignment_type` (`string`, required): The type of assignment. Must be either `"assignment"` or `"practical"`.
+/// - `available_from` (`string`, required): The date/time from which the assignment is available (ISO 8601 format).
+/// - `due_date` (`string`, required): The due date/time for the assignment (ISO 8601 format).
 ///
 /// ### Responses
 ///
@@ -118,7 +120,6 @@ pub async fn create_assignment(
         assignment_type,
         available_from,
         due_date,
-        None,
     )
     .await
     {

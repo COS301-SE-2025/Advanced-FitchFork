@@ -293,6 +293,7 @@ pub async fn has_role_in_module(
 ) -> impl IntoResponse {
     let role = match params.role.to_lowercase().as_str() {
         "lecturer" => Role::Lecturer,
+        "assistant_lecturer" => Role::AssistantLecturer,
         "tutor" => Role::Tutor,
         "student" => Role::Student,
         _ => {
@@ -325,5 +326,67 @@ pub async fn has_role_in_module(
     (
         StatusCode::OK,
         Json(ApiResponse::success(response, "Role check completed")),
+    )
+}
+
+
+
+#[derive(Debug, Deserialize)]
+pub struct ModuleRoleQuery {
+    pub module_id: i32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModuleRoleResponse {
+    pub role: Option<String>,
+}
+/// GET /api/auth/module-role
+///
+/// Returns the role of the authenticated user in the given module, if any.
+///
+/// ### Authorization
+/// Requires a valid bearer token.
+///
+/// ### Query Parameters
+/// - `module_id`: The module ID to check
+///
+/// ### Response
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Role fetched successfully",
+///   "data": {
+///     "role": "lecturer" // or "tutor", "student", null
+///   }
+/// }
+/// ```
+/// #[derive(Debug, Deserialize)]
+pub async fn get_module_role(
+    State(db): State<DatabaseConnection>,
+    AuthUser(claims): AuthUser,
+    Query(params): Query<ModuleRoleQuery>,
+) -> impl IntoResponse {
+    let role = match user_module_role::Entity::find()
+        .filter(user_module_role::Column::UserId.eq(claims.sub))
+        .filter(user_module_role::Column::ModuleId.eq(params.module_id))
+        .one(&db)
+        .await
+    {
+        Ok(Some(model)) => Some(model.role.to_string().to_lowercase()),
+        Ok(None) => None,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ModuleRoleResponse>::error("Database error")),
+            );
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            ModuleRoleResponse { role },
+            "Role fetched successfully",
+        )),
     )
 }

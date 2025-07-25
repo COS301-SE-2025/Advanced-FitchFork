@@ -7,7 +7,7 @@ export const updateMarkAllocator = async (
   assignmentId: number,
   payload: MarkAllocatorItem[]
 ): Promise<ApiResponse<null>> => {
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/mark-allocator`, {
+  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/mark_allocator`, {
     method: "PUT",
     body: JSON.stringify(payload),
     }

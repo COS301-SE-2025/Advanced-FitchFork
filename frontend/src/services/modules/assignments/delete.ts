@@ -1,4 +1,4 @@
-import type { DeleteAssignmentResponse, DeleteAssignmentFilesResponse } from "@/types/modules/assignments";
+import type { DeleteAssignmentResponse, DeleteAssignmentFilesResponse, BulkDeleteAssignmentsRequest, BulkDeleteAssignmentsResponse } from "@/types/modules/assignments";
 import { apiFetch } from "@/utils/api";
 
 export const deleteAssignment = async (
@@ -16,6 +16,16 @@ export const deleteAssignmentFiles = async (
   payload: { file_ids: number[] }
 ): Promise<DeleteAssignmentFilesResponse> => {
   return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/files`, {
+    method: "DELETE",
+    body: JSON.stringify(payload),
+  });
+};
+
+export const bulkDeleteAssignments = async (
+  moduleId: number,
+  payload: BulkDeleteAssignmentsRequest
+): Promise<BulkDeleteAssignmentsResponse> => {
+  return apiFetch(`/modules/${moduleId}/assignments/bulk`, {
     method: "DELETE",
     body: JSON.stringify(payload),
   });

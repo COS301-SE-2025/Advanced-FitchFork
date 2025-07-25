@@ -12,7 +12,7 @@
 use axum::{Router, routing::{get, post}};
 use sea_orm::DatabaseConnection;
 use post::{register, login, request_password_reset, verify_reset_token, reset_password, upload_profile_picture};
-use get::{get_me, get_avatar, has_role_in_module};
+use get::{get_me, get_avatar, has_role_in_module, get_module_role};
 
 pub mod post;
 pub mod get;
@@ -50,4 +50,5 @@ pub fn auth_routes() -> Router<DatabaseConnection> {
         .route("/upload-profile-picture", post(upload_profile_picture))
         .route("/avatar/{user_id}", get(get_avatar))
         .route("/has-role", get(has_role_in_module))
+        .route("/module-role", get(get_module_role)) // TODO: Write tests
 }

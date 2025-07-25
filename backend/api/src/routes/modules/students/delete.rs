@@ -1,8 +1,5 @@
 use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
-use crate::{
-    auth::AuthUser,
-    response::ApiResponse,
-};
+use crate::response::ApiResponse;
 use sea_orm::{EntityTrait, QueryFilter, Condition, ModelTrait, ColumnTrait, DatabaseConnection};
 use db::models::{
     user,
@@ -75,16 +72,8 @@ use crate::routes::modules::common::ModifyUsersModuleRequest;
 pub async fn remove_students(
     State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
-    AuthUser(claims): AuthUser,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
-    if !claims.admin {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("You do not have permission to perform this action")),
-        );
-    }
-
     if body.user_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,

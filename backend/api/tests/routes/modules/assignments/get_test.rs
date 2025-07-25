@@ -7,7 +7,7 @@ mod tests {
     use api::auth::generate_jwt;
     use dotenvy;
     use chrono::{Utc, TimeZone};
-    use db::models::assignment::{AssignmentType, Status};
+    use db::models::assignment::AssignmentType;
     use crate::test_helpers::make_app;
 
     struct TestData {
@@ -37,7 +37,6 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-            Some(Status::Setup),
         ).await.unwrap();
         let a2 = AssignmentModel::create(
             db,
@@ -47,7 +46,6 @@ mod tests {
             AssignmentType::Practical,
             Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 2, 28, 23, 59, 59).unwrap(),
-            Some(Status::Open),
         ).await.unwrap();
         let a3 = AssignmentModel::create(
             db,
@@ -57,7 +55,6 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 3, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 3, 31, 23, 59, 59).unwrap(),
-            Some(Status::Closed),
         ).await.unwrap();
 
         TestData {

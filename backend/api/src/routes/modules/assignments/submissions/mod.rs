@@ -5,6 +5,7 @@ use post::submit_assignment;
 
 pub mod get;
 pub mod post;
+pub mod common;
 
 /// Defines HTTP routes related to assignment submissions.
 ///

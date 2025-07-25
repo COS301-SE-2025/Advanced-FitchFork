@@ -1,1 +1,3 @@
-// Placeholder for mod_test.rs 
+pub mod get_test;
+pub mod put_test;
+pub mod delete_test;

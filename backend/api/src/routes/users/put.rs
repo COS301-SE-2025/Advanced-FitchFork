@@ -14,15 +14,10 @@ use validator::Validate;
 use crate::{response::ApiResponse};
 use common::format_validation_errors;
 use db::models::user;
-use crate::auth::AuthUser;
 use crate::routes::common::UserResponse;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateUserRequest {
-    #[validate(regex(
-        path = &*username_REGEX,
-        message = "Student number must be in format u12345678"
-    ))]
     pub username: Option<String>,
 
     #[validate(email(message = "Invalid email format"))]
@@ -278,17 +273,9 @@ struct ProfilePictureResponse {
 ///
 pub async fn upload_avatar(
     State(db): State<DatabaseConnection>,
-    AuthUser(claims): AuthUser,
     Path(user_id): Path<i64>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    if !claims.admin {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<ProfilePictureResponse>::error("Only admins may upload avatars for other users")),
-        )
-    }
-
     const MAX_SIZE: u64 = 2 * 1024 * 1024;
     const ALLOWED_MIME: &[&str] = &["image/jpeg", "image/png", "image/gif"];
 

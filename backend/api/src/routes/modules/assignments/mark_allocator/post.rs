@@ -1,5 +1,4 @@
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-use serde_json::json;
 use util::mark_allocator::mark_allocator::{generate_allocator, SaveError};
 use crate::response::ApiResponse;
 
@@ -54,14 +53,18 @@ use crate::response::ApiResponse;
 /// **404 Not Found** - Module or assignment folder does not exist
 /// ```json
 /// {
-///   "error": "Module or assignment folder does not exist"
+///   "success": false,
+///   "message": "Module or assignment folder does not exist",
+///   "data": null
 /// }
 /// ```
 ///
 /// **500 Internal Server Error** - Failed to generate mark allocator
 /// ```json
 /// {
-///   "error": "Failed to generate mark allocator"
+///   "success": false,
+///   "message": "Failed to generate mark allocator",
+///   "data": null
 /// }
 /// ```
 ///
@@ -86,13 +89,17 @@ pub async fn generate(
 
         Err(SaveError::DirectoryNotFound) => (
             StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Module or assignment folder does not exist" })),
+            Json(ApiResponse::<()>::error(
+                "Module or assignment folder does not exist",
+            )),
         )
             .into_response(),
 
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Failed to generate mark allocator" })),
+            Json(ApiResponse::<()>::error(
+                "Failed to generate mark allocator",
+            )),
         )
             .into_response(),
     }

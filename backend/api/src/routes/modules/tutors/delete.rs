@@ -4,7 +4,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use crate::auth::AuthUser;
 use crate::response::ApiResponse;
 use db::models::{
     user,
@@ -78,16 +77,8 @@ use crate::routes::modules::common::ModifyUsersModuleRequest;
 pub async fn remove_tutors(
     State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
-    AuthUser(claims): AuthUser,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
-    if !claims.admin {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("You do not have permission to perform this action")),
-        );
-    }
-
     if body.user_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
