@@ -1,28 +1,27 @@
 // Core dependencies
-use std::{env, fs, path::PathBuf, process::Stdio};
 use std::fs::File;
 use std::io::Cursor;
+use std::{env, fs, path::PathBuf, process::Stdio};
 
 // Async, process, and timing
 use tokio::process::Command;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 // External crates
-use zip::ZipArchive;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use tempfile::tempdir;
-use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
+use zip::ZipArchive;
 
 // Your own modules
-use crate::execution_config::ExecutionConfig;
 use crate::validate_files::validate_memo_files;
 
 // Models
 use db::models::assignment::Entity as Assignment;
-use db::models::assignment_memo_output::{Entity as MemoOutputEntity, Column as MemoOutputColumn};
+use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as MemoOutputEntity};
 use db::models::assignment_task::Model as AssignmentTask;
 
+use util::execution_config::ExecutionConfig;
 
-pub mod execution_config;
 pub mod validate_files;
 
 /// Returns the first `.zip` file found in the given directory.
@@ -139,7 +138,6 @@ pub async fn create_memo_outputs_for_all_tasks(
 
     Ok(())
 }
-
 
 use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 

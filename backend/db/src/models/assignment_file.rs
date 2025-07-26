@@ -1,7 +1,7 @@
 // models/assignment_file.rs
 
 use chrono::{DateTime, Utc};
-// use code_runner::{run_zip_files, ExecutionConfig};
+// use code_runner::ExecutionConfig;
 use sea_orm::ActiveValue::Set;
 use sea_orm::entity::prelude::*;
 use std::env;
@@ -77,6 +77,16 @@ pub enum Relation {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
+    // /// Loads and returns the `ExecutionConfig` if the file type is `Config`.
+    // /// Requires `module_id` because it's not stored in the DB.
+    // pub fn load_execution_config(&self, module_id: i64) -> Result<ExecutionConfig, String> {
+    //     if self.file_type != FileType::Config {
+    //         return Err("File is not of type 'config'".to_string());
+    //     }
+
+    //     ExecutionConfig::get_execution_config(module_id, self.assignment_id)
+    // }
+
     /// Returns the base directory for assignment file storage from the environment.
     pub fn storage_root() -> PathBuf {
         env::var("ASSIGNMENT_STORAGE_ROOT")
