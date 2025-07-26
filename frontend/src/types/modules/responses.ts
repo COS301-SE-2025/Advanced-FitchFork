@@ -21,9 +21,10 @@ export type GetModuleResponse = ApiResponse<{
 } & Module>;
 
 export type GetMyModulesResponse = ApiResponse<{
+  as_lecturer: Module[];  
+  as_assistant_lecturer: Module[];
   as_student: Module[];
   as_tutor: Module[];
-  as_lecturer: Module[];
 }>;
 
 export type GetPersonnelReponse = ApiResponse<{ 

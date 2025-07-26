@@ -1,0 +1,7 @@
+version: '3.8'
+services:
+  universal:
+    build: .
+    image: universal-runner:latest
+    ports:
+      - "12345:12345"

@@ -2,21 +2,14 @@
 //!
 //! This module provides the endpoint handler for retrieving detailed information about a specific assignment task within a module, including its subsections and associated memo outputs. It interacts with the database to validate module, assignment, and task existence, loads the mark allocator configuration, and parses memo output files to provide detailed feedback for each subsection of the task.
 
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
 use serde_json::Value;
-use sea_orm::{EntityTrait, QueryFilter, QueryOrder, ColumnTrait};
+use sea_orm::{EntityTrait, QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection};
 use std::{env, fs, path::PathBuf};
-
 use crate::response::ApiResponse;
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
-use db::connect;
-use db::models::{
-    assignment,
-    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-    assignment_task::{Column, Entity},
-    module,
-};
+use db::models::assignment_task::{Column, Entity};
 use util::mark_allocator::mark_allocator::load_allocator;
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
@@ -104,80 +97,11 @@ pub struct TaskDetailResponse {
 /// ```
 ///
 pub async fn get_task_details(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
-    // Validate module
-    let module_exists = match module::Entity::find_by_id(module_id).one(&db).await {
-        Ok(Some(_)) => true,
-        Ok(None) => false,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving module")),
-            )
-                .into_response();
-        }
-    };
-    if !module_exists {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module not found")),
-        )
-            .into_response();
-    }
-
-    // Validate assignment
-    let assignment_model = match assignment::Entity::find_by_id(assignment_id).one(&db).await {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving assignment")),
-            )
-                .into_response();
-        }
-    };
-    if assignment_model.module_id != module_id {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Assignment does not belong to this module")),
-        )
-            .into_response();
-    }
-
-    let task = match Entity::find_by_id(task_id).one(&db).await {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Task not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving task")),
-            )
-                .into_response();
-        }
-    };
-    if task.assignment_id != assignment_id {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Task does not belong to this assignment")),
-        )
-            .into_response();
-    }
+    let task = Entity::find_by_id(task_id)
+    .one(&db).await.unwrap().unwrap();
 
     let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
         .unwrap_or_else(|_| "data/assignment_files".into());
@@ -215,7 +139,6 @@ pub async fn get_task_details(
     };
 
     let parsed_outputs: Vec<Option<String>> = outputs.into_iter().skip(1).collect();
-
     let allocator_json: Option<Value> = load_allocator(module_id, assignment_id).await.ok();
     let task_key = format!("task{}", task.task_number);
 
@@ -344,36 +267,9 @@ pub async fn get_task_details(
 /// ```
 ///
 pub async fn list_tasks(
-    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    State(db): State<DatabaseConnection>,
+    Path((_, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
-    let assignment_exists = AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await;
-
-    match assignment_exists {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<Vec<TaskResponse>>::error(
-                    "Assignment or module not found",
-                )),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<TaskResponse>>::error("Database error")),
-            )
-                .into_response();
-        }
-    }
-
     match Entity::find()
         .filter(Column::AssignmentId.eq(assignment_id))
         .order_by_asc(Column::TaskNumber)
@@ -388,8 +284,8 @@ pub async fn list_tasks(
                     task_number: task.task_number,
                     name: task.name,
                     command: task.command,
-                    created_at: task.created_at,
-                    updated_at: task.updated_at,
+                    created_at: task.created_at.to_rfc3339(),
+                    updated_at: task.updated_at.to_rfc3339(),
                 })
                 .collect::<Vec<_>>();
 

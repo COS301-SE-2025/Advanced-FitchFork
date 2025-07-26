@@ -1,8 +1,12 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    extract::Path,
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
+use crate::response::ApiResponse;
 use serde_json::Value;
 use util::mark_allocator::mark_allocator::{save_allocator, SaveError};
-
-use crate::response::ApiResponse;
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
@@ -135,8 +139,51 @@ pub async fn save(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<Value>,
 ) -> impl IntoResponse {
-    let res = save_allocator(module_id, assignment_id, req).await;
+    let validation_error = || {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error("Invalid mark allocator structure or weights")),
+        )
+            .into_response()
+    };
 
+    let tasks = match req.get("tasks").and_then(|t| t.as_array()) {
+        Some(t) if !t.is_empty() => t,
+        _ => return validation_error(),
+    };
+    let total_weight = match req.get("total_weight").and_then(|w| w.as_f64()) {
+        Some(w) => w,
+        None => return validation_error(),
+    };
+
+    let mut sum_task_weights = 0.0;
+    for task in tasks {
+        let task_weight = match task.get("weight").and_then(|w| w.as_f64()) {
+            Some(w) => w,
+            None => return validation_error(),
+        };
+        sum_task_weights += task_weight;
+        let criteria = match task.get("criteria").and_then(|c| c.as_array()) {
+            Some(c) if !c.is_empty() => c,
+            _ => return validation_error(),
+        };
+        let mut sum_criteria_weights = 0.0;
+        for crit in criteria {
+            let crit_weight = match crit.get("weight").and_then(|w| w.as_f64()) {
+                Some(w) => w,
+                None => return validation_error(),
+            };
+            sum_criteria_weights += crit_weight;
+        }
+        if (sum_criteria_weights - 1.0).abs() > 1e-6 {
+            return validation_error();
+        }
+    }
+    if (sum_task_weights - total_weight).abs() > 1e-6 || (total_weight - 1.0).abs() > 1e-6 {
+        return validation_error();
+    }
+
+    let res = save_allocator(module_id, assignment_id, req).await;
     match res {
         Ok(_) => (
             StatusCode::OK,
@@ -149,7 +196,13 @@ pub async fn save(
 
         Err(SaveError::DirectoryNotFound) => (
             StatusCode::NOT_FOUND,
-            Json::<ApiResponse<()>>(ApiResponse::error("Module or assignment does not exist")),
+            Json::<ApiResponse<()>>(ApiResponse::error("Module or assignment directory does not exist")),
+        )
+            .into_response(),
+
+        Err(SaveError::JsonError(_)) => (
+            StatusCode::BAD_REQUEST,
+            Json::<ApiResponse<()>>(ApiResponse::error("Invalid JSON")),
         )
             .into_response(),
 

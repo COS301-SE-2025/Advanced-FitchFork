@@ -1,7 +1,5 @@
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-use serde_json::json;
 use util::mark_allocator::mark_allocator::{generate_allocator, SaveError};
-
 use crate::response::ApiResponse;
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
@@ -55,14 +53,18 @@ use crate::response::ApiResponse;
 /// **404 Not Found** - Module or assignment folder does not exist
 /// ```json
 /// {
-///   "error": "Module or assignment folder does not exist"
+///   "success": false,
+///   "message": "Module or assignment folder does not exist",
+///   "data": null
 /// }
 /// ```
 ///
 /// **500 Internal Server Error** - Failed to generate mark allocator
 /// ```json
 /// {
-///   "error": "Failed to generate mark allocator"
+///   "success": false,
+///   "message": "Failed to generate mark allocator",
+///   "data": null
 /// }
 /// ```
 ///
@@ -72,7 +74,9 @@ use crate::response::ApiResponse;
 /// - Task weights are automatically calculated to ensure fair distribution
 /// - Generation is restricted to users with Lecturer permissions for the module
 /// - The generated allocator can be further customized using the PUT endpoint
-pub async fn generate(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
+pub async fn generate(
+    Path((module_id, assignment_id)): Path<(i64, i64)>
+) -> impl IntoResponse {
     match generate_allocator(module_id, assignment_id).await {
         Ok(json) => (
             StatusCode::OK,
@@ -85,13 +89,17 @@ pub async fn generate(Path((module_id, assignment_id)): Path<(i64, i64)>) -> imp
 
         Err(SaveError::DirectoryNotFound) => (
             StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Module or assignment folder does not exist" })),
+            Json(ApiResponse::<()>::error(
+                "Module or assignment folder does not exist",
+            )),
         )
             .into_response(),
 
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Failed to generate mark allocator" })),
+            Json(ApiResponse::<()>::error(
+                "Failed to generate mark allocator",
+            )),
         )
             .into_response(),
     }

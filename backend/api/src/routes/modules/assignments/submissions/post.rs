@@ -1,18 +1,14 @@
 use axum::{
-    extract::{Path, Multipart, Extension},
+    extract::{State, Path, Multipart, Extension},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use serde::Serialize;
-use db::{
-    connect,
-    models::{
-        assignment_submission::{self, Model as AssignmentSubmissionModel},
-        assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
-    },
+use db::models::{
+    assignment_submission::{self, Model as AssignmentSubmissionModel},
+    assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
 };
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, QueryOrder};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, QueryOrder, DatabaseConnection};
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
@@ -22,59 +18,9 @@ use code_runner;
 use util::mark_allocator::mark_allocator::load_allocator;
 use marker::MarkingJob;
 use md5;
-
-/// Summary of marks for a submission.
-#[derive(Debug, Serialize)]
-pub struct MarkSummary {
-    pub earned: i64,
-    pub total: i64,
-}
-
-/// Summary of code complexity metrics.
-#[derive(Debug, Serialize)]
-pub struct CodeComplexitySummary {
-    pub earned: i64,
-    pub total: i64,
-}
-
-/// Code complexity details for a submission.
-#[derive(Debug, Serialize)]
-pub struct CodeComplexity {
-    pub summary: CodeComplexitySummary,
-    pub metrics: Vec<serde_json::Value>,
-}
-
-/// The full response returned after a submission is processed and graded.
-///
-/// Fields:
-/// - `id`: Submission DB ID
-/// - `attempt`: Attempt number for this user/assignment
-/// - `filename`: Name of the uploaded file
-/// - `hash`: MD5 hash of the uploaded file
-/// - `created_at`, `updated_at`: Timestamps
-/// - `mark`: Earned/total marks
-/// - `is_practice`: Whether this was a practice submission
-/// - `is_late`: Whether the submission was after the due date
-/// - `tasks`: Per-task grading details
-/// - `code_coverage`: Optional code coverage report (if available)
-/// - `code_complexity`: Optional code complexity report (if available)
-#[derive(Debug, Serialize)]
-pub struct SubmissionDetailResponse {
-    pub id: i64,
-    pub attempt: i64,
-    pub filename: String,
-    pub hash: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub mark: MarkSummary,
-    pub is_practice: bool,
-    pub is_late: bool,
-    pub tasks: Vec<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_coverage: Option<Vec<serde_json::Value>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_complexity: Option<CodeComplexity>,
-}
+use super::common::{
+    MarkSummary, CodeComplexitySummary, CodeComplexity, SubmissionDetailResponse,
+};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions
 ///
@@ -179,32 +125,15 @@ pub struct SubmissionDetailResponse {
 /// - The endpoint is restricted to authenticated students assigned to the module
 /// - All errors are returned in a consistent JSON format
 pub async fn submit_assignment(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
-    let assignment = match AssignmentEntity::find()
+    let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await
-    {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<SubmissionDetailResponse> ::error("Assignment not found")),
-            )
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SubmissionDetailResponse> ::error("Database error")),
-            )
-        }
-    };
+        .one(&db).await.unwrap().unwrap();
 
     let mut is_practice = false;
     // let mut force_submit = false;
@@ -221,10 +150,6 @@ pub async fn submit_assignment(
                 let val = field.text().await.unwrap_or_default();
                 is_practice = val == "true" || val == "1";
             }
-            // Some("force_submit") => {
-            //     let val = field.text().await.unwrap_or_default();
-            //     force_submit = val == "true" || val == "1";
-            // }
             _ => {}
         }
     }
@@ -312,8 +237,8 @@ pub async fn submit_assignment(
         )
     }
 
-    let _allocator_json = match load_allocator(module_id, assignment_id).await {
-        Ok(val) => val,
+    match load_allocator(module_id, assignment_id).await {
+        Ok(_) => { },
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -435,31 +360,3 @@ pub async fn submit_assignment(
 
     (StatusCode::OK, Json(ApiResponse::<SubmissionDetailResponse>::success(resp, "Submission received and graded")))
 }
-
-/*
-Testing plan
-
-Happy Path (Success) Test Cases
-1. Valid submission (zip file): Upload a valid .zip file as a student assigned to the module. Expect 200 OK, grading report returned.
-2. Valid submission (tar file): Upload a valid .tar file as a student assigned to the module. Expect 200 OK, grading report returned.
-3. Valid submission (tgz file): Upload a valid .tgz file as a student assigned to the module. Expect 200 OK, grading report returned.
-4. Valid submission (gz file): Upload a valid .gz file as a student assigned to the module. Expect 200 OK, grading report returned.
-5. Practice submission: Upload a valid file with is_practice=true. Expect 200 OK, is_practice field is true in response.
-6. Multiple attempts: Submit twice as the same student; verify attempt increments. Expect 200 OK, attempt increases by 1.
-7. Submission with code coverage and complexity: Upload a file that triggers code coverage and complexity analysis. Expect 200 OK, code_coverage and code_complexity fields present.
-8. Submission exactly at due date: Submit a file with a timestamp exactly matching the assignment due date. Expect 200 OK, is_late is false.
-9. Submission just after due date: Submit a file just after the due date. Expect 200 OK, is_late is true.
-10. Submission with large file (within allowed size): Upload a large but valid file. Expect 200 OK, grading report returned.
-
-Unhappy Path (Error) Test Cases
-11. Missing file: Submit without a file in the form. Expect 422 Unprocessable Entity, error message about missing file.
-12. Empty file: Submit an empty file. Expect 422 Unprocessable Entity, error message about empty file.
-13. Invalid file extension: Submit a file with an unsupported extension (e.g., .exe). Expect 422 Unprocessable Entity, error message about allowed extensions.
-14. Corrupted archive: Submit a corrupted .zip file. Expect 500 Internal Server Error, error message about failed extraction or grading.
-15. Assignment not found: Submit to a non-existent assignment ID. Expect 404 Not Found, error message about assignment not found.
-16. User not assigned to module: Submit as a user not assigned to the module. Expect 403 Forbidden or 404 Not Found, error message about permissions.
-17. Database error during save: Simulate a database failure when saving the submission. Expect 500 Internal Server Error, error message about failed to save submission.
-18. Failure in code runner: Simulate a failure in the code runner after file upload. Expect 500 Internal Server Error, error message about failed to run code.
-19. Failure to load mark allocator: Simulate missing or invalid mark allocator. Expect 500 Internal Server Error, error message about failed to load mark allocator.
-20. Failure in marking: Simulate a marking error (e.g., invalid memo output). Expect 500 Internal Server Error, error message about failed to mark submission.
-*/

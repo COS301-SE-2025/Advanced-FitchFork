@@ -1,32 +1,44 @@
 import { Card, Avatar, Tag, Typography, Tooltip } from 'antd';
 import { BookOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 import type { Module } from '@/types/modules';
-import type { ModuleRole } from '@/types/modules';
 
 const { Meta } = Card;
 const { Paragraph } = Typography;
 
 interface Props {
-  module: { role: ModuleRole } & Module;
+  module: Module;
   isFavorite: boolean;
   onToggleFavorite: (moduleId: number) => void;
+  actions?: React.ReactNode[];
+  showFavorite?: boolean;
 }
 
-const roleColorMap: Record<ModuleRole, string> = {
-  Student: 'green',
-  Tutor: 'orange',
-  Lecturer: 'purple',
-};
+const roleColorMap = {
+  student: 'green',
+  tutor: 'orange',
+  lecturer: 'purple',
+  assistant_lecturer: 'pink',
+} as const;
 
-const roleLabelMap: Record<ModuleRole, string> = {
-  Student: 'Enrolled',
-  Tutor: 'Tutoring',
-  Lecturer: 'Lecturing',
-};
+const roleLabelMap = {
+  student: 'Enrolled',
+  tutor: 'Tutoring',
+  lecturer: 'Lecturing',
+  assistant_lecturer: 'Assistant',
+} as const;
 
-const ModuleCard = ({ module, isFavorite, onToggleFavorite }: Props) => {
+const ModuleCard = ({
+  module,
+  isFavorite,
+  onToggleFavorite,
+  actions,
+  showFavorite = true,
+}: Props) => {
   const navigate = useNavigate();
+  const { getModuleRole } = useAuth();
+  const role = getModuleRole(module.id);
 
   const handleClick = () => {
     navigate(`/modules/${module.id}`);
@@ -45,16 +57,19 @@ const ModuleCard = ({ module, isFavorite, onToggleFavorite }: Props) => {
       cover={
         <div className="h-[140px] !flex items-center justify-center bg-gray-100 dark:bg-neutral-700 relative">
           <BookOutlined className="text-5xl !text-gray-400 dark:!text-neutral-400" />
-          <Tooltip title={isFavorite ? 'Unfavorite' : 'Favorite'}>
-            <div
-              onClick={handleStarClick}
-              className="absolute top-2 right-2 text-xl text-yellow-400"
-            >
-              {isFavorite ? <StarFilled /> : <StarOutlined />}
-            </div>
-          </Tooltip>
+          {showFavorite && (
+            <Tooltip title={isFavorite ? 'Unfavorite' : 'Favorite'}>
+              <div
+                onClick={handleStarClick}
+                className="absolute top-2 right-2 text-xl text-yellow-400"
+              >
+                {isFavorite ? <StarFilled /> : <StarOutlined />}
+              </div>
+            </Tooltip>
+          )}
         </div>
       }
+      actions={actions}
     >
       <Meta
         avatar={<Avatar icon={<BookOutlined />} style={{ backgroundColor: '#1890ff' }} />}
@@ -62,7 +77,7 @@ const ModuleCard = ({ module, isFavorite, onToggleFavorite }: Props) => {
           <div className="flex justify-between items-center">
             <span className="text-black dark:text-white">{module.code}</span>
             <div className="flex gap-1">
-              <Tag color={roleColorMap[module.role]}>{roleLabelMap[module.role]}</Tag>
+              {role && <Tag color={roleColorMap[role]}>{roleLabelMap[role]}</Tag>}
               <Tag color="blue">{module.year}</Tag>
             </div>
           </div>

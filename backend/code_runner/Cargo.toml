@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 zip = "4.3"
+tar = "0.4.44"
 uuid = { version = "1.0", features = ["v4"] }
 tempfile = "3.0"
 tokio = { version = "1.0", features = ["full"] }
@@ -16,6 +17,7 @@ sea-orm = { version = "1.1", features = [
 ] }
 chrono = { version = "0.4", features = ["serde"] }
 db = { path = "../db" }
+flate2 = "1.1.2"
 util = { path = "../util" }
 
 [dev-dependencies]

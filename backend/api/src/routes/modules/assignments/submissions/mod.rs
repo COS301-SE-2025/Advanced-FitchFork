@@ -1,13 +1,11 @@
-use axum::middleware::from_fn;
-use axum::{extract::Path, Router};
+use axum::{Router, routing::{get, post}};
+use sea_orm::DatabaseConnection;
+use get::{list_submissions, get_submission};
+use post::submit_assignment;
 
 pub mod get;
 pub mod post;
-use get::{list_submissions, get_submission};
-use axum::routing::{get, post};
-use post::{submit_assignment};
-
-use crate::auth::guards::{require_assigned_to_module};
+pub mod common;
 
 /// Defines HTTP routes related to assignment submissions.
 ///
@@ -24,24 +22,9 @@ use crate::auth::guards::{require_assigned_to_module};
 /// 
 /// - `POST /`
 ///   - Submit a new assignment (student access only)
-pub fn submission_routes() -> Router {
+pub fn submission_routes() -> Router<DatabaseConnection> {
     Router::new()
-        .route(
-            "/",
-            get(list_submissions).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_assigned_to_module(Path(params), req, next)
-            })),
-        )
-          .route(
-            "/{submission_id}",
-            get(get_submission).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_assigned_to_module(Path(params), req, next)
-            })),
-        )
-        .route(
-            "/",
-            post(submit_assignment).layer(from_fn(|Path(params): Path<(i64,)>, req, next| {
-                require_assigned_to_module(Path(params), req, next)
-            })),
-        )
+        .route("/", get(list_submissions))
+        .route("/{submission_id}", get(get_submission))
+        .route("/", post(submit_assignment))
 }

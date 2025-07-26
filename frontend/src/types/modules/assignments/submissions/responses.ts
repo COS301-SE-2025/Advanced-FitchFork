@@ -7,13 +7,9 @@ import type { Submission } from "./shared";
 
 export type GetSubmissionDetailResponse = ApiResponse<Submission>;
 
-export type GetSubmissionListResponse = ApiResponse<
-  ({
-    submissions: Submission[];
-  } & PaginationResponse)
-  |
-  Submission[]
->;
+export type GetSubmissionListResponse = ApiResponse<{
+  submissions: Submission[];
+} & PaginationResponse>;
 
 
 // ─────────────────────────────────────────────────────────────

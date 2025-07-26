@@ -32,6 +32,11 @@ export type PostUploadAssignmentFileResonse = ApiResponse<AssignmentFile>;
 
 export type PutAssignmentResponse = ApiResponse<Assignment>;
 
+export type BulkUpdateAssignmentsResponse = ApiResponse<{
+  updated: number;
+  failed: { id: number; error: string }[];
+}>;
+
 // ─────────────────────────────────────────────────────────────
 // DELETE Responses Types
 // ─────────────────────────────────────────────────────────────
@@ -39,3 +44,8 @@ export type PutAssignmentResponse = ApiResponse<Assignment>;
 export type DeleteAssignmentResponse = ApiResponse<null>;
 
 export type DeleteAssignmentFilesResponse = ApiResponse<{ not_found: string[];} | null>;
+
+export type BulkDeleteAssignmentsResponse = ApiResponse<{
+  deleted: number;
+  failed: { id: number; error: string }[];
+}>;

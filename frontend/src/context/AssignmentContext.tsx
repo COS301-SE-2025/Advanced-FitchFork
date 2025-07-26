@@ -1,14 +1,18 @@
 import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
+import type { MarkAllocatorItem } from '@/types/modules/assignments/mark-allocator';
+import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
 import { createContext, useContext } from 'react';
 
 interface AssignmentDetails extends Assignment {
   files: AssignmentFile[];
 }
 
-interface AssignmentContextValue {
+export interface AssignmentContextValue {
   assignment: AssignmentDetails;
+  memoOutput: MemoTaskOutput[];
+  markAllocator: MarkAllocatorItem[];
   readiness: AssignmentReadiness | null;
-  refreshReadiness: () => Promise<void>;
+  refreshAssignment: () => Promise<void>;
 }
 
 const AssignmentContext = createContext<AssignmentContextValue | null>(null);
