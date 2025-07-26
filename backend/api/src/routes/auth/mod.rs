@@ -35,6 +35,7 @@ pub mod get;
 // - `GET /auth/me` — Retrieve info about the currently authenticated user.
 // - `GET /auth/avatar/{user_id}` — Retrieve a user's profile picture.
 // - `GET /auth/has-role` — Check if the current user has a role in a module.
+// - 
 //
 // ## Usage
 // Use the `auth_routes()` function to mount all `/auth` endpoints under the main application router.
@@ -50,5 +51,5 @@ pub fn auth_routes() -> Router<DatabaseConnection> {
         .route("/upload-profile-picture", post(upload_profile_picture))
         .route("/avatar/{user_id}", get(get_avatar))
         .route("/has-role", get(has_role_in_module))
-        .route("/module-role", get(get_module_role)) // TODO: Write tests
+        .route("/module-role", get(get_module_role))
 }

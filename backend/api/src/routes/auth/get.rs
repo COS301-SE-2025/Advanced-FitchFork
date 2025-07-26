@@ -329,8 +329,6 @@ pub async fn has_role_in_module(
     )
 }
 
-
-
 #[derive(Debug, Deserialize)]
 pub struct ModuleRoleQuery {
     pub module_id: i32,
@@ -340,6 +338,7 @@ pub struct ModuleRoleQuery {
 pub struct ModuleRoleResponse {
     pub role: Option<String>,
 }
+
 /// GET /api/auth/module-role
 ///
 /// Returns the role of the authenticated user in the given module, if any.
