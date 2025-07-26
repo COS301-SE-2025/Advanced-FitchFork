@@ -1,20 +1,10 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
 use chrono::{DateTime, Utc};
-
+use sea_orm::DatabaseConnection;
 use crate::response::ApiResponse;
-
-use db::{
-    connect,
-    models::assignment::{self, AssignmentType, Status},
-};
-
-use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, IntoActiveModel, DbErr
-};
-
+use db::models::assignment::{self, AssignmentType, Status};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, IntoActiveModel, DbErr};
 use super::common::{AssignmentRequest, AssignmentResponse, BulkUpdateRequest, BulkUpdateResult};
-
-
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}
 ///
@@ -68,16 +58,14 @@ use super::common::{AssignmentRequest, AssignmentResponse, BulkUpdateRequest, Bu
 ///   "message": "Failed to update assignment"
 /// }
 /// ```
-///
 /// ### Notes
 /// - The `status` field of the assignment cannot be updated with this endpoint.
 /// - Status is managed automatically by the system when all readiness checks pass.
 pub async fn edit_assignment(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
     let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
         .map(|dt| dt.with_timezone(&Utc))
     {
@@ -212,15 +200,11 @@ pub async fn edit_assignment(
 ///   "message": "No assignment IDs provided"
 /// }
 /// ```
-
 pub async fn bulk_update_assignments(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(req): Json<BulkUpdateRequest>,
 ) -> impl IntoResponse {
-    use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, IntoActiveModel};
-
-    let db = connect().await;
-
     if req.assignment_ids.is_empty() {
         let result = BulkUpdateResult {
             updated: 0,
@@ -249,8 +233,6 @@ pub async fn bulk_update_assignments(
         match res {
             Ok(Some(model)) => {
                 let mut active = model.into_active_model();
-
-                // Do NOT update status here anymore
 
                 if let Some(available_from) = &req.available_from {
                     if let Ok(dt) = DateTime::parse_from_rfc3339(available_from) {
@@ -302,10 +284,9 @@ pub async fn bulk_update_assignments(
 ///
 /// Only works if current status is `Ready`, `Closed`, or `Archived`.
 pub async fn open_assignment(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
     let assignment = assignment::Entity::find()
         .filter(assignment::Column::Id.eq(assignment_id))
         .filter(assignment::Column::ModuleId.eq(module_id))
@@ -365,10 +346,9 @@ pub async fn open_assignment(
 ///
 /// Only works if current status is `Open`.
 pub async fn close_assignment(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
     let assignment = assignment::Entity::find()
         .filter(assignment::Column::Id.eq(assignment_id))
         .filter(assignment::Column::ModuleId.eq(module_id))

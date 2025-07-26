@@ -1,57 +1,75 @@
-use axum::{
-    extract::{Path, FromRequestParts},
-    http::{Request, StatusCode},
-    middleware::Next,
-    body::Body,
-    response::Response,
-    Json,
-};
+use axum::{extract::{Path, State, FromRequestParts}, http::{Request, StatusCode}, middleware::Next, body::Body, response::{Response, IntoResponse}, Json};
 use crate::auth::claims::AuthUser;
-use crate::auth::extractors::{extract_module_id, PathParams};
 use crate::response::ApiResponse;
+use sea_orm::DatabaseConnection;
+use std::collections::HashMap;
+use sea_orm::EntityTrait;
+use sea_orm::QueryFilter;
+use sea_orm::ColumnTrait;
+use db::models::{
+    module::Entity as ModuleEntity,
+    assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
+    assignment_task::{Entity as TaskEntity, Column as TaskColumn},
+    assignment_submission::{Entity as SubmissionEntity, Column as SubmissionColumn},
+    assignment_file::{Entity as FileEntity, Column as FileColumn},
+    user::Entity as UserEntity,
+    user
+};
 
-use db::models::user;
-use db::connect;
-
-use futures::future::join_all;
+// --- Role Based Access Guards ---
 
 #[derive(serde::Serialize, Default)]
 pub struct Empty;
 
-/// Basic guard to ensure the request is authenticated.
-pub async fn require_authenticated(
-    mut req: Request<Body>,
-    next: Next,
-) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+/// Helper to extract, validate user from request extensions and insert the back into the request
+async fn extract_and_insert_authuser(
+    mut req: Request<Body>
+) -> Result<(Request<Body>, AuthUser), (StatusCode, Json<ApiResponse<Empty>>)> {
     let (mut parts, body) = req.into_parts();
-
     let user = AuthUser::from_request_parts(&mut parts, &())
         .await
         .map_err(|_| (
             StatusCode::UNAUTHORIZED,
             Json(ApiResponse::error("Authentication required"))
         ))?;
-
+    
     req = Request::from_parts(parts, body);
-    req.extensions_mut().insert(user);
+    req.extensions_mut().insert(user.clone());
+    Ok((req, user))
+}
+
+/// Helper to check if user has any of the specified roles
+async fn user_has_any_role(
+    db: &DatabaseConnection,
+    user_id: i64,
+    module_id: i64,
+    roles: &[&str],
+) -> bool {
+    for role in roles {
+        if user::Model::is_in_role(db, user_id, module_id, role).await.unwrap_or(false) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Basic guard to ensure the request is authenticated.
+pub async fn require_authenticated(
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    let (req, _user) = extract_and_insert_authuser(req).await?;
 
     Ok(next.run(req).await)
 }
 
 /// Admin-only guard.
 pub async fn require_admin(
-    mut req: Request<Body>,
+    req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let (mut parts, body) = req.into_parts();
-
-    let user = AuthUser::from_request_parts(&mut parts, &())
-        .await
-        .map_err(|_| (
-            StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::error("Authentication required"))
-        ))?;
-
+    let (req, user) = extract_and_insert_authuser(req).await?;
+    
     if !user.0.admin {
         return Err((
             StatusCode::FORBIDDEN,
@@ -59,44 +77,32 @@ pub async fn require_admin(
         ));
     }
 
-    req = Request::from_parts(parts, body);
-    req.extensions_mut().insert(user);
-
     Ok(next.run(req).await)
 }
 
-/// Role-based access guard factory.
-async fn require_role<T: Into<PathParams>>(
-    Path(params): Path<T>,
+/// Base role-based access guard that other guards can build upon
+async fn require_role_base(
+    State(db): State<DatabaseConnection>,
+    Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
-    required_role: &str,
+    required_roles: &[&str],
     failure_msg: &str,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let Some(module_id) = extract_module_id(params) else {
-        return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error("Invalid module path"))));
-    };
-
-    let user = req
-        .extensions()
-        .get::<AuthUser>()
+    let (req, user) = extract_and_insert_authuser(req).await?;
+    
+    let module_id = params.get("module_id")
+        .and_then(|s| s.parse::<i64>().ok())
         .ok_or((
-            StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::error("Authentication required"))
-        ))?
-        .0
-        .clone();
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Missing or invalid module_id"))
+        ))?;
 
-    if user.admin {
+    if user.0.admin {
         return Ok(next.run(req).await);
     }
 
-    let db = connect().await;
-    let is_in_role = user::Model::is_in_role(&db, user.sub, module_id, required_role)
-        .await
-        .unwrap_or(false);
-
-    if is_in_role {
+    if user_has_any_role(&db, user.0.sub, module_id, required_roles).await {
         Ok(next.run(req).await)
     } else {
         Err((StatusCode::FORBIDDEN, Json(ApiResponse::error(failure_msg))))
@@ -104,143 +110,269 @@ async fn require_role<T: Into<PathParams>>(
 }
 
 /// Guard for requiring lecturer access.
-pub async fn require_lecturer<T: Into<PathParams>>(
-    path: Path<T>,
+pub async fn require_lecturer(
+    State(db): State<DatabaseConnection>,
+    Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role(path, req, next, "lecturer", "Lecturer access required for this module").await
+    require_role_base(
+        State(db),
+        Path(params),
+        req,
+        next,
+        &["lecturer"],
+        "Lecturer access required for this module"
+    ).await
 }
 
 /// Guard for requiring tutor access.
-pub async fn require_tutor<T: Into<PathParams>>(
-    path: Path<T>,
+pub async fn require_tutor(
+    State(db): State<DatabaseConnection>,
+    Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role(path, req, next, "tutor", "Tutor access required for this module").await
+    require_role_base(
+        State(db),
+        Path(params),
+        req,
+        next,
+        &["tutor"],
+        "Tutor access required for this module"
+    ).await
 }
 
 /// Guard for requiring student access.
-pub async fn require_student<T: Into<PathParams>>(
-    path: Path<T>,
+pub async fn require_student(
+    State(db): State<DatabaseConnection>,
+    Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role(path, req, next, "student", "Student access required for this module").await
+    require_role_base(
+        State(db),
+        Path(params),
+        req,
+        next,
+        &["student"],
+        "Student access required for this module"
+    ).await
+}
+
+/// Guard for requiring lecturer or tutor access.
+pub async fn require_lecturer_or_tutor(
+    State(db): State<DatabaseConnection>,
+    Path(params): Path<HashMap<String, String>>,
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    require_role_base(
+        State(db),
+        Path(params),
+        req,
+        next,
+        &["lecturer", "tutor"],
+        "Lecturer or tutor access required for this module"
+    ).await
 }
 
 /// Guard for requiring any assigned role (lecturer, tutor, student).
-pub async fn require_assigned_to_module<T: Into<PathParams>>(
-    Path(params): Path<T>,
+pub async fn require_assigned_to_module(
+    State(db): State<DatabaseConnection>,
+    Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let Some(module_id) = extract_module_id(params) else {
-        return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error("Invalid module path"))));
-    };
-
-    let user = req
-        .extensions()
-        .get::<AuthUser>()
-        .ok_or((
-            StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::error("Authentication required"))
-        ))?
-        .0
-        .clone();
-
-    if user.admin {
-        return Ok(next.run(req).await);
-    }
-
-    let db = connect().await;
-    let roles = ["lecturer", "tutor", "student"];
-    let has_any = join_all(
-        roles.iter().map(|r| {
-            user::Model::is_in_role(&db, user.sub, module_id, r)
-        })
-    )
-    .await
-    .into_iter()
-    .any(|res| res.unwrap_or(false));
-
-    if has_any {
-        Ok(next.run(req).await)
-    } else {
-        Err((StatusCode::FORBIDDEN, Json(ApiResponse::error("Access denied: Not assigned to this module"))))
-    }
+    require_role_base(
+        State(db),
+        Path(params),
+        req,
+        next,
+        &["lecturer", "tutor", "student"],
+        "User not assigned to this module"
+    ).await
 }
 
-/// Guard for requiring either lecturer or tutor access.
-pub async fn require_lecturer_or_tutor<T: Into<PathParams>>(
-    Path(params): Path<T>,
-    req: Request<Body>,
-    next: Next,
-) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let module_id = match extract_module_id(params.into()) {
-        Some(id) => id,
-        None => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error("Invalid module path")))),
-    };
+// --- Path ID Guards ---
 
-    let user = req.extensions().get::<AuthUser>()
-        .ok_or((
-            StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::error("Authentication required"))
-        ))?
-        .0.clone();
-
-    if user.admin {
-        return Ok(next.run(req).await);
-    }
-
-    let db = connect().await;
-    let is_lecturer = user::Model::is_in_role(&db, user.sub, module_id, "lecturer").await.unwrap_or(false);
-    let is_tutor = user::Model::is_in_role(&db, user.sub, module_id, "tutor").await.unwrap_or(false);
-
-    if is_lecturer || is_tutor {
-        Ok(next.run(req).await)
-    } else {
-        Err((StatusCode::FORBIDDEN, Json(ApiResponse::error("Lecturer or tutor access required for this module"))))
-    }
-}
-
-//It's in the name! :)
-pub async fn require_lecturer_or_admin<T: Into<PathParams>>(
-    Path(params): Path<T>,
-    req: Request<Body>,
-    next: Next,
-) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let module_id = match extract_module_id(params.into()) {
-        Some(id) => id,
-        None => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::error("Invalid module path")),
-            ));
-        }
-    };
-
-    let user = req.extensions().get::<AuthUser>().ok_or((
-        StatusCode::UNAUTHORIZED,
-        Json(ApiResponse::error("Authentication required")),
-    ))?.0.clone();
-
-    if user.admin {
-        return Ok(next.run(req).await);
-    }
-
-    let db = connect().await;
-    let is_lecturer = user::Model::is_in_role(&db, user.sub, module_id, "lecturer")
+async fn check_module_exists(
+    module_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    let found = ModuleEntity::find_by_id(module_id)
+        .one(db)
         .await
-        .unwrap_or(false);
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking module"))))?;
 
-    if is_lecturer {
-        Ok(next.run(req).await)
-    } else {
-        Err((
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::error("Lecturer or admin access required for this module")),
-        ))
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Module {} not found.", module_id))),
+        ));
     }
+    Ok(())
+}
+
+async fn check_user_exists(
+    user_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    let found = UserEntity::find_by_id(user_id)
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking user"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("User {} not found.", user_id))),
+        ));
+    }
+    Ok(())
+}
+
+async fn check_assignment_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_module_exists(module_id, db).await?;
+
+    let found = AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id))
+        .filter(AssignmentColumn::ModuleId.eq(module_id))
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking assignment"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Assignment {} in Module {} not found.", assignment_id, module_id))),
+        ));
+    }
+    Ok(())
+}
+
+async fn check_task_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    task_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+
+    let found = TaskEntity::find()
+        .filter(TaskColumn::Id.eq(task_id))
+        .filter(TaskColumn::AssignmentId.eq(assignment_id))
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking task"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Task {} in Assignment {} not found.", task_id, assignment_id))),
+        ));
+    }
+    Ok(())
+}
+
+async fn check_submission_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    submission_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+
+    let found = SubmissionEntity::find()
+        .filter(SubmissionColumn::Id.eq(submission_id))
+        .filter(SubmissionColumn::AssignmentId.eq(assignment_id))
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking submission"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Submission {} in Assignment {} not found.", submission_id, assignment_id))),
+        ));
+    }
+    Ok(())
+}
+
+async fn check_file_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    file_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+
+    let found = FileEntity::find()
+        .filter(FileColumn::Id.eq(file_id))
+        .filter(FileColumn::AssignmentId.eq(assignment_id))
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking file"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("File {} in Assignment {} not found.", file_id, assignment_id))),
+        ));
+    }
+    Ok(())
+}
+
+pub async fn validate_known_ids(
+    State(db): State<DatabaseConnection>,
+    Path(params): Path<HashMap<String, String>>,
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, Response> {
+    let mut module_id: Option<i32>     = None;
+    let mut assignment_id: Option<i32> = None;
+    let mut task_id: Option<i32>       = None;
+    let mut submission_id: Option<i32> = None;
+    let mut file_id: Option<i32>       = None;
+    let mut user_id: Option<i32>       = None;
+
+    for (key, raw) in &params {
+        let id = raw.parse::<i32>().map_err(|_| {
+            (StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Invalid {}: '{}'. Must be an integer.", key, raw)))).into_response()
+        })?;
+        match key.as_str() {
+            "module_id"     => module_id = Some(id),
+            "assignment_id" => assignment_id = Some(id),
+            "task_id"       => task_id = Some(id),
+            "submission_id" => submission_id = Some(id),
+            "file_id"       => file_id = Some(id),
+            "user_id"       => user_id = Some(id),
+            _ => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Unexpected parameter: '{}'.", key)))).into_response()),
+        }
+    }
+
+    if let Some(uid) = user_id {
+        check_user_exists(uid, &db).await.map_err(|e| e.into_response())?;
+    }
+    if let Some(mid) = module_id {
+        check_module_exists(mid, &db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid)) = (module_id, assignment_id) {
+        check_assignment_hierarchy(mid, aid, &db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, task_id) {
+        check_task_hierarchy(mid, aid, tid, &db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid), Some(sid)) = (module_id, assignment_id, submission_id) {
+        check_submission_hierarchy(mid, aid, sid, &db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid), Some(fid)) = (module_id, assignment_id, file_id) {
+        check_file_hierarchy(mid, aid, fid, &db).await.map_err(|e| e.into_response())?;
+    }
+
+    Ok(next.run(req).await)
 }

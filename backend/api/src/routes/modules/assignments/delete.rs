@@ -1,14 +1,13 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-
-use sea_orm::DbErr;
-
-use serde_json::{json, Value as JsonValue};
-
-use db::{
-    connect,
-    models::{assignment::{self}},
+use axum::{
+    extract::{State, Path},
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
 };
-
+use sqlx::types::JsonValue;
+use sea_orm::DatabaseConnection;
+use serde_json::json;
+use db::models::assignment;
 use crate::response::ApiResponse;
 use super::common::BulkDeleteRequest;
 
@@ -47,23 +46,15 @@ use super::common::BulkDeleteRequest;
 /// }
 /// ```
 pub async fn delete_assignment(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
     match assignment::Model::delete(&db, assignment_id as i32, module_id as i32).await {
         Ok(()) => (
             StatusCode::OK,
             Json(json!({
                 "success": true,
                 "message": format!("Assignment {} deleted successfully", assignment_id),
-            })),
-        ),
-        Err(DbErr::RecordNotFound(_)) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({
-                "success": false,
-                "message": format!("No assignment found with ID {} in module {}", assignment_id, module_id),
             })),
         ),
         Err(e) => (
@@ -105,11 +96,10 @@ pub async fn delete_assignment(
 /// }
 /// ```
 pub async fn bulk_delete_assignments(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(req): Json<BulkDeleteRequest>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
     if req.assignment_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,

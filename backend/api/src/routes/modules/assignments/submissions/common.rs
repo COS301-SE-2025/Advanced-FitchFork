@@ -9,6 +9,7 @@ pub struct ListSubmissionsQuery {
     pub sort: Option<String>,
     pub query: Option<String>,
     pub username: Option<String>,
+    pub late: Option<bool>,
 }
 
 /// Represents a user associated with a submission.

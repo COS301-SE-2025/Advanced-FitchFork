@@ -1,5 +1,5 @@
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     Json,
     http::StatusCode,
     response::IntoResponse,
@@ -7,17 +7,8 @@ use axum::{
 use db::models::{assignment};
 use serde::{Deserialize};
 use serde_json::{Value};
-use sea_orm::{EntityTrait, Set, QueryFilter, ColumnTrait, ActiveModelTrait};
-
-use db::{
-    connect,
-    models::{
-        assignment::{
-            Column as AssignmentColumn, Entity as AssignmentEntity,
-        },
-    },
-};
-
+use sea_orm::{EntityTrait, Set, QueryFilter, ColumnTrait, ActiveModelTrait, DatabaseConnection};
+use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
 use crate::response::ApiResponse;
 
 #[derive(Debug, Deserialize)]
@@ -25,6 +16,7 @@ pub struct PartialConfigUpdate {
     #[serde(flatten)]
     pub fields: serde_json::Map<String, Value>,
 }
+
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
 /// Partially update specific fields of an assignment's configuration. Accessible to users with
@@ -142,31 +134,16 @@ pub struct PartialConfigUpdate {
 /// - For complete configuration replacement, use the POST endpoint instead
 /// - Partial updates are restricted to users with appropriate module permissions
 /// - The `timeout_seconds` and `max_processors` fields are validated to ensure they are integers
-pub async fn update_assignment_config(Path((module_id, assignment_id)) : Path<(i64, i64)>, Json(payload): Json<PartialConfigUpdate>) -> impl IntoResponse {
-    let db = connect().await;
-
-    let assignment = match AssignmentEntity::find()
+pub async fn update_assignment_config(
+    State(db): State<DatabaseConnection>,
+    Path((module_id, assignment_id)) : Path<(i64, i64)>,
+    Json(payload): Json<PartialConfigUpdate>
+) -> impl IntoResponse {
+    let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::ModuleId.eq(module_id))
         .filter(AssignmentColumn::Id.eq(assignment_id))
         .one(&db)
-        .await
-    {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment or module not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error")),
-            )
-                .into_response();
-        }
-    };
+        .await.unwrap().unwrap();
 
     let config = assignment.config.clone();
     let mut existing_config: serde_json::Map<String, Value> = match config {

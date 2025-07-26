@@ -1,13 +1,7 @@
-use axum::{extract::{Path, Query}, http::StatusCode, response::{Response, IntoResponse}, Json};
+use axum::{extract::{Path, Query, State}, http::StatusCode, response::{Response, IntoResponse}, Json};
 use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, JoinType, PaginatorTrait, DatabaseConnection, QuerySelect, QueryOrder};
 use crate::response::ApiResponse;
-use db::{
-    connect,
-    models::{
-        user,
-        user_module_role::{self, Column as RoleCol, Role},
-    },
-};
+use db::models::{user, user_module_role::{self, Column as RoleCol, Role}};
 use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleResponse};
 
 /// GET /api/modules/{module_id}/lecturers
@@ -16,7 +10,7 @@ use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleRespo
 ///
 /// ### Access Control
 /// This endpoint is accessible to:
-/// - Admin users (`claims.admin == true`)
+/// - Admin users
 /// - Users assigned to the module (as Lecturer, Tutor, or Student)
 ///
 /// ### Path Parameters
@@ -93,24 +87,10 @@ use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleRespo
 /// }
 /// ```
 pub async fn get_lecturers(
-    Path(module_id): Path<i32>,
+    State(db): State<DatabaseConnection>,
+    Path(module_id): Path<i64>,
     Query(params): Query<RoleQuery>,
 ) -> Response {
-    let db: DatabaseConnection = connect().await;
-
-    let module_exists = user_module_role::Entity::find()
-        .filter(RoleCol::ModuleId.eq(module_id))
-        .one(&db)
-        .await;
-
-    if let Ok(None) | Err(_) = module_exists {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module not found")),
-        )
-            .into_response();
-    }
-
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
 

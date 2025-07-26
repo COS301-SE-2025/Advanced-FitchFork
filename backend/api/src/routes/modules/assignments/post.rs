@@ -1,17 +1,13 @@
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
 use chrono::{DateTime, Utc};
-
-use sea_orm::DbErr;
-
+use sea_orm::{DatabaseConnection, DbErr};
 use crate::response::ApiResponse;
 use db::{
-    connect,
     models::{
         assignment::{
             AssignmentType,
@@ -37,15 +33,47 @@ use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentR
 /// - `available_from` (`string`, required): The date/time from which the assignment is available (ISO 8601 format).
 /// - `due_date` (`string`, required): The due date/time for the assignment (ISO 8601 format).
 ///
-/// ### Behavior
-/// The newly created assignment will always have its `status` set to `"setup"`,  
-/// regardless of any other input.
-pub async fn create(
+/// ### Responses
+///
+/// - `200 OK`
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Assignment created successfully",
+///   "data": {
+///     "id": 123,
+///     "module_id": 456,
+///     "name": "Assignment 1",
+///     "description": "This is a sample assignment",
+///     "assignment_type": "Assignment",
+///     "available_from": "2024-01-01T00:00:00Z",
+///     "due_date": "2024-01-31T23:59:59Z",
+///     "created_at": "2024-01-01T00:00:00Z",
+///     "updated_at": "2024-01-01T00:00:00Z"
+///   }
+/// }
+/// ```
+///
+/// - `400 Bad Request`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Invalid available_from datetime" // or "Invalid due_date datetime" or "assignment_type must be 'assignment' or 'practical'"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Assignment could not be inserted" // or "Database error"
+/// }
+/// ```
+pub async fn create_assignment(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
     let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
         .map(|dt| dt.with_timezone(&Utc)) {
         Ok(date) => date,

@@ -1,20 +1,15 @@
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use crate::auth::AuthUser;
 use crate::response::ApiResponse;
-use db::{
-    connect,
-    models::{
-        module,
-        user,
-        user_module_role::{self, Column as RoleCol, Role},
-    },
+use db::models::{
+    user,
+    user_module_role::{self, Column as RoleCol, Role},
 };
-use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, ActiveModelTrait};
+use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, DatabaseConnection, ActiveModelTrait};
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
 /// DELETE /api/modules/{module_id}/tutors
@@ -80,34 +75,14 @@ use crate::routes::modules::common::ModifyUsersModuleRequest;
 /// }
 /// ```
 pub async fn remove_tutors(
-    Path(module_id): Path<i32>,
-    AuthUser(claims): AuthUser,
+    State(db): State<DatabaseConnection>,
+    Path(module_id): Path<i64>,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
-    if !claims.admin {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("You do not have permission to perform this action")),
-        );
-    }
-
     if body.user_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::error("Request must include a non-empty list of user_ids")),
-        );
-    }
-
-    let db = connect().await;
-
-    let module_exists = module::Entity::find_by_id(module_id)
-        .one(&db)
-        .await;
-
-    if let Ok(None) | Err(_) = module_exists {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module not found")),
         );
     }
 

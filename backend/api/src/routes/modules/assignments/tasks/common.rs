@@ -1,5 +1,4 @@
 use serde::Serialize;
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Serialize)]
 pub struct TaskResponse {
@@ -7,6 +6,6 @@ pub struct TaskResponse {
     pub task_number: i64,
     pub name: String,
     pub command: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: String,
+    pub updated_at: String,
 }

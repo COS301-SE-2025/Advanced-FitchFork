@@ -1,31 +1,21 @@
 use axum::{
-    extract::{Path, Query},
+    Extension, Json,
+    extract::{State, Path, Query},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Extension, Json,
 };
-
 use serde::{Deserialize, Serialize};
-
 use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, Order,
-    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, Order, PaginatorTrait,
+    QueryFilter, QueryOrder, QuerySelect,
 };
-
-use crate::{
-    auth::AuthUser,
-    response::ApiResponse,
-};
-
-use db::{
-    connect,
-    models::{
-        module::{Column as ModuleCol, Entity as ModuleEntity, Model as Module},
-        user::{self, Column as UserCol, Entity as UserEntity, Model as UserModel},
-        user_module_role::{self, Column as RoleCol, Entity as RoleEntity, Role},
-    },
-};
+use crate::{auth::AuthUser, response::ApiResponse};
 use crate::routes::common::UserResponse;
+use db::models::{
+    module::{Column as ModuleCol, Entity as ModuleEntity, Model as Module},
+    user::{self, Column as UserCol, Entity as UserEntity, Model as UserModel},
+    user_module_role::{self, Column as RoleCol, Entity as RoleEntity, Role},
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModuleResponse {
@@ -148,15 +138,16 @@ pub struct EligibleUserListResponse {
 /// }
 /// ```
 pub async fn get_eligible_users_for_module(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Query(params): Query<EligibleUserQuery>,
 ) -> Response {
-    let db = connect().await;
-
     if !["Lecturer", "Tutor", "Student"].contains(&params.role.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<EligibleUserListResponse>::error("Invalid role")),
+            Json(ApiResponse::<EligibleUserListResponse>::error(
+                "Invalid role",
+            )),
         )
             .into_response();
     }
@@ -176,7 +167,7 @@ pub async fn get_eligible_users_for_module(
     let mut condition = Condition::all();
 
     if !assigned_ids.is_empty() {
-    condition = condition.add(user::Column::Id.is_not_in(assigned_ids));
+        condition = condition.add(user::Column::Id.is_not_in(assigned_ids));
     }
 
     if let Some(ref q) = params.query {
@@ -216,7 +207,10 @@ pub async fn get_eligible_users_for_module(
 
     let paginator = query.paginate(&db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
-    let users = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
+    let users = paginator
+        .fetch_page((page - 1).into())
+        .await
+        .unwrap_or_default();
 
     (
         StatusCode::OK,
@@ -317,26 +311,12 @@ pub async fn get_eligible_users_for_module(
 ///   "message": "Database error retrieving module"
 /// }
 /// ```
-pub async fn get_module(Path(module_id): Path<i32>) -> Response {
-    let db: DatabaseConnection = connect().await;
-
-    let module = match ModuleEntity::find_by_id(module_id).one(&db).await {
-        Ok(Some(m)) => m,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Module not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving module")),
-            )
-                .into_response();
-        }
-    };
+pub async fn get_module(
+    State(db): State<DatabaseConnection>,
+    Path(module_id): Path<i64>
+) -> Response {
+    let module = ModuleEntity::find_by_id(module_id)
+        .one(&db).await.unwrap().unwrap();
 
     let (lecturers, tutors, students) = tokio::join!(
         get_users_by_role(&db, module_id, Role::Lecturer),
@@ -347,26 +327,43 @@ pub async fn get_module(Path(module_id): Path<i32>) -> Response {
     if lecturers.is_err() || tutors.is_err() || students.is_err() {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error("Failed to retrieve assigned personnel")),
+            Json(ApiResponse::<()>::error(
+                "Failed to retrieve assigned personnel",
+            )),
         )
             .into_response();
     }
 
     let mut response = ModuleResponse::from(module);
-    response.lecturers = lecturers.unwrap().into_iter().map(UserResponse::from).collect();
-    response.tutors = tutors.unwrap().into_iter().map(UserResponse::from).collect();
-    response.students = students.unwrap().into_iter().map(UserResponse::from).collect();
+    response.lecturers = lecturers
+        .unwrap()
+        .into_iter()
+        .map(UserResponse::from)
+        .collect();
+    response.tutors = tutors
+        .unwrap()
+        .into_iter()
+        .map(UserResponse::from)
+        .collect();
+    response.students = students
+        .unwrap()
+        .into_iter()
+        .map(UserResponse::from)
+        .collect();
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response, "Module retrieved successfully")),
+        Json(ApiResponse::success(
+            response,
+            "Module retrieved successfully",
+        )),
     )
         .into_response()
 }
 
 async fn get_users_by_role(
     db: &DatabaseConnection,
-    module_id: i32,
+    module_id: i64,
     role: Role,
 ) -> Result<Vec<UserModel>, sea_orm::DbErr> {
     UserEntity::find()
@@ -511,9 +508,10 @@ impl From<(Vec<Module>, i32, i32, i32)> for FilterResponse {
 ///   "message": "An internal server error occurred"
 /// }
 /// ```
-pub async fn get_modules(Query(params): Query<FilterReq>) -> impl IntoResponse {
-    let db: DatabaseConnection = db::connect().await;
-
+pub async fn get_modules(
+    State(db): State<DatabaseConnection>,
+    Query(params): Query<FilterReq>
+) -> impl IntoResponse {
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100).max(1);
 
@@ -524,7 +522,9 @@ pub async fn get_modules(Query(params): Query<FilterReq>) -> impl IntoResponse {
             if !valid_fields.contains(&field) {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<FilterResponse>::error("Invalid field used for sorting")),
+                    Json(ApiResponse::<FilterResponse>::error(
+                        "Invalid field used for sorting",
+                    )),
                 );
             }
         }
@@ -532,10 +532,13 @@ pub async fn get_modules(Query(params): Query<FilterReq>) -> impl IntoResponse {
 
     let mut condition = Condition::all();
 
+    // Query filters
     if let Some(ref q) = params.query {
         let q = q.to_lowercase();
         condition = condition.add(
-            ModuleCol::Code.contains(&q).or(ModuleCol::Description.contains(&q)),
+            ModuleCol::Code
+                .contains(&q)
+                .or(ModuleCol::Description.contains(&q)),
         );
     }
 
@@ -546,9 +549,9 @@ pub async fn get_modules(Query(params): Query<FilterReq>) -> impl IntoResponse {
     if let Some(year) = params.year {
         condition = condition.add(ModuleCol::Year.eq(year));
     }
-
+    
     let mut query = ModuleEntity::find().filter(condition);
-
+    
     if let Some(sort_str) = &params.sort {
         for field in sort_str.split(',') {
             let trimmed = field.trim();
@@ -603,16 +606,24 @@ pub async fn get_modules(Query(params): Query<FilterReq>) -> impl IntoResponse {
         }
     }
 
+    // Pagination
     let paginator = query.paginate(&db, per_page as u64);
     let total = paginator.num_items().await.unwrap_or(0) as i32;
-    let modules: Vec<Module> = paginator.fetch_page((page - 1) as u64).await.unwrap_or_default();
+    let modules: Vec<Module> = paginator
+        .fetch_page((page - 1) as u64)
+        .await
+        .unwrap_or_default();
 
     let response = FilterResponse::from((modules, page, per_page, total));
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response, "Modules retrieved successfully")),
+        Json(ApiResponse::success(
+            response,
+            "Modules retrieved successfully",
+        )),
     )
 }
+
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct MyDetailsResponse {
@@ -632,9 +643,18 @@ impl From<(Vec<Module>, Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsRes
         ),
     ) -> Self {
         MyDetailsResponse {
-            as_student: as_student.into_iter().map(ModuleDetailsResponse::from).collect(),
-            as_tutor: as_tutor.into_iter().map(ModuleDetailsResponse::from).collect(),
-            as_lecturer: as_lecturer.into_iter().map(ModuleDetailsResponse::from).collect(),
+            as_student: as_student
+                .into_iter()
+                .map(ModuleDetailsResponse::from)
+                .collect(),
+            as_tutor: as_tutor
+                .into_iter()
+                .map(ModuleDetailsResponse::from)
+                .collect(),
+            as_lecturer: as_lecturer
+                .into_iter()
+                .map(ModuleDetailsResponse::from)
+                .collect(),
             as_assistant_lecturer: as_assistant_lecturer
                 .into_iter()
                 .map(ModuleDetailsResponse::from)
@@ -691,9 +711,9 @@ impl From<(Vec<Module>, Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsRes
 /// }
 /// ```
 pub async fn get_my_details(
+    State(db): State<DatabaseConnection>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db: DatabaseConnection = connect().await;
     let user_id = claims.sub;
 
     let (as_student, as_tutor, as_lecturer, as_assistant_lecturer) = tokio::join!(
@@ -722,7 +742,6 @@ pub async fn get_my_details(
         ),
     }
 }
-
 
 /// Helper to fetch modules by user_id and role using SeaORM relations
 async fn get_modules_by_user_and_role(
