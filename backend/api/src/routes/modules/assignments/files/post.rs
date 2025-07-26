@@ -1,29 +1,15 @@
 use axum::{
-    extract::{Multipart, Path},
+    extract::{State, Multipart, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
 use serde::Serialize;
-
-use sea_orm::{
-    ColumnTrait,
-    EntityTrait,
-    QueryFilter,
+use sea_orm::DatabaseConnection;
+use db::models::assignment_file::{
+    FileType,
+    Model as FileModel,
 };
-
-use db::models::{
-    assignment::{
-        Column as AssignmentColumn,
-        Entity as AssignmentEntity,
-    },
-    assignment_file::{
-        FileType,
-        Model as FileModel,
-    },
-};
-
 use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
@@ -102,38 +88,10 @@ pub struct AssignmentSubmissionMetadata {
 /// ```
 ///
 pub async fn upload_files(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = db::connect().await;
-
-    let assignment_exists = AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await;
-
-    match assignment_exists {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<UploadedFileMetadata>::error(
-                    "Assignment not found",
-                )),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            eprintln!("DB error checking assignment: {:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UploadedFileMetadata>::error("Database error")),
-            )
-                .into_response();
-        }
-    }
-
     let mut file_type: Option<FileType> = None;
     let mut file_name: Option<String> = None;
     let mut file_bytes: Option<Vec<u8>> = None;

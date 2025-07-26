@@ -1,15 +1,8 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
 use validator::Validate;
 use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, Set, ActiveModelTrait, DatabaseConnection, TransactionTrait, IntoActiveModel};
 use crate::response::ApiResponse;
-use db::{
-    connect,
-    models::{
-        user::{Entity as UserEntity},
-        module::{Entity as ModuleEntity},
-        user_module_role::{Entity as RoleEntity, Column as RoleCol, Role},
-    },
-};
+use db::models::{user::{Entity as UserEntity}, user_module_role::{Entity as RoleEntity, Column as RoleCol, Role}};
 use crate::routes::modules::common::EditRoleRequest;
 
 /// PUT /api/modules/{module_id}/lecturers
@@ -88,6 +81,7 @@ use crate::routes::modules::common::EditRoleRequest;
 /// }
 /// ```
 pub async fn edit_lecturers(
+    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(req): Json<EditRoleRequest>,
 ) -> impl IntoResponse {
@@ -96,16 +90,6 @@ pub async fn edit_lecturers(
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::error(error_message)),
-        );
-    }
-
-    let db: DatabaseConnection = connect().await;
-
-    let module = ModuleEntity::find_by_id(module_id).one(&db).await;
-    if let Ok(None) | Err(_) = module {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module not found")),
         );
     }
 

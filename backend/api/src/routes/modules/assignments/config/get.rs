@@ -1,24 +1,21 @@
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     Json,
     http::StatusCode,
     response::IntoResponse,
 };
 use serde_json::{Value, Map};
-
 use crate::{
     response::ApiResponse,
 };
-
 use db::{
-    connect,
     models::{
         assignment::{
             Column as AssignmentColumn, Entity as AssignmentEntity,
         },
     },
 };
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, DatabaseConnection};
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -112,32 +109,14 @@ use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 /// - The configuration object is used by the evaluation system to customize assignment behavior
 /// - Only valid JSON objects are accepted as configuration; arrays, primitives, or null values are rejected
 /// - Configuration retrieval is restricted to users with appropriate module permissions
-pub async fn get_assignment_config( Path((module_id, assignment_id)): Path<(i64, i64)>,) -> impl IntoResponse {
-    let db = connect().await;
-
-    let result = AssignmentEntity::find()
+pub async fn get_assignment_config(
+    State(db): State<DatabaseConnection>,
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await;
-
-    let assignment = match result {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment or module not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error")),
-            )
-                .into_response();
-        }
-    };
+        .one(&db).await.unwrap().unwrap();
 
     let config = match assignment.config {
         Some(Value::Object(obj)) => Value::Object(obj),

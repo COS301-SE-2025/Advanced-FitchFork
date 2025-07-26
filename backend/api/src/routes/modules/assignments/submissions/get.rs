@@ -1,25 +1,8 @@
-use std::fs;
-use axum::{
-    extract::{Path, Query},
-    http::StatusCode,
-    response::IntoResponse,
-    Extension, Json,
-};
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
+use axum::{extract::{State, Path, Query}, http::StatusCode, response::IntoResponse, Extension, Json};
 use chrono::{DateTime, Utc};
-use db::{
-    connect,
-    models::{
-        assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-        assignment_submission::{self, Entity as SubmissionEntity},
-        user,
-        user_module_role::{self, Role},
-    },
-};
-use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder,  QuerySelect, JoinType, RelationTrait
-};
+use db::models::{assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, assignment_submission::{self, Entity as SubmissionEntity}, user, user_module_role::{self, Role}};
+use sea_orm::{ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,  QuerySelect, JoinType, RelationTrait};
 use serde_json::Value;
 use crate::{auth::AuthUser, response::ApiResponse};
 use super::common::{
@@ -66,39 +49,16 @@ fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
 /// ### Notes
 /// - No filtering on other students or usernames is possible in this endpoint.
 async fn get_user_submissions(
+    db: DatabaseConnection,
     module_id: i64,
     assignment_id: i64,
     user_id: i64,
     Query(params): Query<ListSubmissionsQuery>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
-    let assignment = match AssignmentEntity::find()
+    let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await
-    {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<SubmissionsListResponse>::error(
-                    "Assignment not found",
-                )),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SubmissionsListResponse>::error(
-                    "Database error",
-                )),
-            )
-                .into_response();
-        }
-    };
+        .one(&db).await.unwrap().unwrap();
 
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
@@ -110,6 +70,14 @@ async fn get_user_submissions(
     if let Some(query) = &params.query {
         let pattern = format!("%{}%", query.to_lowercase());
         condition = condition.add(assignment_submission::Column::Filename.contains(&pattern));
+    }
+
+    if let Some(late_status) = params.late {
+        condition = if late_status {
+            condition.add(assignment_submission::Column::CreatedAt.gt(assignment.due_date))
+        } else {
+            condition.add(assignment_submission::Column::CreatedAt.lte(assignment.due_date))
+        };
     }
 
     let mut query = assignment_submission::Entity::find()
@@ -284,13 +252,11 @@ async fn get_user_submissions(
 /// - Late submissions are computed relative to assignment `due_date`.
 /// - Defaults to sorting by `created_at DESC`.
 async fn get_list_submissions(
+    db: DatabaseConnection,
     module_id: i64,
     assignment_id: i64,
     params: ListSubmissionsQuery,
 ) -> impl IntoResponse {
-
-    let db = connect().await;
-
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
@@ -375,6 +341,14 @@ async fn get_list_submissions(
                     .into_response();
             }
         }
+    }
+
+    if let Some(late_status) = params.late {
+        condition = if late_status {
+            condition.add(assignment_submission::Column::CreatedAt.gt(assignment.due_date))
+        } else {
+            condition.add(assignment_submission::Column::CreatedAt.lte(assignment.due_date))
+        };
     }
 
     let mut query = assignment_submission::Entity::find()
@@ -543,21 +517,19 @@ async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bo
 /// - Students: `username` is ignored, only their own submissions returned.
 /// - Late submissions are calculated based on `due_date`.
 pub async fn list_submissions(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Query(params): Query<ListSubmissionsQuery>,
 ) -> axum::response::Response {
     let user_id = claims.sub;
-    let db = connect().await;
-
     if is_student(module_id, user_id, &db).await {
-        // Pass params explicitly now
-        return get_user_submissions(module_id, assignment_id, user_id, Query(params))
+        return get_user_submissions(db, module_id, assignment_id, user_id, Query(params))
             .await
             .into_response();
     }
 
-    get_list_submissions(module_id, assignment_id, params)
+    get_list_submissions(db, module_id, assignment_id, params)
         .await
         .into_response()
 }
@@ -672,28 +644,12 @@ pub async fn list_submissions(
 ///   code coverage/complexity analysis
 /// - Access is restricted to users with appropriate permissions for the module
 pub async fn get_submission(
+    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-    let submission = match SubmissionEntity::find_by_id(submission_id).one(&db).await {
-        Ok(Some(sub)) => sub,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Submission not found")),
-            )
-                .into_response();
-        }
-        Err(err) => {
-            eprintln!("DB error loading submission: {:?}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error")),
-            )
-                .into_response();
-        }
-    };
+    let submission = SubmissionEntity::find_by_id(submission_id)
+    .one(&db).await.unwrap().unwrap();
 
     if submission.assignment_id != assignment_id {
         return (

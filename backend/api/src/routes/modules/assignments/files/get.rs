@@ -1,29 +1,20 @@
 use std::{env, path::PathBuf};
-
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Json, Response},
 };
-
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
-
 use sea_orm::{
     ColumnTrait,
     EntityTrait,
     QueryFilter,
+    DatabaseConnection,
 };
-
 use crate::response::ApiResponse;
-use db::models::{
-    assignment::{
-        Column as AssignmentColumn,
-        Entity as AssignmentEntity,
-    },
-    assignment_file::{
-        Column as FileColumn,
-        Entity as FileEntity,
-    },
+use db::models::assignment_file::{
+    Column as FileColumn,
+    Entity as FileEntity,
 };
 use crate::routes::modules::assignments::common::File;
 
@@ -56,39 +47,17 @@ use crate::routes::modules::assignments::common::File;
 /// ```
 ///
 pub async fn download_file(
+    State(db): State<DatabaseConnection>,
     Path((_module_id, assignment_id, file_id)): Path<(i64, i64, i64)>,
 ) -> Response {
-    let db = db::connect().await;
-
-    let file = match FileEntity::find()
+    let file = FileEntity::find()
         .filter(FileColumn::Id.eq(file_id as i32))
         .filter(FileColumn::AssignmentId.eq(assignment_id as i32))
         .one(&db)
-        .await
-    {
-        Ok(Some(file)) => file,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("File not found")),
-            )
-                .into_response();
-        }
-        Err(err) => {
-            eprintln!("DB error fetching file: {:?}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error")),
-            )
-                .into_response();
-        }
-    };
+        .await.unwrap().unwrap();
 
-    let storage_root =
-        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".to_string());
+    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".to_string());
     let fs_path = PathBuf::from(storage_root).join(&file.path);
-
-    eprintln!("Resolved file path: {:?}", fs_path);
 
     if tokio::fs::metadata(&fs_path).await.is_err() {
         return (
@@ -177,33 +146,10 @@ pub async fn download_file(
 /// }
 /// ```
 ///
-pub async fn list_files(Path((module_id, assignment_id)): Path<(i64, i64)>) -> Response {
-    let db = db::connect().await;
-
-    match AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await
-    {
-        Ok(Some(_)) => {} // assignment exists
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<Vec<File>>::error("Assignment not found")),
-            )
-                .into_response();
-        }
-        Err(err) => {
-            eprintln!("DB error checking assignment: {:?}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<File>>::error("Database error")),
-            )
-                .into_response();
-        }
-    }
-
+pub async fn list_files(
+    State(db): State<DatabaseConnection>,
+    Path((_, assignment_id)): Path<(i64, i64)>
+) -> Response {
     match FileEntity::find()
         .filter(FileColumn::AssignmentId.eq(assignment_id as i32))
         .all(&db)
