@@ -45,6 +45,7 @@ import AuthLayout from './layouts/AuthLayout';
 import ModulesList from './pages/modules/ModulesList';
 import ModuleGrades from './pages/modules/ModuleGrades';
 import AssignmentsList from './pages/modules/assignments/AssignmentsList';
+import type { JSX } from 'react';
 
 export default function App() {
   const { user, isAdmin, loading, isExpired } = useAuth();

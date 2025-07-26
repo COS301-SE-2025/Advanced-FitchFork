@@ -80,17 +80,17 @@ const ControlBar = <T,>({
   const clearMenuItems: MenuItemType[] = [
     hasSearch && {
       key: 'clear-search',
-      label: 'Clear Search',
+      label: <span data-cy="clear-search">Clear Search</span>,
       onClick: () => handleSearch(''),
     },
     hasSort && {
       key: 'clear-sort',
-      label: 'Clear Sort',
+      label: <span data-cy="clear-sort">Clear Sort</span>,
       onClick: () => onSortChange?.([]),
     },
     hasFilters && {
       key: 'clear-filters',
-      label: 'Clear Filters',
+      label: <span data-cy="clear-filters">Clear Filters</span>,
       onClick: () => onFilterChange?.([]),
     },
   ].filter(Boolean) as MenuItemType[];
@@ -98,7 +98,7 @@ const ControlBar = <T,>({
   if (clearMenuItems.length > 1) {
     clearMenuItems.push({
       key: 'clear-all',
-      label: 'Clear All',
+      label: <span data-cy="clear-all">Clear All</span>,
       onClick: () => {
         handleSearch('');
         onSortChange?.([]);
@@ -241,6 +241,7 @@ const ControlBar = <T,>({
             {secondaryActions.length === 0 ? (
               <Button
                 type="primary"
+                data-cy={`control-action-${primaryAction.key}`}
                 onClick={() =>
                   primaryAction.handler({
                     selected: selectedRowKeys,
@@ -254,6 +255,7 @@ const ControlBar = <T,>({
               <Space.Compact>
                 <Button
                   type="primary"
+                  data-cy={`control-action-${primaryAction.key}`}
                   onClick={() =>
                     primaryAction.handler({
                       selected: selectedRowKeys,
@@ -265,10 +267,11 @@ const ControlBar = <T,>({
                 </Button>
 
                 <Dropdown
+                  data-cy="control-action-dropdown"
                   menu={{
                     items: secondaryActions.map((a) => ({
                       key: a.key,
-                      label: a.label,
+                      label: <span data-cy={`control-action-${a.key}`}>{a.label}</span>,
                       icon: a.icon,
                       onClick: a.confirm
                         ? undefined
@@ -292,6 +295,7 @@ const ControlBar = <T,>({
           <Col>
             {secondaryBulkActions.length === 0 ? (
               <Button
+                data-cy={`bulk-action-${resolvedPrimaryBulk.key}`}
                 onClick={() =>
                   resolvedPrimaryBulk.handler({
                     selected: selectedRowKeys,
@@ -304,6 +308,7 @@ const ControlBar = <T,>({
             ) : (
               <Space.Compact>
                 <Button
+                  data-cy={`bulk-action-${resolvedPrimaryBulk.key}`}
                   onClick={() =>
                     resolvedPrimaryBulk.handler({
                       selected: selectedRowKeys,
@@ -314,10 +319,11 @@ const ControlBar = <T,>({
                   {resolvedPrimaryBulk.icon} {resolvedPrimaryBulk.label}
                 </Button>
                 <Dropdown
+                  data-cy="bulk-action-dropdown"
                   menu={{
                     items: secondaryBulkActions.map((a) => ({
                       key: a.key,
-                      label: a.label,
+                      label: <span data-cy={`bulk-action-${a.key}`}>{a.label}</span>,
                       icon: a.icon,
                       onClick: a.confirm
                         ? undefined
@@ -343,6 +349,7 @@ const ControlBar = <T,>({
               <Button
                 icon={<ReloadOutlined />}
                 onClick={() => clearMenuItems[0].onClick?.({ key: clearMenuItems[0].key } as any)}
+                data-cy={clearMenuItems[0].key}
               >
                 {clearMenuItems[0].label}
               </Button>

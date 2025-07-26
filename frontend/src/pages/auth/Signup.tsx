@@ -49,7 +49,7 @@ export default function Signup() {
           showIcon
           closable
           onClose={() => setFormError(null)}
-          className="mb-4"
+          className="!mb-4"
         />
       )}
 
