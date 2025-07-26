@@ -8,6 +8,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use strum::{Display, EnumIter, EnumString};
+use util::execution_config::ExecutionConfig;
 
 /// Represents a file associated with an assignment, such as a spec, main file, memo, or submission.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -77,15 +78,15 @@ pub enum Relation {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
-    // /// Loads and returns the `ExecutionConfig` if the file type is `Config`.
-    // /// Requires `module_id` because it's not stored in the DB.
-    // pub fn load_execution_config(&self, module_id: i64) -> Result<ExecutionConfig, String> {
-    //     if self.file_type != FileType::Config {
-    //         return Err("File is not of type 'config'".to_string());
-    //     }
+    /// Loads and returns the `ExecutionConfig` if the file type is `Config`.
+    /// Requires `module_id` because it's not stored in the DB.
+    pub fn load_execution_config(&self, module_id: i64) -> Result<ExecutionConfig, String> {
+        if self.file_type != FileType::Config {
+            return Err("File is not of type 'config'".to_string());
+        }
 
-    //     ExecutionConfig::get_execution_config(module_id, self.assignment_id)
-    // }
+        ExecutionConfig::get_execution_config(module_id, self.assignment_id)
+    }
 
     /// Returns the base directory for assignment file storage from the environment.
     pub fn storage_root() -> PathBuf {

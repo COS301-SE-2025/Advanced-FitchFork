@@ -1,9 +1,10 @@
-use std::fs::{self, File};
-use serde_json::{Value, from_str, json};
-use std::io::{self, ErrorKind, Write};
+use crate::execution_config::ExecutionConfig;
 use chrono::prelude::*;
-use std::path::PathBuf;
+use serde_json::{Value, from_str, json};
 use std::env;
+use std::fs::{self, File};
+use std::io::{self, ErrorKind, Write};
+use std::path::PathBuf; // or adjust path if needed
 
 pub enum SaveError {
     DirectoryNotFound,
@@ -24,10 +25,12 @@ impl From<serde_json::Error> for SaveError {
 }
 
 #[allow(dead_code)]
-const SEPARATOR: &str = "&-=-&";
+//Removed hard-coded value
+// const SEPARATOR: &str = "&-=-&";
+
 /// Generates a mark allocator JSON structure by reading memo output files from
 /// the specified module and assignment directories.
-/// 
+///
 /// Reads all files in the `memo_output` folder corresponding to the module and assignment,
 /// parses lines to count marks and subsections, and constructs a JSON structure with
 /// tasks and their subsections. The resulting JSON is saved to an `allocator.json` file
@@ -43,8 +46,12 @@ const SEPARATOR: &str = "&-=-&";
 /// * `Ok(Value)` - A JSON `Value` representing the generated allocator data.
 /// * `Err(SaveError)` - An error if directory/file operations or JSON serialization fail.
 pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, SaveError> {
-    let base = env::var("ASSIGNMENT_STORAGE_ROOT")
+    let base = env::var("ASSIGNMENT_STORAGE_ROOT").map_err(|_| SaveError::DirectoryNotFound)?;
+
+    //Get config deliminator
+    let config = ExecutionConfig::get_execution_config(module, assignment)
         .map_err(|_| SaveError::DirectoryNotFound)?;
+    let separator = config.deliminator;
 
     let memo_output_path = PathBuf::from(&base)
         .join(format!("module_{}", module))
@@ -75,10 +82,9 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
 
     for p in paths {
         let entry = p.map_err(SaveError::IoError)?;
-        let file_name = entry
-            .file_name()
-            .into_string()
-            .map_err(|_| SaveError::IoError(io::Error::new(ErrorKind::InvalidData, "Invalid filename")))?;
+        let file_name = entry.file_name().into_string().map_err(|_| {
+            SaveError::IoError(io::Error::new(ErrorKind::InvalidData, "Invalid filename"))
+        })?;
 
         let file_path = memo_output_path.join(&file_name);
 
@@ -89,7 +95,10 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
         let mut task_value = 0;
 
         for line in content.lines() {
-            let split: Vec<_> = line.split(SEPARATOR).collect();
+            //No longer harcoded value
+            // let split: Vec<_> = line.split(SEPARATOR).collect();
+
+            let split: Vec<_> = line.split(&separator).collect();
 
             if split.len() > 1 {
                 if !current_section.is_empty() {
@@ -153,8 +162,8 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
 /// * `Ok(Value)` - The parsed JSON allocator data.
 /// * `Err(SaveError)` - If the file or directory does not exist or parsing JSON fails.
 pub async fn load_allocator(module: i64, assignment: i64) -> Result<Value, SaveError> {
-    let base = std::env::var("ASSIGNMENT_STORAGE_ROOT")
-        .map_err(|_| SaveError::DirectoryNotFound)?;
+    let base =
+        std::env::var("ASSIGNMENT_STORAGE_ROOT").map_err(|_| SaveError::DirectoryNotFound)?;
 
     let path = PathBuf::from(&base)
         .join(format!("module_{}", module))
@@ -174,7 +183,6 @@ pub async fn load_allocator(module: i64, assignment: i64) -> Result<Value, SaveE
     Ok(json_value)
 }
 
-
 /// Saves a JSON allocator object to the allocator.json file for the specified module and assignment.
 /// This will overwrite any existing allocator.json file at the target path.
 ///
@@ -189,8 +197,8 @@ pub async fn load_allocator(module: i64, assignment: i64) -> Result<Value, SaveE
 /// * `Ok(())` - On successful write.
 /// * `Err(SaveError)` - If file creation fails or JSON serialization fails.
 pub async fn save_allocator(module: i64, assignment: i64, json: Value) -> Result<(), SaveError> {
-    let base = std::env::var("ASSIGNMENT_STORAGE_ROOT")
-        .map_err(|_| SaveError::DirectoryNotFound)?;
+    let base =
+        std::env::var("ASSIGNMENT_STORAGE_ROOT").map_err(|_| SaveError::DirectoryNotFound)?;
 
     let dir_path = PathBuf::from(&base)
         .join(format!("module_{}", module))
