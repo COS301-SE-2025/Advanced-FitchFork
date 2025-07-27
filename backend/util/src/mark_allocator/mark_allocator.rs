@@ -4,7 +4,7 @@ use serde_json::{Value, from_str, json};
 use std::env;
 use std::fs::{self, File};
 use std::io::{self, ErrorKind, Write};
-use std::path::PathBuf;
+use std::path::PathBuf; // or adjust path if needed
 
 pub enum SaveError {
     DirectoryNotFound,
@@ -30,6 +30,7 @@ impl From<serde_json::Error> for SaveError {
 
 /// Generates a mark allocator JSON structure by reading memo output files from
 /// the specified module and assignment directories.
+///
 ///
 /// Reads all files in the `memo_output` folder corresponding to the module and assignment,
 /// parses lines to count marks and subsections, and constructs a JSON structure with
@@ -95,7 +96,9 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
         let mut task_value = 0;
 
         for line in content.lines() {
+            //No longer harcoded value
             // let split: Vec<_> = line.split(SEPARATOR).collect();
+
             let split: Vec<_> = line.split(&separator).collect();
 
             if split.len() > 1 {
