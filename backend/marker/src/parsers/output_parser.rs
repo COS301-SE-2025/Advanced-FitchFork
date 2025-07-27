@@ -17,9 +17,10 @@
 //!
 //! Returns [`MarkerError`] variants for invalid output format or mismatched counts.
 
-use regex::Regex;
 use crate::error::MarkerError;
 use crate::traits::parser::Parser;
+use regex::Regex;
+// use util::execution_config::ExecutionConfig;
 
 /// Represents a parsed submission containing multiple tasks.
 #[derive(Debug)]
@@ -58,7 +59,10 @@ pub struct SubtaskOutput {
 pub struct OutputParser;
 
 impl<'a> Parser<(&'a [String], &'a [String], Vec<usize>), Submission> for OutputParser {
-    fn parse(&self, input: (&'a [String], &'a [String], Vec<usize>)) -> Result<Submission, MarkerError> {
+    fn parse(
+        &self,
+        input: (&'a [String], &'a [String], Vec<usize>),
+    ) -> Result<Submission, MarkerError> {
         let (memo_contents, student_contents, expected_subtasks) = input;
         if memo_contents.len() != student_contents.len() {
             return Err(MarkerError::ParseOutputError(format!(
@@ -77,7 +81,11 @@ impl<'a> Parser<(&'a [String], &'a [String], Vec<usize>), Submission> for Output
         }
 
         let mut tasks = Vec::new();
-        for (i, (memo_content, student_content)) in memo_contents.iter().zip(student_contents.iter()).enumerate() {
+        for (i, (memo_content, student_content)) in memo_contents
+            .iter()
+            .zip(student_contents.iter())
+            .enumerate()
+        {
             let task_id = format!("Task{}", i + 1);
             let expected_subtask_count = expected_subtasks[i];
             let memo_output = parse_task_output(memo_content, expected_subtask_count)?;
@@ -108,11 +116,14 @@ impl<'a> Parser<(&'a [String], &'a [String], Vec<usize>), Submission> for Output
 /// # Errors
 ///
 /// Returns [`MarkerError`] for invalid output format or mismatched counts.
-fn parse_task_output(content: &str, expected_subtask_count: usize) -> Result<TaskOutput, MarkerError> {
+fn parse_task_output(
+    content: &str,
+    expected_subtask_count: usize,
+) -> Result<TaskOutput, MarkerError> {
     let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
     if lines.is_empty() {
         return Err(MarkerError::ParseOutputError(
-            "Content is empty".to_string()
+            "Content is empty".to_string(),
         ));
     }
 
@@ -278,8 +289,12 @@ without any delimiters."#;
 
     #[test]
     fn test_parse_case1_happy_path() {
-        let memo_contents = vec![read_test_file("src/test_files/output_parser/case1/memo.txt")];
-        let student_contents = vec![read_test_file("src/test_files/output_parser/case1/student.txt")];
+        let memo_contents = vec![read_test_file(
+            "src/test_files/output_parser/case1/memo.txt",
+        )];
+        let student_contents = vec![read_test_file(
+            "src/test_files/output_parser/case1/student.txt",
+        )];
         let parser = OutputParser;
         let result = parser.parse((&memo_contents, &student_contents, vec![3]));
 
@@ -306,8 +321,12 @@ without any delimiters."#;
 
     #[test]
     fn test_parse_case2_missing_delimiter() {
-        let memo_contents = vec![read_test_file("src/test_files/output_parser/case2/memo.txt")];
-        let student_contents = vec![read_test_file("src/test_files/output_parser/case2/student.txt")];
+        let memo_contents = vec![read_test_file(
+            "src/test_files/output_parser/case2/memo.txt",
+        )];
+        let student_contents = vec![read_test_file(
+            "src/test_files/output_parser/case2/student.txt",
+        )];
         let parser = OutputParser;
         let result = parser.parse((&memo_contents, &student_contents, vec![3]));
 
@@ -321,8 +340,12 @@ without any delimiters."#;
 
     #[test]
     fn test_parse_case3_extra_delimiter() {
-        let memo_contents = vec![read_test_file("src/test_files/output_parser/case3/memo.txt")];
-        let student_contents = vec![read_test_file("src/test_files/output_parser/case3/student.txt")];
+        let memo_contents = vec![read_test_file(
+            "src/test_files/output_parser/case3/memo.txt",
+        )];
+        let student_contents = vec![read_test_file(
+            "src/test_files/output_parser/case3/student.txt",
+        )];
         let parser = OutputParser;
         let result = parser.parse((&memo_contents, &student_contents, vec![3]));
 
@@ -336,8 +359,12 @@ without any delimiters."#;
 
     #[test]
     fn test_parse_case4_empty_subtask() {
-        let memo_contents = vec![read_test_file("src/test_files/output_parser/case4/memo.txt")];
-        let student_contents = vec![read_test_file("src/test_files/output_parser/case4/student.txt")];
+        let memo_contents = vec![read_test_file(
+            "src/test_files/output_parser/case4/memo.txt",
+        )];
+        let student_contents = vec![read_test_file(
+            "src/test_files/output_parser/case4/student.txt",
+        )];
         let parser = OutputParser;
         let result = parser.parse((&memo_contents, &student_contents, vec![3]));
 
@@ -361,14 +388,18 @@ without any delimiters."#;
 
     #[test]
     fn test_parse_case5_mismatched_file_counts() {
-        let memo_contents = vec![read_test_file("src/test_files/output_parser/case5/memo.txt")];
+        let memo_contents = vec![read_test_file(
+            "src/test_files/output_parser/case5/memo.txt",
+        )];
         let student_contents = Vec::new();
         let parser = OutputParser;
         let result = parser.parse((&memo_contents, &student_contents, vec![2]));
 
         match result {
             Err(MarkerError::ParseOutputError(msg)) => {
-                assert!(msg.contains("Number of memo files (1) does not match number of student files (0)"));
+                assert!(msg.contains(
+                    "Number of memo files (1) does not match number of student files (0)"
+                ));
             }
             _ => panic!("Expected InvalidOutputFormat error for mismatched file counts"),
         }

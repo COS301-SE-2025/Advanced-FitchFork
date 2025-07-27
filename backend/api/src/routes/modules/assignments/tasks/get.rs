@@ -2,14 +2,20 @@
 //!
 //! This module provides the endpoint handler for retrieving detailed information about a specific assignment task within a module, including its subsections and associated memo outputs. It interacts with the database to validate module, assignment, and task existence, loads the mark allocator configuration, and parses memo output files to provide detailed feedback for each subsection of the task.
 
-use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
-use serde::Serialize;
-use serde_json::Value;
-use sea_orm::{EntityTrait, QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection};
-use std::{env, fs, path::PathBuf};
 use crate::response::ApiResponse;
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use db::models::assignment_task::{Column, Entity};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
+use serde::Serialize;
+use serde_json::Value;
+use std::{env, fs, path::PathBuf};
+use util::execution_config::ExecutionConfig;
 use util::mark_allocator::mark_allocator::load_allocator;
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
@@ -31,7 +37,7 @@ pub struct TaskDetailResponse {
     /// The task's ID (may be the same as `id`).
     pub task_id: i64,
     /// The display name assigned to a task
-    pub name: String,  
+    pub name: String,
     /// The command associated with this task.
     pub command: String,
     /// The creation timestamp of the task (RFC3339 format).
@@ -100,11 +106,10 @@ pub async fn get_task_details(
     State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let task = Entity::find_by_id(task_id)
-    .one(&db).await.unwrap().unwrap();
+    let task = Entity::find_by_id(task_id).one(&db).await.unwrap().unwrap();
 
-    let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/assignment_files".into());
+    let base_path =
+        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
     let memo_path = PathBuf::from(&base_path)
         .join(format!("module_{}", module_id))
         .join(format!("assignment_{}", assignment_id))
@@ -112,17 +117,26 @@ pub async fn get_task_details(
         .join(format!("task_{}.txt", task.task_number));
 
     let memo_content = fs::read_to_string(&memo_path).ok().or_else(|| {
-        fs::read_dir(memo_path.parent()?).ok()?.filter_map(Result::ok).find_map(|entry| {
-            if entry.path().extension().map_or(false, |ext| ext == "txt") {
-                fs::read_to_string(entry.path()).ok()
-            } else {
-                None
-            }
-        })
+        fs::read_dir(memo_path.parent()?)
+            .ok()?
+            .filter_map(Result::ok)
+            .find_map(|entry| {
+                if entry.path().extension().map_or(false, |ext| ext == "txt") {
+                    fs::read_to_string(entry.path()).ok()
+                } else {
+                    None
+                }
+            })
     });
 
+    // Load the ExecutionConfig to get the custom delimiter
+    let separator = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
+        Ok(config) => config.deliminator,
+        Err(_) => "&-=-&".to_string(), // fallback if config file missing or unreadable
+    };
+
     let outputs: Vec<Option<String>> = if let Some(ref memo) = memo_content {
-        let parts: Vec<&str> = memo.split("&-=-&").collect();
+        let parts: Vec<&str> = memo.split(&separator).collect();
         parts
             .into_iter()
             .map(|part| {
@@ -147,19 +161,25 @@ pub async fn get_task_details(
         .and_then(|v| v.get("tasks"))
         .and_then(|t| t.as_array())
     {
-        tasks.iter().find_map(|obj| {
-            obj.as_object().and_then(|map| {
-                let task_obj = map.get(&task_key)?.as_object()?;
-                let name = task_obj.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
-                let value = task_obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
-                let subsections = task_obj.get("subsections")?.as_array()?.clone();
-                Some((name, value, subsections))
+        tasks
+            .iter()
+            .find_map(|obj| {
+                obj.as_object().and_then(|map| {
+                    let task_obj = map.get(&task_key)?.as_object()?;
+                    let name = task_obj
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let value = task_obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let subsections = task_obj.get("subsections")?.as_array()?.clone();
+                    Some((name, value, subsections))
+                })
             })
-        }).unwrap_or_else(|| ("".to_string(), 0, vec![]))
+            .unwrap_or_else(|| ("".to_string(), 0, vec![]))
     } else {
         ("".to_string(), 0, vec![])
     };
-
 
     let mut subsection_outputs = parsed_outputs;
     subsection_outputs.resize(subsections.len(), None);
@@ -176,12 +196,14 @@ pub async fn get_task_details(
                 }
             };
 
-            let name = obj.get("name")
+            let name = obj
+                .get("name")
                 .and_then(|n| n.as_str())
                 .unwrap_or("<unnamed>")
                 .to_string();
 
-            let mark_value = obj.get("value")
+            let mark_value = obj
+                .get("value")
                 .and_then(|v| v.as_i64())
                 .unwrap_or_else(|| {
                     eprintln!("Missing or invalid value for subsection '{}'", name);
@@ -198,11 +220,10 @@ pub async fn get_task_details(
         })
         .collect();
 
-
     let resp = TaskDetailResponse {
         id: task.id,
         task_id: task.id,
-        name: task.name.clone(), 
+        name: task.name.clone(),
         command: task.command,
         created_at: task.created_at.to_rfc3339(),
         updated_at: task.updated_at.to_rfc3339(),
@@ -211,7 +232,10 @@ pub async fn get_task_details(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(resp, "Task details retrieved successfully")),
+        Json(ApiResponse::success(
+            resp,
+            "Task details retrieved successfully",
+        )),
     )
         .into_response()
 }
@@ -297,7 +321,9 @@ pub async fn list_tasks(
         }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<Vec<TaskResponse>>::error("Failed to retrieve tasks")),
+            Json(ApiResponse::<Vec<TaskResponse>>::error(
+                "Failed to retrieve tasks",
+            )),
         )
             .into_response(),
     }
