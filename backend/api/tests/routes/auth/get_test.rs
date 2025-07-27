@@ -416,4 +416,126 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
+
+    /// Test Case: Successful Role Retrieval - User Has Role in Module
+    #[tokio::test]
+    #[serial]
+    async fn test_get_module_role_success_with_role() {
+        let db = setup_test_db().await;
+        let (data, _temp_dir) = setup_test_data(&db).await;
+
+        let app = make_app(db.clone());
+        let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
+        let uri = format!("/api/auth/module-role?module_id={}", data.module.id);
+        let req = Request::builder()
+            .method("GET")
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(AxumBody::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        
+        assert_eq!(json["success"], true);
+        assert_eq!(json["message"], "Role fetched successfully");
+        assert_eq!(json["data"]["role"], "student");
+    }
+
+    /// Test Case: Successful Role Retrieval - User Has No Role in Module
+    #[tokio::test]
+    #[serial]
+    async fn test_get_module_role_success_no_role() {
+        let db = setup_test_db().await;
+        let (data, _temp_dir) = setup_test_data(&db).await;
+
+        // Create a new module that user is not assigned to
+        let new_module = ModuleModel::create(&db, "MATH101", 2024, Some("Math Module"), 16)
+            .await
+            .expect("Failed to create test module");
+
+        let app = make_app(db.clone());
+        let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
+        let uri = format!("/api/auth/module-role?module_id={}", new_module.id);
+        let req = Request::builder()
+            .method("GET")
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(AxumBody::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        
+        assert_eq!(json["success"], true);
+        assert_eq!(json["message"], "Role fetched successfully");
+        assert!(json["data"]["role"].is_null());
+    }
+
+    /// Test Case: Missing Module ID Parameter
+    #[tokio::test]
+    #[serial]
+    async fn test_get_module_role_missing_module_id() {
+        let db = setup_test_db().await;
+        let (data, _temp_dir) = setup_test_data(&db).await;
+
+        let app = make_app(db.clone());
+        let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
+        let uri = "/api/auth/module-role";
+        let req = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(AxumBody::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    /// Test Case: Unauthenticated Access
+    #[tokio::test]
+    #[serial]
+    async fn test_get_module_role_unauthenticated() {
+        let db = setup_test_db().await;
+        let (data, _temp_dir) = setup_test_data(&db).await;
+
+        let app = make_app(db.clone());
+        let uri = format!("/api/auth/module-role?module_id={}", data.module.id);
+        let req = Request::builder()
+            .method("GET")
+            .uri(&uri)
+            .body(AxumBody::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// Test Case: Invalid Module ID Format
+    #[tokio::test]
+    #[serial]
+    async fn test_get_module_role_invalid_module_id() {
+        let db = setup_test_db().await;
+        let (data, _temp_dir) = setup_test_data(&db).await;
+
+        let app = make_app(db.clone());
+        let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
+        let uri = "/api/auth/module-role?module_id=invalid";
+        let req = Request::builder()
+            .method("GET")
+            .uri(uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(AxumBody::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
 }

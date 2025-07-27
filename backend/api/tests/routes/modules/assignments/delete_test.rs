@@ -3,7 +3,7 @@ mod tests {
     use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::{Model as ModuleModel, ActiveModel as ModuleActiveModel}, assignment::{Model as AssignmentModel, AssignmentType}, user_module_role::{Model as UserModuleRoleModel, Role}, assignment_file::{Model as AssignmentFileModel, FileType}, assignment_task::Model as AssignmentTaskModel, assignment_memo_output::Model as AssignmentMemoOutputModel, assignment_submission::Model as AssignmentSubmissionModel}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
-    use serde_json::Value;
+    use serde_json::{json, Value};
     use api::auth::generate_jwt;
     use dotenvy;
     use chrono::{Utc, TimeZone};
@@ -345,5 +345,156 @@ mod tests {
 
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    /// Test Case: Successful Bulk Delete by Lecturer
+    #[tokio::test]
+    async fn test_bulk_delete_assignments_success_lecturer() {
+        let db = setup_test_db().await;
+        let data = setup_test_data(&db).await;
+
+        let app = make_app(db.clone());
+        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+        let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
+        
+        let ids_to_delete = vec![data.assignments[0].id, data.assignments[1].id];
+        let req_body = json!({ "assignment_ids": ids_to_delete });
+        
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_string(&req_body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        
+        assert_eq!(json["success"], true);
+        assert_eq!(json["message"], "Deleted 2/2 assignments");
+        assert_eq!(json["data"]["deleted"], 2);
+        assert!(json["data"]["failed"].as_array().unwrap().is_empty());
+    }
+
+    /// Test Case: Successful Bulk Delete by Admin
+    #[tokio::test]
+    async fn test_bulk_delete_assignments_success_admin() {
+        let db = setup_test_db().await;
+        let data = setup_test_data(&db).await;
+
+        let app = make_app(db.clone());
+        let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
+        let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
+        
+        let ids_to_delete = vec![data.assignments[2].id];
+        let req_body = json!({ "assignment_ids": ids_to_delete });
+        
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_string(&req_body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        
+        assert_eq!(json["success"], true);
+        assert_eq!(json["message"], "Deleted 1/1 assignments");
+        assert_eq!(json["data"]["deleted"], 1);
+    }
+
+    /// Test Case: Mixed Success/Failure with Invalid IDs
+    #[tokio::test]
+    async fn test_bulk_delete_assignments_mixed_results() {
+        let db = setup_test_db().await;
+        let data = setup_test_data(&db).await;
+
+        let app = make_app(db.clone());
+        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+        let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
+        
+        let ids_to_delete = vec![data.assignments[0].id, 9999, data.assignments[2].id];
+        let req_body = json!({ "assignment_ids": ids_to_delete });
+        
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_string(&req_body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        
+        assert_eq!(json["success"], true);
+        assert_eq!(json["message"], "Deleted 2/3 assignments");
+        assert_eq!(json["data"]["deleted"], 2);
+        
+        let failed = json["data"]["failed"].as_array().unwrap();
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0]["id"], 9999);
+        assert!(failed[0]["error"].as_str().unwrap().contains("not found"));
+    }
+
+    /// Test Case: Forbidden for Student
+    #[tokio::test]
+    async fn test_bulk_delete_assignments_forbidden_student() {
+        let db = setup_test_db().await;
+        let data = setup_test_data(&db).await;
+
+        let app = make_app(db.clone());
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
+        let req_body = json!({ "assignment_ids": [data.assignments[0].id] });
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_string(&req_body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    /// Test Case: Empty Assignment IDs
+    #[tokio::test]
+    async fn test_bulk_delete_assignments_empty_ids() {
+        let db = setup_test_db().await;
+        let data = setup_test_data(&db).await;
+
+        let app = make_app(db.clone());
+        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+        let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
+        let req_body = json!({ "assignment_ids": [] });
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_string(&req_body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["message"], "No assignment IDs provided");
     }
 }
