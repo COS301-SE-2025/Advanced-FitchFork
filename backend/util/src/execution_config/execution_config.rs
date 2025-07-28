@@ -59,6 +59,19 @@ impl ExecutionConfig {
         }
     }
 
+    pub fn default_config() -> Self {
+        ExecutionConfig {
+            timeout_secs: 10,
+            max_memory: "1024m".to_string(),
+            max_cpus: "2.0".to_string(),
+            max_uncompressed_size: 1000000,
+            max_processes: 256,
+            marking_scheme: MarkingScheme::Exact,
+            feedback_scheme: FeedbackScheme::Auto,
+            deliminator: default_deliminator(),
+        }
+    }
+
     pub fn get_execution_config_with_base(
         module_id: i64,
         assignment_id: i64,
