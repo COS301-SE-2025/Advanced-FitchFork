@@ -3,6 +3,14 @@ import type { User } from ".";
 import type { Module, ModuleRole } from "@/types/modules";
 
 // ─────────────────────────────────────────────────────────────
+// POST Response Types
+// ─────────────────────────────────────────────────────────────
+
+export type PostUserResponse = ApiResponse<User>;
+
+export type PostUsersBulkResponse = ApiResponse<User[]>;
+
+// ─────────────────────────────────────────────────────────────
 // GET Response Types
 // ─────────────────────────────────────────────────────────────
 

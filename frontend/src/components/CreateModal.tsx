@@ -9,6 +9,7 @@ export interface TableCreateModalField {
   placeholder?: string;
   required?: boolean;
   options?: { label: string; value: string }[]; // only for 'select'
+  defaultValue?: any;
 }
 
 interface Props {
@@ -35,11 +36,19 @@ const CreateModal = ({
   useEffect(() => {
     if (open) {
       const values = { ...initialValues };
+
       fields.forEach((field) => {
+        // Use defaultValue only if initialValues does not already have the key
+        if (values[field.name] === undefined && field.defaultValue !== undefined) {
+          values[field.name] = field.defaultValue;
+        }
+
+        // Convert datetime
         if (field.type === 'datetime' && values[field.name]) {
           values[field.name] = dayjs(values[field.name]);
         }
       });
+
       form.setFieldsValue(values);
     }
   }, [open, initialValues, fields, form]);
@@ -71,7 +80,9 @@ const CreateModal = ({
 
           return (
             <Form.Item key={name} name={name} label={label} rules={rules}>
-              {type === 'text' || type === 'email' || type === 'password' || type === 'number' ? (
+              {type === 'password' ? (
+                <Input.Password placeholder={placeholder} />
+              ) : type === 'text' || type === 'email' || type === 'number' ? (
                 <Input type={type === 'number' ? 'number' : type} placeholder={placeholder} />
               ) : type === 'textarea' ? (
                 <Input.TextArea rows={4} placeholder={placeholder} />
@@ -92,8 +103,10 @@ const CreateModal = ({
 
         <Form.Item>
           <div className="flex justify-end gap-2 pt-2">
-            <Button onClick={onCancel}>Cancel</Button>
-            <Button type="primary" onClick={handleSubmit}>
+            <Button onClick={onCancel} data-cy="create-modal-cancel">
+              Cancel
+            </Button>
+            <Button type="primary" onClick={handleSubmit} data-cy="create-modal-submit">
               Create
             </Button>
           </div>

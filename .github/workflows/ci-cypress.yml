@@ -1,0 +1,95 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  cypress-tests:
+    name: Cypress E2E Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # ----------------------
+      # Cache Rust & Node deps
+      # ----------------------
+      - name: Cache Cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Cargo build output
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+
+      # ----------------------
+      # Backend Setup
+      # ----------------------
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Copy .env file
+        run: cp .env.example .env
+        working-directory: backend
+
+      - name: Build backend Docker image
+        run: docker build -t universal-runner:latest .
+        working-directory: backend
+
+      - name: Run migrations and seed database
+        run: |
+          cargo run -p migration -- fresh
+          cargo run -p seeder --quiet
+        working-directory: backend
+
+      - name: Start backend server
+        run: cargo run -p api &
+        working-directory: backend
+
+      # ----------------------
+      # Frontend Setup
+      # ----------------------
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Start frontend server
+        run: npm run dev &
+        working-directory: frontend
+
+      # ----------------------
+      # Wait for backend and frontend to be ready
+      # ----------------------
+      - name: Wait for servers
+        run: npx wait-on http://localhost:5173 http://localhost:3000/api
+
+      # ----------------------
+      # Run Cypress Tests
+      # ----------------------
+      - name: Install Cypress test dependencies
+        run: npm ci
+        working-directory: cypress-tests
+
+      - name: Run Cypress tests
+        run: npm run test:headless
+        working-directory: cypress-tests
+        env:
+          CYPRESS_baseUrl: http://localhost:5173

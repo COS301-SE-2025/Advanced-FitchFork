@@ -1,0 +1,25 @@
+# Node modules
+node_modules/
+
+# Cypress generated folders
+downloads/
+screenshots/
+videos/
+results/
+
+# Environment files (optional)
+.env
+.env.local
+
+# System files
+.DS_Store
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE/editor junk
+.vscode/
+.idea/
+*.swp

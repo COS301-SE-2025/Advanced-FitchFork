@@ -1,24 +1,21 @@
-import { useEffect, useState } from 'react';
-import { Segmented, Table, Transfer, Input, Button, Tag, Skeleton } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { Segmented, Table, Transfer, Button, Input } from 'antd';
 import type { Key } from 'react';
-import type { TransferProps, TablePaginationConfig, TableProps } from 'antd';
+import type { TablePaginationConfig, TableProps } from 'antd';
 import { MODULE_ROLES, type ModuleRole } from '@/types/modules';
-import { useNotifier } from '@/components/Notifier';
 import { useTableQuery } from '@/hooks/useTableQuery';
 import { useParams } from 'react-router-dom';
 import PageHeader from '@/components/PageHeader';
+import { message } from '@/utils/message';
+import { useAuth } from '@/context/AuthContext';
 import {
-  assignLecturers,
-  assignTutors,
-  enrollStudents,
-  getEligibleUsersForRole,
-  getLecturers,
-  getStudents,
-  getTutors,
-  removeLecturers,
-  removeStudents,
-  removeTutors,
-} from '@/services/modules';
+  getPersonnel,
+  assignPersonnel,
+  removePersonnel,
+  getEligibleUsers,
+} from '@/services/modules/personnel';
+import type { TableRowSelection } from 'antd/es/table/interface';
+import ModuleRoleTag, { roleLabels } from '@/components/modules/ModuleRoleTag';
 
 interface TableTransferItem {
   key: string;
@@ -29,377 +26,229 @@ interface TableTransferItem {
   role?: ModuleRole;
 }
 
-type TableRowSelection<T> = TableProps<T>['rowSelection'];
-type TransferItem = Required<TransferProps>['dataSource'][number];
-
 const ModulePersonnel = () => {
   const { id } = useParams();
   const moduleId = Number(id);
-  const { notifyError, notifySuccess } = useNotifier();
+  const auth = useAuth();
 
+  const [targetRole, setTargetRole] = useState<ModuleRole>('tutor');
   const [eligibleUsers, setEligibleUsers] = useState<TableTransferItem[]>([]);
   const [assignedUsers, setAssignedUsers] = useState<TableTransferItem[]>([]);
+  const [targetKeys, setTargetKeys] = useState<Key[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedRole, setSelectedRole] = useState<ModuleRole>('student');
-  const [roleAssignments, setRoleAssignments] = useState<Record<ModuleRole, Key[]>>({
-    lecturer: [],
-    tutor: [],
-    student: [],
-    assistant_lecturer: [],
-  });
 
-  const available = useTableQuery();
-  const assigned = useTableQuery();
+  const sourceQuery = useTableQuery();
+  const targetQuery = useTableQuery();
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const eligibleRes = await getEligibleUsersForRole(moduleId, selectedRole, {
-        page: available.pagination.current,
-        per_page: available.pagination.pageSize,
-        query: available.searchTerm,
-        email: available.filterState.email?.[0],
-        username: available.filterState.username?.[0],
-      });
+  const availableRoles = useMemo(() => {
+    return MODULE_ROLES.filter((r) => auth.user?.admin || r !== 'lecturer');
+  }, [auth.user]);
 
-      const getFn = {
-        lecturer: getLecturers,
-        assistant_lecturer: getLecturers, // Use same service unless separate endpoint exists
-        tutor: getTutors,
-        student: getStudents,
-      }[selectedRole];
-
-      const assignedRes = await getFn(moduleId, {
-        page: assigned.pagination.current,
-        per_page: assigned.pagination.pageSize,
-        query: assigned.searchTerm,
-        email: assigned.filterState.email?.[0],
-        username: assigned.filterState.username?.[0],
-      });
-
-      if (eligibleRes.success) {
-        setEligibleUsers(
-          eligibleRes.data.users.map((u) => ({
-            key: String(u.id),
-            username: u.username,
-            email: u.email,
-            title: u.email,
-            description: u.username,
-          })),
-        );
-        available.setPagination({ total: eligibleRes.data.total });
-      } else {
-        notifyError('Failed to load eligible users', eligibleRes.message);
-      }
-
-      if (assignedRes.success) {
-        setAssignedUsers(
-          assignedRes.data.users.map((u) => ({
-            key: String(u.id),
-            username: u.username,
-            email: u.email,
-            title: u.email,
-            description: u.username,
-            role: selectedRole,
-          })),
-        );
-        assigned.setPagination({ total: assignedRes.data.total });
-        setRoleAssignments((prev) => ({
-          ...prev,
-          [selectedRole]: assignedRes.data.users.map((u) => String(u.id)),
-        }));
-      } else {
-        notifyError('Failed to load assigned users', assignedRes.message);
-      }
-    } finally {
-      setLoading(false);
+  const fetchEligibleUsers = async () => {
+    const res = await getEligibleUsers(moduleId, {
+      page: sourceQuery.pagination.current,
+      per_page: sourceQuery.pagination.pageSize,
+      query: sourceQuery.searchTerm,
+      email: sourceQuery.filterState.email?.[0],
+      username: sourceQuery.filterState.username?.[0],
+    });
+    if (res.success) {
+      const users = res.data.users.map((u) => ({
+        key: String(u.id),
+        username: u.username,
+        email: u.email,
+        title: u.email,
+        description: u.username,
+      }));
+      setEligibleUsers(users);
+      sourceQuery.setPagination({ total: res.data.total });
+    } else {
+      message.error(res.message);
     }
+  };
+
+  const fetchAssignedUsers = async () => {
+    const res = await getPersonnel(moduleId, {
+      role: targetRole,
+      page: targetQuery.pagination.current,
+      per_page: targetQuery.pagination.pageSize,
+      query: targetQuery.searchTerm,
+      email: targetQuery.filterState.email?.[0],
+      username: targetQuery.filterState.username?.[0],
+    });
+    if (res.success) {
+      const users = res.data.users.map((u) => ({
+        key: String(u.id),
+        username: u.username,
+        email: u.email,
+        title: u.email,
+        description: u.username,
+        role: targetRole,
+      }));
+      setAssignedUsers(users);
+      setTargetKeys(users.map((u) => u.key));
+      targetQuery.setPagination({ total: res.data.total });
+    } else {
+      message.error(res.message);
+    }
+  };
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    await Promise.all([fetchEligibleUsers(), fetchAssignedUsers()]);
+    setLoading(false);
   };
 
   useEffect(() => {
-    fetchData();
+    fetchUsers();
   }, [
-    moduleId,
-    selectedRole,
-    available.pagination.current,
-    available.pagination.pageSize,
-    available.searchTerm,
-    available.filterState.email,
-    available.filterState.username,
-    assigned.pagination.current,
-    assigned.pagination.pageSize,
-    assigned.searchTerm,
-    assigned.filterState.email,
-    assigned.filterState.username,
+    targetRole,
+    sourceQuery.pagination.current,
+    sourceQuery.pagination.pageSize,
+    sourceQuery.searchTerm,
+    sourceQuery.filterState.email,
+    sourceQuery.filterState.username,
+    targetQuery.pagination.current,
+    targetQuery.pagination.pageSize,
+    targetQuery.searchTerm,
+    targetQuery.filterState.email,
+    targetQuery.filterState.username,
   ]);
 
-  const handleTransferChange = async (
-    nextKeys: Key[],
-    _direction: 'left' | 'right',
-    _movedKeys: Key[],
-  ) => {
-    const user_ids = nextKeys.map(Number);
-    const prevKeys = roleAssignments[selectedRole].map(Number);
+  const handleTransferChange = async (nextKeys: Key[]) => {
+    const prev = targetKeys.map(Number);
+    const next = nextKeys.map(Number);
 
-    const toAdd = user_ids.filter((id) => !prevKeys.includes(id));
-    const toRemove = prevKeys.filter((id) => !user_ids.includes(id));
+    const toAssign = next.filter((id) => !prev.includes(id));
+    const toRemove = prev.filter((id) => !next.includes(id));
 
-    setRoleAssignments((prev) => ({ ...prev, [selectedRole]: nextKeys }));
-
-    const assignFn = {
-      lecturer: assignLecturers,
-      assistant_lecturer: assignLecturers,
-      tutor: assignTutors,
-      student: enrollStudents,
-    }[selectedRole];
-
-    const removeFn = {
-      lecturer: removeLecturers,
-      assistant_lecturer: removeLecturers,
-      tutor: removeTutors,
-      student: removeStudents,
-    }[selectedRole];
-
-    let assignRes = { success: true, message: '' };
-    let removeRes = { success: true, message: '' };
-
-    if (toAdd.length) {
-      assignRes = await assignFn(moduleId, { user_ids: toAdd });
+    if (toAssign.length > 0) {
+      await assignPersonnel(moduleId, { role: targetRole, user_ids: toAssign });
+      message.success(
+        `Assigned ${toAssign.length} user${toAssign.length === 1 ? '' : 's'} to ${roleLabels[targetRole]} role`,
+      );
     }
 
-    if (toRemove.length) {
-      removeRes = await removeFn(moduleId, { user_ids: toRemove });
+    if (toRemove.length > 0) {
+      await removePersonnel(moduleId, { role: targetRole, user_ids: toRemove });
+      message.success(
+        `Unassigned ${toRemove.length} user${toRemove.length === 1 ? '' : 's'} from ${roleLabels[targetRole]} role`,
+      );
     }
 
-    if (assignRes.success && removeRes.success) {
-      notifySuccess(`Updated ${selectedRole}s`, assignRes.message || removeRes.message);
-      await fetchData();
-    } else {
-      const firstError = !assignRes.success ? assignRes : removeRes;
-      notifyError(`Failed to update ${selectedRole}s`, firstError.message);
-    }
+    await fetchUsers();
   };
 
-  const allUsers = [...eligibleUsers, ...assignedUsers].filter(
-    (u, i, arr) => arr.findIndex((x) => x.key === u.key) === i,
-  );
-
   const getColumns = (
-    state: ReturnType<typeof useTableQuery>,
-  ): TableProps<TableTransferItem>['columns'] => [
-    {
-      dataIndex: 'username',
-      title: 'Username',
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
-        <div style={{ padding: 8 }}>
-          <Input
-            placeholder="Filter by username"
-            value={selectedKeys[0]}
-            onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-            onPressEnter={() => {
-              confirm();
-              state.setFilterState({
-                ...state.filterState,
-                username: [selectedKeys[0] as string],
-              });
-            }}
-            style={{ width: 188, marginBottom: 8, display: 'block' }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <a
-              onClick={() => {
-                confirm();
-                state.setFilterState({
-                  ...state.filterState,
-                  username: [selectedKeys[0] as string],
-                });
-              }}
-            >
-              Apply
-            </a>
-            <a
-              onClick={() => {
-                clearFilters?.();
-                state.setFilterState({ ...state.filterState, username: [] });
-              }}
-            >
-              Reset
-            </a>
-          </div>
-        </div>
-      ),
-    },
-    {
-      dataIndex: 'email',
-      title: 'Email',
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
-        <div style={{ padding: 8 }}>
-          <Input
-            placeholder="Filter by email"
-            value={selectedKeys[0]}
-            onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-            onPressEnter={() => {
-              confirm();
-              state.setFilterState({ ...state.filterState, email: [selectedKeys[0] as string] });
-            }}
-            style={{ width: 188, marginBottom: 8, display: 'block' }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <a
-              onClick={() => {
-                confirm();
-                state.setFilterState({ ...state.filterState, email: [selectedKeys[0] as string] });
-              }}
-            >
-              Apply
-            </a>
-            <a
-              onClick={() => {
-                clearFilters?.();
-                state.setFilterState({ ...state.filterState, email: [] });
-              }}
-            >
-              Reset
-            </a>
-          </div>
-        </div>
-      ),
-    },
-    {
-      dataIndex: 'role',
-      title: 'Role',
-      render: (_, record) => {
-        if (!record.role) {
-          return <Tag color="default">None</Tag>;
-        }
-        const color =
-          record.role === 'lecturer'
-            ? 'volcano'
-            : record.role === 'tutor'
-              ? 'geekblue'
-              : record.role === 'assistant_lecturer'
-                ? 'purple'
-                : 'green';
-        return <Tag color={color}>{record.role.replace('_', ' ')}</Tag>;
+    _: ReturnType<typeof useTableQuery>,
+    isTarget: boolean,
+  ): TableProps<TableTransferItem>['columns'] => {
+    const baseCols: TableProps<TableTransferItem>['columns'] = [
+      {
+        dataIndex: 'username',
+        title: 'Username',
       },
-    },
-  ];
+      {
+        dataIndex: 'email',
+        title: 'Email',
+      },
+    ];
 
-  const renderTableTransfer = (direction: 'left' | 'right', props: any) => {
-    const state = direction === 'left' ? available : assigned;
+    if (isTarget) {
+      baseCols.push({
+        dataIndex: 'role',
+        title: 'Role',
+        render: (_, record) => (record.role ? <ModuleRoleTag role={record.role} /> : null),
+      });
+    }
+
+    return baseCols;
+  };
+
+  const renderTable = (direction: 'left' | 'right', props: any) => {
+    const state = direction === 'left' ? sourceQuery : targetQuery;
     const pagination: TablePaginationConfig = {
       current: state.pagination.current,
       pageSize: state.pagination.pageSize,
       total: state.pagination.total,
-      pageSizeOptions: state.pagination.pageSizeOptions,
       showSizeChanger: true,
-      onChange: (page, pageSize) => {
-        state.setPagination({ current: page, pageSize });
-      },
+      onChange: (page, pageSize) => state.setPagination({ current: page, pageSize }),
     };
 
-    const rowSelection: TableRowSelection<TransferItem> = {
+    const rowSelection: TableRowSelection<TableTransferItem> = {
       getCheckboxProps: () => ({ disabled: props.disabled }),
-      onChange: (selectedRowKeys) => {
-        props.onItemSelectAll(selectedRowKeys, 'replace');
-      },
+      onChange: (selectedRowKeys) => props.onItemSelectAll(selectedRowKeys, 'replace'),
       selectedRowKeys: props.selectedKeys,
     };
 
     return (
-      <div className=" space-y-2 p-2">
-        <div className="flex gap-2">
+      <div className="space-y-2 p-2">
+        <div className="flex gap-2 mb-2">
           <Input.Search
             allowClear
-            placeholder={`Search ${direction === 'left' ? 'available' : 'assigned'} users`}
+            placeholder={`Search ${direction === 'left' ? 'eligible' : 'assigned'} users`}
             value={state.searchTerm}
             onChange={(e) => state.setSearchTerm(e.target.value)}
             onSearch={() => state.setPagination({ current: 1 })}
             style={{ width: '100%' }}
+            data-cy={direction === 'left' ? 'available-user-search' : 'assigned-user-search'}
           />
-          <Button
-            onClick={() => {
-              state.clearSearch();
-              state.setPagination({ current: 1 });
-            }}
-          >
-            Clear
-          </Button>
+          <Button onClick={() => state.clearAll()}>Clear</Button>
         </div>
-        {loading ? (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, idx) => (
-              <div key={idx} className="grid grid-cols-3 gap-4 w-full">
-                <Skeleton.Input block active />
-                <Skeleton.Input block active />
-                <Skeleton.Input block active />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <Table
-            rowSelection={rowSelection}
-            columns={getColumns(state)}
-            dataSource={props.filteredItems}
-            pagination={pagination}
-            size="small"
-            rowKey="key"
-            onRow={({ key }) => ({
-              onClick: () => {
-                if (!props.disabled) {
-                  props.onItemSelect(key, !props.selectedKeys.includes(key));
-                }
-              },
-            })}
-            style={{ pointerEvents: props.disabled ? 'none' : undefined }}
-          />
-        )}
+
+        <Table
+          rowSelection={rowSelection}
+          columns={getColumns(state, direction === 'right')}
+          dataSource={props.filteredItems}
+          pagination={pagination}
+          loading={loading}
+          size="small"
+          rowKey="key"
+          onRow={({ key }) => ({
+            'data-cy': `${direction === 'left' ? 'available' : 'assigned'}-user-row-${key}`,
+            onClick: () => {
+              if (!props.disabled) {
+                props.onItemSelect(key, !props.selectedKeys.includes(key));
+              }
+            },
+          })}
+          data-cy={direction === 'left' ? 'available-user-table' : 'assigned-user-table'}
+        />
       </div>
     );
   };
 
   return (
     <div className="bg-white dark:bg-gray-950 p-4 sm:p-6 h-full overflow-y-auto">
-      <div className="mb-4">
-        <PageHeader
-          title="Module Personnel"
-          description="Use the segmented selector to assign Lecturers, Tutors, Assistant Lecturers, or Students."
+      <PageHeader
+        title="Module Personnel"
+        description="Assign eligible users to a specific role in this module."
+      />
+
+      <div className="flex justify-end mb-4">
+        <Segmented
+          options={availableRoles.map((role) => ({
+            label: roleLabels[role],
+            value: role,
+          }))}
+          value={targetRole}
+          onChange={(val) => setTargetRole(val as ModuleRole)}
+          data-cy="personnel-role-selector"
         />
       </div>
 
-      <div className="bg-white dark:bg-gray-950">
-        <div className="flex flex-col gap-4">
-          <Segmented
-            options={[...MODULE_ROLES]}
-            value={selectedRole}
-            onChange={(val) => {
-              setSelectedRole(val as ModuleRole);
-              available.setPagination({ current: 1 });
-              assigned.setPagination({ current: 1 });
-              available.clearSearch();
-              assigned.clearSearch();
-              available.clearFilters();
-              assigned.clearFilters();
-            }}
-            size="large"
-            block
-          />
-
-          <Transfer
-            dataSource={allUsers}
-            targetKeys={roleAssignments[selectedRole]}
-            onChange={handleTransferChange}
-            showSearch={false}
-            showSelectAll={false}
-            rowKey={(record) => record.key}
-            titles={['Available', 'Assigned']}
-            filterOption={() => true}
-            oneWay={false}
-          >
-            {(props) => renderTableTransfer(props.direction as 'left' | 'right', props)}
-          </Transfer>
-        </div>
-      </div>
+      <Transfer
+        dataSource={[...eligibleUsers, ...assignedUsers]}
+        targetKeys={targetKeys}
+        onChange={handleTransferChange}
+        showSearch={false}
+        showSelectAll={false}
+        rowKey={(record) => record.key}
+        titles={['Eligible Users', roleLabels[targetRole]]}
+        filterOption={() => true}
+      >
+        {(props) => renderTable(props.direction as 'left' | 'right', props)}
+      </Transfer>
     </div>
   );
 };

@@ -99,7 +99,7 @@ const EditModal = ({
         <Form.Item>
           <div className="flex justify-end gap-2 pt-2">
             <Button onClick={onCancel}>Cancel</Button>
-            <Button type="primary" onClick={handleSubmit}>
+            <Button type="primary" onClick={handleSubmit} data-cy="edit-modal-submit">
               Save
             </Button>
           </div>

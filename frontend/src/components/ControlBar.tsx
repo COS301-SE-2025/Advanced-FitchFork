@@ -218,8 +218,22 @@ const ControlBar = <T,>({
               value={viewMode}
               onChange={(val) => onViewModeChange(val as 'table' | 'grid')}
               options={[
-                { value: 'table', icon: <TableOutlined /> },
-                { value: 'grid', icon: <AppstoreOutlined /> },
+                {
+                  value: 'table',
+                  label: (
+                    <span data-cy="view-toggle-table">
+                      <TableOutlined />
+                    </span>
+                  ),
+                },
+                {
+                  value: 'grid',
+                  label: (
+                    <span data-cy="view-toggle-grid">
+                      <AppstoreOutlined />
+                    </span>
+                  ),
+                },
               ]}
               className="dark:!bg-gray-950"
             />
@@ -232,6 +246,7 @@ const ControlBar = <T,>({
           value={searchTerm}
           className="w-full sm:w-[320px]"
           style={{ width: '100%' }}
+          data-cy="entity-search"
         />
       </div>
 
@@ -319,7 +334,6 @@ const ControlBar = <T,>({
                   {resolvedPrimaryBulk.icon} {resolvedPrimaryBulk.label}
                 </Button>
                 <Dropdown
-                  data-cy="bulk-action-dropdown"
                   menu={{
                     items: secondaryBulkActions.map((a) => ({
                       key: a.key,
@@ -336,7 +350,7 @@ const ControlBar = <T,>({
                   }}
                   placement="bottomRight"
                 >
-                  <Button icon={<MoreOutlined />} />
+                  <Button icon={<MoreOutlined />} data-cy="bulk-action-dropdown" />
                 </Dropdown>
               </Space.Compact>
             )}

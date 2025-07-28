@@ -10,9 +10,9 @@ import UserCard from '@/components/users/UserCard';
 import UserAdminTag from '@/components/users/UserAdminTag';
 
 import { listUsers, editUser, deleteUser } from '@/services/users';
-import { register } from '@/services/auth';
 import type { User } from '@/types/users';
 import dayjs from 'dayjs';
+import { createUser } from '@/services/users/post';
 
 const UsersList = () => {
   const navigate = useNavigate();
@@ -58,15 +58,20 @@ const UsersList = () => {
   };
 
   const handleAddUser = async (formValues: Record<string, any>) => {
-    const { username, email } = formValues;
+    const { username, email, password } = formValues;
 
-    const res = await register(username, email, 'changeme123');
+    const res = await createUser({
+      username,
+      email,
+      password,
+    });
+
     if (res.success) {
-      message.success(res.message || 'User registered successfully');
+      message.success(res.message || 'User created successfully');
       setCreateOpen(false);
       listRef.current?.refresh();
     } else {
-      message.error(`Failed to register user: ${res.message}`);
+      message.error(`Failed to create user: ${res.message}`);
     }
   };
 
@@ -239,6 +244,13 @@ const UsersList = () => {
         fields={[
           { name: 'username', label: 'Username', type: 'text', required: true },
           { name: 'email', label: 'Email', type: 'email', required: true },
+          {
+            name: 'password',
+            label: 'Password',
+            type: 'password',
+            required: true,
+            defaultValue: 'changeme123',
+          },
         ]}
         title="Add User"
       />

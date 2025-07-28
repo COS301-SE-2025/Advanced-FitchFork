@@ -1,0 +1,12 @@
+{
+    "name": "fitchfork-cypress-tests",
+    "version": "1.0.0",
+    "scripts": {
+        "test": "cypress open",
+        "test:headless": "cypress run"
+    },
+    "devDependencies": {
+        "cypress": "^14.5.3",
+        "cypress-file-upload": "^5.0.8"
+    }
+}

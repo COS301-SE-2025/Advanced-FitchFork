@@ -119,6 +119,7 @@ const StepTasks = () => {
           {tasks.map((task) => (
             <div
               key={task.id}
+              data-cy="task-card"
               className="p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded flex flex-col md:flex-row md:items-center md:justify-between gap-2"
             >
               <div className="flex flex-col md:flex-row md:gap-4">

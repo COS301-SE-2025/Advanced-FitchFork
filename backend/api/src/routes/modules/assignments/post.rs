@@ -133,6 +133,10 @@ pub async fn create_assignment(
                 )),
             )
         }
+        Err(DbErr::Custom(msg)) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<AssignmentResponse>::error(&msg)),
+        ),
         Err(DbErr::RecordNotInserted) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<AssignmentResponse>::error(

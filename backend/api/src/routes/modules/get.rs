@@ -47,10 +47,8 @@ impl From<db::models::module::Model> for ModuleResponse {
         }
     }
 }
-
 #[derive(Debug, Deserialize)]
 pub struct EligibleUserQuery {
-    pub role: String,
     pub page: Option<u32>,
     pub per_page: Option<u32>,
     pub sort: Option<String>,
@@ -69,50 +67,30 @@ pub struct EligibleUserListResponse {
 
 /// GET /api/modules/{module_id}/eligible-users
 ///
-/// Retrieves a paginated list of users who are eligible to be assigned to a specific module role.
+/// Retrieves a paginated list of users who are not assigned to **any role** in the given module.
 ///
-/// This endpoint returns users who are not currently assigned to the specified module,
-/// allowing administrators to see who can be assigned as lecturers, tutors, or students.
+/// This allows administrators to see which users are eligible to be assigned as lecturers, tutors, or students.
 ///
 /// # Arguments
 ///
-/// The arguments are automatically extracted from the HTTP request:
-/// - Path parameter `module_id`: The ID of the module to check for eligible users.
-/// - Query parameters via the `EligibleUserQuery` struct:
-///   - `role`: (Required) The role to check eligibility for. Must be one of: "Lecturer", "Tutor", "Student".
-///   - `page`: (Optional) The page number for pagination. Defaults to 1 if not provided. Minimum value is 1.
-///   - `per_page`: (Optional) The number of items per page. Defaults to 20. Maximum is 100. Minimum is 1.
-///   - `query`: (Optional) A general search string that filters users by email or username.
-///   - `email`: (Optional) A filter to match specific email addresses (only used if `query` is not provided).
-///   - `username`: (Optional) A filter to match specific usernames (only used if `query` is not provided).
-///   - `sort`: (Optional) Field to sort by. Prefix with `-` for descending order. Allowed values: "email", "username", "created_at".
+/// - `module_id`: Module ID (path param)
+/// - `query`, `email`, `username`: optional search filters
+/// - `page`: pagination (default = 1)
+/// - `per_page`: page size (default = 20, max = 100)
+/// - `sort`: sorting field (prefix with `-` for descending). Options: `email`, `username`, `created_at`.
 ///
 /// # Returns
 ///
-/// Returns an HTTP response indicating the result:
-/// - `200 OK` with a paginated list of eligible users wrapped in a standardized response format.
-/// - `400 BAD REQUEST` if an invalid role is provided.
-/// - `500 INTERNAL SERVER ERROR` if a database error occurs while retrieving the users.
-///
-/// The response body contains:
-/// - A paginated list of users who are not assigned to the module.
-/// - Metadata: current page, items per page, and total items.
+/// - `200 OK`: Eligible users and pagination metadata
+/// - `500 Internal Server Error`: On DB errors
 ///
 /// # Example Response
-///
 /// ```json
 /// {
 ///   "success": true,
 ///   "data": {
 ///     "users": [
-///       {
-///         "id": 1,
-///         "username": "u12345678",
-///         "email": "lecturer@example.com",
-///         "admin": false,
-///         "created_at": "2025-05-23T18:00:00Z",
-///         "updated_at": "2025-05-23T18:00:00Z"
-///       }
+///       { "id": 1, "username": "u123", "email": "user@example.com", "admin": false, "created_at": "...", "updated_at": "..." }
 ///     ],
 ///     "page": 1,
 ///     "per_page": 20,
@@ -121,55 +99,32 @@ pub struct EligibleUserListResponse {
 ///   "message": "Eligible users fetched"
 /// }
 /// ```
-///
-/// - `400 Bad Request`  
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Invalid role"
-/// }
-/// ```
-///
-/// - `500 Internal Server Error`  
-/// ```json
-/// {
-///   "success": false,
-///   "message": "An internal server error occurred"
-/// }
-/// ```
 pub async fn get_eligible_users_for_module(
     State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Query(params): Query<EligibleUserQuery>,
 ) -> Response {
-    if !["Lecturer", "Tutor", "Student"].contains(&params.role.as_str()) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<EligibleUserListResponse>::error(
-                "Invalid role",
-            )),
-        )
-            .into_response();
-    }
-
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
-
-    let assigned_ids: Vec<i32> = user_module_role::Entity::find()
+    // Step 1: collect IDs of all users with any role in this module
+    let assigned_ids: Vec<i64> = user_module_role::Entity::find()
         .select_only()
         .column(user_module_role::Column::UserId)
         .filter(user_module_role::Column::ModuleId.eq(module_id))
-        .into_tuple::<i32>()
+        .into_tuple::<i64>()
         .all(&db)
         .await
         .unwrap_or_default();
 
-    let mut condition = Condition::all();
+    // Step 2: pagination config
+    let page = params.page.unwrap_or(1).max(1);
+    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
 
+    // Step 3: filter users NOT assigned to this module
+    let mut condition = Condition::all();
     if !assigned_ids.is_empty() {
         condition = condition.add(user::Column::Id.is_not_in(assigned_ids));
     }
 
+    // Step 4: apply optional search filters
     if let Some(ref q) = params.query {
         let pattern = format!("%{}%", q.to_lowercase());
         condition = condition.add(
@@ -181,13 +136,13 @@ pub async fn get_eligible_users_for_module(
         if let Some(ref email) = params.email {
             condition = condition.add(user::Column::Email.contains(email));
         }
-        if let Some(ref sn) = params.username {
-            condition = condition.add(user::Column::Username.contains(sn));
+        if let Some(ref username) = params.username {
+            condition = condition.add(user::Column::Username.contains(username));
         }
     }
 
+    // Step 5: base query + sort
     let mut query = user::Entity::find().filter(condition);
-
     if let Some(sort) = &params.sort {
         let (field, dir) = if sort.starts_with('-') {
             (&sort[1..], Order::Desc)
@@ -205,12 +160,10 @@ pub async fn get_eligible_users_for_module(
         query = query.order_by(user::Column::Id, Order::Asc);
     }
 
+    // Step 6: paginate + return
     let paginator = query.paginate(&db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
-    let users = paginator
-        .fetch_page((page - 1).into())
-        .await
-        .unwrap_or_default();
+    let users = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
 
     (
         StatusCode::OK,

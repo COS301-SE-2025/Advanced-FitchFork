@@ -2,21 +2,14 @@ import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Typography, Table, Spin, Descriptions, Select, Button, Popconfirm, Space } from 'antd';
 import { EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
-import ModuleRoleTag from '@/components/ModuleRoleTag';
 import AdminTag from '@/components/AdminTag';
 import { useNotifier } from '@/components/Notifier';
 import type { User } from '@/types/users';
 import { type ModuleRole, type Module, MODULE_ROLES } from '@/types/modules';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
-import {
-  removeLecturers,
-  removeTutors,
-  removeStudents,
-  assignLecturers,
-  assignTutors,
-  enrollStudents,
-} from '@/services/modules';
 import { getUser, getUserModules } from '@/services/users';
+import { removePersonnel, assignPersonnel } from '@/services/modules/personnel';
+import ModuleRoleTag from '@/components/modules/ModuleRoleTag';
 
 const { Title } = Typography;
 
@@ -77,15 +70,8 @@ const UserView = () => {
     if (oldRole === newRole) return;
 
     try {
-      if (oldRole === 'lecturer' || oldRole === 'assistant_lecturer')
-        await removeLecturers(moduleId, { user_ids: [userId] });
-      if (oldRole === 'tutor') await removeTutors(moduleId, { user_ids: [userId] });
-      if (oldRole === 'student') await removeStudents(moduleId, { user_ids: [userId] });
-
-      if (newRole === 'lecturer' || newRole === 'assistant_lecturer')
-        await assignLecturers(moduleId, { user_ids: [userId] });
-      if (newRole === 'tutor') await assignTutors(moduleId, { user_ids: [userId] });
-      if (newRole === 'student') await enrollStudents(moduleId, { user_ids: [userId] });
+      await removePersonnel(moduleId, { user_ids: [userId], role: oldRole });
+      await assignPersonnel(moduleId, { user_ids: [userId], role: newRole });
 
       notifySuccess('Role updated', 'The user’s role was successfully updated.');
       setEditingModuleId(null);
@@ -98,10 +84,7 @@ const UserView = () => {
 
   const handleRemove = async (moduleId: number, role: ModuleRole) => {
     try {
-      if (role === 'lecturer' || role === 'assistant_lecturer')
-        await removeLecturers(moduleId, { user_ids: [userId] });
-      if (role === 'tutor') await removeTutors(moduleId, { user_ids: [userId] });
-      if (role === 'student') await removeStudents(moduleId, { user_ids: [userId] });
+      await removePersonnel(moduleId, { user_ids: [userId], role });
 
       notifySuccess('User removed', 'The user was removed from this module.');
       fetchUserData();

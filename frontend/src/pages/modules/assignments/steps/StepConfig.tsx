@@ -81,7 +81,12 @@ const StepConfig = () => {
       )}
 
       <div className="flex flex-col md:flex-row gap-4">
-        <Button type="primary" onClick={uploadDefaultConfig} loading={loading}>
+        <Button
+          type="primary"
+          onClick={uploadDefaultConfig}
+          loading={loading}
+          data-cy="step-config-default"
+        >
           Use Default Configuration
         </Button>
 

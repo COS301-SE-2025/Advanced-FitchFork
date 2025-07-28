@@ -125,9 +125,12 @@ impl Model {
         username: &str,
         password: &str,
     ) -> Result<Option<Model>, DbErr> {
+        let username = username.trim();
+
         if let Some(user) = Self::get_by_username(db, username).await? {
             let parsed = PasswordHash::new(&user.password_hash)
                 .map_err(|e| DbErr::Custom(format!("Invalid hash: {}", e)))?;
+
             if Argon2::default()
                 .verify_password(password.as_bytes(), &parsed)
                 .is_ok()
@@ -135,6 +138,7 @@ impl Model {
                 return Ok(Some(user));
             }
         }
+
         Ok(None)
     }
 

@@ -19,15 +19,10 @@ use post::create;
 use put::edit_module;
 use sea_orm::DatabaseConnection;
 use assignments::assignment_routes;
-use lecturers::lecturer_routes;
-use tutors::tutor_routes;
-use students::student_routes;
-use crate::auth::guards::{require_admin, require_assigned_to_module};
+use crate::{auth::guards::{require_admin, require_assigned_to_module, require_lecturer}, routes::modules::personnel::personnel_routes};
 
 pub mod assignments;
-pub mod lecturers;
-pub mod tutors;
-pub mod students;
+pub mod personnel;
 pub mod delete;
 pub mod get;
 pub mod post;
@@ -43,23 +38,19 @@ pub mod common;
 /// - `PUT    /modules/{module_id}`     → edit module details (admin only)
 /// - `DELETE /modules/{module_id}`     → delete a module entirely (admin only)
 ///
-/// - Nested assignments routes under `/modules/{module_id}/assignments`
-/// - Nested lecturers routes under `/modules/{module_id}/lecturers`
-/// - Nested tutors routes under `/modules/{module_id}/tutors`
 /// - Nested students routes under `/modules/{module_id}/students`
+/// - Nested personnel routes under `/modules/{module_id}/personnel`
 ///
 /// All modifying routes are protected by `require_admin` middleware.
 pub fn modules_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
         .route("/", get(get_modules))
         .route("/me", get(get_my_details))
-        .route("/{module_id}/eligible-users", get(get_eligible_users_for_module).route_layer(from_fn(require_admin)))
+        .route("/{module_id}/eligible-users", get(get_eligible_users_for_module).route_layer(from_fn_with_state(db.clone(),require_lecturer)))
         .route("/{module_id}", get(get_module).route_layer(from_fn_with_state(db.clone(), require_assigned_to_module)))
         .route("/", post(create).route_layer(from_fn(require_admin)))
         .route("/{module_id}", put(edit_module).route_layer(from_fn(require_admin)))
         .route("/{module_id}", delete(delete_module).route_layer(from_fn(require_admin)))
         .nest("/{module_id}/assignments", assignment_routes(db.clone()))
-        .nest("/{module_id}/lecturers", lecturer_routes(db.clone()))
-        .nest("/{module_id}/tutors", tutor_routes(db.clone()))
-        .nest("/{module_id}/students", student_routes(db.clone()))
+        .nest("/{module_id}/personnel", personnel_routes().route_layer(from_fn_with_state(db.clone(),require_lecturer)))
 }

@@ -93,6 +93,24 @@ const AssignmentsList = () => {
     }
   };
 
+  const handleCreate = async (values: Record<string, any>) => {
+    const res = await createAssignment(module.id, {
+      name: values.name,
+      assignment_type: values.assignment_type,
+      available_from: values.available_from.toISOString(),
+      due_date: values.due_date.toISOString(),
+      description: values.description || '',
+    });
+
+    if (res.success) {
+      message.success('Assignment created');
+      setSetupOpen(false);
+      listRef.current?.refresh();
+    } else {
+      message.error(res.message);
+    }
+  };
+
   const handleEdit = async (values: Record<string, any>) => {
     if (!editingItem) return;
     const res = await editAssignment(module.id, editingItem.id, values);
@@ -103,7 +121,7 @@ const AssignmentsList = () => {
       setEditingItem(null);
       listRef.current?.refresh();
     } else {
-      message.error(`Failed to update assignment: ${res.message}`);
+      message.error(res.message);
     }
   };
 
@@ -122,14 +140,14 @@ const AssignmentsList = () => {
       setBulkEditOpen(false);
       listRef.current?.refresh();
     } else {
-      message.error(`Bulk update failed: ${res.message}`);
+      message.error(res.message);
     }
   };
 
   const handleDelete = async (assignment: Assignment, refresh: () => void) => {
     const res = await deleteAssignment(module.id, assignment.id);
     if (res.success) {
-      message.success('Assignment removed successfully');
+      message.success('Assignment deleted successfully');
       refresh();
     } else {
       message.error(`Delete failed: ${res.message}`);
@@ -287,7 +305,6 @@ const AssignmentsList = () => {
                     key: 'bulk-delete',
                     label: 'Bulk Delete',
                     icon: <DeleteOutlined />,
-                    isPrimary: true,
                     handler: () => {
                       const selected = listRef.current?.getSelectedRowKeys() ?? [];
                       if (selected.length === 0) {
@@ -301,6 +318,7 @@ const AssignmentsList = () => {
                     key: 'bulk-edit',
                     label: 'Bulk Edit',
                     icon: <EditOutlined />,
+                    isPrimary: true,
                     handler: () => {
                       const selected = listRef.current?.getSelectedRowKeys() ?? [];
                       if (selected.length === 0) {
@@ -319,22 +337,7 @@ const AssignmentsList = () => {
       <CreateModal
         open={setupOpen}
         onCancel={() => setSetupOpen(false)}
-        onCreate={async (values) => {
-          const res = await createAssignment(module.id, {
-            name: values.name,
-            assignment_type: values.assignment_type,
-            available_from: values.available_from.toISOString(),
-            due_date: values.due_date.toISOString(),
-            description: values.description || '',
-          });
-          if (res.success) {
-            message.success('Assignment created');
-            setSetupOpen(false);
-            listRef.current?.refresh();
-          } else {
-            message.error(`Failed to create assignment: ${res.message}`);
-          }
-        }}
+        onCreate={handleCreate}
         fields={[
           { name: 'name', label: 'Name', type: 'text', required: true },
           {
@@ -375,7 +378,6 @@ const AssignmentsList = () => {
         }}
         fields={[
           { name: 'name', label: 'Name', type: 'text', required: true },
-          { name: 'description', label: 'Description', type: 'text' },
           {
             name: 'assignment_type',
             label: 'Type',
@@ -385,6 +387,7 @@ const AssignmentsList = () => {
           },
           { name: 'available_from', label: 'Available From', type: 'datetime', required: true },
           { name: 'due_date', label: 'Due Date', type: 'datetime', required: true },
+          { name: 'description', label: 'Description', type: 'text' },
         ]}
       />
 

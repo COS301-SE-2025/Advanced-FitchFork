@@ -1,6 +1,6 @@
 import { Table, Empty, Button, Dropdown, Popconfirm, Space, Tooltip } from 'antd';
 import { ReloadOutlined, MoreOutlined } from '@ant-design/icons';
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState, type JSX } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import type { SortOption } from '@/types/common';
 
