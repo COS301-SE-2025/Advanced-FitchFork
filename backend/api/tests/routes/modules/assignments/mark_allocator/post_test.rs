@@ -104,8 +104,10 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
-        //TODO = fix this
-        // assert_eq!(response.status(), StatusCode::OK);
+        println!("Creating memo output at: {:?}", memo_output_dir);
+        assert!(memo_output_dir.exists(), "Memo output folder not created!");
+
+        assert_eq!(response.status(), StatusCode::OK);
 
         let _ = fs::remove_dir_all("./tmp");
     }

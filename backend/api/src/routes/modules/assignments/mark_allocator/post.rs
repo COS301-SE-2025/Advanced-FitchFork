@@ -1,6 +1,6 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-use util::mark_allocator::mark_allocator::{generate_allocator, SaveError};
 use crate::response::ApiResponse;
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use util::mark_allocator::mark_allocator::{SaveError, generate_allocator};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
@@ -74,9 +74,7 @@ use crate::response::ApiResponse;
 /// - Task weights are automatically calculated to ensure fair distribution
 /// - Generation is restricted to users with Lecturer permissions for the module
 /// - The generated allocator can be further customized using the PUT endpoint
-pub async fn generate(
-    Path((module_id, assignment_id)): Path<(i64, i64)>
-) -> impl IntoResponse {
+pub async fn generate(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
     match generate_allocator(module_id, assignment_id).await {
         Ok(json) => (
             StatusCode::OK,

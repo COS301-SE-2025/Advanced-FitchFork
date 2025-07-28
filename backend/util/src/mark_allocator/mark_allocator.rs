@@ -49,10 +49,10 @@ impl From<serde_json::Error> for SaveError {
 pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, SaveError> {
     let base = env::var("ASSIGNMENT_STORAGE_ROOT").map_err(|_| SaveError::DirectoryNotFound)?;
 
-    // Load execution config for this assignment
-    let config = ExecutionConfig::get_execution_config(module, assignment)
-        .map_err(|_| SaveError::DirectoryNotFound)?;
-    let separator = config.deliminator;
+    // Load execution config for this assignment, use default if not found
+    let separator = ExecutionConfig::get_execution_config(module, assignment)
+        .map(|config| config.deliminator)
+        .unwrap_or_else(|_| "&-=-&".to_string());
 
     let memo_output_path = PathBuf::from(&base)
         .join(format!("module_{}", module))

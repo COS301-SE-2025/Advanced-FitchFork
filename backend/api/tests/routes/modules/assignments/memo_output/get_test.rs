@@ -124,8 +124,8 @@ mod tests {
             .get("data")
             .and_then(|d| d.as_array())
             .expect("data not array");
-        //TODO this failed for some reason
-        // assert_eq!(data_arr.len(), 1);
+        //TODO this failed for some reason once on my side (could not replicate again) - Richard
+        assert_eq!(data_arr.len(), 1);
         assert_eq!(
             data_arr[0].get("raw").and_then(|r| r.as_str()),
             Some("This is a test memo output.")
