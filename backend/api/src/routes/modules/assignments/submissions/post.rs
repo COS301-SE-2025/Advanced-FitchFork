@@ -1,26 +1,22 @@
+use super::common::{CodeComplexity, CodeComplexitySummary, MarkSummary, SubmissionDetailResponse};
+use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late};
 use axum::{
-    extract::{State, Path, Multipart, Extension},
+    Json,
+    extract::{Extension, Multipart, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
-};
-use db::models::{
-    assignment_submission::{self, Model as AssignmentSubmissionModel},
-    assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
-};
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, QueryOrder, DatabaseConnection};
-use crate::{
-    auth::AuthUser,
-    response::ApiResponse,
-    routes::modules::assignments::get::is_late,
 };
 use code_runner;
-use util::mark_allocator::mark_allocator::load_allocator;
+use db::models::{
+    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
+    assignment_submission::{self, Model as AssignmentSubmissionModel},
+};
 use marker::MarkingJob;
 use md5;
-use super::common::{
-    MarkSummary, CodeComplexitySummary, CodeComplexity, SubmissionDetailResponse,
-};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
+use util::mark_allocator::mark_allocator::load_allocator;
+
+use util::execution_config::ExecutionConfig;
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions
 ///
@@ -133,7 +129,10 @@ pub async fn submit_assignment(
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db).await.unwrap().unwrap();
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
 
     let mut is_practice = false;
     // let mut force_submit = false;
@@ -159,8 +158,10 @@ pub async fn submit_assignment(
         None => {
             return (
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(ApiResponse::<SubmissionDetailResponse> ::error("No file provided")),
-            )
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "No file provided",
+                )),
+            );
         }
     };
     let file_bytes = match file_bytes {
@@ -168,8 +169,10 @@ pub async fn submit_assignment(
         None => {
             return (
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(ApiResponse::<SubmissionDetailResponse> ::error("No file provided")),
-            )
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "No file provided",
+                )),
+            );
         }
     };
     let allowed_extensions = [".tgz", ".gz", ".tar", ".zip"];
@@ -183,16 +186,18 @@ pub async fn submit_assignment(
     {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<SubmissionDetailResponse> ::error(
+            Json(ApiResponse::<SubmissionDetailResponse>::error(
                 "Only .tgz, .gz, .tar, and .zip files are allowed",
             )),
-        )
+        );
     }
     if file_bytes.is_empty() {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<SubmissionDetailResponse> ::error("Empty file provided")),
-        )
+            Json(ApiResponse::<SubmissionDetailResponse>::error(
+                "Empty file provided",
+            )),
+        );
     }
 
     let file_hash = format!("{:x}", md5::compute(&file_bytes));
@@ -224,8 +229,10 @@ pub async fn submit_assignment(
             eprintln!("Error saving submission: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SubmissionDetailResponse> ::error("Failed to save submission")),
-            )
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Failed to save submission",
+                )),
+            );
         }
     };
 
@@ -233,21 +240,26 @@ pub async fn submit_assignment(
         eprintln!("Code runner failed: {}", e);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<SubmissionDetailResponse> ::error("Failed to run code for submission")),
-        )
+            Json(ApiResponse::<SubmissionDetailResponse>::error(
+                "Failed to run code for submission",
+            )),
+        );
     }
 
     match load_allocator(module_id, assignment_id).await {
-        Ok(_) => { },
+        Ok(_) => {}
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SubmissionDetailResponse> ::error("Failed to load mark allocator")),
-            )
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Failed to load mark allocator",
+                )),
+            );
         }
     };
 
-    let assignment_storage_root = std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".to_string());
+    let assignment_storage_root = std::env::var("ASSIGNMENT_STORAGE_ROOT")
+        .unwrap_or_else(|_| "data/assignment_files".to_string());
     let base_path = std::path::PathBuf::from(&assignment_storage_root)
         .join(format!("module_{}", module_id))
         .join(format!("assignment_{}", assignment_id));
@@ -282,24 +294,28 @@ pub async fn submit_assignment(
     student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     let mut memo_outputs: Vec<_> = match std::fs::read_dir(&memo_output_dir) {
-        Ok(rd) => rd.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.is_file()).collect(),
+        Ok(rd) => rd
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.is_file())
+            .collect(),
         Err(_) => Vec::new(),
     };
     memo_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
-    let marking_job = MarkingJob::new(
-        memo_outputs,
-        student_outputs,
-        mark_allocator_path,
-    );
+    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
+        .expect("Failed to load execution config");
+
+    let marking_job = MarkingJob::new(memo_outputs, student_outputs, mark_allocator_path, config);
     let mark_report = match marking_job.mark().await {
         Ok(report) => report,
         Err(e) => {
             eprintln!("Marking failed: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SubmissionDetailResponse> ::error("Failed to mark submission")),
-            )
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Failed to mark submission",
+                )),
+            );
         }
     };
 
@@ -307,17 +323,29 @@ pub async fn submit_assignment(
         earned: mark_report.data.mark.earned as i64,
         total: mark_report.data.mark.total as i64,
     };
-    let tasks = serde_json::to_value(&mark_report.data.tasks).unwrap_or_default().as_array().cloned().unwrap_or_default();
+    let tasks = serde_json::to_value(&mark_report.data.tasks)
+        .unwrap_or_default()
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     let code_coverage = match &mark_report.data.code_coverage {
         Some(cov) => {
-            let arr = serde_json::to_value(cov).unwrap_or_default().as_array().cloned().unwrap_or_default();
+            let arr = serde_json::to_value(cov)
+                .unwrap_or_default()
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
             if !arr.is_empty() { Some(arr) } else { None }
-        },
+        }
         None => None,
     };
     let code_complexity = match &mark_report.data.code_complexity {
         Some(c) => {
-            let metrics = serde_json::to_value(&c.metrics).unwrap_or_default().as_array().cloned().unwrap_or_default();
+            let metrics = serde_json::to_value(&c.metrics)
+                .unwrap_or_default()
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
             let summary = CodeComplexitySummary {
                 earned: c.summary.as_ref().map(|s| s.earned as i64).unwrap_or(0),
                 total: c.summary.as_ref().map(|s| s.total as i64).unwrap_or(0),
@@ -327,7 +355,7 @@ pub async fn submit_assignment(
             } else {
                 None
             }
-        },
+        }
         None => None,
     };
     let resp = SubmissionDetailResponse {
@@ -358,5 +386,11 @@ pub async fn submit_assignment(
         eprintln!("Failed to serialize submission report to JSON");
     }
 
-    (StatusCode::OK, Json(ApiResponse::<SubmissionDetailResponse>::success(resp, "Submission received and graded")))
+    (
+        StatusCode::OK,
+        Json(ApiResponse::<SubmissionDetailResponse>::success(
+            resp,
+            "Submission received and graded",
+        )),
+    )
 }
