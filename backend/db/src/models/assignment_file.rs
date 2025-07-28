@@ -1,13 +1,14 @@
 // models/assignment_file.rs
 
 use chrono::{DateTime, Utc};
-// use code_runner::{run_zip_files, ExecutionConfig};
-use sea_orm::entity::prelude::*;
+// use code_runner::ExecutionConfig;
 use sea_orm::ActiveValue::Set;
+use sea_orm::entity::prelude::*;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use strum::{Display, EnumIter, EnumString};
+use util::execution_config::ExecutionConfig;
 
 /// Represents a file associated with an assignment, such as a spec, main file, memo, or submission.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -59,6 +60,9 @@ pub enum FileType {
     #[strum(serialize = "config")]
     #[sea_orm(string_value = "config")]
     Config,
+    #[strum(serialize = "interpreter")]
+    #[sea_orm(string_value = "interpreter")]
+    Interpreter,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -74,6 +78,16 @@ pub enum Relation {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
+    /// Loads and returns the `ExecutionConfig` if the file type is `Config`.
+    /// Requires `module_id` because it's not stored in the DB.
+    pub fn load_execution_config(&self, module_id: i64) -> Result<ExecutionConfig, String> {
+        if self.file_type != FileType::Config {
+            return Err("File is not of type 'config'".to_string());
+        }
+
+        ExecutionConfig::get_execution_config(module_id, self.assignment_id)
+    }
+
     /// Returns the base directory for assignment file storage from the environment.
     pub fn storage_root() -> PathBuf {
         env::var("ASSIGNMENT_STORAGE_ROOT")
@@ -103,7 +117,6 @@ impl Model {
     ) -> Result<Self, DbErr> {
         let now = Utc::now();
 
-        // Step 1: Delete existing file record of the same type (if any)
         use sea_orm::ColumnTrait;
         use sea_orm::EntityTrait;
         use sea_orm::QueryFilter;
@@ -122,7 +135,6 @@ impl Model {
             existing.delete(db).await?;
         }
 
-        // Step 2: Insert placeholder record with dummy path
         let partial = ActiveModel {
             assignment_id: Set(assignment_id),
             filename: Set(filename.to_string()),
@@ -135,7 +147,6 @@ impl Model {
 
         let inserted: Model = partial.insert(db).await?;
 
-        // Step 3: Build deterministic file path (e.g., 42.json)
         let ext = PathBuf::from(filename)
             .extension()
             .map(|e| e.to_string_lossy().to_string());
@@ -159,7 +170,6 @@ impl Model {
         fs::write(&file_path, bytes)
             .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
 
-        // Step 4: Update DB row with the actual file path
         let mut model: ActiveModel = inserted.into();
         model.path = Set(relative_path);
         model.updated_at = Set(Utc::now());

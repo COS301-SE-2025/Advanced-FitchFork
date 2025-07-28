@@ -1,13 +1,9 @@
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use crate::response::ApiResponse;
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use serde::Serialize;
 use std::{env, fs, path::PathBuf};
 use tokio::fs as tokio_fs;
-use crate::response::ApiResponse;
-use serde::Serialize;
+use util::execution_config::ExecutionConfig;
 
 #[derive(Serialize)]
 struct MemoSubsection {
@@ -59,8 +55,8 @@ struct MemoTaskOutput {
 pub async fn get_all_memo_outputs(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/assignment_files".into());
+    let base_path =
+        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
 
     let output_dir = PathBuf::from(base_path)
         .join(format!("module_{}", module_id))
@@ -70,7 +66,9 @@ pub async fn get_all_memo_outputs(
     if !output_dir.is_dir() {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<Vec<MemoTaskOutput>>::error("Memo output directory does not exist")),
+            Json(ApiResponse::<Vec<MemoTaskOutput>>::error(
+                "Memo output directory does not exist",
+            )),
         );
     }
 
@@ -79,7 +77,9 @@ pub async fn get_all_memo_outputs(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<MemoTaskOutput>>::error("Failed to read memo output directory")),
+                Json(ApiResponse::<Vec<MemoTaskOutput>>::error(
+                    "Failed to read memo output directory",
+                )),
             );
         }
     };
@@ -94,7 +94,15 @@ pub async fn get_all_memo_outputs(
                 Err(_) => continue,
             };
 
-            let sections = raw_content.split("&-=-&").filter(|s| !s.trim().is_empty());
+            // Load the ExecutionConfig to get the custom delimiter
+            let separator = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
+                Ok(config) => config.deliminator,
+                Err(_) => "&-=-&".to_string(), // fallback if config file missing or unreadable
+            };
+
+            let sections = raw_content
+                .split(&separator)
+                .filter(|s| !s.trim().is_empty());
 
             let subsections = sections
                 .map(|s| {
@@ -119,12 +127,17 @@ pub async fn get_all_memo_outputs(
     if tasks.is_empty() {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<Vec<MemoTaskOutput>>::error("No memo output found")),
+            Json(ApiResponse::<Vec<MemoTaskOutput>>::error(
+                "No memo output found",
+            )),
         );
     }
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(tasks, "Fetched memo output successfully")),
+        Json(ApiResponse::success(
+            tasks,
+            "Fetched memo output successfully",
+        )),
     )
 }

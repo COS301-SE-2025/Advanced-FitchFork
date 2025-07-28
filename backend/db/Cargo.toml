@@ -15,6 +15,7 @@ rand = "0.8" # Using older version of rand because sqlx and other packages are b
 strum = { version = "0.26", features = ["derive"] }  # Using older version of strum because sea-orm is behind
 log = "0.4"
 uuid = { version = "1.7", features = ["v4", "serde"] }
+util = { path = "../util" }
 
 [dev-dependencies]
 tempfile = "3.0"

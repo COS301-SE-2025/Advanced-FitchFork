@@ -1,30 +1,33 @@
 // Core dependencies
-use std::{env, fs, path::{Path, PathBuf, Component}, process::Stdio};
 use std::fs::File;
 use std::io::{Cursor, Read};
+use std::{
+    env, fs,
+    path::{Component, Path, PathBuf},
+    process::Stdio,
+};
 
 // Async, process, and timing
 use tokio::process::Command;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 // External crates
-use zip::ZipArchive;
+use flate2::read::GzDecoder;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use tar::Archive as TarArchive;
 use tempfile::tempdir;
-use flate2::read::GzDecoder;
-use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
+use zip::ZipArchive;
 
 // Your own modules
-use crate::execution_config::ExecutionConfig;
 use crate::validate_files::validate_memo_files;
 
 // Models
 use db::models::assignment::Entity as Assignment;
-use db::models::assignment_memo_output::{Entity as MemoOutputEntity, Column as MemoOutputColumn};
+use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as MemoOutputEntity};
 use db::models::assignment_task::Model as AssignmentTask;
 
+use util::execution_config::ExecutionConfig;
 
-pub mod execution_config;
 pub mod validate_files;
 
 /// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
@@ -44,7 +47,12 @@ fn first_archive_in(dir: &PathBuf) -> Result<PathBuf, String> {
             }
             false
         })
-        .ok_or_else(|| format!("No .zip, .tar, .tgz, or .gz file found in {}", dir.display()))
+        .ok_or_else(|| {
+            format!(
+                "No .zip, .tar, .tgz, or .gz file found in {}",
+                dir.display()
+            )
+        })
 }
 
 /// Resolves a potentially relative storage root path to an absolute path,
@@ -126,14 +134,19 @@ pub async fn create_memo_outputs_for_all_tasks(
     for task in tasks {
         let filename = format!("task_{}_output.txt", task.task_number);
 
-        let output =
-            match run_all_archives_with_command(archive_paths.clone(), &config, &task.command).await {
-                Ok(output) => output,
-                Err(err) => {
-                    println!("Task {} failed:\n{}", task.task_number, err);
-                    err.to_string() // Save error as output
-                }
-            };
+        let output = match run_all_archives_with_command(
+            archive_paths.clone(),
+            &config,
+            &task.command,
+        )
+        .await
+        {
+            Ok(output) => output,
+            Err(err) => {
+                println!("Task {} failed:\n{}", task.task_number, err);
+                err.to_string() // Save error as output
+            }
+        };
 
         if let Err(e) = db::models::assignment_memo_output::Model::save_file(
             db,
@@ -150,7 +163,6 @@ pub async fn create_memo_outputs_for_all_tasks(
 
     Ok(())
 }
-
 
 use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 
@@ -228,17 +240,22 @@ pub async fn create_submission_outputs_for_all_tasks(
             task.task_number, user_id, attempt_number
         );
 
-        let output =
-            match run_all_archives_with_command(archive_paths.clone(), &config, &task.command).await {
-                Ok(output) => output,
-                Err(err) => {
-                    println!(
-                        "Task {} failed for user {} attempt {}:\n{}",
-                        task.task_number, user_id, attempt_number, err
-                    );
-                    err.to_string() // Save error as file content
-                }
-            };
+        let output = match run_all_archives_with_command(
+            archive_paths.clone(),
+            &config,
+            &task.command,
+        )
+        .await
+        {
+            Ok(output) => output,
+            Err(err) => {
+                println!(
+                    "Task {} failed for user {} attempt {}:\n{}",
+                    task.task_number, user_id, attempt_number, err
+                );
+                err.to_string() // Save error as file content
+            }
+        };
 
         if let Err(e) = SubmissionOutputModel::save_file(
             db,
