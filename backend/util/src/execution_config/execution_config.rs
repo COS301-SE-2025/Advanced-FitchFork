@@ -30,6 +30,12 @@ pub struct ExecutionConfig {
     pub max_processes: u32,
     pub marking_scheme: MarkingScheme,
     pub feedback_scheme: FeedbackScheme,
+    #[serde(default = "default_deliminator")]
+    pub deliminator: String,
+}
+
+fn default_deliminator() -> String {
+    "&-=-&".to_string()
 }
 
 impl ExecutionConfig {
@@ -196,5 +202,44 @@ mod tests {
 
         assert!(config.is_err());
         assert_eq!(config.unwrap_err(), "Invalid config JSON format");
+    }
+
+    #[test]
+    fn test_config_with_deliminator() {
+        let temp_dir = tempdir().unwrap();
+
+        let module_id = 1;
+        let assignment_id = 1;
+
+        let config_dir = temp_dir
+            .path()
+            .join(format!("module_{}", module_id))
+            .join(format!("assignment_{}", assignment_id))
+            .join("config");
+        fs::create_dir_all(&config_dir).unwrap();
+
+        let config_json = r#"
+    {
+        "timeout_secs": 10,
+        "max_memory": "512m",
+        "max_cpus": "2",
+        "max_uncompressed_size": 20971520,
+        "max_processes": 128,
+        "marking_scheme": "percentage",
+        "feedback_scheme": "manual",
+        "deliminator": "@@@"
+    }
+    "#;
+
+        fs::write(config_dir.join("config.json"), config_json).unwrap();
+
+        let config = ExecutionConfig::get_execution_config_with_base(
+            module_id,
+            assignment_id,
+            Some(temp_dir.path().to_str().unwrap()),
+        )
+        .unwrap();
+
+        assert_eq!(config.deliminator, "@@@");
     }
 }

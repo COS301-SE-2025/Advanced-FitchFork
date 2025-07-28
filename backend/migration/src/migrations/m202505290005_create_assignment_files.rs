@@ -41,6 +41,7 @@ impl MigrationTrait for Migration {
                                     Alias::new("markallocator"),
                                     Alias::new("makefile"),
                                     Alias::new("config"),
+                                    Alias::new("interpreter"),
                                 ],
                             )
                             .not_null(),

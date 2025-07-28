@@ -24,6 +24,9 @@ impl Seeder for AssignmentFileSeeder {
                 format!("mark_allocator_{}.txt", id)
             }),
             (FileType::Config, |id| format!("config_{}.txt", id)),
+            (FileType::Interpreter, |id| {
+                format!("interpreter_{}.txt", id)
+            }),
         ];
 
         for a in &assignments {

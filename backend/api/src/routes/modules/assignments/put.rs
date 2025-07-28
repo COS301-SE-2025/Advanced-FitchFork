@@ -210,17 +210,9 @@ pub async fn bulk_update_assignments(
     Json(req): Json<BulkUpdateRequest>,
 ) -> impl IntoResponse {
     if req.assignment_ids.is_empty() {
-        let result = BulkUpdateResult {
-            updated: 0,
-            failed: vec![],
-        };
-
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::success(
-                result,
-                "No assignment IDs provided",
-            )),
+            Json(ApiResponse::error("No assignment IDs provided")),
         );
     }
 

@@ -1,8 +1,8 @@
-use crate::execution_config::ExecutionConfig;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
+use util::execution_config::ExecutionConfig;
 
 /// Validates the presence of necessary `.zip` files and config correctness
 /// for a given module and assignment in the specified storage root.
