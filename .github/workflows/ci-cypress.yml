@@ -1,4 +1,4 @@
-name: E2E Tests
+name: Cypress E2E Tests
 
 on:
   push:
@@ -7,89 +7,89 @@ on:
     branches: [main, dev]
 
 jobs:
-  cypress-tests:
+  e2e:
     name: Cypress E2E Tests
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # ----------------------
-      # Cache Rust & Node deps
-      # ----------------------
-      - name: Cache Cargo registry
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache Cargo build output
-        uses: actions/cache@v3
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
-
-      # ----------------------
-      # Backend Setup
-      # ----------------------
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
 
-      - name: Copy .env file
-        run: cp .env.example .env
-        working-directory: backend
-
-      - name: Build backend Docker image
-        run: docker build -t universal-runner:latest .
-        working-directory: backend
-
-      - name: Run migrations and seed database
-        run: |
-          cargo run -p migration -- fresh
-          cargo run -p seeder --quiet
-        working-directory: backend
-
-      - name: Start backend server
-        run: cargo run -p api &
-        working-directory: backend
-
-      # ----------------------
-      # Frontend Setup
-      # ----------------------
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
+
+      # -------------------------------
+      # BACKEND SETUP
+      # -------------------------------
+      - name: Copy backend .env
+        run: cp .env.example .env
+        working-directory: backend
+
+      - name: Build universal-runner image
+        run: docker build -t universal-runner:latest .
+        working-directory: backend
+
+      - name: Run migrations
+        run: cargo run -p migration
+        working-directory: backend
+
+      - name: Seed database
+        run: cargo run -p seeder --quiet
+        working-directory: backend
+
+      # -------------------------------
+      # FRONTEND SETUP
+      # -------------------------------
+      - name: Copy frontend .env
+        run: cp .env.example .env
+        working-directory: frontend
 
       - name: Install frontend dependencies
         run: npm ci
         working-directory: frontend
 
-      - name: Start frontend server
-        run: npm run dev &
-        working-directory: frontend
-
-      # ----------------------
-      # Wait for backend and frontend to be ready
-      # ----------------------
-      - name: Wait for servers
-        run: npx wait-on http://localhost:5173 http://localhost:3000/api
-
-      # ----------------------
-      # Run Cypress Tests
-      # ----------------------
-      - name: Install Cypress test dependencies
+      # -------------------------------
+      # CYPRESS SETUP
+      # -------------------------------
+      - name: Install Cypress dependencies
         run: npm ci
         working-directory: cypress-tests
 
-      - name: Run Cypress tests
-        run: npm run test:headless
-        working-directory: cypress-tests
-        env:
-          CYPRESS_baseUrl: http://localhost:5173
+      # -------------------------------
+      # START SERVERS AND RUN CYPRESS
+      # -------------------------------
+      - name: Run backend/frontend servers and Cypress tests
+        run: |
+          npx concurrently \
+            -k \
+            -s first \
+            -n "BACKEND,FRONTEND,CYPRESS" \
+            -c "blue,green,magenta" \
+            "cd backend && cp .env.example .env && HOST=0.0.0.0 cargo run -p api" \
+            "cd frontend && cp .env.example .env && npm run dev -- --port 5173 --host 0.0.0.0" \
+            "npx wait-on http://localhost:3000/api/health http://localhost:5173 && cd cypress-tests && npm run test:headless"
+
+      # -------------------------------
+      # ARTIFACTS ON FAILURE
+      # -------------------------------
+      - name: Upload Cypress screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: cypress-tests/screenshots
+
+      - name: Upload Cypress videos on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-videos
+          path: cypress-tests/videos
