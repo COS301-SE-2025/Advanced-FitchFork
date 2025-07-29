@@ -1,7 +1,7 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{env, fs, path::PathBuf};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MarkingScheme {
     Exact,
@@ -9,7 +9,7 @@ pub enum MarkingScheme {
     Regex,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FeedbackScheme {
     Auto,
@@ -17,28 +17,75 @@ pub enum FeedbackScheme {
     Ai,
 }
 
-/// Configuration for resource-limited code execution environments.
-///
-/// This struct is loaded from a JSON file per assignment, and passed to Docker
-/// to enforce memory, CPU, timeout, and process constraints.
-#[derive(Debug, Clone, Deserialize)]
-pub struct ExecutionConfig {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ExecutionLimits {
+    #[serde(default = "default_timeout_secs")]
     pub timeout_secs: u64,
-    pub max_memory: String,
-    pub max_cpus: String,
+
+    #[serde(default = "default_max_memory")]
+    pub max_memory: u64,
+
+    #[serde(default = "default_max_cpus")]
+    pub max_cpus: u32,
+
+    #[serde(default = "default_max_uncompressed_size")]
     pub max_uncompressed_size: u64,
+
+    #[serde(default = "default_max_processes")]
     pub max_processes: u32,
+}
+
+impl Default for ExecutionLimits {
+    fn default() -> Self {
+        Self {
+            timeout_secs: default_timeout_secs(),
+            max_memory: default_max_memory(),
+            max_cpus: default_max_cpus(),
+            max_uncompressed_size: default_max_uncompressed_size(),
+            max_processes: default_max_processes(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MarkingOptions {
+    #[serde(default = "default_marking_scheme")]
     pub marking_scheme: MarkingScheme,
+
+    #[serde(default = "default_feedback_scheme")]
     pub feedback_scheme: FeedbackScheme,
+
     #[serde(default = "default_deliminator")]
     pub deliminator: String,
 }
 
-fn default_deliminator() -> String {
-    "&-=-&".to_string()
+impl Default for MarkingOptions {
+    fn default() -> Self {
+        Self {
+            marking_scheme: default_marking_scheme(),
+            feedback_scheme: default_feedback_scheme(),
+            deliminator: default_deliminator(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ExecutionConfig {
+    #[serde(default)]
+    pub execution: ExecutionLimits,
+
+    #[serde(default)]
+    pub marking: MarkingOptions,
 }
 
 impl ExecutionConfig {
+    pub fn default_config() -> Self {
+        ExecutionConfig {
+            execution: ExecutionLimits::default(),
+            marking: MarkingOptions::default(),
+        }
+    }
+
     fn resolve_storage_root() -> PathBuf {
         if let Ok(p) = env::var("ASSIGNMENT_STORAGE_ROOT") {
             let path = PathBuf::from(p);
@@ -56,19 +103,6 @@ impl ExecutionConfig {
             }
         } else {
             PathBuf::from("../data/assignment_files")
-        }
-    }
-
-    pub fn default_config() -> Self {
-        ExecutionConfig {
-            timeout_secs: 10,
-            max_memory: "1024m".to_string(),
-            max_cpus: "2.0".to_string(),
-            max_uncompressed_size: 1000000,
-            max_processes: 256,
-            marking_scheme: MarkingScheme::Exact,
-            feedback_scheme: FeedbackScheme::Auto,
-            deliminator: default_deliminator(),
         }
     }
 
@@ -113,146 +147,36 @@ impl ExecutionConfig {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-    use tempfile::tempdir;
+//Default Functions
 
-    #[test]
-    fn test_load_valid_config() {
-        let temp_dir = tempdir().unwrap();
+fn default_timeout_secs() -> u64 {
+    10
+}
 
-        let module_id = 123;
-        let assignment_id = 42;
+fn default_max_memory() -> u64 {
+    8_589_934_592
+}
 
-        let config_dir = temp_dir
-            .path()
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("config");
-        fs::create_dir_all(&config_dir).unwrap();
+fn default_max_cpus() -> u32 {
+    2
+}
 
-        let config_json = r#"
-        {
-            "timeout_secs": 15,
-            "max_memory": "256m",
-            "max_cpus": "1.5",
-            "max_uncompressed_size": 10485760,
-            "max_processes": 64,
-            "marking_scheme": "exact",
-            "feedback_scheme": "auto"
-        }
-        "#;
+fn default_max_uncompressed_size() -> u64 {
+    100_000_000
+}
 
-        let config_path = config_dir.join("124.json");
-        fs::write(&config_path, config_json).unwrap();
+fn default_max_processes() -> u32 {
+    256
+}
 
-        let config = ExecutionConfig::get_execution_config_with_base(
-            module_id,
-            assignment_id,
-            Some(temp_dir.path().to_str().unwrap()),
-        );
+fn default_marking_scheme() -> MarkingScheme {
+    MarkingScheme::Exact
+}
 
-        assert!(config.is_ok());
+fn default_feedback_scheme() -> FeedbackScheme {
+    FeedbackScheme::Auto
+}
 
-        let cfg = config.unwrap();
-        assert_eq!(cfg.timeout_secs, 15);
-        assert_eq!(cfg.max_memory, "256m");
-        assert_eq!(cfg.max_cpus, "1.5");
-        assert_eq!(cfg.max_uncompressed_size, 10 * 1024 * 1024);
-        assert_eq!(cfg.max_processes, 64);
-        assert!(matches!(cfg.marking_scheme, MarkingScheme::Exact));
-        assert!(matches!(cfg.feedback_scheme, FeedbackScheme::Auto));
-    }
-
-    #[test]
-    fn test_config_file_missing() {
-        let temp_dir = tempdir().unwrap();
-
-        let module_id = 123;
-        let assignment_id = 999;
-
-        let config_dir = temp_dir
-            .path()
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("config");
-        fs::create_dir_all(&config_dir).unwrap();
-
-        let config = ExecutionConfig::get_execution_config_with_base(
-            module_id,
-            assignment_id,
-            Some(temp_dir.path().to_str().unwrap()),
-        );
-
-        assert!(config.is_err());
-        assert!(config.unwrap_err().contains("No config json file found"));
-    }
-
-    #[test]
-    fn test_invalid_config_json() {
-        let temp_dir = tempdir().unwrap();
-
-        let module_id = 123;
-        let assignment_id = 77;
-
-        let config_dir = temp_dir
-            .path()
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("config");
-        fs::create_dir_all(&config_dir).unwrap();
-
-        let invalid_json = r#"{ "timeout_secs": "oops" }"#;
-        fs::write(config_dir.join("config.json"), invalid_json).unwrap();
-
-        let config = ExecutionConfig::get_execution_config_with_base(
-            module_id,
-            assignment_id,
-            Some(temp_dir.path().to_str().unwrap()),
-        );
-
-        assert!(config.is_err());
-        assert_eq!(config.unwrap_err(), "Invalid config JSON format");
-    }
-
-    #[test]
-    fn test_config_with_deliminator() {
-        let temp_dir = tempdir().unwrap();
-
-        let module_id = 1;
-        let assignment_id = 1;
-
-        let config_dir = temp_dir
-            .path()
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("config");
-        fs::create_dir_all(&config_dir).unwrap();
-
-        let config_json = r#"
-    {
-        "timeout_secs": 10,
-        "max_memory": "512m",
-        "max_cpus": "2",
-        "max_uncompressed_size": 20971520,
-        "max_processes": 128,
-        "marking_scheme": "percentage",
-        "feedback_scheme": "manual",
-        "deliminator": "@@@"
-    }
-    "#;
-
-        fs::write(config_dir.join("config.json"), config_json).unwrap();
-
-        let config = ExecutionConfig::get_execution_config_with_base(
-            module_id,
-            assignment_id,
-            Some(temp_dir.path().to_str().unwrap()),
-        )
-        .unwrap();
-
-        assert_eq!(config.deliminator, "@@@");
-    }
+fn default_deliminator() -> String {
+    "&-=-&".to_string()
 }

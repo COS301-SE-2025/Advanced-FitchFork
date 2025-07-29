@@ -51,7 +51,7 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
 
     // Load execution config for this assignment, use default if not found
     let separator = ExecutionConfig::get_execution_config(module, assignment)
-        .map(|config| config.deliminator)
+        .map(|config| config.marking.deliminator)
         .unwrap_or_else(|_| "&-=-&".to_string());
 
     let memo_output_path = PathBuf::from(&base)

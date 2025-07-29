@@ -132,7 +132,7 @@ fn parse_task_output(
     }
 
     let content_lines = &lines[1..];
-    let deliminator = config.deliminator.clone();
+    let deliminator = config.marking.deliminator.clone();
     let pattern = format!(r"^{}(.+)$", escape(&deliminator));
     let delimiter_regex = Regex::new(&pattern)
         .map_err(|e| MarkerError::ParseOutputError(format!("Failed to compile regex: {}", e)))?;

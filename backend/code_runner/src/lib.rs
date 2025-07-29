@@ -288,18 +288,26 @@ pub async fn run_all_archives_with_command(
 
     for archive_path in archive_paths {
         let archive_bytes = std::fs::read(&archive_path)?;
-        extract_archive_contents(&archive_bytes, config.max_uncompressed_size, &code_path)?;
+        extract_archive_contents(
+            &archive_bytes,
+            config.execution.max_uncompressed_size,
+            &code_path,
+        )?;
     }
 
     let full_command = custom_command.to_string();
+
+    let memory_arg = format!("--memory={}b", config.execution.max_memory);
+    let cpus_arg = format!("--cpus={}", config.execution.max_cpus);
+    let pids_arg = format!("--pids-limit={}", config.execution.max_processes);
 
     let docker_output = Command::new("docker")
         .arg("run")
         .arg("--rm")
         .arg("--network=none")
-        .arg(format!("--memory={}", config.max_memory))
-        .arg(format!("--cpus={}", config.max_cpus))
-        .arg(format!("--pids-limit={}", config.max_processes))
+        .arg(memory_arg)
+        .arg(cpus_arg)
+        .arg(pids_arg)
         .arg("--security-opt=no-new-privileges")
         .arg("-v")
         .arg(format!("{}:/code:rw", code_path.display()))
@@ -314,7 +322,7 @@ pub async fn run_all_archives_with_command(
         .spawn()?;
 
     let output = timeout(
-        Duration::from_secs(config.timeout_secs),
+        Duration::from_secs(config.execution.timeout_secs),
         docker_output.wait_with_output(),
     )
     .await??;
