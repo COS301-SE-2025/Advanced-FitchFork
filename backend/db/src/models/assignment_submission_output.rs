@@ -154,4 +154,31 @@ impl Model {
 
         model.update(db).await
     }
+
+    /// Returns the contents of a submission output file given its identifiers.
+    /// Does not require a Model instance.
+    pub fn read_submission_output_file(
+        module_id: i64,
+        assignment_id: i64,
+        task_number: i64,
+        user_id: i64,
+        attempt_number: i64,
+        file_id: i64,
+    ) -> Result<Vec<u8>, std::io::Error> {
+        let storage_root = Self::storage_root();
+
+        let dir_path = storage_root
+            .join(format!("module_{module_id}"))
+            .join(format!("assignment_{assignment_id}"))
+            .join("assignment_submissions")
+            .join(format!("user_{user_id}"))
+            .join(format!("attempt_{attempt_number}"))
+            .join("submission_output")
+            .join(format!("task_{task_number}"));
+
+        // Assuming file name is just the id with no extension
+        let file_path = dir_path.join(file_id.to_string());
+
+        std::fs::read(file_path)
+    }
 }
