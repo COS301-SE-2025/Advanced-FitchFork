@@ -764,3 +764,109 @@ pub async fn upload_profile_picture(
         Json(ApiResponse::success(response, "Profile picture uploaded.")),
     )
 }
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct ChangePasswordRequest {
+    #[validate(length(min = 1, message = "Current password is required"))]
+    pub current_password: String,
+
+    #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
+    pub new_password: String,
+}
+
+/// POST /api/auth/change_password
+///
+/// Change the password for an authenticated user.
+///
+/// ### Request Body
+/// ```json
+/// {
+///   "current_password": "OldPassword123",
+///   "new_password": "NewSecurePassword456"
+/// }
+/// ```
+///
+/// ### Responses
+///
+/// - `200 OK`  
+/// ```json
+/// {
+///   "success": true,
+///   "data": null,
+///   "message": "Password changed successfully."
+/// }
+/// ```
+///
+/// - `400 Bad Request` (validation failure)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Password must be at least 8 characters"
+/// }
+/// ```
+///
+/// - `401 Unauthorized` (invalid current password)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Current password is incorrect"
+/// }
+/// ```
+///
+/// - `401 Unauthorized` (not authenticated)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Authentication required"
+/// }
+/// ```
+pub async fn change_password(
+    State(db): State<DatabaseConnection>,
+    AuthUser(claims): AuthUser,
+    Json(req): Json<ChangePasswordRequest>,
+) -> impl IntoResponse {
+    if let Err(validation_errors) = req.validate() {
+        let error_message = common::format_validation_errors(&validation_errors);
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(error_message)),
+        );
+    }
+
+    let user = match user::Entity::find_by_id(claims.sub).one(&db).await {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(ApiResponse::<()>::error("Authentication required")),
+            );
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+            );
+        }
+    };
+
+    if !user.verify_password(&req.current_password) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ApiResponse::<()>::error("Current password is incorrect")),
+        );
+    }
+
+    let mut active_user = user.into_active_model();
+    active_user.password_hash = Set(UserModel::hash_password(&req.new_password));
+    
+    match active_user.update(&db).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::success((), "Password changed successfully.")),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+        ),
+    }
+}

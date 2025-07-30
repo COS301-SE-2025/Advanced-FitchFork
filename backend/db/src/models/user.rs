@@ -221,6 +221,18 @@ impl Model {
             .expect("Failed to hash password")
             .to_string()
     }
+
+    /// Verifies a plaintext password against the stored hash
+    pub fn verify_password(&self, password: &str) -> bool {
+        let parsed = match PasswordHash::new(&self.password_hash) {
+            Ok(parsed) => parsed,
+            Err(_) => return false,
+        };
+
+        Argon2::default()
+            .verify_password(password.as_bytes(), &parsed)
+            .is_ok()
+    }
 }
 
 #[cfg(test)]
