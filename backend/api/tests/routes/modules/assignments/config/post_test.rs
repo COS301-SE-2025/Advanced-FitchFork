@@ -7,7 +7,7 @@ mod tests {
     use api::{auth::generate_jwt};
     use dotenvy;
     use chrono::{Utc, TimeZone};
-    use sea_orm::{Set, IntoActiveModel, ActiveModelTrait};
+    use db::models::assignment_file::{FileType, Model as AssignmentFile};
     use crate::test_helpers::make_app;
 
     struct TestData {
@@ -228,26 +228,73 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let mut assignment = data.assignments[0].clone().into_active_model();
-        assignment.config = Set(Some(json!({"old_field": 1, "test_timeout": 50})));
-        assignment.update(&db).await.unwrap();
+        // Save initial config using correct API format
+        let old_config = json!({
+            "execution": {
+                "timeout_secs": 50,
+                "max_memory": 8589934592u64,
+                "max_cpus": 2,
+                "max_uncompressed_size": 100_000_000u64,
+                "max_processes": 256
+            },
+            "marking": {
+                "marking_scheme": "exact",
+                "feedback_scheme": "auto",
+                "deliminator": "&-=-&"
+            }
+        });
 
+        let old_bytes = serde_json::to_vec_pretty(&old_config).unwrap();
+        AssignmentFile::save_file(
+            &db,
+            data.assignments[0].id,
+            data.module.id,
+            FileType::Config,
+            "config.json",
+            &old_bytes,
+        )
+        .await
+        .unwrap();
+
+        // Perform POST overwrite
         let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
-        let body = json!({"test_timeout": 999, "new_field": true});
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
+
+        let new_config = json!({
+            "execution": {
+                "timeout_secs": 999,
+                "max_memory": 8589934592u64,
+                "max_cpus": 2,
+                "max_uncompressed_size": 100_000_000u64,
+                "max_processes": 256
+            },
+            "marking": {
+                "marking_scheme": "exact",
+                "feedback_scheme": "auto",
+                "deliminator": "&-=-&"
+            }
+        });
+
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(Body::from(body.to_string()))
+            .body(Body::from(new_config.to_string()))
             .unwrap();
 
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let get_uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
+        // GET the updated config
+        let get_uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
         let get_req = Request::builder()
             .uri(&get_uri)
             .header("Authorization", format!("Bearer {}", token))
@@ -257,10 +304,17 @@ mod tests {
         let get_response = app.oneshot(get_req).await.unwrap();
         assert_eq!(get_response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(get_response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(get_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["data"]["test_timeout"], 999);
-        assert_eq!(json["data"]["new_field"], true);
+
+        assert_eq!(json["data"]["execution"]["timeout_secs"], 999);
+        assert_eq!(json["data"]["marking"]["marking_scheme"], "exact");
+
+        // "old_field" shouldn't be preserved since it's not part of ExecutionConfig
         assert!(json["data"].get("old_field").is_none());
     }
+
+
 }

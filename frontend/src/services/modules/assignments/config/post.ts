@@ -1,4 +1,4 @@
-import type { AssignmentConfig, PostAssignmentConfigResponse } from "@/types/modules/assignments/config";
+import type { AssignmentConfig } from "@/types/modules/assignments/config";
 import { apiFetch } from "@/utils/api";
 
 
@@ -7,7 +7,7 @@ export async function setAssignmentConfig(
   assignmentId: number,
   config: AssignmentConfig
 ) {
-  return await apiFetch<PostAssignmentConfigResponse>(
+  return await apiFetch<AssignmentConfig>(
     `/modules/${moduleId}/assignments/${assignmentId}/config`,
     {
       method: 'POST',

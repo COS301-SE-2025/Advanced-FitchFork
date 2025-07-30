@@ -145,6 +145,30 @@ impl ExecutionConfig {
     pub fn get_execution_config(module_id: i64, assignment_id: i64) -> Result<Self, String> {
         Self::get_execution_config_with_base(module_id, assignment_id, None)
     }
+
+    /// Save the configuration to disk under the derived path based on module and assignment IDs.
+    pub fn save(&self, module_id: i64, assignment_id: i64) -> Result<(), String> {
+        let base_path = Self::resolve_storage_root();
+
+        let config_dir = base_path
+            .join(format!("module_{}", module_id))
+            .join(format!("assignment_{}", assignment_id))
+            .join("config");
+
+        // Create directory if it doesn't exist
+        if let Err(e) = fs::create_dir_all(&config_dir) {
+            return Err(format!("Failed to create config directory: {:?}", e));
+        }
+
+        let config_path = config_dir.join("config.json");
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| format!("Failed to serialize config to JSON: {}", e))?;
+
+        fs::write(&config_path, json)
+            .map_err(|e| format!("Failed to write config file to disk: {:?}", e))?;
+
+        Ok(())
+    }
 }
 
 //Default Functions
