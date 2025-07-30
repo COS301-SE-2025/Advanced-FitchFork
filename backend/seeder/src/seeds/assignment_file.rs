@@ -203,14 +203,19 @@ task3:
         // New config file content
         let config_json = r#"
 {
-  "timeout_secs": 15,
-  "max_memory": "768m",
-  "max_cpus": "2",
-  "max_processes": 256,
-  "max_uncompressed_size": 50000000,
-  "marking_scheme": "exact",
-  "feedback_scheme": "auto"
-}
+          "execution": {
+    "timeout_secs": 10,
+    "max_memory":  8589934592,
+    "max_cpus": 2,
+    "max_uncompressed_size": 100000000,
+    "max_processes": 256
+  },
+  "marking": {
+    "marking_scheme": "exact",
+    "feedback_scheme": "auto",
+    "deliminator": "&-=-&"
+  }
+    }
 "#;
 
         let zipped_files = vec![
@@ -441,14 +446,19 @@ task4: main
 
         let config_json_cpp = r#"
 {
-  "timeout_secs": 15,
-  "max_memory": "768m",
-  "max_cpus": "2",
-  "max_processes": 256,
-  "max_uncompressed_size": 50000000,
-  "marking_scheme": "exact",
-  "feedback_scheme": "auto"
-}
+          "execution": {
+    "timeout_secs": 10,
+    "max_memory": 8589934592,
+    "max_cpus": 2,
+    "max_uncompressed_size": 100000000,
+    "max_processes": 256
+  },
+  "marking": {
+    "marking_scheme": "exact",
+    "feedback_scheme": "auto",
+    "deliminator": "&-=-&"
+  }
+    }
 "#;
 
         let zipped_files_cpp = vec![

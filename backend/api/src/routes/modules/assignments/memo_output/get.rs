@@ -96,7 +96,7 @@ pub async fn get_all_memo_outputs(
 
             // Load the ExecutionConfig to get the custom delimiter
             let separator = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
-                Ok(config) => config.deliminator,
+                Ok(config) => config.marking.deliminator,
                 Err(_) => "&-=-&".to_string(), // fallback if config file missing or unreadable
             };
 

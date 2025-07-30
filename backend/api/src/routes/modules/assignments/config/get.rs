@@ -1,21 +1,14 @@
+use crate::response::ApiResponse;
 use axum::{
-    extract::{State, Path},
     Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
-use serde_json::{Value, Map};
-use crate::{
-    response::ApiResponse,
-};
-use db::{
-    models::{
-        assignment::{
-            Column as AssignmentColumn, Entity as AssignmentEntity,
-        },
-    },
-};
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, DatabaseConnection};
+use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use serde_json::{Map, Value};
+use util::execution_config::ExecutionConfig;
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -116,7 +109,10 @@ pub async fn get_assignment_config(
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db).await.unwrap().unwrap();
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
 
     let config = match assignment.config {
         Some(Value::Object(obj)) => Value::Object(obj),
@@ -136,9 +132,46 @@ pub async fn get_assignment_config(
         "Assignment configuration retrieved successfully"
     };
 
+    (StatusCode::OK, Json(ApiResponse::success(config, message))).into_response()
+}
+
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/config/default
+///
+/// Returns the default execution configuration used when no custom config file is present.
+/// This helps clients pre-fill configuration forms or understand system defaults.
+///
+/// ### Success Response (200 OK)
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Default execution config retrieved successfully",
+///   "data":
+/// {
+//   "execution": {
+//     "timeout_secs": 10,
+//     "max_memory": 1000000,
+//     "max_cpus": 2,
+//     "max_uncompressed_size": 1000000,
+//     "max_processes": 256
+//   },
+//   "marking": {
+//     "marking_scheme": "exact",
+//     "feedback_scheme": "auto",
+//     "deliminator": "&-=-&"
+//   }
+// }
+
+/// }
+/// ```
+pub async fn get_default_assignment_config(
+    Path((_module_id, _assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    let default_config = ExecutionConfig::default_config();
     (
         StatusCode::OK,
-        Json(ApiResponse::success(config, message)),
+        Json(ApiResponse::success(
+            default_config,
+            "Default execution config retrieved successfully",
+        )),
     )
-        .into_response()
 }

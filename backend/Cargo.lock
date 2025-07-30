@@ -61,6 +61,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ai"
+version = "0.1.0"
+dependencies = [
+ "db",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "aliasable"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1819,6 +1827,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "util",
 ]
 
 [[package]]

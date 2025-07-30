@@ -56,11 +56,9 @@ impl Model {
 
         PathBuf::from(relative_root)
     }
-
     pub fn full_directory_path(
         module_id: i64,
         assignment_id: i64,
-        task_number: i64,
         user_id: i64,
         attempt_number: i64,
     ) -> PathBuf {
@@ -70,8 +68,7 @@ impl Model {
             .join("assignment_submissions")
             .join(format!("user_{user_id}"))
             .join(format!("attempt_{attempt_number}"))
-            .join(format!("submission_output"))
-            .join(format!("task_{task_number}"))
+            .join("submission_output")
     }
 
     pub fn full_path(&self) -> PathBuf {
@@ -107,7 +104,7 @@ impl Model {
             None => inserted.id.to_string(),
         };
 
-        //Get submission
+        // Get submission
         let submission = super::assignment_submission::Entity::find_by_id(submission_id)
             .one(db)
             .await
@@ -122,16 +119,9 @@ impl Model {
 
         let module_id = assignment.module_id;
 
-        let task = super::assignment_task::Entity::find_by_id(task_id)
-            .one(db)
-            .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding task: {}", e)))?
-            .ok_or_else(|| DbErr::Custom("Task not found".to_string()))?;
-
         let dir_path = Self::full_directory_path(
             module_id,
             assignment.id,
-            task.task_number,
             submission.user_id,
             submission.attempt,
         );
@@ -153,5 +143,29 @@ impl Model {
         model.updated_at = Set(Utc::now());
 
         model.update(db).await
+    }
+
+    /// Reads the contents of a submission output file from disk,
+    /// given the module_id, assignment_id, user_id, attempt_number, and the file id (filename).
+    pub fn read_submission_output_file(
+        module_id: i64,
+        assignment_id: i64,
+        user_id: i64,
+        attempt_number: i64,
+        file_id: i64,
+    ) -> Result<Vec<u8>, std::io::Error> {
+        let storage_root = Self::storage_root();
+
+        let dir_path = storage_root
+            .join(format!("module_{module_id}"))
+            .join(format!("assignment_{assignment_id}"))
+            .join("assignment_submissions")
+            .join(format!("user_{user_id}"))
+            .join(format!("attempt_{attempt_number}"))
+            .join("submission_output");
+
+        let file_path = dir_path.join(file_id.to_string());
+
+        std::fs::read(file_path)
     }
 }
