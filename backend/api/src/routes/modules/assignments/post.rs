@@ -126,13 +126,17 @@ pub async fn create_assignment(
         Ok(model) => {
             let response = AssignmentResponse::from(model);
             (
-                StatusCode::OK,
+                StatusCode::CREATED,
                 Json(ApiResponse::success(
                     response,
                     "Assignment created successfully",
                 )),
             )
         }
+        Err(DbErr::Custom(msg)) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<AssignmentResponse>::error(&msg)),
+        ),
         Err(DbErr::RecordNotInserted) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<AssignmentResponse>::error(

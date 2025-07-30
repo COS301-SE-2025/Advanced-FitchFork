@@ -109,12 +109,14 @@ impl Model {
         available_from: DateTime<Utc>,
         due_date: DateTime<Utc>,
     ) -> Result<Self, DbErr> {
+        Self::validate_dates(available_from, due_date)?;
+
         let active = ActiveModel {
             module_id: Set(module_id),
             name: Set(name.to_string()),
             description: Set(description.map(|d| d.to_string())),
             assignment_type: Set(assignment_type),
-            status: Set(Status::Setup), // always starts as Setup
+            status: Set(Status::Setup),
             available_from: Set(available_from),
             due_date: Set(due_date),
             created_at: Set(Utc::now()),
@@ -135,6 +137,8 @@ impl Model {
         available_from: DateTime<Utc>,
         due_date: DateTime<Utc>,
     ) -> Result<Self, DbErr> {
+        Self::validate_dates(available_from, due_date)?;
+
         let mut assignment = Entity::find()
             .filter(Column::Id.eq(id))
             .filter(Column::ModuleId.eq(module_id))
@@ -236,6 +240,16 @@ impl Model {
         }
 
         query_builder.paginate(db, per_page).fetch_page(page - 1).await
+    }
+
+    fn validate_dates(available_from: DateTime<Utc>, due_date: DateTime<Utc>) -> Result<(), DbErr> {
+        if due_date < available_from {
+            Err(DbErr::Custom(
+                "Due date cannot be before Available From date".into(),
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     /// Computes a detailed readiness report for an assignment by checking if all required components are present.

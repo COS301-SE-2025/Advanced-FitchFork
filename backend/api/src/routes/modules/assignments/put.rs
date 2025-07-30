@@ -132,6 +132,10 @@ pub async fn edit_assignment(
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<AssignmentResponse>::error("Assignment not found")),
         ),
+        Err(DbErr::Custom(msg)) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<AssignmentResponse>::error(&msg)),
+        ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<AssignmentResponse>::error(

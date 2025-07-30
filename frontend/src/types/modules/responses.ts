@@ -27,24 +27,15 @@ export type GetMyModulesResponse = ApiResponse<{
   as_tutor: Module[];
 }>;
 
-export type GetPersonnelReponse = ApiResponse<{ 
-  users: User[];
-} & PaginationResponse>;
-
 export type GetModulesForUserResponse = ApiResponse<{
  role: ModuleRole
 } & Module[]>;
-
-export type GetEligibleUsersResponse = ApiResponse<{
-  users: User[];
-} & PaginationResponse>;
 
 // ─────────────────────────────────────────────────────────────
 // POST Response Types
 // ─────────────────────────────────────────────────────────────
 
 export type PostModuleResponse = ApiResponse<Module>;
-export type PostAssignPersonnelResponse = ApiResponse<null>;
 
 // ─────────────────────────────────────────────────────────────
 // PUT Response Types

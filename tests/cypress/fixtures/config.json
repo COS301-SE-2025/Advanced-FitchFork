@@ -1,0 +1,9 @@
+{
+    "timeout_secs": 20,
+    "max_memory": "8192m",
+    "max_cpus": "4",
+    "max_uncompressed_size": 1000000,
+    "max_processes": 256,
+    "marking_scheme": "exact",
+    "feedback_scheme": "auto"
+}

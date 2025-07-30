@@ -22,16 +22,16 @@ impl Seeder for UserRoleSeeder {
         let mut rng = StdRng::from_rng(OsRng).expect("Failed to seed RNG");
 
         for u in users {
-            // Skip only `u00000001` (admin)
-            if u.username == "u00000001" {
+            // Skip only `admin` (admin)
+            if u.username == "admin" {
                 continue;
             }
 
             let role = match u.username.as_str() {
-                "u00000002" => Some(Role::Lecturer),
-                "u00000003" => Some(Role::AssistantLecturer),
-                "u00000004" => Some(Role::Tutor),
-                "u00000005" => Some(Role::Student),
+                "lecturer" => Some(Role::Lecturer),
+                "assistant_lecturer" => Some(Role::AssistantLecturer),
+                "tutor" => Some(Role::Tutor),
+                "student" => Some(Role::Student),
                 _ => None,
             };
 

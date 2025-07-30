@@ -1,5 +1,3 @@
-// components/layout/SidebarContent.tsx
-
 import { Button, Menu } from 'antd';
 import {
   DoubleLeftOutlined,
@@ -37,9 +35,9 @@ const SidebarContent = ({
   setMode,
   logout,
 }: SidebarContentProps) => {
-  const selectedKeys = [
+  const selectedKeys: string[] = [
     visibleMenuItems
-      .map((item) => item.key)
+      .map((item) => item.key.toString())
       .filter((key) => location.pathname === key || location.pathname.startsWith(key + '/'))
       .sort((a, b) => b.length - a.length)[0] ?? '',
   ];
@@ -59,7 +57,6 @@ const SidebarContent = ({
             mode="inline"
             theme="light"
             selectedKeys={selectedKeys}
-            items={visibleMenuItems}
             onClick={({ key }) => {
               if (key !== 'logout') {
                 navigate(key);
@@ -69,7 +66,13 @@ const SidebarContent = ({
             inlineCollapsed={!isMobile && collapsed}
             className="!bg-transparent !p-0 mt-2"
             style={{ border: 'none' }}
-          />
+          >
+            {visibleMenuItems.map((item) => (
+              <Menu.Item key={item.key.toString()} icon={item.icon}>
+                {item.label}
+              </Menu.Item>
+            ))}
+          </Menu>
         </div>
       </div>
 
@@ -103,7 +106,7 @@ const SidebarContent = ({
           </Menu.Item>
 
           {visibleBottomItems.map((item) => (
-            <Menu.Item key={item.key} icon={item.icon}>
+            <Menu.Item key={item.key.toString()} icon={item.icon}>
               {item.label}
             </Menu.Item>
           ))}

@@ -3,11 +3,11 @@ mod tests {
     use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::{Model as AssignmentModel, AssignmentType}, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
-    use serde_json::{json, Value};
+    use serde_json::{Value};
     use api::auth::generate_jwt;
     use dotenvy;
     use chrono::{Utc, TimeZone};
-    use sea_orm::{Set, IntoActiveModel, ActiveModelTrait};
+    use db::models::assignment_file::{FileType, Model as AssignmentFile};
     use crate::test_helpers::make_app;
 
     struct TestData {
@@ -62,13 +62,42 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let mut assignment = data.assignments[0].clone().into_active_model();
-        assignment.config = Set(Some(json!({"test_timeout": 123, "allowed_languages": ["java"]})));
-        assignment.update(&db).await.unwrap();
+        let config = serde_json::json!({
+            "execution": {
+                "timeout_secs": 123,
+                "max_memory": 8589934592u64,
+                "max_cpus": 2,
+                "max_uncompressed_size": 100_000_000u64,
+                "max_processes": 256
+            },
+            "marking": {
+                "marking_scheme": "exact",
+                "feedback_scheme": "auto",
+                "deliminator": "&-=-&"
+            }
+        });
 
+        let config_bytes = serde_json::to_vec_pretty(&config).unwrap();
+
+        AssignmentFile::save_file(
+            &db,
+            data.assignments[0].id,
+            data.module.id,
+            FileType::Config,
+            "config.json",
+            &config_bytes,
+        )
+        .await
+        .unwrap();
+
+        // Make request as admin
         let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
+
         let req = Request::builder()
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
@@ -78,11 +107,14 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
+
         assert_eq!(json["success"], true);
-        assert_eq!(json["data"]["test_timeout"], 123);
-        assert_eq!(json["data"]["allowed_languages"], json!(["java"]));
+        assert_eq!(json["data"]["execution"]["timeout_secs"], 123);
+        assert_eq!(json["data"]["marking"]["marking_scheme"], "exact");
     }
 
     #[tokio::test]
@@ -91,13 +123,42 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let mut assignment = data.assignments[1].clone().into_active_model();
-        assignment.config = Set(Some(json!({"max_memory": "512MB"})));
-        assignment.update(&db).await.unwrap();
+        // Save a valid config using disk-backed storage
+        let config = serde_json::json!({
+            "execution": {
+                "timeout_secs": 10,
+                "max_memory": 512_000_000u64,
+                "max_cpus": 2,
+                "max_uncompressed_size": 100_000_000u64,
+                "max_processes": 256
+            },
+            "marking": {
+                "marking_scheme": "exact",
+                "feedback_scheme": "auto",
+                "deliminator": "&-=-&"
+            }
+        });
+
+        let config_bytes = serde_json::to_vec_pretty(&config).unwrap();
+
+        AssignmentFile::save_file(
+            &db,
+            data.assignments[1].id,
+            data.module.id,
+            FileType::Config,
+            "config.json",
+            &config_bytes,
+        )
+        .await
+        .unwrap();
 
         let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[1].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[1].id
+        );
+
         let req = Request::builder()
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
@@ -107,11 +168,17 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
+
         assert_eq!(json["success"], true);
-        assert_eq!(json["data"]["max_memory"], "512MB");
+        assert_eq!(json["data"]["execution"]["max_memory"], 512_000_000);
+        assert_eq!(json["data"]["execution"]["timeout_secs"], 10);
+        assert_eq!(json["data"]["marking"]["feedback_scheme"], "auto");
     }
+
 
     #[tokio::test]
     async fn test_get_config_forbidden_for_student() {
@@ -217,13 +284,27 @@ mod tests {
         let db = setup_test_db().await;
         let data = setup_test_data(&db).await;
 
-        let mut assignment = data.assignments[0].clone().into_active_model();
-        assignment.config = Set(Some(json!(12345)));
-        assignment.update(&db).await.unwrap();
+        // Intentionally save invalid JSON (e.g., a primitive instead of object)
+        let bad_json = b"12345";
+
+        AssignmentFile::save_file(
+            &db,
+            data.assignments[0].id,
+            data.module.id,
+            FileType::Config,
+            "config.json",
+            bad_json,
+        )
+        .await
+        .unwrap();
 
         let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
+
         let req = Request::builder()
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
@@ -231,11 +312,16 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::OK); // No longer 400
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Invalid configuration format"));
+
+        assert_eq!(json["success"], true);
+        assert!(json["message"]
+            .as_str()
+            .unwrap()
+            .contains("No configuration set for this assignment"));
+        assert!(json["data"].as_object().unwrap().is_empty());
     }
 }

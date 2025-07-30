@@ -71,7 +71,7 @@ const ModulesList = () => {
       setCreateOpen(false);
       listRef.current?.refresh();
     } else {
-      message.error(`Failed to create module: ${res.message}`);
+      message.error(res.message);
     }
   };
 
@@ -91,7 +91,7 @@ const ModulesList = () => {
       setEditingItem(null);
       listRef.current?.refresh();
     } else {
-      message.error(`Failed to update module: ${res.message}`);
+      message.error(res.message);
     }
   };
 

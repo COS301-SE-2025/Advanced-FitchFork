@@ -1,0 +1,22 @@
+{
+    "admin": {
+        "username": "admin",
+        "password": "1"
+    },
+    "lecturer": {
+        "username": "lecturer",
+        "password": "1"
+    },
+    "assistant_lecturer": {
+        "username": "assistant_lecturer",
+        "password": "1"
+    },
+    "tutor": {
+        "username": "tutor",
+        "password": "1"
+    },
+    "student": {
+        "username": "student",
+        "password": "1"
+    }
+}

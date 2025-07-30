@@ -1,4 +1,4 @@
-name: CI - Rust
+name: Integration Tests
 
 on:
   push:

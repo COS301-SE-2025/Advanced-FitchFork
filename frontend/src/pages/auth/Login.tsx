@@ -44,7 +44,7 @@ export default function Login() {
           showIcon
           closable
           onClose={() => setFormError(null)}
-          className="mb-4"
+          className="!mb-4"
         />
       )}
 

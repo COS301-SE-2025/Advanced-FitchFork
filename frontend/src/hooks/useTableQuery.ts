@@ -36,7 +36,7 @@ export function useTableQuery(): UseTableQueryResult {
   const [sorterState, setSorterState] = useState<SortOption[]>([]);
   const [pagination, setPaginationState] = useState<PaginationState>({
     current: 1,
-    pageSize: 5,
+    pageSize: 10,
     pageSizeOptions: [5, 10, 20, 50],
     total: 0,
     style: {

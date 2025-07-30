@@ -4,18 +4,9 @@ import { UploadOutlined } from '@ant-design/icons';
 import { uploadAssignmentFile } from '@/services/modules/assignments';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
+import { DEFAULT_ASSIGNMENT_CONFIG } from '@/constants/assignments';
 
 const { Title, Paragraph } = Typography;
-
-const defaultConfig = {
-  timeout_secs: 10,
-  max_memory: '1024m',
-  max_cpus: '2',
-  max_uncompressed_size: 1000000,
-  max_processes: 256,
-  marking_scheme: 'exact',
-  feedback_scheme: 'auto',
-};
 
 const StepConfig = () => {
   const module = useModule();
@@ -29,7 +20,9 @@ const StepConfig = () => {
       return;
     }
 
-    const blob = new Blob([JSON.stringify(defaultConfig, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(DEFAULT_ASSIGNMENT_CONFIG, null, 2)], {
+      type: 'application/json',
+    });
     const file = new File([blob], 'config.json', { type: 'application/json' });
 
     setLoading(true);
@@ -81,7 +74,12 @@ const StepConfig = () => {
       )}
 
       <div className="flex flex-col md:flex-row gap-4">
-        <Button type="primary" onClick={uploadDefaultConfig} loading={loading}>
+        <Button
+          type="primary"
+          onClick={uploadDefaultConfig}
+          loading={loading}
+          data-cy="step-config-default"
+        >
           Use Default Configuration
         </Button>
 

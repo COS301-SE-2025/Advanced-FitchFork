@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet, useParams } from 'react-router-dom';
-import { Spin, Dropdown, Segmented, Button, Alert, Modal, Upload, Checkbox, Tag } from 'antd';
+import {
+  Spin,
+  Dropdown,
+  Segmented,
+  Button,
+  Alert,
+  Modal,
+  Upload,
+  Checkbox,
+  Tag,
+  Typography,
+} from 'antd';
 import type { MenuProps } from 'antd';
 import {
   CheckCircleOutlined,
@@ -449,34 +460,50 @@ const AssignmentLayout = () => {
       />
 
       <Modal
-        title="Submit Assignment"
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
-        onOk={handleSubmitAssignment}
-        okButtonProps={{ loading }}
-        okText="Submit"
+        footer={null}
+        title={<Typography.Title level={4}>Submit Assignment</Typography.Title>}
+        centered
       >
-        <Upload
-          maxCount={1}
-          beforeUpload={(file) => {
-            setSelectedFile(file);
-            return false;
-          }}
-          accept=".zip,.tar,.gz,.tgz"
-          disabled={loading}
-        >
-          <Button icon={<UploadOutlined />} disabled={loading}>
-            Click to select file
-          </Button>
-        </Upload>
-        <Checkbox
-          checked={isPractice}
-          onChange={(e) => setIsPractice(e.target.checked)}
-          style={{ marginTop: 16 }}
-          disabled={loading}
-        >
-          This is a practice submission
-        </Checkbox>
+        <div className="space-y-4">
+          <Upload
+            maxCount={1}
+            beforeUpload={(file) => {
+              setSelectedFile(file);
+              return false; // prevent automatic upload
+            }}
+            accept=".zip,.tar,.gz,.tgz"
+            disabled={loading}
+          >
+            <Button icon={<UploadOutlined />} disabled={loading}>
+              Click to select file
+            </Button>
+          </Upload>
+
+          <Checkbox
+            checked={isPractice}
+            onChange={(e) => setIsPractice(e.target.checked)}
+            disabled={loading}
+          >
+            This is a practice submission
+          </Checkbox>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button onClick={() => setModalOpen(false)} data-cy="submit-modal-cancel">
+              Cancel
+            </Button>
+            <Button
+              type="primary"
+              onClick={handleSubmitAssignment}
+              loading={loading}
+              disabled={!selectedFile}
+              data-cy="submit-modal-submit"
+            >
+              Submit
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

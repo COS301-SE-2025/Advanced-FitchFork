@@ -33,8 +33,8 @@ const ModuleLayout = () => {
   const moduleId = Number(id);
   const { setBreadcrumbLabel } = useBreadcrumbContext();
 
-  const { isAdmin } = useAuth();
-  const showPersonnel = isAdmin;
+  const auth = useAuth();
+  const showPersonnel = auth.isAdmin || auth.isLecturer(moduleId);
 
   const [loading, setLoading] = useState(true);
   const [module, setModule] = useState<ModuleDetails | null>(null);

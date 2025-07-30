@@ -85,6 +85,7 @@ const StepMemoAndAllocator = () => {
           onClick={handleGenerate}
           loading={loading}
           disabled={currentStep === 2}
+          data-cy="generate-memo-mark"
         >
           {currentStep === 2 ? 'Completed' : 'Generate'}
         </Button>

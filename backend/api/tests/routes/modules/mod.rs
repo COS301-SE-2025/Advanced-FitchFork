@@ -3,6 +3,4 @@ pub mod post_test;
 pub mod put_test;
 pub mod delete_test;
 pub mod assignments;
-pub mod lecturers; 
-pub mod students;
-pub mod tutors;
+pub mod personnel;

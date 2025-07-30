@@ -6,15 +6,15 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, Order, PaginatorTrait,
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait,
     QueryFilter, QueryOrder, QuerySelect,
 };
 use crate::{auth::AuthUser, response::ApiResponse};
 use crate::routes::common::UserResponse;
 use db::models::{
     module::{Column as ModuleCol, Entity as ModuleEntity, Model as Module},
-    user::{self, Column as UserCol, Entity as UserEntity, Model as UserModel},
-    user_module_role::{self, Column as RoleCol, Entity as RoleEntity, Role},
+    user::{Column as UserCol, Entity as UserEntity, Model as UserModel},
+    user_module_role::{Column as RoleCol, Entity as RoleEntity, Role},
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,185 +46,6 @@ impl From<db::models::module::Model> for ModuleResponse {
             students: vec![],
         }
     }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct EligibleUserQuery {
-    pub role: String,
-    pub page: Option<u32>,
-    pub per_page: Option<u32>,
-    pub sort: Option<String>,
-    pub query: Option<String>,
-    pub email: Option<String>,
-    pub username: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct EligibleUserListResponse {
-    pub users: Vec<db::models::user::Model>,
-    pub page: u32,
-    pub per_page: u32,
-    pub total: u64,
-}
-
-/// GET /api/modules/{module_id}/eligible-users
-///
-/// Retrieves a paginated list of users who are eligible to be assigned to a specific module role.
-///
-/// This endpoint returns users who are not currently assigned to the specified module,
-/// allowing administrators to see who can be assigned as lecturers, tutors, or students.
-///
-/// # Arguments
-///
-/// The arguments are automatically extracted from the HTTP request:
-/// - Path parameter `module_id`: The ID of the module to check for eligible users.
-/// - Query parameters via the `EligibleUserQuery` struct:
-///   - `role`: (Required) The role to check eligibility for. Must be one of: "Lecturer", "Tutor", "Student".
-///   - `page`: (Optional) The page number for pagination. Defaults to 1 if not provided. Minimum value is 1.
-///   - `per_page`: (Optional) The number of items per page. Defaults to 20. Maximum is 100. Minimum is 1.
-///   - `query`: (Optional) A general search string that filters users by email or username.
-///   - `email`: (Optional) A filter to match specific email addresses (only used if `query` is not provided).
-///   - `username`: (Optional) A filter to match specific usernames (only used if `query` is not provided).
-///   - `sort`: (Optional) Field to sort by. Prefix with `-` for descending order. Allowed values: "email", "username", "created_at".
-///
-/// # Returns
-///
-/// Returns an HTTP response indicating the result:
-/// - `200 OK` with a paginated list of eligible users wrapped in a standardized response format.
-/// - `400 BAD REQUEST` if an invalid role is provided.
-/// - `500 INTERNAL SERVER ERROR` if a database error occurs while retrieving the users.
-///
-/// The response body contains:
-/// - A paginated list of users who are not assigned to the module.
-/// - Metadata: current page, items per page, and total items.
-///
-/// # Example Response
-///
-/// ```json
-/// {
-///   "success": true,
-///   "data": {
-///     "users": [
-///       {
-///         "id": 1,
-///         "username": "u12345678",
-///         "email": "lecturer@example.com",
-///         "admin": false,
-///         "created_at": "2025-05-23T18:00:00Z",
-///         "updated_at": "2025-05-23T18:00:00Z"
-///       }
-///     ],
-///     "page": 1,
-///     "per_page": 20,
-///     "total": 45
-///   },
-///   "message": "Eligible users fetched"
-/// }
-/// ```
-///
-/// - `400 Bad Request`  
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Invalid role"
-/// }
-/// ```
-///
-/// - `500 Internal Server Error`  
-/// ```json
-/// {
-///   "success": false,
-///   "message": "An internal server error occurred"
-/// }
-/// ```
-pub async fn get_eligible_users_for_module(
-    State(db): State<DatabaseConnection>,
-    Path(module_id): Path<i64>,
-    Query(params): Query<EligibleUserQuery>,
-) -> Response {
-    if !["Lecturer", "Tutor", "Student"].contains(&params.role.as_str()) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<EligibleUserListResponse>::error(
-                "Invalid role",
-            )),
-        )
-            .into_response();
-    }
-
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
-
-    let assigned_ids: Vec<i32> = user_module_role::Entity::find()
-        .select_only()
-        .column(user_module_role::Column::UserId)
-        .filter(user_module_role::Column::ModuleId.eq(module_id))
-        .into_tuple::<i32>()
-        .all(&db)
-        .await
-        .unwrap_or_default();
-
-    let mut condition = Condition::all();
-
-    if !assigned_ids.is_empty() {
-        condition = condition.add(user::Column::Id.is_not_in(assigned_ids));
-    }
-
-    if let Some(ref q) = params.query {
-        let pattern = format!("%{}%", q.to_lowercase());
-        condition = condition.add(
-            Condition::any()
-                .add(user::Column::Email.contains(&pattern))
-                .add(user::Column::Username.contains(&pattern)),
-        );
-    } else {
-        if let Some(ref email) = params.email {
-            condition = condition.add(user::Column::Email.contains(email));
-        }
-        if let Some(ref sn) = params.username {
-            condition = condition.add(user::Column::Username.contains(sn));
-        }
-    }
-
-    let mut query = user::Entity::find().filter(condition);
-
-    if let Some(sort) = &params.sort {
-        let (field, dir) = if sort.starts_with('-') {
-            (&sort[1..], Order::Desc)
-        } else {
-            (sort.as_str(), Order::Asc)
-        };
-
-        match field {
-            "email" => query = query.order_by(user::Column::Email, dir),
-            "username" => query = query.order_by(user::Column::Username, dir),
-            "created_at" => query = query.order_by(user::Column::CreatedAt, dir),
-            _ => {}
-        }
-    } else {
-        query = query.order_by(user::Column::Id, Order::Asc);
-    }
-
-    let paginator = query.paginate(&db, per_page.into());
-    let total = paginator.num_items().await.unwrap_or(0);
-    let users = paginator
-        .fetch_page((page - 1).into())
-        .await
-        .unwrap_or_default();
-
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(
-            EligibleUserListResponse {
-                users,
-                page,
-                per_page,
-                total,
-            },
-            "Eligible users fetched",
-        )),
-    )
-        .into_response()
 }
 
 /// GET /api/modules/{module_id}

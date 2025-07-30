@@ -1,6 +1,6 @@
 import { Table, Empty, Button, Dropdown, Popconfirm, Space, Tooltip } from 'antd';
 import { ReloadOutlined, MoreOutlined } from '@ant-design/icons';
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState, type JSX } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import type { SortOption } from '@/types/common';
 
@@ -205,11 +205,12 @@ const EntityList = forwardRef(function <T>(
         const secondaryActions = entityActions.filter((a) => a.key !== resolvedPrimary.key);
 
         return (
-          <div onClick={(e) => e.stopPropagation()}>
+          <div onClick={(e) => e.stopPropagation()} data-cy="entity-actions">
             {secondaryActions.length === 0 ? (
               <Button
                 size="small"
                 icon={resolvedPrimary.icon}
+                data-cy={`entity-action-${resolvedPrimary.key}`}
                 onClick={() => resolvedPrimary.handler({ entity: record, refresh: fetchData })}
               >
                 {resolvedPrimary.label}
@@ -219,6 +220,7 @@ const EntityList = forwardRef(function <T>(
                 <Button
                   size="small"
                   icon={resolvedPrimary.icon}
+                  data-cy={`entity-action-${resolvedPrimary.key}`}
                   onClick={() => resolvedPrimary.handler({ entity: record, refresh: fetchData })}
                 >
                   {resolvedPrimary.label}
@@ -234,20 +236,22 @@ const EntityList = forwardRef(function <T>(
                           cancelText="No"
                           onConfirm={() => a.handler({ entity: record, refresh: fetchData })}
                         >
-                          <span>{a.label}</span>
+                          <span data-cy={`entity-action-${a.key}`}>{a.label}</span>
                         </Popconfirm>
                       ) : (
-                        a.label
+                        <span
+                          data-cy={`entity-action-${a.key}`}
+                          onClick={() => a.handler({ entity: record, refresh: fetchData })}
+                        >
+                          {a.label}
+                        </span>
                       ),
                       icon: a.icon,
-                      onClick: a.confirm
-                        ? undefined
-                        : () => a.handler({ entity: record, refresh: fetchData }),
                     })),
                   }}
                   placement="bottomRight"
                 >
-                  <Button size="small" icon={<MoreOutlined />} />
+                  <Button data-cy="entity-action-dropdown" size="small" icon={<MoreOutlined />} />
                 </Dropdown>
               </Space.Compact>
             )}
@@ -454,7 +458,10 @@ const EntityList = forwardRef(function <T>(
               pageSize: pagination.pageSize || 10,
             });
           }}
-          onRow={onRowClick ? (record) => ({ onClick: () => onRowClick(record) }) : undefined}
+          onRow={(record) => ({
+            onClick: () => onRowClick?.(record),
+            'data-cy': `entity-${getRowKey(record)}`,
+          })}
           locale={{
             emptyText: (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data found.">

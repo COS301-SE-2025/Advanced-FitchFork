@@ -1,13 +1,14 @@
 use crate::response::ApiResponse;
 use axum::{
-    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
+    Json,
 };
 use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
-use serde_json::{Map, Value};
+use db::models::assignment_file::{Entity as AssignmentFile, Column as AssignmentFileColumn, FileType, Model as AssignmentFileModel};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
+use serde_json::to_value;
 use util::execution_config::ExecutionConfig;
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/config
@@ -15,9 +16,8 @@ use util::execution_config::ExecutionConfig;
 /// Retrieve the JSON configuration object associated with a specific assignment. Accessible to users
 /// assigned to the module with appropriate permissions.
 ///
-/// The configuration object contains assignment-specific settings that control various aspects of
-/// the assignment evaluation process, such as test parameters, grading criteria, or execution settings.
-/// If no configuration has been set, an empty JSON object is returned.
+/// The configuration object is loaded from disk using the [`ExecutionConfig`] schema. If no configuration
+/// file is present on disk, an empty config is returned instead.
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): The ID of the module containing the assignment
@@ -35,18 +35,23 @@ use util::execution_config::ExecutionConfig;
 ///   "success": true,
 ///   "message": "Assignment configuration retrieved successfully",
 ///   "data": {
-///     "test_timeout": 300,
-///     "max_memory": "512MB",
-///     "allowed_languages": ["java", "python"],
-///     "grading_criteria": {
-///       "test_weight": 0.7,
-///       "style_weight": 0.3
+///     "execution": {
+///       "timeout_secs": 10,
+///       "max_memory": 8589934592,
+///       "max_cpus": 2,
+///       "max_uncompressed_size": 100000000,
+///       "max_processes": 256
+///     },
+///     "marking": {
+///       "marking_scheme": "exact",
+///       "feedback_scheme": "auto",
+///       "deliminator": "&-=-&"
 ///     }
 ///   }
 /// }
 /// ```
 ///
-/// ### Success Response (200 OK) - No Configuration Set
+/// ### Success Response (200 OK) - No Configuration File
 /// ```json
 /// {
 ///   "success": true,
@@ -56,83 +61,93 @@ use util::execution_config::ExecutionConfig;
 /// ```
 ///
 /// ### Error Responses
-///
-/// **400 Bad Request** - Invalid configuration format
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Invalid configuration format"
-/// }
-/// ```
-///
-/// **403 Forbidden** - Insufficient permissions
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Access denied"
-/// }
-/// ```
-///
-/// **404 Not Found** - Assignment or module not found
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Assignment or module not found"
-/// }
-/// ```
-///
-/// **500 Internal Server Error** - Database error
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Database error"
-/// }
-/// ```
-///
-/// ### Configuration Format
-/// The configuration must be a valid JSON object. Common configuration fields include:
-/// - `test_timeout`: Maximum execution time for tests (in seconds)
-/// - `max_memory`: Memory limit for test execution
-/// - `allowed_languages`: Array of programming languages allowed for submissions
-/// - `grading_criteria`: Object containing various grading weights and criteria
-/// - `environment_variables`: Key-value pairs for test environment setup
+/// - **404** – Assignment not found
+/// - **500** – Failed to load configuration from disk
 ///
 /// ### Notes
-/// - Configuration is optional; assignments can function without a configuration object
-/// - The configuration object is used by the evaluation system to customize assignment behavior
-/// - Only valid JSON objects are accepted as configuration; arrays, primitives, or null values are rejected
-/// - Configuration retrieval is restricted to users with appropriate module permissions
+/// - Configurations are stored on disk under `ASSIGNMENT_STORAGE_ROOT/module_{id}/assignment_{id}/config/config.json`
+/// - Config format uses [`ExecutionConfig`] as the schema
+/// - This is an example schema and will evolve over time
 pub async fn get_assignment_config(
     State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let assignment = AssignmentEntity::find()
+    // Verify the assignment exists
+    match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
         .one(&db)
         .await
-        .unwrap()
-        .unwrap();
-
-    let config = match assignment.config {
-        Some(Value::Object(obj)) => Value::Object(obj),
-        Some(_) => {
+    {
+        Ok(Some(_)) => {}
+        Ok(None) => {
             return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error("Invalid configuration format")),
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment or module not found")),
             )
                 .into_response();
         }
-        None => Value::Object(Map::new()),
+        Err(e) => {
+            eprintln!("DB error: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response();
+        }
+    }
+
+    // Look up the latest config assignment file
+    let config_file: Option<AssignmentFileModel> = match AssignmentFile::find()
+        .filter(AssignmentFileColumn::AssignmentId.eq(assignment_id))
+        .filter(AssignmentFileColumn::FileType.eq(FileType::Config))
+        .order_by_desc(AssignmentFileColumn::UpdatedAt)
+        .one(&db)
+        .await
+    {
+        Ok(opt) => opt,
+        Err(e) => {
+            eprintln!("DB error while fetching config file: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response();
+        }
     };
 
-    let message = if config.as_object().unwrap().is_empty() {
-        "No configuration set for this assignment"
-    } else {
-        "Assignment configuration retrieved successfully"
-    };
-
-    (StatusCode::OK, Json(ApiResponse::success(config, message))).into_response()
+    // Load the config from the file model
+    match config_file {
+        Some(file_model) => match file_model.load_execution_config(module_id) {
+            Ok(cfg) => {
+                let json = to_value(cfg).unwrap_or_else(|_| serde_json::json!({}));
+                (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(json, "Assignment configuration retrieved successfully")),
+                )
+                    .into_response()
+            }
+            Err(err) => {
+                eprintln!("Failed to load config from disk: {}", err);
+                (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(
+                        serde_json::json!({}),
+                        "No configuration set for this assignment",
+                    )),
+                )
+                    .into_response()
+            }
+        },
+        None => (
+            StatusCode::OK,
+            Json(ApiResponse::success(
+                serde_json::json!({}),
+                "No configuration set for this assignment",
+            )),
+        )
+            .into_response(),
+    }
 }
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/config/default
