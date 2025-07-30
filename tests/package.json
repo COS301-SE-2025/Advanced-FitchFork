@@ -1,0 +1,17 @@
+{
+    "name": "fitchfork-cypress-tests",
+    "version": "1.0.0",
+    "scripts": {
+        "e2e": "npx concurrently -k -s first -n \"BACKEND,FRONTEND,CYPRESS\" -c \"yellow,blue,green\" \"cd ../backend && HOST=0.0.0.0 cargo run -p api\" \"cd ../frontend && npm run dev -- --port 5173 --host 0.0.0.0\" \"npx wait-on http://localhost:3000/api/health http://localhost:5173 && npm run e2e:headless\"",
+        "e2e:open": "cypress open",
+        "e2e:headless": "cypress run",
+        "k6:submission": "k6 run k6/scenarios/submissionLoad/index.js\""
+    },
+    "devDependencies": {
+        "@cypress/webpack-preprocessor": "^6.0.4",
+        "concurrently": "^9.2.0",
+        "cypress": "^14.5.3",
+        "cypress-file-upload": "^5.0.8",
+        "wait-on": "^8.0.4"
+    }
+}

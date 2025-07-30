@@ -14,7 +14,7 @@
 
 use axum::{middleware::{from_fn, from_fn_with_state}, routing::{delete, get, post, put}, Router};
 use delete::delete_module;
-use get::{get_eligible_users_for_module, get_module, get_modules, get_my_details};
+use get::{get_module, get_modules, get_my_details};
 use post::create;
 use put::edit_module;
 use sea_orm::DatabaseConnection;
@@ -46,7 +46,6 @@ pub fn modules_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
         .route("/", get(get_modules))
         .route("/me", get(get_my_details))
-        .route("/{module_id}/eligible-users", get(get_eligible_users_for_module).route_layer(from_fn_with_state(db.clone(),require_lecturer)))
         .route("/{module_id}", get(get_module).route_layer(from_fn_with_state(db.clone(), require_assigned_to_module)))
         .route("/", post(create).route_layer(from_fn(require_admin)))
         .route("/{module_id}", put(edit_module).route_layer(from_fn(require_admin)))

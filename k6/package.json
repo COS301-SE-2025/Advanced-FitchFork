@@ -1,8 +1,0 @@
-{
-  "name": "k6-tests",
-  "version": "1.0.0",
-  "scripts": {
-    "run:submission": "k6 run scenarios/submissionLoad/index.js"
-  },
-  "devDependencies": {}
-}

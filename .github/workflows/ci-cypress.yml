@@ -59,23 +59,16 @@ jobs:
       # -------------------------------
       # CYPRESS SETUP
       # -------------------------------
-      - name: Install Cypress dependencies
+      - name: Install Test dependencies
         run: npm ci
-        working-directory: cypress-tests
+        working-directory: tests
 
       # -------------------------------
       # START SERVERS AND RUN CYPRESS
       # -------------------------------
       - name: Run backend/frontend servers and Cypress tests
-        run: |
-          npx concurrently \
-            -k \
-            -s first \
-            -n "BACKEND,FRONTEND,CYPRESS" \
-            -c "blue,green,magenta" \
-            "cd backend && cp .env.example .env && HOST=0.0.0.0 cargo run -p api" \
-            "cd frontend && cp .env.example .env && npm run dev -- --port 5173 --host 0.0.0.0" \
-            "npx wait-on http://localhost:3000/api/health http://localhost:5173 && cd cypress-tests && npm run test:headless"
+        run: npm run e2e
+        working-directory: tests
 
       # -------------------------------
       # ARTIFACTS ON FAILURE
@@ -85,11 +78,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cypress-screenshots
-          path: cypress-tests/screenshots
+          path: tests/cypress/screenshots
 
       - name: Upload Cypress videos on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: cypress-videos
-          path: cypress-tests/videos
+          path: tests/cypress/videos

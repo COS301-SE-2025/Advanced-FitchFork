@@ -6,15 +6,15 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, Order, PaginatorTrait,
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait,
     QueryFilter, QueryOrder, QuerySelect,
 };
 use crate::{auth::AuthUser, response::ApiResponse};
 use crate::routes::common::UserResponse;
 use db::models::{
     module::{Column as ModuleCol, Entity as ModuleEntity, Model as Module},
-    user::{self, Column as UserCol, Entity as UserEntity, Model as UserModel},
-    user_module_role::{self, Column as RoleCol, Entity as RoleEntity, Role},
+    user::{Column as UserCol, Entity as UserEntity, Model as UserModel},
+    user_module_role::{Column as RoleCol, Entity as RoleEntity, Role},
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,138 +46,6 @@ impl From<db::models::module::Model> for ModuleResponse {
             students: vec![],
         }
     }
-}
-#[derive(Debug, Deserialize)]
-pub struct EligibleUserQuery {
-    pub page: Option<u32>,
-    pub per_page: Option<u32>,
-    pub sort: Option<String>,
-    pub query: Option<String>,
-    pub email: Option<String>,
-    pub username: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct EligibleUserListResponse {
-    pub users: Vec<db::models::user::Model>,
-    pub page: u32,
-    pub per_page: u32,
-    pub total: u64,
-}
-
-/// GET /api/modules/{module_id}/eligible-users
-///
-/// Retrieves a paginated list of users who are not assigned to **any role** in the given module.
-///
-/// This allows administrators to see which users are eligible to be assigned as lecturers, tutors, or students.
-///
-/// # Arguments
-///
-/// - `module_id`: Module ID (path param)
-/// - `query`, `email`, `username`: optional search filters
-/// - `page`: pagination (default = 1)
-/// - `per_page`: page size (default = 20, max = 100)
-/// - `sort`: sorting field (prefix with `-` for descending). Options: `email`, `username`, `created_at`.
-///
-/// # Returns
-///
-/// - `200 OK`: Eligible users and pagination metadata
-/// - `500 Internal Server Error`: On DB errors
-///
-/// # Example Response
-/// ```json
-/// {
-///   "success": true,
-///   "data": {
-///     "users": [
-///       { "id": 1, "username": "u123", "email": "user@example.com", "admin": false, "created_at": "...", "updated_at": "..." }
-///     ],
-///     "page": 1,
-///     "per_page": 20,
-///     "total": 45
-///   },
-///   "message": "Eligible users fetched"
-/// }
-/// ```
-pub async fn get_eligible_users_for_module(
-    State(db): State<DatabaseConnection>,
-    Path(module_id): Path<i64>,
-    Query(params): Query<EligibleUserQuery>,
-) -> Response {
-    // Step 1: collect IDs of all users with any role in this module
-    let assigned_ids: Vec<i64> = user_module_role::Entity::find()
-        .select_only()
-        .column(user_module_role::Column::UserId)
-        .filter(user_module_role::Column::ModuleId.eq(module_id))
-        .into_tuple::<i64>()
-        .all(&db)
-        .await
-        .unwrap_or_default();
-
-    // Step 2: pagination config
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
-
-    // Step 3: filter users NOT assigned to this module
-    let mut condition = Condition::all();
-    if !assigned_ids.is_empty() {
-        condition = condition.add(user::Column::Id.is_not_in(assigned_ids));
-    }
-
-    // Step 4: apply optional search filters
-    if let Some(ref q) = params.query {
-        let pattern = format!("%{}%", q.to_lowercase());
-        condition = condition.add(
-            Condition::any()
-                .add(user::Column::Email.contains(&pattern))
-                .add(user::Column::Username.contains(&pattern)),
-        );
-    } else {
-        if let Some(ref email) = params.email {
-            condition = condition.add(user::Column::Email.contains(email));
-        }
-        if let Some(ref username) = params.username {
-            condition = condition.add(user::Column::Username.contains(username));
-        }
-    }
-
-    // Step 5: base query + sort
-    let mut query = user::Entity::find().filter(condition);
-    if let Some(sort) = &params.sort {
-        let (field, dir) = if sort.starts_with('-') {
-            (&sort[1..], Order::Desc)
-        } else {
-            (sort.as_str(), Order::Asc)
-        };
-
-        match field {
-            "email" => query = query.order_by(user::Column::Email, dir),
-            "username" => query = query.order_by(user::Column::Username, dir),
-            "created_at" => query = query.order_by(user::Column::CreatedAt, dir),
-            _ => {}
-        }
-    } else {
-        query = query.order_by(user::Column::Id, Order::Asc);
-    }
-
-    // Step 6: paginate + return
-    let paginator = query.paginate(&db, per_page.into());
-    let total = paginator.num_items().await.unwrap_or(0);
-    let users = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
-
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(
-            EligibleUserListResponse {
-                users,
-                page,
-                per_page,
-                total,
-            },
-            "Eligible users fetched",
-        )),
-    )
-        .into_response()
 }
 
 /// GET /api/modules/{module_id}

@@ -1,0 +1,17 @@
+{
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			// Cypress
+			"@api/*": ["cypress/support/commands/api/*"],
+			"@ui/*": ["cypress/support/commands/ui/*"],
+			"@utils/*": ["cypress/support/commands/utils/*"],
+
+			// K6
+			"@k6/shared/*": ["k6/shared/*"],
+			"@k6/scenarios/*": ["k6/scenarios/*"],
+			"@k6/test_files/*": ["k6/test_files/*"]
+		}
+	},
+	"include": ["cypress/**/*.js", "k6/**/*.js"]
+}

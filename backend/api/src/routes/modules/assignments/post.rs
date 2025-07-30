@@ -126,7 +126,7 @@ pub async fn create_assignment(
         Ok(model) => {
             let response = AssignmentResponse::from(model);
             (
-                StatusCode::OK,
+                StatusCode::CREATED,
                 Json(ApiResponse::success(
                     response,
                     "Assignment created successfully",

@@ -21,5 +21,5 @@ export const getEligibleUsers = async (
   query: GetEligibleUsersQuery
 ): Promise<GetEligibleUsersResponse> => {
   const q = buildQuery(query);
-  return apiFetch(`/modules/${moduleId}/eligible-users?${q}`);
+  return apiFetch(`/modules/${moduleId}/personnel/eligible?${q}`);
 };

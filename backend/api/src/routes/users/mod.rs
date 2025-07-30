@@ -44,8 +44,8 @@ pub mod common;
 pub fn users_routes() -> Router<DatabaseConnection> {
     Router::new()
         .route("/", get(list_users))
-        .route("/", post(create_user)) // TODO: Make Tests
-        .route("/bulk", post(bulk_create_users))       // TODO: Make Tests
+        .route("/", post(create_user))
+        .route("/bulk", post(bulk_create_users))
         .route("/{user_id}/modules", get(get_user_modules))
         .route("/{user_id}", get(get_user))
         .route("/{user_id}", put(update_user))

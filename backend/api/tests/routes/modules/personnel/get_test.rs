@@ -133,7 +133,7 @@ mod tests {
         let app = make_app(db.clone());
 
         let (token, _) = generate_jwt(data.admin.id, true);
-        let uri = format!("/api/modules/{}/eligible-users", data.module.id);
+        let uri = format!("/api/modules/{}/personnel/eligible", data.module.id);
 
         let req = Request::builder()
             .method("GET")
@@ -168,7 +168,7 @@ mod tests {
         let app = make_app(db.clone());
 
         let (token, _) = generate_jwt(data.admin.id, true);
-        let uri = format!("/api/modules/{}/eligible-users?page=1&per_page=1&username=out", data.module.id);
+        let uri = format!("/api/modules/{}/personnel/eligible?page=1&per_page=1&username=out", data.module.id);
 
         let req = Request::builder()
             .method("GET")
