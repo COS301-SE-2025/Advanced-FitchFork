@@ -1,15 +1,21 @@
 use db::models::assignment_memo_output::Model as MemoOutputModel;
 use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 
+/*
+So this class is so that you can fetch the memo_output and submission_output easily
+
+This way you don't have to figure out how the db library works :)
+*/
 use std::fs;
 use std::io::{self, ErrorKind};
-use std::path::PathBuf;
 
+#[allow(dead_code)]
 pub struct Output;
 
 impl Output {
     /// Get all memo output files for the given module and assignment,
     /// returning Vec<(filename, file_contents_as_string)>
+    #[allow(dead_code)]
     pub fn get_memo_output(
         module_id: i64,
         assignment_id: i64,
@@ -44,10 +50,12 @@ impl Output {
 
     /// Get all submission output files for the given parameters,
     /// returning Vec<(filename, file_contents_as_string)>
+    ///
+    /// Now task_number is NOT used to build the path (flat folder structure)
+    #[allow(dead_code)]
     pub fn get_submission_output(
         module_id: i64,
         assignment_id: i64,
-        task_number: i64,
         user_id: i64,
         attempt_number: i64,
     ) -> io::Result<Vec<(String, String)>> {
@@ -57,8 +65,7 @@ impl Output {
             .join("assignment_submissions")
             .join(format!("user_{user_id}"))
             .join(format!("attempt_{attempt_number}"))
-            .join("submission_output")
-            .join(format!("task_{task_number}"));
+            .join("submission_output");
 
         if !dir_path.exists() {
             return Err(io::Error::new(
@@ -88,6 +95,7 @@ impl Output {
 mod tests {
     use super::*;
 
+    #[ignore]
     #[test]
     fn test_print_memo_output() {
         let module_id = 9;
@@ -104,21 +112,15 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[test]
     fn test_print_submission_output() {
-        let module_id = 1;
-        let assignment_id = 1;
-        let task_number = 1;
+        let module_id = 9;
+        let assignment_id = 18;
         let user_id = 1;
         let attempt_number = 1;
 
-        match Output::get_submission_output(
-            module_id,
-            assignment_id,
-            task_number,
-            user_id,
-            attempt_number,
-        ) {
+        match Output::get_submission_output(module_id, assignment_id, user_id, attempt_number) {
             Ok(files) => {
                 println!("Submission output files:");
                 for (filename, contents) in files {

@@ -272,25 +272,19 @@ pub async fn submit_assignment(
         .join("submission_output");
 
     let mut student_outputs = Vec::new();
-    if let Ok(task_dirs) = std::fs::read_dir(&student_output_dir) {
-        for task_dir in task_dirs.flatten() {
-            let path = task_dir.path();
-            if path.is_dir() {
-                if let Ok(files) = std::fs::read_dir(&path) {
-                    for file in files.flatten() {
-                        let file_path = file.path();
-                        if file_path.is_file() {
-                            if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-                                if ext.eq_ignore_ascii_case("txt") {
-                                    student_outputs.push(file_path);
-                                }
-                            }
-                        }
+    if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
+        for entry in entries.flatten() {
+            let file_path = entry.path();
+            if file_path.is_file() {
+                if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+                    if ext.eq_ignore_ascii_case("txt") {
+                        student_outputs.push(file_path);
                     }
                 }
             }
         }
     }
+
     student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     let mut memo_outputs: Vec<_> = match std::fs::read_dir(&memo_output_dir) {
