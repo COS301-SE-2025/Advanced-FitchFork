@@ -39,16 +39,17 @@
 //!
 //! This module includes comprehensive tests for valid and invalid report files, covering edge cases and error reporting.
 
-use crate::types::{AllocatorSchema, TaskEntry, Subsection};
+use crate::types::{AllocatorSchema, Subsection, TaskEntry};
 
 /// Parser for allocator reports in JSON format.
 ///
 /// Implements [`ReportParser<AllocatorSchema>`] for parsing and validating the schema.
 pub struct JsonAllocatorParser;
 
-use serde_json::Value;
 use crate::error::MarkerError;
 use crate::traits::parser::Parser;
+use serde_json::Value;
+use util::execution_config::ExecutionConfig;
 
 impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
     /// Parses a JSON value into an [`AllocatorSchema`].
@@ -56,33 +57,49 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
     /// # Errors
     ///
     /// Returns [`MarkerError::ParseAllocatorError`] if the JSON does not conform to the expected schema.
-    fn parse(&self, raw: &'a Value) -> Result<AllocatorSchema, MarkerError> {
+    fn parse(
+        &self,
+        raw: &'a Value,
+        _config: ExecutionConfig,
+    ) -> Result<AllocatorSchema, MarkerError> {
         let obj = raw.as_object().ok_or_else(|| {
-            MarkerError::ParseAllocatorError("Top-level JSON must be an object to check 'generated_at' and 'tasks'".to_string())
+            MarkerError::ParseAllocatorError(
+                "Top-level JSON must be an object to check 'generated_at' and 'tasks'".to_string(),
+            )
         })?;
 
         match obj.get("generated_at") {
-            Some(Value::String(_)) => {},
+            Some(Value::String(_)) => {}
             Some(_) => {
-                return Err(MarkerError::ParseAllocatorError("'generated_at' must be a string".to_string()));
-            },
+                return Err(MarkerError::ParseAllocatorError(
+                    "'generated_at' must be a string".to_string(),
+                ));
+            }
             None => {
-                return Err(MarkerError::ParseAllocatorError("Missing required 'generated_at' field".to_string()));
+                return Err(MarkerError::ParseAllocatorError(
+                    "Missing required 'generated_at' field".to_string(),
+                ));
             }
         }
 
         let arr = obj.get("tasks").and_then(|v| v.as_array()).ok_or_else(|| {
-            MarkerError::ParseAllocatorError("Top-level JSON must have a 'tasks' array field".to_string())
+            MarkerError::ParseAllocatorError(
+                "Top-level JSON must have a 'tasks' array field".to_string(),
+            )
         })?;
 
         let mut tasks = Vec::with_capacity(arr.len());
         for (i, task_obj) in arr.iter().enumerate() {
             let obj = task_obj.as_object().ok_or_else(|| {
-                MarkerError::ParseAllocatorError(format!("Task entry at index {} is not an object", i))
+                MarkerError::ParseAllocatorError(format!(
+                    "Task entry at index {} is not an object",
+                    i
+                ))
             })?;
             if obj.len() != 1 {
                 return Err(MarkerError::ParseAllocatorError(format!(
-                    "Task entry at index {} must have exactly one key (task_id)", i
+                    "Task entry at index {} must have exactly one key (task_id)",
+                    i
                 )));
             }
 
@@ -97,7 +114,8 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
 
             let task_map = task_val.as_object().ok_or_else(|| {
                 MarkerError::ParseAllocatorError(format!(
-                    "Task '{}' value is not an object", task_id
+                    "Task '{}' value is not an object",
+                    task_id
                 ))
             })?;
 
@@ -105,31 +123,33 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
                 Some(Value::String(s)) => s.clone(),
                 _ => {
                     return Err(MarkerError::ParseAllocatorError(format!(
-                        "Task '{}' missing or invalid 'name' field", task_id
-                    )))
+                        "Task '{}' missing or invalid 'name' field",
+                        task_id
+                    )));
                 }
             };
 
             let value = match task_map.get("value") {
-                Some(Value::Number(n)) if n.is_u64() => {
-                    n.as_u64().unwrap() as u32
-                }
+                Some(Value::Number(n)) if n.is_u64() => n.as_u64().unwrap() as u32,
                 _ => {
                     return Err(MarkerError::ParseAllocatorError(format!(
-                        "Task '{}' missing or invalid 'value' field (must be u32)", task_id
-                    )))
+                        "Task '{}' missing or invalid 'value' field (must be u32)",
+                        task_id
+                    )));
                 }
             };
 
             let subsections_val = task_map.get("subsections").ok_or_else(|| {
                 MarkerError::ParseAllocatorError(format!(
-                    "Task '{}' missing 'subsections' field", task_id
+                    "Task '{}' missing 'subsections' field",
+                    task_id
                 ))
             })?;
 
             let subsections_arr = subsections_val.as_array().ok_or_else(|| {
                 MarkerError::ParseAllocatorError(format!(
-                    "Task '{}' 'subsections' is not an array", task_id
+                    "Task '{}' 'subsections' is not an array",
+                    task_id
                 ))
             })?;
 
@@ -138,7 +158,8 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
             for (j, sub_val) in subsections_arr.iter().enumerate() {
                 let sub_obj = sub_val.as_object().ok_or_else(|| {
                     MarkerError::ParseAllocatorError(format!(
-                        "Task '{}' subsection at index {} is not an object", task_id, j
+                        "Task '{}' subsection at index {} is not an object",
+                        task_id, j
                     ))
                 })?;
 
@@ -146,8 +167,9 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
                     Some(Value::String(s)) => s.clone(),
                     _ => {
                         return Err(MarkerError::ParseAllocatorError(format!(
-                            "Task '{}' subsection {} missing or invalid 'name' field", task_id, j
-                        )))
+                            "Task '{}' subsection {} missing or invalid 'name' field",
+                            task_id, j
+                        )));
                     }
                 };
 
@@ -159,8 +181,9 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
                     }
                     _ => {
                         return Err(MarkerError::ParseAllocatorError(format!(
-                            "Task '{}' subsection {} missing or invalid 'value' field (must be u32)", task_id, j
-                        )))
+                            "Task '{}' subsection {} missing or invalid 'value' field (must be u32)",
+                            task_id, j
+                        )));
                     }
                 };
 
@@ -184,7 +207,7 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
                 subsections,
             });
         }
-        
+
         Ok(AllocatorSchema(tasks))
     }
 }
@@ -205,7 +228,9 @@ mod tests {
         let data = fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
         let parser = JsonAllocatorParser;
-        let report = parser.parse(&value).expect("Should parse valid single task report");
+        let report = parser
+            .parse(&value, ExecutionConfig::default_config())
+            .expect("Should parse valid single task report");
         assert_eq!(report.0.len(), 1, "Should have one task");
         let task = &report.0[0];
         assert_eq!(task.id, "task1");
@@ -225,7 +250,9 @@ mod tests {
         let data = fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
         let parser = JsonAllocatorParser;
-        let report = parser.parse(&value).expect("Should parse valid multiple tasks report");
+        let report = parser
+            .parse(&value, ExecutionConfig::default_config())
+            .expect("Should parse valid multiple tasks report");
         assert_eq!(report.0.len(), 2, "Should have two tasks");
         let task1 = &report.0[0];
         assert_eq!(task1.id, "task1");
@@ -246,12 +273,19 @@ mod tests {
         let data = fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
         let parser = JsonAllocatorParser;
-        let result = parser.parse(&value);
+        let result = parser.parse(&value, ExecutionConfig::default_config());
         match result {
             Err(MarkerError::ParseAllocatorError(msg)) => {
-                assert!(msg.contains("name"), "Error message should mention missing name, got: {}", msg);
-            },
-            other => panic!("Expected ParseAllocatorError for missing name, got: {:?}", other),
+                assert!(
+                    msg.contains("name"),
+                    "Error message should mention missing name, got: {}",
+                    msg
+                );
+            }
+            other => panic!(
+                "Expected ParseAllocatorError for missing name, got: {:?}",
+                other
+            ),
         }
     }
 
@@ -262,12 +296,19 @@ mod tests {
         let data = fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
         let parser = JsonAllocatorParser;
-        let result = parser.parse(&value);
+        let result = parser.parse(&value, ExecutionConfig::default_config());
         match result {
             Err(MarkerError::ParseAllocatorError(msg)) => {
-                assert!(msg.contains("sum of subsection values"), "Error message should mention sum of subsection values, got: {}", msg);
-            },
-            other => panic!("Expected ParseAllocatorError for subsection sum > parent value, got: {:?}", other),
+                assert!(
+                    msg.contains("sum of subsection values"),
+                    "Error message should mention sum of subsection values, got: {}",
+                    msg
+                );
+            }
+            other => panic!(
+                "Expected ParseAllocatorError for subsection sum > parent value, got: {:?}",
+                other
+            ),
         }
     }
 
@@ -278,13 +319,21 @@ mod tests {
         let data = fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: Value = serde_json::from_str(&data).expect("Failed to parse JSON");
         let parser = JsonAllocatorParser;
-        let result = parser.parse(&value);
+        let result = parser.parse(&value, ExecutionConfig::default_config());
         match result {
             Err(MarkerError::ParseAllocatorError(msg)) => {
-                assert!(msg.contains("invalid key") || msg.contains("not an array") || msg.contains("invalid 'value' field"),
-                    "Error message should mention invalid key, not an array, or invalid value, got: {}", msg);
-            },
-            other => panic!("Expected ParseAllocatorError for invalid subsections or value type, got: {:?}", other),
+                assert!(
+                    msg.contains("invalid key")
+                        || msg.contains("not an array")
+                        || msg.contains("invalid 'value' field"),
+                    "Error message should mention invalid key, not an array, or invalid value, got: {}",
+                    msg
+                );
+            }
+            other => panic!(
+                "Expected ParseAllocatorError for invalid subsections or value type, got: {:?}",
+                other
+            ),
         }
     }
 }

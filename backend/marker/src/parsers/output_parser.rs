@@ -20,7 +20,8 @@
 use crate::error::MarkerError;
 use crate::traits::parser::Parser;
 use regex::Regex;
-// use util::execution_config::ExecutionConfig;
+use regex::escape;
+use util::execution_config::ExecutionConfig;
 
 /// Represents a parsed submission containing multiple tasks.
 #[derive(Debug)]
@@ -62,6 +63,7 @@ impl<'a> Parser<(&'a [String], &'a [String], Vec<usize>), Submission> for Output
     fn parse(
         &self,
         input: (&'a [String], &'a [String], Vec<usize>),
+        config: ExecutionConfig,
     ) -> Result<Submission, MarkerError> {
         let (memo_contents, student_contents, expected_subtasks) = input;
         if memo_contents.len() != student_contents.len() {
@@ -88,8 +90,9 @@ impl<'a> Parser<(&'a [String], &'a [String], Vec<usize>), Submission> for Output
         {
             let task_id = format!("Task{}", i + 1);
             let expected_subtask_count = expected_subtasks[i];
-            let memo_output = parse_task_output(memo_content, expected_subtask_count)?;
-            let student_output = parse_task_output(student_content, expected_subtask_count)?;
+            let memo_output = parse_task_output(memo_content, expected_subtask_count, &config)?;
+            let student_output =
+                parse_task_output(student_content, expected_subtask_count, &config)?;
 
             tasks.push(Task {
                 task_id,
@@ -119,6 +122,7 @@ impl<'a> Parser<(&'a [String], &'a [String], Vec<usize>), Submission> for Output
 fn parse_task_output(
     content: &str,
     expected_subtask_count: usize,
+    config: &ExecutionConfig,
 ) -> Result<TaskOutput, MarkerError> {
     let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
     if lines.is_empty() {
@@ -128,8 +132,14 @@ fn parse_task_output(
     }
 
     let content_lines = &lines[1..];
-    let delimiter_regex = Regex::new(r"^&-=-&(.+)$")
+    let deliminator = config.marking.deliminator.clone();
+    let pattern = format!(r"^{}(.+)$", escape(&deliminator));
+    let delimiter_regex = Regex::new(&pattern)
         .map_err(|e| MarkerError::ParseOutputError(format!("Failed to compile regex: {}", e)))?;
+
+    //No longer hardcoded
+    // let delimiter_regex = Regex::new(r"^&-=-&(.+)$")
+    //     .map_err(|e| MarkerError::ParseOutputError(format!("Failed to compile regex: {}", e)))?;
 
     let mut delimiters = Vec::new();
     for (line_num, line) in content_lines.iter().enumerate() {
@@ -183,7 +193,7 @@ line1
 line2
 &-=-&Subtask2
 line3"#;
-        let result = parse_task_output(content, 2);
+        let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
         assert!(result.is_ok());
         let task_output = result.unwrap();
         assert_eq!(task_output.subtasks.len(), 2);
@@ -198,7 +208,7 @@ line3"#;
         let content = r#"gcc -o program program.c
 &-=-&Subtask1
 line1"#;
-        let result = parse_task_output(content, 2);
+        let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
         assert!(result.is_err());
         match result.err().unwrap() {
             MarkerError::ParseOutputError(msg) => {
@@ -217,7 +227,7 @@ line1
 line2
 &-=-&Subtask3
 line3"#;
-        let result = parse_task_output(content, 2);
+        let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
         assert!(result.is_err());
         match result.err().unwrap() {
             MarkerError::ParseOutputError(msg) => {
@@ -234,7 +244,7 @@ line3"#;
 &-=-&Subtask2
 line1
 line2"#;
-        let result = parse_task_output(content, 2);
+        let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
         assert!(result.is_ok());
         let task_output = result.unwrap();
         assert_eq!(task_output.subtasks.len(), 2);
@@ -249,7 +259,7 @@ line2"#;
         let content = r#"gcc -o program program.c
 Some random output
 without any delimiters."#;
-        let result = parse_task_output(content, 1);
+        let result = parse_task_output(content, 1, &ExecutionConfig::default_config());
         assert!(result.is_err());
         match result.err().unwrap() {
             MarkerError::ParseOutputError(msg) => {
@@ -262,7 +272,7 @@ without any delimiters."#;
     #[test]
     fn test_parse_task_output_empty_content() {
         let content = "";
-        let result = parse_task_output(content, 1);
+        let result = parse_task_output(content, 1, &ExecutionConfig::default_config());
         assert!(result.is_err());
         match result.err().unwrap() {
             MarkerError::ParseOutputError(msg) => {
@@ -275,7 +285,7 @@ without any delimiters."#;
     #[test]
     fn test_parse_task_output_only_command_line() {
         let content = "gcc -o program program.c";
-        let result = parse_task_output(content, 0);
+        let result = parse_task_output(content, 0, &ExecutionConfig::default_config());
         assert!(result.is_ok());
         let task_output = result.unwrap();
         assert!(task_output.subtasks.is_empty());
@@ -296,7 +306,10 @@ without any delimiters."#;
             "src/test_files/output_parser/case1/student.txt",
         )];
         let parser = OutputParser;
-        let result = parser.parse((&memo_contents, &student_contents, vec![3]));
+        let result = parser.parse(
+            (&memo_contents, &student_contents, vec![3]),
+            ExecutionConfig::default_config(),
+        );
 
         assert!(result.is_ok(), "test_parse_case1_happy_path failed");
         let submission = result.unwrap();
@@ -328,7 +341,10 @@ without any delimiters."#;
             "src/test_files/output_parser/case2/student.txt",
         )];
         let parser = OutputParser;
-        let result = parser.parse((&memo_contents, &student_contents, vec![3]));
+        let result = parser.parse(
+            (&memo_contents, &student_contents, vec![3]),
+            ExecutionConfig::default_config(),
+        );
 
         match result {
             Err(MarkerError::ParseOutputError(msg)) => {
@@ -347,7 +363,10 @@ without any delimiters."#;
             "src/test_files/output_parser/case3/student.txt",
         )];
         let parser = OutputParser;
-        let result = parser.parse((&memo_contents, &student_contents, vec![3]));
+        let result = parser.parse(
+            (&memo_contents, &student_contents, vec![3]),
+            ExecutionConfig::default_config(),
+        );
 
         match result {
             Err(MarkerError::ParseOutputError(msg)) => {
@@ -366,7 +385,10 @@ without any delimiters."#;
             "src/test_files/output_parser/case4/student.txt",
         )];
         let parser = OutputParser;
-        let result = parser.parse((&memo_contents, &student_contents, vec![3]));
+        let result = parser.parse(
+            (&memo_contents, &student_contents, vec![3]),
+            ExecutionConfig::default_config(),
+        );
 
         assert!(result.is_ok());
         let submission = result.unwrap();
@@ -393,7 +415,10 @@ without any delimiters."#;
         )];
         let student_contents = Vec::new();
         let parser = OutputParser;
-        let result = parser.parse((&memo_contents, &student_contents, vec![2]));
+        let result = parser.parse(
+            (&memo_contents, &student_contents, vec![2]),
+            ExecutionConfig::default_config(),
+        );
 
         match result {
             Err(MarkerError::ParseOutputError(msg)) => {
@@ -418,7 +443,10 @@ without any delimiters."#;
             read_test_file("src/test_files/output_parser/case6/student3.txt"),
         ];
         let parser = OutputParser;
-        let result = parser.parse((&memo_contents, &student_contents, vec![3, 3, 3]));
+        let result = parser.parse(
+            (&memo_contents, &student_contents, vec![3, 3, 3]),
+            ExecutionConfig::default_config(),
+        );
 
         assert!(result.is_ok());
         let submission = result.unwrap();

@@ -15,18 +15,21 @@
 //! use marker::error::MarkerError;
 //! use marker::traits::parser::Parser;
 //! use serde_json::Value;
+//! use util::execution_config::ExecutionConfig;
 //!
 //! struct MyJsonParser;
 //! struct MyReport;
 //!
 //! // Example for a JSON parser
 //! impl<'a> Parser<&'a Value, MyReport> for MyJsonParser {
-//!     fn parse(&self, raw: &'a Value) -> Result<MyReport, MarkerError> {
-//!         // -- snip --
+//!     fn parse(&self, raw: &'a Value, _config: ExecutionConfig) -> Result<MyReport, MarkerError> {
+//!         // Dummy implementation
 //!         Ok(MyReport)
 //!     }
 //! }
 //! ```
+
+use util::execution_config::ExecutionConfig;
 
 use crate::error::MarkerError;
 
@@ -50,5 +53,5 @@ pub trait Parser<Input, Output> {
     ///
     /// Returns a [`MarkerError`] if the input does not conform to the expected schema
     /// or cannot be parsed.
-    fn parse(&self, input: Input) -> Result<Output, MarkerError>;
+    fn parse(&self, input: Input, config: ExecutionConfig) -> Result<Output, MarkerError>;
 }

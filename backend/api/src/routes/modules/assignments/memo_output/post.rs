@@ -1,13 +1,13 @@
-use std::{env, path::PathBuf, fs};
-use axum::{
-    extract::{State, Path},
-    http::StatusCode,
-    Json,
-};
-use tracing::{error, info};
 use crate::response::ApiResponse;
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+};
 use code_runner::create_memo_outputs_for_all_tasks;
 use sea_orm::DatabaseConnection;
+use std::{env, fs, path::PathBuf};
+use tracing::{error, info};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/memo_output/generate
 ///
@@ -98,8 +98,8 @@ pub async fn generate_memo_output(
     State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/assignment_files".into());
+    let base_path =
+        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
 
     let assignment_root = PathBuf::from(&base_path)
         .join(format!("module_{}", module_id))
@@ -118,7 +118,9 @@ pub async fn generate_memo_output(
     if !memo_valid {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<()>::error("Required memo directory is missing or empty")),
+            Json(ApiResponse::<()>::error(
+                "Required memo directory is missing or empty",
+            )),
         );
     }
 
@@ -141,14 +143,24 @@ pub async fn generate_memo_output(
 
     match create_memo_outputs_for_all_tasks(&db, assignment_id).await {
         Ok(_) => {
-            info!("Memo output generation complete for assignment {}", assignment_id);
+            info!(
+                "Memo output generation complete for assignment {}",
+                assignment_id
+            );
             (
                 StatusCode::OK,
-                Json(ApiResponse::<()>::success((), "Memo output generation complete")),
+                Json(ApiResponse::<()>::success(
+                    (),
+                    "Memo output generation complete",
+                )),
             )
         }
         Err(e) => {
-            error!("Memo output generation failed for assignment {}: {:?}", assignment_id, e);
+            println!("{}", e);
+            error!(
+                "Memo output generation failed for assignment {}: {:?}",
+                assignment_id, e
+            );
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Failed to generate memo output")),

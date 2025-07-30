@@ -240,14 +240,20 @@ pub fn write_config_json(base_path: &PathBuf, module_id: i64, assignment_id: i64
 
     let config_json = r#"
     {
-        "timeout_secs": 10,
-        "max_memory": "256m",
-        "max_cpus": "1.0",
-        "max_uncompressed_size": 10485760,
-        "max_processes": 16,
-        "marking_scheme": "exact",
-        "feedback_scheme": "auto"
-    }
+  "execution": {
+    "timeout_secs": 10,
+    "max_memory": 8589934592,
+    "max_cpus": 2,
+    "max_uncompressed_size": 100000000,
+    "max_processes": 256
+  },
+  "marking": {
+    "marking_scheme": "exact",
+    "feedback_scheme": "auto",
+    "deliminator": "&-=-&"
+  }
+}
+
     "#;
 
     fs::write(config_dir.join("config.json"), config_json).unwrap();
