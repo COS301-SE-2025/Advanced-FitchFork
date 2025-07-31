@@ -27,7 +27,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-force-graph": "^1.47.6",
-    "react-force-graph-3d": "^1.26.1",
+    "react-force-graph-3d": "^1.28.0",
     "react-responsive": "^10.0.1",
     "react-router-dom": "^7.6.0"
   },
