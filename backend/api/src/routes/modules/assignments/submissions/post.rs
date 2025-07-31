@@ -15,8 +15,129 @@ use marker::MarkingJob;
 use md5;
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
 use util::mark_allocator::mark_allocator::load_allocator;
-
+use serde::{Serialize, Deserialize};
 use util::execution_config::ExecutionConfig;
+
+// Common grading function that can be used for both initial submissions and regrading
+async fn grade_submission(
+    db: &DatabaseConnection,
+    submission: AssignmentSubmissionModel,
+    assignment: &db::models::assignment::Model,
+    base_path: &std::path::Path,
+    memo_outputs: &[std::path::PathBuf],
+    mark_allocator_path: &std::path::Path,
+    config: &util::execution_config::ExecutionConfig,
+) -> Result<SubmissionDetailResponse, String> {
+    // Get student output directory
+    let student_output_dir = base_path
+        .join("assignment_submissions")
+        .join(format!("user_{}", submission.user_id))
+        .join(format!("attempt_{}", submission.attempt))
+        .join("submission_output");
+
+    // Collect student output files
+    let mut student_outputs = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
+        for entry in entries.flatten() {
+            let file_path = entry.path();
+            if file_path.is_file() {
+                if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+                    if ext.eq_ignore_ascii_case("txt") {
+                        student_outputs.push(file_path);
+                    }
+                }
+            }
+        }
+    }
+    student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+    // Run marking job
+    let marking_job = MarkingJob::new(
+        memo_outputs.to_vec(),
+        student_outputs,
+        mark_allocator_path.to_path_buf(),
+        config.clone(),
+    );
+    let mark_report = marking_job.mark().await.map_err(|e| e.to_string())?;
+
+    // Prepare submission details
+    let mark = MarkSummary {
+        earned: mark_report.data.mark.earned as i64,
+        total: mark_report.data.mark.total as i64,
+    };
+    let tasks = serde_json::to_value(&mark_report.data.tasks)
+        .unwrap_or_default()
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let code_coverage = match &mark_report.data.code_coverage {
+        Some(cov) => {
+            let arr = serde_json::to_value(cov)
+                .unwrap_or_default()
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            if !arr.is_empty() { Some(arr) } else { None }
+        }
+        None => None,
+    };
+    let code_complexity = match &mark_report.data.code_complexity {
+        Some(c) => {
+            let metrics = serde_json::to_value(&c.metrics)
+                .unwrap_or_default()
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            let summary = CodeComplexitySummary {
+                earned: c.summary.as_ref().map(|s| s.earned as i64).unwrap_or(0),
+                total: c.summary.as_ref().map(|s| s.total as i64).unwrap_or(0),
+            };
+            if !metrics.is_empty() || summary.earned != 0 || summary.total != 0 {
+                Some(CodeComplexity { summary, metrics })
+            } else {
+                None
+            }
+        }
+        None => None,
+    };
+
+    let resp = SubmissionDetailResponse {
+        id: submission.id as i64,
+        attempt: submission.attempt,
+        filename: submission.filename.clone(),
+        hash: submission.file_hash.clone().unwrap_or_default(),
+        created_at: submission.created_at.to_rfc3339(),
+        updated_at: submission.updated_at.to_rfc3339(),
+        mark,
+        is_practice: submission.is_practice.unwrap_or(false),
+        is_late: is_late(submission.created_at, assignment.due_date),
+        tasks,
+        code_coverage,
+        code_complexity,
+    };
+
+    // Save updated report
+    let attempt_dir = base_path
+        .join("assignment_submissions")
+        .join(format!("user_{}", submission.user_id))
+        .join(format!("attempt_{}", submission.attempt));
+    let report_path = attempt_dir.join("submission_report.json");
+    if let Ok(json) = serde_json::to_string_pretty(&resp) {
+        std::fs::write(&report_path, json).map_err(|e| e.to_string())?;
+    } else {
+        return Err("Failed to serialize submission report".to_string());
+    }
+
+    // Update submission in database
+    let mut active_model = submission.into_active_model();
+    active_model.mark = Set(Some(mark.earned as i32));
+    active_model
+        .update(db)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(resp)
+}
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions
 ///
@@ -265,27 +386,6 @@ pub async fn submit_assignment(
         .join(format!("assignment_{}", assignment_id));
     let mark_allocator_path = base_path.join("mark_allocator/allocator.json");
     let memo_output_dir = base_path.join("memo_output");
-    let student_output_dir = base_path
-        .join("assignment_submissions")
-        .join(format!("user_{}", claims.sub))
-        .join(format!("attempt_{}", saved.attempt))
-        .join("submission_output");
-
-    let mut student_outputs = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
-        for entry in entries.flatten() {
-            let file_path = entry.path();
-            if file_path.is_file() {
-                if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-                    if ext.eq_ignore_ascii_case("txt") {
-                        student_outputs.push(file_path);
-                    }
-                }
-            }
-        }
-    }
-
-    student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     let mut memo_outputs: Vec<_> = match std::fs::read_dir(&memo_output_dir) {
         Ok(rd) => rd
@@ -296,95 +396,370 @@ pub async fn submit_assignment(
     };
     memo_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
-    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
-        .expect("Failed to load execution config");
-
-    let marking_job = MarkingJob::new(memo_outputs, student_outputs, mark_allocator_path, config);
-    let mark_report = match marking_job.mark().await {
-        Ok(report) => report,
-        Err(e) => {
-            eprintln!("Marking failed: {:?}", e);
+    let config = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
+        Some(c) => c,
+        None => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<SubmissionDetailResponse>::error(
-                    "Failed to mark submission",
+                    "Failed to load execution config",
                 )),
-            );
+            )
         }
     };
 
-    let mark = MarkSummary {
-        earned: mark_report.data.mark.earned as i64,
-        total: mark_report.data.mark.total as i64,
-    };
-    let tasks = serde_json::to_value(&mark_report.data.tasks)
-        .unwrap_or_default()
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
-    let code_coverage = match &mark_report.data.code_coverage {
-        Some(cov) => {
-            let arr = serde_json::to_value(cov)
-                .unwrap_or_default()
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            if !arr.is_empty() { Some(arr) } else { None }
-        }
-        None => None,
-    };
-    let code_complexity = match &mark_report.data.code_complexity {
-        Some(c) => {
-            let metrics = serde_json::to_value(&c.metrics)
-                .unwrap_or_default()
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            let summary = CodeComplexitySummary {
-                earned: c.summary.as_ref().map(|s| s.earned as i64).unwrap_or(0),
-                total: c.summary.as_ref().map(|s| s.total as i64).unwrap_or(0),
-            };
-            if !metrics.is_empty() || summary.earned != 0 || summary.total != 0 {
-                Some(CodeComplexity { summary, metrics })
-            } else {
-                None
+    match grade_submission(
+        &db,
+        saved,
+        &assignment,
+        &base_path,
+        &memo_outputs,
+        &mark_allocator_path,
+        &config,
+    )
+    .await
+    {
+        Ok(resp) => (
+            StatusCode::OK,
+            Json(ApiResponse::success(
+                resp,
+                "Submission received and graded",
+            )),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<SubmissionDetailResponse>::error(e)),
+        ),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RemarkRequest {
+    #[serde(default)]
+    submission_ids: Option<Vec<i64>>,
+    #[serde(default)]
+    all: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RemarkResponse {
+    regraded: usize,
+    failed: Vec<FailedRemark>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FailedRemark {
+    id: Option<i64>,
+    error: String,
+}
+
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions/remark
+///
+/// Regrade (remark) assignment submissions. Accessible to lecturers, assistant lecturers, and admins.
+///
+/// This endpoint allows authorized users to re-run marking logic on either:
+/// - Specific submissions (via `submission_ids`)
+/// - All submissions in an assignment (via `all: true`)
+///
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment containing the submissions
+///
+/// ### Request Body
+/// Either:
+/// ```json
+/// { "submission_ids": [123, 124, 125] }
+/// ```
+/// or
+/// ```json
+/// { "all": true }
+/// ```
+///
+/// ### Success Response (200 OK)
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Regraded 3/4 submissions",
+///   "data": {
+///     "regraded": 3,
+///     "failed": [
+///       { "id": 125, "error": "Submission not found" }
+///     ]
+///   }
+/// }
+/// ```
+///
+/// ### Error Responses
+///
+/// **400 Bad Request** - Invalid request parameters
+/// ```json
+/// { "success": false, "message": "Must provide either submission_ids or all=true" }
+/// ```
+///
+/// **403 Forbidden** - User not authorized for operation
+/// ```json
+/// { "success": false, "message": "Not authorized to remark submissions" }
+/// ```
+///
+/// **404 Not Found** - Assignment not found
+/// ```json
+/// { "success": false, "message": "Assignment not found" }
+/// ```
+///
+/// **500 Internal Server Error** - Regrading failure
+/// ```json
+/// { "success": false, "message": "Failed to load mark allocator" }
+/// ```
+pub async fn remark_submissions(
+    State(db): State<DatabaseConnection>,
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    Json(req): Json<RemarkRequest>,
+) -> impl IntoResponse {
+    // Validate request parameters
+    let submission_ids = match (req.submission_ids, req.all) {
+        (Some(ids), _) if !ids.is_empty() => ids,
+        (_, Some(true)) => {
+            // Get all submission IDs for this assignment
+            match AssignmentSubmissionModel::find_by_assignment(assignment_id, &db).await {
+                Ok(ids) => ids,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<RemarkResponse>::error(format!(
+                            "Failed to fetch submissions: {}",
+                            e
+                        ))),
+                    )
+                }
             }
         }
-        None => None,
-    };
-    let resp = SubmissionDetailResponse {
-        id: saved.id,
-        attempt: saved.attempt,
-        filename: saved.filename,
-        hash: file_hash,
-        created_at: saved.created_at.to_rfc3339(),
-        updated_at: saved.updated_at.to_rfc3339(),
-        mark,
-        is_practice,
-        is_late: is_late(saved.created_at, assignment.due_date),
-        tasks,
-        code_coverage,
-        code_complexity,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<RemarkResponse>::error(
+                    "Must provide either submission_ids or all=true",
+                )),
+            )
+        }
     };
 
-    let attempt_dir = base_path
-        .join("assignment_submissions")
-        .join(format!("user_{}", claims.sub))
-        .join(format!("attempt_{}", saved.attempt));
-    let report_path = attempt_dir.join("submission_report.json");
-    if let Ok(json) = serde_json::to_string_pretty(&resp) {
-        if let Err(e) = std::fs::write(&report_path, json) {
-            eprintln!("Failed to write submission_report.json: {}", e);
+    // Load mark allocator once for all submissions
+    match load_allocator(module_id, assignment_id).await {
+        Ok(_) => {}
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<RemarkResponse>::error(format!(
+                    "Failed to load mark allocator: {}",
+                    e
+                ))),
+            )
         }
-    } else {
-        eprintln!("Failed to serialize submission report to JSON");
+    };
+
+    let assignment_storage_root = std::env::var("ASSIGNMENT_STORAGE_ROOT")
+        .unwrap_or_else(|_| "data/assignment_files".to_string());
+    let base_path = std::path::PathBuf::from(&assignment_storage_root)
+        .join(format!("module_{}", module_id))
+        .join(format!("assignment_{}", assignment_id));
+    let mark_allocator_path = base_path.join("mark_allocator/allocator.json");
+    let memo_output_dir = base_path.join("memo_output");
+
+    // Load memo outputs once for all submissions
+    let mut memo_outputs: Vec<_> = match std::fs::read_dir(&memo_output_dir) {
+        Ok(rd) => rd
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.is_file())
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    memo_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+    let config = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
+        Some(c) => c,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<RemarkResponse>::error(
+                    "Failed to load execution config",
+                )),
+            )
+        }
+    };
+
+    let mut regraded = 0;
+    let mut failed = Vec::new();
+
+    // Process each submission
+    for submission_id in submission_ids {
+        let submission = match assignment_submission::Entity::find_by_id(submission_id as i32)
+            .one(&db)
+            .await
+        {
+            Ok(Some(sub)) => sub,
+            Ok(None) => {
+                failed.push(FailedRemark {
+                    id: Some(submission_id),
+                    error: "Submission not found".to_string(),
+                });
+                continue;
+            }
+            Err(e) => {
+                failed.push(FailedRemark {
+                    id: Some(submission_id),
+                    error: format!("Database error: {}", e),
+                });
+                continue;
+            }
+        };
+
+        // Verify submission belongs to this assignment
+        if submission.assignment_id != assignment_id {
+            failed.push(FailedRemark {
+                id: Some(submission_id),
+                error: "Submission does not belong to this assignment".to_string(),
+            });
+            continue;
+        }
+
+        // Get student output directory
+        let student_output_dir = base_path
+            .join("assignment_submissions")
+            .join(format!("user_{}", submission.user_id))
+            .join(format!("attempt_{}", submission.attempt))
+            .join("submission_output");
+
+        // Collect student output files
+        let mut student_outputs = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
+            for entry in entries.flatten() {
+                let file_path = entry.path();
+                if file_path.is_file() {
+                    if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+                        if ext.eq_ignore_ascii_case("txt") {
+                            student_outputs.push(file_path);
+                        }
+                    }
+                }
+            }
+        }
+        student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+        // Run marking job
+        let marking_job = MarkingJob::new(
+            memo_outputs.clone(),
+            student_outputs,
+            mark_allocator_path.clone(),
+            config.clone(),
+        );
+        let mark_report = match marking_job.mark().await {
+            Ok(report) => report,
+            Err(e) => {
+                failed.push(FailedRemark {
+                    id: Some(submission_id),
+                    error: format!("Marking failed: {}", e),
+                });
+                continue;
+            }
+        };
+
+        // Prepare updated submission details
+        let mark = MarkSummary {
+            earned: mark_report.data.mark.earned as i64,
+            total: mark_report.data.mark.total as i64,
+        };
+        let tasks = serde_json::to_value(&mark_report.data.tasks)
+            .unwrap_or_default()
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let code_coverage = match &mark_report.data.code_coverage {
+            Some(cov) => {
+                let arr = serde_json::to_value(cov)
+                    .unwrap_or_default()
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                if !arr.is_empty() { Some(arr) } else { None }
+            }
+            None => None,
+        };
+        let code_complexity = match &mark_report.data.code_complexity {
+            Some(c) => {
+                let metrics = serde_json::to_value(&c.metrics)
+                    .unwrap_or_default()
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                let summary = CodeComplexitySummary {
+                    earned: c.summary.as_ref().map(|s| s.earned as i64).unwrap_or(0),
+                    total: c.summary.as_ref().map(|s| s.total as i64).unwrap_or(0),
+                };
+                if !metrics.is_empty() || summary.earned != 0 || summary.total != 0 {
+                    Some(CodeComplexity { summary, metrics })
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
+        let resp = SubmissionDetailResponse {
+            id: submission.id as i64,
+            attempt: submission.attempt,
+            filename: submission.filename.clone(),
+            hash: submission.file_hash.clone().unwrap_or_default(),
+            created_at: submission.created_at.to_rfc3339(),
+            updated_at: submission.updated_at.to_rfc3339(),
+            mark,
+            is_practice: false, // false for now because assignment submissions dont seem to implement this yet
+            is_late: is_late(submission.created_at, assignment.due_date),
+            tasks,
+            code_coverage,
+            code_complexity,
+        };
+
+        // Save updated report
+        let attempt_dir = base_path
+            .join("assignment_submissions")
+            .join(format!("user_{}", submission.user_id))
+            .join(format!("attempt_{}", submission.attempt));
+        let report_path = attempt_dir.join("submission_report.json");
+        if let Ok(json) = serde_json::to_string_pretty(&resp) {
+            if let Err(e) = std::fs::write(&report_path, json) {
+                failed.push(FailedRemark {
+                    id: Some(submission_id),
+                    error: format!("Failed to save report: {}", e),
+                });
+                continue;
+            }
+        } else {
+            failed.push(FailedRemark {
+                id: Some(submission_id),
+                error: "Failed to serialize report".to_string(),
+            });
+            continue;
+        }
+
+        // Update submission in database
+        let mut active_model = submission.into_active_model();
+        active_model.mark = Set(Some(mark.earned as i32));
+        if let Err(e) = active_model.update(&db).await {
+            failed.push(FailedRemark {
+                id: Some(submission_id),
+                error: format!("Database update failed: {}", e),
+            });
+            continue;
+        }
+
+        regraded += 1;
     }
+
+    let response = RemarkResponse { regraded, failed };
+    let message = format!("Regraded {}/{} submissions", regraded, submission_ids.len());
 
     (
         StatusCode::OK,
-        Json(ApiResponse::<SubmissionDetailResponse>::success(
-            resp,
-            "Submission received and graded",
-        )),
+        Json(ApiResponse::success(response, &message)),
     )
 }

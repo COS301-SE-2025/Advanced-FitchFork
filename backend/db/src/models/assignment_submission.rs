@@ -208,6 +208,19 @@ impl Model {
     pub fn delete_file_only(&self) -> Result<(), std::io::Error> {
         fs::remove_file(self.full_path())
     }
+
+    /// Find all submission IDs for a given assignment
+    pub async fn find_by_assignment(
+        assignment_id: i64,
+        db: &DatabaseConnection,
+    ) -> Result<Vec<i64>, DbErr> {
+        let submissions = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id as i32))
+            .all(db)
+            .await?;
+
+        Ok(submissions.into_iter().map(|s| s.id as i64).collect())
+    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use axum::{Router, routing::{get, post}};
 use sea_orm::DatabaseConnection;
 use get::{list_submissions, get_submission};
-use post::submit_assignment;
+use post::{submit_assignment, remark_submissions};
 
 pub mod get;
 pub mod post;
@@ -27,4 +27,5 @@ pub fn submission_routes() -> Router<DatabaseConnection> {
         .route("/", get(list_submissions))
         .route("/{submission_id}", get(get_submission))
         .route("/", post(submit_assignment))
+        .route("/remark", post(remark_submissions))
 }
