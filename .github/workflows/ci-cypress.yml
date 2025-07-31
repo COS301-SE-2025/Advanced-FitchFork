@@ -1,0 +1,88 @@
+name: Cypress E2E Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  e2e:
+    name: Cypress E2E Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # -------------------------------
+      # BACKEND SETUP
+      # -------------------------------
+      - name: Copy backend .env
+        run: cp .env.example .env
+        working-directory: backend
+
+      - name: Build universal-runner image
+        run: docker build -t universal-runner:latest .
+        working-directory: backend
+
+      - name: Run migrations
+        run: cargo run -p migration
+        working-directory: backend
+
+      - name: Seed database
+        run: cargo run -p seeder --quiet
+        working-directory: backend
+
+      # -------------------------------
+      # FRONTEND SETUP
+      # -------------------------------
+      - name: Copy frontend .env
+        run: cp .env.example .env
+        working-directory: frontend
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      # -------------------------------
+      # CYPRESS SETUP
+      # -------------------------------
+      - name: Install Test dependencies
+        run: npm ci
+        working-directory: tests
+
+      # -------------------------------
+      # START SERVERS AND RUN CYPRESS
+      # -------------------------------
+      - name: Run backend/frontend servers and Cypress tests
+        run: npm run e2e
+        working-directory: tests
+
+      # -------------------------------
+      # ARTIFACTS ON FAILURE
+      # -------------------------------
+      - name: Upload Cypress screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: tests/cypress/screenshots
+
+      - name: Upload Cypress videos on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-videos
+          path: tests/cypress/videos

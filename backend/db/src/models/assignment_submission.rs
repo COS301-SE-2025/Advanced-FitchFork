@@ -5,6 +5,7 @@ use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use crate::models::user;
 
 /// Represents a user's submission for a specific assignment.
 ///
@@ -54,6 +55,12 @@ pub enum Relation {
 
 /// Custom behavior for the active model (currently using default behavior).
 impl ActiveModelBehavior for ActiveModel {}
+
+impl Related<user::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::User.def()
+    }
+}
 
 impl Model {
     /// Returns the root directory used for storing assignment submissions on disk.
@@ -218,7 +225,9 @@ mod tests {
     }
 
     fn override_storage_dir(temp: &TempDir) {
-        env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
+        unsafe {
+            env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
+        }
     }
 
     #[tokio::test]

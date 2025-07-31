@@ -1,0 +1,16 @@
+{
+    "generated_at": "2025-06-20T12:00:00+02:00",
+    "tasks": [
+      {
+        "task1": {
+          "name": "Initialization",
+          "value": 10,
+          "subsections": [
+            { "name": "Constructor",   "value": 6 },
+            { "name": "Setup Globals", "value": 4 }
+          ]
+        }
+      }
+    ]
+  }
+  

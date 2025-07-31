@@ -1,82 +1,156 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+
 import { useAuth } from './context/AuthContext';
+
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
 import RequestPasswordResetPage from './pages/auth/RequestPasswordResetPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
-import Forbidden from './pages/shared/status/Forbidden';
-import Unauthorized from './pages/shared/status/Unauthorized';
-import Home from './pages/Home';
-import UsersList from './pages/users/UsersList';
-import ModuleList from './pages/modules/admin/ModuleList';
-import ModuleView from './pages/modules/admin/view/ModuleView';
-import NotFound from './pages/shared/status/NotFound';
-import UnderConstruction from './pages/shared/status/UnderConstruction';
-import ProfilePage from './pages/shared/Profile';
-import UserView from './pages/users/UserView';
 import PasswordResetSuccessPage from './pages/auth/PasswordResetSuccessPage';
 
+import Forbidden from './pages/shared/status/Forbidden';
+import Unauthorized from './pages/shared/status/Unauthorized';
+import NotFound from './pages/shared/status/NotFound';
+
+import UsersList from './pages/users/UsersList';
+import UserView from './pages/users/UserView';
+import UnderConstruction from './pages/shared/status/UnderConstruction';
+import CalendarPage from './pages/shared/CalendarPage';
+
+import ModuleOverview from './pages/modules/ModuleOverview';
+import ModulePersonnel from './pages/modules/ModulePersonnel';
+
+import AppLayout from './layouts/AppLayout';
+import ModuleLayout from './layouts/ModuleLayout';
+import SettingsLayout from './layouts/SettingsLayout';
+import Account from './pages/settings/Account';
+import Security from './pages/settings/Security';
+import Appearance from './pages/settings/Appearance';
+import AssignmentLayout from './layouts/AssignmentLayout';
+import SubmissionView from './pages/modules/assignments/submissions/show/SubmissionView';
+import Submissions from './pages/modules/assignments/submissions/index/Submissions';
+import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
+import MemoOutput from './pages/modules/assignments/MemoOutput';
+import MarkAllocator from './pages/modules/assignments/MarkAllocator';
+import HelpPageLayout from './layouts/HelpPageLayout';
+import HelpAccount from './pages/help/HelpAccount';
+import HelpAssignments from './pages/help/HelpAssignments';
+import HelpContact from './pages/help/HelpContact';
+import HelpSubmissions from './pages/help/HelpSubmissions';
+import HelpTroubleshooting from './pages/help/HelpTroubleshooting';
+import Landing from './pages/Landing';
+import Config from './pages/modules/assignments/Config';
+import Dashboard from './pages/Dashboard';
+import Tasks from './pages/modules/assignments/Tasks';
+import AuthLayout from './layouts/AuthLayout';
+import ModulesList from './pages/modules/ModulesList';
+import ModuleGrades from './pages/modules/ModuleGrades';
+import AssignmentsList from './pages/modules/assignments/AssignmentsList';
+
+import ProtectedAuthRoute from './components/routes/ProtectedAuthRoute';
+import ProtectedAdminRoute from './components/routes/ProtectedAdminRoute';
+import ProtectedModuleRoute from './components/routes/ProtectedModuleRoute';
+
 export default function App() {
-  const { user, isAdmin, loading, isExpired } = useAuth();
+  const { user, loading, isExpired } = useAuth();
 
   if (loading) return null;
-
-  const requireAuth = (element: JSX.Element) =>
-    user && !isExpired() ? element : <Navigate to="/login" replace />;
-
-  const requireAdmin = (element: JSX.Element) =>
-    user && !isExpired() ? (
-      isAdmin() ? (
-        element
-      ) : (
-        <Navigate to="/unauthorized" replace />
-      )
-    ) : (
-      <Navigate to="/forbidden" replace />
-    );
 
   return (
     <Router>
       <Routes>
         {/* Public Auth Routes */}
-        <Route path="/" element={<Navigate to={user ? '/home' : '/login'} />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/forgot-password" element={<RequestPasswordResetPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/password-reset-success" element={<PasswordResetSuccessPage />} />
-
-        {/* Admin-only User Routes */}
-        <Route path="/users" element={requireAdmin(<UsersList />)} />
-        <Route path="/users/:id" element={requireAdmin(<UserView />)} />
-        <Route path="/users/:id/modules" element={requireAdmin(<Unauthorized />)} />
-
-        {/* Authenticated Routes */}
-        <Route path="/home" element={requireAuth(<Home />)} />
-        <Route path="/settings" element={requireAuth(<UnderConstruction />)} />
-        <Route path="/profile" element={requireAuth(<ProfilePage />)} />
-
-        {/* Modules */}
-        <Route path="/modules" element={requireAuth(<ModuleList />)} />
-        <Route path="/modules/my" element={requireAuth(<Unauthorized />)} />
-        <Route path="/modules/:id" element={requireAuth(<ModuleView />)} />
-        <Route path="/modules/:id/edit" element={requireAuth(<Unauthorized />)} />
-
-        {/* Assignments */}
-        <Route path="/modules/:module_id/assignments" element={requireAuth(<Unauthorized />)} />
         <Route
-          path="/modules/:module_id/assignments/:assignment_id"
-          element={requireAuth(<Unauthorized />)}
+          path="/"
+          element={user && !isExpired() ? <Navigate to="/dashboard" replace /> : <Landing />}
         />
+        <Route element={<AuthLayout />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<RequestPasswordResetPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/password-reset-success" element={<PasswordResetSuccessPage />} />
+        </Route>
 
-        <Route path="/reports" element={<UnderConstruction />} />
-
-        {/* Status Pages */}
+        {/* Status + Fallback */}
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/forbidden" element={<Forbidden />} />
-
-        {/* Fallback */}
         <Route path="*" element={<NotFound />} />
+
+        {/* Protected Auth Routes */}
+        <Route element={<ProtectedAuthRoute />}>
+          <Route element={<AppLayout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route index element={<Navigate to="account" replace />} />
+              <Route path="account" element={<Account />} />
+              <Route path="security" element={<Security />} />
+              <Route path="appearance" element={<Appearance />} />
+            </Route>
+
+            <Route path="/calendar" element={<CalendarPage />} />
+
+            {/* Admin-only routes */}
+            <Route element={<ProtectedAdminRoute />}>
+              <Route path="/users" element={<UsersList />} />
+              <Route path="/users/:id" element={<UserView />} />
+              <Route path="/users/:id/modules" element={<Unauthorized />} />
+            </Route>
+
+            {/* Modules */}
+            <Route path="/modules" element={<ModulesList />} />
+            <Route path="/modules/:id" element={<ModuleLayout />}>
+              <Route index element={<ModuleOverview />} />
+
+              <Route path="assignments" element={<AssignmentsList />} />
+              <Route path="assignments/:assignment_id" element={<AssignmentLayout />}>
+                <Route index element={<Navigate to="submissions" replace />} />
+                <Route path="files" element={<AssignmentFiles />} />
+                <Route path="submissions" element={<Submissions />} />
+                <Route path="submissions/:submission_id" element={<SubmissionView />} />
+                <Route path="tasks" element={<Tasks />}>
+                  <Route index element={<></>} />
+                  <Route path=":task_id" element={<></>} />
+                </Route>
+                <Route path="memo-output" element={<MemoOutput />} />
+                <Route path="mark-allocator" element={<MarkAllocator />} />
+                <Route path="stats" element={<UnderConstruction />} />
+                <Route path="config" element={<Config />} />
+              </Route>
+
+              <Route path="bookings" element={<UnderConstruction />} />
+              <Route path="grades" element={<ModuleGrades />} />
+              <Route path="resources" element={<UnderConstruction />} />
+              <Route
+                path="personnel"
+                element={
+                  <ProtectedModuleRoute allowedRoles={['lecturer', 'assistant_lecturer']}>
+                    <ModulePersonnel />
+                  </ProtectedModuleRoute>
+                }
+              />
+            </Route>
+
+            {/* Help Routes */}
+            <Route path="/help" element={<HelpPageLayout />}>
+              <Route index element={<Navigate to="account" replace />} />
+              <Route path="account" element={<HelpAccount />} />
+              <Route path="assignments" element={<HelpAssignments />} />
+              <Route path="submissions" element={<HelpSubmissions />} />
+              <Route path="troubleshooting" element={<HelpTroubleshooting />} />
+              <Route path="contact" element={<HelpContact />} />
+            </Route>
+
+            {/* Explicit Unauthorized Fallbacks */}
+            <Route path="/modules/:module_id/assignments" element={<Unauthorized />} />
+            <Route
+              path="/modules/:module_id/assignments/:assignment_id"
+              element={<Unauthorized />}
+            />
+            <Route path="/reports" element={<UnderConstruction />} />
+          </Route>
+        </Route>
       </Routes>
     </Router>
   );

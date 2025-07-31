@@ -1,0 +1,37 @@
+//! File Routes Module
+//!
+//! This module defines the routing for assignment file-related endpoints, including uploading, listing, downloading, and deleting files. It applies access control middleware to ensure appropriate permissions for each operation.
+
+use axum::{middleware::from_fn_with_state, Router, routing::{get, post, delete}};
+use crate::auth::guards::{require_assigned_to_module, require_lecturer};
+use get::{list_files, download_file};
+use post::upload_files;
+use delete::delete_files;
+use sea_orm::DatabaseConnection;
+
+pub mod get;
+pub mod post;
+pub mod delete;
+
+/// Registers the routes for assignment file endpoints.
+///
+/// This function sets up the following endpoints under the current router:
+///
+/// - `POST /`: Upload files to an assignment. Access is restricted to lecturers assigned to the module.
+/// - `GET /`: List all files for an assignment. Access is restricted to users assigned to the module.
+/// - `GET /{file_id}`: Download a specific file from an assignment. Access is restricted to users assigned to the module.
+/// - `DELETE /`: Delete files from an assignment. Access is restricted to lecturers assigned to the module.
+///
+/// Routes apply appropriate middleware based on the operation:
+/// - Upload and delete operations require lecturer permissions
+/// - List and download operations require module assignment
+///
+/// # Returns
+/// An [`axum::Router`] with the file endpoints and their associated middleware.
+pub fn files_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
+    Router::new()
+        .route("/", post(upload_files).route_layer(from_fn_with_state(db.clone(), require_lecturer)))
+        .route("/", get(list_files).route_layer(from_fn_with_state(db.clone(), require_assigned_to_module)))
+        .route("/", delete(delete_files).route_layer(from_fn_with_state(db.clone(), require_lecturer)))
+        .route("/{file_id}", get(download_file).route_layer(from_fn_with_state(db.clone(), require_assigned_to_module)))
+}

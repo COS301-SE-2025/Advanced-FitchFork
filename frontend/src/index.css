@@ -1,7 +1,12 @@
 @import 'tailwindcss';
 
+/* Enable `dark:` variant */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/**
+ * Theme color variables
+ * These define a consistent grayscale palette used throughout the app.
+ */
 @theme {
   --color-gray-50: #fafafa;
   --color-gray-100: #f5f5f5;
@@ -16,6 +21,10 @@
   --color-gray-950: #0f0f0f;
 }
 
+/**
+ * Reset base html, body, and root element
+ * Ensures full height layout and no overflow
+ */
 html,
 body,
 #root {
@@ -23,5 +32,27 @@ body,
   width: 100%;
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+}
+
+/**
+ * Table header background customization
+ * 
+ * We override Ant Design table header background to match our theme.
+ * 
+ * Light mode:
+ *   Use a neutral gray (`--color-gray-100`) for subtle contrast.
+ * 
+ * Dark mode:
+ *   Use a deep gray (`--color-gray-900`) for a dark-friendly header.
+ */
+
+/* Light mode table header */
+:root .ant-table-thead > tr > th {
+  background-color: var(--color-gray-100) !important;
+}
+
+/* Dark mode table header */
+.dark .ant-table-thead > tr > th {
+  background-color: var(--color-gray-950) !important;
 }

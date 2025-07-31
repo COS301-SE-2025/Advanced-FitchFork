@@ -3,7 +3,7 @@ use sea_orm::entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, IntoActiveModel, QueryFilter, Set,
 };
-use strum_macros::EnumIter;
+use strum::EnumIter;
 
 /// Assignment task model representing the `assignment_tasks` table.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -13,6 +13,7 @@ pub struct Model {
     pub id: i64,
     pub assignment_id: i64,
     pub task_number: i64,
+    pub name: String, 
     pub command: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -36,11 +37,13 @@ impl Model {
         db: &DatabaseConnection,
         assignment_id: i64,
         task_number: i64,
+        name: &str,
         command: &str,
     ) -> Result<Self, DbErr> {
         let active = ActiveModel {
             assignment_id: Set(assignment_id),
             task_number: Set(task_number),
+            name: Set(name.to_string()),
             command: Set(command.to_string()),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
@@ -65,14 +68,16 @@ impl Model {
             .await
     }
 
-    /// Edit a task's command.
-    pub async fn edit_command(
+    /// Edit a task's command and name.
+    pub async fn edit_command_and_name(
         db: &DatabaseConnection,
         id: i64,
+        new_name: &str,
         new_command: &str,
     ) -> Result<Self, DbErr> {
         if let Some(task) = Self::get_by_id(db, id).await? {
             let mut active = task.into_active_model();
+            active.name = Set(new_name.to_string());
             active.command = Set(new_command.to_string());
             active.updated_at = Set(Utc::now());
             active.update(db).await

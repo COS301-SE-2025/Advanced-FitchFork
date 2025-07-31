@@ -9,34 +9,49 @@
 //! ## Usage
 //! The `auth_routes()` function returns a `Router` which is nested under `/auth` in the main application.
 
+use axum::{middleware::from_fn, Router, routing::{get, post}};
+use sea_orm::DatabaseConnection;
+use crate::auth::guards::require_authenticated;
+use post::{register, login, request_password_reset, verify_reset_token, reset_password, upload_profile_picture, change_password};
+use get::{get_me, get_avatar, has_role_in_module, get_module_role};
+
 pub mod post;
 pub mod get;
 
-use axum::{
-    Router,
-    routing::{post, get},
-};
+// # Auth Routes Module
+//
+// This module defines and wires up routes under the `/api/auth` endpoint group.
+//
+// ## Structure
+// - `post.rs` — POST handlers for authentication actions like registration, login, and password reset.
+// - `get.rs` — GET handlers for retrieving authenticated user info, avatars, and role checks.
+//
+// ## Routes
+// - `POST /auth/register` — Register a new user.
+// - `POST /auth/login` — Authenticate an existing user.
+// - `POST /auth/request-password-reset` — Initiate password reset process.
+// - `POST /auth/verify-reset-token` — Validate a password reset token.
+// - `POST /auth/reset-password` — Complete password reset.
+// - `POST /auth/upload-profile-picture` — Upload a user profile picture.
+// - `GET /auth/me` — Retrieve info about the currently authenticated user.
+// - `GET /auth/avatar/{user_id}` — Retrieve a user's profile picture.
+// - `GET /auth/has-role` — Check if the current user has a role in a module.
+// - 
+//
+// ## Usage
+// Use the `auth_routes()` function to mount all `/auth` endpoints under the main application router.
 
-use post::{register, login, request_password_reset, verify_reset_token, reset_password};
-use get::get_me;
-
-/// Builds the `/auth` route group, mapping HTTP methods to handlers.
-///
-/// - `POST /auth/register` → `register`
-/// - `POST /auth/login` → `login`
-/// - `POST /auth/request-password-reset` → `request_password_reset`
-/// - `POST /auth/verify-reset-token` → `verify_reset_token`
-/// - `POST /auth/reset-password` → `reset_password`
-/// - `GET /auth/me` → `get_me`
-///
-/// # Returns
-/// A configured `Router` instance to be nested in the main app.
-pub fn auth_routes() -> Router {
-    Router::new()
+pub fn auth_routes() -> Router<DatabaseConnection> {
+    Router::new()        
         .route("/register", post(register))
         .route("/login", post(login))
         .route("/request-password-reset", post(request_password_reset))
         .route("/verify-reset-token", post(verify_reset_token))
         .route("/reset-password", post(reset_password))
         .route("/me", get(get_me))
+        .route("/upload-profile-picture", post(upload_profile_picture))
+        .route("/avatar/{user_id}", get(get_avatar))
+        .route("/has-role", get(has_role_in_module))
+        .route("/module-role", get(get_module_role))
+        .route("/change-password", post(change_password).route_layer(from_fn(require_authenticated)))
 }

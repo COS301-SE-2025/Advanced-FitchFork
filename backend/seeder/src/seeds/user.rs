@@ -9,16 +9,25 @@ pub struct UserSeeder;
 impl Seeder for UserSeeder {
     async fn seed(&self, db: &DatabaseConnection) {
         // Fixed Admin User
-        let _ = Model::create(db, "u00000001", "admin@example.com", "password123", true).await;
+        let _ = Model::create(db, "admin", "admin@example.com", "1", true).await;
 
-        // Fixed Normal User
-        let _ = Model::create(db, "u00000002", "user@example.com", "password123", false).await;
+        // Fixed Lecturer User
+        let _ = Model::create(db, "lecturer", "lecturer@example.com", "1", false).await;
+
+        // Fixed Assistant Lecturer User
+        let _ = Model::create(db, "assistant_lecturer", "assistant_lecturer@example.com", "1", false).await;
+
+        // Fixed Tutor User
+        let _ = Model::create(db, "tutor", "tutor@example.com", "1", false).await;
+
+        // Fixed Student User
+        let _ = Model::create(db, "student", "student@example.com", "1", false).await;
 
         // Random Users
         for _ in 0..10 {
-            let student_number = format!("u{:08}", fastrand::u32(..100_000_000));
+            let username = format!("u{:08}", fastrand::u32(..100_000_000));
             let email: String = SafeEmail().fake();
-            let _ = Model::create(db, &student_number, &email, "password_hash", false).await;
+            let _ = Model::create(db, &username, &email, "password_hash", false).await;
         }
     }
 }

@@ -2,15 +2,14 @@ import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Typography, Table, Spin, Descriptions, Select, Button, Popconfirm, Space } from 'antd';
 import { EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
-import AppLayout from '@/layouts/AppLayout';
-import { UsersService } from '@/services/users';
-import { ModulesService } from '@/services/modules';
-import ModuleRoleTag from '@/components/ModuleRoleTag';
 import AdminTag from '@/components/AdminTag';
 import { useNotifier } from '@/components/Notifier';
 import type { User } from '@/types/users';
 import { type ModuleRole, type Module, MODULE_ROLES } from '@/types/modules';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { getUser, getUserModules } from '@/services/users';
+import { removePersonnel, assignPersonnel } from '@/services/modules/personnel';
+import ModuleRoleTag from '@/components/modules/ModuleRoleTag';
 
 const { Title } = Typography;
 
@@ -19,7 +18,7 @@ interface UserModule {
   role: ModuleRole;
 }
 
-export default function UserView() {
+const UserView = () => {
   const { id } = useParams();
   const userId = Number(id);
   const [user, setUser] = useState<User | null>(null);
@@ -32,14 +31,12 @@ export default function UserView() {
 
   const fetchUserData = async () => {
     setLoading(true);
-    const userRes = await UsersService.getUser(userId);
-    const moduleRes = await UsersService.getUserModules(userId);
+    const userRes = await getUser(userId);
+    const moduleRes = await getUserModules(userId);
 
     if (userRes.success) {
       setUser(userRes.data);
-
-      // Set custom breadcrumb label using the student number
-      setBreadcrumbLabel(`users/${userId}`, userRes.data.student_number);
+      setBreadcrumbLabel(`users/${userId}`, userRes.data.username);
     } else {
       notifyError('Failed to load user', userRes.message);
     }
@@ -73,17 +70,8 @@ export default function UserView() {
     if (oldRole === newRole) return;
 
     try {
-      if (oldRole === 'Lecturer')
-        await ModulesService.removeLecturers(moduleId, { user_ids: [userId] });
-      if (oldRole === 'Tutor') await ModulesService.removeTutors(moduleId, { user_ids: [userId] });
-      if (oldRole === 'Student')
-        await ModulesService.removeStudents(moduleId, { user_ids: [userId] });
-
-      if (newRole === 'Lecturer')
-        await ModulesService.assignLecturers(moduleId, { user_ids: [userId] });
-      if (newRole === 'Tutor') await ModulesService.assignTutors(moduleId, { user_ids: [userId] });
-      if (newRole === 'Student')
-        await ModulesService.enrollStudents(moduleId, { user_ids: [userId] });
+      await removePersonnel(moduleId, { user_ids: [userId], role: oldRole });
+      await assignPersonnel(moduleId, { user_ids: [userId], role: newRole });
 
       notifySuccess('Role updated', 'The user’s role was successfully updated.');
       setEditingModuleId(null);
@@ -96,10 +84,7 @@ export default function UserView() {
 
   const handleRemove = async (moduleId: number, role: ModuleRole) => {
     try {
-      if (role === 'Lecturer')
-        await ModulesService.removeLecturers(moduleId, { user_ids: [userId] });
-      if (role === 'Tutor') await ModulesService.removeTutors(moduleId, { user_ids: [userId] });
-      if (role === 'Student') await ModulesService.removeStudents(moduleId, { user_ids: [userId] });
+      await removePersonnel(moduleId, { user_ids: [userId], role });
 
       notifySuccess('User removed', 'The user was removed from this module.');
       fetchUserData();
@@ -111,13 +96,10 @@ export default function UserView() {
   if (loading || !user) return <Spin className="mt-12 ml-6" />;
 
   return (
-    <AppLayout
-      title={user.student_number}
-      description="This is a user view showing profile and module involvement."
-    >
+    <div className="p-4 sm:p-6">
       <Descriptions layout="vertical" bordered column={3} className="mb-8">
         <Descriptions.Item label="User ID">{user.id}</Descriptions.Item>
-        <Descriptions.Item label="Student Number">{user.student_number}</Descriptions.Item>
+        <Descriptions.Item label="Username">{user.username}</Descriptions.Item>
         <Descriptions.Item label="Email">{user.email}</Descriptions.Item>
         <Descriptions.Item label="Admin">
           <AdminTag isAdmin={user.admin} />
@@ -157,9 +139,9 @@ export default function UserView() {
                 <Select
                   value={editedRole ?? role}
                   onChange={(value) => setEditedRole(value)}
-                  options={MODULE_ROLES.map((r) => ({
+                  options={[...MODULE_ROLES].map((r) => ({
                     value: r,
-                    label: r.charAt(0).toUpperCase() + r.slice(1),
+                    label: r.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()),
                   }))}
                   style={{ width: '100%' }}
                 />
@@ -220,6 +202,8 @@ export default function UserView() {
           },
         ]}
       />
-    </AppLayout>
+    </div>
   );
-}
+};
+
+export default UserView;

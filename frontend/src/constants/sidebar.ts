@@ -5,9 +5,15 @@ import {
   UserOutlined,
   AppstoreOutlined,
   BarChartOutlined,
+  CalendarOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons';
 import React from 'react';
+import { useAuth } from '@/context/AuthContext';
 
+/**
+ * Menu item structure.
+ */
 export interface MenuItem {
   key: string;
   label: string;
@@ -17,73 +23,77 @@ export interface MenuItem {
   children?: MenuItem[];
 }
 
-export const TOP_MENU_ITEMS: MenuItem[] = [
-  {
-    key: '/home',
-    icon: React.createElement(HomeOutlined),
-    label: 'Home',
-    adminOnly: false,
-  },
-  {
-    key: '/users',
-    icon: React.createElement(UserOutlined),
-    label: 'Users',
-    adminOnly: true,
-  },
-  {
-    key: '/modules',
-    icon: React.createElement(AppstoreOutlined),
-    label: 'Modules',
-    adminOnly: true,
-  },
-  {
-    key: '/modules',
-    icon: React.createElement(AppstoreOutlined),
-    label: 'Modules',
-    userOnly: true,
-    children: [
-      {
-        key: '/modules/enrolled',
-        label: 'Enrolled',
-        userOnly: true,
-      },
-      {
-        key: '/modules/tutoring',
-        label: 'Tutoring',
-        userOnly: true,
-      },
-      {
-        key: '/modules/lecturing',
-        label: 'Lecturing',
-        userOnly: true,
-      },
-      {
-        key: '/modules', // Admin default view
-        label: 'All Modules',
-        userOnly: true,
-      },
-    ],
-  },
-  {
-    key: '/reports',
-    icon: React.createElement(BarChartOutlined),
-    label: 'Reports',
-    adminOnly: true,
-  },
-];
+/**
+ * Dynamically generates the top sidebar items based on role and module presence.
+ */
+export const useTopMenuItems = (): MenuItem[] => {
+  const { isAdmin, isUser } = useAuth();
 
+  const items: MenuItem[] = [
+    {
+      key: '/dashboard',
+      icon: React.createElement(HomeOutlined),
+      label: 'Dashboard',
+    },
+    {
+      key: '/calendar',
+      icon: React.createElement(CalendarOutlined),
+      label: 'Calendar',
+    },
+  ];
 
+  if (isAdmin) {
+    items.push(
+      {
+        key: '/users',
+        icon: React.createElement(UserOutlined),
+        label: 'Users',
+        adminOnly: true,
+      },
+      {
+        key: '/modules',
+        icon: React.createElement(AppstoreOutlined),
+        label: 'Modules',
+        adminOnly: true,
+      },
+      {
+        key: '/reports',
+        icon: React.createElement(BarChartOutlined),
+        label: 'Reports',
+        adminOnly: true,
+      }
+    );
+  }
+
+  if (isUser) {
+    items.push({
+      key: '/modules',
+      icon: React.createElement(AppstoreOutlined),
+      label: 'Modules',
+      userOnly: true,
+    });
+  }
+
+  return items;
+};
+
+/**
+ * Static bottom sidebar items.
+ */
 export const BOTTOM_MENU_ITEMS: MenuItem[] = [
   {
     key: '/settings',
     icon: React.createElement(SettingOutlined),
     label: 'Settings',
-    adminOnly: false,
   },
   {
     key: 'logout',
     icon: React.createElement(LogoutOutlined),
     label: 'Logout',
-    adminOnly: false,
+  },
+    {
+    key: '/help',
+    label: 'Help',
+    icon: React.createElement(QuestionCircleOutlined),
   },
 ];

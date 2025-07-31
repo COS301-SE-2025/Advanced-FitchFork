@@ -1,4 +1,4 @@
-name: CI - Rust
+name: Integration Tests
 
 on:
   push:
@@ -40,6 +40,9 @@ jobs:
 
       - name: Copy .env file
         run: cp .env.example .env
+
+      - name: Build universal-runner image
+        run: docker build -t universal-runner:latest .
 
       - name: Run backend tests
         run: cargo test --workspace --all-features

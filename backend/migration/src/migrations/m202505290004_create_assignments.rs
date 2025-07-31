@@ -31,10 +31,36 @@ impl MigrationTrait for Migration {
                             )
                             .not_null(),
                     )
+                    .col(
+                        ColumnDef::new(Alias::new("status"))
+                            .enumeration(
+                                Alias::new("status_enum"),
+                                vec![
+                                    Alias::new("setup"),
+                                    Alias::new("ready"),
+                                    Alias::new("open"),
+                                    Alias::new("closed"),
+                                    Alias::new("archived"),
+                                ],
+                            )
+                            .not_null()
+                            .default("setup"),
+                    )
                     .col(ColumnDef::new(Alias::new("available_from")).timestamp().not_null())
                     .col(ColumnDef::new(Alias::new("due_date")).timestamp().not_null())
-                    .col(ColumnDef::new(Alias::new("created_at")).timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
-                    .col(ColumnDef::new(Alias::new("updated_at")).timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
+                    .col(ColumnDef::new(Alias::new("config")).json().null())
+                    .col(
+                        ColumnDef::new(Alias::new("created_at"))
+                            .timestamp()
+                            .not_null()
+                            .default(Expr::cust("CURRENT_TIMESTAMP")),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("updated_at"))
+                            .timestamp()
+                            .not_null()
+                            .default(Expr::cust("CURRENT_TIMESTAMP")),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .from(Alias::new("assignments"), Alias::new("module_id"))

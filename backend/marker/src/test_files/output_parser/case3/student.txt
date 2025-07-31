@@ -1,0 +1,9 @@
+javac … && java Main task1
+&-=-&Sub1
+A
+&-=-&Sub2
+B
+&-=-&Sub3
+C
+&-=-&SubExtra
+D

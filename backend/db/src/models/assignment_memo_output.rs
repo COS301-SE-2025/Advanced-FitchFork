@@ -57,19 +57,29 @@ impl Model {
     /// Uses the `ASSIGNMENT_STORAGE_ROOT` environment variable if set,
     /// otherwise defaults to `data/assignment_files`.
     pub fn storage_root() -> PathBuf {
-        env::var("ASSIGNMENT_STORAGE_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("data/assignment_files"))
+        let relative_root = env::var("ASSIGNMENT_STORAGE_ROOT")
+            .unwrap_or_else(|_| "data/assignment_files".to_string());
+
+        let mut dir = std::env::current_dir().expect("Failed to get current dir");
+
+        while let Some(parent) = dir.parent() {
+            if dir.ends_with("backend") {
+                return dir.join(relative_root);
+            }
+            dir = parent.to_path_buf();
+        }
+
+        // Fallback: just use relative path from current dir
+        PathBuf::from(relative_root)
     }
 
     /// Constructs the full directory path for a memo output based on
     /// its assignment and task identifiers.
-    pub fn full_directory_path(module_id: i64, assignment_id: i64, task_number: i64) -> PathBuf {
+    pub fn full_directory_path(module_id: i64, assignment_id: i64) -> PathBuf {
         Self::storage_root()
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{assignment_id}"))
             .join(format!("memo_output"))
-            .join(format!("task_{task_number}"))
     }
 
     /// Computes the absolute path to the stored output file on disk.
@@ -116,16 +126,7 @@ impl Model {
 
         let module_id = assignment.module_id;
 
-        //Get task
-        let task = super::assignment_task::Entity::find_by_id(task_id)
-            .one(db)
-            .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding task: {}", e)))?
-            .ok_or_else(|| DbErr::Custom("Task not found".to_string()))?;
-
-        let task_number = task.task_number;
-
-        let dir_path = Self::full_directory_path(module_id, assignment_id, task_number);
+        let dir_path = Self::full_directory_path(module_id, assignment_id);
         fs::create_dir_all(&dir_path)
             .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
 
@@ -144,5 +145,24 @@ impl Model {
         model.updated_at = Set(Utc::now());
 
         model.update(db).await
+    }
+
+    /// Reads the contents of a memo output file from disk,
+    /// given the module_id, assignment_id, and the file id (filename).
+    pub fn read_memo_output_file(
+        module_id: i64,
+        assignment_id: i64,
+        file_id: i64,
+    ) -> Result<Vec<u8>, std::io::Error> {
+        let storage_root = Self::storage_root();
+
+        let dir_path = storage_root
+            .join(format!("module_{module_id}"))
+            .join(format!("assignment_{assignment_id}"))
+            .join("memo_output");
+
+        let file_path = dir_path.join(file_id.to_string());
+
+        std::fs::read(file_path)
     }
 }

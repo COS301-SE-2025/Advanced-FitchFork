@@ -27,6 +27,9 @@ impl Seeder for AssignmentTaskSeeder {
         ];
 
         for assignment in &assignments {
+            if assignment.id == 9999 || assignment.id == 9998 {
+                continue;
+            }
             let task_count = 2; // Number of tasks per assignment
 
             for i in 0..task_count {
@@ -36,7 +39,7 @@ impl Seeder for AssignmentTaskSeeder {
                     .unwrap_or(&"echo 'Hello World'")
                     .to_string();
 
-                match AssignmentTaskModel::create(db, assignment.id, task_number, &command).await {
+                match AssignmentTaskModel::create(db, assignment.id, task_number, "Untitled Task", &command).await {
                     Ok(_task) => {
                         // Optionally log or handle success
                     }
@@ -47,6 +50,49 @@ impl Seeder for AssignmentTaskSeeder {
                         );
                     }
                 }
+            }
+        }
+        let special_assignment_id: i64 = 9999;
+
+        let special_tasks = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
+
+        for (task_number, command) in special_tasks {
+            match db::models::assignment_task::Model::create(
+                db,
+                special_assignment_id,
+                task_number,
+                "Untitled Task",
+                command,
+            )
+            .await
+            {
+                Ok(_) => {}
+                Err(e) => eprintln!(
+                    "Failed to create special assignment task {}: {}",
+                    task_number, e
+                ),
+            }
+        }
+
+        let special_assignment_id2: i64 = 9998;
+
+        let special_tasks2 = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
+
+        for (task_number, command) in special_tasks2 {
+            match db::models::assignment_task::Model::create(
+                db,
+                special_assignment_id2,
+                task_number,
+                "Untitled Task",
+                command,
+            )
+            .await
+            {
+                Ok(_) => {}
+                Err(e) => eprintln!(
+                    "Failed to create special assignment task {}: {}",
+                    task_number, e
+                ),
             }
         }
     }
