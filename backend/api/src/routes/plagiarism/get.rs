@@ -1,4 +1,4 @@
-use axum::{response::IntoResponse, Json};
+use axum::{Json, response::IntoResponse};
 use db::{
     connect,
     models::{
@@ -6,10 +6,8 @@ use db::{
         plagiarism_case::Entity as PlagiarismEntity, user::Entity as UserEntity,
     },
 };
-use sea_orm::ColumnTrait;
-use sea_orm::QueryFilter;
-use sea_orm::{DatabaseConnection, EntityTrait};
-use serde::{Deserialize, Serialize};
+use sea_orm::EntityTrait;
+use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub struct Link {
@@ -64,8 +62,8 @@ pub async fn get_graph() -> impl IntoResponse {
 
             if let (Some(u1), Some(u2)) = (user1, user2) {
                 links.push(Link {
-                    source: u1.student_number,
-                    target: u2.student_number,
+                    source: u1.username,
+                    target: u2.username,
                 });
             }
         }

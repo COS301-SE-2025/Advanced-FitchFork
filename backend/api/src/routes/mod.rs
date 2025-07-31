@@ -14,32 +14,20 @@
 //! ## Usage
 //! Call `routes()` from your main application to initialize all top-level routes.
 
-use axum::{middleware::from_fn, Router};
-use crate::routes::{auth::auth_routes, health::health_routes, modules::modules_routes, users::users_routes};
 use crate::auth::guards::{require_admin, require_authenticated};
+use crate::routes::{
+    auth::auth_routes, health::health_routes, modules::modules_routes,
+    plagiarism::plagiarism_routes, users::users_routes,
+};
+use axum::{Router, middleware::from_fn};
 use sea_orm::DatabaseConnection;
 
-pub mod health;
 pub mod auth;
-pub mod users;
-pub mod modules;
-<<<<<<< HEAD
-pub mod plagiarism;
-use axum::Router;
-use axum::middleware::from_fn;
-
-use crate::routes::{
-    auth::auth_routes,
-    example::example_routes,
-    health::health_routes,
-    modules::modules_routes,
-    users::users_routes,
-    plagiarism::plagiarism_routes,
-};
-use crate::auth::guards::{require_admin, require_authenticated};
-=======
 pub mod common;
->>>>>>> origin/dev
+pub mod health;
+pub mod modules;
+pub mod plagiarism;
+pub mod users;
 
 /// Builds the complete application router.
 ///
@@ -54,18 +42,12 @@ pub mod common;
 /// An Axum `Router` ready to be passed into the main app.
 pub fn routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
-<<<<<<< HEAD
-        .nest("/health", health_routes()) // No protection
-        .nest("/example", example_routes()) // Public or protected as needed inside
-        .nest("/auth", auth_routes()) // No auth required for login/register
-        .nest("/users", users_routes().route_layer(from_fn(require_admin))) // Admin-only access
-        .nest("/modules", modules_routes().route_layer(from_fn(require_authenticated))) // All module routes require auth
-        .nest("/plagiarism", plagiarism_routes()) //TODO Add Auth Guard here
-}
-=======
         .nest("/health", health_routes())
         .nest("/auth", auth_routes())
         .nest("/users", users_routes().route_layer(from_fn(require_admin)))
-        .nest("/modules", modules_routes(db.clone()).route_layer(from_fn(require_authenticated)))
+        .nest(
+            "/modules",
+            modules_routes(db.clone()).route_layer(from_fn(require_authenticated)),
+        )
+        .nest("/plagiarism", plagiarism_routes()) //TODO Add Auth Guard here
 }
->>>>>>> origin/dev
