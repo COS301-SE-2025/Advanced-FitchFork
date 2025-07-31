@@ -1,11 +1,12 @@
 use crate::models::assignment;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait};
+use sea_orm::{ActiveValue::Set, EntityTrait};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use crate::models::user;
+use crate::get_connection;
 
 /// Represents a user's submission for a specific assignment.
 ///
@@ -127,7 +128,6 @@ impl Model {
     /// - `Ok(Model)`: The complete, updated `Model` representing the saved file.
     /// - `Err(DbErr)`: If any database or filesystem operation fails.
     pub async fn save_file(
-        db: &DatabaseConnection,
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
@@ -148,6 +148,7 @@ impl Model {
             ..Default::default()
         };
 
+        let db = get_connection().await;
         let inserted: Model = partial.insert(db).await?;
 
         // Step 2: Lookup module_id
@@ -213,8 +214,7 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::Model;
-    use crate::models::{assignment::AssignmentType, user::Model as UserModel};
-    use crate::test_utils::setup_test_db;
+    use crate::{get_connection, models::{assignment::AssignmentType, user::Model as UserModel}};
     use chrono::Utc;
     use sea_orm::{ActiveModelTrait, Set};
     use std::env;
@@ -234,11 +234,10 @@ mod tests {
     async fn test_save_load_delete_submission_file() {
         let temp_dir = TempDir::new().unwrap();
         override_storage_dir(&temp_dir);
-        let db = setup_test_db().await;
+        let db = get_connection().await;
 
         // Create dummy user
         let user = UserModel::create(
-            &db,
             "u63963920",
             "testuser12y4f@example.com",
             "password123",
@@ -256,13 +255,12 @@ mod tests {
             updated_at: Set(Utc::now()),
             ..Default::default()
         }
-        .insert(&db)
+        .insert(db)
         .await
         .expect("Failed to insert module");
 
         // Create dummy assignment
         let assignment = crate::models::assignment::Model::create(
-            &db,
             module.id,
             "Test fsh",
             Some("Description"),
@@ -284,13 +282,13 @@ mod tests {
             updated_at: Set(Utc::now()),
             ..Default::default()
         }
-        .insert(&db)
+        .insert(db)
         .await
         .expect("Failed to insert submission");
 
         // Save file via submission
         let content = fake_bytes();
-        let file = Model::save_file(&db, submission.id, user.id, 6, "solution.zip", &content)
+        let file = Model::save_file(submission.id, user.id, 6, "solution.zip", &content)
             .await
             .expect("Failed to save file");
 

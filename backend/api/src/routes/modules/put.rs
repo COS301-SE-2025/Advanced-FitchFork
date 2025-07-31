@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -10,15 +10,17 @@ use sea_orm::{
     ActiveModelTrait,
     ColumnTrait,
     Condition,
-    DatabaseConnection,
     EntityTrait,
     QueryFilter,
     Set,
 };
-use db::models::module::{
-    ActiveModel as ModuleActiveModel,
-    Column as ModuleCol,
-    Entity as ModuleEntity,
+use db::{
+    get_connection,
+    models::module::{
+        ActiveModel as ModuleActiveModel,
+        Column as ModuleCol,
+        Entity as ModuleEntity,
+    }
 };
 use crate::response::ApiResponse;
 use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
@@ -99,7 +101,6 @@ use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
 /// }
 /// ```
 pub async fn edit_module(
-    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(req): Json<ModuleRequest>,
 ) -> impl IntoResponse {
@@ -111,13 +112,14 @@ pub async fn edit_module(
         );
     }
 
+    let db = get_connection().await;
     let duplicate = ModuleEntity::find()
         .filter(
             Condition::all()
                 .add(ModuleCol::Code.eq(req.code.clone()))
                 .add(ModuleCol::Id.ne(module_id)),
         )
-        .one(&db)
+        .one(db)
         .await;
 
     if let Ok(Some(_)) = duplicate {
@@ -137,7 +139,7 @@ pub async fn edit_module(
         ..Default::default()
     };
 
-    match updated_module.update(&db).await {
+    match updated_module.update(db).await {
         Ok(module) => (
             StatusCode::OK,
             Json(ApiResponse::success(ModuleResponse::from(module), "Module updated successfully")),

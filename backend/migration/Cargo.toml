@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-dotenvy = "0.15"
 sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 sea-orm-migration = "1.1"
 tokio = { version = "1.0", features = ["full"] }
 url = "2.5"
 colored = "3.0"
 futures = "0.3"
+util = { version = "0.1.0", path = "../util" }
 
 [lib]
 name = "migration"

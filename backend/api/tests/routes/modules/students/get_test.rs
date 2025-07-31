@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{models::{user::Model as UserModel, module::Model as ModuleModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::Value;
@@ -16,17 +16,17 @@ mod tests {
         empty_module: ModuleModel,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS201", 2024, Some("Test Module"), 16).await.unwrap();
-        let empty_module = ModuleModel::create(db, "COS202", 2024, Some("Empty Module"), 16).await.unwrap();
-        let admin_user = UserModel::create(db, "admin2", "admin2@test.com", "password", true).await.unwrap();
-        let forbidden_user = UserModel::create(db, "unauthed2", "unauthed2@test.com", "password", false).await.unwrap();
-        let student1 = UserModel::create(db, "student1", "student1@test.com", "password1", false).await.unwrap();
-        let student2 = UserModel::create(db, "student2", "student2@test.com", "password2", false).await.unwrap();
-        let student3 = UserModel::create(db, "student3", "student3@test.com", "password3", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student1.id, module.id, Role::Student).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student2.id, module.id, Role::Student).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student3.id, module.id, Role::Student).await.unwrap();
+    async fn setup_test_data() -> TestData {
+        let module = ModuleModel::create("COS201", 2024, Some("Test Module"), 16).await.unwrap();
+        let empty_module = ModuleModel::create("COS202", 2024, Some("Empty Module"), 16).await.unwrap();
+        let admin_user = UserModel::create("admin2", "admin2@test.com", "password", true).await.unwrap();
+        let forbidden_user = UserModel::create("unauthed2", "unauthed2@test.com", "password", false).await.unwrap();
+        let student1 = UserModel::create("student1", "student1@test.com", "password1", false).await.unwrap();
+        let student2 = UserModel::create("student2", "student2@test.com", "password2", false).await.unwrap();
+        let student3 = UserModel::create("student3", "student3@test.com", "password3", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(student1.id, module.id, Role::Student).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(student2.id, module.id, Role::Student).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(student3.id, module.id, Role::Student).await.unwrap();
 
         TestData {
             admin_user,
@@ -41,10 +41,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_students_success_as_admin() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/students", data.module.id);
         let req = Request::builder()
@@ -70,10 +69,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_students_success_as_student() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.student1.id, data.student1.admin);
         let uri = format!("/api/modules/{}/students", data.module.id);
         let req = Request::builder()
@@ -99,10 +97,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_students_not_found() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/students", 9999);
         let req = Request::builder()
@@ -123,10 +120,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_students_forbidden() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/students", data.module.id);
         let req = Request::builder()
@@ -143,10 +139,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_students_with_query_params() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/students?query=student&sort=-email", data.module.id);
         let req = Request::builder()
@@ -172,10 +167,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_students_pagination() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/students?page=2&per_page=2", data.module.id);
         let req = Request::builder()
@@ -203,10 +197,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_students_empty_module() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/students", data.empty_module.id);
         let req = Request::builder()

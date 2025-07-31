@@ -1,15 +1,18 @@
 use rand::{seq::SliceRandom, Rng, SeedableRng};
 use rand::rngs::{StdRng, OsRng};
-use sea_orm::{ActiveModelTrait, EntityTrait, Set, DatabaseConnection};
+use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use db::models::user_module_role::{self, Role};
 use db::models::{user, module};
+use db::get_connection;
 use crate::seed::Seeder;
 
 pub struct UserRoleSeeder;
 
 #[async_trait::async_trait]
 impl Seeder for UserRoleSeeder {
-    async fn seed(&self, db: &DatabaseConnection) {
+    async fn seed(&self) {
+        let db = get_connection().await;
+
         let users = user::Entity::find()
             .all(db)
             .await

@@ -1,5 +1,4 @@
 use axum::{Router, routing::{get, post}};
-use sea_orm::DatabaseConnection;
 use get::{list_submissions, get_submission};
 use post::submit_assignment;
 
@@ -22,7 +21,7 @@ pub mod common;
 /// 
 /// - `POST /`
 ///   - Submit a new assignment (student access only)
-pub fn submission_routes() -> Router<DatabaseConnection> {
+pub fn submission_routes() -> Router {
     Router::new()
         .route("/", get(list_submissions))
         .route("/{submission_id}", get(get_submission))

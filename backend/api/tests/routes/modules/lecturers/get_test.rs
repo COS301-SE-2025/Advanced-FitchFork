@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{models::{user::Model as UserModel, module::Model as ModuleModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::Value;
@@ -15,16 +15,16 @@ mod tests {
         module: ModuleModel,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true).await.unwrap();
-        let forbidden_user = UserModel::create(db, "unauthed", "unauthed@test.com", "password", false).await.unwrap();
-        let lecturer1 = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
-        let lecturer2 = UserModel::create(db, "lecturer2", "lecturer2@test.com", "password2", false).await.unwrap();
-        let lecturer3 = UserModel::create(db, "lecturer3", "lecturer3@test.com", "password3", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer1.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer2.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer3.id, module.id, Role::Lecturer).await.unwrap();
+    async fn setup_test_data() -> TestData {
+        let module = ModuleModel::create("COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let admin_user = UserModel::create("admin1", "admin1@test.com", "password", true).await.unwrap();
+        let forbidden_user = UserModel::create("unauthed", "unauthed@test.com", "password", false).await.unwrap();
+        let lecturer1 = UserModel::create("lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
+        let lecturer2 = UserModel::create("lecturer2", "lecturer2@test.com", "password2", false).await.unwrap();
+        let lecturer3 = UserModel::create("lecturer3", "lecturer3@test.com", "password3", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(lecturer1.id, module.id, Role::Lecturer).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(lecturer2.id, module.id, Role::Lecturer).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(lecturer3.id, module.id, Role::Lecturer).await.unwrap();
 
         TestData {
             admin_user,
@@ -38,10 +38,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_lecturers_success_as_admin() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/lecturers", data.module.id);
         let req = Request::builder()
@@ -67,10 +66,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_lecturers_success_as_lecturer() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.lecturer1.id, data.lecturer1.admin);
         let uri = format!("/api/modules/{}/lecturers", data.module.id);
         let req = Request::builder()
@@ -96,10 +94,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_lecturers_not_found() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/lecturers", 9999);
         let req = Request::builder()
@@ -121,10 +118,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_lecturers_forbidden() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/lecturers", data.module.id);
         let req = Request::builder()
@@ -141,10 +137,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_lecturers_with_query_params() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/lecturers?query=lecturer&sort=-email", data.module.id);
         let req = Request::builder()
@@ -170,10 +165,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_lecturers_pagination() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/lecturers?page=2&per_page=2", data.module.id);
         let req = Request::builder()

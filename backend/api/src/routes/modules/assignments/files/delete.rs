@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -9,10 +9,12 @@ use sea_orm::{
     ColumnTrait,
     EntityTrait,
     QueryFilter,
-    DatabaseConnection,
 };
 use serde_json::json;
-use db::models::assignment_file;
+use db::{
+    get_connection,
+    models::assignment_file
+};
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/files
 ///
@@ -60,7 +62,6 @@ use db::models::assignment_file;
 /// ```
 ///
 pub async fn delete_files(
-    State(db): State<DatabaseConnection>,
     Path((_, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<serde_json::Value>,
 ) -> impl IntoResponse {
@@ -80,12 +81,13 @@ pub async fn delete_files(
         );
     }
 
+    let db = get_connection().await;
     let found_models = match assignment_file::Entity::find()
         .filter(assignment_file::Column::AssignmentId.eq(assignment_id as i32))
         .filter(assignment_file::Column::Id.is_in(
             file_ids.iter().copied().map(|id| id as i32).collect::<Vec<_>>(),
         ))
-        .all(&db)
+        .all(db)
         .await
     {
         Ok(models) => models,
@@ -120,7 +122,7 @@ pub async fn delete_files(
     for file in found_models {
         let _ = file.delete_file_only();
         let am: assignment_file::ActiveModel = file.into();
-        let _ = am.delete(&db).await;
+        let _ = am.delete(db).await;
     }
 
     (

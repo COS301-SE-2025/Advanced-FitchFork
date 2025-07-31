@@ -5,7 +5,7 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{Datelike, Utc};
-    use db::{test_utils::setup_test_db, models::{module::Model as Module, user::Model as UserModel}};
+    use db::{models::{module::Model as Module, user::Model as UserModel}};
     use serde_json::json;
     use tower::ServiceExt;
     use api::auth::generate_jwt;
@@ -17,13 +17,12 @@ mod tests {
         module: Module,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
+    async fn setup_test_data() -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let admin_user = UserModel::create(db, "admin", "admin@test.com", "password", true).await.expect("Failed to create admin user");
-        let regular_user = UserModel::create(db, "regular", "regular@test.com", "password", false).await.expect("Failed to create regular user");
+        let admin_user = UserModel::create("admin", "admin@test.com", "password", true).await.expect("Failed to create admin user");
+        let regular_user = UserModel::create("regular", "regular@test.com", "password", false).await.expect("Failed to create regular user");
         let module = Module::create(
-            db,
             "COS301",
             Utc::now().year(),
             Some("Initial description"),
@@ -42,10 +41,9 @@ mod tests {
     /// Test Case: Admin updates module successfully
     #[tokio::test]
     async fn test_edit_module_success() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -76,10 +74,9 @@ mod tests {
     /// Test Case: Non-admin user attempts to update module
     #[tokio::test]
     async fn test_edit_module_forbidden() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -103,10 +100,9 @@ mod tests {
     /// Test Case: Invalid module code format
     #[tokio::test]
     async fn test_edit_module_invalid_code() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "abc123", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -130,10 +126,9 @@ mod tests {
     /// Test Case: Year in the past
     #[tokio::test]
     async fn test_edit_module_year_in_past() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() - 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -157,10 +152,9 @@ mod tests {
     /// Test Case: Invalid credits value
     #[tokio::test]
     async fn test_edit_module_invalid_credits() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 0});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -184,10 +178,9 @@ mod tests {
     /// Test Case: Description too long
     #[tokio::test]
     async fn test_edit_module_description_too_long() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
             "code": "COS302",
@@ -216,11 +209,9 @@ mod tests {
     /// Test Case: Duplicate module code
     #[tokio::test]
     async fn test_edit_module_duplicate_code() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
         let _other_module = Module::create(
-            &db,
             "COS302",
             Utc::now().year(),
             Some("Other module"),
@@ -229,7 +220,7 @@ mod tests {
         .await
         .expect("Failed to create second module");
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -253,10 +244,9 @@ mod tests {
     /// Test Case: Update non-existent module
     #[tokio::test]
     async fn test_edit_module_not_found() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", 99999);
@@ -280,10 +270,9 @@ mod tests {
     /// Test Case: Multiple validation errors
     #[tokio::test]
     async fn test_edit_module_multiple_errors() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "invalid", "year": 2000, "description": "a".repeat(1001), "credits": 0});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -310,10 +299,9 @@ mod tests {
     /// Test Case: Update with same code (should succeed)
     #[tokio::test]
     async fn test_edit_module_same_code() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS301", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);

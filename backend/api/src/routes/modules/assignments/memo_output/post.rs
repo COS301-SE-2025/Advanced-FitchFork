@@ -1,13 +1,12 @@
 use std::{env, path::PathBuf, fs};
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     Json,
 };
 use tracing::{error, info};
 use crate::response::ApiResponse;
 use code_runner::create_memo_outputs_for_all_tasks;
-use sea_orm::DatabaseConnection;
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/memo_output/generate
 ///
@@ -95,7 +94,6 @@ use sea_orm::DatabaseConnection;
 /// - Generation is restricted to users with appropriate module permissions
 /// - Check server logs for detailed progress and error information
 pub async fn generate_memo_output(
-    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
@@ -139,7 +137,7 @@ pub async fn generate_memo_output(
         );
     }
 
-    match create_memo_outputs_for_all_tasks(&db, assignment_id).await {
+    match create_memo_outputs_for_all_tasks(assignment_id).await {
         Ok(_) => {
             info!("Memo output generation complete for assignment {}", assignment_id);
             (

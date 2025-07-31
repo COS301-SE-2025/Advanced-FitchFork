@@ -1,7 +1,8 @@
 use crate::seed::Seeder;
 use db::models::assignment;
 use db::models::assignment_file::{FileType, Model};
-use sea_orm::{DatabaseConnection, EntityTrait};
+use db::get_connection;
+use sea_orm::EntityTrait;
 use std::io::{Cursor, Write};
 use zip::write::SimpleFileOptions;
 
@@ -9,7 +10,8 @@ pub struct AssignmentFileSeeder;
 
 #[async_trait::async_trait]
 impl Seeder for AssignmentFileSeeder {
-    async fn seed(&self, db: &DatabaseConnection) {
+    async fn seed(&self) {
+        let db = get_connection().await;
         let assignments = assignment::Entity::find()
             .all(db)
             .await
@@ -38,7 +40,6 @@ impl Seeder for AssignmentFileSeeder {
                 let content = format!("This is the content of assignment file {}", a.id);
 
                 let _ = Model::save_file(
-                    db,
                     a.id,
                     a.module_id,
                     file_type.clone(),
@@ -226,7 +227,6 @@ task3:
 
         for (file_type, filename, content) in zipped_files {
             let _ = Model::save_file(
-                db,
                 special_assignment_id,
                 special_module_id,
                 file_type,
@@ -468,7 +468,6 @@ task4: main
 
         for (file_type, filename, content) in zipped_files_cpp {
             let _ = Model::save_file(
-                db,
                 cpp_assignment_id,
                 cpp_module_id,
                 file_type,

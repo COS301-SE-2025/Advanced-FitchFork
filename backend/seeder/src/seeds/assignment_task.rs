@@ -1,13 +1,15 @@
 use crate::seed::Seeder;
-use db::models::{assignment, assignment_task::Model as AssignmentTaskModel};
+use db::{get_connection, models::{assignment, assignment_task::Model as AssignmentTaskModel}};
 use rand::seq::SliceRandom;
-use sea_orm::{DatabaseConnection, EntityTrait};
+use sea_orm::EntityTrait;
 
 pub struct AssignmentTaskSeeder;
 
 #[async_trait::async_trait]
 impl Seeder for AssignmentTaskSeeder {
-    async fn seed(&self, db: &DatabaseConnection) {
+    async fn seed(&self) {
+        let db = get_connection().await;
+
         // Fetch all assignments
         let assignments = assignment::Entity::find()
             .all(db)
@@ -39,7 +41,7 @@ impl Seeder for AssignmentTaskSeeder {
                     .unwrap_or(&"echo 'Hello World'")
                     .to_string();
 
-                match AssignmentTaskModel::create(db, assignment.id, task_number, "Untitled Task", &command).await {
+                match AssignmentTaskModel::create(assignment.id, task_number, "Untitled Task", &command).await {
                     Ok(_task) => {
                         // Optionally log or handle success
                     }
@@ -58,7 +60,6 @@ impl Seeder for AssignmentTaskSeeder {
 
         for (task_number, command) in special_tasks {
             match db::models::assignment_task::Model::create(
-                db,
                 special_assignment_id,
                 task_number,
                 "Untitled Task",
@@ -80,7 +81,6 @@ impl Seeder for AssignmentTaskSeeder {
 
         for (task_number, command) in special_tasks2 {
             match db::models::assignment_task::Model::create(
-                db,
                 special_assignment_id2,
                 task_number,
                 "Untitled Task",

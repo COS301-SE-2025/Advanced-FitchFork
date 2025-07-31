@@ -1,9 +1,10 @@
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait};
+use sea_orm::{ActiveValue::Set, EntityTrait};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use crate::get_connection;
 
 /// Represents a file used to overwrite specific parts of an assignment during evaluation.
 /// Includes metadata such as its related assignment, task, filename, and storage path.
@@ -59,7 +60,6 @@ impl Model {
     }
 
     pub async fn save_file(
-        db: &DatabaseConnection,
         assignment_id: i64,
         task_id: i64,
         filename: &str,
@@ -77,6 +77,7 @@ impl Model {
             ..Default::default()
         };
 
+        let db = get_connection().await;
         let inserted: Model = partial.insert(db).await?;
 
         let ext = PathBuf::from(filename)

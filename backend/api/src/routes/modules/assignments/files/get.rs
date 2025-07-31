@@ -1,6 +1,6 @@
 use std::{env, path::PathBuf};
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Json, Response},
 };
@@ -9,12 +9,14 @@ use sea_orm::{
     ColumnTrait,
     EntityTrait,
     QueryFilter,
-    DatabaseConnection,
 };
 use crate::response::ApiResponse;
-use db::models::assignment_file::{
-    Column as FileColumn,
-    Entity as FileEntity,
+use db::{
+    get_connection,
+    models::assignment_file::{
+        Column as FileColumn,
+        Entity as FileEntity,
+    }
 };
 use crate::routes::modules::assignments::common::File;
 
@@ -47,13 +49,13 @@ use crate::routes::modules::assignments::common::File;
 /// ```
 ///
 pub async fn download_file(
-    State(db): State<DatabaseConnection>,
     Path((_module_id, assignment_id, file_id)): Path<(i64, i64, i64)>,
 ) -> Response {
+    let db = get_connection().await;
     let file = FileEntity::find()
         .filter(FileColumn::Id.eq(file_id as i32))
         .filter(FileColumn::AssignmentId.eq(assignment_id as i32))
-        .one(&db)
+        .one(db)
         .await.unwrap().unwrap();
 
     let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".to_string());
@@ -147,12 +149,12 @@ pub async fn download_file(
 /// ```
 ///
 pub async fn list_files(
-    State(db): State<DatabaseConnection>,
     Path((_, assignment_id)): Path<(i64, i64)>
 ) -> Response {
+    let db = get_connection().await;
     match FileEntity::find()
         .filter(FileColumn::AssignmentId.eq(assignment_id as i32))
-        .all(&db)
+        .all(db)
         .await
     {
         Ok(files) => {

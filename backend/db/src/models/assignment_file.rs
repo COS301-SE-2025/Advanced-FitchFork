@@ -9,6 +9,7 @@ use std::fs;
 use std::path::PathBuf;
 use strum::{Display, EnumIter, EnumString};
 use util::execution_config::ExecutionConfig;
+use crate::get_connection;
 
 /// Represents a file associated with an assignment, such as a spec, main file, memo, or submission.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -108,7 +109,6 @@ impl Model {
     }
 
     pub async fn save_file(
-        db: &DatabaseConnection,
         assignment_id: i64,
         module_id: i64,
         file_type: FileType,
@@ -123,6 +123,7 @@ impl Model {
 
         use crate::models::assignment_file::{Column, Entity as AssignmentFile};
 
+        let db = get_connection().await;
         if let Some(existing) = AssignmentFile::find()
             .filter(Column::AssignmentId.eq(assignment_id))
             .filter(Column::FileType.eq(file_type.clone()))
@@ -194,7 +195,6 @@ impl Model {
 mod tests {
     use super::*;
     use crate::models::assignment::{AssignmentType};
-    use crate::test_utils::setup_test_db;
     use chrono::Utc;
     use sea_orm::Set;
     use std::env;
@@ -235,7 +235,7 @@ mod tests {
     async fn test_save_and_load_file() {
         let temp_dir = TempDir::new().unwrap();
         override_storage_dir(&temp_dir);
-        let db = setup_test_db().await;
+        let db = get_connection().await;
 
         // Insert dummy module so assignment FK passes
         let _module = crate::models::module::ActiveModel {
@@ -246,13 +246,12 @@ mod tests {
             updated_at: Set(Utc::now()),
             ..Default::default()
         }
-        .insert(&db)
+        .insert(db)
         .await
         .expect("Insert module failed");
 
         // Insert dummy assignment using enum value for assignment_type
         let _assignment = crate::models::assignment::Model::create(
-            &db,
             1,
             "Test Assignment",
             Some("Desc"),
@@ -266,7 +265,6 @@ mod tests {
         let content = fake_bytes();
         let filename = "test_file.zip";
         let saved = Model::save_file(
-            &db,
             1, // assignment_id
             1, // module_id
             FileType::Spec,

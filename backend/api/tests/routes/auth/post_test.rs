@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use db::{
-        test_utils::setup_test_db,
         models::{
             user::Model as UserModel,
             password_reset_token::Model as PasswordResetTokenModel,
@@ -29,9 +28,9 @@ mod tests {
     #[serial]
     async fn test_register_success() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
 
-        let app = make_app(db.clone());
+
+        let app = make_app();
         let payload = json!({"username": "testuser123", "email": "testuser123@example.com", "password": "securepassword123"});
         let uri = "/api/auth/register";
         let req = Request::builder()
@@ -63,9 +62,9 @@ mod tests {
     #[serial]
     async fn test_register_invalid_email() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
+
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"username": "testuser456", "email": "not-an-email", "password": "securepassword456"});
         let uri = "/api/auth/register";
         let req = Request::builder()
@@ -88,9 +87,9 @@ mod tests {
     #[serial]
     async fn test_register_short_password() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
+
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"username": "testuser789", "email": "testuser789@example.com", "password": "short"});
         let uri = "/api/auth/register";
         let req = Request::builder()
@@ -113,13 +112,13 @@ mod tests {
     #[serial]
     async fn test_register_duplicate_email() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
 
-        let _existing_user = UserModel::create(&db, "existinguser", "duplicate@test.com", "existingpass", false)
+
+        let _existing_user = UserModel::create("existinguser", "duplicate@test.com", "existingpass", false)
             .await
             .expect("Failed to create existing user");
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"username": "newuser", "email": "duplicate@test.com", "password": "newuserpassword"});
         let uri = "/api/auth/register";
         let req = Request::builder()
@@ -142,13 +141,13 @@ mod tests {
     #[serial]
     async fn test_register_duplicate_username() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
 
-        let _existing_user = UserModel::create(&db, "duplicateuser", "original@test.com", "existingpass", false)
+
+        let _existing_user = UserModel::create("duplicateuser", "original@test.com", "existingpass", false)
             .await
             .expect("Failed to create existing user");
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"username": "duplicateuser", "email": "newuser@test.com", "password": "newuserpassword"});
         let uri = "/api/auth/register";
         let req = Request::builder()
@@ -171,14 +170,14 @@ mod tests {
     #[serial]
     async fn test_login_success() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
+
 
         let user_password = "correctpassword";
-        let user = UserModel::create(&db, "logintestuser", "login@test.com", user_password, false)
+        let user = UserModel::create("logintestuser", "login@test.com", user_password, false)
             .await
             .expect("Failed to create user for login");
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"username": "logintestuser", "password": user_password});
         let uri = "/api/auth/login";
         let req = Request::builder()
@@ -210,13 +209,13 @@ mod tests {
     #[serial]
     async fn test_login_invalid_password() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
 
-        let _user = UserModel::create(&db, "wrongpasstest", "wrongpass@test.com", "realpassword", false)
+
+        let _user = UserModel::create("wrongpasstest", "wrongpass@test.com", "realpassword", false)
             .await
             .expect("Failed to create user for login");
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"username": "wrongpasstest", "password": "wrongpassword"});
         let uri = "/api/auth/login";
         let req = Request::builder()
@@ -239,9 +238,9 @@ mod tests {
     #[serial]
     async fn test_login_nonexistent_user() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
+
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"username": "nonexistentuser", "password": "anypassword"});
         let uri = "/api/auth/login";
         let req = Request::builder()
@@ -264,13 +263,13 @@ mod tests {
     #[serial]
     async fn test_request_password_reset_success() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
 
-        let _user = UserModel::create(&db, "resetrequser", "resetreq@test.com", "oldpassword", false)
+
+        let _user = UserModel::create("resetrequser", "resetreq@test.com", "oldpassword", false)
             .await
             .expect("Failed to create user for reset request");
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"email": "resetreq@test.com"});
         let uri = "/api/auth/request-password-reset";
         let req = Request::builder()
@@ -294,9 +293,9 @@ mod tests {
     #[serial]
     async fn test_request_password_reset_invalid_email() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
+
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"email": "invalid-email-format"});
         let uri = "/api/auth/request-password-reset";
         let req = Request::builder()
@@ -319,17 +318,17 @@ mod tests {
     #[serial]
     async fn test_verify_reset_token_success() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
 
-        let user = UserModel::create(&db, "verifytokenuser", "verifytoken@test.com", "oldpassword", false)
+
+        let user = UserModel::create("verifytokenuser", "verifytoken@test.com", "oldpassword", false)
             .await
             .expect("Failed to create user for token verification");
 
-        let token_model = PasswordResetTokenModel::create(&db, user.id, 15)
+        let token_model = PasswordResetTokenModel::create(user.id, 15)
             .await
             .expect("Failed to create reset token");
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"token": token_model.token});
         let uri = "/api/auth/verify-reset-token";
         let req = Request::builder()
@@ -354,9 +353,9 @@ mod tests {
     #[serial]
     async fn test_verify_reset_token_invalid() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
+
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"token": "definitelynotavalidtoken123456"});
         let uri = "/api/auth/verify-reset-token";
         let req = Request::builder()
@@ -379,20 +378,20 @@ mod tests {
     #[serial]
     async fn test_reset_password_success() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
+
 
         let original_password = "originalpassword";
-        let user = UserModel::create(&db, "resetpassuser", "resetpass@test.com", original_password, false)
+        let user = UserModel::create("resetpassuser", "resetpass@test.com", original_password, false)
             .await
             .expect("Failed to create user for password reset");
 
-        let token_model = PasswordResetTokenModel::create(&db, user.id, 15)
+        let token_model = PasswordResetTokenModel::create(user.id, 15)
             .await
             .expect("Failed to create reset token for password reset");
 
         let new_password = "brandnewsecurepassword";
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"token": token_model.token, "new_password": new_password});
         let uri = "/api/auth/reset-password";
         let req = Request::builder()
@@ -438,9 +437,9 @@ mod tests {
     #[serial]
     async fn test_reset_password_invalid_token() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
 
-        let app = make_app(db.clone());
+
+        let app = make_app();
         let payload = json!({"token": "invalidresettoken123456", "new_password": "newpassword123"});
         let uri = "/api/auth/reset-password";
         let req = Request::builder()
@@ -463,16 +462,16 @@ mod tests {
     #[serial]
     async fn test_reset_password_short_new_password() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
 
-        let user = UserModel::create(&db, "shortpassuser", "shortpass@test.com", "oldpass", false)
+
+        let user = UserModel::create("shortpassuser", "shortpass@test.com", "oldpass", false)
             .await
             .expect("Failed to create user");
-        let token_model = PasswordResetTokenModel::create(&db, user.id, 15)
+        let token_model = PasswordResetTokenModel::create(user.id, 15)
             .await
             .expect("Failed to create token");
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let payload = json!({"token": token_model.token, "new_password": "short"});
         let uri = "/api/auth/reset-password";
         let req = Request::builder()
@@ -495,16 +494,16 @@ mod tests {
     #[serial]
     async fn test_upload_profile_picture_success() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
 
-        let user = UserModel::create(&db, "avataruser", "avatar@test.com", "avatarpass", false)
+
+        let user = UserModel::create("avataruser", "avatar@test.com", "avatarpass", false)
             .await
             .expect("Failed to create user for avatar upload");
 
         let temp_dir = tempdir().expect("Failed to create temporary directory for avatars");
         unsafe { std::env::set_var("USER_PROFILE_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(user.id, user.admin);
         let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
         let file_content = b"fake_jpeg_data_content";
@@ -546,16 +545,16 @@ mod tests {
     #[serial]
     async fn test_upload_profile_picture_invalid_type() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
 
-        let user = UserModel::create(&db, "invalidtypeuser", "invalidtype@test.com", "pass", false)
+
+        let user = UserModel::create("invalidtypeuser", "invalidtype@test.com", "pass", false)
             .await
             .expect("Failed to create user");
 
         let temp_dir = tempdir().expect("Failed to create temp dir");
         unsafe { std::env::set_var("USER_PROFILE_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(user.id, user.admin);
         let boundary = "----InvalidTypeBoundary";
         let file_content = b"this is text content";
@@ -582,17 +581,17 @@ mod tests {
         assert_eq!(json["message"], "File type not supported.");
     }
 
-    /// Test Case: Profile Picture Upload without Authentication (Forbidden)
+    /// Test Case: Profile Picture Upload without Authentication
     #[tokio::test]
     #[serial]
     async fn test_upload_profile_picture_missing_auth() {
         dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
+
 
         let temp_dir = tempdir().expect("Failed to create temp dir");
         unsafe { std::env::set_var("USER_PROFILE_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let boundary = "----NoAuthBoundary";
         let file_content = b"some_data";
         let multipart_body = format!(

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     Json,
     http::StatusCode,
     response::IntoResponse,
@@ -9,13 +9,14 @@ use crate::{
     response::ApiResponse,
 };
 use db::{
+    get_connection,
     models::{
         assignment::{
             Column as AssignmentColumn, Entity as AssignmentEntity,
         },
     },
 };
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, DatabaseConnection};
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -110,13 +111,13 @@ use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, DatabaseConnection};
 /// - Only valid JSON objects are accepted as configuration; arrays, primitives, or null values are rejected
 /// - Configuration retrieval is restricted to users with appropriate module permissions
 pub async fn get_assignment_config(
-    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
+    let db = get_connection().await;
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db).await.unwrap().unwrap();
+        .one(db).await.unwrap().unwrap();
 
     let config = match assignment.config {
         Some(Value::Object(obj)) => Value::Object(obj),

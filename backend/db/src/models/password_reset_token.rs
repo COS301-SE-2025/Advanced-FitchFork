@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc, Duration};
 use rand::{thread_rng, Rng};
 use rand::distributions::Alphanumeric;
+use crate::get_connection;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "password_reset_tokens")]
@@ -57,20 +58,20 @@ impl Model {
     }
 
     pub async fn create(
-        db: &DatabaseConnection,
         user_id: i64,
         expiry_minutes: i64,
     ) -> Result<Self, DbErr> {
         let model = Self::new(user_id, expiry_minutes);
         let mut active_model = model.into_active_model();
         active_model.id = NotSet;
+        let db = get_connection().await;
         active_model.insert(db).await
     }
 
     pub async fn find_valid_token(
-        db: &DatabaseConnection,
         token: &str,
     ) -> Result<Option<Self>, DbErr> {
+        let db = get_connection().await;
         Entity::find()
             .filter(Column::Token.eq(token))
             .filter(Column::Used.eq(false))
@@ -79,9 +80,10 @@ impl Model {
             .await
     }
 
-    pub async fn mark_as_used(&self, db: &DatabaseConnection) -> Result<(), DbErr> {
+    pub async fn mark_as_used(&self) -> Result<(), DbErr> {
         let mut active_model: ActiveModel = self.clone().into();
         active_model.used = Set(true);
+        let db = get_connection().await;
         active_model.update(db).await?;
         Ok(())
     }

@@ -1,16 +1,19 @@
 use axum::{
-    extract::{State, Path, Query},
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
 use crate::response::ApiResponse;
-use db::models::{
-    user,
-    user_module_role,
-    user_module_role::{Column as RoleCol, Role},
+use db::{
+    get_connection,
+    models::{
+        user,
+        user_module_role,
+        user_module_role::{Column as RoleCol, Role},
+    }
 };
-use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, JoinType, QuerySelect, QueryOrder, DatabaseConnection, PaginatorTrait};
+use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, JoinType, QuerySelect, QueryOrder, PaginatorTrait};
 use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleResponse};
 
 /// GET /api/modules/{module_id}/tutors
@@ -96,7 +99,6 @@ use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleRespo
 /// }
 /// ```
 pub async fn get_tutors(
-    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Query(params): Query<RoleQuery>,
 ) -> Response {
@@ -150,7 +152,8 @@ pub async fn get_tutors(
         query = query.order_by(user::Column::Id, sea_orm::Order::Asc);
     }
 
-    let paginator = query.paginate(&db, per_page.into());
+    let db = get_connection().await;
+    let paginator = query.paginate(db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
     let users = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
 

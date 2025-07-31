@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, assignment_submission::Model as AssignmentSubmissionModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{get_connection, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::{Model as AssignmentModel, Entity, ActiveModel}, assignment_submission::Model as AssignmentSubmissionModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::{json, Value};
@@ -10,7 +10,7 @@ mod tests {
     use std::{fs, path::PathBuf};
     use crate::test_helpers::make_app;
     use serial_test::serial;
-    use sea_orm::{Set, ActiveModelTrait};
+    use sea_orm::{Set, ActiveModelTrait, EntityTrait};
     use tempfile::{TempDir, tempdir};
 
     struct TestData {
@@ -22,19 +22,18 @@ mod tests {
         submissions: Vec<AssignmentSubmissionModel>,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> (TestData, TempDir) {
+    async fn setup_test_data() -> (TestData, TempDir) {
         dotenvy::dotenv().expect("Failed to load .env");
         let temp_dir = tempdir().expect("Failed to create temporary directory");
         unsafe{ std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
 
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
-        let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
-        let forbidden_user = UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
+        let module = ModuleModel::create("COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let lecturer_user = UserModel::create("lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
+        let student_user = UserModel::create("student1", "student1@test.com", "password2", false).await.unwrap();
+        let forbidden_user = UserModel::create("forbidden", "forbidden@test.com", "password3", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(student_user.id, module.id, Role::Student).await.unwrap();
         let assignment = AssignmentModel::create(
-            db,
             module.id,
             "Assignment 1",
             Some("Desc 1"),
@@ -43,24 +42,24 @@ mod tests {
             Utc::now() + Duration::days(30)
         ).await.unwrap();
 
-        let sub1 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 1, "ontime.txt", b"ontime").await.unwrap();
+        let sub1 = AssignmentSubmissionModel::save_file(assignment.id, student_user.id, 1, "ontime.txt", b"ontime").await.unwrap();
         let sub1_time = assignment.due_date - Duration::days(1);
-        update_submission_time(db, sub1.id, sub1_time).await;
+        update_submission_time(sub1.id, sub1_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 1, &sub1, false, false, Some(json!({"earned": 80, "total": 100})), sub1_time);
 
-        let sub2 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 2, "late.txt", b"late").await.unwrap();
+        let sub2 = AssignmentSubmissionModel::save_file(assignment.id, student_user.id, 2, "late.txt", b"late").await.unwrap();
         let sub2_time = assignment.due_date + Duration::days(1);
-        update_submission_time(db, sub2.id, sub2_time).await;
+        update_submission_time(sub2.id, sub2_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 2, &sub2, false, false, Some(json!({"earned": 50, "total": 100})), sub2_time);
 
-        let sub3 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 3, "practice.txt", b"practice").await.unwrap();
+        let sub3 = AssignmentSubmissionModel::save_file(assignment.id, student_user.id, 3, "practice.txt", b"practice").await.unwrap();
         let sub3_time = assignment.due_date - Duration::days(2);
-        update_submission_time(db, sub3.id, sub3_time).await;
+        update_submission_time(sub3.id, sub3_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 3, &sub3, true, false, Some(json!({"earned": 100, "total": 100})), sub3_time);
 
-        let sub4 = AssignmentSubmissionModel::save_file(db, assignment.id, forbidden_user.id, 1, "forbidden.txt", b"forbidden").await.unwrap();
+        let sub4 = AssignmentSubmissionModel::save_file(assignment.id, forbidden_user.id, 1, "forbidden.txt", b"forbidden").await.unwrap();
         let sub4_time = assignment.due_date - Duration::days(1);
-        update_submission_time(db, sub4.id, sub4_time).await;
+        update_submission_time(sub4.id, sub4_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, forbidden_user.id, 1, &sub4, false, false, Some(json!({"earned": 0, "total": 100})), sub4_time);
         
         let submissions = [sub1, sub2, sub3, sub4].to_vec();
@@ -78,9 +77,8 @@ mod tests {
         )
     }
 
-    async fn update_submission_time(db: &sea_orm::DatabaseConnection, submission_id: i64, new_time: chrono::DateTime<Utc>) {
-        use db::models::assignment_submission::{ActiveModel, Entity};
-        use sea_orm::EntityTrait;
+    async fn update_submission_time(submission_id: i64, new_time: chrono::DateTime<Utc>) {
+        let db = get_connection().await;
         if let Some(model) = Entity::find_by_id(submission_id).one(db).await.unwrap() {
             let mut active: ActiveModel = model.into();
             active.created_at = Set(new_time);
@@ -118,9 +116,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_student_sees_only_own_submissions() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
@@ -143,9 +140,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_lecturer_sees_all_submissions_with_pagination() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions?per_page=2&page=1", data.module.id, data.assignment.id);
@@ -170,9 +166,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_query_by_username_returns_only_that_user() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions?username=student1", data.module.id, data.assignment.id);
@@ -195,10 +190,9 @@ mod tests {
     #[serial]
     async fn test_filter_by_late_status() {
         dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
+        let (data, _temp_dir) = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions?late=true", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -225,9 +219,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_forbidden_user_gets_403() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
@@ -246,9 +239,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_student_gets_own_submission() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let sub = &data.submissions[0];
@@ -271,9 +263,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_lecturer_gets_any_submission_with_user_info() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let sub = &data.submissions[0];
@@ -297,10 +288,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_forbidden_user_gets_403_on_submission() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
+        let (data, _temp_dir) = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let sub = &data.submissions[0];
         let uri = format!("/api/modules/{}/assignments/{}/submissions/{}", data.module.id, data.assignment.id, sub.id);
@@ -317,9 +307,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_not_found_returns_404() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions/999999", data.module.id, data.assignment.id);
@@ -336,8 +325,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_report_missing_returns_404() {
-        let db = setup_test_db().await;
-        let (data, temp_dir) = setup_test_data(&db).await;
+        let (data, temp_dir) = setup_test_data().await;
 
         let sub = &data.submissions[0];
         let path = PathBuf::from(temp_dir.path())
@@ -349,7 +337,7 @@ mod tests {
             .join("submission_report.json");
         let _ = fs::remove_file(&path);
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions/{}", data.module.id, data.assignment.id, sub.id);
         let req = Request::builder()

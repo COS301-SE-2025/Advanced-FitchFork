@@ -1,16 +1,19 @@
 use validator::{Validate};
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use crate::response::ApiResponse;
-use db::models::{
-    user::{Entity as UserEntity},
-    user_module_role::{Entity as RoleEntity, Column as RoleCol, Role},
+use db::{
+    get_connection,
+    models::{
+        user::{Entity as UserEntity},
+        user_module_role::{Entity as RoleEntity, Column as RoleCol, Role},
+    }
 };
-use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, Set, ActiveModelTrait, DatabaseConnection, TransactionTrait, IntoActiveModel};
+use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, Set, ActiveModelTrait, TransactionTrait, IntoActiveModel};
 use crate::routes::modules::common::EditRoleRequest;
 
 /// PUT /api/modules/{module_id}/tutors
@@ -89,7 +92,6 @@ use crate::routes::modules::common::EditRoleRequest;
 /// }
 /// ```
 pub async fn edit_tutors(
-    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(req): Json<EditRoleRequest>,
 ) -> impl IntoResponse {
@@ -101,8 +103,10 @@ pub async fn edit_tutors(
         );
     }
 
+    let db = get_connection().await;
+
     for &user_id in &req.user_ids {
-        let user = UserEntity::find_by_id(user_id).one(&db).await;
+        let user = UserEntity::find_by_id(user_id).one(db).await;
         if let Ok(None) | Err(_) = user {
             return (
                 StatusCode::NOT_FOUND,

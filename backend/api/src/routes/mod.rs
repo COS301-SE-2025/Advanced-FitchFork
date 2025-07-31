@@ -17,7 +17,6 @@
 use axum::{middleware::from_fn, Router};
 use crate::routes::{auth::auth_routes, health::health_routes, modules::modules_routes, users::users_routes};
 use crate::auth::guards::{require_admin, require_authenticated};
-use sea_orm::DatabaseConnection;
 
 pub mod health;
 pub mod auth;
@@ -36,10 +35,10 @@ pub mod common;
 ///
 /// # Returns
 /// An Axum `Router` ready to be passed into the main app.
-pub fn routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
+pub fn routes() -> Router {
     Router::new()
         .nest("/health", health_routes())
         .nest("/auth", auth_routes())
         .nest("/users", users_routes().route_layer(from_fn(require_admin)))
-        .nest("/modules", modules_routes(db.clone()).route_layer(from_fn(require_authenticated)))
+        .nest("/modules", modules_routes().route_layer(from_fn(require_authenticated)))
 }

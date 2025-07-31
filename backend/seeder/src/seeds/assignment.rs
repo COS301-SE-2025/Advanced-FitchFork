@@ -1,17 +1,22 @@
 use crate::seed::Seeder;
 use chrono::Utc;
-use db::models::{
-    assignment,
-    assignment::{AssignmentType, Status},
-    module,
+use db::{
+    get_connection,
+    models::{
+        assignment,
+        assignment::{AssignmentType, Status},
+        module,
+    }
 };
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 
 pub struct AssignmentSeeder;
 
 #[async_trait::async_trait]
 impl Seeder for AssignmentSeeder {
-    async fn seed(&self, db: &DatabaseConnection) {
+    async fn seed(&self) {
+        let db = get_connection().await;
+
         let modules = module::Entity::find()
             .all(db)
             .await

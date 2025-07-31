@@ -1,15 +1,18 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use crate::response::ApiResponse;
-use db::models::{
-    user,
-    user_module_role::{self, Column as RoleCol, Role},
+use db::{
+    get_connection,
+    models::{
+        user,
+        user_module_role::{self, Column as RoleCol, Role},
+    }
 };
-use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, DatabaseConnection, ActiveModelTrait};
+use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, ActiveModelTrait};
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
 /// DELETE /api/modules/{module_id}/tutors
@@ -75,7 +78,6 @@ use crate::routes::modules::common::ModifyUsersModuleRequest;
 /// }
 /// ```
 pub async fn remove_tutors(
-    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
@@ -87,10 +89,11 @@ pub async fn remove_tutors(
     }
 
     let mut not_assigned = Vec::new();
+    let db = get_connection().await;
 
     for &user_id in &body.user_ids {
         let user_exists = user::Entity::find_by_id(user_id)
-            .one(&db)
+            .one(db)
             .await;
 
         if let Ok(None) | Err(_) = user_exists {
@@ -107,12 +110,12 @@ pub async fn remove_tutors(
                     .add(RoleCol::ModuleId.eq(module_id))
                     .add(RoleCol::Role.eq(Role::Tutor)),
             )
-            .one(&db)
+            .one(db)
             .await;
 
         match role_entry {
             Ok(Some(model)) => {
-                if user_module_role::ActiveModel::from(model).delete(&db).await.is_err() {
+                if user_module_role::ActiveModel::from(model).delete(db).await.is_err() {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ApiResponse::<()>::error("Failed to remove tutor role")),

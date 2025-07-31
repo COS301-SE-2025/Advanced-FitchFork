@@ -1,14 +1,16 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     Json,
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::{assignment};
+use db::{
+    get_connection,
+    models::{assignment::{self, Column as AssignmentColumn, Entity as AssignmentEntity}}
+};
 use serde::{Deserialize};
 use serde_json::{Value};
-use sea_orm::{EntityTrait, Set, QueryFilter, ColumnTrait, ActiveModelTrait, DatabaseConnection};
-use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
+use sea_orm::{EntityTrait, Set, QueryFilter, ColumnTrait, ActiveModelTrait};
 use crate::response::ApiResponse;
 
 #[derive(Debug, Deserialize)]
@@ -135,14 +137,14 @@ pub struct PartialConfigUpdate {
 /// - Partial updates are restricted to users with appropriate module permissions
 /// - The `timeout_seconds` and `max_processors` fields are validated to ensure they are integers
 pub async fn update_assignment_config(
-    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)) : Path<(i64, i64)>,
     Json(payload): Json<PartialConfigUpdate>
 ) -> impl IntoResponse {
+    let db = get_connection().await;
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::ModuleId.eq(module_id))
         .filter(AssignmentColumn::Id.eq(assignment_id))
-        .one(&db)
+        .one(db)
         .await.unwrap().unwrap();
 
     let config = assignment.config.clone();
@@ -192,7 +194,7 @@ pub async fn update_assignment_config(
     let mut assignment_model: assignment::ActiveModel = assignment.into();
     assignment_model.config = Set(Some(Value::Object(existing_config)));
 
-    if let Err(_) = assignment_model.update(&db).await {
+    if let Err(_) = assignment_model.update(db).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error("Failed to update configuration")),

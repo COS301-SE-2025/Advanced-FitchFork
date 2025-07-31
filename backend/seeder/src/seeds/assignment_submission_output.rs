@@ -1,16 +1,21 @@
 use crate::seed::Seeder;
-use db::models::{
-    assignment_submission::Entity as AssignmentSubmission,
-    assignment_submission_output::Model as AssignmentSubmissionOutputModel, assignment_task,
+use db::{
+    get_connection,
+    models::{
+        assignment_submission::Entity as AssignmentSubmission,
+        assignment_submission_output::Model as AssignmentSubmissionOutputModel, assignment_task,
+    }
 };
 
-use sea_orm::{DatabaseConnection, EntityTrait};
+use sea_orm::EntityTrait;
 
 pub struct AssignmentSubmissionOutputSeeder;
 
 #[async_trait::async_trait]
 impl Seeder for AssignmentSubmissionOutputSeeder {
-    async fn seed(&self, db: &DatabaseConnection) {
+    async fn seed(&self) {
+        let db = get_connection().await;
+
         let tasks = assignment_task::Entity::find()
             .all(db)
             .await
@@ -42,7 +47,6 @@ impl Seeder for AssignmentSubmissionOutputSeeder {
                 );
 
                 match AssignmentSubmissionOutputModel::save_file(
-                    db,
                     task.id,
                     submission.id,
                     dummy_filename,

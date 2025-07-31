@@ -1,15 +1,18 @@
 use std::{env, fs, path::PathBuf};
 use axum::{
-    extract::{State, Json, Path},
+    extract::{Json, Path},
     http::StatusCode,
     response::IntoResponse,
 };
 use serde_json::Value;
 use sea_orm::{
-    EntityTrait, ColumnTrait, QueryFilter, DatabaseConnection, ActiveModelTrait, Set,
+    EntityTrait, ColumnTrait, QueryFilter, ActiveModelTrait, Set,
 };
 use crate::response::ApiResponse;
-use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
+use db::{
+    get_connection,
+    models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}
+};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -120,7 +123,6 @@ use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEnt
 /// - Only valid JSON objects are accepted; arrays, primitives, or null values are rejected
 /// - Configuration setting is restricted to users with appropriate module permissions
 pub async fn set_assignment_config(
-    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(config): Json<Value>,
 ) -> impl IntoResponse {
@@ -132,15 +134,16 @@ pub async fn set_assignment_config(
             .into_response();
     }
 
+    let db = get_connection().await;
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db).await.unwrap().unwrap();
+        .one(db).await.unwrap().unwrap();
 
     let mut active_model: db::models::assignment::ActiveModel = assignment.into();
     active_model.config = Set(Some(config.clone()));
 
-    match active_model.update(&db).await {
+    match active_model.update(db).await {
         Ok(_) => {
             let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
                 .unwrap_or_else(|_| "data/assignment_files".into());

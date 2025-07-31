@@ -1,9 +1,12 @@
-use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crate::response::ApiResponse;
-use sea_orm::{EntityTrait, QueryFilter, Condition, ModelTrait, ColumnTrait, DatabaseConnection};
-use db::models::{
-    user,
-    user_module_role::{self, Column as RoleCol, Role},
+use sea_orm::{EntityTrait, QueryFilter, Condition, ModelTrait, ColumnTrait};
+use db::{
+    get_connection,
+    models::{
+        user,
+        user_module_role::{self, Column as RoleCol, Role}
+    }
 };
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
@@ -70,7 +73,6 @@ use crate::routes::modules::common::ModifyUsersModuleRequest;
 /// }
 /// ```
 pub async fn remove_students(
-    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
@@ -82,10 +84,11 @@ pub async fn remove_students(
     }
 
     let mut not_assigned = Vec::new();
-
+    let db = get_connection().await;
+    
     for &user_id in &body.user_ids {
         let user_exists = user::Entity::find_by_id(user_id)
-            .one(&db)
+            .one(db)
             .await;
 
         if let Ok(None) | Err(_) = user_exists {
@@ -102,12 +105,12 @@ pub async fn remove_students(
                     .add(RoleCol::ModuleId.eq(module_id))
                     .add(RoleCol::Role.eq(Role::Student)),
             )
-            .one(&db)
+            .one(db)
             .await;
 
         match role_entry {
             Ok(Some(role)) => {
-                let _ = role.delete(&db).await;
+                let _ = role.delete(db).await;
             }
             Ok(None) => not_assigned.push(user_id),
             Err(_) => {

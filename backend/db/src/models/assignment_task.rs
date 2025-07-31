@@ -4,6 +4,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, IntoActiveModel, QueryFilter, Set,
 };
 use strum::EnumIter;
+use crate::get_connection;
 
 /// Assignment task model representing the `assignment_tasks` table.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -34,7 +35,6 @@ impl ActiveModelBehavior for ActiveModel {}
 impl Model {
     /// Create a new task in the database.
     pub async fn create(
-        db: &DatabaseConnection,
         assignment_id: i64,
         task_number: i64,
         name: &str,
@@ -49,19 +49,21 @@ impl Model {
             updated_at: Set(Utc::now()),
             ..Default::default()
         };
+        let db = get_connection().await;
         active.insert(db).await
     }
 
     /// Get a task by its ID.
-    pub async fn get_by_id(db: &DatabaseConnection, id: i64) -> Result<Option<Self>, DbErr> {
+    pub async fn get_by_id(id: i64) -> Result<Option<Self>, DbErr> {
+        let db = get_connection().await;
         Entity::find_by_id(id).one(db).await
     }
 
     /// Get all tasks for a specific assignment.
     pub async fn get_by_assignment_id(
-        db: &DatabaseConnection,
         assignment_id: i64,
     ) -> Result<Vec<Self>, DbErr> {
+        let db = get_connection().await;
         Entity::find()
             .filter(Column::AssignmentId.eq(assignment_id))
             .all(db)
@@ -70,12 +72,12 @@ impl Model {
 
     /// Edit a task's command and name.
     pub async fn edit_command_and_name(
-        db: &DatabaseConnection,
         id: i64,
         new_name: &str,
         new_command: &str,
     ) -> Result<Self, DbErr> {
-        if let Some(task) = Self::get_by_id(db, id).await? {
+        if let Some(task) = Self::get_by_id(id).await? {
+            let db = get_connection().await;
             let mut active = task.into_active_model();
             active.name = Set(new_name.to_string());
             active.command = Set(new_command.to_string());
@@ -87,8 +89,9 @@ impl Model {
     }
 
     /// Delete a task by ID.
-    pub async fn delete(db: &DatabaseConnection, id: i64) -> Result<(), DbErr> {
-        if let Some(task) = Self::get_by_id(db, id).await? {
+    pub async fn delete(id: i64) -> Result<(), DbErr> {
+        if let Some(task) = Self::get_by_id(id).await? {
+            let db = get_connection().await;
             task.delete(db).await.map(|_| ())
         } else {
             Err(DbErr::RecordNotFound("Task not found".into()))

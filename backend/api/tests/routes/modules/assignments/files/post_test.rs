@@ -1,12 +1,11 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{get_connection, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use api::auth::generate_jwt;
-    use dotenvy;
     use chrono::{Utc, TimeZone};
-    use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
+    use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
     use axum::http::header::{CONTENT_TYPE, AUTHORIZATION};
     use crate::test_helpers::make_app;
 
@@ -17,14 +16,13 @@ mod tests {
         assignment: AssignmentModel,
     }
 
-    async fn setup_test_data(db: &DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
-        let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
+    async fn setup_test_data() -> TestData {
+        let module = ModuleModel::create("COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let lecturer_user = UserModel::create("lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
+        let student_user = UserModel::create("student1", "student1@test.com", "password2", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(student_user.id, module.id, Role::Student).await.unwrap();
         let assignment = AssignmentModel::create(
-            db,
             module.id,
             "Assignment 1",
             Some("Desc 1"),
@@ -56,11 +54,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_success_as_lecturer() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -78,11 +74,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_forbidden_for_student() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -100,11 +94,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_assignment_not_found() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, 9999);
@@ -122,11 +114,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_missing_file_type() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let boundary = "----BoundaryTest".to_string();
         let mut body = Vec::new();
         body.extend(format!("--{}\r\n", boundary).as_bytes());
@@ -148,11 +138,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_empty_file() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (boundary, body) = multipart_body("spec", "spec.txt", b"");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -170,11 +158,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_unauthorized() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -190,11 +176,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_invalid_file_type() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (boundary, body) = multipart_body("not_a_type", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -212,11 +196,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_duplicate_file_type_replaces() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let (boundary1, body1) = multipart_body("spec", "spec1.txt", b"first content");
@@ -243,10 +225,11 @@ mod tests {
         let response2 = app.clone().oneshot(req2).await.unwrap();
         assert_eq!(response2.status(), StatusCode::CREATED);
 
+        let db = get_connection().await;
         let files = db::models::assignment_file::Entity::find()
             .filter(db::models::assignment_file::Column::AssignmentId.eq(data.assignment.id))
             .filter(db::models::assignment_file::Column::FileType.eq(db::models::assignment_file::FileType::Spec))
-            .all(&db)
+            .all(db)
             .await
             .unwrap();
         assert_eq!(files.len(), 1);

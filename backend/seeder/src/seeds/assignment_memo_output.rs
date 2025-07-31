@@ -1,14 +1,17 @@
 use crate::seed::Seeder;
-use db::models::{
-    assignment, assignment_memo_output::Model as AssignmentMemoOutputModel, assignment_task,
+use db::{
+    get_connection,
+    models::{assignment, assignment_memo_output::Model as AssignmentMemoOutputModel, assignment_task}
 };
-use sea_orm::{DatabaseConnection, EntityTrait};
+use sea_orm::EntityTrait;
 
 pub struct AssignmentMemoOutputSeeder;
 
 #[async_trait::async_trait]
 impl Seeder for AssignmentMemoOutputSeeder {
-    async fn seed(&self, db: &DatabaseConnection) {
+    async fn seed(&self) {
+        let db = get_connection().await;
+
         // Fetch all assignments
         let assignments = assignment::Entity::find()
             .all(db)
@@ -42,7 +45,6 @@ impl Seeder for AssignmentMemoOutputSeeder {
                 );
 
                 match AssignmentMemoOutputModel::save_file(
-                    db,
                     assignment.id,
                     task.id,
                     dummy_filename,

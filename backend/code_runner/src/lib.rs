@@ -25,6 +25,7 @@ use crate::validate_files::validate_memo_files;
 use db::models::assignment::Entity as Assignment;
 use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as MemoOutputEntity};
 use db::models::assignment_task::Model as AssignmentTask;
+use db::get_connection;
 
 use util::execution_config::ExecutionConfig;
 
@@ -75,9 +76,9 @@ fn resolve_storage_root(storage_root: &str) -> PathBuf {
 /// 3. Running the configured commands inside Docker
 /// 4. Saving the resulting output as memo files in the database
 pub async fn create_memo_outputs_for_all_tasks(
-    db: &DatabaseConnection,
     assignment_id: i64,
 ) -> Result<(), String> {
+    let db = get_connection().await;
     // Fetch the assignment to get module_id
     let assignment = Assignment::find_by_id(assignment_id)
         .one(db)
@@ -122,7 +123,7 @@ pub async fn create_memo_outputs_for_all_tasks(
         first_archive_in(&base_path.join("main"))?,
     ];
 
-    let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
+    let tasks = AssignmentTask::get_by_assignment_id(assignment_id)
         .await
         .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
@@ -149,7 +150,6 @@ pub async fn create_memo_outputs_for_all_tasks(
         };
 
         if let Err(e) = db::models::assignment_memo_output::Model::save_file(
-            db,
             assignment_id,
             task.task_number,
             &filename,
@@ -225,7 +225,7 @@ pub async fn create_submission_outputs_for_all_tasks(
         first_archive_in(&base_path.join("main"))?,
     ];
 
-    let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
+    let tasks = AssignmentTask::get_by_assignment_id(assignment_id)
         .await
         .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
@@ -258,7 +258,6 @@ pub async fn create_submission_outputs_for_all_tasks(
         };
 
         if let Err(e) = SubmissionOutputModel::save_file(
-            db,
             task.task_number,
             submission_id,
             &filename,

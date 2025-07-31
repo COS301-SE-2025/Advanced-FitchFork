@@ -6,12 +6,15 @@ use crate::response::ApiResponse;
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::assignment_task::{Column, Entity};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
+use db::{
+    get_connection,
+    models::assignment_task::{Column, Entity}
+};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
 use serde_json::Value;
 use std::{env, fs, path::PathBuf};
@@ -103,10 +106,10 @@ pub struct TaskDetailResponse {
 /// ```
 ///
 pub async fn get_task_details(
-    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let task = Entity::find_by_id(task_id).one(&db).await.unwrap().unwrap();
+    let db = get_connection().await;
+    let task = Entity::find_by_id(task_id).one(db).await.unwrap().unwrap();
 
     let base_path =
         env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
@@ -291,13 +294,13 @@ pub async fn get_task_details(
 /// ```
 ///
 pub async fn list_tasks(
-    State(db): State<DatabaseConnection>,
     Path((_, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
+    let db = get_connection().await;
     match Entity::find()
         .filter(Column::AssignmentId.eq(assignment_id))
         .order_by_asc(Column::TaskNumber)
-        .all(&db)
+        .all(db)
         .await
     {
         Ok(tasks) => {

@@ -2,21 +2,18 @@ use api::auth::middleware::log_request;
 use api::auth::guards::validate_known_ids;
 use api::routes::routes;
 use axum::middleware::from_fn;
-use axum::middleware::from_fn_with_state;
 use axum::Router;
-use dotenvy::dotenv;
 use std::env;
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_appender::rolling;
 use axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
-use sea_orm::DatabaseConnection;
-use db::connect;
+use util::app_state::app_state::AppState;
 
 #[tokio::main]
 async fn main() {
-    dotenv().ok();
+    let _ = AppState::init(false);
 
     // Read env vars
     let project_name = env::var("PROJECT_NAME").unwrap_or_else(|_| "unknown-project".to_string());
@@ -31,8 +28,6 @@ async fn main() {
     // Important: hold the guard to flush logs
     let _log_guard = init_logging(&log_file, &log_level);
 
-    let db: DatabaseConnection = connect().await;
-
     info!("Starting {} on http://{}:{}", project_name, host, port);
     println!("Server running at http://{}:{} ({})", host, port, project_name);
 
@@ -42,11 +37,10 @@ async fn main() {
 
     // Setup Axum app
     let app = Router::new()
-        .nest("/api", routes(db.clone()))
+        .nest("/api", routes())
         .layer(from_fn(log_request))
         .layer(cors)
-        .with_state(db.clone())
-        .layer(from_fn_with_state(db.clone(), validate_known_ids));
+        .layer(from_fn(validate_known_ids));
 
     let addr: SocketAddr = format!("{}:{}", host, port)
         .parse()

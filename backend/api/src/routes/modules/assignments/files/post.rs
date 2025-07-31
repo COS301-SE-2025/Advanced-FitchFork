@@ -1,11 +1,10 @@
 use axum::{
-    extract::{State, Multipart, Path},
+    extract::{Multipart, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use serde::Serialize;
-use sea_orm::DatabaseConnection;
 use db::models::assignment_file::{
     FileType,
     Model as FileModel,
@@ -88,7 +87,6 @@ pub struct AssignmentSubmissionMetadata {
 /// ```
 ///
 pub async fn upload_files(
-    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
@@ -175,7 +173,6 @@ pub async fn upload_files(
     };
 
     match FileModel::save_file(
-        &db,
         assignment_id,
         module_id,
         file_type.clone(),

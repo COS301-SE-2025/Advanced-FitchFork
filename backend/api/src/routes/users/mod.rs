@@ -19,7 +19,6 @@ use get::{get_user_modules, get_user};
 use put::update_user;
 use delete::delete_user;
 use crate::routes::users::put::upload_avatar;
-use sea_orm::DatabaseConnection;
 
 pub mod get;
 pub mod put;
@@ -34,7 +33,7 @@ pub mod delete;
 ///
 /// # Returns
 /// A configured `Router` instance to be nested in the main app.
-pub fn users_routes() -> Router<DatabaseConnection> {
+pub fn users_routes() -> Router {
     Router::new()
         .route("/", get(list_users))
         .route("/{user_id}/modules", get(get_user_modules))

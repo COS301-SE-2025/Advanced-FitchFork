@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 use axum::{
-    extract::{State, Query, Path},
+    extract::{Query, Path},
     http::{StatusCode, header, HeaderMap, HeaderValue},
     response::IntoResponse,
     Json,
 };
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, DatabaseConnection};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use tokio::fs::File as FsFile;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
@@ -13,7 +13,10 @@ use crate::{
     auth::claims::AuthUser,
     response::ApiResponse,
 };
-use db::models::{user, module, user_module_role, user_module_role::Role};
+use db::{
+    get_connection,
+    models::{user, module, user_module_role, user_module_role::Role}
+};
 use crate::routes::common::UserModule;
 
 #[derive(Debug, Serialize)]
@@ -86,14 +89,14 @@ pub struct HasRoleResponse {
 /// - `404 Not Found` – User not found
 /// - `500 Internal Server Error` – Database failure
 pub async fn get_me(
-    State(db): State<DatabaseConnection>,
     AuthUser(claims): AuthUser
 ) -> impl IntoResponse {
     let user_id = claims.sub;
 
+    let db = get_connection().await;
     let user = match user::Entity::find()
         .filter(user::Column::Id.eq(user_id))
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(Some(u)) => u,
@@ -114,7 +117,7 @@ pub async fn get_me(
     let roles = match user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user.id))
         .find_also_related(module::Entity)
-        .all(&db)
+        .all(db)
         .await
     {
         Ok(results) => results,
@@ -203,10 +206,10 @@ pub async fn get_me(
 /// }
 /// ```
 pub async fn get_avatar(
-    State(db): State<DatabaseConnection>,
     Path(user_id): Path<i64>
 ) -> impl IntoResponse {
-    let user = user::Entity::find_by_id(user_id).one(&db).await.unwrap().unwrap();
+    let db = get_connection().await;
+    let user = user::Entity::find_by_id(user_id).one(db).await.unwrap().unwrap();
 
     let Some(path) = user.profile_picture_path else {
         return (
@@ -287,7 +290,6 @@ pub async fn get_avatar(
 /// - `403 Forbidden` – Missing or invalid token
 /// - `500 Internal Server Error` – Database failure
 pub async fn has_role_in_module(
-    State(db): State<DatabaseConnection>,
     AuthUser(claims): AuthUser,
     Query(params): Query<HasRoleQuery>
 ) -> impl IntoResponse {
@@ -304,11 +306,12 @@ pub async fn has_role_in_module(
         }
     };
 
+    let db = get_connection().await;
     let exists = match user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(claims.sub))
         .filter(user_module_role::Column::ModuleId.eq(params.module_id))
         .filter(user_module_role::Column::Role.eq(role))
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(Some(_)) => true,
@@ -361,14 +364,14 @@ pub struct ModuleRoleResponse {
 /// ```
 /// #[derive(Debug, Deserialize)]
 pub async fn get_module_role(
-    State(db): State<DatabaseConnection>,
     AuthUser(claims): AuthUser,
     Query(params): Query<ModuleRoleQuery>,
 ) -> impl IntoResponse {
+    let db = get_connection().await;
     let role = match user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(claims.sub))
         .filter(user_module_role::Column::ModuleId.eq(params.module_id))
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(Some(model)) => Some(model.role.to_string().to_lowercase()),

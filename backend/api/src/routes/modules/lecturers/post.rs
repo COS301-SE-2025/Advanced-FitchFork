@@ -1,11 +1,13 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{http::StatusCode, response::IntoResponse, Json};
 use crate::response::ApiResponse;
-use db::models::{
-    user::{Entity as UserEntity},
-    user_module_role::{Entity as RoleEntity, Column as RoleCol, Role, ActiveModel as RoleActiveModel},
+use db::{
+    get_connection,
+    models::{
+        user::{Entity as UserEntity},
+        user_module_role::{Entity as RoleEntity, Column as RoleCol, Role, ActiveModel as RoleActiveModel},
+    }
 };
 use crate::routes::modules::common::ModifyUsersModuleRequest;
-use sea_orm::DatabaseConnection;
 
 /// POST /api/modules/{module_id}/lecturers
 ///
@@ -70,7 +72,6 @@ use sea_orm::DatabaseConnection;
 /// }
 /// ```
 pub async fn assign_lecturers(
-    State(db): State<DatabaseConnection>,
     axum::extract::Path(module_id): axum::extract::Path<i64>,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
@@ -84,9 +85,10 @@ pub async fn assign_lecturers(
     }
 
     let mut already_assigned = Vec::new();
+    let db = get_connection().await;
 
     for &user_id in &body.user_ids {
-        match UserEntity::find_by_id(user_id).one(&db).await {
+        match UserEntity::find_by_id(user_id).one(db).await {
             Ok(Some(_)) => {}
             Ok(None) => {
                 return (
@@ -112,7 +114,7 @@ pub async fn assign_lecturers(
                     .add(RoleCol::ModuleId.eq(module_id))
                     .add(RoleCol::Role.eq(Role::Lecturer)),
             )
-            .one(&db)
+            .one(db)
             .await;
 
         match exists {
@@ -128,7 +130,7 @@ pub async fn assign_lecturers(
                     ..Default::default()
                 };
 
-                if let Err(_) = new_role.insert(&db).await {
+                if let Err(_) = new_role.insert(db).await {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ApiResponse::<()>::error("Failed to assign lecturer")),

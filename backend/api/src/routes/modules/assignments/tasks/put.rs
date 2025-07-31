@@ -2,11 +2,10 @@
 //!
 //! This module provides the endpoint handler for editing the command of a specific assignment task within a module. It validates the existence and relationships of the module, assignment, and task, and updates the task's command in the database. The endpoint returns detailed information about the updated task or appropriate error responses.
 
-use axum::{extract::{State, Path, Json}, http::StatusCode, response::IntoResponse};
+use axum::{extract::{Path, Json}, http::StatusCode, response::IntoResponse};
 use db::models::{assignment_task};
 use serde::Deserialize;
 use crate::response::ApiResponse;
-use sea_orm::DatabaseConnection;
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
 
 /// The request payload for editing a task's command.
@@ -155,7 +154,6 @@ pub struct EditTaskRequest {
 /// - Task editing is restricted to users with appropriate module permissions
 /// - The `updated_at` timestamp is automatically set when the task is modified
 pub async fn edit_task(
-    State(db): State<DatabaseConnection>,
     Path((_, _, task_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<EditTaskRequest>,
 ) -> impl IntoResponse {
@@ -166,7 +164,7 @@ pub async fn edit_task(
         ).into_response();
     }
 
-    let updated = match assignment_task::Model::edit_command_and_name(&db, task_id, &payload.name, &payload.command).await {
+    let updated = match assignment_task::Model::edit_command_and_name(task_id, &payload.name, &payload.command).await {
         Ok(t) => t,
         Err(_) => {
             return (

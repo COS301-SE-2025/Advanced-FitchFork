@@ -1,12 +1,12 @@
 use std::fs;
 use std::path::PathBuf;
 use axum::{
-    extract::{State, Multipart},
+    extract::Multipart,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set, IntoActiveModel, DatabaseConnection};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set, IntoActiveModel};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 use chrono::{Utc, Duration};
@@ -16,9 +16,12 @@ use crate::{
     response::ApiResponse,
     services::email::EmailService,
 };
-use db::models::{
-    user::{self, Model as UserModel},
-    password_reset_token::{self, Model as PasswordResetTokenModel}
+use db::{
+    get_connection,
+    models::{
+        user::{self, Model as UserModel},
+        password_reset_token::{self, Model as PasswordResetTokenModel}
+    }
 };
 use crate::auth::AuthUser;
 
@@ -100,7 +103,6 @@ pub struct UserResponse {
 /// }
 /// ```
 pub async fn register(
-    State(db): State<DatabaseConnection>,
     Json(req): Json<RegisterRequest>
 ) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
@@ -111,9 +113,10 @@ pub async fn register(
         );
     }
 
+    let db = get_connection().await;
     let email_exists = user::Entity::find()
         .filter(user::Column::Email.eq(req.email.clone()))
-        .one(&db)
+        .one(db)
         .await
         .unwrap();
 
@@ -126,7 +129,7 @@ pub async fn register(
 
     let sn_exists = user::Entity::find()
         .filter(user::Column::Username.eq(req.username.clone()))
-        .one(&db)
+        .one(db)
         .await
         .unwrap();
 
@@ -138,7 +141,6 @@ pub async fn register(
     }
 
     let inserted_user = match UserModel::create(
-        &db,
         &req.username,
         &req.email,
         &req.password,
@@ -222,7 +224,6 @@ pub struct LoginRequest {
 /// }
 /// ```
 pub async fn login(
-    State(db): State<DatabaseConnection>,
     Json(req): Json<LoginRequest>
 ) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
@@ -233,7 +234,7 @@ pub async fn login(
         );
     }
 
-    let user = match UserModel::verify_credentials(&db, &req.username, &req.password).await {
+    let user = match UserModel::verify_credentials(&req.username, &req.password).await {
         Ok(Some(u)) => u,
         Ok(None) => {
             return (
@@ -317,7 +318,6 @@ pub struct RequestPasswordResetRequest {
 /// }
 /// ```
 pub async fn request_password_reset(
-    State(db): State<DatabaseConnection>,
     Json(req): Json<RequestPasswordResetRequest>
 ) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
@@ -328,9 +328,10 @@ pub async fn request_password_reset(
         );
     }
 
+    let db = get_connection().await;
     let user = match user::Entity::find()
         .filter(user::Column::Email.eq(req.email.clone()))
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(Some(u)) => u,
@@ -355,7 +356,7 @@ pub async fn request_password_reset(
     let recent_requests = password_reset_token::Entity::find()
         .filter(password_reset_token::Column::UserId.eq(user.id))
         .filter(password_reset_token::Column::CreatedAt.gt(one_hour_ago))
-        .count(&db)
+        .count(db)
         .await
         .unwrap_or(0);
 
@@ -378,7 +379,7 @@ pub async fn request_password_reset(
         .parse::<i64>()
         .unwrap_or(15);
 
-    match PasswordResetTokenModel::create(&db, user.id, expiry_minutes).await {
+    match PasswordResetTokenModel::create(user.id, expiry_minutes).await {
         Ok(token) => {
             match EmailService::send_password_reset_email(&user.email, &token.token).await {
                 Ok(_) => (
@@ -460,7 +461,6 @@ pub struct VerifyResetTokenResponse {
 /// }
 /// ```
 pub async fn verify_reset_token(
-    State(db): State<DatabaseConnection>,
     Json(req): Json<VerifyResetTokenRequest>
 ) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
@@ -471,9 +471,10 @@ pub async fn verify_reset_token(
         );
     }
 
-    match PasswordResetTokenModel::find_valid_token(&db, &req.token).await {
+    let db = get_connection().await;
+    match PasswordResetTokenModel::find_valid_token(&req.token).await {
         Ok(Some(token)) => {
-            match user::Entity::find_by_id(token.user_id).one(&db).await {
+            match user::Entity::find_by_id(token.user_id).one(db).await {
                 Ok(Some(user)) => {
                     let email_parts: Vec<&str> = user.email.split('@').collect();
                     let username = email_parts[0];
@@ -559,7 +560,6 @@ pub struct ResetPasswordRequest {
 /// }
 /// ```
 pub async fn reset_password(
-    State(db): State<DatabaseConnection>,
     Json(req): Json<ResetPasswordRequest>
 ) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
@@ -570,18 +570,19 @@ pub async fn reset_password(
         );
     }
 
-    match PasswordResetTokenModel::find_valid_token(&db, &req.token).await {
+    let db = get_connection().await;
+    match PasswordResetTokenModel::find_valid_token(&req.token).await {
         Ok(Some(token)) => {
-            match user::Entity::find_by_id(token.user_id).one(&db).await {
+            match user::Entity::find_by_id(token.user_id).one(db).await {
                 Ok(Some(user)) => {
                     let user_email = user.email.clone();
                     
                     let mut active_model: user::ActiveModel = user.into();
                     active_model.password_hash = Set(UserModel::hash_password(&req.new_password));
                     
-                    match active_model.update(&db).await {
+                    match active_model.update(db).await {
                         Ok(_) => {
-                            if let Err(e) = token.mark_as_used(&db).await {
+                            if let Err(e) = token.mark_as_used().await {
                                 eprintln!("Failed to mark token as used: {}", e);
                             }
 
@@ -684,7 +685,6 @@ struct ProfilePictureResponse {
 ///   }
 ///   ```
 pub async fn upload_profile_picture(
-    State(db): State<DatabaseConnection>,
     AuthUser(claims): AuthUser,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
@@ -750,10 +750,11 @@ pub async fn upload_profile_picture(
         .to_string_lossy()
         .to_string();
 
-    let current = user::Entity::find_by_id(claims.sub).one(&db).await.unwrap().unwrap();
+    let db = get_connection().await;
+    let current = user::Entity::find_by_id(claims.sub).one(db).await.unwrap().unwrap();
     let mut model = current.into_active_model();
     model.profile_picture_path = Set(Some(relative_path.clone()));
-    model.update(&db).await.unwrap();
+    model.update(db).await.unwrap();
 
     let response = ProfilePictureResponse {
         profile_picture_path: relative_path,

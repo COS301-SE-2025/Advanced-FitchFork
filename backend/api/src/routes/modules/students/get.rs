@@ -1,9 +1,12 @@
-use axum::{extract::{State, Path, Query}, http::StatusCode, response::{Response, IntoResponse}, Json};
-use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, DatabaseConnection, JoinType, Order, PaginatorTrait, QuerySelect, QueryOrder};
+use axum::{extract::{Path, Query}, http::StatusCode, response::{Response, IntoResponse}, Json};
+use sea_orm::{EntityTrait, QueryFilter, Condition, ColumnTrait, JoinType, Order, PaginatorTrait, QuerySelect, QueryOrder};
 use crate::response::ApiResponse;
-use db::models::{
-    user,
-    user_module_role::{Column as RoleCol, Entity as RoleEntity, Role},
+use db::{
+    get_connection,
+    models::{
+        user,
+        user_module_role::{Column as RoleCol, Entity as RoleEntity, Role}
+    }
 };
 use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleResponse};
 
@@ -43,7 +46,6 @@ use crate::routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleRespo
 /// - `403 Forbidden` – if user is not admin or assigned to module
 /// - `404 Not Found` – if the module does not exist
 pub async fn get_students(
-    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Query(params): Query<RoleQuery>,
 ) -> Response {
@@ -97,7 +99,8 @@ pub async fn get_students(
         query = query.order_by(user::Column::Id, Order::Asc);
     }
 
-    let paginator = query.paginate(&db, per_page.into());
+    let db = get_connection().await;
+    let paginator = query.paginate(db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
     let users = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
 

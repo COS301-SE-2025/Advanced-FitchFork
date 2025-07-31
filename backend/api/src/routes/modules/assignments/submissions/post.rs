@@ -1,14 +1,17 @@
 use axum::{
-    extract::{State, Path, Multipart, Extension},
+    extract::{Path, Multipart, Extension},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use db::models::{
-    assignment_submission::{self, Model as AssignmentSubmissionModel},
-    assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
+use db::{
+    get_connection,
+    models::{
+        assignment_submission::{self, Model as AssignmentSubmissionModel},
+        assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
+    }
 };
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, QueryOrder, DatabaseConnection};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, QueryOrder};
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
@@ -125,15 +128,15 @@ use super::common::{
 /// - The endpoint is restricted to authenticated students assigned to the module
 /// - All errors are returned in a consistent JSON format
 pub async fn submit_assignment(
-    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
+    let db = get_connection().await;
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db).await.unwrap().unwrap();
+        .one(db).await.unwrap().unwrap();
 
     let mut is_practice = false;
     // let mut force_submit = false;
@@ -201,7 +204,7 @@ pub async fn submit_assignment(
         .filter(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
         .filter(assignment_submission::Column::UserId.eq(claims.sub))
         .order_by_desc(assignment_submission::Column::Attempt)
-        .one(&db)
+        .one(db)
         .await
         .ok()
         .flatten()
@@ -210,7 +213,6 @@ pub async fn submit_assignment(
     let attempt = prev_attempt + 1;
 
     let saved = match AssignmentSubmissionModel::save_file(
-        &db,
         assignment_id,
         claims.sub,
         attempt,
@@ -229,7 +231,7 @@ pub async fn submit_assignment(
         }
     };
 
-    if let Err(e) = code_runner::create_submission_outputs_for_all_tasks(&db, saved.id).await {
+    if let Err(e) = code_runner::create_submission_outputs_for_all_tasks(db, saved.id).await {
         eprintln!("Code runner failed: {}", e);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,

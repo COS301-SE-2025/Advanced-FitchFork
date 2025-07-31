@@ -8,13 +8,12 @@ use axum::{Router, routing::{get, post, put}};
 use post::set_assignment_config;
 use get::get_assignment_config;
 use put::update_assignment_config;
-use sea_orm::DatabaseConnection;
 
 pub mod post;
 pub mod put;
 pub mod get;
 
-pub fn config_routes() -> Router<DatabaseConnection> {
+pub fn config_routes() -> Router {
     Router::new()
         .route("/", post(set_assignment_config))
         .route("/", get(get_assignment_config))

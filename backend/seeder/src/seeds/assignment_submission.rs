@@ -1,6 +1,6 @@
 use crate::seed::Seeder;
-use db::models::{assignment, assignment_submission::Model as AssignmentSubmissionModel, user};
-use sea_orm::{DatabaseConnection, EntityTrait};
+use db::{get_connection, models::{assignment, assignment_submission::Model as AssignmentSubmissionModel, user}};
+use sea_orm::EntityTrait;
 use std::io::{Cursor, Write};
 use zip::write::SimpleFileOptions;
 
@@ -8,7 +8,9 @@ pub struct AssignmentSubmissionSeeder;
 
 #[async_trait::async_trait]
 impl Seeder for AssignmentSubmissionSeeder {
-    async fn seed(&self, db: &DatabaseConnection) {
+    async fn seed(&self) {
+        let db = get_connection().await;
+
         // Fetch all assignments and users
         let assignments = assignment::Entity::find()
             .all(db)
@@ -41,7 +43,6 @@ impl Seeder for AssignmentSubmissionSeeder {
                     );
 
                     let _ = AssignmentSubmissionModel::save_file(
-                        db,
                         assignment.id,
                         user.id,
                         counter,
@@ -181,7 +182,6 @@ std::string HelperThree::subtaskAlpha() {
         let content_java = create_memo_zip_as_submission_java();
 
         match AssignmentSubmissionModel::save_file(
-            db,
             assignment_id_java,
             user_id,
             attempt_number,
@@ -204,7 +204,6 @@ std::string HelperThree::subtaskAlpha() {
         let content_cpp = create_cpp_submission_zip();
 
         match AssignmentSubmissionModel::save_file(
-            db,
             assignment_id_cpp,
             user_id,
             attempt_number,

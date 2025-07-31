@@ -1,5 +1,4 @@
 use axum::{
-    extract::State,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -8,7 +7,6 @@ use chrono::{Datelike, Utc};
 use validator::Validate;
 use db::models::module::{Model as Module};
 use crate::response::ApiResponse;
-use sea_orm::DatabaseConnection;
 use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
 
 /// POST /api/modules
@@ -82,7 +80,6 @@ use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
 /// }
 /// ```
 pub async fn create(
-    State(db): State<DatabaseConnection>,
     Json(req): Json<ModuleRequest>
 ) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
@@ -105,7 +102,6 @@ pub async fn create(
     }
 
     match Module::create(
-        &db,
         &req.code,
         req.year,
         req.description.as_deref(),

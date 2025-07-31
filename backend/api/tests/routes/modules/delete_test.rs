@@ -4,7 +4,7 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
-    use db::{test_utils::setup_test_db, models::{module::{self, Model as Module}, user::Model as UserModel}};
+    use db::{get_connection, models::{module::{self, Model as Module}, user::Model as UserModel}};
     use tower::ServiceExt;
     use api::auth::generate_jwt;
     use crate::test_helpers::make_app;
@@ -16,13 +16,12 @@ mod tests {
         module: Module,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
+    async fn setup_test_data() -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let admin_user = UserModel::create(db, "admin", "admin@test.com", "password", true).await.expect("Failed to create admin user");
-        let regular_user = UserModel::create(db, "regular", "regular@test.com", "password", false).await.expect("Failed to create regular user");
+        let admin_user = UserModel::create("admin", "admin@test.com", "password", true).await.expect("Failed to create admin user");
+        let regular_user = UserModel::create("regular", "regular@test.com", "password", false).await.expect("Failed to create regular user");
         let module = Module::create(
-            db,
             "COS301",
             2025,
             Some("Module to be deleted"),
@@ -41,10 +40,9 @@ mod tests {
     /// Test Case: Admin deletes module successfully
     #[tokio::test]
     async fn test_delete_module_success() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -64,8 +62,9 @@ mod tests {
         assert_eq!(json["message"], "Module deleted successfully");
         assert!(json["data"].is_null());
 
+        let db = get_connection().await;
         let exists = module::Entity::find_by_id(data.module.id)
-            .one(&db)
+            .one(db)
             .await
             .unwrap()
             .is_some();
@@ -75,10 +74,9 @@ mod tests {
     /// Test Case: Non-admin user attempts to delete module
     #[tokio::test]
     async fn test_delete_module_forbidden() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
     
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -96,8 +94,9 @@ mod tests {
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Admin access required");
 
+        let db = get_connection().await;
         let exists = module::Entity::find_by_id(data.module.id)
-            .one(&db)
+            .one(db)
             .await
             .unwrap()
             .is_some();
@@ -107,10 +106,9 @@ mod tests {
     /// Test Case: Delete non-existent module
     #[tokio::test]
     async fn test_delete_module_not_found() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", 99999);
         let req = Request::builder()
@@ -132,10 +130,9 @@ mod tests {
     /// Test Case: Missing authorization header
     #[tokio::test]
     async fn test_delete_module_unauthorized() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
             .method("DELETE")
@@ -146,8 +143,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
+        let db = get_connection().await;
         let exists = module::Entity::find_by_id(data.module.id)
-            .one(&db)
+            .one(db)
             .await
             .unwrap()
             .is_some();

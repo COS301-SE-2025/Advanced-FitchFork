@@ -1,15 +1,15 @@
 use axum::{
-    extract::{State, Path, Query},
+    extract::{Path, Query},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, DatabaseConnection};
+use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 use crate::response::ApiResponse;
 use crate::routes::common::UserModule;
-use db::models::user::{Entity as UserEntity, Model as UserModel, Column as UserColumn};
+use db::{get_connection, models::user::{Column as UserColumn, Entity as UserEntity, Model as UserModel}};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct ListUsersQuery {
@@ -110,7 +110,6 @@ impl From<UserModel> for UserListItem {
 /// - `403 Forbidden` - Authenticated but not admin user
 /// - `500 Internal Server Error` - Database error
 pub async fn list_users(
-    State(db): State<DatabaseConnection>,
     Query(query): Query<ListUsersQuery>
 ) -> impl IntoResponse {
     if let Err(e) = query.validate() {
@@ -194,7 +193,8 @@ pub async fn list_users(
         query_builder = query_builder.order_by_asc(UserColumn::Id);
     }
 
-    let paginator = query_builder.paginate(&db, per_page);
+    let db = get_connection().await;
+    let paginator = query_builder.paginate(db, per_page);
     let total = paginator.num_items().await.unwrap_or(0);
     let users = paginator.fetch_page(page - 1).await.unwrap_or_default();
     let users = users.into_iter().map(UserListItem::from).collect();
@@ -226,10 +226,10 @@ pub async fn list_users(
 /// - `404 Not Found`: User does not exist
 /// - `500 Internal Server Error`: DB error
 pub async fn get_user(
-    State(db): State<DatabaseConnection>,
     Path(user_id): Path<i64>
 ) -> impl IntoResponse {
-    match UserEntity::find_by_id(user_id).one(&db).await {
+    let db = get_connection().await;
+    match UserEntity::find_by_id(user_id).one(db).await {
         Ok(Some(user)) => {
             let user_item = UserListItem::from(user);
             (
@@ -303,10 +303,9 @@ pub async fn get_user(
 /// }
 /// ```
 pub async fn get_user_modules(
-    State(db): State<DatabaseConnection>,
     Path(user_id): Path<i64>
 ) -> impl IntoResponse {
-    let roles = match UserModel::get_module_roles(&db, user_id).await {
+    let roles = match UserModel::get_module_roles(user_id).await {
         Ok(r) => r,
         Err(e) => {
             return (

@@ -1,10 +1,9 @@
-use axum::{middleware::from_fn, middleware::from_fn_with_state, Router, routing::{get, post, put, delete}};
+use axum::{middleware::from_fn, Router, routing::{get, post, put, delete}};
 use crate::auth::guards::{require_admin, require_lecturer};
 use get::get_lecturers;
 use post::assign_lecturers;
 use put::edit_lecturers;
 use delete::remove_lecturers;
-use sea_orm::DatabaseConnection;
 
 mod get;
 mod post;
@@ -21,9 +20,9 @@ mod delete;
 /// - `POST   /modules/{module_id}/lecturers`     → assign lecturers
 /// - `PUT    /modules/{module_id}/lecturers`     → set lecturers (overwrites existing roles)
 /// - `DELETE /modules/{module_id}/lecturers`     → remove lecturers from module
-pub fn lecturer_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
+pub fn lecturer_routes() -> Router {
     Router::new()
-        .route("/", get(get_lecturers).route_layer(from_fn_with_state(db.clone(), require_lecturer)))
+        .route("/", get(get_lecturers).route_layer(from_fn(require_lecturer)))
         .route("/", post(assign_lecturers).route_layer(from_fn(require_admin)))
         .route("/", put(edit_lecturers).route_layer(from_fn(require_admin)))
         .route("/", delete(remove_lecturers).route_layer(from_fn(require_admin)))

@@ -1,14 +1,16 @@
 use axum::{
-    extract::State,
     http::StatusCode,
     Json,
 };
 use crate::response::ApiResponse;
-use db::models::{
-    user::{Entity as UserEntity},
-    user_module_role::{Entity as RoleEntity, ActiveModel as RoleActiveModel, Column as RoleCol, Role},
+use db::{
+    get_connection,
+    models::{
+        user::{Entity as UserEntity},
+        user_module_role::{Entity as RoleEntity, ActiveModel as RoleActiveModel, Column as RoleCol, Role},
+    }
 };
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, DatabaseConnection, ActiveModelTrait, Condition, Set};
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait, Condition, Set};
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
 /// POST /api/modules/{module_id}/tutors
@@ -74,7 +76,6 @@ use crate::routes::modules::common::ModifyUsersModuleRequest;
 /// }
 /// ```
 pub async fn assign_tutors(
-    State(db): State<DatabaseConnection>,
     axum::extract::Path(module_id): axum::extract::Path<i64>,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl axum::response::IntoResponse {
@@ -86,9 +87,10 @@ pub async fn assign_tutors(
     }
 
     let mut already_assigned = Vec::new();
+    let db = get_connection().await;
 
     for &user_id in &body.user_ids {
-        match UserEntity::find_by_id(user_id).one(&db).await {
+        match UserEntity::find_by_id(user_id).one(db).await {
             Ok(Some(_)) => {}
             Ok(None) => {
                 return (
@@ -114,7 +116,7 @@ pub async fn assign_tutors(
                     .add(RoleCol::ModuleId.eq(module_id))
                     .add(RoleCol::Role.eq(Role::Tutor)),
             )
-            .one(&db)
+            .one(db)
             .await;
 
         match exists {
@@ -130,7 +132,7 @@ pub async fn assign_tutors(
                     ..Default::default()
                 };
 
-                if let Err(_) = new_role.insert(&db).await {
+                if let Err(_) = new_role.insert(db).await {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ApiResponse::<()>::error("Failed to assign tutor")),

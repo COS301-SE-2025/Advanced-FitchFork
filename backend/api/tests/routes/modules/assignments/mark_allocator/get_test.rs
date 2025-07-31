@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::Value;
@@ -19,15 +19,14 @@ mod tests {
         assignment: AssignmentModel,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
-        let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
-        let forbidden_user = UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
+    async fn setup_test_data() -> TestData {
+        let module = ModuleModel::create("COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let lecturer_user = UserModel::create("lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
+        let student_user = UserModel::create("student1", "student1@test.com", "password2", false).await.unwrap();
+        let forbidden_user = UserModel::create("forbidden", "forbidden@test.com", "password3", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(student_user.id, module.id, Role::Student).await.unwrap();
         let assignment = AssignmentModel::create(
-            db,
             module.id,
             "Assignment 1",
             Some("Desc 1"),
@@ -50,8 +49,7 @@ mod tests {
     async fn test_get_mark_allocator_success_as_lecturer() {
         dotenvy::dotenv().expect("Failed to load .env");
         unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
         
         let allocator_path = PathBuf::from("./tmp")
             .join(format!("module_{}", data.module.id))
@@ -61,7 +59,7 @@ mod tests {
         fs::create_dir_all(allocator_path.parent().unwrap()).unwrap();
         fs::write(&allocator_path, r#"{"tasks":[{"task_number":1,"weight":1.0,"criteria":[{"name":"Correctness","weight":1.0}]}],"total_weight":1.0}"#).unwrap();
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -86,10 +84,9 @@ mod tests {
     async fn test_get_mark_allocator_not_found() {
         dotenvy::dotenv().expect("Failed to load .env");
         unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -107,10 +104,9 @@ mod tests {
     async fn test_get_mark_allocator_forbidden_for_student() {
         dotenvy::dotenv().expect("Failed to load .env");
         unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -128,10 +124,9 @@ mod tests {
     async fn test_get_mark_allocator_forbidden_for_unassigned_user() {
         dotenvy::dotenv().expect("Failed to load .env");
         unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -149,10 +144,9 @@ mod tests {
     async fn test_get_mark_allocator_unauthorized() {
         dotenvy::dotenv().expect("Failed to load .env");
         unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp"); }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
         
-        let app = make_app(db.clone());
+        let app = make_app();
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
         let req = Request::builder()
             .uri(&uri)

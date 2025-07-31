@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use db::{
-        test_utils::setup_test_db,
         models::{
             user::Model as UserModel,
             module::Model as ModuleModel,
@@ -27,18 +26,16 @@ mod tests {
         module: ModuleModel,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        dotenvy::dotenv().expect("Failed to load .env");
-
-        let module = ModuleModel::create(db, "MOD101", Utc::now().year() - 1, Some("Test Module Description"), 16).await.expect("Failed to create test module");
-        let admin_user = UserModel::create(db, "module_admin", "module_admin@test.com", "password", true).await.expect("Failed to create admin user");
-        let forbidden_user = UserModel::create(db, "module_forbidden", "module_forbidden@test.com", "password", false).await.expect("Failed to create forbidden user");
-        let lecturer_user = UserModel::create(db, "module_lecturer", "module_lecturer@test.com", "password", false).await.expect("Failed to create lecturer user");
-        let tutor_user = UserModel::create(db, "module_tutor", "module_tutor@test.com", "password", false).await.expect("Failed to create tutor user");
-        let student_user = UserModel::create(db, "module_student", "module_student@test.com", "password", false).await.expect("Failed to create student user");
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.expect("Failed to assign lecturer role");
-        UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor).await.expect("Failed to assign tutor role");
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.expect("Failed to assign student role");
+    async fn setup_test_data() -> TestData {
+        let module = ModuleModel::create("MOD101", Utc::now().year() - 1, Some("Test Module Description"), 16).await.expect("Failed to create test module");
+        let admin_user = UserModel::create("module_admin", "module_admin@test.com", "password", true).await.expect("Failed to create admin user");
+        let forbidden_user = UserModel::create("module_forbidden", "module_forbidden@test.com", "password", false).await.expect("Failed to create forbidden user");
+        let lecturer_user = UserModel::create("module_lecturer", "module_lecturer@test.com", "password", false).await.expect("Failed to create lecturer user");
+        let tutor_user = UserModel::create("module_tutor", "module_tutor@test.com", "password", false).await.expect("Failed to create tutor user");
+        let student_user = UserModel::create("module_student", "module_student@test.com", "password", false).await.expect("Failed to create student user");
+        UserModuleRoleModel::assign_user_to_module(lecturer_user.id, module.id, Role::Lecturer).await.expect("Failed to assign lecturer role");
+        UserModuleRoleModel::assign_user_to_module(tutor_user.id, module.id, Role::Tutor).await.expect("Failed to assign tutor role");
+        UserModuleRoleModel::assign_user_to_module(student_user.id, module.id, Role::Student).await.expect("Failed to assign student role");
 
         TestData {
             admin_user,
@@ -53,10 +50,9 @@ mod tests {
     /// Test Case: Successful Retrieval of Module Info as Admin
     #[tokio::test]
     async fn test_get_module_success_as_admin() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -100,10 +96,9 @@ mod tests {
     /// Test Case: Successful Retrieval of Module Info as Lecturer
     #[tokio::test]
     async fn test_get_module_success_as_lecturer() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -120,10 +115,9 @@ mod tests {
     /// Test Case: Successful Retrieval of Module Info as Tutor
     #[tokio::test]
     async fn test_get_module_success_as_tutor() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.tutor_user.id, data.tutor_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -140,10 +134,9 @@ mod tests {
     /// Test Case: Successful Retrieval of Module Info as Student
     #[tokio::test]
     async fn test_get_module_success_as_student() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -160,10 +153,9 @@ mod tests {
     /// Test Case: Retrieving Non-Existent Module
     #[tokio::test]
     async fn test_get_module_not_found() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", 99999);
         let req = Request::builder()
@@ -182,13 +174,12 @@ mod tests {
         assert_eq!(json["message"], format!("Module 99999 not found."));
     }
 
-    /// Test Case: Accessing Module without Required Role (Forbidden)
+    /// Test Case: Accessing Module without Required Role
     #[tokio::test]
     async fn test_get_module_forbidden_user() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -205,10 +196,9 @@ mod tests {
     /// Test Case: Accessing Module without Authorization Header
     #[tokio::test]
     async fn test_get_module_missing_auth_header() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
             .method("GET")
@@ -223,10 +213,9 @@ mod tests {
     /// Test Case: Accessing Module with Invalid JWT Token
     #[tokio::test]
     async fn test_get_module_invalid_token() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
             .method("GET")
@@ -242,10 +231,9 @@ mod tests {
     /// Test Case: Module Info Includes Correct User Details in Personnel
     #[tokio::test]
     async fn test_get_module_personnel_user_details() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -287,13 +275,13 @@ mod tests {
     /// Test Case: Module with No Assigned Personnel
     #[tokio::test]
     async fn test_get_module_no_personnel() {
-        let db = setup_test_db().await;
+
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let empty_module = ModuleModel::create(&db, "EMPTY101", Utc::now().year() - 1, Some("Empty Module"), 10).await.expect("Failed to create empty module");
-        let admin_user = UserModel::create(&db, "empty_admin", "empty_admin@test.com", "password", true).await.expect("Failed to create admin user for empty module test");
+        let empty_module = ModuleModel::create("EMPTY101", Utc::now().year() - 1, Some("Empty Module"), 10).await.expect("Failed to create empty module");
+        let admin_user = UserModel::create("empty_admin", "empty_admin@test.com", "password", true).await.expect("Failed to create admin user for empty module test");
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(admin_user.id, admin_user.admin);
         let uri = format!("/api/modules/{}", empty_module.id);
         let req = Request::builder()
@@ -328,19 +316,18 @@ mod tests {
     /// Test Case: Module with Multiple Users per Role
     #[tokio::test]
     async fn test_get_module_multiple_personnel_per_role() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let lecturer2 = UserModel::create(&db, "module_lecturer2", "module_lecturer2@test.com", "password", false).await.expect("Failed to create second lecturer");
-        let tutor2 = UserModel::create(&db, "module_tutor2", "module_tutor2@test.com", "password", false).await.expect("Failed to create second tutor");
-        let student2 = UserModel::create(&db, "module_student2", "module_student2@test.com", "password", false).await.expect("Failed to create second student");
-        let student3 = UserModel::create(&db, "module_student3", "module_student3@test.com", "password", false).await.expect("Failed to create third student");
-        UserModuleRoleModel::assign_user_to_module(&db, lecturer2.id, data.module.id, Role::Lecturer).await.expect("Failed to assign second lecturer");
-        UserModuleRoleModel::assign_user_to_module(&db, tutor2.id, data.module.id, Role::Tutor).await.expect("Failed to assign second tutor");
-        UserModuleRoleModel::assign_user_to_module(&db, student2.id, data.module.id, Role::Student).await.expect("Failed to assign second student");
-        UserModuleRoleModel::assign_user_to_module(&db, student3.id, data.module.id, Role::Student).await.expect("Failed to assign third student");
+        let lecturer2 = UserModel::create("module_lecturer2", "module_lecturer2@test.com", "password", false).await.expect("Failed to create second lecturer");
+        let tutor2 = UserModel::create("module_tutor2", "module_tutor2@test.com", "password", false).await.expect("Failed to create second tutor");
+        let student2 = UserModel::create("module_student2", "module_student2@test.com", "password", false).await.expect("Failed to create second student");
+        let student3 = UserModel::create("module_student3", "module_student3@test.com", "password", false).await.expect("Failed to create third student");
+        UserModuleRoleModel::assign_user_to_module(lecturer2.id, data.module.id, Role::Lecturer).await.expect("Failed to assign second lecturer");
+        UserModuleRoleModel::assign_user_to_module(tutor2.id, data.module.id, Role::Tutor).await.expect("Failed to assign second tutor");
+        UserModuleRoleModel::assign_user_to_module(student2.id, data.module.id, Role::Student).await.expect("Failed to assign second student");
+        UserModuleRoleModel::assign_user_to_module(student3.id, data.module.id, Role::Student).await.expect("Failed to assign third student");
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()

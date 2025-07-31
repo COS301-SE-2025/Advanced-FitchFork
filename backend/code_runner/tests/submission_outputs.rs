@@ -1,5 +1,6 @@
 use chrono::Utc;
 use code_runner::create_submission_outputs_for_all_tasks;
+use db::get_connection;
 use db::models::assignment::AssignmentType;
 use db::models::assignment::{ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity};
 use db::models::assignment_submission::{
@@ -8,12 +9,11 @@ use db::models::assignment_submission::{
 use db::models::assignment_task::Model as AssignmentTaskModel;
 use db::models::module::{ActiveModel as ModuleActiveModel, Entity as ModuleEntity};
 use db::models::user::{ActiveModel as UserActiveModel, Entity as UserEntity};
-use db::test_utils::setup_test_db;
-use sea_orm::DatabaseConnection;
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 
-async fn seed_user(db: &DatabaseConnection) -> i64 {
+async fn seed_user() -> i64 {
     let user_id = 1;
+    let db = get_connection().await;
     if UserEntity::find_by_id(user_id)
         .one(db)
         .await
@@ -35,11 +35,12 @@ async fn seed_user(db: &DatabaseConnection) -> i64 {
     user_id
 }
 
-async fn seed_submission(db: &DatabaseConnection, assignment_id: i64) -> SubmissionModel {
+async fn seed_submission(assignment_id: i64) -> SubmissionModel {
     let user_id = 1;
     let attempt = 1;
     let filename = "submission.zip";
 
+    let db = get_connection().await;
     let assignment = AssignmentEntity::find_by_id(assignment_id)
         .one(db)
         .await
@@ -77,7 +78,8 @@ async fn seed_submission(db: &DatabaseConnection, assignment_id: i64) -> Submiss
         .expect("Failed to insert submission")
 }
 
-async fn seed_module(db: &DatabaseConnection, module_id: i64, code: &str) {
+async fn seed_module(module_id: i64, code: &str) {
+    let db = get_connection().await;
     let existing_module = ModuleEntity::find_by_id(module_id)
         .one(db)
         .await
@@ -101,7 +103,8 @@ async fn seed_module(db: &DatabaseConnection, module_id: i64, code: &str) {
     }
 }
 
-async fn seed_assignment(db: &DatabaseConnection, assignment_id: i64, module_id: i64) {
+async fn seed_assignment(assignment_id: i64, module_id: i64) {
+    let db = get_connection().await;
     let existing_assignment = AssignmentEntity::find_by_id(assignment_id)
         .one(db)
         .await
@@ -128,7 +131,7 @@ async fn seed_assignment(db: &DatabaseConnection, assignment_id: i64, module_id:
     }
 }
 
-async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
+async fn seed_tasks(assignment_id: i64) {
     let mut tasks = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
 
     if assignment_id == 9998 {
@@ -136,47 +139,43 @@ async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
     }
 
     for (task_number, command) in tasks {
-        AssignmentTaskModel::create(db, assignment_id, task_number,"Untitled Task", command)
+        AssignmentTaskModel::create(assignment_id, task_number,"Untitled Task", command)
             .await
             .expect("Failed to create assignment task");
     }
 }
 
-async fn setup_test_db_with_seeded_tasks(assignment_id: i64, module_id: i64) -> DatabaseConnection {
-    let db = setup_test_db().await;
-
-    seed_user(&db).await;
-    seed_module(&db, module_id, &format!("COS{}", module_id)).await;
-    seed_assignment(&db, assignment_id, module_id).await;
-    seed_tasks(&db, assignment_id).await;
-    seed_submission(&db, assignment_id).await;
-
-    db
+async fn setup_test_db_with_seeded_tasks(assignment_id: i64, module_id: i64) {
+    seed_user().await;
+    seed_module(module_id, &format!("COS{}", module_id)).await;
+    seed_assignment(assignment_id, module_id).await;
+    seed_tasks(assignment_id).await;
+    seed_submission(assignment_id).await;
 }
 
 #[tokio::test]
 #[ignore]
 async fn test_create_submission_outputs_for_all_tasks_9999_java() {
     dotenvy::dotenv().ok();
-
-    let db = setup_test_db_with_seeded_tasks(9999, 9999).await;
+    setup_test_db_with_seeded_tasks(9999, 9999).await;
 
     use db::models::assignment_submission::Entity as SubmissionEntity;
     use sea_orm::ColumnTrait;
     use sea_orm::QueryFilter;
 
+    let db = get_connection().await;
     let submission = SubmissionEntity::find()
         .filter(db::models::assignment_submission::Column::AssignmentId.eq(9999))
         .filter(db::models::assignment_submission::Column::UserId.eq(1))
         .filter(db::models::assignment_submission::Column::Attempt.eq(1))
-        .one(&db)
+        .one(db)
         .await
         .expect("Failed to lookup submission")
         .expect("No matching submission found");
 
     let submission_id = submission.id;
 
-    match create_submission_outputs_for_all_tasks(&db, submission_id).await {
+    match create_submission_outputs_for_all_tasks(db, submission_id).await {
         Ok(_) => {}
         Err(e) => panic!("Failed to generate submission outputs: {}", e),
     }
@@ -186,25 +185,25 @@ async fn test_create_submission_outputs_for_all_tasks_9999_java() {
 #[ignore]
 async fn test_create_submission_outputs_for_all_tasks_9998_cpp() {
     dotenvy::dotenv().ok();
-
-    let db = setup_test_db_with_seeded_tasks(9998, 9998).await;
+    setup_test_db_with_seeded_tasks(9998, 9998).await;
 
     use db::models::assignment_submission::Entity as SubmissionEntity;
     use sea_orm::ColumnTrait;
     use sea_orm::QueryFilter;
 
+    let db = get_connection().await;
     let submission = SubmissionEntity::find()
         .filter(db::models::assignment_submission::Column::AssignmentId.eq(9998))
         .filter(db::models::assignment_submission::Column::UserId.eq(1))
         .filter(db::models::assignment_submission::Column::Attempt.eq(1))
-        .one(&db)
+        .one(db)
         .await
         .expect("Failed to lookup submission")
         .expect("No matching submission found");
 
     let submission_id = submission.id;
 
-    match create_submission_outputs_for_all_tasks(&db, submission_id).await {
+    match create_submission_outputs_for_all_tasks(db, submission_id).await {
         Ok(_) => {}
         Err(e) => panic!(
             "Failed to generate submission outputs for C++ assignment: {}",

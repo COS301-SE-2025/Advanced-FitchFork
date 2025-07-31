@@ -1,20 +1,23 @@
 use axum::{
     Extension, Json,
-    extract::{State, Path, Query},
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, Order, PaginatorTrait,
+    ColumnTrait, Condition, EntityTrait, JoinType, Order, PaginatorTrait,
     QueryFilter, QueryOrder, QuerySelect,
 };
 use crate::{auth::AuthUser, response::ApiResponse};
 use crate::routes::common::UserResponse;
-use db::models::{
-    module::{Column as ModuleCol, Entity as ModuleEntity, Model as Module},
-    user::{self, Column as UserCol, Entity as UserEntity, Model as UserModel},
-    user_module_role::{self, Column as RoleCol, Entity as RoleEntity, Role},
+use db::{
+    get_connection,
+    models::{
+        module::{Column as ModuleCol, Entity as ModuleEntity, Model as Module},
+        user::{self, Column as UserCol, Entity as UserEntity, Model as UserModel},
+        user_module_role::{self, Column as RoleCol, Entity as RoleEntity, Role},
+    }
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -138,7 +141,6 @@ pub struct EligibleUserListResponse {
 /// }
 /// ```
 pub async fn get_eligible_users_for_module(
-    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Query(params): Query<EligibleUserQuery>,
 ) -> Response {
@@ -155,12 +157,13 @@ pub async fn get_eligible_users_for_module(
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
 
+    let db = get_connection().await;
     let assigned_ids: Vec<i32> = user_module_role::Entity::find()
         .select_only()
         .column(user_module_role::Column::UserId)
         .filter(user_module_role::Column::ModuleId.eq(module_id))
         .into_tuple::<i32>()
-        .all(&db)
+        .all(db)
         .await
         .unwrap_or_default();
 
@@ -205,7 +208,7 @@ pub async fn get_eligible_users_for_module(
         query = query.order_by(user::Column::Id, Order::Asc);
     }
 
-    let paginator = query.paginate(&db, per_page.into());
+    let paginator = query.paginate(db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
     let users = paginator
         .fetch_page((page - 1).into())
@@ -312,16 +315,16 @@ pub async fn get_eligible_users_for_module(
 /// }
 /// ```
 pub async fn get_module(
-    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>
 ) -> Response {
+    let db = get_connection().await;
     let module = ModuleEntity::find_by_id(module_id)
-        .one(&db).await.unwrap().unwrap();
+        .one(db).await.unwrap().unwrap();
 
     let (lecturers, tutors, students) = tokio::join!(
-        get_users_by_role(&db, module_id, Role::Lecturer),
-        get_users_by_role(&db, module_id, Role::Tutor),
-        get_users_by_role(&db, module_id, Role::Student),
+        get_users_by_role(module_id, Role::Lecturer),
+        get_users_by_role(module_id, Role::Tutor),
+        get_users_by_role(module_id, Role::Student),
     );
 
     if lecturers.is_err() || tutors.is_err() || students.is_err() {
@@ -362,10 +365,10 @@ pub async fn get_module(
 }
 
 async fn get_users_by_role(
-    db: &DatabaseConnection,
     module_id: i64,
     role: Role,
 ) -> Result<Vec<UserModel>, sea_orm::DbErr> {
+    let db = get_connection().await;
     UserEntity::find()
         .join(
             JoinType::InnerJoin,
@@ -509,7 +512,6 @@ impl From<(Vec<Module>, i32, i32, i32)> for FilterResponse {
 /// }
 /// ```
 pub async fn get_modules(
-    State(db): State<DatabaseConnection>,
     Query(params): Query<FilterReq>
 ) -> impl IntoResponse {
     let page = params.page.unwrap_or(1).max(1);
@@ -607,7 +609,8 @@ pub async fn get_modules(
     }
 
     // Pagination
-    let paginator = query.paginate(&db, per_page as u64);
+    let db = get_connection().await;
+    let paginator = query.paginate(db, per_page as u64);
     let total = paginator.num_items().await.unwrap_or(0) as i32;
     let modules: Vec<Module> = paginator
         .fetch_page((page - 1) as u64)
@@ -711,16 +714,15 @@ impl From<(Vec<Module>, Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsRes
 /// }
 /// ```
 pub async fn get_my_details(
-    State(db): State<DatabaseConnection>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
     let user_id = claims.sub;
 
     let (as_student, as_tutor, as_lecturer, as_assistant_lecturer) = tokio::join!(
-        get_modules_by_user_and_role(&db, user_id, Role::Student),
-        get_modules_by_user_and_role(&db, user_id, Role::Tutor),
-        get_modules_by_user_and_role(&db, user_id, Role::Lecturer),
-        get_modules_by_user_and_role(&db, user_id, Role::AssistantLecturer),
+        get_modules_by_user_and_role(user_id, Role::Student),
+        get_modules_by_user_and_role(user_id, Role::Tutor),
+        get_modules_by_user_and_role(user_id, Role::Lecturer),
+        get_modules_by_user_and_role(user_id, Role::AssistantLecturer),
     );
 
     match (as_student, as_tutor, as_lecturer, as_assistant_lecturer) {
@@ -745,10 +747,10 @@ pub async fn get_my_details(
 
 /// Helper to fetch modules by user_id and role using SeaORM relations
 async fn get_modules_by_user_and_role(
-    db: &DatabaseConnection,
     user_id: i64,
     role: Role,
 ) -> Result<Vec<Module>, sea_orm::DbErr> {
+    let db = get_connection().await;
     RoleEntity::find()
         .filter(
             Condition::all()

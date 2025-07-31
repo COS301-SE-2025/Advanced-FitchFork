@@ -1,11 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::{Model as AssignmentModel, Entity as AssignmentEntity, ActiveModel as AssignmentActiveModel}, assignment_task::Model as AssignmentTaskModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{get_connection, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::{Model as AssignmentModel, Entity as AssignmentEntity, ActiveModel as AssignmentActiveModel}, assignment_task::Model as AssignmentTaskModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::Value;
     use api::auth::generate_jwt;
-    use dotenvy;
     use chrono::{Utc, TimeZone, Duration};
     use std::{fs, io::Write};
     use serial_test::serial;
@@ -16,7 +15,7 @@ mod tests {
     use flate2::{write::GzEncoder, Compression};
     use tempfile::{tempdir, TempDir};
     use std::path::Path;
-    use sea_orm::{EntityTrait, ActiveModelTrait, Set, DatabaseConnection};
+    use sea_orm::{EntityTrait, ActiveModelTrait, Set};
 
     struct TestData {
         student_user: UserModel,
@@ -25,17 +24,15 @@ mod tests {
         assignment: AssignmentModel,
     }
 
-    async fn setup_test_data(db: &DatabaseConnection) -> (TestData, TempDir) {
-        dotenvy::dotenv().expect("Failed to load .env");
+    async fn setup_test_data() -> (TestData, TempDir) {
         let temp_dir = tempdir().expect("Failed to create temporary directory");
         unsafe{ std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
 
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
-        let unassigned_user = UserModel::create(&db, "unassigned", "unassigned@test.com", "password", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
+        let module = ModuleModel::create("COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let student_user = UserModel::create("student1", "student1@test.com", "password2", false).await.unwrap();
+        let unassigned_user = UserModel::create("unassigned", "unassigned@test.com", "password", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(student_user.id, module.id, Role::Student).await.unwrap();
         let assignment = AssignmentModel::create(
-            db,
             module.id,
             "Assignment 1",
             Some("Desc 1"),
@@ -44,7 +41,6 @@ mod tests {
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
         ).await.unwrap();
         AssignmentTaskModel::create(
-            db,
             assignment.id,
             1,
             "Task 1",
@@ -297,9 +293,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_valid_submission_zip() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -325,9 +320,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_valid_submission_tar() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_tar();
 
         let (boundary, body) = multipart_body("solution.tar", &file, None);
@@ -353,9 +348,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_valid_submission_tgz() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_tgz();
 
         let (boundary, body) = multipart_body("solution.tgz", &file, None);
@@ -381,9 +376,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_valid_submission_gz() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_gz();
 
         let (boundary, body) = multipart_body("solution.gz", &file, None);
@@ -409,9 +404,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_practice_submission() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, Some("true"));
@@ -437,9 +432,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_multiple_attempts_increments() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -484,8 +479,8 @@ mod tests {
     // #[serial]
     // async fn test_submission_with_code_coverage_and_complexity_fields() {
     //     let db = setup_test_db().await;
-    //     let (data, _temp_dir) = setup_test_data(&db).await;
-    //     let app = make_app(db.clone());
+    //     let (data, _temp_dir) = setup_test_data().await;
+    //     let app = make_app();
     //     let file = create_submission_zip();
     //     let (boundary, body) = multipart_body("solution.zip", &file, None);
     //     let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -509,14 +504,15 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_exactly_at_due_date() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_zip();
 
-        let mut assignment_active_model: AssignmentActiveModel = AssignmentEntity::find_by_id(data.assignment.id).one(&db).await.unwrap().unwrap().into();
+        let db = get_connection().await;
+        let mut assignment_active_model: AssignmentActiveModel = AssignmentEntity::find_by_id(data.assignment.id).one(db).await.unwrap().unwrap().into();
         assignment_active_model.due_date = Set(Utc::now());
-        assignment_active_model.update(&db).await.unwrap();
+        assignment_active_model.update(db).await.unwrap();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -541,14 +537,15 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_just_after_due_date() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_zip();
 
-        let mut assignment_active_model: AssignmentActiveModel = AssignmentEntity::find_by_id(data.assignment.id).one(&db).await.unwrap().unwrap().into();
+        let db = get_connection().await;
+        let mut assignment_active_model: AssignmentActiveModel = AssignmentEntity::find_by_id(data.assignment.id).one(db).await.unwrap().unwrap().into();
         assignment_active_model.due_date = Set(Utc::now() - Duration::hours(1));
-        assignment_active_model.update(&db).await.unwrap();
+        assignment_active_model.update(db).await.unwrap();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -573,14 +570,15 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_just_before_due_date() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_zip();
 
-        let mut assignment_active_model: AssignmentActiveModel = AssignmentEntity::find_by_id(data.assignment.id).one(&db).await.unwrap().unwrap().into();
+        let db = get_connection().await;
+        let mut assignment_active_model: AssignmentActiveModel = AssignmentEntity::find_by_id(data.assignment.id).one(db).await.unwrap().unwrap().into();
         assignment_active_model.due_date = Set(Utc::now() + Duration::hours(1));
-        assignment_active_model.update(&db).await.unwrap();
+        assignment_active_model.update(db).await.unwrap();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -605,9 +603,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_large_file_submission() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_large_zip_file(1024 * 1024);
 
         let (boundary, body) = multipart_body("large.zip", &file, None);
@@ -633,9 +631,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_missing_file() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         
         let boundary = "----BoundaryTest".to_string();
         let mut body = Vec::new();
@@ -664,9 +662,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_empty_file() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = Vec::new();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -692,9 +690,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_invalid_file_extension() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_exe_file();
 
         let (boundary, body) = multipart_body("solution.exe", &file, None);
@@ -720,9 +718,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_corrupted_archive() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_corrupted_zip();
 
         let (boundary, body) = multipart_body("corrupted.zip", &file, None);
@@ -748,9 +746,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_assignment_not_found() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -777,9 +775,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_user_not_assigned() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());    
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();    
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -805,9 +803,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submitting_to_invalid_assignment() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, _temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -836,8 +834,8 @@ mod tests {
     // #[serial]
     // async fn test_code_runner_failure() {
     //     let db = setup_test_db().await;
-    //     let (data, _temp_dir) = setup_test_data(&db).await;
-    //     let app = make_app(db.clone());
+    //     let (data, _temp_dir) = setup_test_data().await;
+    //     let app = make_app();
 
     //     let mut buf = Vec::new();
     //     {
@@ -870,9 +868,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_failed_to_load_mark_allocator() {
-        let db = setup_test_db().await;
-        let (data, temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_zip();
 
         let allocator_path = std::path::PathBuf::from(temp_dir.path())
@@ -905,9 +903,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_failed_marking_due_to_broken_allocator() {
-        let db = setup_test_db().await;
-        let (data, temp_dir) = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+
+        let (data, temp_dir) = setup_test_data().await;
+        let app = make_app();
         let file = create_submission_zip();
 
         let base_path = temp_dir.path()

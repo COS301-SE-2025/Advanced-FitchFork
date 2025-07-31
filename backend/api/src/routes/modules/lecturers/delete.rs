@@ -1,7 +1,10 @@
-use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crate::response::ApiResponse;
-use sea_orm::{EntityTrait, DatabaseConnection};
-use db::models::{user, user_module_role};
+use sea_orm::EntityTrait;
+use db::{
+    get_connection,
+    models::{user, user_module_role}
+};
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
 /// DELETE /api/modules/{module_id}/lecturers
@@ -67,7 +70,6 @@ use crate::routes::modules::common::ModifyUsersModuleRequest;
 /// }
 /// ```
 pub async fn remove_lecturers(
-    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
@@ -79,10 +81,11 @@ pub async fn remove_lecturers(
     }
 
     let mut not_assigned = Vec::new();
+    let db = get_connection().await;
 
     for &user_id in &body.user_ids {
         let user_exists = user::Entity::find_by_id(user_id)
-            .one(&db)
+            .one(db)
             .await
             .map(|opt| opt.is_some())
             .unwrap_or(false);
@@ -94,7 +97,7 @@ pub async fn remove_lecturers(
             );
         }
 
-        let deletion = user_module_role::Model::remove_user_from_module(&db, user_id, module_id)
+        let deletion = user_module_role::Model::remove_user_from_module(user_id, module_id)
             .await;
 
         match deletion {

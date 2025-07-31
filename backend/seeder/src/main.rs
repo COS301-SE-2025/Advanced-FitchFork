@@ -9,14 +9,14 @@ use crate::seeds::{
     assignment_task::AssignmentTaskSeeder, module::ModuleSeeder, user::UserSeeder,
     user_role::UserRoleSeeder,
 };
+use util::app_state::app_state::AppState;
 
 mod seed;
 mod seeds;
 
 #[tokio::main]
 async fn main() {
-    dotenvy::dotenv().ok();
-    let db = db::connect().await;
+    let _ = AppState::init(false);
 
     for (seeder, name) in [
         (
@@ -39,6 +39,6 @@ async fn main() {
             "AssignmentOverwriteFile",
         ),
     ] {
-        run_seeder(&*seeder, name, &db).await;
+        run_seeder(&*seeder, name).await;
     }
 }

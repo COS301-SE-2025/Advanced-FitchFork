@@ -1,17 +1,18 @@
 use axum::{
-    extract::{State, Path, Query},
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
+    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter,
     QueryOrder, sea_query::Expr,
 };
 use crate::response::ApiResponse;
 use crate::routes::modules::assignments::common::{File, AssignmentResponse};
 use db::{
+    get_connection,
     models::{
         assignment::{
             self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity, Model as AssignmentModel
@@ -104,20 +105,20 @@ impl From<AssignmentModel> for AssignmentFileResponse {
 /// }
 /// ```
 pub async fn get_assignment(
-    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
+    let db = get_connection().await;
     let assignment_res = assignment::Entity::find()
         .filter(assignment::Column::Id.eq(assignment_id as i32))
         .filter(assignment::Column::ModuleId.eq(module_id as i32))
-        .one(&db)
+        .one(db)
         .await;
 
     match assignment_res {
         Ok(Some(a)) => {
             let files_res = assignment_file::Entity::find()
                 .filter(assignment_file::Column::AssignmentId.eq(a.id))
-                .all(&db)
+                .all(db)
                 .await;
 
             match files_res {
@@ -275,7 +276,6 @@ impl FilterResponse {
 /// }
 /// ```
 pub async fn get_assignments(
-    State(db): State<DatabaseConnection>,
     Path(module_id): Path<i64>,
     Query(params): Query<FilterReq>,
 ) -> impl IntoResponse {
@@ -424,7 +424,8 @@ pub async fn get_assignments(
         }
     }
 
-    let paginator = query.clone().paginate(&db, per_page as u64);
+    let db = get_connection().await;
+    let paginator = query.clone().paginate(db, per_page as u64);
     let total = match paginator.num_items().await {
         Ok(n) => n as i32,
         Err(e) => {
@@ -542,13 +543,13 @@ pub fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
 /// }
 /// ```
 pub async fn get_assignment_stats(
-    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>
 ) -> impl IntoResponse {
+    let db = get_connection().await;
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(Some(a)) => a,
@@ -572,7 +573,7 @@ pub async fn get_assignment_stats(
     match assignment_submission::Entity::find()
         .filter(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
         .order_by_desc(assignment_submission::Column::CreatedAt)
-        .all(&db)
+        .all(db)
         .await
     {
         Ok(submissions) => {
@@ -598,7 +599,7 @@ pub async fn get_assignment_stats(
             
             let user_models = user::Entity::find()
                 .filter(user::Column::Id.is_in(user_ids.clone()))
-                .all(&db)
+                .all(db)
                 .await;
 
             let mut user_id_to_username = HashMap::new();
@@ -716,14 +717,13 @@ pub struct AssignmentReadiness {
 /// ```
 ///
 pub async fn get_assignment_readiness(
-    State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> (StatusCode, Json<ApiResponse<AssignmentReadiness>>) {
-    match AssignmentModel::compute_readiness_report(&db, module_id, assignment_id).await {
+    match AssignmentModel::compute_readiness_report(module_id, assignment_id).await {
         Ok(report) => {
             if report.is_ready() {
                 if let Err(e) =
-                    AssignmentModel::try_transition_to_ready(&db, module_id, assignment_id).await
+                    AssignmentModel::try_transition_to_ready(module_id, assignment_id).await
                 {
                     tracing::warn!(
                         "Failed to transition assignment {} to Ready: {:?}",

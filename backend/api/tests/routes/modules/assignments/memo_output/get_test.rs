@@ -14,7 +14,6 @@ mod tests {
             user::Model as UserModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
         },
-        test_utils::setup_test_db,
     };
     use dotenvy;
     use serde_json::Value;
@@ -31,33 +30,32 @@ mod tests {
         assignment: AssignmentModel,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
+    async fn setup_test_data() -> TestData {
+        let module = ModuleModel::create("COS101", 2024, Some("Test Module"), 16)
             .await
             .unwrap();
-        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true)
+        let admin_user = UserModel::create("admin1", "admin1@test.com", "password", true)
             .await
             .unwrap();
         let lecturer_user =
-            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
+            UserModel::create("lecturer1", "lecturer1@test.com", "password1", false)
                 .await
                 .unwrap();
         let student_user =
-            UserModel::create(db, "student1", "student1@test.com", "password2", false)
+            UserModel::create("student1", "student1@test.com", "password2", false)
                 .await
                 .unwrap();
         let forbidden_user =
-            UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false)
+            UserModel::create("forbidden", "forbidden@test.com", "password3", false)
                 .await
                 .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
+        UserModuleRoleModel::assign_user_to_module(lecturer_user.id, module.id, Role::Lecturer)
             .await
             .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
+        UserModuleRoleModel::assign_user_to_module(student_user.id, module.id, Role::Student)
             .await
             .unwrap();
         let assignment = AssignmentModel::create(
-            db,
             module.id,
             "Assignment 1",
             Some("Desc 1"),
@@ -99,11 +97,10 @@ mod tests {
         unsafe {
             std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp");
         }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
         setup_memo_output_file(data.module.id, data.assignment.id, 1);
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output",
@@ -141,11 +138,10 @@ mod tests {
         unsafe {
             std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp");
         }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
         setup_memo_output_file(data.module.id, data.assignment.id, 1);
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output",
@@ -170,11 +166,10 @@ mod tests {
         unsafe {
             std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp");
         }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
         setup_memo_output_file(data.module.id, data.assignment.id, 1);
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output",
@@ -199,11 +194,10 @@ mod tests {
         unsafe {
             std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp");
         }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
         setup_memo_output_file(data.module.id, data.assignment.id, 1);
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output",
@@ -227,10 +221,9 @@ mod tests {
         unsafe {
             std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp");
         }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output",
@@ -255,10 +248,9 @@ mod tests {
         unsafe {
             std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp");
         }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output",
@@ -283,10 +275,9 @@ mod tests {
         unsafe {
             std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp");
         }
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let data = setup_test_data().await;
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output",
             data.module.id, data.assignment.id

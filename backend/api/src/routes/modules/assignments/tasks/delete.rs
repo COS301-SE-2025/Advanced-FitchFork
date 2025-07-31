@@ -1,13 +1,10 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use sea_orm::{
-    DbErr,
-    DatabaseConnection
-};
+use sea_orm::DbErr;
 use db::models::assignment_task;
 use crate::response::ApiResponse;
 
@@ -47,10 +44,9 @@ use crate::response::ApiResponse;
 /// ```
 ///
 pub async fn delete_task(
-    State(db): State<DatabaseConnection>,
     Path((_, _, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    match assignment_task::Model::delete(&db, task_id).await {
+    match assignment_task::Model::delete(task_id).await {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::success((), "Task deleted successfully")),

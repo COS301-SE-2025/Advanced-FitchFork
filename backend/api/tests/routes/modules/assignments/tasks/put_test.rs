@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use db::{
-        test_utils::setup_test_db,
         models::{
             user::Model as UserModel,
             module::Model as ModuleModel,
@@ -31,18 +30,17 @@ mod tests {
         task1: AssignmentTaskModel,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> (TestData, TempDir) {
+    async fn setup_test_data() -> (TestData, TempDir) {
         dotenvy::dotenv().expect("Failed to load .env");
         let temp_dir = tempdir().expect("Failed to create temporary directory");
         unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
 
-        let module = ModuleModel::create(db, "TASK101", 2024, Some("Test Task Module"), 16).await.expect("Failed to create test module");
-        let admin_user = UserModel::create(db, "task_admin", "task_admin@test.com", "password", true).await.expect("Failed to create admin user");
-        let forbidden_user = UserModel::create(db, "task_unauthed", "task_unauthed@test.com", "password", false).await.expect("Failed to create forbidden user");
-        let lecturer1 = UserModel::create(db, "task_lecturer1", "task_lecturer1@test.com", "password1", false).await.expect("Failed to create lecturer1");
-        UserModuleRoleModel::assign_user_to_module(db, lecturer1.id, module.id, Role::Lecturer).await.expect("Failed to assign lecturer1 to module");
+        let module = ModuleModel::create("TASK101", 2024, Some("Test Task Module"), 16).await.expect("Failed to create test module");
+        let admin_user = UserModel::create("task_admin", "task_admin@test.com", "password", true).await.expect("Failed to create admin user");
+        let forbidden_user = UserModel::create("task_unauthed", "task_unauthed@test.com", "password", false).await.expect("Failed to create forbidden user");
+        let lecturer1 = UserModel::create("task_lecturer1", "task_lecturer1@test.com", "password1", false).await.expect("Failed to create lecturer1");
+        UserModuleRoleModel::assign_user_to_module(lecturer1.id, module.id, Role::Lecturer).await.expect("Failed to assign lecturer1 to module");
         let assignment = AssignmentModel::create(
-            db,
             module.id,
             "Test Assignment",
             Some("Description"),
@@ -53,7 +51,6 @@ mod tests {
         .await
         .expect("Failed to create test assignment");
         let task1 = AssignmentTaskModel::create(
-             db,
              assignment.id,
              1,
              "echo 'Initial Command'",
@@ -79,10 +76,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_success_as_admin() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
 
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "Updated Task Name", "command": "echo 'Updated Command'"});
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);
@@ -117,10 +114,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_success_as_lecturer() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
 
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+
+        let app = make_app();
         let (token, _) = generate_jwt(data.lecturer1.id, data.lecturer1.admin);
         let payload = json!({"name": "Lecturer Updated Name", "command": "ls -l"});
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);
@@ -140,10 +137,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_not_found() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
 
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "Any Name", "command": "echo 'Any Command'"});
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, 99999);
@@ -168,11 +165,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_assignment_not_found_path_mismatch() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
+
+        let (data, _temp_dir) = setup_test_data().await;
 
         let assignment2 = AssignmentModel::create(
-            &db,
             data.module.id,
             "Assignment 2",
             Some("Desc 2"),
@@ -183,7 +179,6 @@ mod tests {
         .await
         .expect("Failed to create second assignment");
         let task_in_assignment2 = AssignmentTaskModel::create(
-            &db,
             assignment2.id,
             1,
             "echo 'Other Assignment'",
@@ -192,7 +187,7 @@ mod tests {
         .await
         .expect("Failed to create task in second assignment");
 
-        let app = make_app(db.clone());
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "Mismatched Name", "command": "echo 'Mismatched Command'"});
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, task_in_assignment2.id);
@@ -218,10 +213,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_module_not_found() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
 
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "Any Name", "command": "echo 'Any Command'"});
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", 9999, data.assignment.id, data.task1.id);
@@ -247,10 +242,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_forbidden() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
 
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+
+        let app = make_app();
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let payload = json!({"name": "Forbidden Name", "command": "echo 'Forbidden Command'"});
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);
@@ -270,10 +265,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_invalid_name_empty() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
 
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "", "command": "echo 'Valid Command'"});
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);
@@ -298,10 +293,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_invalid_name_whitespace() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
 
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "   \n\t  ", "command": "echo 'Valid Command'"});
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);
@@ -326,10 +321,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_invalid_command_empty() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
 
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "Valid Name", "command": ""});
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);
@@ -354,10 +349,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_invalid_command_whitespace() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
 
-        let app = make_app(db.clone());
+        let (data, _temp_dir) = setup_test_data().await;
+
+        let app = make_app();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "Valid Name", "command": "   \n\t  "});
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);

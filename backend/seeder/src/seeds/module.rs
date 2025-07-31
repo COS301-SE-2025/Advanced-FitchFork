@@ -1,16 +1,16 @@
 use crate::seed::Seeder;
 use chrono::Utc;
-use db::models::module;
+use db::{get_connection, models::module};
 use rand::rngs::OsRng;
 use rand::rngs::StdRng;
 use rand::{seq::SliceRandom, Rng, SeedableRng};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, Set};
+use sea_orm::{ActiveModelTrait, Set};
 
 pub struct ModuleSeeder;
 
 #[async_trait::async_trait]
 impl Seeder for ModuleSeeder {
-    async fn seed(&self, db: &DatabaseConnection) {
+    async fn seed(&self) {
         // Use a Send-compatible RNG
         let mut rng = StdRng::from_rng(OsRng).expect("Failed to seed RNG");
 
@@ -27,6 +27,8 @@ impl Seeder for ModuleSeeder {
             "Compiler Construction",
             "Mobile Development",
         ];
+
+        let db = get_connection().await;
 
         for _ in 0..10 {
             let range_choice = rng.gen_range(0..3);

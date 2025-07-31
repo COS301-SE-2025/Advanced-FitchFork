@@ -14,6 +14,7 @@ use chrono::{DateTime, Utc};
 use std::{env, fs, path::PathBuf};
 use serde::{Serialize, Deserialize};
 use strum::{Display, EnumIter, EnumString};
+use crate::get_connection;
 
 /// Assignment model representing the `assignments` table in the database.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -101,7 +102,6 @@ impl ReadinessReport {
 
 impl Model {
     pub async fn create(
-        db: &DatabaseConnection,
         module_id: i64,
         name: &str,
         description: Option<&str>,
@@ -122,11 +122,11 @@ impl Model {
             ..Default::default()
         };
 
+        let db = get_connection().await;
         active.insert(db).await
     }
 
     pub async fn edit(
-        db: &DatabaseConnection,
         id: i64,
         module_id: i64,
         name: &str,
@@ -135,6 +135,7 @@ impl Model {
         available_from: DateTime<Utc>,
         due_date: DateTime<Utc>,
     ) -> Result<Self, DbErr> {
+        let db = get_connection().await;
         let mut assignment = Entity::find()
             .filter(Column::Id.eq(id))
             .filter(Column::ModuleId.eq(module_id))
@@ -153,7 +154,8 @@ impl Model {
         assignment.update(db).await
     }
 
-    pub async fn delete(db: &DatabaseConnection, id: i32, module_id: i32) -> Result<(), DbErr> {
+    pub async fn delete(id: i32, module_id: i32) -> Result<(), DbErr> {
+        let db = get_connection().await;
         let Some(model) = Entity::find()
             .filter(Column::Id.eq(id))
             .filter(Column::ModuleId.eq(module_id))
@@ -185,7 +187,6 @@ impl Model {
     }
 
     pub async fn filter(
-        db: &DatabaseConnection,
         page: u64,
         per_page: u64,
         sort_by: Option<String>,
@@ -235,6 +236,7 @@ impl Model {
             };
         }
 
+        let db = get_connection().await;
         query_builder.paginate(db, per_page).fetch_page(page - 1).await
     }
 
@@ -268,7 +270,6 @@ impl Model {
     /// File presence is checked on the file system under the expected directories for each file type.
     /// Missing directories or I/O errors are treated as absence of the respective component.
     pub async fn compute_readiness_report(
-        db: &DatabaseConnection,
         module_id: i64,
         assignment_id: i64,
     ) -> Result<ReadinessReport, DbErr> {
@@ -281,6 +282,7 @@ impl Model {
         .map(|mut it| it.any(|f| f.is_ok()))
         .unwrap_or(false);
 
+        let db = get_connection().await;
         let tasks_present = TaskEntity::find()
             .filter(TaskColumn::AssignmentId.eq(assignment_id))
             .limit(1)
@@ -370,12 +372,12 @@ impl Model {
     /// * `Ok(false)` if the assignment is not ready.
     /// * `Err(DbErr)` if a database error occurs.
     pub async fn try_transition_to_ready(
-        db: &DatabaseConnection,
         module_id: i64,
         assignment_id: i64,
     ) -> Result<bool, DbErr> {
-        let report = Self::compute_readiness_report(db, module_id, assignment_id).await?;
+        let report = Self::compute_readiness_report(module_id, assignment_id).await?;
 
+        let db = get_connection().await;
         if report.is_ready() {
             let mut active = Entity::find()
                 .filter(Column::Id.eq(assignment_id))
@@ -401,7 +403,6 @@ impl Model {
 mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
-    use crate::test_utils::setup_test_db;
     use crate::models::module::ActiveModel as ModuleActiveModel;
 
     fn sample_dates() -> (DateTime<Utc>, DateTime<Utc>) {
@@ -413,7 +414,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_assignment() {
-        let db = setup_test_db().await;
+        let db = get_connection().await;
         let (from, due) = sample_dates();
 
         let module = ModuleActiveModel {
@@ -424,12 +425,11 @@ mod tests {
             updated_at: Set(Utc::now()),
             ..Default::default()
         }
-        .insert(&db)
+        .insert(db)
         .await
         .expect("Failed to insert test module");
 
         let assignment = Model::create(
-            &db,
             module.id,
             "Test Assignment",
             Some("Intro to Testing"),
@@ -447,7 +447,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_edit_assignment() {
-        let db = setup_test_db().await;
+        let db = get_connection().await;
         let (from, due) = sample_dates();
 
         let module = ModuleActiveModel {
@@ -458,12 +458,11 @@ mod tests {
             updated_at: Set(Utc::now()),
             ..Default::default()
         }
-        .insert(&db)
+        .insert(db)
         .await
         .expect("Failed to insert test module");
 
         let created = Model::create(
-            &db,
             module.id,
             "Initial",
             Some("Initial Desc"),
@@ -475,7 +474,6 @@ mod tests {
         .unwrap();
 
         let updated = Model::edit(
-            &db,
             created.id,
             module.id,
             "Updated Name",
@@ -493,7 +491,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_filter_assignments_by_query_and_sort() {
-        let db = setup_test_db().await;
+        let db = get_connection().await;
         let (from, due) = sample_dates();
 
         let module = ModuleActiveModel {
@@ -504,12 +502,11 @@ mod tests {
             updated_at: Set(Utc::now()),
             ..Default::default()
         }
-        .insert(&db)
+        .insert(db)
         .await
         .expect("Failed to insert test module");
 
         Model::create(
-            &db,
             module.id,
             "Rust Basics",
             Some("Learn Rust"),
@@ -520,7 +517,6 @@ mod tests {
         .await
         .unwrap();
         Model::create(
-            &db,
             module.id,
             "Advanced Rust",
             Some("Ownership and lifetimes"),
@@ -531,7 +527,6 @@ mod tests {
         .await
         .unwrap();
         Model::create(
-            &db,
             module.id,
             "Python Basics",
             Some("Learn Python"),
@@ -543,7 +538,6 @@ mod tests {
         .unwrap();
 
         let rust_results = Model::filter(
-            &db,
             module.id.try_into().unwrap(),
             10,
             Some("name".into()),

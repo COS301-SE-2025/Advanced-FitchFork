@@ -1,19 +1,19 @@
 use std::path::PathBuf;
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use axum::extract::Multipart;
-use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, IntoActiveModel, QueryFilter, Set};
 use serde::Deserialize;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use validator::Validate;
 use crate::{response::ApiResponse};
 use common::format_validation_errors;
-use db::models::user;
+use db::{get_connection, models::user};
 use crate::routes::common::UserResponse;
 
 #[derive(Debug, Deserialize, Validate)]
@@ -96,7 +96,6 @@ lazy_static::lazy_static! {
 /// }
 /// ```
 pub async fn update_user(
-    State(db): State<DatabaseConnection>,
     Path(user_id): Path<i64>,
     Json(req): Json<UpdateUserRequest>,
 ) -> impl IntoResponse {
@@ -114,8 +113,9 @@ pub async fn update_user(
         );
     }
 
+    let db = get_connection().await;
     let current_user = user::Entity::find_by_id(user_id)
-        .one(&db).await.unwrap().unwrap();
+        .one(db).await.unwrap().unwrap();
 
     // TODO: Should probably make a more robust system with a super admin
     // Prevent changing your own admin status or changing others' admin status
@@ -134,7 +134,7 @@ pub async fn update_user(
                         .add(user::Column::Email.eq(email.clone()))
                         .add(user::Column::Id.ne(user_id)),
                 )
-                .one(&db)
+                .one(db)
                 .await;
 
             match exists_result {
@@ -163,7 +163,7 @@ pub async fn update_user(
                         .add(user::Column::Username.eq(sn.clone()))
                         .add(user::Column::Id.ne(user_id)),
                 )
-                .one(&db)
+                .one(db)
                 .await;
 
             match exists_result {
@@ -197,7 +197,7 @@ pub async fn update_user(
         active_model.admin = Set(admin);
     }
 
-    match active_model.update(&db).await {
+    match active_model.update(db).await {
         Ok(updated) => (
             StatusCode::OK,
             Json(ApiResponse::success(
@@ -272,7 +272,6 @@ struct ProfilePictureResponse {
 ///   ```
 ///
 pub async fn upload_avatar(
-    State(db): State<DatabaseConnection>,
     Path(user_id): Path<i64>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
@@ -338,12 +337,13 @@ pub async fn upload_avatar(
         .to_string_lossy()
         .to_string();
 
+    let db = get_connection().await;
     let current = user::Entity::find_by_id(user_id)
-        .one(&db).await.unwrap().unwrap();
+        .one(db).await.unwrap().unwrap();
 
     let mut model = current.into_active_model();
     model.profile_picture_path = Set(Some(relative_path.clone()));
-    model.update(&db).await.unwrap();
+    model.update(db).await.unwrap();
 
     let response = ProfilePictureResponse {
         profile_picture_path: relative_path,

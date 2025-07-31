@@ -1,10 +1,11 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, DatabaseConnection, ActiveModelTrait, Condition, Set};
+use axum::{http::StatusCode, response::IntoResponse, Json};
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait, Condition, Set};
 use crate::response::ApiResponse;
-use db::models::{
-    user::{Entity as UserEntity},
-    user_module_role::{Entity as RoleEntity, Column as RoleCol, Role, ActiveModel as RoleActiveModel},
-};
+use db::{get_connection, 
+    models::{
+        user::Entity as UserEntity,
+        user_module_role::{ActiveModel as RoleActiveModel, Column as RoleCol, Entity as RoleEntity, Role},
+}};
 use crate::routes::modules::common::ModifyUsersModuleRequest;
 
 /// POST /api/modules/{module_id}/students
@@ -70,7 +71,6 @@ use crate::routes::modules::common::ModifyUsersModuleRequest;
 /// }
 /// ```
 pub async fn assign_students(
-    State(db): State<DatabaseConnection>,
     axum::extract::Path(module_id): axum::extract::Path<i64>,
     Json(body): Json<ModifyUsersModuleRequest>,
 ) -> impl IntoResponse {
@@ -82,9 +82,10 @@ pub async fn assign_students(
     }
 
     let mut already_assigned = Vec::new();
+    let db = get_connection().await;
 
     for &user_id in &body.user_ids {
-        match UserEntity::find_by_id(user_id).one(&db).await {
+        match UserEntity::find_by_id(user_id).one(db).await {
             Ok(Some(_)) => {}
             Ok(None) => {
                 return (
@@ -110,7 +111,7 @@ pub async fn assign_students(
                     .add(RoleCol::ModuleId.eq(module_id))
                     .add(RoleCol::Role.eq(Role::Student)),
             )
-            .one(&db)
+            .one(db)
             .await;
 
         match exists {
@@ -126,7 +127,7 @@ pub async fn assign_students(
                     ..Default::default()
                 };
 
-                if let Err(_) = new_role.insert(&db).await {
+                if let Err(_) = new_role.insert(db).await {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ApiResponse::<()>::error("Failed to assign student")),

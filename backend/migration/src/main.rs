@@ -1,11 +1,12 @@
 use migration::{Migrator};
 use std::{env, fs, path::Path};
+use util::app_state::app_state::AppState;
 
 mod runner;
 
 #[tokio::main]
 async fn main() {
-    dotenvy::dotenv().ok();
+    let _ = AppState::init(false);
 
     let db_path = env::var("DATABASE_PATH").expect("DATABASE_PATH must be set");
     let url = format!("sqlite://{}?mode=rwc", db_path);
