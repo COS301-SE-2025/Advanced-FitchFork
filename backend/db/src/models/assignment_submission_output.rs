@@ -156,7 +156,7 @@ impl Model {
         module_id: i64,
         assignment_id: i64,
         submission_id: i64,
-    ) -> io::Result<Vec<String>> {
+    ) -> io::Result<Vec<(i64, String)>> {
         let submission = assignment_submission::Entity::find_by_id(submission_id).one(db).await
             .map_err(|e| io::Error::new(ErrorKind::Other, format!("DB error: {}", e)))?
             .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "Submission not found"))?;
@@ -183,10 +183,12 @@ impl Model {
         for entry in fs::read_dir(dir_path)? {
             let entry = entry?;
             if entry.file_type()?.is_file() {
+                let filename_str = entry.file_name().to_string_lossy().to_string();
+                let filename = filename_str.split('.').next();
                 let path = entry.path();
 
                 let content = fs::read_to_string(&path)?;
-                results.push(content);
+                results.push((filename.unwrap().to_string().parse::<i64>().unwrap(), content));
             }
         }
 

@@ -10,16 +10,13 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use db::models::{
-    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-    assignment_submission::{self, Entity as SubmissionEntity},
-    assignment_submission_output::Model as SubmissionOutput,
-    user,
-    user_module_role::{self, Role},
+    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, assignment_submission::{self, Entity as SubmissionEntity}, assignment_submission_output::Model as SubmissionOutput, assignment_task, user, user_module_role::{self, Role}
 };
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
     QueryOrder, QuerySelect, RelationTrait,
 };
+use serde::Serialize;
 use serde_json::Value;
 use std::{fs, path::PathBuf};
 
@@ -793,38 +790,77 @@ pub async fn get_submission(
         .into_response()
 }
 
+#[derive(Serialize)]
+struct MemoResponse {
+    task_number: i64,
+    raw: String,
+}
+
 pub async fn get_submission_output(
     State(db): State<DatabaseConnection>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let output =
-        match SubmissionOutput::get_output(&db, module_id, assignment_id, submission_id).await {
-            Ok(output) => output,
-            Err(err) => {
-                eprintln!("Error retrieving submission output: {:?}", err);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error(
-                        "Failed to retrieve submission output",
-                    )),
-                )
-                    .into_response();
-            }
-        };
+
+    let output = match SubmissionOutput::get_output(&db, module_id, assignment_id, submission_id).await {
+        Ok(output) => output,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to retrieve submission output")),
+            )
+            .into_response();
+        }
+    };
+
     if output.is_empty() {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Submission output not found")),
         )
-            .into_response();
+        .into_response();
+    }
+
+    let mut memo_data = Vec::new();
+
+    for (task_id, content) in output {
+        let task = assignment_task::Entity::find_by_id(task_id)
+            .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
+            .one(&db)
+            .await;
+
+        match task {
+            Ok(Some(task)) => {
+                memo_data.push(MemoResponse {
+                    task_number: task.task_number,
+                    raw: content,
+                });
+            }
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<()>::error(&format!(
+                        "Task with ID {} not found for assignment {}",
+                        task_id, assignment_id
+                    ))),
+                )
+                .into_response();
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Database error while fetching task info")),
+                )
+                .into_response();
+            }
+        }
     }
 
     (
         StatusCode::OK,
         Json(ApiResponse::success(
-            output,
-            "Submission output retrieved successfully",
+            memo_data,
+            "Fetched memo output successfully",
         )),
     )
-        .into_response()
+    .into_response()
 }
