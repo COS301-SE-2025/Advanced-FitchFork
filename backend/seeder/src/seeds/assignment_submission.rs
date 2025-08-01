@@ -45,7 +45,9 @@ impl Seeder for AssignmentSubmissionSeeder {
                         assignment.id,
                         user.id,
                         counter,
+                        false,
                         dummy_filename,
+                        "hash123#",
                         dummy_content.as_bytes(),
                     )
                     .await;
@@ -185,7 +187,9 @@ std::string HelperThree::subtaskAlpha() {
             assignment_id_java,
             user_id,
             attempt_number,
+            false,
             filename_java,
+            "hash123#",
             &content_java,
         )
         .await
@@ -208,7 +212,9 @@ std::string HelperThree::subtaskAlpha() {
             assignment_id_cpp,
             user_id,
             attempt_number,
+            false,
             filename_cpp,
+            "hash123#",
             &content_cpp,
         )
         .await
