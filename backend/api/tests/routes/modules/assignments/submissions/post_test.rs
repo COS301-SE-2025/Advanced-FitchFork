@@ -14,6 +14,10 @@ mod tests {
                 ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity,
                 Model as AssignmentModel,
             },
+            assignment_submission::{
+                self,
+                Model as AssignmentSubmissionModel,
+            },
             assignment_task::Model as AssignmentTaskModel,
             module::Model as ModuleModel,
             user::Model as UserModel,
@@ -24,7 +28,7 @@ mod tests {
     use dotenvy;
     use flate2::{Compression, write::GzEncoder};
     use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
-    use serde_json::Value;
+    use serde_json::{json, Value};
     use serial_test::serial;
     use std::path::Path;
     use std::{fs, io::Write};
@@ -928,7 +932,7 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Failed to mark submission");
+        assert_eq!(json["message"], "ParseOutputError(\"Expected 1 subtasks, but found 0 delimiters\")");
     }
 
     #[tokio::test]
@@ -1177,6 +1181,493 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Failed to mark submission");
+        assert_eq!(json["message"], "ParseOutputError(\"Expected 2 subtasks, but found 1 delimiters\")");
+    }
+
+    // Helper function to create a submission
+    async fn create_submission(
+        db: &DatabaseConnection,
+        module_id: i64,
+        assignment_id: i64,
+        user_id: i64,
+        attempt: i64,
+        temp_dir: &TempDir,
+    ) -> AssignmentSubmissionModel {
+        let submission = assignment_submission::ActiveModel {
+            assignment_id: Set(assignment_id),
+            user_id: Set(user_id),
+            attempt: Set(attempt),
+            filename: Set("test_submission.zip".to_string()),
+            file_hash: Set("d41d8cd98f00b204e9800998ecf8427e".to_string()),
+            path: Set(format!(
+                "module_{}/assignment_{}/assignment_submissions/user_{}/attempt_{}/submission.zip",
+                module_id, assignment_id, user_id, attempt
+            )),
+            is_practice: Set(false),
+            ..Default::default()
+        };
+        let submission = submission.insert(db).await.unwrap();
+        
+        // Create mock output files
+        let output_dir = temp_dir.path()
+            .join(format!("module_{}", module_id))
+            .join(format!("assignment_{}", assignment_id))
+            .join("assignment_submissions")
+            .join(format!("user_{}", user_id))
+            .join(format!("attempt_{}", attempt))
+            .join("submission_output");
+        
+        std::fs::create_dir_all(&output_dir).unwrap();
+        
+        // Create mock output for task1
+        let task_output = output_dir.join("task1.txt");
+        std::fs::write(task_output, "make task1\n&-=-&Subtask 1 Output\nOutput A").unwrap();
+
+        submission
+    }
+
+    // Helper to send remark request
+    async fn send_remark_request(
+        app: &axum::Router,
+        token: &str,
+        module_id: i64,
+        assignment_id: i64,
+        body: serde_json::Value,
+    ) -> (StatusCode, Value) {
+        let req = Request::builder()
+            .method("POST")
+            .uri(&format!(
+                "/api/modules/{}/assignments/{}/submissions/remark",
+                module_id, assignment_id
+            ))
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+
+        let response = app.clone().oneshot(req).await.unwrap();
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        (status, json)
+    }
+
+    /// Test 1: Successful remark of specific submissions as lecturer
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_specific_submissions_as_lec() {
+        let db = setup_test_db().await;
+        let (data, temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create lecturer user
+        let lecturer = UserModel::create(&db, "lecturer1", "lecturer@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        
+        // Create submissions
+        let sub1 = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        let sub2 = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
+        
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let body = json!({
+            "submission_ids": [sub1.id, sub2.id]
+        });
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["regraded"], 2);
+        assert_eq!(json["data"]["failed"].as_array().unwrap().len(), 0);
+    }
+
+     /// Test 1: Successful remark of specific submissions as assistant lecturer
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_specific_submissions_as_al() {
+        let db = setup_test_db().await;
+        let (data, temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create assistant lecturer user
+        let assistant = UserModel::create(&db, "assistant1", "assistant@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, assistant.id, data.module.id, Role::AssistantLecturer)
+            .await
+            .unwrap();
+        
+        // Create submissions
+        let sub1 = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        let sub2 = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
+        
+        let (token, _) = generate_jwt(assistant.id, assistant.admin);
+        let body = json!({
+            "submission_ids": [sub1.id, sub2.id]
+        });
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["regraded"], 2);
+        assert_eq!(json["data"]["failed"].as_array().unwrap().len(), 0);
+    }
+
+    /// Test 2: Successful remark of all submissions as lecturer
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_all_submissions_as_lec() {
+        let db = setup_test_db().await;
+        let (data, temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create lecturer
+        let lecturer = UserModel::create(&db, "lecturer1", "lecturer@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        
+        // Create submissions
+        create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
+        
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let body = json!({
+            "all": true
+        });
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["regraded"], 2);
+        assert_eq!(json["data"]["failed"].as_array().unwrap().len(), 0);
+    }
+
+    /// Test 2: Successful remark of all submissions as assistant lecturer
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_all_submissions() {
+        let db = setup_test_db().await;
+        let (data, temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create assistant lecturer
+        let assistant = UserModel::create(&db, "assistant1", "assistant@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, assistant.id, data.module.id, Role::AssistantLecturer)
+            .await
+            .unwrap();
+        
+        // Create submissions
+        create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
+        
+        let (token, _) = generate_jwt(assistant.id, assistant.admin);
+        let body = json!({
+            "all": true
+        });
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["regraded"], 2);
+        assert_eq!(json["data"]["failed"].as_array().unwrap().len(), 0);
+    }
+
+    /// Test 3: Missing both submission_ids and all=true
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_missing_parameters() {
+        let db = setup_test_db().await;
+        let (data, _temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create admin user
+        let admin = UserModel::create(&db, "admin1", "admin@test.com", "password", true)
+            .await
+            .unwrap();
+        
+        let (token, _) = generate_jwt(admin.id, admin.admin);
+        let body = json!({});
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json["success"], false);
+        assert_eq!(json["message"], "Must provide either submission_ids or all=true");
+    }
+
+    /// Test 4: Unauthorized user (student)
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_unauthorized_user() {
+        let db = setup_test_db().await;
+        let (data, temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create a submission
+        let submission = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        
+        // Student tries to remark
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let body = json!({
+            "submission_ids": [submission.id]
+        });
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(json["success"], false);
+        assert_eq!(json["message"], "Lecturer or assistant lecturer access required for this module");
+    }
+
+    /// Test 5: Assignment not found
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_assignment_not_found() {
+        let db = setup_test_db().await;
+        let (data, _temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create lecturer
+        let lecturer = UserModel::create(&db, "lecturer1", "lecturer@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let body = json!({
+            "all": true
+        });
+        
+        // Use invalid assignment ID
+        let (status, json) = send_remark_request(&app, &token, data.module.id, 9999, body).await;
+        
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(json["success"], false);
+        assert_eq!(json["message"], "Assignment 9999 in Module 1 not found.");
+    }
+
+    /// Test 6: Submission not found in assignment
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_submission_not_found() {
+        let db = setup_test_db().await;
+        let (data, _temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create lecturer
+        let lecturer = UserModel::create(&db, "lecturer1", "lecturer@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let body = json!({
+            "submission_ids": [9999] // Invalid submission ID
+        });
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::OK); // Note: This returns 200 with failed items
+        assert_eq!(json["success"], true);
+        let failed = json["data"]["failed"].as_array().unwrap();
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0]["id"], 9999);
+        assert_eq!(failed[0]["error"], "Submission not found");
+    }
+
+    /// Test 7: Failed to load mark allocator
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_failed_allocator() {
+        let db = setup_test_db().await;
+        let (data, temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create lecturer
+        let lecturer = UserModel::create(&db, "lecturer1", "lecturer@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        
+        // Create submission
+        let submission = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        
+        // Delete allocator file
+        let allocator_path = temp_dir
+            .path()
+            .join(format!("module_{}", data.module.id))
+            .join(format!("assignment_{}", data.assignment.id))
+            .join("mark_allocator")
+            .join("allocator.json");
+        fs::remove_file(allocator_path).unwrap();
+        
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let body = json!({
+            "submission_ids": [submission.id]
+        });
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(json["success"], false);
+        assert!(json["message"].as_str().unwrap().contains("Failed to load mark allocator"));
+    }
+
+    /// Test 8: Failed during grading of a submission
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_grading_failure() {
+        let db = setup_test_db().await;
+        let (data, temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create lecturer
+        let lecturer = UserModel::create(&db, "lecturer1", "lecturer@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        
+        // Create submission
+        let submission = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        
+        // Delete student outputs to cause grading failure
+        let student_output_dir = temp_dir
+            .path()
+            .join(format!("module_{}", data.module.id))
+            .join(format!("assignment_{}", data.assignment.id))
+            .join("assignment_submissions")
+            .join(format!("user_{}", data.student_user.id))
+            .join("attempt_1")
+            .join("submission_output");
+        fs::remove_dir_all(student_output_dir).unwrap();
+        
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let body = json!({
+            "submission_ids": [submission.id]
+        });
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::OK); // Overall request succeeds
+        assert_eq!(json["success"], true);
+        let failed = json["data"]["failed"].as_array().unwrap();
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0]["id"], submission.id);
+        assert!(
+            failed[0]["error"].as_str().unwrap().contains("memo_paths.len() != student_paths.len()"),
+            "Actual error: {}",
+            failed[0]["error"]
+        );
+    }
+
+    /// Test 9: Mix of successful and failed regrades
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_mixed_results() {
+        let db = setup_test_db().await;
+        let (data, temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create lecturer
+        let lecturer = UserModel::create(&db, "lecturer1", "lecturer@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        
+        // Create valid submission
+        let valid_sub = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        
+        // Create invalid submission (non-existent)
+        let invalid_sub_id = 9999;
+        
+        // Create submission with missing outputs
+        let broken_sub = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
+        let student_output_dir = temp_dir
+            .path()
+            .join(format!("module_{}", data.module.id))
+            .join(format!("assignment_{}", data.assignment.id))
+            .join("assignment_submissions")
+            .join(format!("user_{}", data.student_user.id))
+            .join("attempt_2")
+            .join("submission_output");
+        fs::remove_dir_all(student_output_dir).unwrap();
+        
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let body = json!({
+            "submission_ids": [valid_sub.id, invalid_sub_id, broken_sub.id]
+        });
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["regraded"], 1);
+        let failed = json["data"]["failed"].as_array().unwrap();
+        assert_eq!(failed.len(), 2);
+        
+        // Verify error messages
+        let errors: Vec<&str> = failed
+            .iter()
+            .map(|f| f["error"].as_str().unwrap())
+            .collect();
+        assert!(errors.contains(&"Submission not found"));
+        assert!(
+            errors.iter().any(|e| e.contains("memo_paths.len() != student_paths.len()")),
+            "Errors: {:?}",
+            errors
+        );
+    }
+
+    /// Test 10: Invalid module ID
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_invalid_module() {
+        let db = setup_test_db().await;
+        let (data, _temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create lecturer
+        let lecturer = UserModel::create(&db, "lecturer1", "lecturer@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let body = json!({
+            "all": true
+        });
+        
+        // Use invalid module ID
+        let (status, json) = send_remark_request(&app, &token, 9999, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(json["success"], false);
+        assert_eq!(json["message"], "Module 9999 not found.");
     }
 }

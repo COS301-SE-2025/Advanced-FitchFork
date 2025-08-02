@@ -78,7 +78,7 @@ mod tests {
         let file = AssignmentFileModel::save_file(db, a1.id, module.id, FileType::Spec, "spec.txt", b"spec").await.unwrap();
         let task = AssignmentTaskModel::create(db, a1.id, 1, "Task 1", "echo Hello").await.unwrap();
         let memo_output = AssignmentMemoOutputModel::save_file(db, a1.id, task.id, "memo.txt", b"memo").await.unwrap();
-        let submission = AssignmentSubmissionModel::save_file(db, a1.id, student_user.id, 1, "sub.txt", b"sub").await.unwrap();
+        let submission = AssignmentSubmissionModel::save_file(db, a1.id, student_user.id, 1, false, "sub.txt", "hash123#", b"sub").await.unwrap();
         
         TestData {
             admin_user,

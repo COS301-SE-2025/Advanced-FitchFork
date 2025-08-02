@@ -25,8 +25,12 @@ pub struct Model {
     pub attempt: i64,
     /// The original filename uploaded by the user.
     pub filename: String,
+    /// The hash of the submitted files.
+    pub file_hash: String,
     /// Relative file path from the storage root.
     pub path: String,
+    /// Is this submission a practice submission?
+    pub is_practice: bool,
     /// Timestamp when the submission was created.
     pub created_at: DateTime<Utc>,
     /// Timestamp when the submission was last updated.
@@ -131,7 +135,9 @@ impl Model {
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
+        is_pratice: bool,
         filename: &str,
+        file_hash: &str,
         bytes: &[u8],
     ) -> Result<Self, DbErr> {
         let now = Utc::now();
@@ -141,7 +147,9 @@ impl Model {
             assignment_id: Set(assignment_id),
             user_id: Set(user_id),
             attempt: Set(attempt),
+            is_practice: Set(is_pratice),
             filename: Set(filename.to_string()),
+            file_hash: Set(file_hash.to_string()),
             path: Set("".to_string()),
             created_at: Set(now),
             updated_at: Set(now),
@@ -207,6 +215,19 @@ impl Model {
     /// - `Err(std::io::Error)`: If the file deletion failed.
     pub fn delete_file_only(&self) -> Result<(), std::io::Error> {
         fs::remove_file(self.full_path())
+    }
+
+    /// Find all submission IDs for a given assignment
+    pub async fn find_by_assignment(
+        assignment_id: i64,
+        db: &DatabaseConnection,
+    ) -> Result<Vec<i64>, DbErr> {
+        let submissions = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id as i32))
+            .all(db)
+            .await?;
+
+        Ok(submissions.into_iter().map(|s| s.id as i64).collect())
     }
 }
 
@@ -279,7 +300,9 @@ mod tests {
             user_id: Set(user.id),
             attempt: Set(1),
             filename: Set("solution.zip".to_string()),
+            file_hash: Set("hash123#".to_string()),
             path: Set("".to_string()),
+            is_practice: Set(false),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()
@@ -290,7 +313,7 @@ mod tests {
 
         // Save file via submission
         let content = fake_bytes();
-        let file = Model::save_file(&db, submission.id, user.id, 6, "solution.zip", &content)
+        let file = Model::save_file(&db, submission.id, user.id, 6, false, "solution.zip", "hash123#", &content)
             .await
             .expect("Failed to save file");
 
