@@ -14,16 +14,20 @@
 //! ## Usage
 //! Call `routes()` from your main application to initialize all top-level routes.
 
-use axum::{middleware::from_fn, Router};
-use crate::routes::{auth::auth_routes, health::health_routes, modules::modules_routes, users::users_routes};
 use crate::auth::guards::{require_admin, require_authenticated};
+use crate::routes::{
+    auth::auth_routes, health::health_routes, modules::modules_routes,
+    plagiarism::plagiarism_routes, users::users_routes,
+};
+use axum::{Router, middleware::from_fn};
 use sea_orm::DatabaseConnection;
 
-pub mod health;
 pub mod auth;
-pub mod users;
-pub mod modules;
 pub mod common;
+pub mod health;
+pub mod modules;
+pub mod plagiarism;
+pub mod users;
 
 /// Builds the complete application router.
 ///
@@ -41,5 +45,9 @@ pub fn routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
         .nest("/health", health_routes())
         .nest("/auth", auth_routes())
         .nest("/users", users_routes().route_layer(from_fn(require_admin)))
-        .nest("/modules", modules_routes(db.clone()).route_layer(from_fn(require_authenticated)))
+        .nest(
+            "/modules",
+            modules_routes(db.clone()).route_layer(from_fn(require_authenticated)),
+        )
+        .nest("/plagiarism", plagiarism_routes()) //TODO Add Auth Guard here
 }

@@ -7,6 +7,7 @@ pub mod assignment_submission_output;
 pub mod assignment_task;
 pub mod module;
 pub mod password_reset_token;
+pub mod plagiarism_case;
 pub mod user;
 pub mod user_module_role;
 
@@ -19,5 +20,6 @@ pub use assignment_submission_output::Entity as AssignmentSubmissionOutput;
 pub use assignment_task::Entity as AssignmentTask;
 pub use module::Entity as Module;
 pub use password_reset_token::Entity as PasswordResetToken;
+pub use plagiarism_case::Entity as PlagiarismCase;
 pub use user::Entity as User;
 pub use user_module_role::Entity as UserModuleRole;

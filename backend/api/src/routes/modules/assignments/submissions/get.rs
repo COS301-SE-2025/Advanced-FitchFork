@@ -1,14 +1,24 @@
-use std::{fs, path::PathBuf};
-use axum::{extract::{State, Path, Query}, http::StatusCode, response::IntoResponse, Extension, Json};
-use chrono::{DateTime, Utc};
-use db::models::{assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, assignment_submission::{self, Entity as SubmissionEntity}, user, user_module_role::{self, Role}};
-use sea_orm::{ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,  QuerySelect, JoinType, RelationTrait};
-use serde_json::Value;
-use crate::{auth::AuthUser, response::ApiResponse};
 use super::common::{
-    ListSubmissionsQuery, UserResponse, SubmissionListItem,
-    SubmissionsListResponse,
+    ListSubmissionsQuery, SubmissionListItem, SubmissionsListResponse, UserResponse,
 };
+use crate::{auth::AuthUser, response::ApiResponse};
+use axum::{
+    Extension, Json,
+    extract::{Path, Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use chrono::{DateTime, Utc};
+use db::models::{
+    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, assignment_submission::{self, Entity as SubmissionEntity}, assignment_submission_output::Model as SubmissionOutput, assignment_task, user, user_module_role::{self, Role}
+};
+use sea_orm::{
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
+    QueryOrder, QuerySelect, RelationTrait,
+};
+use serde::Serialize;
+use serde_json::Value;
+use std::{fs, path::PathBuf};
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
@@ -58,14 +68,17 @@ async fn get_user_submissions(
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db).await.unwrap().unwrap();
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
 
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
 
-    let mut condition =
-        Condition::all().add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
-                        .add(assignment_submission::Column::UserId.eq(user_id));
+    let mut condition = Condition::all()
+        .add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
+        .add(assignment_submission::Column::UserId.eq(user_id));
 
     if let Some(query) = &params.query {
         let pattern = format!("%{}%", query.to_lowercase());
@@ -80,8 +93,7 @@ async fn get_user_submissions(
         };
     }
 
-    let mut query = assignment_submission::Entity::find()
-        .filter(condition);
+    let mut query = assignment_submission::Entity::find().filter(condition);
 
     if let Some(ref sort) = params.sort {
         for field in sort.split(',') {
@@ -92,14 +104,19 @@ async fn get_user_submissions(
             };
 
             match field {
-                "created_at" => query = query.order_by(assignment_submission::Column::CreatedAt, dir),
+                "created_at" => {
+                    query = query.order_by(assignment_submission::Column::CreatedAt, dir)
+                }
                 "filename" => query = query.order_by(assignment_submission::Column::Filename, dir),
                 "attempt" => query = query.order_by(assignment_submission::Column::Attempt, dir),
                 _ => {}
             }
         }
     } else {
-        query = query.order_by(assignment_submission::Column::CreatedAt, sea_orm::Order::Desc);
+        query = query.order_by(
+            assignment_submission::Column::CreatedAt,
+            sea_orm::Order::Desc,
+        );
     }
 
     let paginator = query.paginate(&db, per_page.into());
@@ -109,10 +126,15 @@ async fn get_user_submissions(
         .await
         .unwrap_or_default();
 
-    let base = std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
+    let base =
+        std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
 
     let user_resp = {
-        let u = user::Entity::find_by_id(user_id).one(&db).await.ok().flatten();
+        let u = user::Entity::find_by_id(user_id)
+            .one(&db)
+            .await
+            .ok()
+            .flatten();
         if let Some(u) = u {
             UserResponse {
                 id: u.id,
@@ -294,8 +316,8 @@ async fn get_list_submissions(
         let pattern = format!("%{}%", query.to_lowercase());
 
         // Build OR condition across multiple fields
-        let mut or_condition = Condition::any()
-            .add(assignment_submission::Column::Filename.contains(&pattern));
+        let mut or_condition =
+            Condition::any().add(assignment_submission::Column::Filename.contains(&pattern));
 
         if let Ok(Some(user)) = user::Entity::find()
             .filter(user::Column::Username.contains(&pattern))
@@ -336,7 +358,9 @@ async fn get_list_submissions(
             Err(_) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<SubmissionsListResponse>::error("Database error")),
+                    Json(ApiResponse::<SubmissionsListResponse>::error(
+                        "Database error",
+                    )),
                 )
                     .into_response();
             }
@@ -364,14 +388,19 @@ async fn get_list_submissions(
             };
 
             match field {
-                "created_at" => query = query.order_by(assignment_submission::Column::CreatedAt, dir),
+                "created_at" => {
+                    query = query.order_by(assignment_submission::Column::CreatedAt, dir)
+                }
                 "filename" => query = query.order_by(assignment_submission::Column::Filename, dir),
                 "attempt" => query = query.order_by(assignment_submission::Column::Attempt, dir),
                 _ => {} // mark/status handled in-memory
             }
         }
     } else {
-        query = query.order_by(assignment_submission::Column::CreatedAt, sea_orm::Order::Desc);
+        query = query.order_by(
+            assignment_submission::Column::CreatedAt,
+            sea_orm::Order::Desc,
+        );
     }
 
     let paginator = query.paginate(&db, per_page.into());
@@ -381,7 +410,8 @@ async fn get_list_submissions(
         .await
         .unwrap_or_default();
 
-    let base = std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
+    let base =
+        std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
 
     let mut items: Vec<SubmissionListItem> = rows
         .into_iter()
@@ -483,16 +513,12 @@ async fn get_list_submissions(
         .into_response()
 }
 
-
 async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bool {
     user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user_id))
         .filter(user_module_role::Column::ModuleId.eq(module_id))
         .filter(user_module_role::Column::Role.eq(Role::Student))
-        .join(
-        JoinType::InnerJoin,
-        user_module_role::Relation::User.def(),
-        )
+        .join(JoinType::InnerJoin, user_module_role::Relation::User.def())
         .filter(user::Column::Admin.eq(false))
         .one(db)
         .await
@@ -649,7 +675,10 @@ pub async fn get_submission(
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
     let submission = SubmissionEntity::find_by_id(submission_id)
-    .one(&db).await.unwrap().unwrap();
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
 
     if submission.assignment_id != assignment_id {
         return (
@@ -679,7 +708,7 @@ pub async fn get_submission(
                 .into_response();
         }
     };
-    
+
     if assignment.module_id != module_id {
         return (
             StatusCode::NOT_FOUND,
@@ -687,7 +716,7 @@ pub async fn get_submission(
                 "Assignment does not belong to the specified module",
             )),
         )
-        .into_response();
+            .into_response();
     }
 
     let user_id = submission.user_id;
@@ -698,11 +727,9 @@ pub async fn get_submission(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(
-                    "ASSIGNMENT_STORAGE_ROOT not set",
-                )),
+                Json(ApiResponse::<()>::error("ASSIGNMENT_STORAGE_ROOT not set")),
             )
-            .into_response();
+                .into_response();
         }
     };
 
@@ -719,11 +746,9 @@ pub async fn get_submission(
         Err(_) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error(
-                    "Submission report not found",
-                )),
+                Json(ApiResponse::<()>::error("Submission report not found")),
             )
-            .into_response();
+                .into_response();
         }
     };
 
@@ -732,9 +757,11 @@ pub async fn get_submission(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Failed to parse submission report")),
+                Json(ApiResponse::<()>::error(
+                    "Failed to parse submission report",
+                )),
             )
-            .into_response();
+                .into_response();
         }
     };
 
@@ -758,6 +785,81 @@ pub async fn get_submission(
         Json(ApiResponse::success(
             parsed,
             "Submission details retrieved successfully",
+        )),
+    )
+        .into_response()
+}
+
+#[derive(Serialize)]
+struct MemoResponse {
+    task_number: i64,
+    raw: String,
+}
+
+pub async fn get_submission_output(
+    State(db): State<DatabaseConnection>,
+    Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
+) -> impl IntoResponse {
+
+    let output = match SubmissionOutput::get_output(&db, module_id, assignment_id, submission_id).await {
+        Ok(output) => output,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to retrieve submission output")),
+            )
+            .into_response();
+        }
+    };
+
+    if output.is_empty() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("Submission output not found")),
+        )
+        .into_response();
+    }
+
+    let mut memo_data = Vec::new();
+
+    for (task_id, content) in output {
+        let task = assignment_task::Entity::find_by_id(task_id)
+            .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
+            .one(&db)
+            .await;
+
+        match task {
+            Ok(Some(task)) => {
+                memo_data.push(MemoResponse {
+                    task_number: task.task_number,
+                    raw: content,
+                });
+            }
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<()>::error(&format!(
+                        "Task with ID {} not found for assignment {}",
+                        task_id, assignment_id
+                    ))),
+                )
+                .into_response();
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Database error while fetching task info")),
+                )
+                .into_response();
+            }
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            memo_data,
+            "Fetched memo output successfully",
         )),
     )
     .into_response()
