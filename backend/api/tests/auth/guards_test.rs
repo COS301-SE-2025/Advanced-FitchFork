@@ -26,8 +26,8 @@ mod tests {
         auth::{
             generate_jwt,
             guards::{
-                require_authenticated, require_admin, require_lecturer, require_tutor, require_student,
-                require_lecturer_or_tutor, require_assigned_to_module, Empty, validate_known_ids
+                require_authenticated, require_admin, require_lecturer, require_assistant_lecturer, require_tutor, require_student,
+                require_lecturer_or_assistant_lecturer, require_lecturer_or_tutor, require_assigned_to_module, Empty, validate_known_ids
             }
         },
         response::ApiResponse
@@ -43,6 +43,7 @@ mod tests {
         db: DatabaseConnection,
         admin_token: String,
         lecturer_token: String,
+        assistant_lecturer_token: String,
         tutor_token: String,
         student_token: String,
         unassigned_user_token: String,
@@ -56,16 +57,19 @@ mod tests {
         let module = ModuleModel::create(&db, "TST101", 2025, Some("Guard Test Module"), 1).await.unwrap();
         let admin = UserModel::create(&db, "guard_admin", "ga@test.com", "pw", true).await.unwrap();
         let lecturer = UserModel::create(&db, "guard_lecturer", "gl@test.com", "pw", false).await.unwrap();
+        let assistant_lecturer = UserModel::create(&db, "guard_assistant_lecturer", "gal@test.com", "pw", false).await.unwrap();
         let tutor = UserModel::create(&db, "guard_tutor", "gt@test.com", "pw", false).await.unwrap();
         let student = UserModel::create(&db, "guard_student", "gs@test.com", "pw", false).await.unwrap();
         let unassigned = UserModel::create(&db, "guard_unassigned", "gu@test.com", "pw", false).await.unwrap();
 
         UserModuleRoleModel::assign_user_to_module(&db, lecturer.id, module.id, Role::Lecturer).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, assistant_lecturer.id, module.id, Role::AssistantLecturer).await.unwrap();
         UserModuleRoleModel::assign_user_to_module(&db, tutor.id, module.id, Role::Tutor).await.unwrap();
         UserModuleRoleModel::assign_user_to_module(&db, student.id, module.id, Role::Student).await.unwrap();
 
         let (admin_token, _) = generate_jwt(admin.id, admin.admin);
         let (lecturer_token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let (assistant_lecturer_token, _) = generate_jwt(assistant_lecturer.id, assistant_lecturer.admin);
         let (tutor_token, _) = generate_jwt(tutor.id, tutor.admin);
         let (student_token, _) = generate_jwt(student.id, student.admin);
         let (unassigned_user_token, _) = generate_jwt(unassigned.id, unassigned.admin);
@@ -75,6 +79,7 @@ mod tests {
             module_id: module.id,
             admin_token,
             lecturer_token,
+            assistant_lecturer_token,
             tutor_token,
             student_token,
             unassigned_user_token,
@@ -171,6 +176,55 @@ mod tests {
             assert_eq!(res.status(), StatusCode::FORBIDDEN);
         }
     }
+
+    mod test_require_assistant_lecturer {
+        use super::*;
+
+        #[tokio::test]
+        async fn succeeds_for_assistant_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.db.clone(), require_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.assistant_lecturer_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_admin() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.db.clone(), require_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn fails_for_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.db.clone(), require_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.lecturer_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+
+        #[tokio::test]
+        async fn fails_for_tutor() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.db.clone(), require_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+
+        #[tokio::test]
+        async fn fails_for_student() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.db.clone(), require_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.student_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+    }
     
     mod test_require_tutor {
         use super::*;
@@ -234,6 +288,55 @@ mod tests {
         }
     }
 
+    mod test_require_lecturer_or_assistant_lecturer {
+        use super::*;
+
+        #[tokio::test]
+        async fn succeeds_for_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.db.clone(), require_lecturer_or_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.lecturer_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_assistant_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.db.clone(), require_lecturer_or_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.assistant_lecturer_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_admin() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.db.clone(), require_lecturer_or_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn fails_for_tutor() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.db.clone(), require_lecturer_or_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+
+        #[tokio::test]
+        async fn fails_for_student() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.db.clone(), require_lecturer_or_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.student_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+    }
+
     mod test_require_lecturer_or_tutor {
         use super::*;
 
@@ -282,6 +385,15 @@ mod tests {
             let ctx = setup().await;
             let app = create_test_router(ctx.db.clone(), require_assigned_to_module);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.lecturer_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_assistant_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.db.clone(), require_assigned_to_module);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.assistant_lecturer_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }

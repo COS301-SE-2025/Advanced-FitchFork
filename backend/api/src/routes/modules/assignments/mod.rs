@@ -66,6 +66,6 @@ pub fn assignment_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
         .nest("/{assignment_id}/config", config_routes().layer(from_fn_with_state(db.clone(), require_lecturer)))
         .nest("/{assignment_id}/memo_output", memo_output_routes().layer(from_fn_with_state(db.clone(), require_lecturer)))
         .nest("/{assignment_id}/mark_allocator", mark_allocator_routes().route_layer(from_fn_with_state(db.clone(), require_lecturer)))
-        .nest( "/{assignment_id}/submissions", submission_routes().route_layer(from_fn_with_state(db.clone(), require_assigned_to_module)))
+        .nest( "/{assignment_id}/submissions", submission_routes(db.clone()).route_layer(from_fn_with_state(db.clone(), require_assigned_to_module)))
         .nest("/{assignment_id}/files", files_routes(db.clone()))
 }

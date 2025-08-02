@@ -1187,9 +1187,11 @@ mod tests {
     // Helper function to create a submission
     async fn create_submission(
         db: &DatabaseConnection,
+        module_id: i64,
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
+        temp_dir: &TempDir,
     ) -> AssignmentSubmissionModel {
         let submission = assignment_submission::ActiveModel {
             assignment_id: Set(assignment_id),
@@ -1197,11 +1199,31 @@ mod tests {
             attempt: Set(attempt),
             filename: Set("test_submission.zip".to_string()),
             file_hash: Set("d41d8cd98f00b204e9800998ecf8427e".to_string()),
-            path: Set("test/path/1.txt".to_string()),
+            path: Set(format!(
+                "module_{}/assignment_{}/assignment_submissions/user_{}/attempt_{}/submission.zip",
+                module_id, assignment_id, user_id, attempt
+            )),
             is_practice: Set(false),
             ..Default::default()
         };
-        submission.insert(db).await.unwrap()
+        let submission = submission.insert(db).await.unwrap();
+        
+        // Create mock output files
+        let output_dir = temp_dir.path()
+            .join(format!("module_{}", module_id))
+            .join(format!("assignment_{}", assignment_id))
+            .join("assignment_submissions")
+            .join(format!("user_{}", user_id))
+            .join(format!("attempt_{}", attempt))
+            .join("submission_output");
+        
+        std::fs::create_dir_all(&output_dir).unwrap();
+        
+        // Create mock output for task1
+        let task_output = output_dir.join("task1.txt");
+        std::fs::write(task_output, "make task1\n&-=-&Subtask 1 Output\nOutput A").unwrap();
+
+        submission
     }
 
     // Helper to send remark request
@@ -1232,12 +1254,12 @@ mod tests {
         (status, json)
     }
 
-    /// Test 1: Successful remark of specific submissions
+    /// Test 1: Successful remark of specific submissions as lecturer
     #[tokio::test]
     #[serial]
-    async fn test_remark_specific_submissions() {
+    async fn test_remark_specific_submissions_as_lec() {
         let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
+        let (data, temp_dir) = setup_test_data(&db).await;
         let app = make_app(db.clone());
         
         // Create lecturer user
@@ -1249,8 +1271,8 @@ mod tests {
             .unwrap();
         
         // Create submissions
-        let sub1 = create_submission(&db, data.assignment.id, data.student_user.id, 1).await;
-        let sub2 = create_submission(&db, data.assignment.id, data.student_user.id, 2).await;
+        let sub1 = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        let sub2 = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
         
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({
@@ -1265,12 +1287,78 @@ mod tests {
         assert_eq!(json["data"]["failed"].as_array().unwrap().len(), 0);
     }
 
-    /// Test 2: Successful remark of all submissions
+     /// Test 1: Successful remark of specific submissions as assistant lecturer
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_specific_submissions_as_al() {
+        let db = setup_test_db().await;
+        let (data, temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create assistant lecturer user
+        let assistant = UserModel::create(&db, "assistant1", "assistant@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, assistant.id, data.module.id, Role::AssistantLecturer)
+            .await
+            .unwrap();
+        
+        // Create submissions
+        let sub1 = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        let sub2 = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
+        
+        let (token, _) = generate_jwt(assistant.id, assistant.admin);
+        let body = json!({
+            "submission_ids": [sub1.id, sub2.id]
+        });
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["regraded"], 2);
+        assert_eq!(json["data"]["failed"].as_array().unwrap().len(), 0);
+    }
+
+    /// Test 2: Successful remark of all submissions as lecturer
+    #[tokio::test]
+    #[serial]
+    async fn test_remark_all_submissions_as_lec() {
+        let db = setup_test_db().await;
+        let (data, temp_dir) = setup_test_data(&db).await;
+        let app = make_app(db.clone());
+        
+        // Create lecturer
+        let lecturer = UserModel::create(&db, "lecturer1", "lecturer@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(&db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        
+        // Create submissions
+        create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
+        
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let body = json!({
+            "all": true
+        });
+        
+        let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
+        
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["regraded"], 2);
+        assert_eq!(json["data"]["failed"].as_array().unwrap().len(), 0);
+    }
+
+    /// Test 2: Successful remark of all submissions as assistant lecturer
     #[tokio::test]
     #[serial]
     async fn test_remark_all_submissions() {
         let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
+        let (data, temp_dir) = setup_test_data(&db).await;
         let app = make_app(db.clone());
         
         // Create assistant lecturer
@@ -1282,8 +1370,8 @@ mod tests {
             .unwrap();
         
         // Create submissions
-        create_submission(&db, data.assignment.id, data.student_user.id, 1).await;
-        create_submission(&db, data.assignment.id, data.student_user.id, 2).await;
+        create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
         
         let (token, _) = generate_jwt(assistant.id, assistant.admin);
         let body = json!({
@@ -1326,11 +1414,11 @@ mod tests {
     #[serial]
     async fn test_remark_unauthorized_user() {
         let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
+        let (data, temp_dir) = setup_test_data(&db).await;
         let app = make_app(db.clone());
         
         // Create a submission
-        let submission = create_submission(&db, data.assignment.id, data.student_user.id, 1).await;
+        let submission = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
         
         // Student tries to remark
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -1342,7 +1430,7 @@ mod tests {
         
         assert_eq!(status, StatusCode::FORBIDDEN);
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Not authorized to remark submissions");
+        assert_eq!(json["message"], "Lecturer or assistant lecturer access required for this module");
     }
 
     /// Test 5: Assignment not found
@@ -1371,7 +1459,7 @@ mod tests {
         
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Assignment not found");
+        assert_eq!(json["message"], "Assignment 9999 in Module 1 not found.");
     }
 
     /// Test 6: Submission not found in assignment
@@ -1422,7 +1510,7 @@ mod tests {
             .unwrap();
         
         // Create submission
-        let submission = create_submission(&db, data.assignment.id, data.student_user.id, 1).await;
+        let submission = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
         
         // Delete allocator file
         let allocator_path = temp_dir
@@ -1462,7 +1550,7 @@ mod tests {
             .unwrap();
         
         // Create submission
-        let submission = create_submission(&db, data.assignment.id, data.student_user.id, 1).await;
+        let submission = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
         
         // Delete student outputs to cause grading failure
         let student_output_dir = temp_dir
@@ -1487,7 +1575,11 @@ mod tests {
         let failed = json["data"]["failed"].as_array().unwrap();
         assert_eq!(failed.len(), 1);
         assert_eq!(failed[0]["id"], submission.id);
-        assert!(failed[0]["error"].as_str().unwrap().contains("Marking error"));
+        assert!(
+            failed[0]["error"].as_str().unwrap().contains("memo_paths.len() != student_paths.len()"),
+            "Actual error: {}",
+            failed[0]["error"]
+        );
     }
 
     /// Test 9: Mix of successful and failed regrades
@@ -1507,13 +1599,13 @@ mod tests {
             .unwrap();
         
         // Create valid submission
-        let valid_sub = create_submission(&db, data.assignment.id, data.student_user.id, 1).await;
+        let valid_sub = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
         
         // Create invalid submission (non-existent)
         let invalid_sub_id = 9999;
         
         // Create submission with missing outputs
-        let broken_sub = create_submission(&db, data.assignment.id, data.student_user.id, 2).await;
+        let broken_sub = create_submission(&db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
         let student_output_dir = temp_dir
             .path()
             .join(format!("module_{}", data.module.id))
@@ -1543,7 +1635,11 @@ mod tests {
             .map(|f| f["error"].as_str().unwrap())
             .collect();
         assert!(errors.contains(&"Submission not found"));
-        assert!(errors.iter().any(|e| e.contains("Marking error")));
+        assert!(
+            errors.iter().any(|e| e.contains("memo_paths.len() != student_paths.len()")),
+            "Errors: {:?}",
+            errors
+        );
     }
 
     /// Test 10: Invalid module ID
@@ -1572,6 +1668,6 @@ mod tests {
         
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Assignment not found");
+        assert_eq!(json["message"], "Module 9999 not found.");
     }
 }

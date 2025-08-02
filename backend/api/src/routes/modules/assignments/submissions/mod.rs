@@ -1,7 +1,8 @@
-use axum::{Router, routing::{get, post}};
+use axum::{middleware::from_fn_with_state, Router, routing::{get, post}};
 use sea_orm::DatabaseConnection;
 use get::{list_submissions, get_submission};
 use post::{submit_assignment, remark_submissions};
+use crate::auth::guards::require_lecturer_or_assistant_lecturer;
 
 pub mod get;
 pub mod post;
@@ -22,10 +23,10 @@ pub mod common;
 /// 
 /// - `POST /`
 ///   - Submit a new assignment (student access only)
-pub fn submission_routes() -> Router<DatabaseConnection> {
+pub fn submission_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
     Router::new()
         .route("/", get(list_submissions))
         .route("/{submission_id}", get(get_submission))
         .route("/", post(submit_assignment))
-        .route("/remark", post(remark_submissions))
+        .route("/remark", post(remark_submissions).route_layer(from_fn_with_state(db.clone(), require_lecturer_or_assistant_lecturer)))
 }
