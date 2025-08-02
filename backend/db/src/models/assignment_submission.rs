@@ -300,7 +300,9 @@ mod tests {
             user_id: Set(user.id),
             attempt: Set(1),
             filename: Set("solution.zip".to_string()),
+            file_hash: Set("hash123#".to_string()),
             path: Set("".to_string()),
+            is_practice: Set(false),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()
