@@ -10,3 +10,4 @@ pub mod m202505290009_create_memo_outputs;
 pub mod m202505290010_create_submission_outputs;
 pub mod m202505290011_create_overwrite_files;
 pub mod m202506080012_plagiarism_case;
+pub mod m202508020001_create_tickets;
