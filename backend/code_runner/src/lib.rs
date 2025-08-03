@@ -501,6 +501,154 @@ fn extract_single_file(
     Ok(())
 }
 
+use db::models::assignment_file::{Column as AssignmentFileColumn, Entity as AssignmentFileEntity};
+use db::models::assignment_submission::Entity as AssignmentSubmission;
+use tokio::fs as async_fs;
+use tokio::io::AsyncReadExt;
+pub async fn create_main_from_interpreter(
+    db: &DatabaseConnection,
+    submission_id: i64,
+    interpreter_cmd: &str,
+    main_file_extension: &str,
+) -> Result<(), String> {
+    let submission = AssignmentSubmission::find_by_id(submission_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?
+        .ok_or_else(|| format!("Submission {} not found", submission_id))?;
+
+    let assignment_id = submission.assignment_id;
+
+    let interpreter_file = AssignmentFileEntity::find()
+        .filter(AssignmentFileColumn::AssignmentId.eq(assignment_id))
+        .filter(AssignmentFileColumn::FileType.eq("interpreter"))
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch interpreter file: {}", e))?
+        .ok_or("Interpreter file not found")?;
+
+    let assignment = Assignment::find_by_id(assignment_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch assignment: {}", e))?
+        .ok_or_else(|| format!("Assignment {} not found", assignment_id))?;
+
+    let module_id = assignment.module_id;
+
+    let storage_root = std::env::var("ASSIGNMENT_STORAGE_ROOT")
+        .map_err(|_| "ASSIGNMENT_STORAGE_ROOT not set".to_string())?;
+    let interpreter_path = PathBuf::from(&storage_root).join(&interpreter_file.path);
+
+    if !interpreter_path.exists() {
+        return Err(format!(
+            "Interpreter file does not exist on disk: {}",
+            interpreter_path.display()
+        ));
+    }
+
+    let interpreter_bytes = async_fs::read(&interpreter_path)
+        .await
+        .map_err(|e| format!("Failed to read interpreter file: {}", e))?;
+
+    let temp_dir = tempdir().map_err(|e| format!("Failed to create tempdir: {}", e))?;
+    let temp_path = temp_dir.path();
+
+    extract_zip(&interpreter_bytes, 1_000_000_000, temp_path)
+        .map_err(|e| format!("Failed to extract interpreter archive: {}", e))?;
+
+    let memory_arg = format!("--memory={}b", 500_000_000);
+    let cpus_arg = format!("--cpus=1");
+    let pids_arg = format!("--pids-limit=64");
+
+    let mut docker_cmd = Command::new("docker");
+    docker_cmd
+        .arg("run")
+        .arg("--rm")
+        .arg("--network=none")
+        .arg(memory_arg)
+        .arg(cpus_arg)
+        .arg(pids_arg)
+        .arg("--security-opt=no-new-privileges")
+        .arg("-v")
+        .arg(format!("{}:/code:rw", temp_path.display()))
+        .arg("universal-runner")
+        .arg("sh")
+        .arg("-c")
+        .arg(interpreter_cmd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let docker_process = docker_cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn docker: {}", e))?;
+
+    let output = timeout(Duration::from_secs(60), docker_process.wait_with_output())
+        .await
+        .map_err(|_| "Docker command timed out".to_string())?
+        .map_err(|e| format!("Docker command failed: {}", e))?;
+
+    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    let stderr_str = String::from_utf8_lossy(&output.stderr);
+
+    if !output.status.success() {
+        return Err(format!(
+            "Interpreter Docker run failed:\nSTDOUT:\n{}\nSTDERR:\n{}",
+            stdout_str, stderr_str
+        ));
+    }
+
+    let generated_main = temp_path.join(format!("main.{}", main_file_extension));
+
+    if !generated_main.exists() {
+        return Err(format!(
+            "Interpreter did not produce expected main file: {}",
+            generated_main.display()
+        ));
+    }
+
+    let mut main_content = Vec::new();
+    async_fs::File::open(&generated_main)
+        .await
+        .map_err(|e| format!("Failed to open generated main file: {}", e))?
+        .read_to_end(&mut main_content)
+        .await
+        .map_err(|e| format!("Failed to read generated main file: {}", e))?;
+
+    let zip_filename = format!("main_interpreted.{}.zip", main_file_extension);
+    use std::io::Write;
+    use zip::write::{FileOptions, ZipWriter};
+
+    let mut zip_data = Vec::new();
+    {
+        let mut zip_writer = ZipWriter::new(std::io::Cursor::new(&mut zip_data));
+        zip_writer
+            .start_file(
+                format!("main.{}", main_file_extension),
+                FileOptions::<'_, ()>::default(),
+            )
+            .map_err(|e| format!("Failed to start file in zip: {}", e))?;
+        zip_writer
+            .write_all(&main_content)
+            .map_err(|e| format!("Failed to write main file to zip: {}", e))?;
+        zip_writer
+            .finish()
+            .map_err(|e| format!("Failed to finish zip: {}", e))?;
+    }
+
+    db::models::assignment_file::Model::save_file(
+        db,
+        assignment_id,
+        module_id,
+        db::models::assignment_file::FileType::Main,
+        &zip_filename,
+        &zip_data,
+    )
+    .await
+    .map_err(|e| format!("Failed to save zipped main file: {}", e))?;
+
+    Ok(())
+}
+
 //TODO - Add testing for bad code in new refactored environment -> Richard will do
 // The problem with these tests is that they fail with github actions
 // That is why they are ignored

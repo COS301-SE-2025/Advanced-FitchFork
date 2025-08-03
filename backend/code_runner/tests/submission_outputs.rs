@@ -1,5 +1,5 @@
 use chrono::Utc;
-use code_runner::create_submission_outputs_for_all_tasks;
+use code_runner::{create_main_from_interpreter, create_submission_outputs_for_all_tasks};
 use db::models::assignment::AssignmentType;
 use db::models::assignment::{ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity};
 use db::models::assignment_submission::{
@@ -50,7 +50,7 @@ async fn seed_submission(db: &DatabaseConnection, assignment_id: i64) -> Submiss
 
     let submission_dir =
         SubmissionModel::full_directory_path(module_id, assignment_id, user_id, attempt);
-    let file_path = submission_dir.join("481.zip"); // Adjust if needed
+    let file_path = submission_dir.join("481.zip");
 
     let relative_path = file_path
         .strip_prefix(SubmissionModel::storage_root())
@@ -65,7 +65,9 @@ async fn seed_submission(db: &DatabaseConnection, assignment_id: i64) -> Submiss
         user_id: Set(user_id),
         attempt: Set(attempt),
         filename: Set(filename.to_string()),
+        file_hash: Set("0".to_string()),
         path: Set(relative_path),
+        is_practice: Set(false),
         created_at: Set(now),
         updated_at: Set(now),
         ..Default::default()
@@ -136,7 +138,7 @@ async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
     }
 
     for (task_number, command) in tasks {
-        AssignmentTaskModel::create(db, assignment_id, task_number,"Untitled Task", command)
+        AssignmentTaskModel::create(db, assignment_id, task_number, "Untitled Task", command)
             .await
             .expect("Failed to create assignment task");
     }
@@ -210,5 +212,61 @@ async fn test_create_submission_outputs_for_all_tasks_9998_cpp() {
             "Failed to generate submission outputs for C++ assignment: {}",
             e
         ),
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_run_interpreter_9998_cpp() {
+    dotenvy::dotenv().ok();
+
+    let db = setup_test_db_with_seeded_tasks(9998, 9998).await;
+
+    use db::models::assignment_file::FileType;
+    use db::models::assignment_submission::Entity as SubmissionEntity;
+    use sea_orm::ColumnTrait;
+    use sea_orm::QueryFilter;
+
+    let submission = SubmissionEntity::find()
+        .filter(db::models::assignment_submission::Column::AssignmentId.eq(9998))
+        .filter(db::models::assignment_submission::Column::UserId.eq(1))
+        .filter(db::models::assignment_submission::Column::Attempt.eq(1))
+        .one(&db)
+        .await
+        .expect("Failed to lookup submission")
+        .expect("No matching submission found");
+
+    let submission_id = submission.id;
+
+    use db::models::assignment_file::ActiveModel as AssignmentFileActiveModel;
+    use sea_orm::{ActiveModelTrait, Set};
+
+    let interpreter_filename = "interpreter.cpp";
+    let interpreter_relative_path = "module_9998/assignment_9998/interpreter/149.zip";
+    let now = Utc::now();
+
+    let interpreter_file = AssignmentFileActiveModel {
+        assignment_id: Set(9998),
+        filename: Set(interpreter_filename.to_string()),
+        path: Set(interpreter_relative_path.to_string()),
+        file_type: Set(FileType::Interpreter),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    };
+
+    interpreter_file
+        .insert(&db)
+        .await
+        .expect("Failed to insert interpreter file into DB");
+
+    let compile_and_run_cmd = r#"
+g++ /code/interpreter.cpp -o /code/interpreter_exe &&
+ /code/interpreter_exe 01234
+"#;
+
+    match create_main_from_interpreter(&db, submission_id, compile_and_run_cmd, "cpp").await {
+        Ok(_) => {}
+        Err(e) => panic!("Failed to run interpreter for C++ assignment: {}", e),
     }
 }

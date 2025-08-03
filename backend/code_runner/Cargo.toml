@@ -19,6 +19,7 @@ chrono = { version = "0.4", features = ["serde"] }
 db = { path = "../db" }
 flate2 = "1.1.2"
 util = { path = "../util" }
+shell-escape = "0.1.5"
 
 [dev-dependencies]
 dotenvy = "0.15"
