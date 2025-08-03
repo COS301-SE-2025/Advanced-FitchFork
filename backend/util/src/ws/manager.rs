@@ -33,6 +33,8 @@ impl WebSocketManager {
     ///
     /// # Example
     /// ```
+    /// use util::ws::manager::WebSocketManager;
+    ///
     /// let manager = WebSocketManager::new();
     /// ```
     pub fn new() -> Self {
