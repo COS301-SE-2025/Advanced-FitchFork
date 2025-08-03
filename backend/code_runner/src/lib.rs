@@ -259,7 +259,7 @@ pub async fn create_submission_outputs_for_all_tasks(
 
         if let Err(e) = SubmissionOutputModel::save_file(
             db,
-            task.task_number,
+            task.id,
             submission_id,
             &filename,
             output.as_bytes(),

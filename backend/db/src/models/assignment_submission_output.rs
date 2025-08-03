@@ -64,6 +64,7 @@ impl Model {
         assignment_id: i64,
         user_id: i64,
         attempt_number: i64,
+        task_number: i64,
     ) -> PathBuf {
         Self::storage_root()
             .join(format!("module_{module_id}"))
@@ -72,6 +73,7 @@ impl Model {
             .join(format!("user_{user_id}"))
             .join(format!("attempt_{attempt_number}"))
             .join("submission_output")
+            .join(format!("task_{task_number}"))
     }
 
     pub fn full_path(&self) -> PathBuf {
@@ -111,7 +113,7 @@ impl Model {
         let submission = super::assignment_submission::Entity::find_by_id(submission_id)
             .one(db)
             .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding task: {}", e)))?
+            .map_err(|e| DbErr::Custom(format!("DB error finding submission: {}", e)))?
             .ok_or_else(|| DbErr::Custom("Submission not found".to_string()))?;
 
         let assignment = super::assignment::Entity::find_by_id(submission.assignment_id)
@@ -120,13 +122,18 @@ impl Model {
             .map_err(|e| DbErr::Custom(format!("DB error finding assignment: {}", e)))?
             .ok_or_else(|| DbErr::Custom("Assignment not found".to_string()))?;
 
-        let module_id = assignment.module_id;
+        let task = super::assignment_task::Entity::find_by_id(task_id)
+            .one(db)
+            .await
+            .map_err(|e| DbErr::Custom(format!("DB error finding task: {}", e)))?
+            .ok_or_else(|| DbErr::Custom("Task not found".to_string()))?;
 
         let dir_path = Self::full_directory_path(
-            module_id,
+            assignment.module_id,
             assignment.id,
             submission.user_id,
             submission.attempt,
+            task.task_number,
         );
         fs::create_dir_all(&dir_path)
             .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
@@ -150,7 +157,6 @@ impl Model {
 
     /// Reads the contents of a submission output file from disk,
     /// given the module_id, assignment_id, user_id, submission_id
-
     pub async fn get_output(
         db: &DatabaseConnection,
         module_id: i64,
@@ -160,35 +166,40 @@ impl Model {
         let submission = assignment_submission::Entity::find_by_id(submission_id).one(db).await
             .map_err(|e| io::Error::new(ErrorKind::Other, format!("DB error: {}", e)))?
             .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "Submission not found"))?;
-        let user_id = submission.user_id;
-        let attempt_number = submission.attempt;
 
-        let dir_path = Self::storage_root()
+        let base_dir_path = Self::storage_root()
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{assignment_id}"))
             .join("assignment_submissions")
-            .join(format!("user_{user_id}"))
-            .join(format!("attempt_{attempt_number}"))
+            .join(format!("user_{}", submission.user_id))
+            .join(format!("attempt_{}", submission.attempt))
             .join("submission_output");
 
-        if !dir_path.exists() {
+        if !base_dir_path.exists() {
             return Err(io::Error::new(
                 ErrorKind::NotFound,
-                format!("Submission output directory {:?} does not exist", dir_path),
+                format!("Submission output directory {:?} does not exist", base_dir_path),
             ));
         }
 
         let mut results = Vec::new();
-
-        for entry in fs::read_dir(dir_path)? {
+        for entry in fs::read_dir(&base_dir_path)? {
             let entry = entry?;
-            if entry.file_type()?.is_file() {
-                let filename_str = entry.file_name().to_string_lossy().to_string();
-                let filename = filename_str.split('.').next();
-                let path = entry.path();
-
-                let content = fs::read_to_string(&path)?;
-                results.push((filename.unwrap().to_string().parse::<i64>().unwrap(), content));
+            if entry.file_type()?.is_dir() {
+                let dir_name = entry.file_name().to_string_lossy().to_string();
+                if let Some(task_num_str) = dir_name.strip_prefix("task_") {
+                    if let Ok(task_number) = task_num_str.parse::<i64>() {
+                        let task_dir = entry.path();
+                        for file_entry in fs::read_dir(task_dir)? {
+                            let file_entry = file_entry?;
+                            if file_entry.file_type()?.is_file() {
+                                let file_path = file_entry.path();
+                                let content = fs::read_to_string(&file_path)?;
+                                results.push((task_number, content));
+                            }
+                        }
+                    }
+                }
             }
         }
 
