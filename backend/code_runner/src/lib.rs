@@ -656,6 +656,32 @@ pub async fn create_main_from_interpreter(
     Ok(())
 }
 
+/// Runs the interpreter for a given submission, generating and processing
+/// the main file and outputs for all tasks associated with the assignment.
+///
+/// # Arguments
+/// * `db` - Reference to the database connection for querying and saving data.
+/// * `submission_id` - The unique ID of the submission to process.
+/// * `interpreter_cmd` - The shell command to run the interpreter inside Docker or similar.
+/// * `main_file_name` - The expected filename of the generated main file (e.g., "main.cpp").
+///
+/// # Returns
+/// * `Result<(), String>` - Returns Ok(()) if all steps succeed, or an error message string on failure.
+///
+/// # Workflow:
+/// 1. Fetches the submission by `submission_id` from the database to get its `assignment_id`.
+/// 2. Calls `create_main_from_interpreter` to:
+///     - Run the interpreter command inside Docker.
+///     - Extract and read the generated main file named `main_file_name`.
+///     - Zip and save this main file into the database as an assignment file.
+/// 3. Calls `create_memo_outputs_for_all_tasks` to generate memo outputs for every task
+///    associated with the assignment (using the assignment_id).
+/// 4. Calls `create_submission_outputs_for_all_tasks` to generate outputs for every task
+///    specifically for the given submission.
+/// 5. Returns `Ok(())` on success or an error if any step fails.
+///
+/// This function coordinates the entire workflow for interpreting and processing
+/// a student's submission according to the assignment tasks.
 pub async fn run_interpreter(
     db: &DatabaseConnection,
     submission_id: i64,
