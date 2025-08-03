@@ -509,7 +509,7 @@ pub async fn create_main_from_interpreter(
     db: &DatabaseConnection,
     submission_id: i64,
     interpreter_cmd: &str,
-    main_file_extension: &str,
+    main_file_name: &str,
 ) -> Result<(), String> {
     let submission = AssignmentSubmission::find_by_id(submission_id)
         .one(db)
@@ -597,13 +597,19 @@ pub async fn create_main_from_interpreter(
         ));
     }
 
-    let generated_main = temp_path.join(format!("main.{}", main_file_extension));
-
+    let mut generated_main = temp_path.join(main_file_name);
     if !generated_main.exists() {
-        return Err(format!(
-            "Interpreter did not produce expected main file: {}",
-            generated_main.display()
-        ));
+        let lower_name = main_file_name.to_ascii_lowercase();
+        let generated_main_lower = temp_path.join(&lower_name);
+        if generated_main_lower.exists() {
+            generated_main = generated_main_lower;
+        } else {
+            return Err(format!(
+                "Interpreter did not produce expected main file: {} or {}",
+                generated_main.display(),
+                generated_main_lower.display()
+            ));
+        }
     }
 
     let mut main_content = Vec::new();
@@ -614,7 +620,11 @@ pub async fn create_main_from_interpreter(
         .await
         .map_err(|e| format!("Failed to read generated main file: {}", e))?;
 
-    let zip_filename = format!("main_interpreted.{}.zip", main_file_extension);
+    let zip_filename = format!(
+        "main_interpreted.{}.zip",
+        main_file_name.rsplitn(2, '.').next().unwrap_or("txt")
+    );
+
     use std::io::Write;
     use zip::write::{FileOptions, ZipWriter};
 
@@ -622,10 +632,7 @@ pub async fn create_main_from_interpreter(
     {
         let mut zip_writer = ZipWriter::new(std::io::Cursor::new(&mut zip_data));
         zip_writer
-            .start_file(
-                format!("main.{}", main_file_extension),
-                FileOptions::<'_, ()>::default(),
-            )
+            .start_file(main_file_name, FileOptions::<'_, ()>::default())
             .map_err(|e| format!("Failed to start file in zip: {}", e))?;
         zip_writer
             .write_all(&main_content)
@@ -649,190 +656,29 @@ pub async fn create_main_from_interpreter(
     Ok(())
 }
 
-//TODO - Add testing for bad code in new refactored environment -> Richard will do
-// The problem with these tests is that they fail with github actions
-// That is why they are ignored
+pub async fn run_interpreter(
+    db: &DatabaseConnection,
+    submission_id: i64,
+    interpreter_cmd: &str,
+    main_file_name: &str,
+) -> Result<(), String> {
+    use db::models::assignment_submission::Entity as AssignmentSubmission;
+    let submission = AssignmentSubmission::find_by_id(submission_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?
+        .ok_or_else(|| format!("Submission {} not found", submission_id))?;
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use std::path::PathBuf;
+    let assignment_id = submission.assignment_id;
 
-//     fn test_zip_path(name: &str) -> PathBuf {
-//         PathBuf::from(format!("src/test_files/{}", name))
-//     }
+    // Step 1: Create main zip from interpreter
+    create_main_from_interpreter(db, submission_id, interpreter_cmd, main_file_name).await?;
 
-//     fn test_config() -> ExecutionConfig {
-//         ExecutionConfig {
-//             timeout_secs: 30,
-//             max_memory: "128m",
-//             max_cpus: "1",
-//             max_processes: 64,
-//             max_uncompressed_size: 50 * 1024 * 1024,
-//         }
-//     }
+    // Step 2: Create memo outputs for all tasks of this assignment
+    create_memo_outputs_for_all_tasks(db, assignment_id).await?;
 
-//     fn get_test_language_config(lang: &str) -> LanguageConfig {
-//         get_language_config(lang).expect("Language config not found")
-//     }
+    // Step 3: Create submission outputs for all tasks for this submission
+    create_submission_outputs_for_all_tasks(db, submission_id).await?;
 
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_good_java_example_succeeds() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("good_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
-
-//         let output = result.expect("Expected success, got error");
-//         assert!(!output.trim().is_empty(), "Expected non-empty output");
-//     }
-
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_good_cpp_example_succeeds() {
-//         let lang_cfg = get_test_language_config("cpp");
-//         let result = run_all_zips(
-//             vec![test_zip_path("good_cpp_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
-
-//         assert!(result.is_ok(), "Expected successful C++ run");
-//     }
-
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_good_python_example_succeeds() {
-//         let lang_cfg = get_test_language_config("python");
-//         let result = run_all_zips(
-//             vec![test_zip_path("good_python_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
-
-//         assert!(result.is_ok(), "Expected successful Python run");
-//     }
-
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_infinite_loop_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("infinite_loop_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
-
-//         assert!(result.is_err(), "Infinite loop should timeout or fail");
-//     }
-
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_memory_overflow_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("memory_overflow_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
-
-//         assert!(result.is_err(), "Memory overflow should fail");
-//     }
-
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_fork_bomb_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("fork_bomb_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
-
-//         assert!(result.is_err(), "Fork bomb should fail");
-//     }
-
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_edit_code_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("edit_code_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
-
-//         match result {
-//             Ok(output) => {
-//                 assert!(
-//                     output.contains("Read-only file system"),
-//                     "Expected sandbox to block file edits, but got:\n{}",
-//                     output
-//                 );
-//             }
-//             Err(err) => {
-//                 let msg = err.to_string();
-//                 assert!(
-//                     msg.contains("Read-only file system") || msg.contains("Permission denied"),
-//                     "Expected read-only FS error, but got: {}",
-//                     msg
-//                 );
-//             }
-//         }
-//     }
-
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_privilege_escalation_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("priviledge_escalation_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
-
-//         match result {
-//             Ok(output) => {
-//                 assert!(
-//                     output.contains("uid=1000"),
-//                     "Should not run with root privileges"
-//                 );
-//             }
-//             Err(_) => {
-//                 // Error is also acceptable
-//             }
-//         }
-//     }
-
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_network_access_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("access_network_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
-
-//         assert!(
-//             result.is_err()
-//                 || result
-//                     .as_ref()
-//                     .map(|s| s.contains("Network access blocked"))
-//                     .unwrap_or(false),
-//             "Network access should not be allowed"
-//         );
-//     }
-// }
+    Ok(())
+}
