@@ -5,9 +5,9 @@ use axum::{
     Json,
 };
 use sqlx::types::JsonValue;
-use sea_orm::DatabaseConnection;
 use serde_json::json;
 use db::models::assignment;
+use util::state::AppState;
 use crate::response::ApiResponse;
 use super::common::BulkDeleteRequest;
 
@@ -46,10 +46,12 @@ use super::common::BulkDeleteRequest;
 /// }
 /// ```
 pub async fn delete_assignment(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    match assignment::Model::delete(&db, assignment_id as i32, module_id as i32).await {
+    let db = app_state.db();
+
+    match assignment::Model::delete(db, assignment_id as i32, module_id as i32).await {
         Ok(()) => (
             StatusCode::OK,
             Json(json!({
@@ -96,10 +98,12 @@ pub async fn delete_assignment(
 /// }
 /// ```
 pub async fn bulk_delete_assignments(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Json(req): Json<BulkDeleteRequest>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     if req.assignment_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
@@ -111,7 +115,7 @@ pub async fn bulk_delete_assignments(
     let mut failed: Vec<JsonValue> = Vec::new();
 
     for &id in &req.assignment_ids {
-        match assignment::Model::delete(&db, id as i32, module_id as i32).await {
+        match assignment::Model::delete(db, id as i32, module_id as i32).await {
             Ok(_) => deleted_count += 1,
             Err(e) => {
                 failed.push(json!({

@@ -5,7 +5,7 @@ use axum::{
     Json,
 };
 use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait,
+    ColumnTrait, Condition, EntityTrait, JoinType, PaginatorTrait,
     QueryFilter, QueryOrder, QuerySelect, Order
 };
 
@@ -14,6 +14,7 @@ use db::models::{
     user_module_role::{self, Column as RoleCol, Role},
     user::Model as UserModel
 };
+use util::state::AppState;
 use crate::{
     auth::AuthUser,
     response::{ApiResponse},
@@ -93,12 +94,13 @@ pub struct RoleParam {
 /// }
 /// ```
 pub async fn get_personnel(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Query(role_param): Query<RoleParam>,
     Query(params): Query<RoleQuery>,
 ) -> Response {
+    let db = app_state.db();
     let user_id = claims.sub;
     let requested_role = &role_param.role;
 
@@ -119,7 +121,7 @@ pub async fn get_personnel(
                     .add(RoleCol::UserId.eq(user_id))
                     .add(RoleCol::ModuleId.eq(module_id)),
             )
-            .one(&db)
+            .one(db)
             .await
             .map(|opt| opt.is_some())
             .unwrap_or(false);
@@ -178,7 +180,7 @@ pub async fn get_personnel(
         _ => query = query.order_by_asc(user::Column::Id),
     }
 
-    let paginator = query.paginate(&db, per_page.into());
+    let paginator = query.paginate(db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
     let users = paginator.fetch_page((page - 1) as u64).await.unwrap_or_default();
     let result = users.into_iter().map(RoleResponse::from).collect();
@@ -270,16 +272,18 @@ pub struct EligibleUserListResponse {
 /// }
 /// ```
 pub async fn get_eligible_users_for_module(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Query(params): Query<EligibleUserQuery>,
 ) -> Response {
+    let db = app_state.db();
+
     let assigned_ids: Vec<i64> = user_module_role::Entity::find()
         .select_only()
         .column(user_module_role::Column::UserId)
         .filter(user_module_role::Column::ModuleId.eq(module_id))
         .into_tuple::<i64>()
-        .all(&db)
+        .all(db)
         .await
         .unwrap_or_default();
 
@@ -325,7 +329,7 @@ pub async fn get_eligible_users_for_module(
         query = query.order_by(user::Column::Id, Order::Asc);
     }
 
-    let paginator = query.paginate(&db, per_page.into());
+    let paginator = query.paginate(db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
     let raw_users = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
     let users = raw_users.into_iter().map(MinimalUserResponse::from).collect();

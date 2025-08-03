@@ -4,10 +4,10 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
-    use db::{test_utils::setup_test_db, models::{module::{self, Model as Module}, user::Model as UserModel}};
+    use db::{models::{module::{self, Model as Module}, user::Model as UserModel}};
     use tower::ServiceExt;
     use api::auth::generate_jwt;
-    use crate::test_helpers::make_app;
+    use crate::helpers::app::make_test_app;
     use sea_orm::EntityTrait;
 
     struct TestData {
@@ -41,10 +41,9 @@ mod tests {
     /// Test Case: Admin deletes module successfully
     #[tokio::test]
     async fn test_delete_module_success() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -65,7 +64,7 @@ mod tests {
         assert!(json["data"].is_null());
 
         let exists = module::Entity::find_by_id(data.module.id)
-            .one(&db)
+            .one(app_state.db())
             .await
             .unwrap()
             .is_some();
@@ -75,10 +74,9 @@ mod tests {
     /// Test Case: Non-admin user attempts to delete module
     #[tokio::test]
     async fn test_delete_module_forbidden() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
-    
-        let app = make_app(db.clone());
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
+
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -97,7 +95,7 @@ mod tests {
         assert_eq!(json["message"], "Admin access required");
 
         let exists = module::Entity::find_by_id(data.module.id)
-            .one(&db)
+            .one(app_state.db())
             .await
             .unwrap()
             .is_some();
@@ -107,10 +105,9 @@ mod tests {
     /// Test Case: Delete non-existent module
     #[tokio::test]
     async fn test_delete_module_not_found() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", 99999);
         let req = Request::builder()
@@ -132,10 +129,9 @@ mod tests {
     /// Test Case: Missing authorization header
     #[tokio::test]
     async fn test_delete_module_unauthorized() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
             .method("DELETE")
@@ -147,7 +143,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
         let exists = module::Entity::find_by_id(data.module.id)
-            .one(&db)
+            .one(app_state.db())
             .await
             .unwrap()
             .is_some();

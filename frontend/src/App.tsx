@@ -50,6 +50,7 @@ import AssignmentsList from './pages/modules/assignments/AssignmentsList';
 import ProtectedAuthRoute from './components/routes/ProtectedAuthRoute';
 import ProtectedAdminRoute from './components/routes/ProtectedAdminRoute';
 import ProtectedModuleRoute from './components/routes/ProtectedModuleRoute';
+import Chat from './pages/Chat';
 
 export default function App() {
   const { user, loading, isExpired } = useAuth();
@@ -81,6 +82,7 @@ export default function App() {
         <Route element={<ProtectedAuthRoute />}>
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/chat" element={<Chat />} />
 
             <Route path="/settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to="account" replace />} />

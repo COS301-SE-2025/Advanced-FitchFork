@@ -56,3 +56,49 @@ body,
 .dark .ant-table-thead > tr > th {
   background-color: var(--color-gray-950) !important;
 }
+
+/**
+ * Custom Prose Fixes for Markdown Rendering
+ * Tailwind Preflight resets styles on `ul`, `ol`, `blockquote`, etc.
+ * These rules restore bullet points, numbering, and blockquote visuals manually.
+ * 
+ * You can remove these if the Tailwind Typography Plugin is fixed and loaded properly:
+ * https://v1.tailwindcss.com/docs/typography-plugin
+ */
+
+.prose ul {
+  list-style-type: disc;
+  margin-left: 1.5rem;
+}
+
+.prose ol {
+  list-style-type: decimal;
+  margin-left: 1.5rem;
+}
+
+.prose blockquote {
+  border-left: 4px solid #ddd;
+  padding-left: 1rem;
+  color: #666;
+  font-style: italic;
+}
+
+/* override light theme in dark mode manually */
+.dark .hljs {
+  background: transparent !important;
+  color: #e0e0e0 !important;
+}
+
+/* optional: override syntax tokens */
+.dark .hljs-comment {
+  color: #7c7c7c;
+}
+.dark .hljs-keyword {
+  color: #d4bfff;
+}
+.dark .hljs-string {
+  color: #b5f4a5;
+}
+.dark .hljs-number {
+  color: #f78c6c;
+}

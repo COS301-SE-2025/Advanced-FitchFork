@@ -5,12 +5,12 @@ use axum::{
     Json,
 };
 use chrono::Utc;
+use util::state::AppState;
 use validator::Validate;
 use sea_orm::{
     ActiveModelTrait,
     ColumnTrait,
     Condition,
-    DatabaseConnection,
     EntityTrait,
     QueryFilter,
     Set,
@@ -99,10 +99,12 @@ use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
 /// }
 /// ```
 pub async fn edit_module(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Path(module_id): Path<i64>,
     Json(req): Json<ModuleRequest>,
 ) -> impl IntoResponse {
+    let db = state.db();
+
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -117,7 +119,7 @@ pub async fn edit_module(
                 .add(ModuleCol::Code.eq(req.code.clone()))
                 .add(ModuleCol::Id.ne(module_id)),
         )
-        .one(&db)
+        .one(db)
         .await;
 
     if let Ok(Some(_)) = duplicate {
@@ -137,7 +139,7 @@ pub async fn edit_module(
         ..Default::default()
     };
 
-    match updated_module.update(&db).await {
+    match updated_module.update(db).await {
         Ok(module) => (
             StatusCode::OK,
             Json(ApiResponse::success(ModuleResponse::from(module), "Module updated successfully")),

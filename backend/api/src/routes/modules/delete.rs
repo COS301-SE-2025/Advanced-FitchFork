@@ -4,7 +4,8 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, DatabaseConnection};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::module;
 
@@ -42,16 +43,18 @@ use db::models::module;
 /// }
 /// ```
 pub async fn delete_module(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Path(module_id): Path<i64>
 ) -> impl IntoResponse {
+    let db = state.db();
+
     match module::Entity::find()
         .filter(module::Column::Id.eq(module_id))
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(Some(m)) => {
-            match m.delete(&db).await {
+            match m.delete(db).await {
                 Ok(_) => (
                     StatusCode::OK,
                     Json(ApiResponse::<()>::success((), "Module deleted successfully")),

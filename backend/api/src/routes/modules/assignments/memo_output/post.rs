@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
 };
 use code_runner::create_memo_outputs_for_all_tasks;
-use sea_orm::DatabaseConnection;
+use util::state::AppState;
 use std::{env, fs, path::PathBuf};
 use tracing::{error, info};
 
@@ -95,9 +95,11 @@ use tracing::{error, info};
 /// - Generation is restricted to users with appropriate module permissions
 /// - Check server logs for detailed progress and error information
 pub async fn generate_memo_output(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
+    let db = app_state.db();
+
     let base_path =
         env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
 
@@ -141,7 +143,7 @@ pub async fn generate_memo_output(
         );
     }
 
-    match create_memo_outputs_for_all_tasks(&db, assignment_id).await {
+    match create_memo_outputs_for_all_tasks(db, assignment_id).await {
         Ok(_) => {
             info!(
                 "Memo output generation complete for assignment {}",

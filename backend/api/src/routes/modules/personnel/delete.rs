@@ -6,13 +6,14 @@ use axum::{
 };
 use serde::Deserialize;
 use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
+    ColumnTrait, Condition, EntityTrait, QueryFilter,
 };
 
 use db::models::{
     user::Entity as UserEntity,
     user_module_role::{Entity as RoleEntity, Column as RoleCol, Role},
 };
+use util::state::AppState;
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
@@ -108,11 +109,12 @@ pub struct RemovePersonnelRequest {
 /// }
 /// ```
 pub async fn remove_personnel(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(body): Json<RemovePersonnelRequest>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
     let requester_id = claims.sub;
 
     if body.user_ids.is_empty() {
@@ -142,7 +144,7 @@ pub async fn remove_personnel(
                     .add(RoleCol::ModuleId.eq(module_id))
                     .add(RoleCol::Role.eq(Role::Lecturer)),
             )
-            .one(&db)
+            .one(db)
             .await
             .map(|res| res.is_some())
             .unwrap_or(false);
@@ -160,7 +162,7 @@ pub async fn remove_personnel(
 
     for &target_user_id in &body.user_ids {
         let user_exists = UserEntity::find_by_id(target_user_id)
-            .one(&db)
+            .one(db)
             .await
             .map(|opt| opt.is_some())
             .unwrap_or(false);
@@ -179,7 +181,7 @@ pub async fn remove_personnel(
                     .add(RoleCol::ModuleId.eq(module_id))
                     .add(RoleCol::Role.eq(role_to_remove.clone())),
             )
-            .exec(&db)
+            .exec(db)
             .await;
 
         match delete_result {

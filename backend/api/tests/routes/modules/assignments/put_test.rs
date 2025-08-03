@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::{Model as ModuleModel, ActiveModel as ModuleActiveModel}, assignment::{Model as AssignmentModel, AssignmentType, Status}, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{models::{user::Model as UserModel, module::{Model as ModuleModel, ActiveModel as ModuleActiveModel}, assignment::{Model as AssignmentModel, AssignmentType, Status}, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::{json, Value};
@@ -8,7 +8,7 @@ mod tests {
     use dotenvy;
     use chrono::{Utc, TimeZone, DateTime};
     use sea_orm::{Set, ActiveModelTrait, EntityTrait};
-    use crate::test_helpers::make_app;
+    use crate::helpers::app::make_test_app;
 
     struct TestData {
         admin_user: UserModel,
@@ -25,7 +25,7 @@ mod tests {
         dotenvy::dotenv().expect("Failed to load .env");
 
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let empty_module = ModuleModel::create(&db, "EMPTY101", 2024, Some("Empty Module"), 16).await.unwrap();
+        let empty_module = ModuleModel::create(db, "EMPTY101", 2024, Some("Empty Module"), 16).await.unwrap();
         let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true).await.unwrap();
         let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
         let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
@@ -88,10 +88,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_shouldnt_update_status() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[1].id);
         let body = json!({
@@ -122,10 +121,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_optional_description_none() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[2].id);
         let body = json!({
@@ -155,10 +153,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_success_status_variants() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let statuses = ["setup", "ready", "open", "closed", "archived"];
         for status in statuses.iter() {
@@ -186,10 +183,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_forbidden_for_student() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
         let body = json!({
@@ -214,10 +210,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_forbidden_for_unassigned_user() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
         let body = json!({
@@ -242,10 +237,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_invalid_assignment_type() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
         let body = json!({
@@ -275,10 +269,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_invalid_dates() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
         let body = json!({
@@ -308,10 +301,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_missing_fields() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
         let body = json!({
@@ -331,10 +323,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_not_found() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/9999", data.module.id);
         let body = json!({
@@ -359,11 +350,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_wrong_module() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let app = make_app(db.clone());
+
         let uri = format!("/api/modules/{}/assignments/{}", data.empty_module.id, data.assignments[0].id);
         let body = json!({
             "name": "Wrong Module",
@@ -387,11 +378,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_module_not_found() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let app = make_app(db.clone());
+
         let uri = format!("/api/modules/{}/assignments/{}", data.dummy_module_id, data.assignments[0].id);
         let body = json!({
             "name": "Module 9999 not found.",
@@ -415,10 +406,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_unauthorized() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
         let body = json!({
             "name": "No Auth",
@@ -442,15 +432,15 @@ mod tests {
     /// Test Case: Successful Transition from Ready to Open
     #[tokio::test]
     async fn test_open_assignment_success_from_ready() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
         let req = Request::builder()
@@ -464,7 +454,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let updated = db::models::assignment::Entity::find_by_id(assignment.id)
-            .one(&db)
+            .one(app_state.db())
             .await
             .unwrap()
             .unwrap();
@@ -474,15 +464,15 @@ mod tests {
     /// Test Case: Successful Transition from Closed to Open
     #[tokio::test]
     async fn test_open_assignment_success_from_closed() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Closed);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
         let req = Request::builder()
@@ -499,15 +489,15 @@ mod tests {
     /// Test Case: Successful Transition from Archived to Open
     #[tokio::test]
     async fn test_open_assignment_success_from_archived() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Archived);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
         let req = Request::builder()
@@ -524,15 +514,15 @@ mod tests {
     /// Test Case: Forbidden When Already Open
     #[tokio::test]
     async fn test_open_assignment_already_open() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
         let req = Request::builder()
@@ -549,15 +539,15 @@ mod tests {
     /// Test Case: Forbidden for Student
     #[tokio::test]
     async fn test_open_assignment_forbidden_student() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
         let req = Request::builder()
@@ -574,13 +564,13 @@ mod tests {
     /// Test Case: Forbidden When in Setup State
     #[tokio::test]
     async fn test_open_assignment_invalid_setup_state() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let assignment = data.assignments[0].clone();
         assert_eq!(assignment.status, Status::Setup);
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
         let req = Request::builder()
@@ -597,15 +587,15 @@ mod tests {
     /// Test Case: Not Found for Wrong Module
     #[tokio::test]
     async fn test_open_assignment_wrong_module() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/open", data.empty_module.id, assignment.id);
         let req = Request::builder()
@@ -622,15 +612,15 @@ mod tests {
     /// Test Case: Unauthorized Access
     #[tokio::test]
     async fn test_open_assignment_unauthorized() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
         let req = Request::builder()
             .method("PUT")
@@ -645,15 +635,15 @@ mod tests {
     /// Test Case: Admin Can Open Without Module Role
     #[tokio::test]
     async fn test_open_assignment_admin_without_role() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
         let req = Request::builder()
@@ -670,10 +660,9 @@ mod tests {
     /// Test Case: Assignment Not Found
     #[tokio::test]
     async fn test_open_assignment_not_found() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/9999/open", data.module.id);
         let req = Request::builder()
@@ -690,15 +679,15 @@ mod tests {
     /// Test Case: Successful Transition from Open to Closed (Lecturer)
     #[tokio::test]
     async fn test_close_assignment_success_lecturer() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
         let req = Request::builder()
@@ -712,7 +701,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let updated = db::models::assignment::Entity::find_by_id(assignment.id)
-            .one(&db)
+            .one(app_state.db())
             .await
             .unwrap()
             .unwrap();
@@ -722,15 +711,15 @@ mod tests {
     /// Test Case: Successful Transition from Open to Closed (Admin)
     #[tokio::test]
     async fn test_close_assignment_success_admin() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
         let req = Request::builder()
@@ -747,16 +736,16 @@ mod tests {
     /// Test Case: Forbidden When Not Open
     #[tokio::test]
     async fn test_close_assignment_invalid_state() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
-        let app = make_app(db.clone());
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
 
         for state in &[Status::Setup, Status::Ready, Status::Closed, Status::Archived] {
             let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
             active_assignment.status = Set(state.clone());
             active_assignment.updated_at = Set(Utc::now());
-            let assignment = active_assignment.update(&db).await.unwrap();
+            let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
             let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
             let req = Request::builder()
@@ -778,15 +767,15 @@ mod tests {
     /// Test Case: Forbidden for Student
     #[tokio::test]
     async fn test_close_assignment_forbidden_student() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
         let req = Request::builder()
@@ -803,15 +792,15 @@ mod tests {
     /// Test Case: Not Found for Wrong Module
     #[tokio::test]
     async fn test_close_assignment_wrong_module() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/close", data.empty_module.id, assignment.id);
         let req = Request::builder()
@@ -828,15 +817,15 @@ mod tests {
     /// Test Case: Unauthorized Access
     #[tokio::test]
     async fn test_close_assignment_unauthorized() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
         let req = Request::builder()
             .method("PUT")
@@ -851,15 +840,15 @@ mod tests {
     /// Test Case: Admin Can Close Without Module Role
     #[tokio::test]
     async fn test_close_assignment_admin_without_role() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
         let req = Request::builder()
@@ -876,10 +865,9 @@ mod tests {
     /// Test Case: Assignment Not Found
     #[tokio::test]
     async fn test_close_assignment_not_found() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/9999/close", data.module.id);
         let req = Request::builder()
@@ -896,15 +884,15 @@ mod tests {
     /// Test Case: Forbidden for Unassigned User
     #[tokio::test]
     async fn test_close_assignment_forbidden_unassigned() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
         let req = Request::builder()
@@ -921,15 +909,15 @@ mod tests {
     /// Test Case: Module Not Found
     #[tokio::test]
     async fn test_close_assignment_module_not_found() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment.update(&db).await.unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/99999/assignments/{}/close", assignment.id);
         let req = Request::builder()
@@ -946,10 +934,9 @@ mod tests {
     /// Test Case: Successful Bulk Update by Lecturer
     #[tokio::test]
     async fn test_bulk_update_assignments_success_lecturer() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
 
@@ -983,7 +970,7 @@ mod tests {
 
         for id in ids_to_update {
             let assignment = db::models::assignment::Entity::find_by_id(id)
-                .one(&db)
+                .one(app_state.db())
                 .await
                 .unwrap()
                 .unwrap();
@@ -1002,10 +989,9 @@ mod tests {
     /// Test Case: Successful Bulk Update by Admin
     #[tokio::test]
     async fn test_bulk_update_assignments_success_admin() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
     
@@ -1028,7 +1014,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let assignment = db::models::assignment::Entity::find_by_id(ids_to_update[0])
-            .one(&db)
+            .one(app_state.db())
             .await
             .unwrap()
             .unwrap();
@@ -1042,10 +1028,9 @@ mod tests {
     /// Test Case: Partial Success with Some Failures
     #[tokio::test]
     async fn test_bulk_update_assignments_partial_success() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
         
@@ -1081,7 +1066,7 @@ mod tests {
 
         for id in [data.assignments[0].id, data.assignments[2].id] {
             let assignment = db::models::assignment::Entity::find_by_id(id)
-                .one(&db)
+                .one(app_state.db())
                 .await
                 .unwrap()
                 .unwrap();
@@ -1096,10 +1081,9 @@ mod tests {
     /// Test Case: No Assignment IDs Provided
     #[tokio::test]
     async fn test_bulk_update_assignments_no_ids() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
         let req_body = json!({
@@ -1126,10 +1110,9 @@ mod tests {
     /// Test Case: Forbidden for Student
     #[tokio::test]
     async fn test_bulk_update_assignments_forbidden_student() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
         let req_body = json!({
@@ -1151,10 +1134,9 @@ mod tests {
     /// Test Case: Update Only Available From
     #[tokio::test]
     async fn test_bulk_update_only_available_from() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
         
@@ -1178,7 +1160,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let assignment = db::models::assignment::Entity::find_by_id(data.assignments[0].id)
-            .one(&db)
+            .one(app_state.db())
             .await
             .unwrap()
             .unwrap();
@@ -1196,10 +1178,9 @@ mod tests {
     /// Test Case: Update Only Due Date
     #[tokio::test]
     async fn test_bulk_update_only_due_date() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
         
@@ -1223,7 +1204,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let assignment = db::models::assignment::Entity::find_by_id(data.assignments[1].id)
-            .one(&db)
+            .one(app_state.db())
             .await
             .unwrap()
             .unwrap();
@@ -1241,11 +1222,11 @@ mod tests {
     /// Test Case: Assignment in Wrong Module
     #[tokio::test]
     async fn test_bulk_update_wrong_module() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let other_assignment = AssignmentModel::create(
-            &db,
+            app_state.db(),
             data.empty_module.id,
             "Other Module Assignment",
             Some("Should not be updated"),
@@ -1256,7 +1237,7 @@ mod tests {
         .await
         .unwrap();
 
-        let app = make_app(db.clone());
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
         let ids_to_update = vec![data.assignments[0].id, other_assignment.id];
@@ -1288,7 +1269,7 @@ mod tests {
         assert_eq!(failed[0]["error"], "Assignment not found");
 
         let updated_assignment = db::models::assignment::Entity::find_by_id(data.assignments[0].id)
-            .one(&db)
+            .one(app_state.db())
             .await
             .unwrap()
             .unwrap();
@@ -1298,7 +1279,7 @@ mod tests {
         );
         
         let not_updated = db::models::assignment::Entity::find_by_id(other_assignment.id)
-            .one(&db)
+            .one(app_state.db())
             .await
             .unwrap()
             .unwrap();
@@ -1311,10 +1292,9 @@ mod tests {
     /// Test Case: Unauthorized Access
     #[tokio::test]
     async fn test_bulk_update_assignments_unauthorized() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
         let req_body = json!({
             "assignment_ids": [data.assignments[0].id],
@@ -1334,10 +1314,9 @@ mod tests {
     /// Test Case: Forbidden for Unassigned User
     #[tokio::test]
     async fn test_bulk_update_assignments_forbidden_unassigned() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
         let req_body = json!({

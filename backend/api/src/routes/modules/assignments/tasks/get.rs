@@ -11,11 +11,11 @@ use axum::{
     response::IntoResponse,
 };
 use db::models::assignment_task::{Column, Entity};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
 use serde_json::Value;
 use std::{env, fs, path::PathBuf};
-use util::execution_config::ExecutionConfig;
+use util::{execution_config::ExecutionConfig, state::AppState};
 use util::mark_allocator::mark_allocator::load_allocator;
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
@@ -103,10 +103,12 @@ pub struct TaskDetailResponse {
 /// ```
 ///
 pub async fn get_task_details(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let task = Entity::find_by_id(task_id).one(&db).await.unwrap().unwrap();
+    let db = app_state.db();
+
+    let task = Entity::find_by_id(task_id).one(db).await.unwrap().unwrap();
 
     let base_path =
         env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
@@ -291,13 +293,15 @@ pub async fn get_task_details(
 /// ```
 ///
 pub async fn list_tasks(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     match Entity::find()
         .filter(Column::AssignmentId.eq(assignment_id))
         .order_by_asc(Column::TaskNumber)
-        .all(&db)
+        .all(db)
         .await
     {
         Ok(tasks) => {

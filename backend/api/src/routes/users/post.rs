@@ -11,7 +11,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use sea_orm::DatabaseConnection;
+use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::user::Model as UserModel;
 use crate::routes::users::common::{CreateUserRequest, BulkCreateUsersRequest, UserResponse};
@@ -37,9 +37,11 @@ use validator::Validate;
 /// - 400 Bad Request — Validation failure
 /// - 409 Conflict — Duplicate username/email
 pub async fn create_user(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Json(req): Json<CreateUserRequest>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -48,7 +50,7 @@ pub async fn create_user(
             .into_response();
     }
 
-    match UserModel::create(&db, &req.username, &req.email, &req.password, false).await {
+    match UserModel::create(db, &req.username, &req.email, &req.password, false).await {
         Ok(user) => (
             StatusCode::CREATED,
             Json(ApiResponse::<UserResponse>::success(
@@ -94,9 +96,11 @@ pub async fn create_user(
 /// - 400 Bad Request — If validation fails
 /// - 409 Conflict — If one user fails to insert (first error returned)
 pub async fn bulk_create_users(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Json(req): Json<BulkCreateUsersRequest>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -108,7 +112,7 @@ pub async fn bulk_create_users(
     let mut results = Vec::new();
 
     for user_req in req.users {
-        match UserModel::create(&db, &user_req.username, &user_req.email, &user_req.password, false).await {
+        match UserModel::create(db, &user_req.username, &user_req.email, &user_req.password, false).await {
             Ok(u) => results.push(UserResponse::from(u)),
             Err(e) => {
                 let msg = if e.to_string().contains("UNIQUE constraint failed") {

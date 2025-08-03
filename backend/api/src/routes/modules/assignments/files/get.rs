@@ -9,8 +9,8 @@ use sea_orm::{
     ColumnTrait,
     EntityTrait,
     QueryFilter,
-    DatabaseConnection,
 };
+use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::assignment_file::{
     Column as FileColumn,
@@ -47,13 +47,15 @@ use crate::routes::modules::assignments::common::File;
 /// ```
 ///
 pub async fn download_file(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((_module_id, assignment_id, file_id)): Path<(i64, i64, i64)>,
 ) -> Response {
+    let db = app_state.db();
+
     let file = FileEntity::find()
         .filter(FileColumn::Id.eq(file_id as i32))
         .filter(FileColumn::AssignmentId.eq(assignment_id as i32))
-        .one(&db)
+        .one(db)
         .await.unwrap().unwrap();
 
     let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".to_string());
@@ -147,12 +149,14 @@ pub async fn download_file(
 /// ```
 ///
 pub async fn list_files(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>
 ) -> Response {
+    let db = app_state.db();
+
     match FileEntity::find()
         .filter(FileColumn::AssignmentId.eq(assignment_id as i32))
-        .all(&db)
+        .all(db)
         .await
     {
         Ok(files) => {

@@ -3,7 +3,7 @@ use axum::{
 };
 use get::{get_submission, list_submissions, get_submission_output};
 use post::submit_assignment;
-use sea_orm::DatabaseConnection;
+use util::state::AppState;
 
 use crate::auth::guards::require_lecturer_or_tutor;
 
@@ -26,10 +26,10 @@ pub mod post;
 ///
 /// - `POST /`
 ///   - Submit a new assignment (student access only)
-pub fn submission_routes(db : DatabaseConnection) -> Router<DatabaseConnection> {
+pub fn submission_routes(app_state : AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(list_submissions))
         .route("/{submission_id}", get(get_submission))
-        .route("/{submission_id}/output", get(get_submission_output).route_layer(from_fn_with_state(db.clone(), require_lecturer_or_tutor)))
+        .route("/{submission_id}/output", get(get_submission_output).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_tutor)))
         .route("/", post(submit_assignment))
 }

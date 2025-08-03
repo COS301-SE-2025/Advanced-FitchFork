@@ -17,8 +17,8 @@ use delete::delete_module;
 use get::{get_module, get_modules, get_my_details};
 use post::create;
 use put::edit_module;
-use sea_orm::DatabaseConnection;
 use assignments::assignment_routes;
+use util::state::AppState;
 use crate::{auth::guards::{require_admin, require_assigned_to_module, require_lecturer}, routes::modules::personnel::personnel_routes};
 
 pub mod assignments;
@@ -42,14 +42,14 @@ pub mod common;
 /// - Nested personnel routes under `/modules/{module_id}/personnel`
 ///
 /// All modifying routes are protected by `require_admin` middleware.
-pub fn modules_routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
+pub fn modules_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(get_modules))
         .route("/me", get(get_my_details))
-        .route("/{module_id}", get(get_module).route_layer(from_fn_with_state(db.clone(), require_assigned_to_module)))
+        .route("/{module_id}", get(get_module).route_layer(from_fn_with_state(app_state.clone(),require_assigned_to_module)))
         .route("/", post(create).route_layer(from_fn(require_admin)))
         .route("/{module_id}", put(edit_module).route_layer(from_fn(require_admin)))
         .route("/{module_id}", delete(delete_module).route_layer(from_fn(require_admin)))
-        .nest("/{module_id}/assignments", assignment_routes(db.clone()))
-        .nest("/{module_id}/personnel", personnel_routes().route_layer(from_fn_with_state(db.clone(),require_lecturer)))
+        .nest("/{module_id}/assignments", assignment_routes(app_state.clone()))
+        .nest("/{module_id}/personnel", personnel_routes().route_layer(from_fn_with_state(app_state.clone(),require_lecturer)))
 }

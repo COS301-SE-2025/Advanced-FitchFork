@@ -53,13 +53,16 @@ impl Model {
     ///
     /// # Returns
     /// A fully populated `Model` after insertion.
-    pub async fn create(
-        db: &DatabaseConnection,
+    pub async fn create<C>(
+      db: &C,
         code: &str,
         year: i32,
         description: Option<&str>,
         credits: i32,
-    ) -> Result<Self, DbErr> {
+    ) -> Result<Self, DbErr>
+        where
+        C: ConnectionTrait, 
+    {
         let active = ActiveModel {
             code: Set(code.to_owned()),
             year: Set(year),

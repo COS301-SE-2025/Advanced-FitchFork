@@ -13,8 +13,8 @@ use db::models::{
 };
 use marker::MarkingJob;
 use md5;
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
-use util::mark_allocator::mark_allocator::load_allocator;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+use util::{mark_allocator::mark_allocator::load_allocator, state::AppState};
 
 use util::execution_config::ExecutionConfig;
 
@@ -121,15 +121,17 @@ use util::execution_config::ExecutionConfig;
 /// - The endpoint is restricted to authenticated students assigned to the module
 /// - All errors are returned in a consistent JSON format
 pub async fn submit_assignment(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
+        .one(db)
         .await
         .unwrap()
         .unwrap();
@@ -206,7 +208,7 @@ pub async fn submit_assignment(
         .filter(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
         .filter(assignment_submission::Column::UserId.eq(claims.sub))
         .order_by_desc(assignment_submission::Column::Attempt)
-        .one(&db)
+        .one(db)
         .await
         .ok()
         .flatten()
@@ -215,7 +217,7 @@ pub async fn submit_assignment(
     let attempt = prev_attempt + 1;
 
     let saved = match AssignmentSubmissionModel::save_file(
-        &db,
+        db,
         assignment_id,
         claims.sub,
         attempt,
