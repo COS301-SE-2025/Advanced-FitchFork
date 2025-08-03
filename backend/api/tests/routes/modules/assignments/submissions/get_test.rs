@@ -43,22 +43,22 @@ mod tests {
             Utc::now() + Duration::days(30)
         ).await.unwrap();
 
-        let sub1 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 1, "ontime.txt", b"ontime").await.unwrap();
+        let sub1 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 1, false, "ontime.txt", "hash123#", b"ontime").await.unwrap();
         let sub1_time = assignment.due_date - Duration::days(1);
         update_submission_time(db, sub1.id, sub1_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 1, &sub1, false, false, Some(json!({"earned": 80, "total": 100})), sub1_time);
 
-        let sub2 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 2, "late.txt", b"late").await.unwrap();
+        let sub2 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 2, false, "late.txt", "hash123#", b"late").await.unwrap();
         let sub2_time = assignment.due_date + Duration::days(1);
         update_submission_time(db, sub2.id, sub2_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 2, &sub2, false, false, Some(json!({"earned": 50, "total": 100})), sub2_time);
 
-        let sub3 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 3, "practice.txt", b"practice").await.unwrap();
+        let sub3 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 3, false, "practice.txt", "hash123#", b"practice").await.unwrap();
         let sub3_time = assignment.due_date - Duration::days(2);
         update_submission_time(db, sub3.id, sub3_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 3, &sub3, true, false, Some(json!({"earned": 100, "total": 100})), sub3_time);
 
-        let sub4 = AssignmentSubmissionModel::save_file(db, assignment.id, forbidden_user.id, 1, "forbidden.txt", b"forbidden").await.unwrap();
+        let sub4 = AssignmentSubmissionModel::save_file(db, assignment.id, forbidden_user.id, 1, false, "forbidden.txt", "hash123#", b"forbidden").await.unwrap();
         let sub4_time = assignment.due_date - Duration::days(1);
         update_submission_time(db, sub4.id, sub4_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, forbidden_user.id, 1, &sub4, false, false, Some(json!({"earned": 0, "total": 100})), sub4_time);

@@ -4,7 +4,7 @@ pub struct Migration;
 
 impl MigrationName for Migration {
     fn name(&self) -> &str {
-        "m202505290006_create_assignment_submission"
+        "m202508020002_create_ticket_messages"
     }
 }
 
@@ -14,26 +14,30 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Alias::new("assignment_submissions"))
+                    .table(Alias::new("ticket_messages"))
                     .if_not_exists()
                     .col(
                         ColumnDef::new(Alias::new("id"))
-                            .integer()
+                            .big_integer()
                             .not_null()
                             .auto_increment()
                             .primary_key(),
                     )
                     .col(
-                        ColumnDef::new(Alias::new("assignment_id"))
-                            .integer()
+                        ColumnDef::new(Alias::new("ticket_id"))
+                            .big_integer()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(Alias::new("user_id")).integer().not_null())
-                    .col(ColumnDef::new(Alias::new("attempt")).integer().not_null())
-                    .col(ColumnDef::new(Alias::new("filename")).string().not_null())
-                    .col(ColumnDef::new(Alias::new("file_hash")).string().not_null())
-                    .col(ColumnDef::new(Alias::new("path")).string().not_null())
-                    .col(ColumnDef::new(Alias::new("is_practice")).boolean().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("user_id"))
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("content"))
+                            .text()
+                            .not_null(),
+                    )
                     .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()
@@ -48,16 +52,13 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .from(
-                                Alias::new("assignment_submissions"),
-                                Alias::new("assignment_id"),
-                            )
-                            .to(Alias::new("assignments"), Alias::new("id"))
+                            .from(Alias::new("ticket_messages"), Alias::new("ticket_id"))
+                            .to(Alias::new("tickets"), Alias::new("id"))
                             .on_delete(ForeignKeyAction::Cascade),
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .from(Alias::new("assignment_submissions"), Alias::new("user_id"))
+                            .from(Alias::new("ticket_messages"), Alias::new("user_id"))
                             .to(Alias::new("users"), Alias::new("id"))
                             .on_delete(ForeignKeyAction::Cascade),
                     )
@@ -70,7 +71,7 @@ impl MigrationTrait for Migration {
         manager
             .drop_table(
                 Table::drop()
-                    .table(Alias::new("assignment_submissions"))
+                    .table(Alias::new("ticket_messages"))
                     .to_owned(),
             )
             .await

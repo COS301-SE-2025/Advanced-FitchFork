@@ -8,6 +8,8 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::module;
+use serde::{Serialize, Deserialize};
+use validator::Validate;
 
 /// DELETE /api/modules/{module_id}
 ///
@@ -74,4 +76,125 @@ pub async fn delete_module(
             Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
         ),
     }
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct BulkDeleteRequest {
+    #[validate(length(min = 1, message = "At least one module ID is required"))]
+    pub module_ids: Vec<i64>,
+}
+
+#[derive(Serialize)]
+pub struct BulkDeleteResult {
+    pub deleted: usize,
+    pub failed: Vec<FailedDelete>,
+}
+
+#[derive(Serialize)]
+pub struct FailedDelete {
+    pub id: i64,
+    pub error: String,
+}
+
+/// DELETE /api/modules/bulk
+///
+/// Bulk delete multiple modules by their IDs.
+/// Only accessible by admin users.
+///
+/// ### Request Body
+/// ```json
+/// {
+///   "module_ids": [1, 2, 3]
+/// }
+/// ```
+///
+/// ### Responses
+///
+/// - `200 OK`
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///     "deleted": 2,
+///     "failed": [
+///       { "id": 3, "error": "Module not found" }
+///     ]
+///   },
+///   "message": "Deleted 2/3 modules"
+/// }
+/// ```
+///
+/// - `400 Bad Request`
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "At least one module ID is required"
+/// }
+/// ```
+pub async fn bulk_delete_modules(
+    State(app_state): State<AppState>,
+    Json(req): Json<BulkDeleteRequest>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
+    // Validate the request
+    if let Err(validation_errors) = req.validate() {
+        let error_message = common::format_validation_errors(&validation_errors);
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<BulkDeleteResult>::error(error_message)),
+        );
+    }
+
+    let mut deleted_count = 0;
+    let mut failed = Vec::new();
+
+    for &id in &req.module_ids {
+        match module::Entity::find()
+            .filter(module::Column::Id.eq(id))
+            .one(db)
+            .await
+        {
+            Ok(Some(module_model)) => {
+                match module_model.delete(db).await {
+                    Ok(_) => deleted_count += 1,
+                    Err(e) => {
+                        failed.push(FailedDelete {
+                            id,
+                            error: format!("Failed to delete module: {}", e),
+                        });
+                    }
+                }
+            }
+            Ok(None) => {
+                failed.push(FailedDelete {
+                    id,
+                    error: "Module not found".into(),
+                });
+            }
+            Err(e) => {
+                failed.push(FailedDelete {
+                    id,
+                    error: format!("Database error: {}", e),
+                });
+            }
+        }
+    }
+
+    let result = BulkDeleteResult {
+        deleted: deleted_count,
+        failed,
+    };
+
+    let message = format!(
+        "Deleted {}/{} modules",
+        deleted_count,
+        req.module_ids.len()
+    );
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(result, message)),
+    )
 }

@@ -124,8 +124,25 @@ pub async fn require_lecturer(
         Path(params),
         req,
         next,
-        &["lecturer"],
+        &["Lecturer"],
         "Lecturer access required for this module"
+    ).await
+}
+
+/// Guard for requiring assistant lecturer access.
+pub async fn require_assistant_lecturer(
+    State(app_state): State<AppState>,
+    Path(params): Path<HashMap<String, String>>,
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    require_role_base(
+        State(app_state),
+        Path(params),
+        req,
+        next,
+        &["AssistantLecturer"],
+        "Assistant lecturer access required for this module"
     ).await
 }
 
@@ -141,7 +158,7 @@ pub async fn require_tutor(
         Path(params),
         req,
         next,
-        &["tutor"],
+        &["Tutor"],
         "Tutor access required for this module"
     ).await
 }
@@ -158,12 +175,30 @@ pub async fn require_student(
         Path(params),
         req,
         next,
-        &["student"],
+        &["Student"],
         "Student access required for this module"
     ).await
 }
 
+/// Guard for requiring lecturer or assistant lecturer access.
+pub async fn require_lecturer_or_assistant_lecturer(
+    State(app_state): State<AppState>,
+    Path(params): Path<HashMap<String, String>>,
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    require_role_base(
+        State(app_state),
+        Path(params),
+        req,
+        next,
+        &["Lecturer", "AssistantLecturer"],
+        "Lecturer or assistant lecturer access required for this module"
+    ).await
+}
+
 /// Guard for requiring lecturer or tutor access.
+/// TODO: Add ALs to this?
 pub async fn require_lecturer_or_tutor(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
@@ -175,7 +210,7 @@ pub async fn require_lecturer_or_tutor(
         Path(params),
         req,
         next,
-        &["lecturer", "tutor"],
+        &["Lecturer", "Tutor"],
         "Lecturer or tutor access required for this module"
     ).await
 }
@@ -192,7 +227,7 @@ pub async fn require_assigned_to_module(
         Path(params),
         req,
         next,
-        &["lecturer", "tutor", "student"],
+        &["Lecturer", "AssistantLecturer", "Tutor", "Student"],
         "User not assigned to this module"
     ).await
 }

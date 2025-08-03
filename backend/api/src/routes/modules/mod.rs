@@ -13,10 +13,10 @@
 //! Call `modules_routes()` to get a configured `Router` for `/modules` to be mounted in the main app.
 
 use axum::{middleware::{from_fn, from_fn_with_state}, routing::{delete, get, post, put}, Router};
-use delete::delete_module;
+use delete::{delete_module, bulk_delete_modules};
 use get::{get_module, get_modules, get_my_details};
 use post::create;
-use put::edit_module;
+use put::{edit_module, bulk_edit_modules};
 use assignments::assignment_routes;
 use util::state::AppState;
 use crate::{auth::guards::{require_admin, require_assigned_to_module, require_lecturer}, routes::modules::personnel::personnel_routes};
@@ -50,6 +50,8 @@ pub fn modules_routes(app_state: AppState) -> Router<AppState> {
         .route("/", post(create).route_layer(from_fn(require_admin)))
         .route("/{module_id}", put(edit_module).route_layer(from_fn(require_admin)))
         .route("/{module_id}", delete(delete_module).route_layer(from_fn(require_admin)))
+        .route("/bulk", delete(bulk_delete_modules).route_layer(from_fn(require_admin)))
+        .route("/bulk", put(bulk_edit_modules).route_layer(from_fn(require_admin)))
         .nest("/{module_id}/assignments", assignment_routes(app_state.clone()))
         .nest("/{module_id}/personnel", personnel_routes().route_layer(from_fn_with_state(app_state.clone(),require_lecturer)))
 }

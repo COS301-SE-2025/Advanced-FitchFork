@@ -25,7 +25,8 @@ mod tests {
         auth::{
             generate_jwt,
             guards::{
-                require_admin, require_assigned_to_module, require_authenticated, require_lecturer, require_lecturer_or_tutor, require_student, require_tutor, validate_known_ids, Empty
+                require_authenticated, require_admin, require_lecturer, require_assistant_lecturer, require_tutor, require_student,
+                require_lecturer_or_assistant_lecturer, require_lecturer_or_tutor, require_assigned_to_module, Empty, validate_known_ids
             }
         },
         response::ApiResponse
@@ -43,6 +44,7 @@ mod tests {
         app_state: AppState,
         admin_token: String,
         lecturer_token: String,
+        assistant_lecturer_token: String,
         tutor_token: String,
         student_token: String,
         unassigned_user_token: String,
@@ -57,16 +59,19 @@ mod tests {
         let module = ModuleModel::create(db, "TST101", 2025, Some("Guard Test Module"), 1).await.unwrap();
         let admin = UserModel::create(db, "guard_admin", "ga@test.com", "pw", true).await.unwrap();
         let lecturer = UserModel::create(db, "guard_lecturer", "gl@test.com", "pw", false).await.unwrap();
+        let assistant_lecturer = UserModel::create(db, "guard_assistant_lecturer", "gal@test.com", "pw", false).await.unwrap();
         let tutor = UserModel::create(db, "guard_tutor", "gt@test.com", "pw", false).await.unwrap();
         let student = UserModel::create(db, "guard_student", "gs@test.com", "pw", false).await.unwrap();
         let unassigned = UserModel::create(db, "guard_unassigned", "gu@test.com", "pw", false).await.unwrap();
 
         UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, assistant_lecturer.id, module.id, Role::AssistantLecturer).await.unwrap();
         UserModuleRoleModel::assign_user_to_module(db, tutor.id, module.id, Role::Tutor).await.unwrap();
         UserModuleRoleModel::assign_user_to_module(db, student.id, module.id, Role::Student).await.unwrap();
 
         let (admin_token, _) = generate_jwt(admin.id, admin.admin);
         let (lecturer_token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let (assistant_lecturer_token, _) = generate_jwt(assistant_lecturer.id, assistant_lecturer.admin);
         let (tutor_token, _) = generate_jwt(tutor.id, tutor.admin);
         let (student_token, _) = generate_jwt(student.id, student.admin);
         let (unassigned_user_token, _) = generate_jwt(unassigned.id, unassigned.admin);
@@ -76,6 +81,7 @@ mod tests {
             module_id: module.id,
             admin_token,
             lecturer_token,
+            assistant_lecturer_token,
             tutor_token,
             student_token,
             unassigned_user_token,
@@ -177,6 +183,55 @@ mod tests {
             assert_eq!(res.status(), StatusCode::FORBIDDEN);
         }
     }
+
+    mod test_require_assistant_lecturer {
+        use super::*;
+
+        #[tokio::test]
+        async fn succeeds_for_assistant_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), require_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.assistant_lecturer_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_admin() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), require_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn fails_for_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), require_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.lecturer_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+
+        #[tokio::test]
+        async fn fails_for_tutor() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), require_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+
+        #[tokio::test]
+        async fn fails_for_student() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), require_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.student_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+    }
     
     mod test_require_tutor {
         use super::*;
@@ -240,6 +295,55 @@ mod tests {
         }
     }
 
+    mod test_require_lecturer_or_assistant_lecturer {
+        use super::*;
+
+        #[tokio::test]
+        async fn succeeds_for_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), require_lecturer_or_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.lecturer_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_assistant_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), require_lecturer_or_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.assistant_lecturer_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_admin() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), require_lecturer_or_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn fails_for_tutor() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), require_lecturer_or_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+
+        #[tokio::test]
+        async fn fails_for_student() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), require_lecturer_or_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.student_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+    }
+
     mod test_require_lecturer_or_tutor {
         use super::*;
 
@@ -288,6 +392,15 @@ mod tests {
             let ctx = setup().await;
             let app = create_test_router(ctx.app_state.clone(), require_assigned_to_module);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.lecturer_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_assistant_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), require_assigned_to_module);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.assistant_lecturer_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }
@@ -480,7 +593,7 @@ mod tests {
         async fn succeeds_for_submission_and_file_hierarchy() {
             let ctx = setup().await;
             let assignment = AssignmentModel::create(ctx.app_state.db(), ctx.module_id, "A6", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
-            let submission = SubmissionModel::save_file(ctx.app_state.db(), assignment.id, 1, 1, "f.txt", b"test").await.unwrap();
+            let submission = SubmissionModel::save_file(ctx.app_state.db(), assignment.id, 1, 1, false, "f.txt", "hash123#", b"test").await.unwrap();
             let file = FileModel::save_file(ctx.app_state.db(), assignment.id, ctx.module_id, FileType::Spec, "f.txt", b"test").await.unwrap();
 
             let sub_path = "/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}";
@@ -498,7 +611,7 @@ mod tests {
         async fn fails_for_submission_not_in_assignment() {
             let ctx = setup().await;
             let other_assignment = AssignmentModel::create(ctx.app_state.db(), ctx.module_id, "A7", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
-            let submission = SubmissionModel::save_file(ctx.app_state.db(), other_assignment.id, 1, 1, "f.txt", b"test").await.unwrap();
+            let submission = SubmissionModel::save_file(ctx.app_state.db(), other_assignment.id, 1, 1, false, "f.txt", "hash123#", b"test").await.unwrap();
             let path = "/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}";
             let app = create_router(ctx.app_state.clone(), path);
             let uri = format!("/modules/{}/assignments/{}/submissions/{}", ctx.module_id, 0, submission.id);

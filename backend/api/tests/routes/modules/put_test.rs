@@ -5,7 +5,8 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{Datelike, Utc};
-    use db::{models::{module::Model as Module, user::Model as UserModel}};
+    use db::{models::{module::Model as Module, user::Model as UserModel, module::Entity as ModuleEntity,}};
+    use sea_orm::{DatabaseConnection, EntityTrait};
     use serde_json::json;
     use tower::ServiceExt;
     use api::auth::generate_jwt;
@@ -322,5 +323,251 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["year"], Utc::now().year() + 1);
+    }
+
+    async fn create_multiple_modules(db: &DatabaseConnection, count: usize) -> Vec<Module> {
+        let mut modules = Vec::new();
+        for i in 0..count {
+            let module = Module::create(
+                db,
+                &format!("MOD{}", i),
+                2025,
+                Some("Test module"),
+                15,
+            )
+            .await
+            .expect("Failed to create test module");
+            modules.push(module);
+        }
+        modules
+    }
+
+    /// Test Case: Admin bulk updates modules successfully
+    #[tokio::test]
+    async fn test_bulk_update_modules_success() {
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        let modules = create_multiple_modules(&db, 3).await;
+        let module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
+
+        let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
+        let req_body = json!({
+            "module_ids": module_ids,
+            "year": 2026,
+            "description": "Updated description"
+        });
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/api/modules/bulk")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&req_body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["success"], true);
+        assert_eq!(json["message"], "Updated 3/3 modules");
+        assert_eq!(json["data"]["updated"], 3);
+        assert!(json["data"]["failed"].as_array().unwrap().is_empty());
+
+        for id in module_ids {
+            let module = ModuleEntity::find_by_id(id)
+                .one(db)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(module.year, 2026);
+            assert_eq!(module.description, Some("Updated description".into()));
+        }
+    }
+
+    /// Test Case: Attempt to update module code
+    #[tokio::test]
+    async fn test_bulk_update_code_forbidden() {
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        let modules = create_multiple_modules(&db, 2).await;
+        let module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
+
+        let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
+        let req_body = json!({
+            "module_ids": module_ids,
+            "code": "NEWCODE"
+        });
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/api/modules/bulk")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&req_body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["message"], "Bulk update cannot change module code");
+    }
+
+    /// Test Case: Bulk update with no module IDs
+    #[tokio::test]
+    async fn test_bulk_update_no_ids() {
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
+        let req_body = json!({
+            "module_ids": [],
+            "year": 2026
+        });
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/api/modules/bulk")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&req_body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["message"], "At least one module ID is required");
+    }
+
+    /// Test Case: Partial success with some updates failing
+    #[tokio::test]
+    async fn test_bulk_update_partial_success() {
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        let modules = create_multiple_modules(&db, 2).await;
+        let mut module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
+        module_ids.push(99999); // Non-existent ID
+
+        let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
+        let req_body = json!({
+            "module_ids": module_ids,
+            "credits": 20
+        });
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/api/modules/bulk")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&req_body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        
+        assert_eq!(json["success"], true);
+        assert_eq!(json["message"], "Updated 2/3 modules");
+        assert_eq!(json["data"]["updated"], 2);
+        
+        let failed = json["data"]["failed"].as_array().unwrap();
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0]["id"], 99999);
+        assert_eq!(failed[0]["error"], "Module not found");
+
+        // Verify successful updates
+        for id in modules.iter().map(|m| m.id) {
+            let module = ModuleEntity::find_by_id(id)
+                .one(db)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(module.credits, 20);
+        }
+    }
+
+    /// Test Case: Validation errors in bulk update
+    #[tokio::test]
+    async fn test_bulk_update_validation_errors() {
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        let modules = create_multiple_modules(&db, 2).await;
+        let module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
+
+        let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
+        let req_body = json!({
+            "module_ids": module_ids,
+            "year": 2000,  // Invalid (past year)
+            "credits": 0    // Invalid (must be positive)
+        });
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/api/modules/bulk")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&req_body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        let message = json["message"].as_str().unwrap();
+        assert!(message.contains("Year must be at least 2024"));
+        assert!(message.contains("Credits must be positive"));
+    }
+
+    /// Test Case: Non-admin attempts bulk update
+    #[tokio::test]
+    async fn test_bulk_update_forbidden() {
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        let modules = create_multiple_modules(&db, 2).await;
+        let module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
+
+        let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
+        let req_body = json!({
+            "module_ids": module_ids,
+            "year": 2026
+        });
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/api/modules/bulk")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_vec(&req_body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // Verify no updates occurred
+        for id in module_ids {
+            let module = ModuleEntity::find_by_id(id)
+                .one(db)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(module.year, 2025); // Original value
+        }
     }
 }
