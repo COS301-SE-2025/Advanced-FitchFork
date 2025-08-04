@@ -1,5 +1,6 @@
 use sea_orm::{entity::prelude::*, ActiveValue::Set, QueryOrder};
 use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Deserialize, Serialize)]
 #[sea_orm(table_name = "ticket_messages")]
@@ -12,8 +13,8 @@ pub struct Model {
 
     pub content: String,
 
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -54,7 +55,7 @@ impl Model {
         user_id: i64,
         content: &str,
     ) -> Result<Model, DbErr> {
-        let now = chrono::Utc::now().naive_utc();
+        let now = Utc::now();
 
         let active = ActiveModel {
             ticket_id: Set(ticket_id),
@@ -79,7 +80,11 @@ impl Model {
             .await
     }
 
-    pub fn is_author(&self, user_id: i64) -> bool {
-        self.user_id == user_id
+    pub async fn is_author(message_id: i64, user_id: i64, db: &DbConn) -> bool {
+        let message = Entity::find_by_id(message_id).one(db).await;
+        match message {
+            Ok(Some(t)) => t.user_id == user_id,
+            _ => false,
+        }
     }
 }
