@@ -365,6 +365,30 @@ async fn check_file_hierarchy(
     Ok(())
 }
 
+pub async fn check_ticket_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    ticket_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+
+    let found = db::models::tickets::Entity::find()
+        .filter(db::models::tickets::Column::Id.eq(ticket_id))
+        .filter(db::models::tickets::Column::AssignmentId.eq(assignment_id))
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking ticket"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Ticket {} in Assignment {} not found.", ticket_id, assignment_id))),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn validate_known_ids(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
@@ -379,6 +403,7 @@ pub async fn validate_known_ids(
     let mut submission_id: Option<i32> = None;
     let mut file_id: Option<i32>       = None;
     let mut user_id: Option<i32>       = None;
+    let mut ticket_id: Option<i32>     = None;
 
     for (key, raw) in &params {
         let id = raw.parse::<i32>().map_err(|_| {
@@ -391,6 +416,7 @@ pub async fn validate_known_ids(
             "submission_id" => submission_id = Some(id),
             "file_id"       => file_id = Some(id),
             "user_id"       => user_id = Some(id),
+            "ticket_id"    => ticket_id = Some(id),
             _ => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Unexpected parameter: '{}'.", key)))).into_response()),
         }
     }
@@ -412,6 +438,9 @@ pub async fn validate_known_ids(
     }
     if let (Some(mid), Some(aid), Some(fid)) = (module_id, assignment_id, file_id) {
         check_file_hierarchy(mid, aid, fid, db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, ticket_id) {
+        check_ticket_hierarchy(mid, aid, tid, db).await.map_err(|e| e.into_response())?;
     }
 
     Ok(next.run(req).await)
