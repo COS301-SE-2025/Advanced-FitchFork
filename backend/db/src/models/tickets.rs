@@ -1,8 +1,6 @@
 use chrono::{DateTime, Utc};
-use migration::query;
 use sea_orm::ActiveValue::Set;
 use sea_orm::DeriveActiveEnum;
-use sea_orm::QueryFilter;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};

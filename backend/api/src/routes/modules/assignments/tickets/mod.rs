@@ -11,7 +11,7 @@ use delete::delete_ticket;
 use get::{get_ticket, get_tickets};
 
 
-pub fn ticket_routes(app_state: AppState) -> Router<AppState> {
+pub fn ticket_routes(_app_state: AppState) -> Router<AppState> {
 	Router::new()
 	.route("/", post(create_ticket))
 	.route("/{ticket_id}/close", put(close_ticket))
