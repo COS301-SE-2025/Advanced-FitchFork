@@ -1,3 +1,4 @@
 pub mod auth;
 pub mod routes;
-pub mod test_helpers;
+pub mod ws;
+pub mod helpers;

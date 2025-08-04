@@ -5,11 +5,11 @@ use axum::{
     Json,
 };
 use serde::Serialize;
-use sea_orm::DatabaseConnection;
 use db::models::assignment_file::{
     FileType,
     Model as FileModel,
 };
+use util::state::AppState;
 use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
@@ -88,10 +88,12 @@ pub struct AssignmentSubmissionMetadata {
 /// ```
 ///
 pub async fn upload_files(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     let mut file_type: Option<FileType> = None;
     let mut file_name: Option<String> = None;
     let mut file_bytes: Option<Vec<u8>> = None;
@@ -175,7 +177,7 @@ pub async fn upload_files(
     };
 
     match FileModel::save_file(
-        &db,
+        db,
         assignment_id,
         module_id,
         file_type.clone(),

@@ -1,19 +1,17 @@
 #[cfg(test)]
 mod tests {
-    use db::test_utils::setup_test_db;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
     use tower::ServiceExt;
     use serde_json::Value;
-    use crate::test_helpers::make_app;
+    use crate::helpers::app::make_test_app;
 
     #[tokio::test]
     async fn health_check_returns_ok_json() {
-        let db = setup_test_db().await; 
+        let (app, _) = make_test_app().await;
 
-        let app = make_app(db);
         let req = Request::builder()
             .method("GET")
             .uri("/api/health")

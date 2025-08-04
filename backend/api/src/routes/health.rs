@@ -1,6 +1,6 @@
 use axum::{Router, routing::get, Json, response::IntoResponse};
+use util::state::AppState;
 use crate::response::ApiResponse;
-use sea_orm::DatabaseConnection;
 
 /// Builds the `/health` route group.
 ///
@@ -9,7 +9,7 @@ use sea_orm::DatabaseConnection;
 ///
 /// # Returns
 /// An Axum `Router` with the `GET /health` route configured.
-pub fn health_routes() -> Router<DatabaseConnection> {
+pub fn health_routes() -> Router<AppState> {
     Router::new().route("/", get(health_check))
 }
 

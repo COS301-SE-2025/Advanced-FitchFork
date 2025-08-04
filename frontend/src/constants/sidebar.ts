@@ -7,6 +7,7 @@ import {
   BarChartOutlined,
   CalendarOutlined,
   QuestionCircleOutlined,
+  CommentOutlined,
 } from '@ant-design/icons';
 import React from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -39,6 +40,11 @@ export const useTopMenuItems = (): MenuItem[] => {
       key: '/calendar',
       icon: React.createElement(CalendarOutlined),
       label: 'Calendar',
+    },
+    {
+      key: '/chat',
+      icon: React.createElement(CommentOutlined),
+      label: 'Chat',
     },
   ];
 

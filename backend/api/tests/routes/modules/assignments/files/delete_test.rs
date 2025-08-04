@@ -1,14 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}, assignment_file::{Model as AssignmentFileModel, FileType}}};
+    use db::{models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}, assignment_file::{Model as AssignmentFileModel, FileType}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::json;
     use api::auth::generate_jwt;
-    use dotenvy;
     use chrono::{Utc, TimeZone};
     use sea_orm::DatabaseConnection;
-    use crate::test_helpers::make_app;
+    use crate::helpers::app::make_test_app;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -72,11 +71,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_file_success_as_lecturer() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -93,11 +90,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_file_forbidden_for_student() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -114,11 +109,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_file_assignment_not_found() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, 9999);
         let req = Request::builder()
@@ -135,11 +128,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_file_bad_request_empty_file_ids() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -156,11 +147,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_file_unauthorized() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("DELETE")
@@ -175,11 +164,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_file_id_not_exist() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -196,11 +183,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_file_id_belongs_to_another_assignment() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()

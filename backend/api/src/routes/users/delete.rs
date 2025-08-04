@@ -4,7 +4,8 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use sea_orm::{EntityTrait, DatabaseConnection};
+use sea_orm::{EntityTrait};
+use util::state::AppState;
 use crate::{
     auth::claims::AuthUser,
     response::ApiResponse,
@@ -61,10 +62,12 @@ use db::models::user::{Entity as UserEntity};
 /// }
 /// ```
 pub async fn delete_user(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(user_id): Path<i64>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     if user_id == claims.sub {
         return (
             StatusCode::FORBIDDEN,
@@ -72,7 +75,7 @@ pub async fn delete_user(
         );
     }
 
-    match UserEntity::delete_by_id(user_id).exec(&db).await {
+    match UserEntity::delete_by_id(user_id).exec(db).await {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::success_without_data("User deleted successfully")),

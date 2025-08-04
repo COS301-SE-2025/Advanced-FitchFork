@@ -1,14 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::{Model as AssignmentModel, AssignmentType}, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{models::{user::Model as UserModel, module::Model as ModuleModel, assignment::{Model as AssignmentModel, AssignmentType}, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use serde_json::{Value};
     use api::auth::generate_jwt;
-    use dotenvy;
     use chrono::{Utc, TimeZone};
     use db::models::assignment_file::{FileType, Model as AssignmentFile};
-    use crate::test_helpers::make_app;
+    use crate::helpers::app::make_test_app;
 
     struct TestData {
         admin_user: UserModel,
@@ -58,9 +57,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_success_as_admin() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let config = serde_json::json!({
             "execution": {
@@ -80,7 +78,7 @@ mod tests {
         let config_bytes = serde_json::to_vec_pretty(&config).unwrap();
 
         AssignmentFile::save_file(
-            &db,
+            app_state.db(),
             data.assignments[0].id,
             data.module.id,
             FileType::Config,
@@ -91,7 +89,6 @@ mod tests {
         .unwrap();
 
         // Make request as admin
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/config",
@@ -119,9 +116,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_success_as_lecturer() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         // Save a valid config using disk-backed storage
         let config = serde_json::json!({
@@ -142,7 +138,7 @@ mod tests {
         let config_bytes = serde_json::to_vec_pretty(&config).unwrap();
 
         AssignmentFile::save_file(
-            &db,
+            app_state.db(),
             data.assignments[1].id,
             data.module.id,
             FileType::Config,
@@ -152,7 +148,6 @@ mod tests {
         .await
         .unwrap();
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/config",
@@ -182,11 +177,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_forbidden_for_student() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
         let req = Request::builder()
@@ -201,11 +194,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_forbidden_for_unassigned_user() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
         let req = Request::builder()
@@ -220,11 +211,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_not_found() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/9999/config", data.module.id);
         let req = Request::builder()
@@ -239,11 +228,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_unauthorized() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
         let req = Request::builder()
             .uri(&uri)
@@ -256,11 +243,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_no_config_set() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
         let req = Request::builder()
@@ -280,15 +265,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_invalid_config_format() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         // Intentionally save invalid JSON (e.g., a primitive instead of object)
         let bad_json = b"12345";
 
         AssignmentFile::save_file(
-            &db,
+            app_state.db(),
             data.assignments[0].id,
             data.module.id,
             FileType::Config,
@@ -298,7 +282,6 @@ mod tests {
         .await
         .unwrap();
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/config",

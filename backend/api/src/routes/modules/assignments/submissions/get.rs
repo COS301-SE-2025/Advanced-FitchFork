@@ -18,6 +18,7 @@ use sea_orm::{
 };
 use serde::Serialize;
 use serde_json::Value;
+use util::state::AppState;
 use std::{fs, path::PathBuf};
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
@@ -59,7 +60,7 @@ fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
 /// ### Notes
 /// - No filtering on other students or usernames is possible in this endpoint.
 async fn get_user_submissions(
-    db: DatabaseConnection,
+    db: &DatabaseConnection,
     module_id: i64,
     assignment_id: i64,
     user_id: i64,
@@ -68,7 +69,7 @@ async fn get_user_submissions(
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
+        .one(db)
         .await
         .unwrap()
         .unwrap();
@@ -119,7 +120,7 @@ async fn get_user_submissions(
         );
     }
 
-    let paginator = query.paginate(&db, per_page.into());
+    let paginator = query.paginate(db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
     let rows = paginator
         .fetch_page((page - 1) as u64)
@@ -131,7 +132,7 @@ async fn get_user_submissions(
 
     let user_resp = {
         let u = user::Entity::find_by_id(user_id)
-            .one(&db)
+            .one(db)
             .await
             .ok()
             .flatten();
@@ -274,7 +275,7 @@ async fn get_user_submissions(
 /// - Late submissions are computed relative to assignment `due_date`.
 /// - Defaults to sorting by `created_at DESC`.
 async fn get_list_submissions(
-    db: DatabaseConnection,
+    db: &DatabaseConnection,
     module_id: i64,
     assignment_id: i64,
     params: ListSubmissionsQuery,
@@ -282,7 +283,7 @@ async fn get_list_submissions(
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(Some(a)) => a,
@@ -321,7 +322,7 @@ async fn get_list_submissions(
 
         if let Ok(Some(user)) = user::Entity::find()
             .filter(user::Column::Username.contains(&pattern))
-            .one(&db)
+            .one(db)
             .await
         {
             or_condition = or_condition.add(assignment_submission::Column::UserId.eq(user.id));
@@ -333,7 +334,7 @@ async fn get_list_submissions(
     if let Some(ref username) = params.username {
         match user::Entity::find()
             .filter(user::Column::Username.eq(username.clone()))
-            .one(&db)
+            .one(db)
             .await
         {
             Ok(Some(user)) => {
@@ -403,7 +404,7 @@ async fn get_list_submissions(
         );
     }
 
-    let paginator = query.paginate(&db, per_page.into());
+    let paginator = query.paginate(db, per_page.into());
     let total = paginator.num_items().await.unwrap_or(0);
     let rows = paginator
         .fetch_page((page - 1) as u64)
@@ -543,13 +544,15 @@ async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bo
 /// - Students: `username` is ignored, only their own submissions returned.
 /// - Late submissions are calculated based on `due_date`.
 pub async fn list_submissions(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Query(params): Query<ListSubmissionsQuery>,
 ) -> axum::response::Response {
+    let db = app_state.db();
+
     let user_id = claims.sub;
-    if is_student(module_id, user_id, &db).await {
+    if is_student(module_id, user_id, db).await {
         return get_user_submissions(db, module_id, assignment_id, user_id, Query(params))
             .await
             .into_response();
@@ -670,12 +673,14 @@ pub async fn list_submissions(
 ///   code coverage/complexity analysis
 /// - Access is restricted to users with appropriate permissions for the module
 pub async fn get_submission(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     let submission = SubmissionEntity::find_by_id(submission_id)
-        .one(&db)
+        .one(db)
         .await
         .unwrap()
         .unwrap();
@@ -690,7 +695,7 @@ pub async fn get_submission(
             .into_response();
     }
 
-    let assignment = match AssignmentEntity::find_by_id(assignment_id).one(&db).await {
+    let assignment = match AssignmentEntity::find_by_id(assignment_id).one(db).await {
         Ok(Some(assignment)) => assignment,
         Ok(None) => {
             return (
@@ -765,8 +770,8 @@ pub async fn get_submission(
         }
     };
 
-    if !is_student(module_id, claims.sub, &db).await {
-        if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(&db).await {
+    if !is_student(module_id, claims.sub, db).await {
+        if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(db).await {
             let user_value = serde_json::to_value(UserResponse {
                 id: u.id,
                 username: u.username,
@@ -797,11 +802,12 @@ struct MemoResponse {
 }
 
 pub async fn get_submission_output(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
 
-    let output = match SubmissionOutput::get_output(&db, module_id, assignment_id, submission_id).await {
+    let output = match SubmissionOutput::get_output(db, module_id, assignment_id, submission_id).await {
         Ok(output) => output,
         Err(_) => {
             return (
@@ -825,7 +831,7 @@ pub async fn get_submission_output(
     for (task_id, content) in output {
         let task = assignment_task::Entity::find_by_id(task_id)
             .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
-            .one(&db)
+            .one(db)
             .await;
 
         match task {

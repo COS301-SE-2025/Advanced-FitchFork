@@ -6,7 +6,7 @@ use axum::{
 };
 use serde::Deserialize;
 use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter, Set, ActiveModelTrait,
+    ColumnTrait, Condition, EntityTrait, QueryFilter, Set, ActiveModelTrait,
     IntoActiveModel,
 };
 
@@ -14,6 +14,7 @@ use db::models::{
     user::Entity as UserEntity,
     user_module_role::{Entity as RoleEntity, ActiveModel as RoleActiveModel, Column as RoleCol, Role},
 };
+use util::state::AppState;
 use crate::{
     auth::AuthUser,
     response::{ApiResponse},
@@ -103,11 +104,12 @@ pub struct AssignPersonnelRequest {
 /// }
 /// ```
 pub async fn assign_personnel(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(body): Json<AssignPersonnelRequest>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
     let user_id = claims.sub;
 
     if body.user_ids.is_empty() {
@@ -137,7 +139,7 @@ pub async fn assign_personnel(
                     .add(RoleCol::ModuleId.eq(module_id))
                     .add(RoleCol::Role.eq(Role::Lecturer)),
             )
-            .one(&db)
+            .one(db)
             .await
             .map(|res| res.is_some())
             .unwrap_or(false);
@@ -153,7 +155,7 @@ pub async fn assign_personnel(
     // === PROCESS ASSIGNMENTS ===
     for &target_user_id in &body.user_ids {
         let user_exists = UserEntity::find_by_id(target_user_id)
-            .one(&db)
+            .one(db)
             .await
             .map(|opt| opt.is_some())
             .unwrap_or(false);
@@ -171,7 +173,7 @@ pub async fn assign_personnel(
                     .add(RoleCol::UserId.eq(target_user_id))
                     .add(RoleCol::ModuleId.eq(module_id)),
             )
-            .one(&db)
+            .one(db)
             .await;
 
         match existing_role {
@@ -180,7 +182,7 @@ pub async fn assign_personnel(
                     let mut active = existing.into_active_model();
                     active.role = Set(assigning_role.clone());
 
-                    if let Err(_) = active.update(&db).await {
+                    if let Err(_) = active.update(db).await {
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(ApiResponse::<()>::error("Failed to update role")),
@@ -195,7 +197,7 @@ pub async fn assign_personnel(
                     role: Set(assigning_role.clone()),
                 };
 
-                if let Err(_) = new_role.insert(&db).await {
+                if let Err(_) = new_role.insert(db).await {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ApiResponse::<()>::error("Failed to assign role")),

@@ -501,190 +501,210 @@ fn extract_single_file(
     Ok(())
 }
 
-//TODO - Add testing for bad code in new refactored environment -> Richard will do
-// The problem with these tests is that they fail with github actions
-// That is why they are ignored
+use db::models::assignment_file::{Column as AssignmentFileColumn, Entity as AssignmentFileEntity};
+use db::models::assignment_submission::Entity as AssignmentSubmission;
+use tokio::fs as async_fs;
+use tokio::io::AsyncReadExt;
+pub async fn create_main_from_interpreter(
+    db: &DatabaseConnection,
+    submission_id: i64,
+    interpreter_cmd: &str,
+    main_file_name: &str,
+) -> Result<(), String> {
+    let submission = AssignmentSubmission::find_by_id(submission_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?
+        .ok_or_else(|| format!("Submission {} not found", submission_id))?;
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use std::path::PathBuf;
+    let assignment_id = submission.assignment_id;
 
-//     fn test_zip_path(name: &str) -> PathBuf {
-//         PathBuf::from(format!("src/test_files/{}", name))
-//     }
+    let interpreter_file = AssignmentFileEntity::find()
+        .filter(AssignmentFileColumn::AssignmentId.eq(assignment_id))
+        .filter(AssignmentFileColumn::FileType.eq("interpreter"))
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch interpreter file: {}", e))?
+        .ok_or("Interpreter file not found")?;
 
-//     fn test_config() -> ExecutionConfig {
-//         ExecutionConfig {
-//             timeout_secs: 30,
-//             max_memory: "128m",
-//             max_cpus: "1",
-//             max_processes: 64,
-//             max_uncompressed_size: 50 * 1024 * 1024,
-//         }
-//     }
+    let assignment = Assignment::find_by_id(assignment_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch assignment: {}", e))?
+        .ok_or_else(|| format!("Assignment {} not found", assignment_id))?;
 
-//     fn get_test_language_config(lang: &str) -> LanguageConfig {
-//         get_language_config(lang).expect("Language config not found")
-//     }
+    let module_id = assignment.module_id;
 
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_good_java_example_succeeds() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("good_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    let storage_root = std::env::var("ASSIGNMENT_STORAGE_ROOT")
+        .map_err(|_| "ASSIGNMENT_STORAGE_ROOT not set".to_string())?;
+    let interpreter_path = PathBuf::from(&storage_root).join(&interpreter_file.path);
 
-//         let output = result.expect("Expected success, got error");
-//         assert!(!output.trim().is_empty(), "Expected non-empty output");
-//     }
+    if !interpreter_path.exists() {
+        return Err(format!(
+            "Interpreter file does not exist on disk: {}",
+            interpreter_path.display()
+        ));
+    }
 
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_good_cpp_example_succeeds() {
-//         let lang_cfg = get_test_language_config("cpp");
-//         let result = run_all_zips(
-//             vec![test_zip_path("good_cpp_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    let interpreter_bytes = async_fs::read(&interpreter_path)
+        .await
+        .map_err(|e| format!("Failed to read interpreter file: {}", e))?;
 
-//         assert!(result.is_ok(), "Expected successful C++ run");
-//     }
+    let temp_dir = tempdir().map_err(|e| format!("Failed to create tempdir: {}", e))?;
+    let temp_path = temp_dir.path();
 
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_good_python_example_succeeds() {
-//         let lang_cfg = get_test_language_config("python");
-//         let result = run_all_zips(
-//             vec![test_zip_path("good_python_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    extract_zip(&interpreter_bytes, 1_000_000_000, temp_path)
+        .map_err(|e| format!("Failed to extract interpreter archive: {}", e))?;
 
-//         assert!(result.is_ok(), "Expected successful Python run");
-//     }
+    let memory_arg = format!("--memory={}b", 500_000_000);
+    let cpus_arg = format!("--cpus=1");
+    let pids_arg = format!("--pids-limit=64");
 
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_infinite_loop_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("infinite_loop_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    let mut docker_cmd = Command::new("docker");
+    docker_cmd
+        .arg("run")
+        .arg("--rm")
+        .arg("--network=none")
+        .arg(memory_arg)
+        .arg(cpus_arg)
+        .arg(pids_arg)
+        .arg("--security-opt=no-new-privileges")
+        .arg("-v")
+        .arg(format!("{}:/code:rw", temp_path.display()))
+        .arg("universal-runner")
+        .arg("sh")
+        .arg("-c")
+        .arg(interpreter_cmd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
-//         assert!(result.is_err(), "Infinite loop should timeout or fail");
-//     }
+    let docker_process = docker_cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn docker: {}", e))?;
 
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_memory_overflow_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("memory_overflow_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    let output = timeout(Duration::from_secs(60), docker_process.wait_with_output())
+        .await
+        .map_err(|_| "Docker command timed out".to_string())?
+        .map_err(|e| format!("Docker command failed: {}", e))?;
 
-//         assert!(result.is_err(), "Memory overflow should fail");
-//     }
+    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    let stderr_str = String::from_utf8_lossy(&output.stderr);
 
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_fork_bomb_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("fork_bomb_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    if !output.status.success() {
+        return Err(format!(
+            "Interpreter Docker run failed:\nSTDOUT:\n{}\nSTDERR:\n{}",
+            stdout_str, stderr_str
+        ));
+    }
 
-//         assert!(result.is_err(), "Fork bomb should fail");
-//     }
+    let mut generated_main = temp_path.join(main_file_name);
+    if !generated_main.exists() {
+        let lower_name = main_file_name.to_ascii_lowercase();
+        let generated_main_lower = temp_path.join(&lower_name);
+        if generated_main_lower.exists() {
+            generated_main = generated_main_lower;
+        } else {
+            return Err(format!(
+                "Interpreter did not produce expected main file: {} or {}",
+                generated_main.display(),
+                generated_main_lower.display()
+            ));
+        }
+    }
 
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_edit_code_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("edit_code_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    let mut main_content = Vec::new();
+    async_fs::File::open(&generated_main)
+        .await
+        .map_err(|e| format!("Failed to open generated main file: {}", e))?
+        .read_to_end(&mut main_content)
+        .await
+        .map_err(|e| format!("Failed to read generated main file: {}", e))?;
 
-//         match result {
-//             Ok(output) => {
-//                 assert!(
-//                     output.contains("Read-only file system"),
-//                     "Expected sandbox to block file edits, but got:\n{}",
-//                     output
-//                 );
-//             }
-//             Err(err) => {
-//                 let msg = err.to_string();
-//                 assert!(
-//                     msg.contains("Read-only file system") || msg.contains("Permission denied"),
-//                     "Expected read-only FS error, but got: {}",
-//                     msg
-//                 );
-//             }
-//         }
-//     }
+    let zip_filename = format!(
+        "main_interpreted.{}.zip",
+        main_file_name.rsplitn(2, '.').next().unwrap_or("txt")
+    );
 
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_privilege_escalation_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("priviledge_escalation_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    use std::io::Write;
+    use zip::write::{FileOptions, ZipWriter};
 
-//         match result {
-//             Ok(output) => {
-//                 assert!(
-//                     output.contains("uid=1000"),
-//                     "Should not run with root privileges"
-//                 );
-//             }
-//             Err(_) => {
-//                 // Error is also acceptable
-//             }
-//         }
-//     }
+    let mut zip_data = Vec::new();
+    {
+        let mut zip_writer = ZipWriter::new(std::io::Cursor::new(&mut zip_data));
+        zip_writer
+            .start_file(main_file_name, FileOptions::<'_, ()>::default())
+            .map_err(|e| format!("Failed to start file in zip: {}", e))?;
+        zip_writer
+            .write_all(&main_content)
+            .map_err(|e| format!("Failed to write main file to zip: {}", e))?;
+        zip_writer
+            .finish()
+            .map_err(|e| format!("Failed to finish zip: {}", e))?;
+    }
 
-//     #[tokio::test]
-//     #[ignore]
-//     async fn test_network_access_fails() {
-//         let lang_cfg = get_test_language_config("java");
-//         let result = run_all_zips(
-//             vec![test_zip_path("access_network_java_example.zip")],
-//             &lang_cfg,
-//             &test_config(),
-//         )
-//         .await;
+    db::models::assignment_file::Model::save_file(
+        db,
+        assignment_id,
+        module_id,
+        db::models::assignment_file::FileType::Main,
+        &zip_filename,
+        &zip_data,
+    )
+    .await
+    .map_err(|e| format!("Failed to save zipped main file: {}", e))?;
 
-//         assert!(
-//             result.is_err()
-//                 || result
-//                     .as_ref()
-//                     .map(|s| s.contains("Network access blocked"))
-//                     .unwrap_or(false),
-//             "Network access should not be allowed"
-//         );
-//     }
-// }
+    Ok(())
+}
+
+/// Runs the interpreter for a given submission, generating and processing
+/// the main file and outputs for all tasks associated with the assignment.
+///
+/// # Arguments
+/// * `db` - Reference to the database connection for querying and saving data.
+/// * `submission_id` - The unique ID of the submission to process.
+/// * `interpreter_cmd` - The shell command to run the interpreter inside Docker or similar.
+/// * `main_file_name` - The expected filename of the generated main file (e.g., "main.cpp").
+///
+/// # Returns
+/// * `Result<(), String>` - Returns Ok(()) if all steps succeed, or an error message string on failure.
+///
+/// # Workflow:
+/// 1. Fetches the submission by `submission_id` from the database to get its `assignment_id`.
+/// 2. Calls `create_main_from_interpreter` to:
+///     - Run the interpreter command inside Docker.
+///     - Extract and read the generated main file named `main_file_name`.
+///     - Zip and save this main file into the database as an assignment file.
+/// 3. Calls `create_memo_outputs_for_all_tasks` to generate memo outputs for every task
+///    associated with the assignment (using the assignment_id).
+/// 4. Calls `create_submission_outputs_for_all_tasks` to generate outputs for every task
+///    specifically for the given submission.
+/// 5. Returns `Ok(())` on success or an error if any step fails.
+///
+/// This function coordinates the entire workflow for interpreting and processing
+/// a student's submission according to the assignment tasks.
+pub async fn run_interpreter(
+    db: &DatabaseConnection,
+    submission_id: i64,
+    interpreter_cmd: &str,
+    main_file_name: &str,
+) -> Result<(), String> {
+    use db::models::assignment_submission::Entity as AssignmentSubmission;
+    let submission = AssignmentSubmission::find_by_id(submission_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?
+        .ok_or_else(|| format!("Submission {} not found", submission_id))?;
+
+    let assignment_id = submission.assignment_id;
+
+    // Step 1: Create main zip from interpreter
+    create_main_from_interpreter(db, submission_id, interpreter_cmd, main_file_name).await?;
+
+    // Step 2: Create memo outputs for all tasks of this assignment
+    create_memo_outputs_for_all_tasks(db, assignment_id).await?;
+
+    // Step 3: Create submission outputs for all tasks for this submission
+    create_submission_outputs_for_all_tasks(db, submission_id).await?;
+
+    Ok(())
+}
