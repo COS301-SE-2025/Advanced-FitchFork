@@ -5,10 +5,10 @@ use axum::{
     response::IntoResponse,
 };
 use db::models::tickets::Model as TicketModel;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use util::state::AppState;
 
-use crate::{auth::AuthUser, response::ApiResponse};
+use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::tickets::common::TicketResponse};
 
 #[derive(Debug, Deserialize)]
 pub struct TicketRequest {
@@ -16,31 +16,6 @@ pub struct TicketRequest {
     pub description: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TicketResponse {
-    pub id: i64,
-    pub assignment_id: i64,
-    pub user_id: i64,
-    pub title: String,
-    pub description: String,
-    pub status: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
-impl From<TicketModel> for TicketResponse {
-    fn from(ticket: TicketModel) -> Self {
-        Self {
-            id: ticket.id,
-            assignment_id: ticket.assignment_id,
-            user_id: ticket.user_id,
-            title: ticket.title,
-            description: ticket.description,
-            status: ticket.status.to_string(),
-            created_at: ticket.created_at.to_rfc3339(),
-            updated_at: ticket.updated_at.to_rfc3339(),
-        }
-    }
-}
 pub async fn create_ticket(
     State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,

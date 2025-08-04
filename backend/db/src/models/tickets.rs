@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use migration::query;
 use sea_orm::ActiveValue::Set;
 use sea_orm::DeriveActiveEnum;
 use sea_orm::QueryFilter;
@@ -93,18 +94,6 @@ impl Model {
         active_model.insert(db).await
     }
 
-    pub async fn find_by_user_and_assignment(
-        db: &DbConn,
-        user_id: i64,
-        assignment_id: i64,
-    ) -> Result<Option<Model>, DbErr> {
-        Entity::find()
-            .filter(Column::UserId.eq(user_id))
-            .filter(Column::AssignmentId.eq(assignment_id))
-            .one(db)
-            .await
-    }
-
     pub async fn set_open(db: &DbConn, ticket_id: i64) -> Result<Model, DbErr> {
         let model = Entity::find_by_id(ticket_id).one(db).await?;
 
@@ -135,19 +124,8 @@ impl Model {
         active_model.update(db).await
     }
 
-    pub async fn find_all_for_assignment(
-        db: &DbConn,
-        assignment_id: i64,
-        user_id: i64,
-        user_is_admin: bool,
-    ) -> Result<Vec<Model>, DbErr> {
-        let mut query = Entity::find().filter(Column::AssignmentId.eq(assignment_id));
-
-        if !user_is_admin {
-            query = query.filter(Column::UserId.eq(user_id));
-        }
-
-        query.all(db).await
+    pub async fn get_by_id(db: &DbConn, ticket_id: i64) -> Result<Option<Model>, DbErr> {
+        Entity::find_by_id(ticket_id).one(db).await
     }
 
     pub async fn delete(db: &DbConn, ticket_id: i64) -> Result<(), DbErr> {

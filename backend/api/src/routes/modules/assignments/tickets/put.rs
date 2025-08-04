@@ -1,12 +1,10 @@
-use crate::{auth::AuthUser, response::ApiResponse};
+use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::tickets::common::is_valid};
 use axum::{
     extract::{Path, State}, http::StatusCode, response::{IntoResponse, Json}, Extension
 };
 use db::models::tickets::Model as TicketModel;
 use serde::Serialize;
 use util::state::AppState;
-
-use crate::routes::modules::assignments::tickets::common::is_valid;
 
 
 #[derive(Serialize)]
