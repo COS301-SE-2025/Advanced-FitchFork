@@ -80,6 +80,14 @@ impl Model {
             .await
     }
 
+    pub async fn delete(
+        db: &DbConn,
+        message_id: i64,
+    ) -> Result<(), DbErr> {
+        Entity::delete_by_id(message_id).exec(db).await?;
+        Ok(())
+    }
+
     pub async fn is_author(message_id: i64, user_id: i64, db: &DbConn) -> bool {
         let message = Entity::find_by_id(message_id).one(db).await;
         match message {

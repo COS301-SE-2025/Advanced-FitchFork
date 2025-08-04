@@ -150,6 +150,11 @@ impl Model {
         query.all(db).await
     }
 
+    pub async fn delete(db: &DbConn, ticket_id: i64) -> Result<(), DbErr> {
+        Entity::delete_by_id(ticket_id).exec(db).await?;
+        Ok(())
+    }
+
     pub async fn is_author(ticket_id: i64, user_id: i64, db: &DbConn) -> bool {
         let ticket = Entity::find_by_id(ticket_id).one(db).await;
         match ticket {
