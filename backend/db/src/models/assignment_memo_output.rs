@@ -41,7 +41,7 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::assignment_task::Entity",
         from = "Column::TaskId",
-        to = "super::assignment_task::Column::TaskNumber"
+        to = "super::assignment_task::Column::Id"
     )]
     AssignmentTask,
 }
@@ -59,18 +59,10 @@ impl Model {
     pub fn storage_root() -> PathBuf {
         let relative_root = env::var("ASSIGNMENT_STORAGE_ROOT")
             .unwrap_or_else(|_| "data/assignment_files".to_string());
-
-        let mut dir = std::env::current_dir().expect("Failed to get current dir");
-
-        while let Some(parent) = dir.parent() {
-            if dir.ends_with("backend") {
-                return dir.join(relative_root);
-            }
-            dir = parent.to_path_buf();
-        }
-
-        // Fallback: just use relative path from current dir
-        PathBuf::from(relative_root)
+        
+        let project_root = env::current_dir().expect("Failed to get current dir");
+        
+        project_root.join(relative_root)
     }
 
     /// Constructs the full directory path for a memo output based on

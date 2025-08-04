@@ -60,10 +60,7 @@ fn first_archive_in(dir: &PathBuf) -> Result<PathBuf, String> {
 fn resolve_storage_root(storage_root: &str) -> PathBuf {
     let path = PathBuf::from(storage_root);
     if path.is_relative() {
-        let mut abs_path = std::env::current_dir().unwrap();
-        abs_path.pop();
-        abs_path.push(path);
-        abs_path
+        env::current_dir().unwrap().join(path)
     } else {
         path
     }
@@ -151,7 +148,7 @@ pub async fn create_memo_outputs_for_all_tasks(
         if let Err(e) = db::models::assignment_memo_output::Model::save_file(
             db,
             assignment_id,
-            task.task_number,
+            task.id,
             &filename,
             output.as_bytes(),
         )

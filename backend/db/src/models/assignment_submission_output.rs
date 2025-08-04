@@ -29,7 +29,7 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::assignment_task::Entity",
         from = "Column::TaskId",
-        to = "super::assignment_task::Column::TaskNumber"
+        to = "super::assignment_task::Column::Id"
     )]
     AssignmentTask,
 
