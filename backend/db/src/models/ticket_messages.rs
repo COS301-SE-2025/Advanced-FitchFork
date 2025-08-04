@@ -1,4 +1,4 @@
-use sea_orm::entity::prelude::*;
+use sea_orm::{entity::prelude::*, ActiveValue::Set, QueryOrder};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Deserialize, Serialize)]
@@ -46,3 +46,40 @@ impl Related<super::user::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl Model {
+    pub async fn create(
+        db: &DbConn,
+        ticket_id: i64,
+        user_id: i64,
+        content: &str,
+    ) -> Result<Model, DbErr> {
+        let now = chrono::Utc::now().naive_utc();
+
+        let active = ActiveModel {
+            ticket_id: Set(ticket_id),
+            user_id: Set(user_id),
+            content: Set(content.to_owned()),
+            created_at: Set(now),
+            updated_at: Set(now),
+            ..Default::default()
+        };
+
+        active.insert(db).await
+    }
+
+    pub async fn find_all_for_ticket(
+        db: &DbConn,
+        ticket_id: i64,
+    ) -> Result<Vec<Model>, DbErr> {
+        Entity::find()
+            .filter(Column::TicketId.eq(ticket_id))
+            .order_by_asc(Column::CreatedAt)
+            .all(db)
+            .await
+    }
+
+    pub fn is_author(&self, user_id: i64) -> bool {
+        self.user_id == user_id
+    }
+}

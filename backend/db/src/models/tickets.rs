@@ -1,7 +1,8 @@
 use sea_orm::entity::prelude::*;
-use sea_orm::{DeriveActiveEnum};
+use sea_orm::{DeriveActiveEnum, ActiveValue};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
+use sea_orm::QueryFilter;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "tickets")]
@@ -62,4 +63,62 @@ impl Related<super::user::Entity> for Entity {
     }
 }
 
-impl ActiveModelBehavior for ActiveModel {}
+impl ActiveModelBehavior for ActiveModel {
+ 
+}
+
+impl Model {
+    pub async fn create(
+        db: &DbConn,
+        assignment_id: i64,
+        user_id: i64,
+        title: &str,
+        description: &str,
+    ) -> Result<Model, DbErr> {
+        let now = chrono::Utc::now().naive_utc();
+
+        let active_model = ActiveModel {
+            assignment_id: ActiveValue::Set(assignment_id),
+            user_id: ActiveValue::Set(user_id),
+            title: ActiveValue::Set(title.to_owned()),
+            description: ActiveValue::Set(description.to_owned()),
+            status: ActiveValue::Set(TicketStatus::Open),
+            created_at: ActiveValue::Set(now),
+            updated_at: ActiveValue::Set(now),
+            ..Default::default()
+        };
+
+        active_model.insert(db).await
+    }
+
+    pub async fn find_by_user_and_assignment(
+        db: &DbConn,
+        user_id: i64,
+        assignment_id: i64,
+    ) -> Result<Option<Model>, DbErr> {
+        Entity::find()
+            .filter(Column::UserId.eq(user_id))
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .one(db)
+            .await
+    }
+
+    pub async fn find_all_for_assignment(
+        db: &DbConn,
+        assignment_id: i64,
+        user_id: i64,
+        user_is_admin: bool,
+    ) -> Result<Vec<Model>, DbErr> {
+        let mut query = Entity::find().filter(Column::AssignmentId.eq(assignment_id));
+
+        if !user_is_admin {
+            query = query.filter(Column::UserId.eq(user_id));
+        }
+
+        query.all(db).await
+    }
+
+    pub fn is_author(&self, user_id: i64) -> bool {
+        self.user_id == user_id
+    }
+}
