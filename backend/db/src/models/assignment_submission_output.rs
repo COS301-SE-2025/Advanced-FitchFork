@@ -64,7 +64,6 @@ impl Model {
         assignment_id: i64,
         user_id: i64,
         attempt_number: i64,
-        task_number: i64,
     ) -> PathBuf {
         Self::storage_root()
             .join(format!("module_{module_id}"))
@@ -73,7 +72,6 @@ impl Model {
             .join(format!("user_{user_id}"))
             .join(format!("attempt_{attempt_number}"))
             .join("submission_output")
-            .join(format!("task_{task_number}"))
     }
 
     pub fn full_path(&self) -> PathBuf {
@@ -122,18 +120,11 @@ impl Model {
             .map_err(|e| DbErr::Custom(format!("DB error finding assignment: {}", e)))?
             .ok_or_else(|| DbErr::Custom("Assignment not found".to_string()))?;
 
-        let task = super::assignment_task::Entity::find_by_id(task_id)
-            .one(db)
-            .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding task: {}", e)))?
-            .ok_or_else(|| DbErr::Custom("Task not found".to_string()))?;
-
         let dir_path = Self::full_directory_path(
             assignment.module_id,
             assignment.id,
             submission.user_id,
             submission.attempt,
-            task.task_number,
         );
         fs::create_dir_all(&dir_path)
             .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
@@ -185,19 +176,19 @@ impl Model {
         let mut results = Vec::new();
         for entry in fs::read_dir(&base_dir_path)? {
             let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                let dir_name = entry.file_name().to_string_lossy().to_string();
-                if let Some(task_num_str) = dir_name.strip_prefix("task_") {
-                    if let Ok(task_number) = task_num_str.parse::<i64>() {
-                        let task_dir = entry.path();
-                        for file_entry in fs::read_dir(task_dir)? {
-                            let file_entry = file_entry?;
-                            if file_entry.file_type()?.is_file() {
-                                let file_path = file_entry.path();
-                                let content = fs::read_to_string(&file_path)?;
-                                results.push((task_number, content));
-                            }
-                        }
+            if entry.file_type()?.is_file() {
+                let file_path = entry.path();
+                if let Some(file_name) = file_path.file_stem().and_then(|n| n.to_str()) {
+                    if let Ok(output_id) = file_name.parse::<i64>() {
+                        // Find the output in the database to get the task_id
+                        let output = Entity::find_by_id(output_id)
+                            .one(db)
+                            .await
+                            .map_err(|e| io::Error::new(ErrorKind::Other, format!("DB error: {}", e)))?
+                            .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "Output not found"))?;
+                        
+                        let content = fs::read_to_string(&file_path)?;
+                        results.push((output.task_id, content));
                     }
                 }
             }

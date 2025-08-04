@@ -19,6 +19,7 @@ mod tests {
                 self,
                 Model as AssignmentSubmissionModel,
             },
+            assignment_submission_output,
             assignment_task::Model as AssignmentTaskModel,
             module::Model as ModuleModel,
             user::Model as UserModel,
@@ -26,7 +27,7 @@ mod tests {
         }
     };
     use flate2::{Compression, write::GzEncoder};
-    use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+    use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, QueryFilter, ColumnTrait};
     use serde_json::{json, Value};
     use serial_test::serial;
     use std::path::Path;
@@ -1052,7 +1053,7 @@ mod tests {
     //     let db = setup_test_db().await;
     //     let data = setup_test_data(&db).await;
     //     let app = make_app(db.clone());
-
+    //
     //     let mut buf = Vec::new();
     //     {
     //         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
@@ -1061,7 +1062,7 @@ mod tests {
     //         zip.write_all(b"invalid C code that won't compile").unwrap();
     //         zip.finish().unwrap();
     //     }
-
+    //
     //     let (boundary, body) = multipart_body("solution.zip", &buf, None);
     //     let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
     //     let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
@@ -1072,7 +1073,7 @@ mod tests {
     //         .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
     //         .body(Body::from(body))
     //         .unwrap();
-
+    //
     //     let response = app.oneshot(req).await.unwrap();
     //     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     //     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -1208,6 +1209,21 @@ mod tests {
         };
         let submission = submission.insert(db).await.unwrap();
 
+        let task = db::models::assignment_task::Entity::find()
+            .filter(db::models::assignment_task::Column::AssignmentId.eq(assignment_id))
+            .one(db)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let output = assignment_submission_output::ActiveModel {
+            task_id: Set(task.id),
+            submission_id: Set(submission.id),
+            path: Set("".to_string()),
+            ..Default::default()
+        };
+        let output = output.insert(db).await.unwrap();
+
         let output_dir = temp_dir.path()
             .join(format!("module_{}", module_id))
             .join(format!("assignment_{}", assignment_id))
@@ -1216,11 +1232,19 @@ mod tests {
             .join(format!("attempt_{}", attempt))
             .join("submission_output");
         
-        let task_1_dir = output_dir.join("task_1");
-        std::fs::create_dir_all(&task_1_dir).unwrap();
+        std::fs::create_dir_all(&output_dir).unwrap();
+        let file_path = output_dir.join(format!("{}.txt", output.id));
+        std::fs::write(&file_path, "make task1\n&-=-&Subtask 1 Output\nOutput A").unwrap();
 
-        let task_1_output = task_1_dir.join("1001.txt");
-        std::fs::write(task_1_output, "make task1\n&-=-&Subtask 1 Output\nOutput A").unwrap();
+        let relative_path = file_path
+            .strip_prefix(temp_dir.path())
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        let mut output_active: assignment_submission_output::ActiveModel = output.into();
+        output_active.path = Set(relative_path);
+        output_active.update(db).await.unwrap();
 
         submission
     }

@@ -36,22 +36,11 @@ async fn grade_submission(
     let mut student_outputs = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
         for entry in entries.flatten() {
-            let entry_path = entry.path();
-            if entry_path.is_dir() {
-                if let Some(dir_name) = entry_path.file_name().and_then(|n| n.to_str()) {
-                    if dir_name.starts_with("task_") {
-                        if let Ok(task_entries) = std::fs::read_dir(&entry_path) {
-                            for task_entry in task_entries.flatten() {
-                                let file_path = task_entry.path();
-                                if file_path.is_file() {
-                                    if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-                                        if ext.eq_ignore_ascii_case("txt") {
-                                            student_outputs.push(file_path);
-                                        }
-                                    }
-                                }
-                            }
-                        }
+            let file_path = entry.path();
+            if file_path.is_file() {
+                if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+                    if ext.eq_ignore_ascii_case("txt") {
+                        student_outputs.push(file_path);
                     }
                 }
             }
