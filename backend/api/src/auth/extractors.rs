@@ -1,12 +1,12 @@
 use axum::{
-    extract::FromRequestParts,
+    extract::{FromRequestParts},
     http::{request::Parts, StatusCode},
 };
 use axum_extra::extract::TypedHeader;
 use headers::{Authorization, authorization::Bearer};
 use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use std::collections::HashMap;
 use std::env;
-
 use crate::auth::claims::{Claims, AuthUser};
 
 /// Implements extraction of `AuthUser` from request headers.
@@ -34,18 +34,37 @@ where
 {
     type Rejection = (StatusCode, &'static str);
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let TypedHeader(Authorization(bearer)) = TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, _state)
-            .await
-            .map_err(|_| (StatusCode::UNAUTHORIZED, "Missing or invalid Authorization header"))?;
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // Try Authorization header first
+        if let Ok(TypedHeader(Authorization(bearer))) =
+            TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state).await
+        {
+            return decode_token(bearer.token());
+        }
 
-        let token_data = decode::<Claims>(
-            bearer.token(),
-            &DecodingKey::from_secret(env::var("JWT_SECRET").unwrap().as_bytes()),
-            &Validation::new(Algorithm::HS256),
-        )
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid or expired token"))?;
+        // Fallback to query param `?token=...`
+        if let Some(query) = &parts.uri.query() {
+            let parsed: HashMap<String, String> = url::form_urlencoded::parse(query.as_bytes())
+                .into_owned()
+                .collect();
 
-        Ok(AuthUser(token_data.claims))
+            if let Some(token) = parsed.get("token") {
+                return decode_token(token);
+            }
+        }
+
+        Err((StatusCode::UNAUTHORIZED, "Missing or invalid Authorization header"))
     }
+}
+
+fn decode_token(token: &str) -> Result<AuthUser, (StatusCode, &'static str)> {
+    let secret = env::var("JWT_SECRET").map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "JWT secret not set"))?;
+    let data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::new(Algorithm::HS256),
+    )
+    .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid or expired token"))?;
+
+    Ok(AuthUser(data.claims))
 }

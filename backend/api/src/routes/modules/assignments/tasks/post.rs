@@ -5,8 +5,9 @@ use axum::{
     Json,
 };
 use chrono::Utc;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, DatabaseConnection};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
+use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::assignment_task::{ActiveModel, Column, Entity};
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
@@ -127,10 +128,12 @@ pub struct CreateTaskRequest {
 /// - The `command` field supports any shell command that can be executed in the evaluation environment
 /// - Task creation is restricted to users with appropriate module permissions
 pub async fn create_task(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
     Json(payload): Json<CreateTaskRequest>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     if payload.task_number <= 0 || payload.command.trim().is_empty() {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -142,7 +145,7 @@ pub async fn create_task(
     let exists = Entity::find()
         .filter(Column::AssignmentId.eq(assignment_id))
         .filter(Column::TaskNumber.eq(payload.task_number))
-        .one(&db)
+        .one(db)
         .await;
 
     if let Ok(Some(_)) = exists {
@@ -163,7 +166,7 @@ pub async fn create_task(
         ..Default::default()
     };
 
-    match new_task.insert(&db).await {
+    match new_task.insert(db).await {
         Ok(task) => {
             let response = TaskResponse {
                 id: task.id,

@@ -4,7 +4,8 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, DatabaseConnection};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::module;
 use serde::{Serialize, Deserialize};
@@ -44,16 +45,18 @@ use validator::Validate;
 /// }
 /// ```
 pub async fn delete_module(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Path(module_id): Path<i64>
 ) -> impl IntoResponse {
+    let db = state.db();
+
     match module::Entity::find()
         .filter(module::Column::Id.eq(module_id))
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(Some(m)) => {
-            match m.delete(&db).await {
+            match m.delete(db).await {
                 Ok(_) => (
                     StatusCode::OK,
                     Json(ApiResponse::<()>::success((), "Module deleted successfully")),
@@ -130,9 +133,11 @@ pub struct FailedDelete {
 /// }
 /// ```
 pub async fn bulk_delete_modules(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Json(req): Json<BulkDeleteRequest>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     // Validate the request
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
@@ -148,11 +153,11 @@ pub async fn bulk_delete_modules(
     for &id in &req.module_ids {
         match module::Entity::find()
             .filter(module::Column::Id.eq(id))
-            .one(&db)
+            .one(db)
             .await
         {
             Ok(Some(module_model)) => {
-                match module_model.delete(&db).await {
+                match module_model.delete(db).await {
                     Ok(_) => deleted_count += 1,
                     Err(e) => {
                         failed.push(FailedDelete {

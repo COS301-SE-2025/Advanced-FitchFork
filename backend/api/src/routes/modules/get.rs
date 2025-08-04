@@ -9,6 +9,7 @@ use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait,
     QueryFilter, QueryOrder, QuerySelect,
 };
+use util::state::AppState;
 use crate::{auth::AuthUser, response::ApiResponse};
 use crate::routes::common::UserResponse;
 use db::models::{
@@ -133,16 +134,18 @@ impl From<db::models::module::Model> for ModuleResponse {
 /// }
 /// ```
 pub async fn get_module(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Path(module_id): Path<i64>
 ) -> Response {
+    let db = state.db();
+
     let module = ModuleEntity::find_by_id(module_id)
-        .one(&db).await.unwrap().unwrap();
+        .one(db).await.unwrap().unwrap();
 
     let (lecturers, tutors, students) = tokio::join!(
-        get_users_by_role(&db, module_id, Role::Lecturer),
-        get_users_by_role(&db, module_id, Role::Tutor),
-        get_users_by_role(&db, module_id, Role::Student),
+        get_users_by_role(db, module_id, Role::Lecturer),
+        get_users_by_role(db, module_id, Role::Tutor),
+        get_users_by_role(db, module_id, Role::Student),
     );
 
     if lecturers.is_err() || tutors.is_err() || students.is_err() {
@@ -330,11 +333,14 @@ impl From<(Vec<Module>, i32, i32, i32)> for FilterResponse {
 /// }
 /// ```
 pub async fn get_modules(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Query(params): Query<FilterReq>
-) -> impl IntoResponse {
+) -> impl IntoResponse {    
+    let db = state.db();
+
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100).max(1);
+
 
     if let Some(sort) = &params.sort {
         let valid_fields = ["code", "created_at", "year", "credits", "description"];
@@ -428,7 +434,7 @@ pub async fn get_modules(
     }
 
     // Pagination
-    let paginator = query.paginate(&db, per_page as u64);
+    let paginator = query.paginate(db, per_page as u64);
     let total = paginator.num_items().await.unwrap_or(0) as i32;
     let modules: Vec<Module> = paginator
         .fetch_page((page - 1) as u64)
@@ -532,16 +538,18 @@ impl From<(Vec<Module>, Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsRes
 /// }
 /// ```
 pub async fn get_my_details(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
-) -> impl IntoResponse {
+) -> impl IntoResponse {    
+    let db = state.db();
+
     let user_id = claims.sub;
 
     let (as_student, as_tutor, as_lecturer, as_assistant_lecturer) = tokio::join!(
-        get_modules_by_user_and_role(&db, user_id, Role::Student),
-        get_modules_by_user_and_role(&db, user_id, Role::Tutor),
-        get_modules_by_user_and_role(&db, user_id, Role::Lecturer),
-        get_modules_by_user_and_role(&db, user_id, Role::AssistantLecturer),
+        get_modules_by_user_and_role(db, user_id, Role::Student),
+        get_modules_by_user_and_role(db, user_id, Role::Tutor),
+        get_modules_by_user_and_role(db, user_id, Role::Lecturer),
+        get_modules_by_user_and_role(db, user_id, Role::AssistantLecturer),
     );
 
     match (as_student, as_tutor, as_lecturer, as_assistant_lecturer) {

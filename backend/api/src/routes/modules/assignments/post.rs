@@ -5,7 +5,8 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use sea_orm::{DatabaseConnection, DbErr};
+use sea_orm::{DbErr};
+use util::state::AppState;
 use crate::response::ApiResponse;
 use db::{
     models::{
@@ -70,10 +71,12 @@ use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentR
 /// }
 /// ```
 pub async fn create_assignment(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
         .map(|dt| dt.with_timezone(&Utc)) {
         Ok(date) => date,
@@ -113,7 +116,7 @@ pub async fn create_assignment(
     };
 
     match AssignmentModel::create(
-        &db,
+        db,
         module_id,
         &req.name,
         req.description.as_deref(),

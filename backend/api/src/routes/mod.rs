@@ -1,26 +1,10 @@
-//! # Application Routes
-//!
-//! This module defines the top-level routing configuration for the API.
-//!
-//! Each submodule is responsible for its own route group (e.g., `/health`),
-//! and those groups are composed together here.
-//!
-//! ## Structure
-//! - `health.rs`: Contains the `/health` route for basic uptime checks.
-//! - `auth/`: A folder containing `post.rs` for the `/auth` API group.
-//! - `users/`: A folder containing `get.rs` for the `/users` API group.
-//! - `modules/`: A folder containing `post.rs` for the `/modules` API group.
-//!
-//! ## Usage
-//! Call `routes()` from your main application to initialize all top-level routes.
-
 use crate::auth::guards::{require_admin, require_authenticated};
 use crate::routes::{
     auth::auth_routes, health::health_routes, modules::modules_routes,
     plagiarism::plagiarism_routes, users::users_routes,
 };
-use axum::{Router, middleware::from_fn};
-use sea_orm::DatabaseConnection;
+use axum::{middleware::from_fn, Router};
+use util::state::AppState;
 
 pub mod auth;
 pub mod common;
@@ -33,21 +17,19 @@ pub mod users;
 ///
 /// This nests sub-routes under the appropriate base paths:
 /// - `/health` → health check endpoint
-/// - `/auth` → authentication endpoints
-/// - `/users` → user management endpoints
-/// - `/modules` → module management endpoints
-/// - `/assignments` → assignment management endpoints
+/// - `/auth` → authentication endpoints (login, token handling)
+/// - `/users` → user management (admin-only)
+/// - `/modules` → module CRUD, personnel management, assignments (authenticated users)
+/// - `/plagiarism` → plagiarism detection and results
+/// - `/ws` → WebSocket topics (real-time communication via guarded topic namespaces)
 ///
 /// # Returns
-/// An Axum `Router` ready to be passed into the main app.
-pub fn routes(db: DatabaseConnection) -> Router<DatabaseConnection> {
+/// An Axum `Router<AppState>` with all route groups and middleware applied.
+pub fn routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .nest("/health", health_routes())
         .nest("/auth", auth_routes())
         .nest("/users", users_routes().route_layer(from_fn(require_admin)))
-        .nest(
-            "/modules",
-            modules_routes(db.clone()).route_layer(from_fn(require_authenticated)),
-        )
-        .nest("/plagiarism", plagiarism_routes()) //TODO Add Auth Guard here
+        .nest("/modules", modules_routes(app_state.clone()).route_layer(from_fn(require_authenticated)))
+        .nest("/plagiarism", plagiarism_routes()) // TODO Add Auth Guard here
 }

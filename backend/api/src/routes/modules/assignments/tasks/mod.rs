@@ -7,7 +7,7 @@ use get::{get_task_details, list_tasks};
 use put::edit_task;
 use post::create_task;
 use delete::delete_task;
-use sea_orm::DatabaseConnection;
+use util::state::AppState;
 
 pub mod get;
 pub mod put;
@@ -29,7 +29,7 @@ pub mod common;
 ///
 /// # Returns
 /// An [`axum::Router`] with the task endpoints and their associated middleware.
-pub fn tasks_routes() -> Router<DatabaseConnection> {
+pub fn tasks_routes() -> Router<AppState> {
     Router::new()        
         .route("/", get(list_tasks))
         .route("/", post(create_task))

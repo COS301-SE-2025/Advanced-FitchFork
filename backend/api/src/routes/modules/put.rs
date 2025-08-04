@@ -5,13 +5,13 @@ use axum::{
     Json,
 };
 use chrono::Utc;
+use util::state::AppState;
 use validator::Validate;
 use sea_orm::{
     IntoActiveModel,
     ActiveModelTrait,
     ColumnTrait,
     Condition,
-    DatabaseConnection,
     EntityTrait,
     QueryFilter,
     Set,
@@ -103,10 +103,12 @@ use serde_json::Value;
 /// }
 /// ```
 pub async fn edit_module(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Path(module_id): Path<i64>,
     Json(req): Json<ModuleRequest>,
 ) -> impl IntoResponse {
+    let db = state.db();
+
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -121,7 +123,7 @@ pub async fn edit_module(
                 .add(ModuleCol::Code.eq(req.code.clone()))
                 .add(ModuleCol::Id.ne(module_id)),
         )
-        .one(&db)
+        .one(db)
         .await;
 
     if let Ok(Some(_)) = duplicate {
@@ -141,7 +143,7 @@ pub async fn edit_module(
         ..Default::default()
     };
 
-    match updated_module.update(&db).await {
+    match updated_module.update(db).await {
         Ok(module) => (
             StatusCode::OK,
             Json(ApiResponse::success(ModuleResponse::from(module), "Module updated successfully")),
@@ -226,9 +228,11 @@ pub struct FailedUpdate {
 /// }
 /// ```
 pub async fn bulk_edit_modules(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Json(raw_value): Json<Value>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     // First check for forbidden 'code' field
     if let Some(obj) = raw_value.as_object() {
         if obj.keys().any(|k| k.to_lowercase() == "code") {
@@ -265,7 +269,7 @@ pub async fn bulk_edit_modules(
     for id in &req.module_ids {
         let res = module::Entity::find()
             .filter(module::Column::Id.eq(*id))
-            .one(&db)
+            .one(db)
             .await;
 
         match res {
@@ -292,7 +296,7 @@ pub async fn bulk_edit_modules(
                 if has_changes {
                     active.updated_at = Set(Utc::now());
 
-                    if active.update(&db).await.is_ok() {
+                    if active.update(db).await.is_ok() {
                         updated += 1;
                     } else {
                         failed.push(FailedUpdate {

@@ -17,7 +17,7 @@ migration = { path = "../migration" }
 code-runner = { path = "../code_runner" }
 
 # Web framework and middleware
-axum = { version = "0.8", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart", "ws"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["cors"] }
@@ -57,6 +57,11 @@ tokio-util = { version = "0.7" , features = ["io"]}
 md5 = "0.8"
 sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 sea-orm-migration = "1.1"
+
+futures-util = "0.3"
+tokio-tungstenite = { version = "0.27", features = ["connect"] }
+url = "2.5"
+portpicker = "0.1"
 
 [dev-dependencies]
 serial_test = "3.2"
