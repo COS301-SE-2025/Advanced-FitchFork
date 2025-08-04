@@ -1,14 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use db::{test_utils::setup_test_db, models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use api::auth::generate_jwt;
-    use dotenvy;
     use chrono::{Utc, TimeZone};
     use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
     use axum::http::header::{CONTENT_TYPE, AUTHORIZATION};
-    use crate::test_helpers::make_app;
+    use crate::helpers::app::make_test_app;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -56,11 +55,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_success_as_lecturer() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -78,11 +75,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_forbidden_for_student() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -100,11 +95,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_assignment_not_found() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, 9999);
@@ -122,11 +115,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_missing_file_type() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let boundary = "----BoundaryTest".to_string();
         let mut body = Vec::new();
         body.extend(format!("--{}\r\n", boundary).as_bytes());
@@ -148,11 +139,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_empty_file() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("spec", "spec.txt", b"");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -170,11 +159,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_unauthorized() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -190,11 +177,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_invalid_file_type() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (boundary, body) = multipart_body("not_a_type", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -212,11 +197,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_duplicate_file_type_replaces() {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let (boundary1, body1) = multipart_body("spec", "spec1.txt", b"first content");
@@ -246,7 +229,7 @@ mod tests {
         let files = db::models::assignment_file::Entity::find()
             .filter(db::models::assignment_file::Column::AssignmentId.eq(data.assignment.id))
             .filter(db::models::assignment_file::Column::FileType.eq(db::models::assignment_file::FileType::Spec))
-            .all(&db)
+            .all(app_state.db())
             .await
             .unwrap();
         assert_eq!(files.len(), 1);

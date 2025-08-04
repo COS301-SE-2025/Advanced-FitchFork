@@ -5,12 +5,12 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{Datelike, Utc};
-    use db::{test_utils::setup_test_db, models::{module::{Model as Module, Entity as ModuleEntity}, user::Model as UserModel}};
+    use db::{models::{module::Model as Module, user::Model as UserModel, module::Entity as ModuleEntity,}};
+    use sea_orm::{DatabaseConnection, EntityTrait};
     use serde_json::json;
     use tower::ServiceExt;
     use api::auth::generate_jwt;
-    use crate::test_helpers::make_app;
-    use sea_orm::{EntityTrait, DatabaseConnection};
+    use crate::helpers::app::make_test_app;
 
     struct TestData {
         admin_user: UserModel,
@@ -43,10 +43,9 @@ mod tests {
     /// Test Case: Admin updates module successfully
     #[tokio::test]
     async fn test_edit_module_success() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -77,10 +76,9 @@ mod tests {
     /// Test Case: Non-admin user attempts to update module
     #[tokio::test]
     async fn test_edit_module_forbidden() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -104,10 +102,9 @@ mod tests {
     /// Test Case: Invalid module code format
     #[tokio::test]
     async fn test_edit_module_invalid_code() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "abc123", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -131,10 +128,9 @@ mod tests {
     /// Test Case: Year in the past
     #[tokio::test]
     async fn test_edit_module_year_in_past() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() - 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -158,10 +154,9 @@ mod tests {
     /// Test Case: Invalid credits value
     #[tokio::test]
     async fn test_edit_module_invalid_credits() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 0});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -185,10 +180,9 @@ mod tests {
     /// Test Case: Description too long
     #[tokio::test]
     async fn test_edit_module_description_too_long() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
             "code": "COS302",
@@ -217,11 +211,11 @@ mod tests {
     /// Test Case: Duplicate module code
     #[tokio::test]
     async fn test_edit_module_duplicate_code() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let _other_module = Module::create(
-            &db,
+            app_state.db(),
             "COS302",
             Utc::now().year(),
             Some("Other module"),
@@ -230,7 +224,6 @@ mod tests {
         .await
         .expect("Failed to create second module");
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -254,10 +247,9 @@ mod tests {
     /// Test Case: Update non-existent module
     #[tokio::test]
     async fn test_edit_module_not_found() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", 99999);
@@ -281,10 +273,9 @@ mod tests {
     /// Test Case: Multiple validation errors
     #[tokio::test]
     async fn test_edit_module_multiple_errors() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "invalid", "year": 2000, "description": "a".repeat(1001), "credits": 0});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -311,10 +302,9 @@ mod tests {
     /// Test Case: Update with same code (should succeed)
     #[tokio::test]
     async fn test_edit_module_same_code() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS301", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
         let uri = format!("/api/modules/{}", data.module.id);
@@ -355,12 +345,13 @@ mod tests {
     /// Test Case: Admin bulk updates modules successfully
     #[tokio::test]
     async fn test_bulk_update_modules_success() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
         let modules = create_multiple_modules(&db, 3).await;
         let module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
             "module_ids": module_ids,
@@ -388,7 +379,7 @@ mod tests {
 
         for id in module_ids {
             let module = ModuleEntity::find_by_id(id)
-                .one(&db)
+                .one(db)
                 .await
                 .unwrap()
                 .unwrap();
@@ -400,12 +391,13 @@ mod tests {
     /// Test Case: Attempt to update module code
     #[tokio::test]
     async fn test_bulk_update_code_forbidden() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
         let modules = create_multiple_modules(&db, 2).await;
         let module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
             "module_ids": module_ids,
@@ -431,10 +423,10 @@ mod tests {
     /// Test Case: Bulk update with no module IDs
     #[tokio::test]
     async fn test_bulk_update_no_ids() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
             "module_ids": [],
@@ -460,13 +452,14 @@ mod tests {
     /// Test Case: Partial success with some updates failing
     #[tokio::test]
     async fn test_bulk_update_partial_success() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
         let modules = create_multiple_modules(&db, 2).await;
         let mut module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
         module_ids.push(99999); // Non-existent ID
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
             "module_ids": module_ids,
@@ -498,7 +491,7 @@ mod tests {
         // Verify successful updates
         for id in modules.iter().map(|m| m.id) {
             let module = ModuleEntity::find_by_id(id)
-                .one(&db)
+                .one(db)
                 .await
                 .unwrap()
                 .unwrap();
@@ -509,12 +502,13 @@ mod tests {
     /// Test Case: Validation errors in bulk update
     #[tokio::test]
     async fn test_bulk_update_validation_errors() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
         let modules = create_multiple_modules(&db, 2).await;
         let module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
             "module_ids": module_ids,
@@ -543,12 +537,13 @@ mod tests {
     /// Test Case: Non-admin attempts bulk update
     #[tokio::test]
     async fn test_bulk_update_forbidden() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
         let modules = create_multiple_modules(&db, 2).await;
         let module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let req_body = json!({
             "module_ids": module_ids,
@@ -568,7 +563,7 @@ mod tests {
         // Verify no updates occurred
         for id in module_ids {
             let module = ModuleEntity::find_by_id(id)
-                .one(&db)
+                .one(db)
                 .await
                 .unwrap()
                 .unwrap();

@@ -13,10 +13,10 @@ use db::models::{
 };
 use marker::MarkingJob;
 use md5;
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
-use util::mark_allocator::mark_allocator::load_allocator;
-use serde::{Serialize, Deserialize};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+use util::{mark_allocator::mark_allocator::load_allocator, state::AppState};
 use util::execution_config::ExecutionConfig;
+use serde::{Serialize, Deserialize};
 
 // Common grading function that can be used for both initial submissions and regrading
 async fn grade_submission(
@@ -239,15 +239,17 @@ async fn grade_submission(
 /// - The endpoint is restricted to authenticated students assigned to the module
 /// - All errors are returned in a consistent JSON format
 pub async fn submit_assignment(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
+        .one(db)
         .await
         .unwrap()
         .unwrap();
@@ -324,7 +326,7 @@ pub async fn submit_assignment(
         .filter(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
         .filter(assignment_submission::Column::UserId.eq(claims.sub))
         .order_by_desc(assignment_submission::Column::Attempt)
-        .one(&db)
+        .one(db)
         .await
         .ok()
         .flatten()
@@ -333,7 +335,7 @@ pub async fn submit_assignment(
     let attempt = prev_attempt + 1;
 
     let submission = match AssignmentSubmissionModel::save_file(
-        &db,
+        db,
         assignment_id,
         claims.sub,
         attempt,
@@ -501,14 +503,16 @@ pub struct FailedRemark {
 /// { "success": false, "message": "Failed to load mark allocator" }
 /// ```
 pub async fn remark_submissions(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<RemarkRequest>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     let submission_ids = match (req.submission_ids, req.all) {
         (Some(ids), _) if !ids.is_empty() => ids,
         (_, Some(true)) => {
-            match AssignmentSubmissionModel::find_by_assignment(assignment_id, &db).await {
+            match AssignmentSubmissionModel::find_by_assignment(assignment_id, db).await {
                 Ok(ids) => ids,
                 Err(e) => {
                     return (
@@ -534,7 +538,7 @@ pub async fn remark_submissions(
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
+        .one(db)
         .await
         .unwrap()
         .unwrap();
@@ -576,7 +580,7 @@ pub async fn remark_submissions(
 
     for submission_id in submission_ids.clone() {
         let submission = match assignment_submission::Entity::find_by_id(submission_id as i32)
-            .one(&db)
+            .one(db)
             .await
         {
             Ok(Some(sub)) => sub,

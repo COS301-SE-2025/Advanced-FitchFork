@@ -7,9 +7,9 @@ use axum::{
 };
 use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
 use db::models::assignment_file::{Entity as AssignmentFile, Column as AssignmentFileColumn, FileType, Model as AssignmentFileModel};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::to_value;
-use util::execution_config::ExecutionConfig;
+use util::{execution_config::ExecutionConfig, state::AppState};
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -69,14 +69,16 @@ use util::execution_config::ExecutionConfig;
 /// - Config format uses [`ExecutionConfig`] as the schema
 /// - This is an example schema and will evolve over time
 pub async fn get_assignment_config(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     // Verify the assignment exists
     match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(Some(_)) => {}
@@ -102,7 +104,7 @@ pub async fn get_assignment_config(
         .filter(AssignmentFileColumn::AssignmentId.eq(assignment_id))
         .filter(AssignmentFileColumn::FileType.eq(FileType::Config))
         .order_by_desc(AssignmentFileColumn::UpdatedAt)
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(opt) => opt,

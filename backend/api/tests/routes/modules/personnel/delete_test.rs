@@ -4,16 +4,14 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::json;
     use api::auth::generate_jwt;
-    use dotenvy;
     use db::{
-        test_utils::setup_test_db,
         models::{
             user::Model as UserModel,
             module::Model as ModuleModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
         },
     };
-    use crate::test_helpers::make_app;
+    use crate::helpers::app::make_test_app;
 
     struct TestData {
         admin: UserModel,
@@ -36,10 +34,8 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_as_admin_success() {
-        dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
-        let data = setup_data(&db).await;
-        let app = make_app(db.clone());
+        let (app, app_state) = make_test_app().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -61,10 +57,8 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_as_lecturer_success() {
-        dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
-        let data = setup_data(&db).await;
-        let app = make_app(db.clone());
+        let (app, app_state) = make_test_app().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -86,10 +80,8 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_as_lecturer_forbidden_target_lecturer() {
-        dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
-        let data = setup_data(&db).await;
-        let app = make_app(db.clone());
+        let (app, app_state) = make_test_app().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -111,10 +103,8 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_as_outsider_forbidden() {
-        dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
-        let data = setup_data(&db).await;
-        let app = make_app(db.clone());
+        let (app, app_state) = make_test_app().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.outsider.id, false);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -136,10 +126,8 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_user_not_found() {
-        dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
-        let data = setup_data(&db).await;
-        let app = make_app(db.clone());
+        let (app, app_state) = make_test_app().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -161,10 +149,8 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_empty_user_ids() {
-        dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
-        let data = setup_data(&db).await;
-        let app = make_app(db.clone());
+        let (app, app_state) = make_test_app().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -186,10 +172,8 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_conflict_user_not_assigned() {
-        dotenvy::dotenv().ok();
-        let db = setup_test_db().await;
-        let data = setup_data(&db).await;
-        let app = make_app(db.clone());
+        let (app, app_state) = make_test_app().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);

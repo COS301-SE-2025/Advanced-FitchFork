@@ -162,6 +162,42 @@ std::string HelperThree::subtaskAlpha() {
 }
 "#;
 
+                let helper_one_h = r#"
+#ifndef HELPERONE_H
+#define HELPERONE_H
+#include <string>
+struct HelperOne {
+    static std::string subtaskA();
+    static std::string subtaskZ();
+    static std::string subtaskBeta();
+};
+#endif
+"#;
+
+                let helper_two_h = r#"
+#ifndef HELPERTWO_H
+#define HELPERTWO_H
+#include <string>
+struct HelperTwo {
+    static std::string subtaskB();
+    static std::string subtaskX();
+    static std::string subtaskGamma();
+};
+#endif
+"#;
+
+                let helper_three_h = r#"
+#ifndef HELPERTHREE_H
+#define HELPERTHREE_H
+#include <string>
+struct HelperThree {
+    static std::string subtaskC();
+    static std::string subtaskY();
+    static std::string subtaskAlpha();
+};
+#endif
+"#;
+
                 zip.start_file("HelperOne.cpp", options).unwrap();
                 zip.write_all(helper_one_cpp.as_bytes()).unwrap();
 
@@ -170,6 +206,15 @@ std::string HelperThree::subtaskAlpha() {
 
                 zip.start_file("HelperThree.cpp", options).unwrap();
                 zip.write_all(helper_three_cpp.as_bytes()).unwrap();
+
+                zip.start_file("HelperOne.h", options).unwrap();
+                zip.write_all(helper_one_h.as_bytes()).unwrap();
+
+                zip.start_file("HelperTwo.h", options).unwrap();
+                zip.write_all(helper_two_h.as_bytes()).unwrap();
+
+                zip.start_file("HelperThree.h", options).unwrap();
+                zip.write_all(helper_three_h.as_bytes()).unwrap();
 
                 zip.finish().unwrap();
             }

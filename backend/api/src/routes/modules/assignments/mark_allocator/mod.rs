@@ -7,7 +7,7 @@ use axum::{Router, routing::{get, post, put}};
 use get::load;
 use post::generate;
 use put::save;
-use sea_orm::DatabaseConnection;
+use util::state::AppState;
 
 pub mod get;
 pub mod post;
@@ -22,7 +22,7 @@ pub mod put;
 /// - `PUT  /` → `save` updated allocator data to disk.
 ///
 /// All routes require lecturer authentication using the `require_lecturer` middleware.
-pub fn mark_allocator_routes() -> Router<DatabaseConnection> {
+pub fn mark_allocator_routes() -> Router<AppState> {
     Router::new()
         .route("/generate", post(generate))
         .route("/", get(load))

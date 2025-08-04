@@ -4,8 +4,9 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, DatabaseConnection};
+use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
+use util::state::AppState;
 use validator::Validate;
 use crate::response::ApiResponse;
 use crate::routes::common::UserModule;
@@ -110,9 +111,11 @@ impl From<UserModel> for UserListItem {
 /// - `403 Forbidden` - Authenticated but not admin user
 /// - `500 Internal Server Error` - Database error
 pub async fn list_users(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Query(query): Query<ListUsersQuery>
 ) -> impl IntoResponse {
+    let db = app_state.db();
+    
     if let Err(e) = query.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -194,7 +197,7 @@ pub async fn list_users(
         query_builder = query_builder.order_by_asc(UserColumn::Id);
     }
 
-    let paginator = query_builder.paginate(&db, per_page);
+    let paginator = query_builder.paginate(db, per_page);
     let total = paginator.num_items().await.unwrap_or(0);
     let users = paginator.fetch_page(page - 1).await.unwrap_or_default();
     let users = users.into_iter().map(UserListItem::from).collect();
@@ -226,10 +229,12 @@ pub async fn list_users(
 /// - `404 Not Found`: User does not exist
 /// - `500 Internal Server Error`: DB error
 pub async fn get_user(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(user_id): Path<i64>
 ) -> impl IntoResponse {
-    match UserEntity::find_by_id(user_id).one(&db).await {
+    let db = app_state.db();
+
+    match UserEntity::find_by_id(user_id).one(db).await {
         Ok(Some(user)) => {
             let user_item = UserListItem::from(user);
             (
@@ -303,10 +308,12 @@ pub async fn get_user(
 /// }
 /// ```
 pub async fn get_user_modules(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(user_id): Path<i64>
 ) -> impl IntoResponse {
-    let roles = match UserModel::get_module_roles(&db, user_id).await {
+    let db = app_state.db();
+
+    let roles = match UserModel::get_module_roles(db, user_id).await {
         Ok(r) => r,
         Err(e) => {
             return (

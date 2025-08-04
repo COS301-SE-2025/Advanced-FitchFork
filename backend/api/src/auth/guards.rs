@@ -1,4 +1,5 @@
 use axum::{extract::{Path, State, FromRequestParts}, http::{Request, StatusCode}, middleware::Next, body::Body, response::{Response, IntoResponse}, Json};
+use util::state::AppState;
 use crate::auth::claims::AuthUser;
 use crate::response::ApiResponse;
 use sea_orm::DatabaseConnection;
@@ -82,13 +83,15 @@ pub async fn require_admin(
 
 /// Base role-based access guard that other guards can build upon
 async fn require_role_base(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
     required_roles: &[&str],
     failure_msg: &str,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    let db =  app_state.db();
+
     let (req, user) = extract_and_insert_authuser(req).await?;
     
     let module_id = params.get("module_id")
@@ -111,13 +114,13 @@ async fn require_role_base(
 
 /// Guard for requiring lecturer access.
 pub async fn require_lecturer(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(db),
+        State(app_state),
         Path(params),
         req,
         next,
@@ -128,13 +131,13 @@ pub async fn require_lecturer(
 
 /// Guard for requiring assistant lecturer access.
 pub async fn require_assistant_lecturer(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(db),
+        State(app_state),
         Path(params),
         req,
         next,
@@ -145,13 +148,13 @@ pub async fn require_assistant_lecturer(
 
 /// Guard for requiring tutor access.
 pub async fn require_tutor(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(db),
+        State(app_state),
         Path(params),
         req,
         next,
@@ -162,13 +165,13 @@ pub async fn require_tutor(
 
 /// Guard for requiring student access.
 pub async fn require_student(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(db),
+        State(app_state),
         Path(params),
         req,
         next,
@@ -179,13 +182,13 @@ pub async fn require_student(
 
 /// Guard for requiring lecturer or assistant lecturer access.
 pub async fn require_lecturer_or_assistant_lecturer(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(db),
+        State(app_state),
         Path(params),
         req,
         next,
@@ -197,13 +200,13 @@ pub async fn require_lecturer_or_assistant_lecturer(
 /// Guard for requiring lecturer or tutor access.
 /// TODO: Add ALs to this?
 pub async fn require_lecturer_or_tutor(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(db),
+        State(app_state),
         Path(params),
         req,
         next,
@@ -214,13 +217,13 @@ pub async fn require_lecturer_or_tutor(
 
 /// Guard for requiring any assigned role (lecturer, tutor, student).
 pub async fn require_assigned_to_module(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(db),
+        State(app_state),
         Path(params),
         req,
         next,
@@ -363,11 +366,13 @@ async fn check_file_hierarchy(
 }
 
 pub async fn validate_known_ids(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, Response> {
+    let db = app_state.db();
+
     let mut module_id: Option<i32>     = None;
     let mut assignment_id: Option<i32> = None;
     let mut task_id: Option<i32>       = None;
@@ -389,24 +394,24 @@ pub async fn validate_known_ids(
             _ => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Unexpected parameter: '{}'.", key)))).into_response()),
         }
     }
-
+    
     if let Some(uid) = user_id {
-        check_user_exists(uid, &db).await.map_err(|e| e.into_response())?;
+        check_user_exists(uid, db).await.map_err(|e| e.into_response())?;
     }
     if let Some(mid) = module_id {
-        check_module_exists(mid, &db).await.map_err(|e| e.into_response())?;
+        check_module_exists(mid, db).await.map_err(|e| e.into_response())?;
     }
     if let (Some(mid), Some(aid)) = (module_id, assignment_id) {
-        check_assignment_hierarchy(mid, aid, &db).await.map_err(|e| e.into_response())?;
+        check_assignment_hierarchy(mid, aid, db).await.map_err(|e| e.into_response())?;
     }
     if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, task_id) {
-        check_task_hierarchy(mid, aid, tid, &db).await.map_err(|e| e.into_response())?;
+        check_task_hierarchy(mid, aid, tid, db).await.map_err(|e| e.into_response())?;
     }
     if let (Some(mid), Some(aid), Some(sid)) = (module_id, assignment_id, submission_id) {
-        check_submission_hierarchy(mid, aid, sid, &db).await.map_err(|e| e.into_response())?;
+        check_submission_hierarchy(mid, aid, sid, db).await.map_err(|e| e.into_response())?;
     }
     if let (Some(mid), Some(aid), Some(fid)) = (module_id, assignment_id, file_id) {
-        check_file_hierarchy(mid, aid, fid, &db).await.map_err(|e| e.into_response())?;
+        check_file_hierarchy(mid, aid, fid, db).await.map_err(|e| e.into_response())?;
     }
 
     Ok(next.run(req).await)

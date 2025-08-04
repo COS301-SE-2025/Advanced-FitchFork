@@ -9,10 +9,10 @@ use sea_orm::{
     ColumnTrait,
     EntityTrait,
     QueryFilter,
-    DatabaseConnection,
 };
 use serde_json::json;
 use db::models::assignment_file;
+use util::state::AppState;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/files
 ///
@@ -60,10 +60,12 @@ use db::models::assignment_file;
 /// ```
 ///
 pub async fn delete_files(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<serde_json::Value>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     let file_ids: Vec<i64> = req
         .get("file_ids")
         .and_then(|v| v.as_array())
@@ -85,7 +87,7 @@ pub async fn delete_files(
         .filter(assignment_file::Column::Id.is_in(
             file_ids.iter().copied().map(|id| id as i32).collect::<Vec<_>>(),
         ))
-        .all(&db)
+        .all(db)
         .await
     {
         Ok(models) => models,
@@ -120,7 +122,7 @@ pub async fn delete_files(
     for file in found_models {
         let _ = file.delete_file_only();
         let am: assignment_file::ActiveModel = file.into();
-        let _ = am.delete(&db).await;
+        let _ = am.delete(db).await;
     }
 
     (

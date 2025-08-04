@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::test_helpers::make_app;
+    use crate::helpers::app::make_test_app;
     use api::auth::generate_jwt;
     use axum::{
         body::Body,
@@ -14,14 +14,22 @@ mod tests {
             module::Model as ModuleModel,
             user::Model as UserModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        test_utils::setup_test_db,
+        }
     };
     use serial_test::serial;
     use std::{fs, io::Write, path::PathBuf};
     use tempfile::{TempDir, tempdir};
     use tower::ServiceExt;
     use zip::write::SimpleFileOptions;
+
+    fn setup_assignment_storage_root() -> TempDir {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        unsafe {
+            std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path());
+        };
+
+        temp_dir
+    }
 
     fn create_makefile_content_stub() -> Vec<u8> {
         b"task1:\n\t@echo 'Memo for task 1'\n\t@mkdir -p /output\n\t@echo 'Memo for task 1' > /output/1.txt\n".to_vec()
@@ -87,13 +95,7 @@ mod tests {
         assignment: AssignmentModel,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> (TestData, TempDir) {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let temp_dir = tempdir().expect("Failed to create temporary directory");
-        unsafe {
-            std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path().to_str().unwrap());
-        }
-
+    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
             .await
             .unwrap();
@@ -132,18 +134,15 @@ mod tests {
         AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1")
             .await
             .unwrap();
-
-        (
-            TestData {
-                admin_user,
-                lecturer_user,
-                student_user,
-                forbidden_user,
-                module,
-                assignment,
-            },
-            temp_dir,
-        )
+    
+        TestData {
+            admin_user,
+            lecturer_user,
+            student_user,
+            forbidden_user,
+            module,
+            assignment,
+        }
     }
 
     fn setup_input_dirs(module_id: i64, assignment_id: i64, storage_root: &std::path::Path) {
@@ -197,11 +196,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_post_memo_output_success_as_lecturer() {
-        let db = setup_test_db().await;
-        let (data, temp_dir) = setup_test_data(&db).await;
+        let temp_dir = setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
         setup_input_dirs(data.module.id, data.assignment.id, temp_dir.path());
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output/generate",
@@ -240,11 +239,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_post_memo_output_success_as_admin() {
-        let db = setup_test_db().await;
-        let (data, temp_dir) = setup_test_data(&db).await;
+        let temp_dir = setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
         setup_input_dirs(data.module.id, data.assignment.id, temp_dir.path());
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output/generate",
@@ -283,10 +282,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_post_memo_output_forbidden_for_student() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
+        setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output/generate",
@@ -306,10 +305,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_post_memo_output_forbidden_for_unassigned_user() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
+        setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output/generate",
@@ -329,10 +328,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_post_memo_output_unauthorized() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
+        setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output/generate",
             data.module.id, data.assignment.id
@@ -350,10 +349,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_post_memo_output_assignment_not_found() {
-        let db = setup_test_db().await;
-        let (data, _temp_dir) = setup_test_data(&db).await;
+        setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output/generate",

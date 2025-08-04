@@ -10,10 +10,13 @@
 //! The `auth_routes()` function returns a `Router` which is nested under `/auth` in the main application.
 
 use axum::{middleware::from_fn, Router, routing::{get, post}};
-use sea_orm::DatabaseConnection;
 use crate::auth::guards::require_authenticated;
-use post::{register, login, request_password_reset, verify_reset_token, reset_password, upload_profile_picture, change_password};
+use post::{
+    register, login, request_password_reset, verify_reset_token,
+    reset_password, upload_profile_picture, change_password
+};
 use get::{get_me, get_avatar, has_role_in_module, get_module_role};
+use util::state::AppState;
 
 pub mod post;
 pub mod get;
@@ -41,7 +44,7 @@ pub mod get;
 // ## Usage
 // Use the `auth_routes()` function to mount all `/auth` endpoints under the main application router.
 
-pub fn auth_routes() -> Router<DatabaseConnection> {
+pub fn auth_routes() -> Router<AppState> {
     Router::new()        
         .route("/register", post(register))
         .route("/login", post(login))

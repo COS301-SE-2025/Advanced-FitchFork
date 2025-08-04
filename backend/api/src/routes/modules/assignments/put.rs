@@ -1,6 +1,6 @@
 use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
 use chrono::{DateTime, Utc};
-use sea_orm::DatabaseConnection;
+use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::assignment::{self, AssignmentType, Status};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, IntoActiveModel, DbErr};
@@ -62,10 +62,12 @@ use super::common::{AssignmentRequest, AssignmentResponse, BulkUpdateRequest, Bu
 /// - The `status` field of the assignment cannot be updated with this endpoint.
 /// - Status is managed automatically by the system when all readiness checks pass.
 pub async fn edit_assignment(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
         .map(|dt| dt.with_timezone(&Utc))
     {
@@ -107,7 +109,7 @@ pub async fn edit_assignment(
     };
 
     match assignment::Model::edit(
-        &db,
+        db,
         assignment_id,
         module_id,
         &req.name,
@@ -205,10 +207,12 @@ pub async fn edit_assignment(
 /// }
 /// ```
 pub async fn bulk_update_assignments(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Json(req): Json<BulkUpdateRequest>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     if req.assignment_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
@@ -223,7 +227,7 @@ pub async fn bulk_update_assignments(
         let res = assignment::Entity::find()
             .filter(assignment::Column::Id.eq(*id))
             .filter(assignment::Column::ModuleId.eq(module_id))
-            .one(&db)
+            .one(db)
             .await;
 
         match res {
@@ -244,7 +248,7 @@ pub async fn bulk_update_assignments(
 
                 active.updated_at = Set(Utc::now());
 
-                if active.update(&db).await.is_ok() {
+                if active.update(db).await.is_ok() {
                     updated += 1;
                 } else {
                     failed.push(crate::routes::modules::assignments::common::FailedUpdate {
@@ -280,13 +284,15 @@ pub async fn bulk_update_assignments(
 ///
 /// Only works if current status is `Ready`, `Closed`, or `Archived`.
 pub async fn open_assignment(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
     let assignment = assignment::Entity::find()
         .filter(assignment::Column::Id.eq(assignment_id))
         .filter(assignment::Column::ModuleId.eq(module_id))
-        .one(&db)
+        .one(db)
         .await;
 
     match assignment {
@@ -307,7 +313,7 @@ pub async fn open_assignment(
             active.status = Set(Status::Open);
             active.updated_at = Set(Utc::now());
 
-            if active.update(&db).await.is_ok() {
+            if active.update(db).await.is_ok() {
                 (
                     StatusCode::OK,
                     Json(ApiResponse::<()>::success(
@@ -342,13 +348,14 @@ pub async fn open_assignment(
 ///
 /// Only works if current status is `Open`.
 pub async fn close_assignment(
-    State(db): State<DatabaseConnection>,
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
     let assignment = assignment::Entity::find()
         .filter(assignment::Column::Id.eq(assignment_id))
         .filter(assignment::Column::ModuleId.eq(module_id))
-        .one(&db)
+        .one(db)
         .await;
 
     match assignment {
@@ -366,7 +373,7 @@ pub async fn close_assignment(
             active.status = Set(Status::Closed);
             active.updated_at = Set(Utc::now());
 
-            if active.update(&db).await.is_ok() {
+            if active.update(db).await.is_ok() {
                 (
                     StatusCode::OK,
                     Json(ApiResponse::<()>::success(

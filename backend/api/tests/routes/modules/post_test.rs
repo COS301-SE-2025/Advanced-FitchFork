@@ -5,9 +5,9 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{Datelike, Utc};
-    use db::{test_utils::setup_test_db, models::user::Model as UserModel};
+    use db::{models::user::Model as UserModel};
     use api::auth::generate_jwt;
-    use crate::test_helpers::make_app;
+    use crate::helpers::app::make_test_app;
     use serde_json::json;
     use tower::ServiceExt;
 
@@ -31,10 +31,9 @@ mod tests {
     /// Test Case: Admin creates module successfully
     #[tokio::test]
     async fn test_create_module_success() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS301", "year": Utc::now().year(), "description": "Advanced Software Engineering", "credits": 16});
         let req = Request::builder()
@@ -65,10 +64,9 @@ mod tests {
     /// Test Case: Non-admin user attempts to create module
     #[tokio::test]
     async fn test_create_module_forbidden() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let req_body = json!({"code": "COS301", "year": Utc::now().year(), "credits": 16});
         let req = Request::builder()
@@ -91,10 +89,9 @@ mod tests {
     /// Test Case: Invalid module code format
     #[tokio::test]
     async fn test_create_module_invalid_code() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "abc123", "year": Utc::now().year(), "credits": 16});
         let req = Request::builder()
@@ -117,10 +114,9 @@ mod tests {
     /// Test Case: Year in the past
     #[tokio::test]
     async fn test_create_module_year_in_past() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
-        
-        let app = make_app(db.clone());
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
+
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let current_year = Utc::now().year();
         let req_body = json!({"code": "COS301", "year": current_year - 1, "credits": 16});
@@ -144,10 +140,9 @@ mod tests {
     /// Test Case: Invalid credits value
     #[tokio::test]
     async fn test_create_module_invalid_credits() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS301", "year": Utc::now().year(), "credits": 0});
         let req = Request::builder()
@@ -170,10 +165,9 @@ mod tests {
     /// Test Case: Description too long
     #[tokio::test]
     async fn test_create_module_description_too_long() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let long_description = "a".repeat(1001);
         let req_body = json!({"code": "COS301", "year": Utc::now().year(), "description": long_description, "credits": 16});
@@ -197,10 +191,9 @@ mod tests {
     /// Test Case: Duplicate module code
     #[tokio::test]
     async fn test_create_module_duplicate_code() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body1 = json!({"code": "COS301", "year": Utc::now().year(), "credits": 16});
         let req1 = Request::builder()
@@ -235,10 +228,9 @@ mod tests {
     /// Test Case: Multiple validation errors
     #[tokio::test]
     async fn test_create_module_multiple_errors() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "invalid", "year": 2000, "credits": 0});
         let req = Request::builder()
@@ -263,10 +255,9 @@ mod tests {
     /// Test Case: Missing required fields
     #[tokio::test]
     async fn test_create_module_missing_fields() {
-        let db = setup_test_db().await;
-        let data = setup_test_data(&db).await;
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let app = make_app(db.clone());
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"year": Utc::now().year()});
         let req = Request::builder()
