@@ -19,6 +19,7 @@ mod tests {
                 self,
                 Model as AssignmentSubmissionModel,
             },
+            assignment_submission_output,
             assignment_task::Model as AssignmentTaskModel,
             module::Model as ModuleModel,
             user::Model as UserModel,
@@ -26,7 +27,7 @@ mod tests {
         }
     };
     use flate2::{Compression, write::GzEncoder};
-    use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+    use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, QueryFilter, ColumnTrait};
     use serde_json::{json, Value};
     use serial_test::serial;
     use std::path::Path;
@@ -1052,7 +1053,7 @@ mod tests {
     //     let db = setup_test_db().await;
     //     let data = setup_test_data(&db).await;
     //     let app = make_app(db.clone());
-
+    //
     //     let mut buf = Vec::new();
     //     {
     //         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
@@ -1061,7 +1062,7 @@ mod tests {
     //         zip.write_all(b"invalid C code that won't compile").unwrap();
     //         zip.finish().unwrap();
     //     }
-
+    //
     //     let (boundary, body) = multipart_body("solution.zip", &buf, None);
     //     let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
     //     let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
@@ -1072,7 +1073,7 @@ mod tests {
     //         .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
     //         .body(Body::from(body))
     //         .unwrap();
-
+    //
     //     let response = app.oneshot(req).await.unwrap();
     //     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     //     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -1207,8 +1208,22 @@ mod tests {
             ..Default::default()
         };
         let submission = submission.insert(db).await.unwrap();
-        
-        // Create mock output files
+
+        let task = db::models::assignment_task::Entity::find()
+            .filter(db::models::assignment_task::Column::AssignmentId.eq(assignment_id))
+            .one(db)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let output = assignment_submission_output::ActiveModel {
+            task_id: Set(task.id),
+            submission_id: Set(submission.id),
+            path: Set("".to_string()),
+            ..Default::default()
+        };
+        let output = output.insert(db).await.unwrap();
+
         let output_dir = temp_dir.path()
             .join(format!("module_{}", module_id))
             .join(format!("assignment_{}", assignment_id))
@@ -1218,10 +1233,18 @@ mod tests {
             .join("submission_output");
         
         std::fs::create_dir_all(&output_dir).unwrap();
-        
-        // Create mock output for task1
-        let task_output = output_dir.join("task1.txt");
-        std::fs::write(task_output, "make task1\n&-=-&Subtask 1 Output\nOutput A").unwrap();
+        let file_path = output_dir.join(format!("{}.txt", output.id));
+        std::fs::write(&file_path, "make task1\n&-=-&Subtask 1 Output\nOutput A").unwrap();
+
+        let relative_path = file_path
+            .strip_prefix(temp_dir.path())
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        let mut output_active: assignment_submission_output::ActiveModel = output.into();
+        output_active.path = Set(relative_path);
+        output_active.update(db).await.unwrap();
 
         submission
     }
@@ -1263,15 +1286,9 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
         
-        // Create lecturer user
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
+        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
         
-        // Create submissions
         let sub1 = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
         let sub2 = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
         
@@ -1297,15 +1314,9 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
         
-        // Create assistant lecturer user
-        let assistant = UserModel::create(db, "assistant1", "assistant@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, assistant.id, data.module.id, Role::AssistantLecturer)
-            .await
-            .unwrap();
+        let assistant = UserModel::create(db, "assistant1", "assistant@test.com", "password", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, assistant.id, data.module.id, Role::AssistantLecturer).await.unwrap();
         
-        // Create submissions
         let sub1 = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
         let sub2 = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
         
@@ -1330,16 +1341,10 @@ mod tests {
         let (app, app_state) = make_test_app().await;
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
+    
+        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
         
-        // Create lecturer
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
-        
-        // Create submissions
         create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
         create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
         
@@ -1365,15 +1370,9 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
         
-        // Create assistant lecturer
-        let assistant = UserModel::create(db, "assistant1", "assistant@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, assistant.id, data.module.id, Role::AssistantLecturer)
-            .await
-            .unwrap();
+        let assistant = UserModel::create(db, "assistant1", "assistant@test.com", "password", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, assistant.id, data.module.id, Role::AssistantLecturer).await.unwrap();
         
-        // Create submissions
         create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
         create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
         
@@ -1399,10 +1398,7 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
         
-        // Create admin user
-        let admin = UserModel::create(db, "admin1", "admin@test.com", "password", true)
-            .await
-            .unwrap();
+        let admin = UserModel::create(db, "admin1", "admin@test.com", "password", true).await.unwrap();
         
         let (token, _) = generate_jwt(admin.id, admin.admin);
         let body = json!({});
@@ -1423,10 +1419,8 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
         
-        // Create a submission
         let submission = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
         
-        // Student tries to remark
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let body = json!({
             "submission_ids": [submission.id]
@@ -1448,20 +1442,14 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
         
-        // Create lecturer
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
+        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
         
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({
             "all": true
         });
         
-        // Use invalid assignment ID
         let (status, json) = send_remark_request(&app, &token, data.module.id, 9999, body).await;
         
         assert_eq!(status, StatusCode::NOT_FOUND);
@@ -1477,23 +1465,18 @@ mod tests {
         let (app, app_state) = make_test_app().await;
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
-        
-        // Create lecturer
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
+
+        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
         
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({
-            "submission_ids": [9999] // Invalid submission ID
+            "submission_ids": [9999]
         });
         
         let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
         
-        assert_eq!(status, StatusCode::OK); // Note: This returns 200 with failed items
+        assert_eq!(status, StatusCode::OK);
         assert_eq!(json["success"], true);
         let failed = json["data"]["failed"].as_array().unwrap();
         assert_eq!(failed.len(), 1);
@@ -1509,19 +1492,12 @@ mod tests {
         let (app, app_state) = make_test_app().await;
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
-        
-        // Create lecturer
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
-        
-        // Create submission
+    
+        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
+    
         let submission = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
-        
-        // Delete allocator file
+
         let allocator_path = temp_dir
             .path()
             .join(format!("module_{}", data.module.id))
@@ -1551,18 +1527,11 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
         
-        // Create lecturer
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
+        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
         
-        // Create submission
         let submission = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
         
-        // Delete student outputs to cause grading failure
         let student_output_dir = temp_dir
             .path()
             .join(format!("module_{}", data.module.id))
@@ -1580,7 +1549,7 @@ mod tests {
         
         let (status, json) = send_remark_request(&app, &token, data.module.id, data.assignment.id, body).await;
         
-        assert_eq!(status, StatusCode::OK); // Overall request succeeds
+        assert_eq!(status, StatusCode::OK);
         assert_eq!(json["success"], true);
         let failed = json["data"]["failed"].as_array().unwrap();
         assert_eq!(failed.len(), 1);
@@ -1600,22 +1569,13 @@ mod tests {
         let (app, app_state) = make_test_app().await;
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
+    
+        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
         
-        // Create lecturer
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
-        
-        // Create valid submission
         let valid_sub = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
-        
-        // Create invalid submission (non-existent)
         let invalid_sub_id = 9999;
         
-        // Create submission with missing outputs
         let broken_sub = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
         let student_output_dir = temp_dir
             .path()
@@ -1639,8 +1599,7 @@ mod tests {
         assert_eq!(json["data"]["regraded"], 1);
         let failed = json["data"]["failed"].as_array().unwrap();
         assert_eq!(failed.len(), 2);
-        
-        // Verify error messages
+
         let errors: Vec<&str> = failed
             .iter()
             .map(|f| f["error"].as_str().unwrap())
@@ -1661,21 +1620,15 @@ mod tests {
         let (app, app_state) = make_test_app().await;
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
-        
-        // Create lecturer
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
+
+        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
         
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({
             "all": true
         });
-        
-        // Use invalid module ID
+
         let (status, json) = send_remark_request(&app, &token, 9999, data.assignment.id, body).await;
         
         assert_eq!(status, StatusCode::NOT_FOUND);
