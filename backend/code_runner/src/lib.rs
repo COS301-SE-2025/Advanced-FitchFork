@@ -708,3 +708,107 @@ pub async fn run_interpreter(
 
     Ok(())
 }
+
+// Required imports
+use k8s_openapi::api::batch::v1::Job;
+use k8s_openapi::api::core::v1::{Container, PodSpec, PodTemplateSpec};
+use kube::api::{DeleteParams, ListParams, PostParams};
+use kube::{Api, Client, ResourceExt};
+use tokio::time::sleep;
+use uuid::Uuid;
+
+/// Launches a Kubernetes Job in k3s that prints "Hello World", waits for it to complete,
+/// and prints the logs to the main console.
+pub async fn run_hello_world_k8s_job() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = Client::try_default().await?;
+    let namespace = "default";
+    let jobs: Api<Job> = Api::namespaced(client.clone(), namespace);
+
+    let job_name = format!("job-{}", Uuid::new_v4().simple());
+
+    // Define the job
+    let job = Job {
+        metadata: kube::api::ObjectMeta {
+            name: Some(job_name.clone()),
+            ..Default::default()
+        },
+        spec: Some(k8s_openapi::api::batch::v1::JobSpec {
+            template: PodTemplateSpec {
+                metadata: Some(kube::api::ObjectMeta {
+                    name: Some(format!("pod-{}", job_name)),
+                    ..Default::default()
+                }),
+                spec: Some(PodSpec {
+                    containers: vec![Container {
+                        name: "hello".to_string(),
+                        image: Some("alpine".to_string()),
+                        command: Some(vec![
+                            "sh".to_string(),
+                            "-c".to_string(),
+                            "echo Hello World".to_string(),
+                        ]),
+                        ..Default::default()
+                    }],
+                    restart_policy: Some("Never".to_string()),
+                    ..Default::default()
+                }),
+            },
+            backoff_limit: Some(0),
+            ..Default::default()
+        }),
+        status: None,
+    };
+
+    // Create job
+    let pp = PostParams::default();
+    jobs.create(&pp, &job).await?;
+
+    // Wait for job to complete
+    let mut attempts = 0;
+    loop {
+        let job_status = jobs.get_status(&job_name).await?;
+        if let Some(status) = job_status.status {
+            if let Some(conditions) = status.conditions {
+                if conditions
+                    .iter()
+                    .any(|c| c.type_ == "Complete" && c.status == "True")
+                {
+                    break;
+                }
+            }
+        }
+
+        attempts += 1;
+        if attempts > 20 {
+            return Err("Job did not complete in time".into());
+        }
+        sleep(Duration::from_secs(1)).await;
+    }
+
+    // Fetch logs from the pod
+    let pods: Api<k8s_openapi::api::core::v1::Pod> = Api::namespaced(client.clone(), namespace);
+    let lp = ListParams::default().labels(&format!("job-name={}", job_name));
+    let pod_list = pods.list(&lp).await?;
+
+    if let Some(pod) = pod_list.items.first() {
+        let pod_name = pod.name_any();
+        let logs = pods.logs(&pod_name, &Default::default()).await?;
+
+        println!("Log output from pod: {}", logs);
+    } else {
+        return Err("No pod found for job".into());
+    }
+
+    // Clean up
+    jobs.delete(&job_name, &DeleteParams::background()).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_run_hello_world_k8s_job() {
+    match run_hello_world_k8s_job().await {
+        Ok(_) => println!("Kubernetes job ran successfully!"),
+        Err(e) => panic!("Failed to run Kubernetes job: {}", e),
+    }
+}
