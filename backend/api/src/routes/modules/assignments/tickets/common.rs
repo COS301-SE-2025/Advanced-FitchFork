@@ -1,11 +1,8 @@
 use db::models::tickets::Model as TicketModel;
-use db::models::user_module_role::Role;
-use db::models::{user, user_module_role};
-use sea_orm::entity::prelude::*;
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, JoinType, QueryFilter, QuerySelect};
+use sea_orm::{DatabaseConnection};
 use serde::{Deserialize, Serialize};
 
-pub async fn is_valid(module_id: i64, user_id: i64, ticket_id: i64, db: &DatabaseConnection) -> bool {
+pub async fn is_valid(user_id: i64, ticket_id: i64, db: &DatabaseConnection) -> bool {
     let is_author = TicketModel::is_author(ticket_id, user_id, db).await;
     is_author
 }

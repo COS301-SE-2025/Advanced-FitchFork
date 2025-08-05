@@ -8,6 +8,7 @@ mod tests {
         module::Model as ModuleModel,
         tickets::Model as TicketModel,
         user::Model as UserModel,
+        user_module_role::{Model as UserModuleRole, Role},
     };
 
     use axum::{
@@ -34,6 +35,10 @@ mod tests {
                 .unwrap();
 
         let module = ModuleModel::create(db, "330", 2025, Some("test description"), 16)
+            .await
+            .unwrap();
+
+        UserModuleRole::assign_user_to_module(db, user.id, module.id, Role::Student)
             .await
             .unwrap();
 
@@ -113,6 +118,6 @@ mod tests {
             .await
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["message"], "Forbidden");
+        assert_eq!(json["message"], "User not assigned to this module");
     }
 }
