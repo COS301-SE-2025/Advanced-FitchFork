@@ -1,8 +1,9 @@
+use chrono::{DateTime, Utc};
+use sea_orm::ActiveValue::Set;
+use sea_orm::DeriveActiveEnum;
 use sea_orm::entity::prelude::*;
-use sea_orm::{DeriveActiveEnum, ActiveValue};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
-use sea_orm::QueryFilter;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "tickets")]
@@ -18,11 +19,13 @@ pub struct Model {
 
     pub status: TicketStatus,
 
-    pub created_at: DateTime,
-    pub updated_at: DateTime,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, EnumIter, DeriveActiveEnum, Display, EnumString, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, EnumIter, DeriveActiveEnum, Display, EnumString, Serialize, Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "ticket_status")]
 #[strum(serialize_all = "lowercase", ascii_case_insensitive)]
@@ -63,9 +66,7 @@ impl Related<super::user::Entity> for Entity {
     }
 }
 
-impl ActiveModelBehavior for ActiveModel {
- 
-}
+impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
     pub async fn create(
@@ -75,50 +76,66 @@ impl Model {
         title: &str,
         description: &str,
     ) -> Result<Model, DbErr> {
-        let now = chrono::Utc::now().naive_utc();
+        let now = Utc::now();
 
         let active_model = ActiveModel {
-            assignment_id: ActiveValue::Set(assignment_id),
-            user_id: ActiveValue::Set(user_id),
-            title: ActiveValue::Set(title.to_owned()),
-            description: ActiveValue::Set(description.to_owned()),
-            status: ActiveValue::Set(TicketStatus::Open),
-            created_at: ActiveValue::Set(now),
-            updated_at: ActiveValue::Set(now),
+            assignment_id: Set(assignment_id),
+            user_id: Set(user_id),
+            title: Set(title.to_owned()),
+            description: Set(description.to_owned()),
+            status: Set(TicketStatus::Open),
+            created_at: Set(now),
+            updated_at: Set(now),
             ..Default::default()
         };
 
         active_model.insert(db).await
     }
 
-    pub async fn find_by_user_and_assignment(
-        db: &DbConn,
-        user_id: i64,
-        assignment_id: i64,
-    ) -> Result<Option<Model>, DbErr> {
-        Entity::find()
-            .filter(Column::UserId.eq(user_id))
-            .filter(Column::AssignmentId.eq(assignment_id))
-            .one(db)
-            .await
+    pub async fn set_open(db: &DbConn, ticket_id: i64) -> Result<Model, DbErr> {
+        let model = Entity::find_by_id(ticket_id).one(db).await?;
+
+        let model = match model {
+            Some(m) => m,
+            None => return Err(DbErr::RecordNotFound("Ticket not found".to_string())),
+        };
+
+        let mut active_model: ActiveModel = model.into();
+
+        active_model.status = Set(TicketStatus::Open);
+        active_model.updated_at = Set(Utc::now());
+        active_model.update(db).await
     }
 
-    pub async fn find_all_for_assignment(
-        db: &DbConn,
-        assignment_id: i64,
-        user_id: i64,
-        user_is_admin: bool,
-    ) -> Result<Vec<Model>, DbErr> {
-        let mut query = Entity::find().filter(Column::AssignmentId.eq(assignment_id));
+    pub async fn set_closed(db: &DbConn, ticket_id: i64) -> Result<Model, DbErr> {
+        let model = Entity::find_by_id(ticket_id).one(db).await?;
 
-        if !user_is_admin {
-            query = query.filter(Column::UserId.eq(user_id));
+        let model = match model {
+            Some(m) => m,
+            None => return Err(DbErr::RecordNotFound("Ticket not found".to_string())),
+        };
+
+        let mut active_model: ActiveModel = model.into();
+
+        active_model.status = Set(TicketStatus::Closed);
+        active_model.updated_at = Set(Utc::now());
+        active_model.update(db).await
+    }
+
+    pub async fn get_by_id(db: &DbConn, ticket_id: i64) -> Result<Option<Model>, DbErr> {
+        Entity::find_by_id(ticket_id).one(db).await
+    }
+
+    pub async fn delete(db: &DbConn, ticket_id: i64) -> Result<(), DbErr> {
+        Entity::delete_by_id(ticket_id).exec(db).await?;
+        Ok(())
+    }
+
+    pub async fn is_author(ticket_id: i64, user_id: i64, db: &DbConn) -> bool {
+        let ticket = Entity::find_by_id(ticket_id).one(db).await;
+        match ticket {
+            Ok(Some(t)) => t.user_id == user_id,
+            _ => false,
         }
-
-        query.all(db).await
-    }
-
-    pub fn is_author(&self, user_id: i64) -> bool {
-        self.user_id == user_id
     }
 }

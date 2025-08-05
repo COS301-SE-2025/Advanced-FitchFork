@@ -298,7 +298,7 @@ pub async fn get_assignments(
             "updated_at",
         ];
         for field in sort_field.split(',') {
-            let field = field.trim_start_matches('-');
+            let field = field.trim().trim_start_matches('-');
             if !valid_fields.contains(&field) {
                 return (
                     StatusCode::BAD_REQUEST,
