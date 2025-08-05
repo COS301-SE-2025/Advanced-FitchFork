@@ -86,8 +86,9 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
+
         let response_data: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(response_data["status"], "open");
+        assert_eq!(response_data["data"]["status"], "open");
         assert_eq!(response_data["message"], "Ticket opened successfully");
     }
 
@@ -125,6 +126,13 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        
+        let response_data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(response_data["data"]["status"], "closed");
+        assert_eq!(response_data["message"], "Ticket closed successfully");
     }
 
     #[tokio::test]
