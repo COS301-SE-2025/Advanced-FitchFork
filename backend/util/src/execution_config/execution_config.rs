@@ -174,7 +174,7 @@ impl ExecutionConfig {
 //Default Functions
 
 fn default_timeout_secs() -> u64 {
-    10
+    60
 }
 
 fn default_max_memory() -> u64 {

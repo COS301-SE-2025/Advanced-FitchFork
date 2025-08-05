@@ -709,30 +709,75 @@ pub async fn run_interpreter(
     Ok(())
 }
 
-// Required imports
 use k8s_openapi::api::batch::v1::Job;
-use k8s_openapi::api::core::v1::{Container, PodSpec, PodTemplateSpec};
+use k8s_openapi::api::core::v1::ConfigMap;
+use k8s_openapi::api::core::v1::EmptyDirVolumeSource;
+use k8s_openapi::api::core::v1::{Container, PodSpec, PodTemplateSpec, Volume, VolumeMount};
+use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use kube::api::{DeleteParams, ListParams, PostParams};
 use kube::{Api, Client, ResourceExt};
+use std::collections::BTreeMap;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-/// Launches a Kubernetes Job in k3s that prints "Hello World", waits for it to complete,
-/// and prints the logs to the main console.
-pub async fn run_hello_world_k8s_job() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+/// Runs arbitrary code inside a Kubernetes Job, by injecting the source file and running the given command.
+///
+/// # Arguments
+/// * `config` - ExecutionConfig for resources and timeout
+/// * `source_code` - The source code content as a string
+/// * `filename` - Filename of the source code (e.g. "main.java", "main.cpp", "main.py")
+/// * `image` - Container image to use (e.g. "openjdk:17-alpine", "gcc:latest", "python:3.11-alpine")
+/// * `command` - The shell command to compile and run the program (e.g. "javac main.java && java Main")
+pub async fn run_k8s_job_with_code(
+    config: &ExecutionConfig,
+    source_code: &str,
+    filename: &str,
+    image: &str,
+    command: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let client = Client::try_default().await?;
     let namespace = "default";
     let jobs: Api<Job> = Api::namespaced(client.clone(), namespace);
+    let configmaps: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
 
+    // Generate unique names once
     let job_name = format!("job-{}", Uuid::new_v4().simple());
+    let cm_name = format!("source-code-cm-{}", Uuid::new_v4().simple());
 
-    // Define the job
+    // Create ConfigMap once
+    let cm = ConfigMap {
+        metadata: kube::api::ObjectMeta {
+            name: Some(cm_name.clone()),
+            ..Default::default()
+        },
+        data: Some(BTreeMap::from([(
+            filename.to_string(),
+            source_code.to_string(),
+        )])),
+        ..Default::default()
+    };
+    configmaps.create(&PostParams::default(), &cm).await?;
+
+    // Convert bytes to Kubernetes quantity string like "512Mi"
+    fn bytes_to_quantity(bytes: u64) -> Quantity {
+        let mebi = (bytes + 1024 * 1024 - 1) / (1024 * 1024);
+        Quantity(format!("{}Mi", mebi))
+    }
+    let memory_limit = bytes_to_quantity(config.execution.max_memory);
+    let cpu_limit = Quantity(config.execution.max_cpus.to_string());
+
+    let volume_name = "source-code";
+    let mount_path = "/workspace";
+
+    // Create Job with ConfigMap mounted
     let job = Job {
         metadata: kube::api::ObjectMeta {
             name: Some(job_name.clone()),
             ..Default::default()
         },
         spec: Some(k8s_openapi::api::batch::v1::JobSpec {
+            active_deadline_seconds: Some(config.execution.timeout_secs as i64),
+            backoff_limit: Some(0),
             template: PodTemplateSpec {
                 metadata: Some(kube::api::ObjectMeta {
                     name: Some(format!("pod-{}", job_name)),
@@ -740,30 +785,92 @@ pub async fn run_hello_world_k8s_job() -> Result<(), Box<dyn std::error::Error +
                 }),
                 spec: Some(PodSpec {
                     containers: vec![Container {
-                        name: "hello".to_string(),
-                        image: Some("alpine".to_string()),
+                        name: "runner".to_string(),
+                        image: Some(image.to_string()),
                         command: Some(vec![
                             "sh".to_string(),
                             "-c".to_string(),
-                            "echo Hello World".to_string(),
+                            command.to_string(),
                         ]),
+                        volume_mounts: Some(vec![
+                            VolumeMount {
+                                mount_path: "/input".to_string(), // read-only ConfigMap
+                                name: "source-code".to_string(),
+                                read_only: Some(true),
+                                ..Default::default()
+                            },
+                            VolumeMount {
+                                mount_path: "/workspace".to_string(), // writable dir
+                                name: "workspace-vol".to_string(),
+                                read_only: Some(false),
+                                ..Default::default()
+                            },
+                        ]),
+
+                        resources: Some(k8s_openapi::api::core::v1::ResourceRequirements {
+                            claims: None,
+                            limits: Some(BTreeMap::from([
+                                ("memory".to_string(), memory_limit.clone()),
+                                ("cpu".to_string(), cpu_limit.clone()),
+                            ])),
+                            requests: Some(BTreeMap::from([
+                                ("memory".to_string(), memory_limit.clone()),
+                                ("cpu".to_string(), cpu_limit.clone()),
+                            ])),
+                        }),
                         ..Default::default()
                     }],
                     restart_policy: Some("Never".to_string()),
+                    volumes: Some(vec![
+                        Volume {
+                            name: "source-code".to_string(),
+                            config_map: Some(k8s_openapi::api::core::v1::ConfigMapVolumeSource {
+                                name: cm_name.clone(),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        },
+                        Volume {
+                            name: "workspace-vol".to_string(),
+                            empty_dir: Some(EmptyDirVolumeSource::default()),
+                            ..Default::default()
+                        },
+                    ]),
+
                     ..Default::default()
                 }),
             },
-            backoff_limit: Some(0),
             ..Default::default()
         }),
         status: None,
     };
 
-    // Create job
+    if let Ok(_) = jobs.get(&job_name).await {
+        // Delete and wait for deletion
+        jobs.delete(&job_name, &DeleteParams::foreground()).await?;
+
+        // Poll until Job is really deleted
+        loop {
+            match jobs.get(&job_name).await {
+                Ok(_) => {
+                    // Job still exists, wait a bit
+                    sleep(Duration::from_secs(1)).await;
+                }
+                Err(kube::Error::Api(api_err)) if api_err.code == 404 => {
+                    // Job is deleted
+                    break;
+                }
+                Err(e) => return Err(Box::new(e)),
+            }
+        }
+    }
+
+    // Now create the Job
+    // Create the Job
     let pp = PostParams::default();
     jobs.create(&pp, &job).await?;
 
-    // Wait for job to complete
+    // Wait for the job to complete
     let mut attempts = 0;
     loop {
         let job_status = jobs.get_status(&job_name).await?;
@@ -775,6 +882,26 @@ pub async fn run_hello_world_k8s_job() -> Result<(), Box<dyn std::error::Error +
                 {
                     break;
                 }
+                // After detecting the job failed condition
+                if conditions
+                    .iter()
+                    .any(|c| c.type_ == "Failed" && c.status == "True")
+                {
+                    // Fetch pod logs to understand failure
+                    let pods: Api<k8s_openapi::api::core::v1::Pod> =
+                        Api::namespaced(client.clone(), namespace);
+                    let lp = ListParams::default().labels(&format!("job-name={}", job_name));
+                    let pod_list = pods.list(&lp).await?;
+                    let logs = if let Some(pod) = pod_list.items.first() {
+                        let pod_name = pod.name_any();
+                        pods.logs(&pod_name, &Default::default())
+                            .await
+                            .unwrap_or_else(|_| "<failed to fetch logs>".to_string())
+                    } else {
+                        "<no pod found>".to_string()
+                    };
+                    return Err(format!("Job failed. Pod logs:\n{}", logs).into());
+                }
             }
         }
 
@@ -785,30 +912,70 @@ pub async fn run_hello_world_k8s_job() -> Result<(), Box<dyn std::error::Error +
         sleep(Duration::from_secs(1)).await;
     }
 
-    // Fetch logs from the pod
+    // Fetch logs
     let pods: Api<k8s_openapi::api::core::v1::Pod> = Api::namespaced(client.clone(), namespace);
     let lp = ListParams::default().labels(&format!("job-name={}", job_name));
     let pod_list = pods.list(&lp).await?;
 
-    if let Some(pod) = pod_list.items.first() {
+    let logs = if let Some(pod) = pod_list.items.first() {
         let pod_name = pod.name_any();
-        let logs = pods.logs(&pod_name, &Default::default()).await?;
-
-        println!("Log output from pod: {}", logs);
+        pods.logs(&pod_name, &Default::default()).await?
     } else {
         return Err("No pod found for job".into());
-    }
+    };
 
-    // Clean up
-    jobs.delete(&job_name, &DeleteParams::background()).await?;
+    // Cleanup Job and ConfigMap
+    jobs.delete(&job_name, &DeleteParams::background())
+        .await
+        .ok();
+    configmaps
+        .delete(&cm_name, &DeleteParams::background())
+        .await
+        .ok();
 
-    Ok(())
+    Ok(logs)
 }
 
 #[tokio::test]
 async fn test_run_hello_world_k8s_job() {
-    match run_hello_world_k8s_job().await {
-        Ok(_) => println!("Kubernetes job ran successfully!"),
-        Err(e) => panic!("Failed to run Kubernetes job: {}", e),
+    // Prepare a temp dir to hold main.java source file
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let java_file_path = temp_dir.path().join("Main.java");
+
+    // Hello World Java source code
+    let java_code = r#"
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println("Hello World");
+            }
+        }
+    "#;
+
+    // Write the Java source to the file
+    fs::write(&java_file_path, java_code).expect("Failed to write java file");
+
+    // Construct an ExecutionConfig or use default (fill in with needed values)
+    let config = ExecutionConfig::default_config();
+
+    // Call your function, passing the directory with java file, command, etc.
+    let res = run_k8s_job_with_code(
+        &config,
+        &java_code,          // source_code: &str
+        "Main.java",         // filename: &str
+        "openjdk:17-alpine", // image: &str
+        r#"
+cp /input/Main.java /workspace && 
+javac /workspace/Main.java && 
+java -cp /workspace Main
+"#, // command
+    )
+    .await;
+
+    match res {
+        Ok(logs) => {
+            println!("Java job ran successfully! Output:\n{}", logs);
+            assert!(logs.contains("Hello World"));
+        }
+        Err(e) => panic!("Java job failed: {}", e),
     }
 }
