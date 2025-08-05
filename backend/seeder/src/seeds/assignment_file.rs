@@ -184,13 +184,13 @@ public class HelperThree {
 
                 let makefile_content = r#"
 task1:
-	javac -d /output Main.java HelperOne.java HelperTwo.java HelperThree.java && java -cp /output Main task1
+	javac -d /workspace Main.java HelperOne.java HelperTwo.java HelperThree.java && java -cp /workspace Main task1
 
 task2:
-	javac -d /output Main.java HelperOne.java HelperTwo.java HelperThree.java && java -cp /output Main task2
+	javac -d /workspace Main.java HelperOne.java HelperTwo.java HelperThree.java && java -cp /workspace Main task2
 
 task3:
-	javac -d /output Main.java HelperOne.java HelperTwo.java HelperThree.java && java -cp /output Main task3
+	javac -d /workspace Main.java HelperOne.java HelperTwo.java HelperThree.java && java -cp /workspace Main task3
 "#;
 
                 zip.start_file("Makefile", options).unwrap();

@@ -10,3 +10,6 @@
 .env
 
 *.db
+
+#Kubernentes
+openjdk17-cpp-make_alpine.tar

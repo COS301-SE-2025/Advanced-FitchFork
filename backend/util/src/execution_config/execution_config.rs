@@ -33,6 +33,9 @@ pub struct ExecutionLimits {
 
     #[serde(default = "default_max_processes")]
     pub max_processes: u32,
+
+    #[serde(default = "default_image")]
+    pub image: String,
 }
 
 impl Default for ExecutionLimits {
@@ -43,6 +46,7 @@ impl Default for ExecutionLimits {
             max_cpus: default_max_cpus(),
             max_uncompressed_size: default_max_uncompressed_size(),
             max_processes: default_max_processes(),
+            image: default_image(),
         }
     }
 }
@@ -174,7 +178,7 @@ impl ExecutionConfig {
 //Default Functions
 
 fn default_timeout_secs() -> u64 {
-    60
+    20
 }
 
 fn default_max_memory() -> u64 {
@@ -191,6 +195,10 @@ fn default_max_uncompressed_size() -> u64 {
 
 fn default_max_processes() -> u32 {
     256
+}
+
+fn default_image() -> String {
+    "openjdk17-cpp-make:alpine".to_string()
 }
 
 fn default_marking_scheme() -> MarkingScheme {

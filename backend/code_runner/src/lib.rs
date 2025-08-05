@@ -273,135 +273,137 @@ pub async fn create_submission_outputs_for_all_tasks(
     Ok(())
 }
 
-/// Executes a set of archive files inside a Docker container using the specified command.
-/// Captures and returns stdout output if successful, or full error output if not.
-pub async fn run_all_archives_with_command(
-    archive_paths: Vec<PathBuf>,
-    config: &ExecutionConfig,
-    custom_command: &str,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let temp_code_dir = tempdir()?;
-    let temp_output_dir = tempdir()?;
+//Old Docker implementation
 
-    let code_path = temp_code_dir.path().to_path_buf();
-    let output_path = temp_output_dir.path().to_path_buf();
+// /// Executes a set of archive files inside a Docker container using the specified command.
+// /// Captures and returns stdout output if successful, or full error output if not.
+// pub async fn run_all_archives_with_command(
+//     archive_paths: Vec<PathBuf>,
+//     config: &ExecutionConfig,
+//     custom_command: &str,
+// ) -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+//     let temp_code_dir = tempdir()?;
+//     let temp_output_dir = tempdir()?;
 
-    for archive_path in archive_paths {
-        let archive_bytes = std::fs::read(&archive_path)?;
-        extract_archive_contents(
-            &archive_bytes,
-            config.execution.max_uncompressed_size,
-            &code_path,
-        )?;
-    }
+//     let code_path = temp_code_dir.path().to_path_buf();
+//     let output_path = temp_output_dir.path().to_path_buf();
 
-    let full_command = custom_command.to_string();
+//     for archive_path in archive_paths {
+//         let archive_bytes = std::fs::read(&archive_path)?;
+//         extract_archive_contents(
+//             &archive_bytes,
+//             config.execution.max_uncompressed_size,
+//             &code_path,
+//         )?;
+//     }
 
-    let memory_arg = format!("--memory={}b", config.execution.max_memory);
-    let cpus_arg = format!("--cpus={}", config.execution.max_cpus);
-    let pids_arg = format!("--pids-limit={}", config.execution.max_processes);
+//     let full_command = custom_command.to_string();
 
-    let docker_output = Command::new("docker")
-        .arg("run")
-        .arg("--rm")
-        .arg("--network=none")
-        .arg(memory_arg)
-        .arg(cpus_arg)
-        .arg(pids_arg)
-        .arg("--security-opt=no-new-privileges")
-        .arg("-v")
-        .arg(format!("{}:/code:rw", code_path.display()))
-        .arg("-v")
-        .arg(format!("{}:/output", output_path.display()))
-        .arg("universal-runner")
-        .arg("sh")
-        .arg("-c")
-        .arg(&full_command)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+//     let memory_arg = format!("--memory={}b", config.execution.max_memory);
+//     let cpus_arg = format!("--cpus={}", config.execution.max_cpus);
+//     let pids_arg = format!("--pids-limit={}", config.execution.max_processes);
 
-    let output = timeout(
-        Duration::from_secs(config.execution.timeout_secs),
-        docker_output.wait_with_output(),
-    )
-    .await??;
+//     let docker_output = Command::new("docker")
+//         .arg("run")
+//         .arg("--rm")
+//         .arg("--network=none")
+//         .arg(memory_arg)
+//         .arg(cpus_arg)
+//         .arg(pids_arg)
+//         .arg("--security-opt=no-new-privileges")
+//         .arg("-v")
+//         .arg(format!("{}:/code:rw", code_path.display()))
+//         .arg("-v")
+//         .arg(format!("{}:/output", output_path.display()))
+//         .arg("universal-runner")
+//         .arg("sh")
+//         .arg("-c")
+//         .arg(&full_command)
+//         .stdout(Stdio::piped())
+//         .stderr(Stdio::piped())
+//         .spawn()?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+//     let output = timeout(
+//         Duration::from_secs(config.execution.timeout_secs),
+//         docker_output.wait_with_output(),
+//     )
+//     .await??;
 
-    if output.status.success() {
-        // println!("--- Output directory contents ---");
-        // for entry in fs::read_dir(&output_path)? {
-        //     let entry = entry?;
-        //     let path = entry.path();
-        // println!("File: {}", path.display());
+//     let stdout = String::from_utf8_lossy(&output.stdout);
+//     let stderr = String::from_utf8_lossy(&output.stderr);
 
-        // if path
-        //     .extension()
-        //     .map(|ext| ext == "txt" || ext == "log")
-        //     .unwrap_or(false)
-        // {
-        //     let content = fs::read_to_string(&path)?;
-        //     println!("Content:\n{}", content);
-        // }
-        // }
+//     if output.status.success() {
+//         // println!("--- Output directory contents ---");
+//         // for entry in fs::read_dir(&output_path)? {
+//         //     let entry = entry?;
+//         //     let path = entry.path();
+//         // println!("File: {}", path.display());
 
-        Ok(stdout.into_owned())
-    } else {
-        Err(format!(
-            "Execution failed (exit code {}):\nSTDOUT:\n{}\nSTDERR:\n{}",
-            output.status.code().unwrap_or(-1),
-            stdout,
-            stderr
-        )
-        .into())
-    }
-}
+//         // if path
+//         //     .extension()
+//         //     .map(|ext| ext == "txt" || ext == "log")
+//         //     .unwrap_or(false)
+//         // {
+//         //     let content = fs::read_to_string(&path)?;
+//         //     println!("Content:\n{}", content);
+//         // }
+//         // }
 
-/// Extracts the contents of a archive archive into the given output directory,
-/// while checking for total uncompressed size and archive slip vulnerabilities.
-fn extract_archive_contents(
-    archive_bytes: &[u8],
-    max_total_uncompressed: u64,
-    output_dir: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if archive_bytes.starts_with(b"\x1F\x8B") {
-        let mut decoder = GzDecoder::new(archive_bytes);
-        let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)?;
+//         Ok(stdout.into_owned())
+//     } else {
+//         Err(format!(
+//             "Execution failed (exit code {}):\nSTDOUT:\n{}\nSTDERR:\n{}",
+//             output.status.code().unwrap_or(-1),
+//             stdout,
+//             stderr
+//         )
+//         .into())
+//     }
+// }
 
-        if let Err(e) = extract_tar(
-            Cursor::new(&decompressed),
-            max_total_uncompressed,
-            output_dir,
-        ) {
-            if e.downcast_ref::<std::io::Error>()
-                .map(|ioe| ioe.kind() == std::io::ErrorKind::InvalidData)
-                .unwrap_or(false)
-            {
-                extract_single_file(
-                    &decompressed,
-                    max_total_uncompressed,
-                    output_dir,
-                    "decompressed",
-                )
-            } else {
-                Err(e)
-            }
-        } else {
-            Ok(())
-        }
-    } else if archive_bytes.starts_with(b"PK") {
-        extract_zip(archive_bytes, max_total_uncompressed, output_dir)
-    } else {
-        extract_tar(
-            Cursor::new(archive_bytes),
-            max_total_uncompressed,
-            output_dir,
-        )
-    }
-}
+// /// Extracts the contents of a archive archive into the given output directory,
+// /// while checking for total uncompressed size and archive slip vulnerabilities.
+// fn extract_archive_contents(
+//     archive_bytes: &[u8],
+//     max_total_uncompressed: u64,
+//     output_dir: &std::path::Path,
+// ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+//     if archive_bytes.starts_with(b"\x1F\x8B") {
+//         let mut decoder = GzDecoder::new(archive_bytes);
+//         let mut decompressed = Vec::new();
+//         decoder.read_to_end(&mut decompressed)?;
+
+//         if let Err(e) = extract_tar(
+//             Cursor::new(&decompressed),
+//             max_total_uncompressed,
+//             output_dir,
+//         ) {
+//             if e.downcast_ref::<std::io::Error>()
+//                 .map(|ioe| ioe.kind() == std::io::ErrorKind::InvalidData)
+//                 .unwrap_or(false)
+//             {
+//                 extract_single_file(
+//                     &decompressed,
+//                     max_total_uncompressed,
+//                     output_dir,
+//                     "decompressed",
+//                 )
+//             } else {
+//                 Err(e)
+//             }
+//         } else {
+//             Ok(())
+//         }
+//     } else if archive_bytes.starts_with(b"PK") {
+//         extract_zip(archive_bytes, max_total_uncompressed, output_dir)
+//     } else {
+//         extract_tar(
+//             Cursor::new(archive_bytes),
+//             max_total_uncompressed,
+//             output_dir,
+//         )
+//     }
+// }
 
 fn extract_zip(
     zip_bytes: &[u8],
@@ -444,62 +446,62 @@ fn extract_zip(
     Ok(())
 }
 
-fn extract_tar<R: Read>(
-    reader: R,
-    max_total_uncompressed: u64,
-    output_dir: &Path,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut archive = TarArchive::new(reader);
-    let mut total_uncompressed = 0;
+// fn extract_tar<R: Read>(
+//     reader: R,
+//     max_total_uncompressed: u64,
+//     output_dir: &Path,
+// ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+//     let mut archive = TarArchive::new(reader);
+//     let mut total_uncompressed = 0;
 
-    for entry in archive.entries()? {
-        let mut entry = entry?;
-        let path = entry.path()?.into_owned();
-        let size = entry.size();
+//     for entry in archive.entries()? {
+//         let mut entry = entry?;
+//         let path = entry.path()?.into_owned();
+//         let size = entry.size();
 
-        if path.is_absolute() {
-            return Err(format!("Absolute path in archive: {:?}", path).into());
-        }
+//         if path.is_absolute() {
+//             return Err(format!("Absolute path in archive: {:?}", path).into());
+//         }
 
-        if path.components().any(|c| matches!(c, Component::ParentDir)) {
-            return Err(format!("Path traversal attempt: {:?}", path).into());
-        }
+//         if path.components().any(|c| matches!(c, Component::ParentDir)) {
+//             return Err(format!("Path traversal attempt: {:?}", path).into());
+//         }
 
-        total_uncompressed += size;
-        if total_uncompressed > max_total_uncompressed {
-            return Err("Archive too large when decompressed".into());
-        }
+//         total_uncompressed += size;
+//         if total_uncompressed > max_total_uncompressed {
+//             return Err("Archive too large when decompressed".into());
+//         }
 
-        let outpath = output_dir.join(&path);
-        if entry.header().entry_type().is_dir() {
-            std::fs::create_dir_all(&outpath)?;
-        } else {
-            if let Some(parent) = outpath.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            let mut outfile = File::create(&outpath)?;
-            std::io::copy(&mut entry, &mut outfile)?;
-        }
-    }
+//         let outpath = output_dir.join(&path);
+//         if entry.header().entry_type().is_dir() {
+//             std::fs::create_dir_all(&outpath)?;
+//         } else {
+//             if let Some(parent) = outpath.parent() {
+//                 std::fs::create_dir_all(parent)?;
+//             }
+//             let mut outfile = File::create(&outpath)?;
+//             std::io::copy(&mut entry, &mut outfile)?;
+//         }
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-fn extract_single_file(
-    contents: &[u8],
-    max_total_uncompressed: u64,
-    output_dir: &Path,
-    filename: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let size = contents.len() as u64;
-    if size > max_total_uncompressed {
-        return Err("File too large when decompressed".into());
-    }
+// fn extract_single_file(
+//     contents: &[u8],
+//     max_total_uncompressed: u64,
+//     output_dir: &Path,
+//     filename: &str,
+// ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+//     let size = contents.len() as u64;
+//     if size > max_total_uncompressed {
+//         return Err("File too large when decompressed".into());
+//     }
 
-    let outpath = output_dir.join(filename);
-    std::fs::write(outpath, contents)?;
-    Ok(())
-}
+//     let outpath = output_dir.join(filename);
+//     std::fs::write(outpath, contents)?;
+//     Ok(())
+// }
 
 use db::models::assignment_file::{Column as AssignmentFileColumn, Entity as AssignmentFileEntity};
 use db::models::assignment_submission::Entity as AssignmentSubmission;
@@ -713,7 +715,6 @@ use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::ConfigMap;
 use k8s_openapi::api::core::v1::EmptyDirVolumeSource;
 use k8s_openapi::api::core::v1::{Container, PodSpec, PodTemplateSpec, Volume, VolumeMount};
-use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use kube::api::{DeleteParams, ListParams, PostParams};
 use kube::{Api, Client, ResourceExt};
 use std::collections::BTreeMap;
@@ -728,48 +729,64 @@ use uuid::Uuid;
 /// * `filename` - Filename of the source code (e.g. "main.java", "main.cpp", "main.py")
 /// * `image` - Container image to use (e.g. "openjdk:17-alpine", "gcc:latest", "python:3.11-alpine")
 /// * `command` - The shell command to compile and run the program (e.g. "javac main.java && java Main")
-pub async fn run_k8s_job_with_code(
+
+pub async fn run_all_archives_with_command(
+    archive_paths: Vec<PathBuf>,
     config: &ExecutionConfig,
-    source_code: &str,
-    filename: &str,
-    image: &str,
     command: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let client = Client::try_default().await?;
     let namespace = "default";
     let jobs: Api<Job> = Api::namespaced(client.clone(), namespace);
     let configmaps: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
+    let image = &config.execution.image;
 
-    // Generate unique names once
+    // Extract all files from all archives into a single BTreeMap<filename, content>
+    let mut files_map: BTreeMap<String, String> = BTreeMap::new();
+
+    for archive_path in archive_paths {
+        let file = File::open(&archive_path)?;
+        let mut archive = ZipArchive::new(file)?;
+
+        for i in 0..archive.len() {
+            let mut zip_file = archive.by_index(i)?;
+            if zip_file.is_dir() {
+                continue;
+            }
+            let name = zip_file.name().to_string();
+
+            let mut content = String::new();
+            zip_file.read_to_string(&mut content)?;
+            files_map.insert(name, content);
+        }
+    }
+
+    // Create unique names
     let job_name = format!("job-{}", Uuid::new_v4().simple());
     let cm_name = format!("source-code-cm-{}", Uuid::new_v4().simple());
 
-    // Create ConfigMap once
+    // Create ConfigMap with all files
     let cm = ConfigMap {
         metadata: kube::api::ObjectMeta {
             name: Some(cm_name.clone()),
             ..Default::default()
         },
-        data: Some(BTreeMap::from([(
-            filename.to_string(),
-            source_code.to_string(),
-        )])),
+        data: Some(files_map),
         ..Default::default()
     };
     configmaps.create(&PostParams::default(), &cm).await?;
 
-    // Convert bytes to Kubernetes quantity string like "512Mi"
-    fn bytes_to_quantity(bytes: u64) -> Quantity {
+    // Resource limits conversion helper
+    fn bytes_to_quantity(bytes: u64) -> k8s_openapi::apimachinery::pkg::api::resource::Quantity {
         let mebi = (bytes + 1024 * 1024 - 1) / (1024 * 1024);
-        Quantity(format!("{}Mi", mebi))
+        k8s_openapi::apimachinery::pkg::api::resource::Quantity(format!("{}Mi", mebi))
     }
     let memory_limit = bytes_to_quantity(config.execution.max_memory);
-    let cpu_limit = Quantity(config.execution.max_cpus.to_string());
+    let cpu_limit = k8s_openapi::apimachinery::pkg::api::resource::Quantity(
+        config.execution.max_cpus.to_string(),
+    );
 
-    let volume_name = "source-code";
-    let mount_path = "/workspace";
-
-    // Create Job with ConfigMap mounted
+    // Create the job spec with mounted ConfigMap and emptyDir workspace
     let job = Job {
         metadata: kube::api::ObjectMeta {
             name: Some(job_name.clone()),
@@ -792,23 +809,22 @@ pub async fn run_k8s_job_with_code(
                             "-c".to_string(),
                             command.to_string(),
                         ]),
+                        working_dir: Some("/input".to_string()),
                         volume_mounts: Some(vec![
                             VolumeMount {
-                                mount_path: "/input".to_string(), // read-only ConfigMap
+                                mount_path: "/input".to_string(),
                                 name: "source-code".to_string(),
                                 read_only: Some(true),
                                 ..Default::default()
                             },
                             VolumeMount {
-                                mount_path: "/workspace".to_string(), // writable dir
+                                mount_path: "/workspace".to_string(),
                                 name: "workspace-vol".to_string(),
                                 read_only: Some(false),
                                 ..Default::default()
                             },
                         ]),
-
                         resources: Some(k8s_openapi::api::core::v1::ResourceRequirements {
-                            claims: None,
                             limits: Some(BTreeMap::from([
                                 ("memory".to_string(), memory_limit.clone()),
                                 ("cpu".to_string(), cpu_limit.clone()),
@@ -817,6 +833,7 @@ pub async fn run_k8s_job_with_code(
                                 ("memory".to_string(), memory_limit.clone()),
                                 ("cpu".to_string(), cpu_limit.clone()),
                             ])),
+                            ..Default::default()
                         }),
                         ..Default::default()
                     }],
@@ -836,7 +853,6 @@ pub async fn run_k8s_job_with_code(
                             ..Default::default()
                         },
                     ]),
-
                     ..Default::default()
                 }),
             },
@@ -845,32 +861,22 @@ pub async fn run_k8s_job_with_code(
         status: None,
     };
 
-    if let Ok(_) = jobs.get(&job_name).await {
-        // Delete and wait for deletion
+    // Delete existing Job if exists
+    if jobs.get(&job_name).await.is_ok() {
         jobs.delete(&job_name, &DeleteParams::foreground()).await?;
-
-        // Poll until Job is really deleted
         loop {
             match jobs.get(&job_name).await {
-                Ok(_) => {
-                    // Job still exists, wait a bit
-                    sleep(Duration::from_secs(1)).await;
-                }
-                Err(kube::Error::Api(api_err)) if api_err.code == 404 => {
-                    // Job is deleted
-                    break;
-                }
+                Ok(_) => sleep(Duration::from_secs(1)).await,
+                Err(kube::Error::Api(api_err)) if api_err.code == 404 => break,
                 Err(e) => return Err(Box::new(e)),
             }
         }
     }
 
-    // Now create the Job
-    // Create the Job
-    let pp = PostParams::default();
-    jobs.create(&pp, &job).await?;
+    // Create Job
+    jobs.create(&PostParams::default(), &job).await?;
 
-    // Wait for the job to complete
+    // Wait for job to complete
     let mut attempts = 0;
     loop {
         let job_status = jobs.get_status(&job_name).await?;
@@ -882,19 +888,17 @@ pub async fn run_k8s_job_with_code(
                 {
                     break;
                 }
-                // After detecting the job failed condition
                 if conditions
                     .iter()
                     .any(|c| c.type_ == "Failed" && c.status == "True")
                 {
-                    // Fetch pod logs to understand failure
+                    // Get pod logs for debugging
                     let pods: Api<k8s_openapi::api::core::v1::Pod> =
                         Api::namespaced(client.clone(), namespace);
                     let lp = ListParams::default().labels(&format!("job-name={}", job_name));
                     let pod_list = pods.list(&lp).await?;
                     let logs = if let Some(pod) = pod_list.items.first() {
-                        let pod_name = pod.name_any();
-                        pods.logs(&pod_name, &Default::default())
+                        pods.logs(&pod.name_any(), &Default::default())
                             .await
                             .unwrap_or_else(|_| "<failed to fetch logs>".to_string())
                     } else {
@@ -904,9 +908,8 @@ pub async fn run_k8s_job_with_code(
                 }
             }
         }
-
         attempts += 1;
-        if attempts > 20 {
+        if attempts > 30 {
             return Err("Job did not complete in time".into());
         }
         sleep(Duration::from_secs(1)).await;
@@ -918,13 +921,12 @@ pub async fn run_k8s_job_with_code(
     let pod_list = pods.list(&lp).await?;
 
     let logs = if let Some(pod) = pod_list.items.first() {
-        let pod_name = pod.name_any();
-        pods.logs(&pod_name, &Default::default()).await?
+        pods.logs(&pod.name_any(), &Default::default()).await?
     } else {
         return Err("No pod found for job".into());
     };
 
-    // Cleanup Job and ConfigMap
+    // Cleanup
     jobs.delete(&job_name, &DeleteParams::background())
         .await
         .ok();
@@ -937,39 +939,42 @@ pub async fn run_k8s_job_with_code(
 }
 
 #[tokio::test]
-async fn test_run_hello_world_k8s_job() {
-    // Prepare a temp dir to hold main.java source file
+async fn test_run_k8s_job_with_archive() {
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    // Create temp zip archive with Java source
     let temp_dir = tempdir().expect("Failed to create temp dir");
-    let java_file_path = temp_dir.path().join("Main.java");
+    let zip_path = temp_dir.path().join("java_source.zip");
+    {
+        let file = std::fs::File::create(&zip_path).expect("Failed to create zip file");
+        let mut zip = zip::ZipWriter::new(file);
 
-    // Hello World Java source code
-    let java_code = r#"
-        public class Main {
-            public static void main(String[] args) {
-                System.out.println("Hello World");
+        let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+
+        zip.start_file("Main.java", options)
+            .expect("Failed to add file");
+        let java_code = r#"
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println("Hello World");
+                }
             }
-        }
-    "#;
+        "#;
+        zip.write_all(java_code.as_bytes())
+            .expect("Failed to write java code");
+        zip.finish().expect("Failed to finish zip");
+    }
 
-    // Write the Java source to the file
-    fs::write(&java_file_path, java_code).expect("Failed to write java file");
-
-    // Construct an ExecutionConfig or use default (fill in with needed values)
     let config = ExecutionConfig::default_config();
 
-    // Call your function, passing the directory with java file, command, etc.
-    let res = run_k8s_job_with_code(
-        &config,
-        &java_code,          // source_code: &str
-        "Main.java",         // filename: &str
-        "openjdk:17-alpine", // image: &str
-        r#"
-cp /input/Main.java /workspace && 
-javac /workspace/Main.java && 
-java -cp /workspace Main
-"#, // command
-    )
-    .await;
+    let command = r#"
+    cp /input/* /workspace && 
+    javac /workspace/Main.java &&
+    java -cp /workspace Main
+    "#;
+
+    let res = run_all_archives_with_command(vec![zip_path], &config, command).await;
 
     match res {
         Ok(logs) => {

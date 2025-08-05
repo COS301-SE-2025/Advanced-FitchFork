@@ -1,15 +1,7 @@
-FROM alpine:3.20
+FROM openjdk:17-alpine
 
-RUN apk add --no-cache \
-    python3 \
-    py3-pip \
-    openjdk17 \
-    gcc \
-    g++ \
-    libstdc++ \
-    make \
-    lcov \
-    bash \
-    coreutils
+RUN apk add --no-cache g++ make bash
 
-WORKDIR /code
+WORKDIR /workspace
+
+CMD ["bash"]
