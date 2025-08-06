@@ -10,6 +10,58 @@ use serde::Deserialize;
 use util::state::AppState;
 use crate::response::ApiResponse;
 
+/// DELETE /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/{case_id}
+///
+/// Permanently deletes a plagiarism case from the system.
+/// Accessible only to lecturers and assistant lecturers assigned to the module.
+///
+/// # Path Parameters
+///
+/// - `module_id`: The ID of the parent module
+/// - `assignment_id`: The ID of the assignment containing the plagiarism case
+/// - `case_id`: The ID of the plagiarism case to delete
+///
+/// # Returns
+///
+/// Returns an HTTP response indicating the result:
+/// - `200 OK` with success message when deletion is successful
+/// - `403 FORBIDDEN` if user lacks required permissions
+/// - `404 NOT FOUND` if specified plagiarism case doesn't exist
+/// - `500 INTERNAL SERVER ERROR` for database errors or deletion failures
+///
+/// The response body follows a standardized JSON format with a success message.
+///
+/// # Example Response (200 OK)
+///
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Plagiarism case deleted successfully"
+/// }
+/// ```
+///
+/// # Example Responses
+///
+/// - `404 Not Found`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Plagiarism case not found"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to delete plagiarism case: [error details]"
+/// }
+/// ```
+///
+/// # Notes
+///
+/// This operation is irreversible and permanently removes the plagiarism case record.
+/// Only users with lecturer or assistant lecturer roles assigned to the module can perform this action.
 pub async fn delete_plagiarism_case(
     State(app_state): State<AppState>,
     Path((_, _, case_id)): Path<(i64, i64, i64)>,
@@ -46,6 +98,79 @@ pub struct BulkDeletePayload {
     case_ids: Vec<i64>,
 }
 
+/// DELETE /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/bulk
+///
+/// Deletes multiple plagiarism cases in bulk for a specific assignment.
+/// Accessible only to lecturers and assistant lecturers assigned to the module.
+///
+/// # Path Parameters
+///
+/// - `module_id`: The ID of the parent module
+/// - `assignment_id`: The ID of the assignment containing the plagiarism cases
+///
+/// # Request Body
+///
+/// Requires a JSON payload with the following field:
+/// - `case_ids`: Array of plagiarism case IDs to delete (must not be empty)
+///
+/// # Returns
+///
+/// Returns an HTTP response indicating the result:
+/// - `200 OK` with success message and count of deleted cases
+/// - `400 BAD REQUEST` for invalid payload or missing cases
+/// - `403 FORBIDDEN` if user lacks required permissions
+/// - `500 INTERNAL SERVER ERROR` for database errors or deletion failures
+///
+/// The response body follows a standardized JSON format with a success message.
+///
+/// # Example Request
+///
+/// ```json
+/// {
+///   "case_ids": [12, 13, 17]
+/// }
+/// ```
+///
+/// # Example Response (200 OK)
+///
+/// ```json
+/// {
+///   "success": true,
+///   "message": "3 plagiarism cases deleted successfully"
+/// }
+/// ```
+///
+/// # Example Responses
+///
+/// - `400 Bad Request` (empty case_ids)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "case_ids cannot be empty"
+/// }
+/// ```
+///
+/// - `400 Bad Request` (missing cases)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Some plagiarism cases not found or not in assignment: [17, 25]"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error` (transaction failure)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Transaction commit failed: [error details]"
+/// }
+/// ```
+///
+/// # Notes
+///
+/// - This operation is atomic - either all cases are deleted or none
+/// - Returns an error if any specified case doesn't exist or belongs to a different assignment
+/// - Only users with lecturer or assistant lecturer roles assigned to the module can perform this action
 pub async fn bulk_delete_plagiarism_cases(
     State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,

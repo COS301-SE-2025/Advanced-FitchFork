@@ -18,12 +18,70 @@ pub struct FlaggedCaseResponse {
     updated_at: DateTime<Utc>,
 }
 
+/// PATCH /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/{case_id}/flag
+///
+/// Flags a plagiarism case after manual review, indicating confirmed plagiarism.
+/// Accessible only to lecturers and assistant lecturers assigned to the module.
+///
+/// # Path Parameters
+///
+/// - `module_id`: The ID of the parent module
+/// - `assignment_id`: The ID of the assignment containing the plagiarism case
+/// - `case_id`: The ID of the plagiarism case to flag
+///
+/// # Returns
+///
+/// Returns an HTTP response indicating the result:
+/// - `200 OK` with minimal case information on success
+/// - `403 FORBIDDEN` if user lacks required permissions
+/// - `404 NOT FOUND` if specified plagiarism case doesn't exist
+/// - `500 INTERNAL SERVER ERROR` for database errors or update failures
+///
+/// The response body includes only essential fields after the status change.
+///
+/// # Example Response (200 OK)
+///
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Plagiarism case flagged",
+///   "data": {
+///     "id": 17,
+///     "status": "flagged",
+///     "updated_at": "2024-05-20T16:30:00Z"
+///   }
+/// }
+/// ```
+///
+/// # Example Responses
+///
+/// - `404 Not Found`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Plagiarism case not found"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to update plagiarism case: [error details]"
+/// }
+/// ```
+///
+/// # Notes
+///
+/// - This operation updates the case status to "flagged" and sets the current timestamp to `updated_at`
+/// - Only users with lecturer or assistant lecturer roles assigned to the module can perform this action
+/// - Considered an irreversible action indicating confirmed plagiarism
 pub async fn patch_plagiarism_flag(
     State(app_state): State<AppState>,
-    Path((_, assignment_id, plagiarism_id)): Path<(i64, i64, i64)>,
+    Path((_, assignment_id, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
     let case = match PlagiarismEntity::find()
-        .filter(PlagiarismColumn::Id.eq(plagiarism_id))
+        .filter(PlagiarismColumn::Id.eq(case_id))
         .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
         .one(app_state.db())
         .await
@@ -76,12 +134,70 @@ pub struct ReviewedCaseResponse {
     updated_at: DateTime<Utc>,
 }
 
+/// PATCH /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/{case_id}/review
+///
+/// Marks a plagiarism case as reviewed after manual inspection, indicating it's been cleared of plagiarism concerns.
+/// Accessible only to lecturers and assistant lecturers assigned to the module.
+///
+/// # Path Parameters
+///
+/// - `module_id`: The ID of the parent module
+/// - `assignment_id`: The ID of the assignment containing the plagiarism case
+/// - `case_id`: The ID of the plagiarism case to mark as reviewed
+///
+/// # Returns
+///
+/// Returns an HTTP response indicating the result:
+/// - `200 OK` with minimal case information on success
+/// - `403 FORBIDDEN` if user lacks required permissions
+/// - `404 NOT FOUND` if specified plagiarism case doesn't exist
+/// - `500 INTERNAL SERVER ERROR` for database errors or update failures
+///
+/// The response body includes only essential fields after the status change.
+///
+/// # Example Response (200 OK)
+///
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Plagiarism case marked as reviewed",
+///   "data": {
+///     "id": 17,
+///     "status": "reviewed",
+///     "updated_at": "2024-05-20T17:45:00Z"
+///   }
+/// }
+/// ```
+///
+/// # Example Responses
+///
+/// - `404 Not Found`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Plagiarism case not found"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to update plagiarism case: [error details]"
+/// }
+/// ```
+///
+/// # Notes
+///
+/// - This operation updates the case status to "reviewed" and sets the current timestamp to `updated_at`
+/// - Only users with lecturer or assistant lecturer roles assigned to the module can perform this action
+/// - Typically indicates the case was investigated and determined not to be plagiarism
 pub async fn patch_plagiarism_review(
     State(app_state): State<AppState>,
-    Path((_, assignment_id, plagiarism_id)): Path<(i64, i64, i64)>,
+    Path((_, assignment_id, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
     let case = match PlagiarismEntity::find()
-        .filter(PlagiarismColumn::Id.eq(plagiarism_id))
+        .filter(PlagiarismColumn::Id.eq(case_id))
         .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
         .one(app_state.db())
         .await

@@ -18,19 +18,19 @@ pub mod patch;
 /// - `GET    /assignments/plagiarism`                          → List plagiarism cases
 /// - `GET    /assignments/plagiarism/graph`                    → Get plagiarism graph
 /// - `POST   /assignments/plagiarism`                          → Create a new plagiarism case
-/// - `PUT    /assignments/plagiarism/{plagiarism_id}`          → Update a plagiarism case
-/// - `DELETE /assignments/plagiarism/{plagiarism_id}`          → Delete a plagiarism case
+/// - `PUT    /assignments/plagiarism/{case_id}`          → Update a plagiarism case
+/// - `DELETE /assignments/plagiarism/{case_id}`          → Delete a plagiarism case
 /// - `DELETE /assignments/plagiarism/bulk`                     → Bulk delete plagiarism cases
-/// - `PATCH  /assignments/plagiarism/{plagiarism_id}/flag`     → Flag a plagiarism case
-/// - `PATCH  /assignments/plagiarism/{plagiarism_id}/review`   → Review a plagiarism case
+/// - `PATCH  /assignments/plagiarism/{case_id}/flag`     → Flag a plagiarism case
+/// - `PATCH  /assignments/plagiarism/{case_id}/review`   → Review a plagiarism case
 pub fn plagiarism_routes() -> Router<AppState> {
     Router::new()
         .route("/", get(list_plagiarism_cases))
         .route("/graph", get(get_graph))
         .route("/", post(create_plagiarism_case))
-        .route("/{plagiarism_id}", put(update_plagiarism_case))
-        .route("/{plagiarism_id}", delete(delete_plagiarism_case))
+        .route("/{case_id}", put(update_plagiarism_case))
+        .route("/{case_id}", delete(delete_plagiarism_case))
         .route("/bulk", delete(bulk_delete_plagiarism_cases))
-        .route("/{plagiarism_id}/flag", patch(patch_plagiarism_flag))
-        .route("/{plagiarism_id}/review", patch(patch_plagiarism_review))
+        .route("/{case_id}/flag", patch(patch_plagiarism_flag))
+        .route("/{case_id}/review", patch(patch_plagiarism_review))
 }

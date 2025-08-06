@@ -46,9 +46,110 @@ pub struct PlagiarismCaseResponse {
     submission_2: SubmissionResponse,
 }
 
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism
+///
+/// Retrieves paginated plagiarism cases for a specific assignment with filtering and sorting capabilities.
+/// Only accessible to lecturers and assistant lecturers assigned to the module.
+///
+/// # Path Parameters
+///
+/// - `module_id`: The ID of the parent module
+/// - `assignment_id`: The ID of the assignment to retrieve plagiarism cases for
+///
+/// # Query Parameters
+///
+/// - `page`: (Optional) Page number for pagination (default: 1, minimum: 1)
+/// - `per_page`: (Optional) Number of items per page (default: 20, maximum: 100)
+/// - `status`: (Optional) Filter cases by status ("review", "flagged", or "reviewed")
+/// - `query`: (Optional) Case-insensitive fuzzy search on usernames of either submission's user
+/// - `sort`: (Optional) Comma-separated sorting criteria. Prefix with '-' for descending order.
+///   Valid fields: "created_at", "status"
+///
+/// # Returns
+///
+/// Returns an HTTP response indicating the result:
+/// - `200 OK` with paginated plagiarism cases if successful
+/// - `400 BAD REQUEST` for invalid parameters (status, sort, pagination values)
+/// - `403 FORBIDDEN` if user lacks required permissions
+/// - `500 INTERNAL SERVER ERROR` for database errors or data retrieval failures
+///
+/// The response body follows a standardized JSON format containing:
+/// - Pagination metadata (current page, items per page, total items)
+/// - List of plagiarism cases with enriched submission and user details
+///
+/// # Example Response (200 OK)
+///
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Plagiarism cases retrieved successfully",
+///   "data": {
+///     "cases": [
+///       {
+///         "id": 12,
+///         "status": "flagged",
+///         "description": "Very similar submissions",
+///         "created_at": "2024-05-15T08:30:00Z",
+///         "updated_at": "2024-05-16T10:15:00Z",
+///         "submission_1": {
+///           "id": 42,
+///           "filename": "main.cpp",
+///           "created_at": "2024-05-14T09:00:00Z",
+///           "user": {
+///             "id": 5,
+///             "username": "u12345678",
+///             "email": "abc@example.com",
+///             "profile_picture_path": null
+///           }
+///         },
+///         "submission_2": {
+///           "id": 43,
+///           "filename": "main.cpp",
+///           "created_at": "2024-05-14T10:30:00Z",
+///           "user": {
+///             "id": 6,
+///             "username": "u98765432",
+///             "email": "xyz@example.com",
+///             "profile_picture_path": null
+///           }
+///         }
+///       }
+///     ],
+///     "page": 1,
+///     "per_page": 20,
+///     "total": 1
+///   }
+/// }
+/// ```
+///
+/// # Example Responses
+///
+/// - `400 Bad Request` (invalid status)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Invalid status parameter"
+/// }
+/// ```
+///
+/// - `403 Forbidden` (unauthorized role)  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Forbidden: Insufficient permissions"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to retrieve plagiarism cases"
+/// }
+/// ```
 pub async fn list_plagiarism_cases(
     State(app_state): State<AppState>,
-    Path((_module_id, assignment_id)): Path<(i64, i64)>,
+    Path((_, assignment_id)): Path<(i64, i64)>,
     Query(params): Query<ListPlagiarismCaseQueryParams>,
 ) -> impl IntoResponse {
     let page = params.page.unwrap_or(1);
@@ -211,7 +312,7 @@ pub struct LinksResponse {
     pub links: Vec<Link>,
 }
 
-// TODO: Testing @Aidan
+// TODO: Testing and docs @Aidan
 pub async fn get_graph(Query(query): Query<PlagiarismQuery>, State(app_state): State<AppState>) -> impl IntoResponse {
     let mut query_builder = PlagiarismEntity::find();
 
