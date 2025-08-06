@@ -1,17 +1,18 @@
 use axum::{middleware::from_fn_with_state, Router, routing::{get, post, put, delete}};
-use config::config_routes;
-use memo_output::memo_output_routes;
 use delete::{delete_assignment, bulk_delete_assignments};
 use get::{get_assignment, get_assignments, get_assignment_stats, get_assignment_readiness};
-use mark_allocator::mark_allocator_routes;
 use post::create_assignment;
 use put::{edit_assignment, bulk_update_assignments, open_assignment, close_assignment};
+use mark_allocator::mark_allocator_routes;
+use config::config_routes;
+use memo_output::memo_output_routes;
 use submissions::submission_routes;
 use files::files_routes;
 use tasks::tasks_routes;
 use tickets::ticket_routes;
+use plagiarism::plagiarism_routes;
 use util::state::AppState;
-use crate::auth::guards::{require_assigned_to_module, require_lecturer};
+use crate::auth::guards::{require_assigned_to_module, require_lecturer, require_lecturer_or_assistant_lecturer};
 
 pub mod config;
 pub mod delete;
@@ -25,6 +26,7 @@ pub mod memo_output;
 pub mod tasks;
 pub mod common;
 pub mod tickets;
+pub mod plagiarism;
 
 /// Expects a module ID.
 /// If an assignment ID is included it will be modified or deleted.
@@ -71,4 +73,5 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .nest( "/{assignment_id}/submissions", submission_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
         .nest("/{assignment_id}/files", files_routes(app_state.clone()))
         .nest("/{assignment_id}/tickets", ticket_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
+        .nest("/{assignment_id}/plagiarism", plagiarism_routes().route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
 }
