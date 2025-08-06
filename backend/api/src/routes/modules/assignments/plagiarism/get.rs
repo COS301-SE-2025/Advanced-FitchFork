@@ -1,16 +1,14 @@
-use axum::{extract::{Path, Query}, Json, response::IntoResponse};
-use db::{
-    connect,
-    models::{
-        assignment_submission::{self, Entity as SubmissionEntity},
-        plagiarism_case::{self, Entity as PlagiarismEntity, Status},
-        user::{self, Entity as UserEntity},
-    },
+use axum::{extract::{State, Path, Query}, Json, response::IntoResponse};
+use db::models::{
+    assignment_submission::{self, Entity as SubmissionEntity},
+    plagiarism_case::{self, Entity as PlagiarismEntity, Status},
+    user::{self, Entity as UserEntity},
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Condition, QuerySelect, QueryTrait, QueryOrder, PaginatorTrait};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::collections::HashMap;
+use util::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct ListPlagiarismCaseQueryParams {
@@ -49,17 +47,16 @@ pub struct PlagiarismCaseResponse {
 }
 
 pub async fn list_plagiarism_cases(
+    State(app_state): State<AppState>,
     Path((_module_id, assignment_id)): Path<(i64, i64)>,
     Query(params): Query<ListPlagiarismCaseQueryParams>,
 ) -> impl IntoResponse {
-    let db = connect().await;
-
     let page = params.page.unwrap_or(1);
     let per_page = params.per_page.unwrap_or(20).min(100);
 
     let submission_models = SubmissionEntity::find()
         .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
-        .all(&db)
+        .all(app_state.db())
         .await
         .unwrap_or_default();
     
@@ -113,7 +110,7 @@ pub async fn list_plagiarism_cases(
         }
     }
 
-    let paginator = query.paginate(&db, per_page);
+    let paginator = query.paginate(app_state.db(), per_page);
     let total_items = paginator.num_items().await.unwrap_or(0);
     let cases = paginator.fetch_page(page - 1).await.unwrap_or_default();
 
@@ -124,14 +121,14 @@ pub async fn list_plagiarism_cases(
 
     let submissions = SubmissionEntity::find()
         .filter(assignment_submission::Column::Id.is_in(submission_ids))
-        .all(&db)
+        .all(app_state.db())
         .await
         .unwrap_or_default();
 
     let user_ids: Vec<i64> = submissions.iter().map(|s| s.user_id).collect();
     let users = UserEntity::find()
         .filter(user::Column::Id.is_in(user_ids))
-        .all(&db)
+        .all(app_state.db())
         .await
         .unwrap_or_default();
 
@@ -214,9 +211,8 @@ pub struct LinksResponse {
     pub links: Vec<Link>,
 }
 
-pub async fn get_graph(Query(query): Query<PlagiarismQuery>) -> impl IntoResponse {
-    let db = connect().await;
-
+// TODO: Testing @Aidan
+pub async fn get_graph(Query(query): Query<PlagiarismQuery>, State(app_state): State<AppState>) -> impl IntoResponse {
     let mut query_builder = PlagiarismEntity::find();
 
     if let Some(status_str) = query.status {
@@ -225,7 +221,7 @@ pub async fn get_graph(Query(query): Query<PlagiarismQuery>) -> impl IntoRespons
         }
     }
 
-    let plagiarism_cases = match query_builder.all(&db).await {
+    let plagiarism_cases = match query_builder.all(app_state.db()).await {
         Ok(cases) => cases,
         Err(_) => {
             return (
@@ -239,26 +235,26 @@ pub async fn get_graph(Query(query): Query<PlagiarismQuery>) -> impl IntoRespons
 
     for case in plagiarism_cases {
         let submission1 = SubmissionEntity::find_by_id(case.submission_id_1)
-            .one(&db)
+            .one(app_state.db())
             .await
             .ok()
             .flatten();
 
         let submission2 = SubmissionEntity::find_by_id(case.submission_id_2)
-            .one(&db)
+            .one(app_state.db())
             .await
             .ok()
             .flatten();
 
         if let (Some(sub1), Some(sub2)) = (submission1, submission2) {
             let user1 = UserEntity::find_by_id(sub1.user_id)
-                .one(&db)
+                .one(app_state.db())
                 .await
                 .ok()
                 .flatten();
 
             let user2 = UserEntity::find_by_id(sub2.user_id)
-                .one(&db)
+                .one(app_state.db())
                 .await
                 .ok()
                 .flatten();

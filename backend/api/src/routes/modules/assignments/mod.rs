@@ -53,6 +53,8 @@ pub mod plagiarism;
 /// - Mark allocator routes         → `mark_allocator_routes`
 /// - Submissions routes            → `submission_routes`
 /// - Files routes                  → `files_routes`
+/// - Tickets routes                → `ticket_routes`
+/// - Plagiarism routes             → `plagiarism_routes`
 pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", post(create_assignment).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)))

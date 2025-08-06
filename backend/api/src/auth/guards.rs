@@ -9,6 +9,7 @@ use sea_orm::QueryFilter;
 use sea_orm::ColumnTrait;
 use db::models::{
     module::Entity as ModuleEntity,
+    plagiarism_case::{Entity as PlagiarismEntity, Column as PlagiarismColumn},
     assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
     assignment_task::{Entity as TaskEntity, Column as TaskColumn},
     assignment_submission::{Entity as SubmissionEntity, Column as SubmissionColumn},
@@ -389,6 +390,30 @@ pub async fn check_ticket_hierarchy(
     Ok(())
 }
 
+pub async fn check_plagiarism_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    plagiarism_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+
+    let found = PlagiarismEntity::find()
+        .filter(PlagiarismColumn::Id.eq(plagiarism_id))
+        .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking plagiarism case"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Plagiarism case {} in Assignment {} not found.", plagiarism_id, assignment_id))),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn validate_known_ids(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
@@ -404,6 +429,7 @@ pub async fn validate_known_ids(
     let mut file_id: Option<i32>       = None;
     let mut user_id: Option<i32>       = None;
     let mut ticket_id: Option<i32>     = None;
+    let mut plagiarism_id: Option<i32> = None;
 
     for (key, raw) in &params {
         let id = raw.parse::<i32>().map_err(|_| {
@@ -416,7 +442,8 @@ pub async fn validate_known_ids(
             "submission_id" => submission_id = Some(id),
             "file_id"       => file_id = Some(id),
             "user_id"       => user_id = Some(id),
-            "ticket_id"    => ticket_id = Some(id),
+            "ticket_id"     => ticket_id = Some(id),
+            "plagiarism_id" => plagiarism_id = Some(id),
             _ => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Unexpected parameter: '{}'.", key)))).into_response()),
         }
     }
@@ -441,6 +468,9 @@ pub async fn validate_known_ids(
     }
     if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, ticket_id) {
         check_ticket_hierarchy(mid, aid, tid, db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid), Some(sid)) = (module_id, assignment_id, plagiarism_id) {
+        check_plagiarism_hierarchy(mid, aid, sid, db).await.map_err(|e| e.into_response())?;
     }
 
     Ok(next.run(req).await)
