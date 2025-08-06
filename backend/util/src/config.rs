@@ -19,6 +19,8 @@ pub struct AppConfig {
     pub assignment_storage_root: String,
     pub host: String,
     pub port: u16,
+    pub code_manager_host: String,
+    pub code_manager_port: u16,
     pub jwt_secret: String,
     pub jwt_duration_minutes: u64,
     pub reset_token_expiry_minutes: u64,
@@ -48,13 +50,31 @@ impl AppConfig {
             log_file: env::var("LOG_FILE").unwrap_or_else(|_| "api.log".into()),
             log_to_stdout: env::var("LOG_TO_STDOUT").unwrap_or_else(|_| "false".into()) == "true",
             database_path: env::var("DATABASE_PATH").expect("DATABASE_PATH is required"),
-            assignment_storage_root: env::var("ASSIGNMENT_STORAGE_ROOT").expect("ASSIGNMENT_STORAGE_ROOT is required"),
+            assignment_storage_root: env::var("ASSIGNMENT_STORAGE_ROOT")
+                .expect("ASSIGNMENT_STORAGE_ROOT is required"),
             host: env::var("HOST").unwrap_or_else(|_| "127.0.0.1".into()),
-            port: env::var("PORT").unwrap_or_else(|_| "3000".into()).parse().unwrap(),
+            port: env::var("PORT")
+                .unwrap_or_else(|_| "3000".into())
+                .parse()
+                .unwrap(),
+            code_manager_host: env::var("CODE_MANAGE_HOST").unwrap_or_else(|_| "127.0.0.1".into()),
+            code_manager_port: env::var("CODE_MANAGE_PORT")
+                .unwrap_or_else(|_| "3001".into())
+                .parse()
+                .unwrap(),
             jwt_secret: env::var("JWT_SECRET").expect("JWT_SECRET is required"),
-            jwt_duration_minutes: env::var("JWT_DURATION_MINUTES").unwrap_or("60".into()).parse().unwrap(),
-            reset_token_expiry_minutes: env::var("RESET_TOKEN_EXPIRY_MINUTES").unwrap_or("15".into()).parse().unwrap(),
-            max_password_reset_requests_per_hour: env::var("MAX_PASSWORD_RESET_REQUESTS_PER_HOUR").unwrap_or("3".into()).parse().unwrap(),
+            jwt_duration_minutes: env::var("JWT_DURATION_MINUTES")
+                .unwrap_or("60".into())
+                .parse()
+                .unwrap(),
+            reset_token_expiry_minutes: env::var("RESET_TOKEN_EXPIRY_MINUTES")
+                .unwrap_or("15".into())
+                .parse()
+                .unwrap(),
+            max_password_reset_requests_per_hour: env::var("MAX_PASSWORD_RESET_REQUESTS_PER_HOUR")
+                .unwrap_or("3".into())
+                .parse()
+                .unwrap(),
             gmail_username: env::var("GMAIL_USERNAME").unwrap_or_default(),
             gmail_app_password: env::var("GMAIL_APP_PASSWORD").unwrap_or_default(),
             frontend_url: env::var("FRONTEND_URL").unwrap_or_default(),
@@ -92,7 +112,9 @@ impl AppConfig {
         F: FnOnce(&mut AppConfig),
     {
         let lock = CONFIG_INSTANCE.get_or_init(|| RwLock::new(AppConfig::from_env()));
-        let mut guard = lock.write().expect("Failed to acquire AppConfig write lock");
+        let mut guard = lock
+            .write()
+            .expect("Failed to acquire AppConfig write lock");
         setter(&mut guard);
     }
 
