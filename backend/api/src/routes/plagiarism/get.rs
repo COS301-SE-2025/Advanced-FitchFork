@@ -1,13 +1,19 @@
-use axum::{Json, response::IntoResponse};
+use axum::{extract::Query, Json, response::IntoResponse};
 use db::{
     connect,
     models::{
         assignment_submission::Entity as SubmissionEntity,
-        plagiarism_case::Entity as PlagiarismEntity, user::Entity as UserEntity,
+        plagiarism_case::{self, Entity as PlagiarismEntity},
+        user::Entity as UserEntity,
     },
 };
-use sea_orm::EntityTrait;
-use serde::Serialize;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize)]
+pub struct PlagiarismQuery {
+    pub status: Option<String>,
+}
 
 #[derive(Debug, Serialize)]
 pub struct Link {
@@ -20,9 +26,18 @@ pub struct LinksResponse {
     pub links: Vec<Link>,
 }
 
-pub async fn get_graph() -> impl IntoResponse {
+pub async fn get_graph(Query(query): Query<PlagiarismQuery>) -> impl IntoResponse {
     let db = connect().await;
-    let plagiarism_cases = match PlagiarismEntity::find().all(&db).await {
+
+    let mut query_builder = PlagiarismEntity::find();
+
+    if let Some(status_str) = query.status {
+        if let Ok(status) = status_str.parse::<plagiarism_case::Status>() {
+            query_builder = query_builder.filter(plagiarism_case::Column::Status.eq(status));
+        }
+    }
+
+    let plagiarism_cases = match query_builder.all(&db).await {
         Ok(cases) => cases,
         Err(_) => {
             return (
