@@ -78,6 +78,32 @@ impl Model {
         announcement.insert(db).await
     }
 
+    pub async fn update(
+        db: &DbConn,
+        id: i64,
+        title: Option<&str>,
+        body: Option<&str>,
+        pinned: Option<bool>,
+    ) -> Result<Model, DbErr> {
+        let mut announcement = ActiveModel {
+            id: Set(id),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+
+        if let Some(title) = title {
+            announcement.title = Set(title.to_owned());
+        }
+        if let Some(body) = body {
+            announcement.body = Set(body.to_owned());
+        }
+        if let Some(pinned) = pinned {
+            announcement.pinned = Set(pinned);
+        }
+
+        announcement.update(db).await
+    }
+
     pub async fn find_by_user_id(db: &DbConn, user_id: i64) -> Result<Vec<Model>, DbErr> {
         Entity::find()
             .filter(Column::UserId.eq(user_id))
