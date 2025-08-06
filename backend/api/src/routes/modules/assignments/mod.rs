@@ -75,5 +75,5 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .nest( "/{assignment_id}/submissions", submission_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
         .nest("/{assignment_id}/files", files_routes(app_state.clone()))
         .nest("/{assignment_id}/tickets", ticket_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
-        .nest("/{assignment_id}/plagiarism", plagiarism_routes().route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
+        .nest("/{assignment_id}/plagiarism", plagiarism_routes().route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
 }
