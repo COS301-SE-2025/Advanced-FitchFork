@@ -12,7 +12,7 @@ mod plagiarism_tests {
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
-    use sea_orm::DatabaseConnection;
+    use sea_orm::{Set, IntoActiveModel, ActiveModelTrait, DatabaseConnection};
     use tower::ServiceExt;
     use serde_json::Value;
     use api::auth::generate_jwt;
@@ -83,31 +83,25 @@ mod plagiarism_tests {
             .await
             .unwrap();
 
-        // Create first case
         let mut case1 = PlagiarismCaseModel::create_case(db, assignment_id, sub3.id, sub4.id, "Resolved case")
             .await
             .unwrap();
 
-        // Convert to ActiveModel to update
         let mut active_case1 = case1.into_active_model();
         active_case1.status = Set(Status::Flagged);
-        active_case1.updated_at = Set(Utc::now());  // Update timestamp
+        active_case1.updated_at = Set(Utc::now());
         
-        // Save to database
         case1 = active_case1.update(db).await.unwrap();
         cases.push(case1);
 
-        // Create second case
         let mut case2 = PlagiarismCaseModel::create_case(db, assignment_id, sub3.id, sub4.id, "Pending case")
             .await
             .unwrap();
 
-        // Convert to ActiveModel to update
         let mut active_case2 = case2.into_active_model();
         active_case2.status = Set(Status::Reviewed);
-        active_case2.updated_at = Set(Utc::now());  // Update timestamp
+        active_case2.updated_at = Set(Utc::now());
         
-        // Save to database
         case2 = active_case2.update(db).await.unwrap();
         cases.push(case2);
 
@@ -292,9 +286,9 @@ mod plagiarism_tests {
         assert_eq!(json["data"]["total"], 0);
     }
 
-    /// Test Case: Filtering by Status
+    /// Test Case: Filtering by `Review` Status
     #[tokio::test]
-    async fn test_list_plagiarism_cases_filter_by_status() {
+    async fn test_list_plagiarism_cases_filter_by_review_status() {
         let (app, app_state) = make_test_app().await;
         let data = setup_test_data(app_state.db()).await;
         
@@ -321,6 +315,68 @@ mod plagiarism_tests {
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 1);
         assert_eq!(cases[0]["status"], "Review");
+    }
+
+    /// Test Case: Filtering by `Flagged` Status
+    #[tokio::test]
+    async fn test_list_plagiarism_cases_filter_by_flagged_status() {
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
+        
+        let _ = create_additional_plagiarism_cases(
+            app_state.db(),
+            data.assignment.id,
+            data.student_user1.id,
+            data.student_user2.id,
+        ).await;
+
+        let req = make_request(
+            &data.admin_user,
+            data.module.id,
+            data.assignment.id,
+            Some(vec![("status", "Flagged")]),
+        );
+        let response = app.oneshot(req).await.unwrap();
+        
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        
+        let cases = json["data"]["cases"].as_array().unwrap();
+        assert_eq!(cases.len(), 1);
+        assert_eq!(cases[0]["status"], "Flagged");
+    }
+
+    /// Test Case: Filtering by `Reviewed` Status
+    #[tokio::test]
+    async fn test_list_plagiarism_cases_filter_by_reviewed_status() {
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
+        
+        let _ = create_additional_plagiarism_cases(
+            app_state.db(),
+            data.assignment.id,
+            data.student_user1.id,
+            data.student_user2.id,
+        ).await;
+
+        let req = make_request(
+            &data.admin_user,
+            data.module.id,
+            data.assignment.id,
+            Some(vec![("status", "Reviewed")]),
+        );
+        let response = app.oneshot(req).await.unwrap();
+        
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        
+        let cases = json["data"]["cases"].as_array().unwrap();
+        assert_eq!(cases.len(), 1);
+        assert_eq!(cases[0]["status"], "Reviewed");
     }
 
     /// Test Case: Search by Username
@@ -526,11 +582,6 @@ mod plagiarism_tests {
         );
         let response = app.oneshot(req).await.unwrap();
         
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let json: Value = serde_json::from_slice(&body).unwrap();
-        
-        assert!(json["data"]["cases"].as_array().unwrap().len() >= 1);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

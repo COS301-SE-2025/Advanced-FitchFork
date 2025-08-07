@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::response::ApiResponse;
 use util::state::AppState;
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct CreatePlagiarismCasePayload {
     pub submission_id_1: i64,
     pub submission_id_2: i64,

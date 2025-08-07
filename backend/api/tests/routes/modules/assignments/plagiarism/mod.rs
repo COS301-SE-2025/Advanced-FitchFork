@@ -1,5 +1,5 @@
 pub mod get_test;
-// pub mod post;
-// pub mod put;
-// pub mod delete;
-// pub mod patch;
+pub mod post_test;
+pub mod put_test;
+pub mod delete_test;
+pub mod patch_test;

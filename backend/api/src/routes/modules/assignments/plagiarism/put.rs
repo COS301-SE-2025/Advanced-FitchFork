@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use util::state::AppState;
 use crate::response::ApiResponse;
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct UpdatePlagiarismCasePayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -159,10 +159,10 @@ pub async fn update_plagiarism_case(
         }
     };
 
-    let mut case = case;
+    let mut case = case.into_active_model();
 
     if let Some(description) = payload.description {
-        case.description = description;
+        case.description = sea_orm::ActiveValue::Set(description);
     }
 
     if let Some(status_str) = payload.status {
@@ -179,12 +179,12 @@ pub async fn update_plagiarism_case(
                 );
             }
         };
-        case.status = status;
+        case.status = sea_orm::ActiveValue::Set(status);
     }
 
-    case.updated_at = Utc::now();
+    case.updated_at = sea_orm::ActiveValue::Set(Utc::now());
 
-    let updated_case = match case.into_active_model().update(app_state.db()).await {
+    let updated_case = match case.update(app_state.db()).await {
         Ok(updated) => updated,
         Err(e) => {
             return (
