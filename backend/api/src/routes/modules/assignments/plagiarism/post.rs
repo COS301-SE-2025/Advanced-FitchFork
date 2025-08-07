@@ -6,12 +6,14 @@ use axum::{
 };
 use db::models::{
     assignment_submission::{self, Entity as SubmissionEntity},
+    assignment_file,
     plagiarism_case,
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use crate::response::ApiResponse;
+use crate::{response::ApiResponse, services::moss::MossService};
 use util::state::AppState;
+use std::env;
 
 #[derive(Serialize, Deserialize)]
 pub struct CreatePlagiarismCasePayload {
@@ -184,6 +186,97 @@ pub async fn create_plagiarism_case(
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error("Failed to create plagiarism case".to_string())),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct MossRequest {
+    pub user_ids: Vec<i64>,
+    pub language: String,
+}
+
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss
+///
+/// Runs a MOSS check on the latest submissions from a list of users.
+/// Accessible only to lecturers and assistant lecturers assigned to the module.
+///
+/// # Path Parameters
+///
+/// - `module_id`: The ID of the parent module
+/// - `assignment_id`: The ID of the assignment containing the submissions
+///
+/// # Request Body
+///
+/// Requires a JSON payload with the following fields:
+/// - `user_ids`: A list of user IDs to include in the MOSS check
+/// - `language`: The programming language of the submissions
+///
+/// # Returns
+///
+/// Returns an HTTP response indicating the result:
+/// - `200 OK` with the MOSS report URL on success
+/// - `500 INTERNAL SERVER ERROR` for MOSS server errors or other failures
+///
+/// # Example Request
+///
+/// ```json
+/// {
+///   "user_ids": [1, 2, 3],
+///   "language": "c"
+/// }
+/// ```
+///
+/// # Example Response (200 OK)
+///
+/// ```json
+/// {
+///   "success": true,
+///   "message": "MOSS check completed successfully",
+///   "data": "http://moss.stanford.edu/results/123456789"
+/// }
+/// ```
+pub async fn run_moss_check(
+    State(app_state): State<AppState>,
+    Path((_module_id, assignment_id)): Path<(i64, i64)>,
+    Json(payload): Json<MossRequest>,
+) -> impl IntoResponse {
+    let submissions =
+        assignment_submission::Model::get_latest_submissions_for_users(
+            app_state.db(),
+            assignment_id,
+            payload.user_ids,
+        )
+        .await;
+
+    match submissions {
+        Ok(submissions) => {
+            let submission_files: Vec<_> = submissions.iter().map(|s| s.full_path()).collect();
+            
+            let base_files = match assignment_file::Model::get_base_files(app_state.db(), assignment_id).await {
+                Ok(files) => files.into_iter().map(|f| f.full_path()).collect(),
+                Err(_) => vec![],
+            };
+
+            let moss_user_id = env::var("MOSS_USER_ID").unwrap_or_else(|_| "YOUR_MOSS_USER_ID".to_string());
+            let moss_service = MossService::new(&moss_user_id);
+            match moss_service.run(base_files, submission_files, &payload.language).await {
+                Ok(result) => (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(result, "MOSS check completed successfully")),
+                )
+                    .into_response(),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error(format!("Failed to run MOSS check: {}", e))),
+                )
+                    .into_response(),
+            }
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error("Failed to retrieve submissions".to_string())),
         )
             .into_response(),
     }

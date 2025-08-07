@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 // use code_runner::ExecutionConfig;
-use sea_orm::ActiveValue::Set;
+use sea_orm::{ActiveValue::Set, DbErr, DatabaseConnection};
 use sea_orm::entity::prelude::*;
 use std::env;
 use std::fs;
@@ -107,6 +107,10 @@ impl Model {
             .join(file_type.to_string())
     }
 
+    pub fn full_path(&self) -> PathBuf {
+        Self::storage_root().join(&self.path)
+    }
+
     pub async fn save_file(
         db: &DatabaseConnection,
         assignment_id: i64,
@@ -187,6 +191,17 @@ impl Model {
     pub fn delete_file_only(&self) -> Result<(), std::io::Error> {
         let full_path = Self::storage_root().join(&self.path);
         fs::remove_file(full_path)
+    }
+    
+    pub async fn get_base_files(
+        db: &DatabaseConnection,
+        assignment_id: i64,
+    ) -> Result<Vec<Self>, DbErr> {
+        Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .filter(Column::FileType.eq(FileType::Main))
+            .all(db)
+            .await
     }
 }
 
