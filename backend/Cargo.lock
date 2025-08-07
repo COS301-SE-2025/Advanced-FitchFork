@@ -64,8 +64,11 @@ dependencies = [
 name = "ai"
 version = "0.1.0"
 dependencies = [
+ "code-runner",
  "db",
  "rand 0.8.5",
+ "sea-orm",
+ "tokio",
 ]
 
 [[package]]
