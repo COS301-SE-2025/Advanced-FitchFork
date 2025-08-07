@@ -17,6 +17,7 @@ impl ContainerManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn clone(&self) -> Self {
         Self {
             queue: Arc::clone(&self.queue),
@@ -53,7 +54,7 @@ impl ContainerManager {
     }
 
     /// A mock run method specifically for testing concurrency.
-    /// It includes the atomic counters to track actual concurrent execution.
+    #[allow(dead_code)]
     pub async fn run_mock(
         &self,
         language: &str,

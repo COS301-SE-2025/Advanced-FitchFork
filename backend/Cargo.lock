@@ -652,10 +652,12 @@ dependencies = [
  "once_cell",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "util",
+ "zip",
 ]
 
 [[package]]

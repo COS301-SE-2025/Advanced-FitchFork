@@ -1,7 +1,7 @@
 //manager/queue.rs
 use std::collections::VecDeque;
 use std::sync::Arc;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 
 pub struct Queue {
     max_concurrent: usize,

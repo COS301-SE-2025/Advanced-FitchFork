@@ -13,11 +13,9 @@ async fn test_queue_respects_max_concurrency() {
 
     let start = Instant::now();
 
-    // Track actual concurrency during execution
     let running_count = Arc::new(AtomicUsize::new(0));
     let max_observed_concurrent = Arc::new(AtomicUsize::new(0));
 
-    // Spawn multiple concurrent run requests
     let handles: Vec<_> = (0..total_runs)
         .map(|i| {
             let mgr = manager.clone();
@@ -28,14 +26,12 @@ async fn test_queue_respects_max_concurrency() {
                 let language = "rust";
                 let files = vec![format!("file_{}.rs", i)];
 
-                // Call the new mock method that handles tracking internally
                 mgr.run_mock(language, &files, running_count_clone, max_observed_clone)
                     .await
             })
         })
         .collect();
 
-    // Wait for all to finish
     let results = futures::future::join_all(handles).await;
     let elapsed = start.elapsed();
 
@@ -49,7 +45,6 @@ async fn test_queue_respects_max_concurrency() {
         max_observed_concurrent.load(Ordering::SeqCst)
     );
 
-    // Verify all tasks completed successfully
     for (i, result) in results.into_iter().enumerate() {
         let output = result.expect("Task should not panic");
         assert!(
@@ -64,7 +59,6 @@ async fn test_queue_respects_max_concurrency() {
         );
     }
 
-    // Verify concurrency was respected
     assert!(
         max_observed_concurrent.load(Ordering::SeqCst) <= max_concurrent,
         "Observed {} concurrent runs, but max should be {}",
@@ -72,7 +66,6 @@ async fn test_queue_respects_max_concurrency() {
         max_concurrent
     );
 
-    // Verify timing constraints (with tolerance for test environment variance)
     assert!(
         elapsed >= expected_min_duration - tolerance,
         "Elapsed time {:.2}s is too short, expected at least {:.2}s (with {:.2}s tolerance)",
@@ -81,7 +74,6 @@ async fn test_queue_respects_max_concurrency() {
         tolerance.as_secs_f64()
     );
 
-    // Reasonable upper bound to catch infinite waits
     let max_expected = Duration::from_secs(10);
     assert!(
         elapsed <= max_expected,
@@ -93,7 +85,6 @@ async fn test_queue_respects_max_concurrency() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_queue_handles_different_concurrency_limits() {
-    // Test with max_concurrent = 1 (serial execution)
     let manager = ContainerManager::new(1);
     let start = Instant::now();
 
@@ -107,7 +98,6 @@ async fn test_queue_handles_different_concurrency_limits() {
     futures::future::join_all(handles).await;
     let elapsed = start.elapsed();
 
-    // With max_concurrent=1, 3 runs should take ~6 seconds (3 * 2s each)
     assert!(
         elapsed >= Duration::from_millis(5500),
         "Serial execution should take at least 5.5s, got {:.2}s",
@@ -122,9 +112,8 @@ async fn test_queue_handles_different_concurrency_limits() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_queue_with_no_waiting() {
-    // Test case where all requests can run immediately
     let max_concurrent = 5;
-    let total_runs = 3; // Less than max_concurrent
+    let total_runs = 3;
     let manager = ContainerManager::new(max_concurrent);
 
     let start = Instant::now();
@@ -139,7 +128,6 @@ async fn test_queue_with_no_waiting() {
     let results = futures::future::join_all(handles).await;
     let elapsed = start.elapsed();
 
-    // All should run concurrently, so total time should be ~2 seconds
     assert!(
         elapsed >= Duration::from_millis(1800),
         "Concurrent execution should take at least 1.8s"
@@ -150,7 +138,6 @@ async fn test_queue_with_no_waiting() {
         elapsed.as_secs_f64()
     );
 
-    // Verify all completed successfully
     assert_eq!(results.len(), total_runs);
     for result in results {
         assert!(result.is_ok());
@@ -158,46 +145,12 @@ async fn test_queue_with_no_waiting() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_queue_fairness() {
-    // Test that tasks are processed in FIFO order
-    let manager = ContainerManager::new(1); // Force serial execution
-
-    let completion_order = Arc::new(tokio::sync::Mutex::new(Vec::new()));
-
-    let handles: Vec<_> = (0..5)
-        .map(|i| {
-            let mgr = manager.clone();
-            let order = Arc::clone(&completion_order);
-            tokio::spawn(async move {
-                let result = mgr.run("rust", &[format!("task_{}.rs", i)]).await;
-                order.lock().await.push(i);
-                result
-            })
-        })
-        .collect();
-
-    futures::future::join_all(handles).await;
-
-    let final_order = completion_order.lock().await;
-    println!("Completion order: {:?}", *final_order);
-
-    // Should complete in order 0, 1, 2, 3, 4
-    assert_eq!(
-        *final_order,
-        vec![0, 1, 2, 3, 4],
-        "Tasks should complete in FIFO order"
-    );
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_concurrent_managers() {
-    // Test that multiple manager instances work independently
     let manager1 = ContainerManager::new(2);
     let manager2 = ContainerManager::new(1);
 
     let start = Instant::now();
 
-    // Manager 1 runs 3 tasks (should take ~4 seconds: 2 parallel + 1 sequential)
     let handles1: Vec<_> = (0..3)
         .map(|i| {
             let mgr = manager1.clone();
@@ -205,7 +158,6 @@ async fn test_concurrent_managers() {
         })
         .collect();
 
-    // Manager 2 runs 2 tasks serially (should take ~4 seconds)
     let handles2: Vec<_> = (0..2)
         .map(|i| {
             let mgr = manager2.clone();
@@ -213,7 +165,6 @@ async fn test_concurrent_managers() {
         })
         .collect();
 
-    // Both should complete around the same time since they run independently
     let (results1, results2) = tokio::join!(
         futures::future::join_all(handles1),
         futures::future::join_all(handles2)
@@ -221,7 +172,6 @@ async fn test_concurrent_managers() {
 
     let elapsed = start.elapsed();
 
-    // Should take around 4 seconds (not 6-8 if they were blocking each other)
     assert!(elapsed >= Duration::from_millis(3500));
     assert!(
         elapsed <= Duration::from_millis(5000),

@@ -21,6 +21,7 @@ pub struct AppConfig {
     pub port: u16,
     pub code_manager_host: String,
     pub code_manager_port: u16,
+    pub max_number_containers: usize,
     pub jwt_secret: String,
     pub jwt_duration_minutes: u64,
     pub reset_token_expiry_minutes: u64,
@@ -59,7 +60,11 @@ impl AppConfig {
                 .unwrap(),
             code_manager_host: env::var("CODE_MANAGE_HOST").unwrap_or_else(|_| "127.0.0.1".into()),
             code_manager_port: env::var("CODE_MANAGE_PORT")
-                .unwrap_or_else(|_| "3001".into())
+                .unwrap_or_else(|_| "5000".into())
+                .parse()
+                .unwrap(),
+            max_number_containers: env::var("MAX_NUM_CONTAINERS")
+                .unwrap_or("10".into())
                 .parse()
                 .unwrap(),
             jwt_secret: env::var("JWT_SECRET").expect("JWT_SECRET is required"),

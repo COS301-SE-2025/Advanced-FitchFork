@@ -11,10 +11,14 @@ mod manager;
 #[tokio::main]
 async fn main() {
     let config = AppConfig::from_env();
+
     // Initialize tracing subscriber (logging)
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .init();
+
+    // Initialize the global ContainerManager
+    api::init_manager(config.max_number_containers);
 
     // Build API routes
     let app = Router::new()
