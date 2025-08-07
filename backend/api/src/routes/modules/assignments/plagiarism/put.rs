@@ -1,6 +1,7 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
+    response::IntoResponse,
     Json,
 };
 use chrono::Utc;
@@ -18,7 +19,7 @@ pub struct UpdatePlagiarismCasePayload {
     pub status: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct PlagiarismCaseResponse {
     id: i64,
     assignment_id: i64,
@@ -123,20 +124,42 @@ pub async fn update_plagiarism_case(
     State(app_state): State<AppState>,
     Path((_, assignment_id, case_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<UpdatePlagiarismCasePayload>,
-) -> Result<Json<ApiResponse<PlagiarismCaseResponse>>, (StatusCode, Json<ApiResponse<()>>)> {
+) -> impl IntoResponse {
     if payload.description.is_none() && payload.status.is_none() {
-        return Err((
+        return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error("At least one field (description or status) must be provided".to_string())),
-        ));
+            Json(ApiResponse::<PlagiarismCaseResponse>::error(
+                "At least one field (description or status) must be provided",
+            )),
+        );
     }
 
-    let mut case = PlagiarismEntity::find_by_id(case_id)
+    let case = match PlagiarismEntity::find_by_id(case_id)
         .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
         .one(app_state.db())
         .await
-        .unwrap()
-        .unwrap();
+    {
+        Ok(Some(case)) => case,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<PlagiarismCaseResponse>::error(
+                    "Plagiarism case not found",
+                )),
+            );
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<PlagiarismCaseResponse>::error(format!(
+                    "Database error: {}",
+                    e
+                ))),
+            );
+        }
+    };
+
+    let mut case = case;
 
     if let Some(description) = payload.description {
         case.description = description;
@@ -148,10 +171,12 @@ pub async fn update_plagiarism_case(
             "flagged" => Status::Flagged,
             "reviewed" => Status::Reviewed,
             _ => {
-                return Err((
+                return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<()>::error("Invalid status value. Must be one of: 'review', 'flagged', 'reviewed'".to_string())),
-                ));
+                    Json(ApiResponse::<PlagiarismCaseResponse>::error(
+                        "Invalid status value. Must be one of: 'review', 'flagged', 'reviewed'",
+                    )),
+                );
             }
         };
         case.status = status;
@@ -159,15 +184,18 @@ pub async fn update_plagiarism_case(
 
     case.updated_at = Utc::now();
 
-    let updated_case = case.into_active_model()
-        .update(app_state.db())
-        .await
-        .map_err(|e| {
-            (
+    let updated_case = match case.into_active_model().update(app_state.db()).await {
+        Ok(updated) => updated,
+        Err(e) => {
+            return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(format!("Failed to update plagiarism case: {}", e))),
-            )
-        })?;
+                Json(ApiResponse::<PlagiarismCaseResponse>::error(format!(
+                    "Failed to update plagiarism case: {}",
+                    e
+                ))),
+            );
+        }
+    };
 
     let response = PlagiarismCaseResponse {
         id: updated_case.id,
@@ -180,5 +208,11 @@ pub async fn update_plagiarism_case(
         updated_at: updated_case.updated_at,
     };
 
-    Ok(Json(ApiResponse::success(response, "Plagiarism case updated successfully")))
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            response,
+            "Plagiarism case updated successfully",
+        )),
+    )
 }

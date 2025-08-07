@@ -1,4 +1,4 @@
-use axum::{extract::{State, Path, Query}, Json, response::IntoResponse};
+use axum::{extract::{State, Path, Query}, http::StatusCode, Json, response::IntoResponse};
 use db::models::{
     assignment_submission::{self, Entity as SubmissionEntity},
     plagiarism_case::{self, Entity as PlagiarismEntity, Status},
@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::collections::HashMap;
 use util::state::AppState;
+use crate::response::ApiResponse;
 
 #[derive(Debug, Deserialize)]
 pub struct ListPlagiarismCaseQueryParams {
@@ -44,6 +45,14 @@ pub struct PlagiarismCaseResponse {
     updated_at: chrono::DateTime<chrono::Utc>,
     submission_1: SubmissionResponse,
     submission_2: SubmissionResponse,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PlagiarismCaseListResponse {
+    cases: Vec<PlagiarismCaseResponse>,
+    page: u64,
+    per_page: u64,
+    total: u64,
 }
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism
@@ -173,6 +182,11 @@ pub async fn list_plagiarism_cases(
     if let Some(status_str) = params.status {
         if let Ok(status) = Status::from_str(&status_str) {
             query = query.filter(plagiarism_case::Column::Status.eq(status));
+        } else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<PlagiarismCaseListResponse>::error("Invalid status parameter")),
+            );
         }
     }
     if let Some(search_query) = params.query {
@@ -284,16 +298,17 @@ pub async fn list_plagiarism_cases(
         })
         .collect();
 
-    Json(serde_json::json!({
-        "success": true,
-        "message": "Plagiarism cases retrieved successfully",
-        "data": {
-            "cases": response_cases,
-            "page": page,
-            "per_page": per_page,
-            "total": total_items,
-        }
-    }))
+    let response = PlagiarismCaseListResponse {
+        cases: response_cases,
+        page,
+        per_page,
+        total: total_items,
+    };
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(response, "Plagiarism cases retrieved successfully")),
+    )
 }
 
 #[derive(Debug, Deserialize)]
