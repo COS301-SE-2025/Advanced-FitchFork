@@ -1,48 +1,158 @@
-name: Integration Tests
+name: CI
 
 on:
-  push:
-    branches: [main, dev]
   pull_request:
     branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  backend-tests:
-    name: Rust Unit + Integration Tests
+  cypress:
+    name: E2E (Cypress)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
+    timeout-minutes: 45
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache Cargo build output
-        uses: actions/cache@v3
-        with:
-          path: |
-            target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions/checkout@v4
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          override: true
 
-      - name: Copy .env file
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            backend
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            frontend/package-lock.json
+            tests/package-lock.json
+
+      - name: Copy backend .env
         run: cp .env.example .env
+        working-directory: backend
 
-      - name: Build universal-runner image
-        run: docker build -t universal-runner:latest .
+      - name: DB fresh (migrate + seed)
+        run: |
+          cargo run -p migration -- fresh
+          cargo run -p seeder --quiet
+        working-directory: backend
 
-      - name: Run backend tests
-        run: cargo test --workspace --all-features
+      - name: Copy frontend .env
+        run: cp .env.example .env
+        working-directory: frontend
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: Install test deps
+        run: npm ci
+        working-directory: tests
+
+      # --- start servers needed for Cypress: api + code + frontend ---
+      - name: Start servers
+        uses: ./.github/actions/start-servers
+        with:
+          start-frontend: "true"
+          api-url: "http://localhost:3000/api/health"
+          code-url: "http://localhost:5000/health"
+          frontend-url: "http://localhost:5173"
+
+      - name: Run Cypress
+        env:
+          CI: "1"
+        run: npm run e2e
+        working-directory: tests
+
+      # --- collect artifacts on failure ---
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            api.log
+            code.log
+            frontend.log
+            tests/cypress/screenshots
+            tests/cypress/videos
+          if-no-files-found: ignore
+
+      - name: Stop servers
+        if: always()
+        run: bash /tmp/stop_servers.sh
+
+  integration:
+    name: Integration Tests (Rust)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            backend
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Copy backend .env
+        run: cp .env.example .env
+        working-directory: backend
+
+      - name: DB fresh (migrate + seed)
+        run: |
+          cargo run -p migration -- fresh
+          cargo run -p seeder --quiet
+        working-directory: backend
+
+      # --- start servers needed for integration: api + code ---
+      - name: Start servers
+        uses: ./.github/actions/start-servers
+        with:
+          start-frontend: "false"
+          api-url: "http://localhost:3000/api/health"
+          code-url: "http://localhost:5000/health"
+
+      - name: Run integration tests
+        working-directory: backend
+        run: |
+          cargo test --all -- --nocapture
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs
+          path: |
+            api.log
+            code.log
+          if-no-files-found: ignore
+
+      - name: Stop servers
+        if: always()
+        run: bash /tmp/stop_servers.sh
