@@ -32,7 +32,8 @@ enum Users {
 
 
 #[derive(Iden)]
-enum Submissions {
+enum AssignmentSubmissions {
+    #[iden = "assignment_submissions"]
     Table,
     Id,
 }
@@ -74,6 +75,14 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .default(Expr::cust("CURRENT_TIMESTAMP")),
                     )
+                    .index(
+                        Index::create()
+                            .name("uq_grades_assignment_student")
+                            .col(Grades::AssignmentId)
+                            .col(Grades::StudentId)
+                            .unique(),
+                    )
+
                     // FKs
                     .foreign_key(
                         ForeignKey::create()
@@ -93,7 +102,7 @@ impl MigrationTrait for Migration {
                         ForeignKey::create()
                             .name("fk_grades_submission")
                             .from(Grades::Table, Grades::SubmissionId)
-                            .to(Submissions::Table, Submissions::Id)
+                            .to(AssignmentSubmissions::Table, AssignmentSubmissions::Id)
                             .on_delete(ForeignKeyAction::SetNull),
                     )
                     .to_owned(),
