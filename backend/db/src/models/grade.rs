@@ -1,6 +1,6 @@
 use sea_orm::entity::prelude::*;
 use sea_orm::Iterable;
-
+use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "grades")]
@@ -12,7 +12,7 @@ pub struct Model {
     pub student_id: i64,           // FK -> users.id
     pub submission_id: Option<i64>,// FK -> submissions.id (nullable)
 
-    pub score: f32,                // 0.0..=100.0 (DB enforces default 0.0)
+    pub score: f32,             
     pub created_at: DateTime,      // DEFAULT CURRENT_TIMESTAMP (DB)
     pub updated_at: DateTime,      // DEFAULT CURRENT_TIMESTAMP (DB); todo: might have to go back and add this to the DB migration
 }
@@ -61,4 +61,64 @@ impl Related<super::user::Entity> for Entity {
 }
 impl Related<super::assignment_submission::Entity> for Entity {
     fn to() -> RelationDef { Relation::AssignmentSubmission.def() }
+}
+
+
+
+/// Load a single grade record for a specific assignment & student,
+/// along with its related `Assignment`, `User` (student), and optional `AssignmentSubmission`.
+///
+/// # Arguments
+/// * `db` - The active database connection.
+/// * `assignment_id` - The ID of the assignment the grade belongs to.
+/// * `student_id` - The ID of the student whose grade is being retrieved.
+///
+/// # Returns
+/// * `Ok(Some((grade, submission, assignment, student)))`
+///   - `grade` - The `Grade` model.
+///   - `submission` - An `Option<AssignmentSubmission>` if the grade is linked to a submission; `None` if no submission was selected.
+///   - `assignment` - The `Assignment` model linked to the grade.
+///   - `student` - The `User` model linked to the grade.
+/// * `Ok(None)` - No grade was found for the given assignment/student.
+/// * `Err(DbErr)` - A database error occurred.
+///
+/// # Example
+/// ```rust,ignore
+/// let result = grade::find_one_with_related(&db, 42, 101).await?;
+/// if let Some((grade, submission, assignment, student)) = result {
+///     println!("Grade: {}% for student {}", grade.score, student.name);
+/// }
+/// ```
+pub async fn find_one_with_related(
+    db: &DatabaseConnection,
+    assignment_id: i64,
+    student_id: i64,
+) -> Result<Option<(Model, Option<super::assignment_submission::Model>, super::assignment::Model, super::user::Model)>, sea_orm::DbErr> {
+    if let Some(grade) = Entity::find()
+        .filter(Column::AssignmentId.eq(assignment_id))
+        .filter(Column::StudentId.eq(student_id))
+        .one(db)
+        .await?
+    {
+        let assignment = grade
+            .find_related(super::assignment::Entity)
+            .one(db)
+            .await?
+            .expect("FK to assignment is non-null, but record not found");
+
+        let student = grade
+            .find_related(super::user::Entity)
+            .one(db)
+            .await?
+            .expect("FK to student is non-null, but record not found");
+
+        let submission = grade
+            .find_related(super::assignment_submission::Entity)
+            .one(db)
+            .await?;
+
+        Ok(Some((grade, submission, assignment, student)))
+    } else {
+        Ok(None)
+    }
 }
