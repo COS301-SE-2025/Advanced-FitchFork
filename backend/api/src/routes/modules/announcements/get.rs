@@ -39,7 +39,7 @@ impl FilterResponse {
     }
 }
 
-pub async fn get_module_announcements(
+pub async fn get_announcements(
     Path(module_id): Path<i64>,
     State(app_state): State<AppState>,
     Query(params): Query<FilterReq>,
