@@ -233,6 +233,57 @@ pub async fn require_assigned_to_module(
     ).await
 }
 
+pub async fn require_ready_assignment(
+    State(app_state): State<AppState>,
+    Path(params): Path<HashMap<String, String>>,
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    let db = app_state.db();
+
+    let module_id = params.get("module_id")
+        .and_then(|s| s.parse::<i32>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Missing or invalid module_id"))
+        ))?;
+
+    let assignment_id = params.get("assignment_id")
+        .and_then(|s| s.parse::<i32>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Missing or invalid assignment_id"))
+        ))?;
+
+    let assignment = match AssignmentEntity::find_by_id(assignment_id).one(db).await {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::error(format!(
+                    "Assignment {} in Module {} not found.",
+                    assignment_id, module_id
+                ))),
+            ));
+        }
+        Err(_) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("Database error while checking assignment")),
+            ));
+        }
+    };
+
+    if assignment.status == db::models::assignment::Status::Setup {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::error("Assignment is still in Setup stage"))
+        ));
+    }
+
+    Ok(next.run(req).await)
+}
+
 // --- Path ID Guards ---
 
 async fn check_module_exists(

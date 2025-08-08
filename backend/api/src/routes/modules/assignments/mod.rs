@@ -12,7 +12,7 @@ use tasks::tasks_routes;
 use tickets::ticket_routes;
 use plagiarism::plagiarism_routes;
 use util::state::AppState;
-use crate::auth::guards::{require_assigned_to_module, require_lecturer, require_lecturer_or_assistant_lecturer};
+use crate::auth::guards::{require_assigned_to_module, require_lecturer, require_lecturer_or_assistant_lecturer, require_ready_assignment};
 
 pub mod config;
 pub mod delete;
@@ -62,8 +62,8 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .route("/{assignment_id}", get(get_assignment).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
         .route("/{assignment_id}", put(edit_assignment).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)))
         .route("/{assignment_id}", delete(delete_assignment).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)))
-        .route("/{assignment_id}/open", put(open_assignment).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)))
-        .route("/{assignment_id}/close", put(close_assignment).layer(from_fn_with_state(app_state.clone(), require_lecturer)))
+        .route("/{assignment_id}/open", put(open_assignment).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)).route_layer(from_fn_with_state(app_state.clone(), require_ready_assignment)))
+        .route("/{assignment_id}/close", put(close_assignment).layer(from_fn_with_state(app_state.clone(), require_lecturer)).route_layer(from_fn_with_state(app_state.clone(), require_ready_assignment)))
         .route("/bulk", delete(bulk_delete_assignments).layer(from_fn_with_state(app_state.clone(), require_lecturer)))
         .route("/bulk", put(bulk_update_assignments).layer(from_fn_with_state(app_state.clone(), require_lecturer)))
         .route("/{assignment_id}/stats", get(get_assignment_stats).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)))
