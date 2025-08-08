@@ -1,9 +1,10 @@
 use crate::auth::guards::{require_admin, require_authenticated};
+use crate::routes::auth::get::{get_avatar};
 use crate::routes::{
     auth::auth_routes, health::health_routes, modules::modules_routes,
     plagiarism::plagiarism_routes, users::users_routes,
 };
-use axum::{middleware::from_fn, Router};
+use axum::{middleware::from_fn, Router, routing::get};
 use util::state::AppState;
 
 pub mod auth;
@@ -30,6 +31,7 @@ pub fn routes(app_state: AppState) -> Router<AppState> {
         .nest("/health", health_routes())
         .nest("/auth", auth_routes())
         .nest("/users", users_routes().route_layer(from_fn(require_admin)))
+        .route("/users/{user_id}/avatar", get(get_avatar))
         .nest("/modules", modules_routes(app_state.clone()).route_layer(from_fn(require_authenticated)))
         .nest("/plagiarism", plagiarism_routes()) // TODO Add Auth Guard here
 }

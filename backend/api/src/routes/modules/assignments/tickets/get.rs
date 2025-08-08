@@ -1,7 +1,6 @@
 use crate::{
     auth::AuthUser, response::ApiResponse,
-    routes::modules::assignments::tickets::common::TicketResponse,
-    routes::modules::assignments::tickets::common::is_valid,
+    routes::modules::assignments::tickets::common::{is_valid, TicketResponse, TicketWithUserResponse},
 };
 use axum::{
     Extension,
@@ -10,13 +9,75 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use db::models::tickets::{
-    Column as TicketColumn, Entity as TicketEntity, Model as TicketModel, TicketStatus,
+    Column as TicketColumn, Entity as TicketEntity, TicketStatus,
 };
+use db::models::user::{Entity as UserEntity};
 use migration::Expr;
 use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use util::state::AppState;
 
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/with-user
+///
+/// Retrieve a specific ticket along with information about the user who created it.
+/// Accessible to users assigned to the module (e.g., student, tutor, lecturer).
+///
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment containing the ticket
+/// - `ticket_id` (i64): The ID of the ticket to retrieve
+///
+/// ### Responses
+///
+/// - `200 OK`
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Ticket with user retrieved",
+///   "data": {
+///     "ticket": {
+///       "id": 101,
+///       "assignment_id": 456,
+///       "user_id": 789,
+///       "title": "Issue with question 2",
+///       "description": "I'm not sure what the question is asking.",
+///       "status": "open",
+///       "created_at": "2025-08-01T12:00:00Z",
+///       "updated_at": "2025-08-01T12:30:00Z"
+///     },
+///     "user": {
+///       "id": 789,
+///       "username": "u23571561",
+///       "email": "student@example.com",
+///       "profile_picture_path": "uploads/users/789/profile.png"
+///     }
+///   }
+/// }
+/// ```
+///
+/// - `403 Forbidden`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Forbidden"
+/// }
+/// ```
+///
+/// - `404 Not Found`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Ticket not found"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to retrieve ticket"
+/// }
+/// ```
 pub async fn get_ticket(
     State(app_state): State<AppState>,
     Path((_, _, ticket_id)): Path<(i64, i64, i64)>,
@@ -25,33 +86,42 @@ pub async fn get_ticket(
     let db = app_state.db();
     let user_id = claims.sub;
 
+    // Optional: Permission check
     if !is_valid(user_id, ticket_id, db).await {
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error("Forbidden")),
-        )
-            .into_response();
+        ).into_response();
     }
 
-    match TicketModel::get_by_id(db, ticket_id).await {
-        Ok(Some(ticket)) => (
-            StatusCode::OK,
-            Json(ApiResponse::<TicketResponse>::success(
-                ticket.into(),
-                "Ticket retrieved successfully",
-            )),
-        )
-            .into_response(),
+    // Fetch ticket and preload the user relation
+    match TicketEntity::find_by_id(ticket_id)
+        .find_also_related(UserEntity)
+        .one(db)
+        .await
+    {
+        Ok(Some((ticket, Some(user)))) => {
+            let response = TicketWithUserResponse {
+                ticket: ticket.into(),
+                user: user.into(),
+            };
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(response, "Ticket with user retrieved")),
+            ).into_response()
+        }
+        Ok(Some((_ticket, None))) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error("User not found")),
+        ).into_response(),
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Ticket not found")),
-        )
-            .into_response(),
+        ).into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error("Failed to retrieve ticket")),
-        )
-            .into_response(),
+        ).into_response(),
     }
 }
 
