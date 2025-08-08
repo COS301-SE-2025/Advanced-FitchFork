@@ -1,5 +1,5 @@
 name: "Start servers (API, Code Manager, Frontend)"
-description: "Build Docker images, then start required servers in background, wait for health URLs, and expose logs"
+description: "Build Docker images, then start required servers in background, wait for health URLs"
 
 inputs:
   start-api:
@@ -63,7 +63,7 @@ runs:
       shell: bash
       working-directory: backend
       run: |
-        nohup ${INPUT_API_CMD} > ../api.log 2>&1 & echo $! > ../api.pid
+        nohup ${INPUT_API_CMD} >/dev/null 2>&1 & echo $! > ../api.pid
       env:
         INPUT_API_CMD: ${{ inputs.api-cmd }}
 
@@ -72,7 +72,7 @@ runs:
       shell: bash
       working-directory: backend
       run: |
-        nohup ${INPUT_CODE_CMD} > ../code.log 2>&1 & echo $! > ../code.pid
+        nohup ${INPUT_CODE_CMD} >/dev/null 2>&1 & echo $! > ../code.pid
       env:
         INPUT_CODE_CMD: ${{ inputs.code-cmd }}
 
@@ -81,7 +81,7 @@ runs:
       shell: bash
       working-directory: frontend
       run: |
-        nohup ${INPUT_FRONTEND_CMD} > ../frontend.log 2>&1 & echo $! > ../frontend.pid
+        nohup ${INPUT_FRONTEND_CMD} >/dev/null 2>&1 & echo $! > ../frontend.pid
       env:
         INPUT_FRONTEND_CMD: ${{ inputs.frontend-cmd }}
 
@@ -90,10 +90,8 @@ runs:
       shell: bash
       run: |
         echo "Waiting for API at ${API_URL}"
-        head -n 40 api.log || true
         if ! wait-on -t 120000 "${API_URL}"; then
           echo "❌ API did not become healthy"
-          tail -n 200 api.log || true
           exit 1
         fi
       env:
@@ -104,10 +102,8 @@ runs:
       shell: bash
       run: |
         echo "Waiting for Code Manager at ${CODE_URL}"
-        head -n 40 code.log || true
         if ! wait-on -t 120000 "${CODE_URL}"; then
           echo "❌ Code Manager did not become healthy"
-          tail -n 200 code.log || true
           exit 1
         fi
       env:
@@ -118,19 +114,12 @@ runs:
       shell: bash
       run: |
         echo "Waiting for Frontend at ${FRONTEND_URL}"
-        head -n 40 frontend.log || true
         if ! wait-on -t 120000 "${FRONTEND_URL}"; then
           echo "❌ Frontend did not become healthy"
-          tail -n 200 frontend.log || true
           exit 1
         fi
       env:
         FRONTEND_URL: ${{ inputs.frontend-url }}
-
-    - name: Expose logs path
-      id: logs
-      shell: bash
-      run: echo "logs-path=$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
 
     - name: Register post-job cleanup
       shell: bash
