@@ -1,9 +1,9 @@
 // Core dependencies
 use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 use std::{
     env, fs,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     process::Stdio,
 };
 
@@ -12,9 +12,7 @@ use tokio::process::Command;
 use tokio::time::{Duration, timeout};
 
 // External crates
-use flate2::read::GzDecoder;
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
-use tar::Archive as TarArchive;
 use tempfile::tempdir;
 use zip::ZipArchive;
 
@@ -25,7 +23,8 @@ use crate::validate_files::validate_memo_files;
 use db::models::assignment::Entity as Assignment;
 use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as MemoOutputEntity};
 use db::models::assignment_task::Model as AssignmentTask;
-
+use reqwest::Client;
+use serde_json::json;
 use util::execution_config::ExecutionConfig;
 
 pub mod validate_files;
@@ -70,7 +69,7 @@ fn resolve_storage_root(storage_root: &str) -> PathBuf {
 /// 1. Validating memo files
 /// 2. Extracting archive files
 /// 3. Running the configured commands inside Docker
-/// 4. Saving the resulting output as memo files in the database
+/// 4. Saving the resulting output as memo files in the databaseencode
 pub async fn create_memo_outputs_for_all_tasks(
     db: &DatabaseConnection,
     assignment_id: i64,
@@ -128,29 +127,90 @@ pub async fn create_memo_outputs_for_all_tasks(
         return Ok(());
     }
 
+    // Prepare HTTP client
+    let client = Client::new();
+
+    let host = env::var("CODE_MANAGER_HOST")
+        .map_err(|_| "CODE_MANAGER_HOST env var not set".to_string())?;
+
+    let port = env::var("CODE_MANAGER_PORT")
+        .map_err(|_| "CODE_MANAGER_PORT env var not set".to_string())?;
+
+    let code_manager_url = format!("http://{}:{}", host, port);
+
     for task in tasks {
         let filename = format!("task_{}_output.txt", task.task_number);
 
-        let output = match run_all_archives_with_command(
-            archive_paths.clone(),
-            &config,
-            &task.command,
-        )
-        .await
-        {
-            Ok(output) => output,
-            Err(err) => {
-                println!("Task {} failed:\n{}", task.task_number, err);
-                err.to_string() // Save error as output
-            }
-        };
+        // Prepare files to send: read archive contents into Vec<(String, Vec<u8>)>
+        let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+        for archive_path in &archive_paths {
+            let content = std::fs::read(archive_path)
+                .map_err(|e| format!("Failed to read archive {:?}: {}", archive_path, e))?;
+            let file_name = archive_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .ok_or_else(|| "Invalid archive filename".to_string())?;
+            files.push((file_name.to_string(), content));
+        }
+
+        // Wrap command in a vector (assuming task.command is a String)
+        let commands = vec![task.command.clone()];
+
+        // Serialize ExecutionConfig into a serde_json::Value
+        let config_value = serde_json::to_value(&config)
+            .map_err(|e| format!("Failed to serialize ExecutionConfig: {}", e))?;
+
+        // Compose request JSON payload
+        let request_body = serde_json::json!({
+            "config": config_value,
+            "commands": commands,
+            "files": files, // Vec<(String, Vec<u8>)> will serialize correctly
+        });
+
+        // Note: You must adjust your API to accept files as Vec<(String, base64-string)> or send multipart form data.
+        // Here I assume base64 encoding and API adjusted accordingly.
+
+        // Send POST request to /run
+        let response = client
+            .post(format!("{}/run", code_manager_url))
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send request to code_manager: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!(
+                "code_manager responded with error {}: {}",
+                status, text
+            ));
+        }
+
+        // Parse response JSON: expects { output: Vec<String> }
+        let resp_json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response JSON: {}", e))?;
+
+        // Extract output vec from response
+        let output_vec = resp_json
+            .get("output")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| "Response missing 'output' array".to_string())?
+            .iter()
+            .map(|val| val.as_str().unwrap_or("").to_string())
+            .collect::<Vec<String>>();
+
+        // Join outputs or handle as needed
+        let output_combined = output_vec.join("\n");
 
         if let Err(e) = db::models::assignment_memo_output::Model::save_file(
             db,
             assignment_id,
             task.id,
             &filename,
-            output.as_bytes(),
+            output_combined.as_bytes(),
         )
         .await
         {
@@ -175,8 +235,11 @@ pub async fn create_submission_outputs_for_all_tasks(
     use crate::validate_files::validate_submission_files;
     use db::models::assignment::Entity as Assignment;
     use db::models::assignment_submission::Entity as AssignmentSubmission;
-
+    use reqwest::Client;
     use sea_orm::EntityTrait;
+    use serde_json::json;
+    use std::env;
+    use tokio::fs::read;
 
     // Fetch the submission
     let submission = AssignmentSubmission::find_by_id(submission_id)
@@ -216,12 +279,27 @@ pub async fn create_submission_outputs_for_all_tasks(
         .join(format!("user_{}", user_id))
         .join(format!("attempt_{}", attempt_number));
 
+    // Load archive files into memory
     let archive_paths = vec![
         first_archive_in(&submission_path)?,
         first_archive_in(&base_path.join("makefile"))?,
         first_archive_in(&base_path.join("main"))?,
     ];
 
+    let mut files = Vec::new();
+    for path in &archive_paths {
+        let content = read(path)
+            .await
+            .map_err(|e| format!("Failed to read file {:?}: {}", path, e))?;
+        let filename = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| format!("Invalid filename: {:?}", path))?
+            .to_string();
+        files.push((filename, content));
+    }
+
+    // Load all tasks
     let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
         .await
         .map_err(|e| format!("DB error loading tasks: {}", e))?;
@@ -231,26 +309,51 @@ pub async fn create_submission_outputs_for_all_tasks(
         return Ok(());
     }
 
+    // Prepare HTTP client and endpoint URL
+    let host =
+        env::var("CODE_MANAGER_HOST").map_err(|_| "CODE_MANAGER_HOST not set".to_string())?;
+    let port =
+        env::var("CODE_MANAGER_PORT").map_err(|_| "CODE_MANAGER_PORT not set".to_string())?;
+    let code_manager_url = format!("http://{}:{}/run", host, port);
+    let client = Client::new();
+
+    // Serialize config to JSON
+    let config_value = serde_json::to_value(config)
+        .map_err(|e| format!("Failed to serialize execution config: {}", e))?;
+
     for task in tasks {
         let filename = format!(
             "submission_task_{}_user_{}_attempt_{}.txt",
             task.task_number, user_id, attempt_number
         );
 
-        let output = match run_all_archives_with_command(
-            archive_paths.clone(),
-            &config,
-            &task.command,
-        )
-        .await
+        let request_body = json!({
+            "config": config_value,
+            "commands": [task.command],
+            "files": files,
+        });
+
+        let output = match client
+            .post(&code_manager_url)
+            .json(&request_body)
+            .send()
+            .await
         {
-            Ok(output) => output,
-            Err(err) => {
-                println!(
-                    "Task {} failed for user {} attempt {}:\n{}",
-                    task.task_number, user_id, attempt_number, err
-                );
-                err.to_string() // Save error as file content
+            Ok(response) => {
+                if response.status().is_success() {
+                    response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Failed to read response body".to_string())
+                } else {
+                    format!("Code manager returned error: {}", response.status())
+                }
+            }
+            Err(e) => {
+                format!(
+                    "HTTP request to code manager failed for task {}: {}",
+                    task.task_number, e
+                )
             }
         };
 
@@ -268,136 +371,6 @@ pub async fn create_submission_outputs_for_all_tasks(
     }
 
     Ok(())
-}
-
-/// Executes a set of archive files inside a Docker container using the specified command.
-/// Captures and returns stdout output if successful, or full error output if not.
-pub async fn run_all_archives_with_command(
-    archive_paths: Vec<PathBuf>,
-    config: &ExecutionConfig,
-    custom_command: &str,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let temp_code_dir = tempdir()?;
-    let temp_output_dir = tempdir()?;
-
-    let code_path = temp_code_dir.path().to_path_buf();
-    let output_path = temp_output_dir.path().to_path_buf();
-
-    for archive_path in archive_paths {
-        let archive_bytes = std::fs::read(&archive_path)?;
-        extract_archive_contents(
-            &archive_bytes,
-            config.execution.max_uncompressed_size,
-            &code_path,
-        )?;
-    }
-
-    let full_command = custom_command.to_string();
-
-    let memory_arg = format!("--memory={}b", config.execution.max_memory);
-    let cpus_arg = format!("--cpus={}", config.execution.max_cpus);
-    let pids_arg = format!("--pids-limit={}", config.execution.max_processes);
-
-    let docker_output = Command::new("docker")
-        .arg("run")
-        .arg("--rm")
-        .arg("--network=none")
-        .arg(memory_arg)
-        .arg(cpus_arg)
-        .arg(pids_arg)
-        .arg("--security-opt=no-new-privileges")
-        .arg("-v")
-        .arg(format!("{}:/code:rw", code_path.display()))
-        .arg("-v")
-        .arg(format!("{}:/output", output_path.display()))
-        .arg("universal-runner")
-        .arg("sh")
-        .arg("-c")
-        .arg(&full_command)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-
-    let output = timeout(
-        Duration::from_secs(config.execution.timeout_secs),
-        docker_output.wait_with_output(),
-    )
-    .await??;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    if output.status.success() {
-        // println!("--- Output directory contents ---");
-        // for entry in fs::read_dir(&output_path)? {
-        //     let entry = entry?;
-        //     let path = entry.path();
-        // println!("File: {}", path.display());
-
-        // if path
-        //     .extension()
-        //     .map(|ext| ext == "txt" || ext == "log")
-        //     .unwrap_or(false)
-        // {
-        //     let content = fs::read_to_string(&path)?;
-        //     println!("Content:\n{}", content);
-        // }
-        // }
-
-        Ok(stdout.into_owned())
-    } else {
-        Err(format!(
-            "Execution failed (exit code {}):\nSTDOUT:\n{}\nSTDERR:\n{}",
-            output.status.code().unwrap_or(-1),
-            stdout,
-            stderr
-        )
-        .into())
-    }
-}
-
-/// Extracts the contents of a archive archive into the given output directory,
-/// while checking for total uncompressed size and archive slip vulnerabilities.
-fn extract_archive_contents(
-    archive_bytes: &[u8],
-    max_total_uncompressed: u64,
-    output_dir: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if archive_bytes.starts_with(b"\x1F\x8B") {
-        let mut decoder = GzDecoder::new(archive_bytes);
-        let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)?;
-
-        if let Err(e) = extract_tar(
-            Cursor::new(&decompressed),
-            max_total_uncompressed,
-            output_dir,
-        ) {
-            if e.downcast_ref::<std::io::Error>()
-                .map(|ioe| ioe.kind() == std::io::ErrorKind::InvalidData)
-                .unwrap_or(false)
-            {
-                extract_single_file(
-                    &decompressed,
-                    max_total_uncompressed,
-                    output_dir,
-                    "decompressed",
-                )
-            } else {
-                Err(e)
-            }
-        } else {
-            Ok(())
-        }
-    } else if archive_bytes.starts_with(b"PK") {
-        extract_zip(archive_bytes, max_total_uncompressed, output_dir)
-    } else {
-        extract_tar(
-            Cursor::new(archive_bytes),
-            max_total_uncompressed,
-            output_dir,
-        )
-    }
 }
 
 fn extract_zip(
@@ -438,63 +411,6 @@ fn extract_zip(
         }
     }
 
-    Ok(())
-}
-
-fn extract_tar<R: Read>(
-    reader: R,
-    max_total_uncompressed: u64,
-    output_dir: &Path,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut archive = TarArchive::new(reader);
-    let mut total_uncompressed = 0;
-
-    for entry in archive.entries()? {
-        let mut entry = entry?;
-        let path = entry.path()?.into_owned();
-        let size = entry.size();
-
-        if path.is_absolute() {
-            return Err(format!("Absolute path in archive: {:?}", path).into());
-        }
-
-        if path.components().any(|c| matches!(c, Component::ParentDir)) {
-            return Err(format!("Path traversal attempt: {:?}", path).into());
-        }
-
-        total_uncompressed += size;
-        if total_uncompressed > max_total_uncompressed {
-            return Err("Archive too large when decompressed".into());
-        }
-
-        let outpath = output_dir.join(&path);
-        if entry.header().entry_type().is_dir() {
-            std::fs::create_dir_all(&outpath)?;
-        } else {
-            if let Some(parent) = outpath.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            let mut outfile = File::create(&outpath)?;
-            std::io::copy(&mut entry, &mut outfile)?;
-        }
-    }
-
-    Ok(())
-}
-
-fn extract_single_file(
-    contents: &[u8],
-    max_total_uncompressed: u64,
-    output_dir: &Path,
-    filename: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let size = contents.len() as u64;
-    if size > max_total_uncompressed {
-        return Err("File too large when decompressed".into());
-    }
-
-    let outpath = output_dir.join(filename);
-    std::fs::write(outpath, contents)?;
     Ok(())
 }
 

@@ -1,14 +1,16 @@
 //main.rs
 use axum::{routing::get, Router};
 use code_manager::api::api::{health, init_manager, run_code};
+use dotenv::dotenv;
+use std::env;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use util::config::AppConfig;
 
 #[tokio::main]
 async fn main() {
-    let config = AppConfig::from_env();
+    // Load .env
+    dotenv().ok();
 
     // Initialize tracing subscriber (logging)
     tracing_subscriber::registry()
@@ -16,7 +18,11 @@ async fn main() {
         .init();
 
     // Initialize the global ContainerManager
-    init_manager(config.max_number_containers);
+    let max_containers: usize = env::var("MAX_NUM_CONTAINERS")
+        .expect("MAX_NUM_CONTAINERS not set")
+        .parse()
+        .expect("MAX_NUM_CONTAINERS must be a valid usize");
+    init_manager(max_containers);
 
     // Build API routes
     let app = Router::new()
@@ -24,7 +30,9 @@ async fn main() {
         .route("/run", axum::routing::post(run_code));
 
     // Define address to listen on
-    let addr: SocketAddr = format!("{}:{}", config.code_manager_host, config.code_manager_port)
+    let host = env::var("CODE_MANAGER_HOST").expect("CODE_MANAGER_HOST not set");
+    let port = env::var("CODE_MANAGER_PORT").expect("CODE_MANAGER_PORT not set");
+    let addr: SocketAddr = format!("{}:{}", host, port)
         .parse()
         .expect("Invalid address");
     tracing::info!("Listening on {}", addr);
