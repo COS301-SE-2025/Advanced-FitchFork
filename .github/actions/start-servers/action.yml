@@ -1,5 +1,6 @@
 name: "Start servers (API, Code Manager, Frontend)"
 description: "Build Docker images, then start required servers in background, wait for health URLs, and expose logs"
+
 inputs:
   start-frontend:
     description: "Whether to start frontend (true/false)"
@@ -29,12 +30,21 @@ inputs:
     description: "Frontend URL to wait for"
     required: false
     default: "http://localhost:5173"
+
 runs:
   using: "composite"
   steps:
     - name: Install wait-on
       shell: bash
       run: npm i -g wait-on
+
+    # --- Load backend env vars so processes can start correctly ---
+    - name: Load backend .env
+      shell: bash
+      run: |
+        set -a
+        source backend/.env
+        set +a
 
     # ---- Build Docker images first ----
     - name: Build Docker images
