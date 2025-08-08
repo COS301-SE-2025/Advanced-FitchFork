@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Menu, Button, Input, Collapse, Empty, Dropdown } from 'antd';
+import { Menu, Button, Input, Collapse, Empty, Dropdown, Grid } from 'antd';
 import { MoreOutlined, SaveOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -17,12 +17,14 @@ import SettingsGroup from '@/components/SettingsGroup';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
 import { message } from '@/utils/message';
-import CodeEditor from '@/components/CodeEditor';
+import CodeEditor from '@/components/common/CodeEditor';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 
 const { Panel } = Collapse;
 
 const Tasks = () => {
+  const screens = Grid.useBreakpoint();
+  const isMobile = !screens.md;
   const navigate = useNavigate();
   const location = useLocation();
   const module = useModule();
@@ -211,106 +213,222 @@ const Tasks = () => {
     ),
   }));
 
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 flex overflow-hidden">
-      <div className="w-[240px] bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 px-2 py-2">
-        <Menu
-          mode="inline"
-          theme="light"
-          selectedKeys={selectedId ? [selectedId.toString()] : []}
-          onClick={({ key }) => {
-            navigate(`/modules/${module.id}/assignments/${assignment.id}/tasks/${key}`);
-          }}
-          items={menuItems}
-          className="!bg-transparent !p-0"
-          style={{ border: 'none' }}
-        />
-        <div className="px-1 mt-4">
-          <Button block type="dashed" onClick={handleCreateTask}>
-            + New Task
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex-1 p-6 max-w-6xl">
-        {loading ? (
-          <div className="text-gray-400">Loading tasks...</div>
-        ) : tasks.length === 0 ? (
-          <Empty
-            description={<div className="text-gray-700 dark:text-gray-300">No Tasks Found</div>}
-          >
-            <Button type="primary" onClick={handleCreateTask}>
-              + New Task
-            </Button>
-          </Empty>
-        ) : selectedTask ? (
-          <div className="!space-y-6">
-            <SettingsGroup
-              title={`Task`}
-              description="Basic info and execution command for this task."
-            >
-              <div className="space-y-6">
+  const mobileRender = () => (
+    <div>
+      <Collapse
+        accordion
+        onChange={(key) => {
+          const taskId = Number(key);
+          const task = tasks.find((t) => t.id === taskId);
+          if (task) {
+            navigate(`/modules/${module.id}/assignments/${assignment.id}/tasks/${task.id}`);
+          }
+        }}
+      >
+        {tasks.map((task) => (
+          <Collapse.Panel key={task.id} header={task.name}>
+            <div className="space-y-6">
+              {/* Task Details */}
+              <div className="space-y-3">
                 <div>
                   <label className="block font-medium mb-1">Task Name</label>
                   <Input
-                    value={editedName}
-                    onChange={(e) => setEditedName(e.target.value)}
-                    className="w-full"
+                    value={task.id === selectedTask?.id ? editedName : task.name}
+                    onChange={(e) => {
+                      setEditedName(e.target.value);
+                      setSelectedTask((prev) =>
+                        prev?.id === task.id ? { ...prev, name: e.target.value } : prev,
+                      );
+                    }}
                   />
                 </div>
+
                 <div>
                   <label className="block font-medium mb-1">Command</label>
                   <Input
-                    value={editedCommand}
-                    onChange={(e) => setEditedCommand(e.target.value)}
-                    className="w-full"
+                    value={task.id === selectedTask?.id ? editedCommand : task.command}
+                    onChange={(e) => {
+                      setEditedCommand(e.target.value);
+                      setSelectedTask((prev) =>
+                        prev?.id === task.id ? { ...prev, command: e.target.value } : prev,
+                      );
+                    }}
                   />
                 </div>
-                <div className="flex justify-end">
-                  <Button icon={<SaveOutlined />} type="primary" onClick={handleSaveTask}>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="primary"
+                    icon={<SaveOutlined />}
+                    onClick={handleSaveTask}
+                    className="flex-1"
+                  >
                     Save Task
+                  </Button>
+                  <Button danger onClick={() => handleDeleteTask(task.id)} className="flex-1">
+                    Delete
                   </Button>
                 </div>
               </div>
-            </SettingsGroup>
 
-            {selectedTask.subsections?.length > 0 && (
-              <SettingsGroup title="Assessment" description="Breakdown of marks by subsection.">
-                <Collapse accordion bordered>
-                  {selectedTask.subsections?.map((sub, index) => (
-                    <Panel header={sub.name} key={index}>
-                      <div className="space-y-4 px-3 pt-1 pb-2">
-                        <div>
-                          <label className="block font-medium mb-1">Mark</label>
-                          <div className="flex items-center gap-2">
-                            <Input type="number" value={sub.mark_value ?? 0} className="w-16" />
-                            <Button type="primary">Save Mark</Button>
-                          </div>
-                        </div>
+              {/* Subsections */}
+              {task.id === selectedTask?.id &&
+                selectedTask.subsections &&
+                selectedTask.subsections.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-gray-700 dark:text-gray-300">Assessment</h4>
 
-                        <div>
-                          <div className="mt-2">
-                            <CodeEditor
-                              title="Memo Output"
-                              value={sub.memo_output ?? ''}
-                              language="plaintext"
-                              height={200}
-                              readOnly
-                            />
+                    <Collapse accordion>
+                      {selectedTask.subsections.map((sub, index) => (
+                        <Collapse.Panel header={sub.name} key={index}>
+                          <div className="space-y-4 px-1 pt-1 pb-2">
+                            <div>
+                              <label className="block font-medium mb-1">Mark</label>
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  value={sub.mark_value ?? 0}
+                                  className="w-20"
+                                  readOnly
+                                />
+                                <Button size="small" type="primary">
+                                  Save Mark
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div>
+                              <CodeEditor
+                                title="Memo Output"
+                                value={sub.memo_output ?? ''}
+                                language="plaintext"
+                                height={200}
+                                readOnly
+                              />
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    </Panel>
-                  ))}
-                </Collapse>
-              </SettingsGroup>
+                        </Collapse.Panel>
+                      ))}
+                    </Collapse>
+                  </div>
+                )}
+            </div>
+          </Collapse.Panel>
+        ))}
+      </Collapse>
+
+      <Button block type="dashed" className="!mt-6" onClick={handleCreateTask}>
+        + New Task
+      </Button>
+    </div>
+  );
+
+  return (
+    <>
+      {isMobile ? (
+        mobileRender()
+      ) : (
+        <div className="bg-white dark:bg-gray-900 border border-l-0 border-gray-200 dark:border-gray-700 flex overflow-hidden">
+          <div className="w-[240px] bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-700 px-2 py-2">
+            <Menu
+              mode="inline"
+              theme="light"
+              selectedKeys={selectedId ? [selectedId.toString()] : []}
+              onClick={({ key }) => {
+                navigate(`/modules/${module.id}/assignments/${assignment.id}/tasks/${key}`);
+              }}
+              items={menuItems}
+              className="!bg-transparent !p-0"
+              style={{ border: 'none' }}
+            />
+            <div className="px-1 mt-4">
+              <Button block type="dashed" onClick={handleCreateTask}>
+                + New Task
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex-1 p-6 max-w-6xl">
+            {loading ? (
+              <div className="text-gray-400">Loading tasks...</div>
+            ) : tasks.length === 0 ? (
+              <Empty
+                description={<div className="text-gray-700 dark:text-gray-300">No Tasks Found</div>}
+              >
+                <Button type="primary" onClick={handleCreateTask}>
+                  + New Task
+                </Button>
+              </Empty>
+            ) : selectedTask ? (
+              <div className="!space-y-6">
+                <SettingsGroup
+                  title={`Task`}
+                  description="Basic info and execution command for this task."
+                >
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block font-medium mb-1">Task Name</label>
+                      <Input
+                        value={editedName}
+                        onChange={(e) => setEditedName(e.target.value)}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-medium mb-1">Command</label>
+                      <Input
+                        value={editedCommand}
+                        onChange={(e) => setEditedCommand(e.target.value)}
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <Button icon={<SaveOutlined />} type="primary" onClick={handleSaveTask}>
+                        Save Task
+                      </Button>
+                    </div>
+                  </div>
+                </SettingsGroup>
+
+                {selectedTask.subsections?.length > 0 && (
+                  <SettingsGroup title="Assessment" description="Breakdown of marks by subsection.">
+                    <Collapse accordion bordered>
+                      {selectedTask.subsections?.map((sub, index) => (
+                        <Panel header={sub.name} key={index}>
+                          <div className="space-y-4 px-3 pt-1 pb-2">
+                            <div>
+                              <label className="block font-medium mb-1">Mark</label>
+                              <div className="flex items-center gap-2">
+                                <Input type="number" value={sub.mark_value ?? 0} className="w-16" />
+                                <Button type="primary">Save Mark</Button>
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className="mt-2">
+                                <CodeEditor
+                                  title="Memo Output"
+                                  value={sub.memo_output ?? ''}
+                                  language="plaintext"
+                                  height={200}
+                                  readOnly
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </Panel>
+                      ))}
+                    </Collapse>
+                  </SettingsGroup>
+                )}
+              </div>
+            ) : (
+              <div className="text-gray-400">Loading selected task…</div>
             )}
           </div>
-        ) : (
-          <div className="text-gray-400">Loading selected task…</div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 };
 

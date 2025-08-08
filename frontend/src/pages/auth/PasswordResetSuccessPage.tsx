@@ -1,6 +1,6 @@
 import { Button, Typography, Card } from 'antd';
 import { Link } from 'react-router-dom';
-import Logo from '@/components/Logo';
+import Logo from '@/components/common/Logo';
 
 const { Title, Text } = Typography;
 

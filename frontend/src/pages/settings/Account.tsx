@@ -7,7 +7,7 @@ import {
   PlusOutlined,
 } from '@ant-design/icons';
 import { useEffect } from 'react';
-import { Avatar, Button, Divider, Input, message, Upload } from 'antd';
+import { Button, Divider, Input, message, Upload } from 'antd';
 import type { UploadProps } from 'antd';
 import PageHeader from '@/components/PageHeader';
 import SettingsGroup from '@/components/SettingsGroup';
@@ -15,10 +15,11 @@ import { useAuth } from '@/context/AuthContext';
 import useNotImplemented from '@/hooks/useNotImplemented';
 import { uploadProfilePicture } from '@/services/auth';
 import { API_BASE_URL } from '@/config/api';
+import UserAvatar from '@/components/common/UserAvatar';
 
 const Account = () => {
   const notImplemented = useNotImplemented();
-  const { user, profilePictureUrl, setProfilePictureUrl } = useAuth();
+  const { user, setProfilePictureUrl } = useAuth();
 
   useEffect(() => {
     if (user?.id) {
@@ -78,10 +79,9 @@ const Account = () => {
           >
             <div className="relative cursor-pointer w-[96px] h-[96px] rounded-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center overflow-hidden group">
               <div className="w-full h-full flex items-center justify-center">
-                <Avatar
+                <UserAvatar
+                  user={{ id: user?.id ?? -1, username: user?.username ?? 'User' }}
                   size={96}
-                  icon={<UserOutlined />}
-                  src={profilePictureUrl || undefined}
                   className="transition group-hover:opacity-20"
                 />
               </div>

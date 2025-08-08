@@ -1,6 +1,25 @@
 import React, { useState } from 'react';
-import { Input, Button, Dropdown, Segmented, Select, Modal, Col, Row, Space, Checkbox } from 'antd';
-import { ReloadOutlined, TableOutlined, AppstoreOutlined, MoreOutlined } from '@ant-design/icons';
+import {
+  Input,
+  Button,
+  Dropdown,
+  Segmented,
+  Select,
+  Modal,
+  Col,
+  Row,
+  Space,
+  Checkbox,
+  Popconfirm,
+} from 'antd';
+import {
+  ReloadOutlined,
+  TableOutlined,
+  AppstoreOutlined,
+  MoreOutlined,
+  FilterOutlined,
+  SortAscendingOutlined,
+} from '@ant-design/icons';
 import type { MenuItemType } from 'antd/es/menu/interface';
 import type { EntityAction } from './EntityList';
 
@@ -44,6 +63,8 @@ interface Props<T> {
   columns?: { key: string; label: string; defaultHidden?: boolean }[];
   hiddenColumns?: Set<string>;
   onToggleColumn?: (key: string) => void;
+
+  listMode?: boolean;
 }
 
 const ControlBar = <T,>({
@@ -65,6 +86,7 @@ const ControlBar = <T,>({
   columns = [],
   hiddenColumns = new Set(),
   onToggleColumn = () => {},
+  listMode = false,
 }: Props<T>) => {
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
@@ -74,8 +96,6 @@ const ControlBar = <T,>({
   const hasSearch = !!searchTerm.trim();
   const hasSort = (currentSort?.length ?? 0) > 0;
   const hasFilters = (activeFilters?.length ?? 0) > 0;
-
-  const hasActiveFilters = hasSearch || hasSort || hasFilters;
 
   const clearMenuItems: MenuItemType[] = [
     hasSearch && {
@@ -207,7 +227,7 @@ const ControlBar = <T,>({
   );
 
   return (
-    <div className="bg-white dark:bg-gray-950 p-2 rounded-lg border border-gray-200 dark:border-gray-800 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-800 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div className="flex flex-row items-center gap-2 w-full sm:w-auto">
         {viewMode &&
           onViewModeChange &&
@@ -248,26 +268,83 @@ const ControlBar = <T,>({
           style={{ width: '100%' }}
           data-cy="entity-search"
         />
+
+        {(filterGroups.length > 0 || sortOptions.length > 0) &&
+          (viewMode === 'grid' || listMode) && (
+            <Dropdown
+              menu={{
+                items: [
+                  ...(filterGroups.length > 0
+                    ? [
+                        {
+                          key: 'open-filters',
+                          icon: <FilterOutlined />,
+                          label: <span data-cy="open-filter-modal">Filters</span>,
+                          onClick: () => setFilterModalOpen(true),
+                        },
+                      ]
+                    : []),
+                  ...(sortOptions.length > 0
+                    ? [
+                        {
+                          key: 'open-sort',
+                          icon: <SortAscendingOutlined />,
+                          label: <span data-cy="open-sort-modal">Sort</span>,
+                          onClick: () => setSortModalOpen(true),
+                        },
+                      ]
+                    : []),
+                ],
+              }}
+              trigger={['click']}
+            >
+              <Button data-cy="filters-dropdown" className="whitespace-nowrap">
+                Filters
+              </Button>
+            </Dropdown>
+          )}
+
+        {clearMenuItems.length > 0 && (
+          <Col>
+            {clearMenuItems.length === 1 ? (
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => clearMenuItems[0].onClick?.({ key: clearMenuItems[0].key } as any)}
+                data-cy={clearMenuItems[0].key}
+              >
+                {clearMenuItems[0].label}
+              </Button>
+            ) : (
+              <Dropdown menu={{ items: clearMenuItems }}>
+                <Button icon={<ReloadOutlined />}>Clear</Button>
+              </Dropdown>
+            )}
+          </Col>
+        )}
       </div>
 
       <Row gutter={8} align="middle" wrap={false}>
         {primaryAction && (
           <Col>
-            {secondaryActions.length === 0 ? (
-              <Button
-                type="primary"
-                data-cy={`control-action-${primaryAction.key}`}
-                onClick={() =>
-                  primaryAction.handler({
-                    selected: selectedRowKeys,
-                    refresh: () => {},
-                  })
-                }
-              >
-                {primaryAction.icon} {primaryAction.label}
-              </Button>
-            ) : (
-              <Space.Compact>
+            <Space.Compact>
+              {primaryAction.confirm ? (
+                <Popconfirm
+                  title={`Are you sure you want to ${primaryAction.label.toLowerCase()}?`}
+                  okText="Yes"
+                  cancelText="Cancel"
+                  placement="topRight"
+                  onConfirm={() =>
+                    primaryAction.handler({
+                      selected: selectedRowKeys,
+                      refresh: () => {},
+                    })
+                  }
+                >
+                  <Button type="primary" data-cy={`control-action-${primaryAction.key}`}>
+                    {primaryAction.icon} {primaryAction.label}
+                  </Button>
+                </Popconfirm>
+              ) : (
                 <Button
                   type="primary"
                   data-cy={`control-action-${primaryAction.key}`}
@@ -280,29 +357,51 @@ const ControlBar = <T,>({
                 >
                   {primaryAction.icon} {primaryAction.label}
                 </Button>
+              )}
 
+              {secondaryActions.length > 0 && (
                 <Dropdown
                   data-cy="control-action-dropdown"
                   menu={{
                     items: secondaryActions.map((a) => ({
                       key: a.key,
-                      label: <span data-cy={`control-action-${a.key}`}>{a.label}</span>,
                       icon: a.icon,
-                      onClick: a.confirm
-                        ? undefined
-                        : () =>
+                      label: a.confirm ? (
+                        <Popconfirm
+                          title={`Are you sure you want to ${a.label.toLowerCase()}?`}
+                          okText="Yes"
+                          cancelText="Cancel"
+                          placement="topRight"
+                          onConfirm={() =>
                             a.handler({
                               selected: selectedRowKeys,
                               refresh: () => {},
-                            }),
+                            })
+                          }
+                        >
+                          <span data-cy={`control-action-${a.key}`}>{a.label}</span>
+                        </Popconfirm>
+                      ) : (
+                        <span
+                          data-cy={`control-action-${a.key}`}
+                          onClick={() =>
+                            a.handler({
+                              selected: selectedRowKeys,
+                              refresh: () => {},
+                            })
+                          }
+                        >
+                          {a.label}
+                        </span>
+                      ),
                     })),
                   }}
                   placement="bottomRight"
                 >
                   <Button type="primary" icon={<MoreOutlined />} />
                 </Dropdown>
-              </Space.Compact>
-            )}
+              )}
+            </Space.Compact>
           </Col>
         )}
 
@@ -357,25 +456,7 @@ const ControlBar = <T,>({
           </Col>
         )}
 
-        {hasActiveFilters && clearMenuItems.length > 0 && (
-          <Col>
-            {clearMenuItems.length === 1 ? (
-              <Button
-                icon={<ReloadOutlined />}
-                onClick={() => clearMenuItems[0].onClick?.({ key: clearMenuItems[0].key } as any)}
-                data-cy={clearMenuItems[0].key}
-              >
-                {clearMenuItems[0].label}
-              </Button>
-            ) : (
-              <Dropdown menu={{ items: clearMenuItems }}>
-                <Button icon={<ReloadOutlined />}>Clear</Button>
-              </Dropdown>
-            )}
-          </Col>
-        )}
-
-        {columnToggleEnabled && columns?.length && <Col>{columnToggleMenu}</Col>}
+        {columnToggleEnabled && columns?.length && !listMode && <Col>{columnToggleMenu}</Col>}
       </Row>
 
       <Modal

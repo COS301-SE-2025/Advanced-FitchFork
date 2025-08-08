@@ -12,6 +12,7 @@ export interface AssignmentContextValue {
   memoOutput: MemoTaskOutput[];
   markAllocator: MarkAllocatorItem[];
   readiness: AssignmentReadiness | null;
+  loading: boolean;
   refreshAssignment: () => Promise<void>;
 }
 

@@ -51,6 +51,12 @@ import ProtectedAuthRoute from './components/routes/ProtectedAuthRoute';
 import ProtectedAdminRoute from './components/routes/ProtectedAdminRoute';
 import ProtectedModuleRoute from './components/routes/ProtectedModuleRoute';
 import Chat from './pages/Chat';
+import Tickets from './pages/modules/assignments/tickets/Tickets';
+import TicketView from './pages/modules/assignments/tickets/TicketView';
+import WithModuleContext from './components/providers/WithModuleContext';
+import WithAssignmentContext from './components/providers/WithAssignmentContext';
+import AssignmentIndexPage from './pages/modules/assignments/AssignmentIndexPage';
+import ModuleIndexPage from './pages/modules/ModuleIndexPage';
 
 export default function App() {
   const { user, loading, isExpired } = useAuth();
@@ -102,36 +108,43 @@ export default function App() {
 
             {/* Modules */}
             <Route path="/modules" element={<ModulesList />} />
-            <Route path="/modules/:id" element={<ModuleLayout />}>
-              <Route index element={<ModuleOverview />} />
+            <Route path="/modules/:id" element={<WithModuleContext />}>
+              <Route path="/modules/:id" element={<ModuleLayout />}>
+                <Route index element={<ModuleIndexPage />} />
+                <Route path="overview" element={<ModuleOverview />} />
+                <Route path="assignments" element={<AssignmentsList />} />
+                <Route path="assignments/:assignment_id" element={<WithAssignmentContext />}>
+                  <Route element={<AssignmentLayout />}>
+                    <Route index element={<AssignmentIndexPage />} />
+                    <Route path="files" element={<AssignmentFiles />} />
+                    <Route path="submissions" element={<Submissions />} />
+                    <Route path="submissions/:submission_id" element={<SubmissionView />} />
+                    <Route path="tasks" element={<Tasks />}>
+                      <Route index element={<></>} />
+                      <Route path=":task_id" element={<></>} />
+                    </Route>
+                    <Route path="tickets" element={<Tickets />} />
+                    <Route path="memo-output" element={<MemoOutput />} />
+                    <Route path="mark-allocator" element={<MarkAllocator />} />
+                    <Route path="stats" element={<UnderConstruction />} />
+                    <Route path="config" element={<Config />} />
+                  </Route>
 
-              <Route path="assignments" element={<AssignmentsList />} />
-              <Route path="assignments/:assignment_id" element={<AssignmentLayout />}>
-                <Route index element={<Navigate to="submissions" replace />} />
-                <Route path="files" element={<AssignmentFiles />} />
-                <Route path="submissions" element={<Submissions />} />
-                <Route path="submissions/:submission_id" element={<SubmissionView />} />
-                <Route path="tasks" element={<Tasks />}>
-                  <Route index element={<></>} />
-                  <Route path=":task_id" element={<></>} />
+                  <Route path="tickets/:ticket_id" element={<TicketView />} />
                 </Route>
-                <Route path="memo-output" element={<MemoOutput />} />
-                <Route path="mark-allocator" element={<MarkAllocator />} />
-                <Route path="stats" element={<UnderConstruction />} />
-                <Route path="config" element={<Config />} />
-              </Route>
 
-              <Route path="bookings" element={<UnderConstruction />} />
-              <Route path="grades" element={<ModuleGrades />} />
-              <Route path="resources" element={<UnderConstruction />} />
-              <Route
-                path="personnel"
-                element={
-                  <ProtectedModuleRoute allowedRoles={['lecturer', 'assistant_lecturer']}>
-                    <ModulePersonnel />
-                  </ProtectedModuleRoute>
-                }
-              />
+                <Route path="bookings" element={<UnderConstruction />} />
+                <Route path="grades" element={<ModuleGrades />} />
+                <Route path="resources" element={<UnderConstruction />} />
+                <Route
+                  path="personnel"
+                  element={
+                    <ProtectedModuleRoute allowedRoles={['lecturer', 'assistant_lecturer']}>
+                      <ModulePersonnel />
+                    </ProtectedModuleRoute>
+                  }
+                />
+              </Route>
             </Route>
 
             {/* Help Routes */}

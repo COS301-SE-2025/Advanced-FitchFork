@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Typography, Table, Spin, Descriptions, Select, Button, Popconfirm, Space } from 'antd';
 import { EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import AdminTag from '@/components/AdminTag';
-import { useNotifier } from '@/components/Notifier';
+import { useNotifier } from '@/components/common/Notifier';
 import type { User } from '@/types/users';
 import { type ModuleRole, type Module, MODULE_ROLES } from '@/types/modules';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';

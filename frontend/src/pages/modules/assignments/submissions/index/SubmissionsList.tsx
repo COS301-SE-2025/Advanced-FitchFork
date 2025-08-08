@@ -20,6 +20,7 @@ import EventBus from '@/utils/EventBus';
 import type { Submission } from '@/types/modules/assignments/submissions';
 import SubmissionCard from '@/components/submissions/SubmissionCard';
 import { message } from '@/utils/message';
+import { remarkSubmissions } from '@/services/modules/assignments/submissions/post';
 
 const getMarkColor = (mark: number): string => {
   if (mark >= 75) return 'green';
@@ -170,9 +171,22 @@ export default function SubmissionsList() {
             key: 'remark',
             label: 'Re-mark',
             icon: <ReloadOutlined />,
-            handler: ({ refresh }) => {
-              message.success(`Re-marked submission ${entity.id}`);
-              refresh();
+            handler: async ({ refresh }) => {
+              try {
+                const res = await remarkSubmissions(module.id, assignment.id, {
+                  submission_ids: [entity.id],
+                });
+                if (res.success) {
+                  message.success(res.message);
+                } else {
+                  message.error(res.message);
+                }
+                EventBus.emit('submission:updated');
+                refresh();
+              } catch (err) {
+                console.error(err);
+                message.error(`Failed to re-mark submission ${entity.id}`);
+              }
             },
           },
         ],
@@ -190,9 +204,51 @@ export default function SubmissionsList() {
             key: 'bulk-remark',
             label: 'Bulk Re-mark',
             icon: <ReloadOutlined />,
-            handler: ({ selected, refresh }) => {
-              message.success(`Re-marked ${selected?.length || 0} submissions`);
-              refresh();
+            handler: async ({ selected, refresh }) => {
+              const ids = selected as number[];
+              if (ids.length === 0) return;
+
+              try {
+                const res = await remarkSubmissions(module.id, assignment.id, {
+                  submission_ids: ids,
+                });
+
+                if (res.success) {
+                  message.success(res.message);
+                } else {
+                  message.error(res.message);
+                }
+                EventBus.emit('submission:updated');
+                refresh();
+              } catch (err) {
+                console.error(err);
+                message.error(`Failed to re-mark some submissions`);
+              }
+            },
+          },
+        ],
+        control: [
+          {
+            key: 'remark-all',
+            label: 'Re-mark All',
+            icon: <ReloadOutlined />,
+            confirm: true,
+            handler: async ({ refresh }) => {
+              try {
+                const res = await remarkSubmissions(module.id, assignment.id, { all: true });
+
+                if (res.success) {
+                  message.success(res.message);
+                } else {
+                  message.error(res.message);
+                }
+
+                EventBus.emit('submission:updated');
+                refresh();
+              } catch (err) {
+                console.error(err);
+                message.error(`Failed to re-mark all submissions`);
+              }
             },
           },
         ],
@@ -200,7 +256,7 @@ export default function SubmissionsList() {
     : undefined;
 
   return (
-    <div>
+    <div className="m-4">
       <EntityList<StudentSubmission>
         ref={entityListRef}
         name="Submissions"

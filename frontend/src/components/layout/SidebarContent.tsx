@@ -5,7 +5,7 @@ import {
   MoonOutlined,
   SunOutlined,
 } from '@ant-design/icons';
-import Logo from '@/components/Logo';
+import Logo from '@/components/common/Logo';
 import type { MenuItem } from '@/constants/sidebar';
 
 type SidebarContentProps = {

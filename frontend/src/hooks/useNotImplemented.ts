@@ -1,4 +1,4 @@
-import { useNotifier } from '@/components/Notifier';
+import { useNotifier } from '@/components/common/Notifier';
 
 const useNotImplemented = () => {
   const { notifyInfo } = useNotifier();

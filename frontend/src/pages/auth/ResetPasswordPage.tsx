@@ -1,7 +1,7 @@
 import { Form, Input, Button, Typography, Card, Alert } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import Logo from '@/components/Logo';
+import Logo from '@/components/common/Logo';
 import { resetPassword } from '@/services/auth';
 
 const { Title, Text } = Typography;

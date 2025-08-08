@@ -33,10 +33,99 @@ interface ChatEntry {
 
 let nextId = 0;
 
+function stringToPastelHSL(username: string): string {
+  const hash = Array.from(username).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const hue = hash % 360; // full hue range
+  return `hsl(${hue}, 70%, 85%)`; // pastel-ish
+}
+
+function stringToDarkerPastelHSL(username: string): string {
+  const hash = Array.from(username).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const hue = hash % 360;
+  return `hsl(${hue}, 70%, 30%)`; // dark enough for text contrast
+}
+
+const mockMessages: ChatEntry[] = [
+  {
+    id: 1,
+    sender: 'alice',
+    content: 'Hey everyone! 👋',
+    timestamp: '09:00',
+  },
+  {
+    id: 2,
+    sender: 'bob',
+    content: "Hi Alice! How's your morning?",
+    timestamp: '09:01',
+  },
+  {
+    id: 3,
+    sender: 'alice',
+    content: "Pretty good thanks. I'm just reviewing the API docs.",
+    timestamp: '09:01',
+  },
+  {
+    id: 4,
+    sender: 'alice',
+    content: 'Did you see the update from Dana?',
+    timestamp: '09:02',
+  },
+  {
+    id: 5,
+    sender: 'charlie',
+    content: 'That sounds great. I&apos;ll test the new flow soon.',
+    timestamp: '09:03',
+  },
+  {
+    id: 6,
+    sender: 'charlie',
+    content: 'Let me know if you hit any weird edge cases.',
+    timestamp: '09:04',
+  },
+  {
+    id: 7,
+    sender: 'dana',
+    content: "**Heads up**: I'll be deploying at 10:30. Expect ~2 mins downtime.",
+    timestamp: '09:06',
+  },
+  {
+    id: 8,
+    sender: 'System',
+    content: 'charlie joined the chat',
+    timestamp: '09:06',
+    system: true,
+  },
+  {
+    id: 9,
+    sender: 'bob',
+    content: '> “Make it work, make it right, make it fast.” - Kent Beck',
+    timestamp: '09:08',
+  },
+  {
+    id: 10,
+    sender: 'alice',
+    content: 'Check this out: [OpenAI Chat](https://chat.openai.com)',
+    timestamp: '09:08',
+  },
+  {
+    id: 11,
+    sender: 'bob',
+    content: 'My checklist:\n- [x] Fix header bug\n- [x] Update styles\n- [ ] Refactor auth',
+    timestamp: '09:09',
+  },
+  {
+    id: 12,
+    sender: 'bob',
+    content: "Can't believe how fast this week's going.",
+    timestamp: '09:10',
+  },
+];
+
 const Chat: React.FC = () => {
   const { user } = useAuth();
   const { isDarkMode } = useTheme();
-  const [messages, setMessages] = useState<ChatEntry[]>([]);
+  const [messages, setMessages] = useState<ChatEntry[]>(mockMessages);
+
   const [input, setInput] = useState('');
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const lastTypingSentRef = useRef<number>(0);
@@ -178,28 +267,60 @@ const Chat: React.FC = () => {
       </div>
 
       {/* Chat body */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-gray-50 dark:bg-gray-950">
+      <div className="flex-1 overflow-y-auto px-4 py-4 bg-gray-50 dark:bg-gray-950">
         {messages.length === 0 ? (
           <p className="text-gray-400 text-center mt-20">No messages yet</p>
         ) : (
-          messages.map((msg) => {
+          messages.map((msg, index) => {
+            const prevMsg = messages[index - 1];
+            const showAvatarAndName =
+              !prevMsg ||
+              prevMsg.sender !== msg.sender ||
+              dayjs(msg.timestamp, 'HH:mm').diff(dayjs(prevMsg.timestamp, 'HH:mm'), 'minute') > 2;
+
             const content = (
-              <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{msg.content}</ReactMarkdown>
+              <div className="text-sm">
+                <ReactMarkdown
+                  rehypePlugins={[rehypeHighlight]}
+                  components={{
+                    p: ({ children }) => <p className="!my-0">{children}</p>,
+                    ul: ({ children }) => <ul className="my-1">{children}</ul>,
+                    ol: ({ children }) => <ol className="my-1">{children}</ol>,
+                    pre: ({ children }) => <pre className="my-1">{children}</pre>,
+                  }}
+                >
+                  {msg.content}
+                </ReactMarkdown>
+              </div>
             );
 
             if (msg.system) {
               return (
                 <div key={msg.id} className="text-center text-gray-400 italic text-xs my-2">
-                  <div className="prose max-w-full text-sm">{content}</div>
+                  <div className="max-w-full text-sm">{content}</div>
                 </div>
               );
             }
 
-            return (
-              <div key={msg.id} className="flex items-start gap-3">
-                <Avatar size="large" className="flex-shrink-0 pt-1">
-                  {msg.sender.charAt(0).toUpperCase()}
+            return showAvatarAndName ? (
+              <div key={msg.id} className="flex items-start gap-3 mt-4">
+                <Avatar
+                  size="large"
+                  className="flex-shrink-0 pt-1"
+                  style={{
+                    backgroundColor: stringToPastelHSL(msg.sender),
+                  }}
+                >
+                  <span
+                    className="text-base font-semibold"
+                    style={{
+                      color: stringToDarkerPastelHSL(msg.sender),
+                    }}
+                  >
+                    {msg.sender.charAt(0).toUpperCase()}
+                  </span>
                 </Avatar>
+
                 <div>
                   <div className="flex items-center gap-2">
                     <Text strong className="text-sm">
@@ -209,12 +330,17 @@ const Chat: React.FC = () => {
                       {msg.timestamp}
                     </Text>
                   </div>
-                  <div className="prose max-w-full text-sm">{content}</div>
+                  {content}
                 </div>
+              </div>
+            ) : (
+              <div key={msg.id} className="flex items-start gap-3">
+                <div className="ml-[52px] text-sm">{content}</div>
               </div>
             );
           })
         )}
+
         <div ref={scrollRef} />
       </div>
 

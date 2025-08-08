@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Form, Input, Typography, Divider, Alert } from 'antd';
-import Logo from '@/components/Logo';
+import Logo from '@/components/common/Logo';
 import { useAuth } from '@/context/AuthContext';
 
 const { Title, Text, Link } = Typography;

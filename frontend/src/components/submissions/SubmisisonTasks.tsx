@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { Collapse, Tag, Typography, Modal, Button } from 'antd';
 import type { CollapseProps } from 'antd';
-import type { TaskBreakdown } from '@/types/modules/assignments/submissions';
-import CodeDiffEditor from '@/components/CodeDiffEditor';
+import type { SubmissionTaskOutput, TaskBreakdown } from '@/types/modules/assignments/submissions';
+import CodeDiffEditor from '@/components/common/CodeDiffEditor';
 import { useAuth } from '@/context/AuthContext';
 import { useModule } from '@/context/ModuleContext';
+import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
 
 const { Text } = Typography;
 
 type Props = {
   tasks: TaskBreakdown[];
+  memoOutput: MemoTaskOutput[];
+  submisisonOutput: SubmissionTaskOutput[];
 };
 
 const getScoreTagColor = (earned: number, total: number): string => {
@@ -20,16 +23,23 @@ const getScoreTagColor = (earned: number, total: number): string => {
   return 'red';
 };
 
-const SubmissionTasks: React.FC<Props> = ({ tasks }) => {
+const SubmissionTasks: React.FC<Props> = ({ tasks, memoOutput, submisisonOutput }) => {
   const [visible, setVisible] = useState(false);
-  const [currentLabel, setCurrentLabel] = useState<string>('');
+  const [currentTask, setCurrentTask] = useState<{
+    name: string;
+    expected: string;
+    actual: string;
+  } | null>(null);
+
   const auth = useAuth();
   const module = useModule();
-
   const isStudent = auth.isStudent(module.id);
 
-  const handleViewDiff = (label: string) => {
-    setCurrentLabel(label);
+  const handleViewDiff = (taskName: string, taskNumber: number) => {
+    const expected = memoOutput.find((m) => m.task_number === taskNumber)?.raw ?? '';
+    const actual = submisisonOutput.find((s) => s.task_number === taskNumber)?.raw ?? '';
+
+    setCurrentTask({ name: taskName, expected, actual });
     setVisible(true);
   };
 
@@ -49,12 +59,6 @@ const SubmissionTasks: React.FC<Props> = ({ tasks }) => {
               </Tag>
               <span>{sub.label}</span>
             </div>
-
-            {!isStudent && sub.earned !== sub.total && (
-              <Button type="link" size="small" onClick={() => handleViewDiff(sub.label)}>
-                View Diff
-              </Button>
-            )}
           </li>
         ))}
       </ul>
@@ -76,7 +80,7 @@ const SubmissionTasks: React.FC<Props> = ({ tasks }) => {
           size="small"
           onClick={(e) => {
             e.stopPropagation();
-            handleViewDiff(name);
+            handleViewDiff(name, task_number);
           }}
         >
           View Diff
@@ -104,15 +108,21 @@ const SubmissionTasks: React.FC<Props> = ({ tasks }) => {
         open={visible}
         onCancel={() => setVisible(false)}
         footer={null}
-        width={1000}
-        title={`Diff for: ${currentLabel}`}
+        width={1400}
+        title={`Output Difference for ${currentTask?.name}`}
       >
+        <Typography.Paragraph type="secondary" className="mb-4 text-sm">
+          <strong>Note:</strong> The submission output is shown on the <strong>left</strong>, and
+          the memo (expected) output is on the <strong>right</strong>.
+        </Typography.Paragraph>
+
         <CodeDiffEditor
-          title={currentLabel}
-          original={`Expected output of ${currentLabel}\nLine 2\nLine 3`}
-          modified={`Actual output of ${currentLabel}\nLine 2 wrong\nLine 3`}
+          title={currentTask?.name ?? ''}
+          original={currentTask?.actual ?? ''}
+          modified={currentTask?.expected ?? ''}
           language="plaintext"
-          height={400}
+          height={600}
+          minimal={true}
         />
       </Modal>
     </>

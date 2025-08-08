@@ -47,3 +47,8 @@ export interface SubmissionUserInfo {
   email: string;
   username: string;
 }
+
+export interface SubmissionTaskOutput {
+  task_number: number;
+  raw: string;
+}

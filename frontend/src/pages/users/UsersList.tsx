@@ -4,8 +4,8 @@ import PageHeader from '@/components/PageHeader';
 import { message } from '@/utils/message';
 import { EntityList, type EntityListHandle, type EntityListProps } from '@/components/EntityList';
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
-import CreateModal from '@/components/CreateModal';
-import EditModal from '@/components/EditModal';
+import CreateModal from '@/components/common/CreateModal';
+import EditModal from '@/components/common/EditModal';
 import UserCard from '@/components/users/UserCard';
 import UserAdminTag from '@/components/users/UserAdminTag';
 

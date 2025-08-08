@@ -32,7 +32,7 @@ body,
   width: 100%;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 /**
@@ -54,7 +54,11 @@ body,
 
 /* Dark mode table header */
 .dark .ant-table-thead > tr > th {
-  background-color: var(--color-gray-950) !important;
+  background-color: var(--color-gray-900) !important;
+}
+
+.dark .ant-table-row {
+  background-color: var(--color-gray-900);
 }
 
 /**

@@ -26,7 +26,7 @@ const MarkAllocator = () => {
 
   return (
     <div>
-      <Collapse accordion className="!bg-white dark:!bg-gray-950 !rounded-lg">
+      <Collapse accordion className="!bg-white dark:!bg-gray-950 !rounded-none !border-x-0">
         {markAllocator.map((item, index) => {
           const taskKey = Object.keys(item)[0];
           const task: MarkAllocatorTask = item[taskKey];

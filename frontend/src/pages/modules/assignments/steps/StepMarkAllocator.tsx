@@ -4,7 +4,7 @@ import { CheckOutlined, WarningOutlined } from '@ant-design/icons';
 
 import { useModule } from '@/context/ModuleContext';
 import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
-import { useNotifier } from '@/components/Notifier';
+import { useNotifier } from '@/components/common/Notifier';
 import { generateMarkAllocator } from '@/services/modules/assignments/mark-allocator';
 
 const { Title, Paragraph } = Typography;
