@@ -1,9 +1,11 @@
 // manager/manager.rs
+use crate::container::container::run_container;
 use crate::manager::queue::Queue;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
+use util::execution_config::ExecutionConfig;
 
 pub struct ContainerManager {
     queue: Arc<Mutex<Queue>>,
@@ -24,21 +26,25 @@ impl ContainerManager {
     }
 
     /// Runs code, either immediately or after waiting in queue.
-    /// Mock container run with a 2-second delay.
-    pub async fn run(&self, language: &str, files: &[String]) -> String {
+    pub async fn run(
+        &self,
+        config: &ExecutionConfig,
+        commands: Vec<String>,
+        files: Vec<(String, Vec<u8>)>,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync + 'static>> {
         let maybe_notify = {
             let mut queue = self.queue.lock().await;
             queue.try_acquire_slot()
         };
 
-        // If we got a notify, wait for it outside the mutex
         if let Some(notify) = maybe_notify {
             notify.notified().await;
         }
 
-        // Runmock container (just wait 2 seconds)
-        tracing::info!("Running container for language: {}", language);
-        sleep(Duration::from_secs(2)).await;
+        tracing::info!("Running container with commands: {:?}", commands);
+
+        // Actually run the container
+        let result = run_container(config, commands, files).await;
 
         // Release slot after run finishes
         {
@@ -46,10 +52,7 @@ impl ContainerManager {
             queue.release_slot();
         }
 
-        format!(
-            "Ran container for language '{}', files: {:?}",
-            language, files
-        )
+        result
     }
 
     /// A mock run method specifically for testing concurrency.

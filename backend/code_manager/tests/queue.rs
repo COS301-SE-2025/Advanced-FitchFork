@@ -88,15 +88,33 @@ async fn test_queue_handles_different_concurrency_limits() {
     let manager = ContainerManager::new(1);
     let start = Instant::now();
 
+    let running_count = Arc::new(AtomicUsize::new(0));
+    let max_observed_concurrent = Arc::new(AtomicUsize::new(0));
+
     let handles: Vec<_> = (0..3)
         .map(|i| {
             let mgr = manager.clone();
-            tokio::spawn(async move { mgr.run("python", &[format!("script_{}.py", i)]).await })
+            let running_count_clone = Arc::clone(&running_count);
+            let max_observed_clone = Arc::clone(&max_observed_concurrent);
+            tokio::spawn(async move {
+                mgr.run_mock(
+                    "python",
+                    &[format!("script_{}.py", i)],
+                    running_count_clone,
+                    max_observed_clone,
+                )
+                .await
+            })
         })
         .collect();
 
-    futures::future::join_all(handles).await;
+    let results = futures::future::join_all(handles).await;
     let elapsed = start.elapsed();
+
+    for (i, result) in results.into_iter().enumerate() {
+        let output = result.expect("Task should not panic");
+        assert!(output.contains(&format!("script_{}.py", i)));
+    }
 
     assert!(
         elapsed >= Duration::from_millis(5500),
@@ -118,10 +136,23 @@ async fn test_queue_with_no_waiting() {
 
     let start = Instant::now();
 
+    let running_count = Arc::new(AtomicUsize::new(0));
+    let max_observed_concurrent = Arc::new(AtomicUsize::new(0));
+
     let handles: Vec<_> = (0..total_runs)
         .map(|i| {
             let mgr = manager.clone();
-            tokio::spawn(async move { mgr.run("javascript", &[format!("app_{}.js", i)]).await })
+            let running_count_clone = Arc::clone(&running_count);
+            let max_observed_clone = Arc::clone(&max_observed_concurrent);
+            tokio::spawn(async move {
+                mgr.run_mock(
+                    "javascript",
+                    &[format!("app_{}.js", i)],
+                    running_count_clone,
+                    max_observed_clone,
+                )
+                .await
+            })
         })
         .collect();
 
@@ -139,8 +170,9 @@ async fn test_queue_with_no_waiting() {
     );
 
     assert_eq!(results.len(), total_runs);
-    for result in results {
-        assert!(result.is_ok());
+    for (i, result) in results.into_iter().enumerate() {
+        let output = result.expect("Task should not panic");
+        assert!(output.contains(&format!("app_{}.js", i)));
     }
 }
 
@@ -149,19 +181,34 @@ async fn test_concurrent_managers() {
     let manager1 = ContainerManager::new(2);
     let manager2 = ContainerManager::new(1);
 
+    let running_count_1 = Arc::new(AtomicUsize::new(0));
+    let max_observed_1 = Arc::new(AtomicUsize::new(0));
+    let running_count_2 = Arc::new(AtomicUsize::new(0));
+    let max_observed_2 = Arc::new(AtomicUsize::new(0));
+
     let start = Instant::now();
 
     let handles1: Vec<_> = (0..3)
         .map(|i| {
             let mgr = manager1.clone();
-            tokio::spawn(async move { mgr.run("rust", &[format!("mgr1_task_{}.rs", i)]).await })
+            let rc = Arc::clone(&running_count_1);
+            let mo = Arc::clone(&max_observed_1);
+            tokio::spawn(async move {
+                mgr.run_mock("rust", &[format!("mgr1_task_{}.rs", i)], rc, mo)
+                    .await
+            })
         })
         .collect();
 
     let handles2: Vec<_> = (0..2)
         .map(|i| {
             let mgr = manager2.clone();
-            tokio::spawn(async move { mgr.run("python", &[format!("mgr2_task_{}.py", i)]).await })
+            let rc = Arc::clone(&running_count_2);
+            let mo = Arc::clone(&max_observed_2);
+            tokio::spawn(async move {
+                mgr.run_mock("python", &[format!("mgr2_task_{}.py", i)], rc, mo)
+                    .await
+            })
         })
         .collect();
 
@@ -181,4 +228,13 @@ async fn test_concurrent_managers() {
 
     assert_eq!(results1.len(), 3);
     assert_eq!(results2.len(), 2);
+
+    for (i, result) in results1.into_iter().enumerate() {
+        let output = result.expect("Task should not panic");
+        assert!(output.contains(&format!("mgr1_task_{}.rs", i)));
+    }
+    for (i, result) in results2.into_iter().enumerate() {
+        let output = result.expect("Task should not panic");
+        assert!(output.contains(&format!("mgr2_task_{}.py", i)));
+    }
 }

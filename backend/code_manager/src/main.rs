@@ -1,12 +1,10 @@
 //main.rs
 use axum::{routing::get, Router};
+use code_manager::api::api::{health, init_manager, run_code};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use util::config::AppConfig;
-
-mod api;
-mod manager;
 
 #[tokio::main]
 async fn main() {
@@ -18,12 +16,12 @@ async fn main() {
         .init();
 
     // Initialize the global ContainerManager
-    api::init_manager(config.max_number_containers);
+    init_manager(config.max_number_containers);
 
     // Build API routes
     let app = Router::new()
-        .route("/health", get(api::health))
-        .route("/run", axum::routing::post(api::run_code));
+        .route("/health", get(health))
+        .route("/run", axum::routing::post(run_code));
 
     // Define address to listen on
     let addr: SocketAddr = format!("{}:{}", config.code_manager_host, config.code_manager_port)
