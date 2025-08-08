@@ -73,7 +73,6 @@ fn create_interpreter_zip_cpp() -> Vec<u8> {
 
         let interpreter_cpp = r##"
 #include <iostream>
-#include <fstream>
 #include <vector>
 #include <string>
 #include <cstdlib>
@@ -98,7 +97,7 @@ std::string randomSubtaskName(const std::string& task, int index) {
     return task + "Subtask" + std::to_string(index + 1);
 }
 
-void writeTask(std::ofstream& out, const std::string& taskName, const std::vector<std::string>& calls) {
+void writeTask(std::ostream& out, const std::string& taskName, const std::vector<std::string>& calls) {
     out << "static void run" << taskName << "() {\n";
     for (size_t i = 0; i < calls.size(); ++i) {
         out << "    std::cout << \"&-=-&" << randomSubtaskName(taskName, i) << "\" << std::endl;\n";
@@ -129,55 +128,52 @@ int main(int argc, char* argv[]) {
         else break; // ignore extra input beyond 9 valid digits
     }
 
-    std::ofstream out("main.cpp");
-    out << "#include <iostream>\n\n";
+    // Print the generated main.cpp content to stdout
 
-    out << "class HelperOne {\n"
-        << "public:\n"
-        << "    static std::string subtaskA() { return \"HelperOne::subtaskA\"; }\n"
-        << "    static std::string subtaskZ() { return \"HelperOne::subtaskZ\"; }\n"
-        << "    static std::string subtaskBeta() { return \"HelperOne::subtaskBeta\"; }\n"
-        << "};\n\n";
+    std::cout << "#include <iostream>\n\n";
 
-    out << "class HelperTwo {\n"
-        << "public:\n"
-        << "    static std::string subtaskB() { return \"HelperTwo::subtaskB\"; }\n"
-        << "    static std::string subtaskX() { return \"HelperTwo::subtaskX\"; }\n"
-        << "    static std::string subtaskGamma() { return \"HelperTwo::subtaskGamma\"; }\n"
-        << "};\n\n";
+    std::cout << "class HelperOne {\n"
+              << "public:\n"
+              << "    static std::string subtaskA() { return \"HelperOne::subtaskA\"; }\n"
+              << "    static std::string subtaskZ() { return \"HelperOne::subtaskZ\"; }\n"
+              << "    static std::string subtaskBeta() { return \"HelperOne::subtaskBeta\"; }\n"
+              << "};\n\n";
 
-    out << "class HelperThree {\n"
-        << "public:\n"
-        << "    static std::string subtaskC() { return \"HelperThree::subtaskC\"; }\n"
-        << "    static std::string subtaskY() { return \"HelperThree::subtaskY\"; }\n"
-        << "    static std::string subtaskAlpha() { return \"HelperThree::subtaskAlpha\"; }\n"
-        << "};\n\n";
+    std::cout << "class HelperTwo {\n"
+              << "public:\n"
+              << "    static std::string subtaskB() { return \"HelperTwo::subtaskB\"; }\n"
+              << "    static std::string subtaskX() { return \"HelperTwo::subtaskX\"; }\n"
+              << "    static std::string subtaskGamma() { return \"HelperTwo::subtaskGamma\"; }\n"
+              << "};\n\n";
+
+    std::cout << "class HelperThree {\n"
+              << "public:\n"
+              << "    static std::string subtaskC() { return \"HelperThree::subtaskC\"; }\n"
+              << "    static std::string subtaskY() { return \"HelperThree::subtaskY\"; }\n"
+              << "    static std::string subtaskAlpha() { return \"HelperThree::subtaskAlpha\"; }\n"
+              << "};\n\n";
 
     // Declare runtask functions before main()
-    out << "static void runtask1();\n";
-    out << "static void runtask2();\n";
-    out << "static void runtask3();\n\n";
+    std::cout << "static void runtask1();\n";
+    std::cout << "static void runtask2();\n";
+    std::cout << "static void runtask3();\n\n";
 
-    out << "int main(int argc, char* argv[]) {\n";
-    out << "    std::string task = argc > 1 ? argv[1] : \"task1\";\n";
-    out << "    if (task == \"task1\") runtask1();\n";
-    out << "    else if (task == \"task2\") runtask2();\n";
-    out << "    else if (task == \"task3\") runtask3();\n";
-    out << "    else std::cout << task << \" is not a valid task\" << std::endl;\n";
-    out << "    return 0;\n";
-    out << "}\n\n";
+    std::cout << "int main(int argc, char* argv[]) {\n";
+    std::cout << "    std::string task = argc > 1 ? argv[1] : \"task1\";\n";
+    std::cout << "    if (task == \"task1\") runtask1();\n";
+    std::cout << "    else if (task == \"task2\") runtask2();\n";
+    std::cout << "    else if (task == \"task3\") runtask3();\n";
+    std::cout << "    else std::cout << task << \" is not a valid task\" << std::endl;\n";
+    std::cout << "    return 0;\n";
+    std::cout << "}\n\n";
 
     // Define runtask functions after main()
-    writeTask(out, "task1", task1);
-    writeTask(out, "task2", task2);
-    writeTask(out, "task3", task3);
+    writeTask(std::cout, "task1", task1);
+    writeTask(std::cout, "task2", task2);
+    writeTask(std::cout, "task3", task3);
 
-    out.close();
-
-    std::cout << "Generated main.cpp based on input string.\n";
     return 0;
 }
-
 "##;
 
         zip.start_file("interpreter.cpp", options).unwrap();
