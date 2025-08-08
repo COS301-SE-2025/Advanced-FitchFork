@@ -17,7 +17,7 @@ inputs:
   frontend-cmd:
     description: "Command to start Frontend"
     required: false
-    default: "npm run dev -- --port 5173 --host 0.0.0.0"
+    default: "npm run dev -- --port 5173"
   api-url:
     description: "API health URL"
     required: false
@@ -45,6 +45,7 @@ runs:
         set -a
         source backend/.env
         set +a
+        # For local run: don't force HOST or CODE_MANAGER_HOST
 
     # ---- Build Docker images first ----
     - name: Build Docker images
@@ -54,29 +55,38 @@ runs:
 
     - name: Start API
       shell: bash
+      working-directory: backend
       run: |
-        nohup ${INPUT_API_CMD} > api.log 2>&1 & echo $! > api.pid
+        nohup ${INPUT_API_CMD} > ../api.log 2>&1 & echo $! > ../api.pid
       env:
         INPUT_API_CMD: ${{ inputs.api-cmd }}
 
     - name: Start Code Manager
       shell: bash
+      working-directory: backend
       run: |
-        nohup ${INPUT_CODE_CMD} > code.log 2>&1 & echo $! > code.pid
+        nohup ${INPUT_CODE_CMD} > ../code.log 2>&1 & echo $! > ../code.pid
       env:
         INPUT_CODE_CMD: ${{ inputs.code-cmd }}
 
     - name: Start Frontend (optional)
       if: ${{ inputs.start-frontend == 'true' }}
       shell: bash
+      working-directory: frontend
       run: |
-        nohup ${INPUT_FRONTEND_CMD} > frontend.log 2>&1 & echo $! > frontend.pid
+        nohup ${INPUT_FRONTEND_CMD} > ../frontend.log 2>&1 & echo $! > ../frontend.pid
       env:
         INPUT_FRONTEND_CMD: ${{ inputs.frontend-cmd }}
 
     - name: Wait for API + Code Manager
       shell: bash
       run: |
+        echo "Waiting for API at ${API_URL} and Code Manager at ${CODE_URL}"
+        sleep 3
+        echo "--- First lines of API log ---"
+        head -n 20 api.log || true
+        echo "--- First lines of Code Manager log ---"
+        head -n 20 code.log || true
         wait-on -t 600000 "${API_URL}" "${CODE_URL}"
       env:
         API_URL: ${{ inputs.api-url }}
