@@ -62,10 +62,12 @@ jobs:
         run: npm ci
         working-directory: tests
 
-      # --- start servers needed for Cypress: api + code + frontend ---
+      # --- start servers for Cypress: API + Code + Frontend ---
       - name: Start servers
         uses: ./.github/actions/start-servers
         with:
+          start-api: "true"
+          start-code: "true"
           start-frontend: "true"
           api-url: "http://localhost:3000/api/health"
           code-url: "http://localhost:5000/health"
@@ -77,7 +79,6 @@ jobs:
         run: npm run e2e
         working-directory: tests
 
-      # --- collect artifacts on failure ---
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -130,12 +131,13 @@ jobs:
           cargo run -p seeder --quiet
         working-directory: backend
 
-      # --- start servers needed for integration: api + code ---
+      # --- start servers for integration: only Code Manager ---
       - name: Start servers
         uses: ./.github/actions/start-servers
         with:
+          start-api: "false"
+          start-code: "true"
           start-frontend: "false"
-          api-url: "http://localhost:3000/api/health"
           code-url: "http://localhost:5000/health"
 
       - name: Run integration tests
@@ -149,7 +151,6 @@ jobs:
         with:
           name: integration-logs
           path: |
-            api.log
             code.log
           if-no-files-found: ignore
 
