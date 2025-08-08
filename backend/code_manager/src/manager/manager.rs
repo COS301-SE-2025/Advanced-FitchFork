@@ -1,10 +1,9 @@
 // manager/manager.rs
+use crate::manager::queue::Queue;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::time::{sleep, Duration}; // Add this import
-
-use crate::manager::queue::Queue;
+use tokio::time::{sleep, Duration};
 
 pub struct ContainerManager {
     queue: Arc<Mutex<Queue>>,
