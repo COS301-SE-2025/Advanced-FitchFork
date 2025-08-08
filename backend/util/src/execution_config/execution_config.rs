@@ -18,6 +18,14 @@ pub enum FeedbackScheme {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Language {
+    Cpp,
+    Java,
+    Python,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionLimits {
     #[serde(default = "default_timeout_secs")]
     pub timeout_secs: u64,
@@ -70,12 +78,29 @@ impl Default for MarkingOptions {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProjectSetup {
+    #[serde(default = "default_language")]
+    pub language: Language,
+}
+
+impl Default for ProjectSetup {
+    fn default() -> Self {
+        Self {
+            language: default_language(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionConfig {
     #[serde(default)]
     pub execution: ExecutionLimits,
 
     #[serde(default)]
     pub marking: MarkingOptions,
+
+    #[serde(default)]
+    pub project: ProjectSetup,
 }
 
 impl ExecutionConfig {
@@ -83,6 +108,7 @@ impl ExecutionConfig {
         ExecutionConfig {
             execution: ExecutionLimits::default(),
             marking: MarkingOptions::default(),
+            project: ProjectSetup::default(),
         }
     }
 
@@ -203,4 +229,8 @@ fn default_feedback_scheme() -> FeedbackScheme {
 
 fn default_deliminator() -> String {
     "&-=-&".to_string()
+}
+
+fn default_language() -> Language {
+    Language::Cpp
 }

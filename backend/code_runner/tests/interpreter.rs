@@ -234,7 +234,7 @@ async fn test_run_interpreter_9998_cpp() {
     )
     .await;
 
-    match run_interpreter(&db, submission_id, &gene_string, "Main.cpp").await {
+    match run_interpreter(&db, submission_id, &gene_string).await {
         Ok(_) => println!("run_interpreter completed successfully for assignment 9998."),
         Err(e) => panic!("run_interpreter failed: {}", e),
     }

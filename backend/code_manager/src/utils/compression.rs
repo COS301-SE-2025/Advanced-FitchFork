@@ -1,9 +1,8 @@
 //utils/compression.rs
-use std::fs::{self, File};
-use std::io::{Cursor, Read};
-use std::path::Path;
-
 use flate2::read::GzDecoder;
+use std::fs::{self, File};
+use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::path::Path;
 use tar::Archive;
 use zip::read::ZipArchive;
 
@@ -80,16 +79,23 @@ fn extract_zip(
     Ok(())
 }
 
-/// TAR extraction
 fn extract_tar(
     archive_bytes: &[u8],
     max_uncompressed_size: u64,
     destination_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    // First pass: validation
+    {
+        let cursor = Cursor::new(archive_bytes);
+        let mut archive = Archive::new(cursor);
+        validate_tar_size(&mut archive, max_uncompressed_size)?;
+    }
+
+    // Second pass: extraction
     let cursor = Cursor::new(archive_bytes);
     let mut archive = Archive::new(cursor);
-    validate_tar_size(&mut archive, max_uncompressed_size)?;
     archive.unpack(destination_dir)?;
+
     Ok(())
 }
 
