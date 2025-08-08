@@ -1,6 +1,7 @@
+
 use chrono::{DateTime, Utc};
-use sea_orm::entity::prelude::*;
 use sea_orm::ActiveValue::Set;
+use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Deserialize, Serialize)]
@@ -9,8 +10,8 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
 
-    pub module_id: i32,
-    pub user_id: i32,
+    pub module_id: i64,
+    pub user_id: i64,
 
     pub title: String,
     pub body: String,
@@ -54,11 +55,10 @@ impl Related<super::user::Entity> for Entity {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
-
     pub async fn create(
         db: &DbConn,
-        module_id: i32,
-        user_id: i32,
+        module_id: i64,
+        user_id: i64,
         title: &str,
         body: &str,
         pinned: bool,
@@ -78,12 +78,17 @@ impl Model {
         announcement.insert(db).await
     }
 
+    pub async fn delete(db: &DbConn, id: i64) -> Result<(), DbErr> {
+        Entity::delete_by_id(id).exec(db).await?;
+        Ok(())
+    }
+
     pub async fn update(
         db: &DbConn,
         id: i64,
-        title: Option<&str>,
-        body: Option<&str>,
-        pinned: Option<bool>,
+        title: &str,
+        body: &str,
+        pinned: bool,
     ) -> Result<Model, DbErr> {
         let mut announcement = ActiveModel {
             id: Set(id),
@@ -91,30 +96,14 @@ impl Model {
             ..Default::default()
         };
 
-        if let Some(title) = title {
+        if !title.is_empty() {
             announcement.title = Set(title.to_owned());
         }
-        if let Some(body) = body {
+        if !body.is_empty() {
             announcement.body = Set(body.to_owned());
         }
-        if let Some(pinned) = pinned {
-            announcement.pinned = Set(pinned);
-        }
+        announcement.pinned = Set(pinned);
 
         announcement.update(db).await
-    }
-
-    pub async fn find_by_user_id(db: &DbConn, user_id: i64) -> Result<Vec<Model>, DbErr> {
-        Entity::find()
-            .filter(Column::UserId.eq(user_id))
-            .all(db)
-            .await
-    }
-
-    pub async fn find_by_module_id(db: &DbConn, module_id: i32) -> Result<Vec<Model>, DbErr> {
-        Entity::find()
-            .filter(Column::ModuleId.eq(module_id))
-            .all(db)
-            .await
     }
 }
