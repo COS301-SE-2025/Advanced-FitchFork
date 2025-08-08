@@ -91,7 +91,7 @@ async fn require_role_base(
     required_roles: &[&str],
     failure_msg: &str,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let db =  app_state.db();
+    let db: &DatabaseConnection =  app_state.db();
 
     let (req, user) = extract_and_insert_authuser(req).await?;
     
