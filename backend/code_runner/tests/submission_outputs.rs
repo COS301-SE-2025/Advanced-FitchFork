@@ -1,5 +1,5 @@
 use chrono::Utc;
-use code_runner::{create_main_from_interpreter, create_submission_outputs_for_all_tasks};
+use code_runner::create_submission_outputs_for_all_tasks;
 use db::models::assignment::AssignmentType;
 use db::models::assignment::{ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity};
 use db::models::assignment_submission::{
@@ -215,58 +215,58 @@ async fn test_create_submission_outputs_for_all_tasks_9998_cpp() {
     }
 }
 
-#[tokio::test]
-#[ignore]
-async fn test_run_interpreter_9998_cpp() {
-    dotenvy::dotenv().ok();
+// #[tokio::test]
+// #[ignore]
+// async fn test_run_interpreter_9998_cpp() {
+//     dotenvy::dotenv().ok();
 
-    let db = setup_test_db_with_seeded_tasks(9998, 9998).await;
+//     let db = setup_test_db_with_seeded_tasks(9998, 9998).await;
 
-    use db::models::assignment_file::FileType;
-    use db::models::assignment_submission::Entity as SubmissionEntity;
-    use sea_orm::ColumnTrait;
-    use sea_orm::QueryFilter;
+//     use db::models::assignment_file::FileType;
+//     use db::models::assignment_submission::Entity as SubmissionEntity;
+//     use sea_orm::ColumnTrait;
+//     use sea_orm::QueryFilter;
 
-    let submission = SubmissionEntity::find()
-        .filter(db::models::assignment_submission::Column::AssignmentId.eq(9998))
-        .filter(db::models::assignment_submission::Column::UserId.eq(1))
-        .filter(db::models::assignment_submission::Column::Attempt.eq(1))
-        .one(&db)
-        .await
-        .expect("Failed to lookup submission")
-        .expect("No matching submission found");
+//     let submission = SubmissionEntity::find()
+//         .filter(db::models::assignment_submission::Column::AssignmentId.eq(9998))
+//         .filter(db::models::assignment_submission::Column::UserId.eq(1))
+//         .filter(db::models::assignment_submission::Column::Attempt.eq(1))
+//         .one(&db)
+//         .await
+//         .expect("Failed to lookup submission")
+//         .expect("No matching submission found");
 
-    let submission_id = submission.id;
+//     let submission_id = submission.id;
 
-    use db::models::assignment_file::ActiveModel as AssignmentFileActiveModel;
-    use sea_orm::{ActiveModelTrait, Set};
+//     use db::models::assignment_file::ActiveModel as AssignmentFileActiveModel;
+//     use sea_orm::{ActiveModelTrait, Set};
 
-    let interpreter_filename = "interpreter.cpp";
-    let interpreter_relative_path = "module_9998/assignment_9998/interpreter/149.zip";
-    let now = Utc::now();
+//     let interpreter_filename = "interpreter.cpp";
+//     let interpreter_relative_path = "module_9998/assignment_9998/interpreter/149.zip";
+//     let now = Utc::now();
 
-    let interpreter_file = AssignmentFileActiveModel {
-        assignment_id: Set(9998),
-        filename: Set(interpreter_filename.to_string()),
-        path: Set(interpreter_relative_path.to_string()),
-        file_type: Set(FileType::Interpreter),
-        created_at: Set(now),
-        updated_at: Set(now),
-        ..Default::default()
-    };
+//     let interpreter_file = AssignmentFileActiveModel {
+//         assignment_id: Set(9998),
+//         filename: Set(interpreter_filename.to_string()),
+//         path: Set(interpreter_relative_path.to_string()),
+//         file_type: Set(FileType::Interpreter),
+//         created_at: Set(now),
+//         updated_at: Set(now),
+//         ..Default::default()
+//     };
 
-    interpreter_file
-        .insert(&db)
-        .await
-        .expect("Failed to insert interpreter file into DB");
+//     interpreter_file
+//         .insert(&db)
+//         .await
+//         .expect("Failed to insert interpreter file into DB");
 
-    let compile_and_run_cmd = r#"
-g++ /code/interpreter.cpp -o /code/interpreter_exe &&
- /code/interpreter_exe 01234
-"#;
+//     let compile_and_run_cmd = r#"
+// g++ /code/interpreter.cpp -o /code/interpreter_exe &&
+//  /code/interpreter_exe 01234
+// "#;
 
-    match create_main_from_interpreter(&db, submission_id, compile_and_run_cmd, "cpp").await {
-        Ok(_) => {}
-        Err(e) => panic!("Failed to run interpreter for C++ assignment: {}", e),
-    }
-}
+//     match create_main_from_interpreter(&db, submission_id, compile_and_run_cmd, "cpp").await {
+//         Ok(_) => {}
+//         Err(e) => panic!("Failed to run interpreter for C++ assignment: {}", e),
+//     }
+// }

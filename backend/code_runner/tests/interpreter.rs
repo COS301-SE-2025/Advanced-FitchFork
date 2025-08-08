@@ -2,9 +2,9 @@ use chrono::Utc;
 use code_runner::run_interpreter;
 use db::models::assignment::AssignmentType;
 use db::models::assignment::{ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity};
-use db::models::assignment_file::{
-    ActiveModel as AssignmentFileActiveModel, Entity as AssignmentFileEntity,
-};
+// use db::models::assignment_file::{
+//     ActiveModel as AssignmentFileActiveModel, Entity as AssignmentFileEntity,
+// };
 use db::models::assignment_submission::{
     ActiveModel as SubmissionActiveModel, Model as SubmissionModel,
 };
@@ -12,7 +12,7 @@ use db::models::assignment_task::Model as AssignmentTaskModel;
 use db::models::module::{ActiveModel as ModuleActiveModel, Entity as ModuleEntity};
 use db::models::user::{ActiveModel as UserActiveModel, Entity as UserEntity};
 use db::test_utils::setup_test_db;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 async fn seed_user(db: &DatabaseConnection) -> i64 {
     let user_id = 1;
@@ -143,45 +143,45 @@ async fn seed_submission(
         .expect("Failed to insert submission")
 }
 
-async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, interpreter_id: i64) {
-    use db::models::assignment_file::FileType;
+// async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, interpreter_id: i64) {
+//     use db::models::assignment_file::FileType;
 
-    let now = Utc::now();
-    let interpreter_filename = "interpreter.cpp";
-    let interpreter_relative_path = format!(
-        "module_{}/assignment_{}/interpreter/{}.zip",
-        assignment_id, assignment_id, interpreter_id
-    );
+//     let now = Utc::now();
+//     let interpreter_filename = "interpreter.cpp";
+//     let interpreter_relative_path = format!(
+//         "module_{}/assignment_{}/interpreter/{}.zip",
+//         assignment_id, assignment_id, interpreter_id
+//     );
 
-    if AssignmentFileEntity::find()
-        .filter(db::models::assignment_file::Column::AssignmentId.eq(assignment_id))
-        .filter(db::models::assignment_file::Column::FileType.eq("interpreter"))
-        .one(db)
-        .await
-        .expect("DB error")
-        .is_none()
-    {
-        let interpreter_file = AssignmentFileActiveModel {
-            assignment_id: Set(assignment_id),
-            filename: Set(interpreter_filename.to_string()),
-            path: Set(interpreter_relative_path),
-            file_type: Set(FileType::Interpreter),
-            created_at: Set(now),
-            updated_at: Set(now),
-            ..Default::default()
-        };
-        interpreter_file
-            .insert(db)
-            .await
-            .expect("Failed to insert interpreter file");
-    }
-}
+//     if AssignmentFileEntity::find()
+//         .filter(db::models::assignment_file::Column::AssignmentId.eq(assignment_id))
+//         .filter(db::models::assignment_file::Column::FileType.eq("interpreter"))
+//         .one(db)
+//         .await
+//         .expect("DB error")
+//         .is_none()
+//     {
+//         let interpreter_file = AssignmentFileActiveModel {
+//             assignment_id: Set(assignment_id),
+//             filename: Set(interpreter_filename.to_string()),
+//             path: Set(interpreter_relative_path),
+//             file_type: Set(FileType::Interpreter),
+//             created_at: Set(now),
+//             updated_at: Set(now),
+//             ..Default::default()
+//         };
+//         interpreter_file
+//             .insert(db)
+//             .await
+//             .expect("Failed to insert interpreter file");
+//     }
+// }
 
 async fn setup_test_db_for_run_interpreter(
     assignment_id: i64,
     module_id: i64,
     assignment_submission_id: i64,
-    interpreter_id: i64,
+    _interpreter_id: i64,
 ) -> (DatabaseConnection, i64) {
     let db = setup_test_db().await;
 
@@ -190,7 +190,7 @@ async fn setup_test_db_for_run_interpreter(
     seed_assignment(&db, assignment_id, module_id).await;
     seed_tasks(&db, assignment_id).await;
     let submission = seed_submission(&db, assignment_id, assignment_submission_id).await;
-    seed_interpreter_file(&db, assignment_id, interpreter_id).await;
+    // seed_interpreter_file(&db, assignment_id, interpreter_id).await;
 
     (db, submission.id)
 }

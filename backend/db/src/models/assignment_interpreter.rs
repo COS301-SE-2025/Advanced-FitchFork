@@ -1,18 +1,16 @@
-// models/assignment_file.rs
+// models/assignment_interpreter.rs
 
 use chrono::{DateTime, Utc};
-// use code_runner::ExecutionConfig;
 use sea_orm::ActiveValue::Set;
 use sea_orm::entity::prelude::*;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use strum::{Display, EnumIter, EnumString};
-use util::execution_config::ExecutionConfig;
 
-/// Represents a file associated with an assignment, such as a spec, main file, memo, or submission.
+/// Represents an interpreter file associated with an assignment,
+/// including the command used to run it.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "assignment_files")]
+#[sea_orm(table_name = "interpreters")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -26,40 +24,11 @@ pub struct Model {
     /// Relative path to the stored file from the storage root.
     pub path: String,
 
-    /// Type of the file (spec, main, memo, submission).
-    pub file_type: FileType,
+    /// Command to run this interpreter.
+    pub command: String,
 
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-}
-
-/// Enum representing the type/category of an assignment file.
-#[derive(Debug, Clone, PartialEq, EnumIter, EnumString, Display, DeriveActiveEnum)]
-#[strum(ascii_case_insensitive)]
-#[sea_orm(
-    rs_type = "String",
-    db_type = "Enum",
-    enum_name = "assignment_file_type"
-)]
-pub enum FileType {
-    #[strum(serialize = "spec")]
-    #[sea_orm(string_value = "spec")]
-    Spec,
-    #[strum(serialize = "main")]
-    #[sea_orm(string_value = "main")]
-    Main,
-    #[strum(serialize = "memo")]
-    #[sea_orm(string_value = "memo")]
-    Memo,
-    #[strum(serialize = "makefile")]
-    #[sea_orm(string_value = "makefile")]
-    Makefile,
-    #[strum(serialize = "mark_allocator")]
-    #[sea_orm(string_value = "mark_allocator")]
-    MarkAllocator,
-    #[strum(serialize = "config")]
-    #[sea_orm(string_value = "config")]
-    Config,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -75,68 +44,55 @@ pub enum Relation {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
-    /// Loads and returns the `ExecutionConfig` if the file type is `Config`.
-    /// Requires `module_id` because it's not stored in the DB.
-    pub fn load_execution_config(&self, module_id: i64) -> Result<ExecutionConfig, String> {
-        if self.file_type != FileType::Config {
-            return Err("File is not of type 'config'".to_string());
-        }
-
-        ExecutionConfig::get_execution_config(module_id, self.assignment_id)
-    }
-
-    /// Returns the base directory for assignment file storage from the environment.
+    /// Returns the base directory for interpreter file storage from the environment.
     pub fn storage_root() -> PathBuf {
         env::var("ASSIGNMENT_STORAGE_ROOT")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("data/assignment_files"))
+            .unwrap_or_else(|_| PathBuf::from("data/interpreters"))
     }
 
-    /// Computes the full directory path based on module ID, assignment ID, and file type.
-    pub fn full_directory_path(
-        module_id: i64,
-        assignment_id: i64,
-        file_type: &FileType,
-    ) -> PathBuf {
+    /// Computes the full directory path based on module ID and assignment ID.
+    pub fn full_directory_path(module_id: i64, assignment_id: i64) -> PathBuf {
         Self::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join(file_type.to_string())
+            .join(format!("module_{}", module_id))
+            .join(format!("assignment_{}", assignment_id))
+            .join("interpreter")
     }
 
+    /// Save the interpreter file and create or update the DB record.
     pub async fn save_file(
         db: &DatabaseConnection,
         assignment_id: i64,
         module_id: i64,
-        file_type: FileType,
         filename: &str,
+        command: &str,
         bytes: &[u8],
-    ) -> Result<Self, DbErr> {
-        let now = Utc::now();
-
+    ) -> Result<Self, sea_orm::DbErr> {
+        use crate::models::assignment_interpreter::{Column, Entity as AssignmentInterpreter};
         use sea_orm::ColumnTrait;
         use sea_orm::EntityTrait;
         use sea_orm::QueryFilter;
 
-        use crate::models::assignment_file::{Column, Entity as AssignmentFile};
-
-        if let Some(existing) = AssignmentFile::find()
+        // Remove existing record and file if exists
+        if let Some(existing) = AssignmentInterpreter::find()
             .filter(Column::AssignmentId.eq(assignment_id))
-            .filter(Column::FileType.eq(file_type.clone()))
+            .filter(Column::Filename.eq(filename.to_string()))
             .one(db)
             .await?
         {
             let existing_path = Self::storage_root().join(&existing.path);
-            let _ = fs::remove_file(existing_path); // Silently ignore failure
+            let _ = fs::remove_file(existing_path); // ignore failure
 
             existing.delete(db).await?;
         }
 
+        let now = Utc::now();
+
         let partial = ActiveModel {
             assignment_id: Set(assignment_id),
             filename: Set(filename.to_string()),
-            path: Set("".to_string()), // will be updated after write
-            file_type: Set(file_type.clone()),
+            path: Set("".to_string()), // updated after file write
+            command: Set(command.to_string()),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
@@ -153,9 +109,9 @@ impl Model {
             None => inserted.id.to_string(),
         };
 
-        let dir_path = Self::full_directory_path(module_id, assignment_id, &file_type);
+        let dir_path = Self::full_directory_path(module_id, assignment_id);
         fs::create_dir_all(&dir_path)
-            .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
+            .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to create directory: {}", e)))?;
 
         let file_path = dir_path.join(&stored_filename);
         let relative_path = file_path
@@ -165,7 +121,7 @@ impl Model {
             .to_string();
 
         fs::write(&file_path, bytes)
-            .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
+            .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to write file: {}", e)))?;
 
         let mut model: ActiveModel = inserted.into();
         model.path = Set(relative_path);
@@ -174,13 +130,13 @@ impl Model {
         model.update(db).await
     }
 
-    /// Loads the file contents from disk based on the path stored in the model.
+    /// Load interpreter file content from disk.
     pub fn load_file(&self) -> Result<Vec<u8>, std::io::Error> {
         let full_path = Self::storage_root().join(&self.path);
         fs::read(full_path)
     }
 
-    /// Deletes the file from disk (but not the DB record).
+    /// Delete the interpreter file from disk (but not DB record).
     pub fn delete_file_only(&self) -> Result<(), std::io::Error> {
         let full_path = Self::storage_root().join(&self.path);
         fs::remove_file(full_path)
@@ -190,11 +146,9 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::assignment::AssignmentType;
     use crate::test_utils::setup_test_db;
     use chrono::Utc;
     use sea_orm::Set;
-    use std::env;
     use tempfile::TempDir;
 
     fn fake_bytes() -> Vec<u8> {
@@ -203,12 +157,11 @@ mod tests {
 
     fn override_storage_dir(temp: &TempDir) {
         unsafe {
-            env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
+            std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
         }
     }
 
     #[tokio::test]
-    #[ignore]
     async fn test_save_and_load_file() {
         let temp_dir = TempDir::new().unwrap();
         override_storage_dir(&temp_dir);
@@ -233,7 +186,7 @@ mod tests {
             1,
             "Test Assignment",
             Some("Desc"),
-            AssignmentType::Practical,
+            crate::models::assignment::AssignmentType::Practical,
             Utc::now(),
             Utc::now(),
         )
@@ -241,25 +194,19 @@ mod tests {
         .expect("Insert assignment failed");
 
         let content = fake_bytes();
-        let filename = "test_file.zip";
-        let saved = Model::save_file(
-            &db,
-            1, // assignment_id
-            1, // module_id
-            FileType::Spec,
-            filename,
-            &content,
-        )
-        .await
-        .unwrap();
+        let filename = "interpreter.sh";
+        let command = "sh interpreter.sh";
+
+        let saved = Model::save_file(&db, 1, 1, filename, command, &content)
+            .await
+            .expect("Failed to save interpreter");
 
         assert_eq!(saved.assignment_id, 1);
         assert_eq!(saved.filename, filename);
-        assert_eq!(saved.file_type, FileType::Spec);
+        assert_eq!(saved.command, command);
 
         // Confirm file on disk
         let full_path = Model::storage_root().join(&saved.path);
-        //The error was this line
         assert!(full_path.exists());
 
         // Load contents
