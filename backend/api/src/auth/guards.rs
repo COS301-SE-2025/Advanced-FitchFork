@@ -242,18 +242,25 @@ pub async fn require_ready_assignment(
     let db = app_state.db();
 
     let module_id = params.get("module_id")
-        .and_then(|s| s.parse::<i32>().ok())
+        .and_then(|s| s.parse::<i64>().ok())
         .ok_or((
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::error("Missing or invalid module_id"))
         ))?;
 
     let assignment_id = params.get("assignment_id")
-        .and_then(|s| s.parse::<i32>().ok())
+        .and_then(|s| s.parse::<i64>().ok())
         .ok_or((
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::error("Missing or invalid assignment_id"))
         ))?;
+
+    if let Err(e) = db::models::assignment::Model::try_transition_to_ready(db, module_id, assignment_id).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(format!("Failed to transition assignment to ready: {}", e)))
+        ));
+    }
 
     let assignment = match AssignmentEntity::find_by_id(assignment_id).one(db).await {
         Ok(Some(a)) => a,
