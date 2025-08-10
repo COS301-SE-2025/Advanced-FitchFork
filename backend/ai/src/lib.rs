@@ -1,23 +1,231 @@
-//these are the folders that exist with mod.rs files in them
-mod algorithms;
-mod utils;
-use crate::algorithms::genetic_algorithm::{GAConfig, GeneticAlgorithm, Chromosome};
-use std::collections::HashSet;
+// lib.rs
+use ga::{GeneticAlgorithm, Chromosome}; 
+pub use ga::{GeneticAlgorithm, GAConfig, GeneConfig, Chromosome, CrossoverType, MutationType};
+
+use std::collections::HashMap;
+use sea_orm::DatabaseConnection;
 
 
-pub fn construct_ga(config: GAConfig, omegas: (f64, f64, f64)) -> GeneticAlgorithm {
-    let (w1, w2, w3) = omegas;
-    GeneticAlgorithm::new(config, w1, w2, w3)
+/// Decodes a whole chromosome bitstring into i32 values
+/// using fixed `bits_per_gene` (sign + magnitude).
+pub fn decode_genes(bits: &[bool], bits_per_gene: usize) -> Vec<i32> {
+    let mut values = Vec::new();
+    let mut index = 0;
+
+    while index + bits_per_gene <= bits.len() {
+        let slice = &bits[index..index + bits_per_gene];
+        values.push(decode_gene(slice));
+        index += bits_per_gene;
+    }
+
+    if index != bits.len() {
+        panic!(
+            "critical GATLAM decoding error! (expected multiple of {}, got {})",
+            bits_per_gene,
+            bits.len()
+        );
+    }
+
+    values
 }
 
-pub fn run_ga_loop<F>(mut ga: GeneticAlgorithm, mut fetch_run_params: F) -> GeneticAlgorithm where F: FnMut() -> (usize, usize), {
-    let (n_ltl_props, n_tasks) = fetch_run_params();
+/// Decodes a gene from a slice of bits.
+/// Assumes the first bit is the sign bit and the rest are value bits.
+/// If bits are shorter than expected, returns 0.
+fn decode_gene(bits: &[bool]) -> i32 {
+    if bits.len() < 2 {
+        return 0;
+    }
+
+    let is_negative = bits[0];
+    let mut val = 0i32;
+
+    for &b in &bits[1..] {
+        val = (val << 1) | (b as i32);
+    }
+
+    let decoded = if is_negative { -val } else { val };
+    let max = (1 << (bits.len() - 1)) - 1;
+    decoded.clamp(-max, max)
+}
+
+// Fitness evaluation components
+pub struct Components {
+    omega1: f64,
+    omega2: f64,
+    omega3: f64,
+    memory_log: HashMap<usize, HashMap<i32, i32>>,
+    total_checked: usize,
+    bits_per_gene: usize,
+}
+
+impl Components {
+    pub fn new(omega1: f64, omega2: f64, omega3: f64, bits_per_gene: usize) -> Self {
+        if (omega1 + omega2 + omega3 - 1.0).abs() > 1e-6 {
+            panic!("Weights of omegas should sum to 1, not {}", omega1 + omega2 + omega3);
+        }
+        Self {
+            omega1,
+            omega2,
+            omega3,
+            memory_log: HashMap::new(),
+            total_checked: 0,
+            bits_per_gene,
+        }
+    }
+
+    /// Calculates fitness using the three components.
+    /// `num_ltl_props` and `num_tasks` are derived from interpreter outputs.
+    pub fn evaluate(&mut self, x: &Chromosome, generation: usize, num_ltl_props: usize, num_tasks: usize) -> f64 {
+        let ltl  = self.compute_ltl(x, num_ltl_props);
+        let fail = self.compute_fail(x, num_tasks);
+        let mem  = self.compute_mem(x, generation);
+        self.total_checked += 1;
+        if ltl > 0.0 {
+            self.update_memory(x);
+        }
+        self.omega1 * ltl + self.omega2 * fail + self.omega3 * mem
+    }
+
+    fn compute_ltl(&self, _x: &Chromosome, n: usize) -> f64 {
+        let mut violations = 0;
+        for i in 0..n {
+            if self.simulate_tl_property_violation(_x, i) { //todo: return actual ltl violation from loop
+                violations += 1;
+            }
+        }
+        violations as f64 / (n.max(1) as f64)
+    }
+
+    fn compute_fail(&self, _x: &Chromosome, m: usize) -> f64 {
+        let mut failed = 0;
+        for i in 0..m {
+            if self.simulate_task_failure(_x, i) { //todo: return actual fail from loop
+                failed += 1;
+            }
+        }
+        failed as f64 / (m.max(1) as f64)
+    }
+
+    fn compute_mem(&self, x: &Chromosome, _gen: usize) -> f64 {
+        let genes = decode_genes(&x.genes, self.bits_per_gene);
+        let mut sum = 0.0;
+        for (i, &val) in genes.iter().enumerate() {
+            let count = self
+                .memory_log
+                .get(&i)
+                .and_then(|m| m.get(&val))
+                .cloned()
+                .unwrap_or(0);
+            sum += count as f64;
+        }
+        
+        if genes.is_empty() {
+            0.0
+        } else {
+            sum / (genes.len() as f64 * (self.total_checked.max(1) as f64))
+        }
+    }
+
+    fn update_memory(&mut self, x: &Chromosome) {
+        let genes = decode_genes(&x.genes, self.bits_per_gene);
+        for (i, val) in genes.into_iter().enumerate() {
+            let entry = self.memory_log.entry(i).or_insert_with(HashMap::new);
+            *entry.entry(val).or_insert(0) += 1;
+        }
+    }
+
+    fn simulate_tl_property_violation(&self, _x: &Chromosome, _i: usize) -> bool {
+        rand::random::<f64>() < 0.2
+    }
+
+    fn simulate_task_failure(&self, _x: &Chromosome, _i: usize) -> bool {
+        rand::random::<f64>() < 0.3
+    }
+}
 
 
 
-    run_interpreter(&as_string);
 
-    ga.run(n_ltl_props, n_tasks);
-    ga
 
+
+// Interpreter-in-the-loop driver (async, end-to-end)
+
+/// Drives the GA across all generations:
+/// For each generation:
+///   For each chromosome:
+///     - decode → build payload → run interpreter
+///     - derive (num_ltl_props, num_tasks) from outputs
+///     - compute fitness via Components
+///   → step GA with the computed fitness scores
+
+/// TODO: EVERYTHING FROM THIS POINT ON IS A PLACEHOLDER! 
+pub async fn run_ga_end_to_end<D, F>(
+    db: &DatabaseConnection,
+    submission_id: i64,
+    ga: &mut GeneticAlgorithm,
+    comps: &mut Components,
+    mut derive_props: D,
+    mut fetch_outputs: F,
+) -> Result<(), String>
+where
+    D: FnMut(&[(i64, String)]) -> (usize, usize),    // derive (n_ltl_props, num_tasks)
+    F: FnMut(&DatabaseConnection, i64) -> Result<Vec<(i64, String)>, String>, // fetch outputs after interpreter
+{
+    let gens = ga.config().number_of_generations;
+    let bits_per_gene = ga.bits_per_gene();
+
+    for geneneration in 0..gens {
+        let mut fitness_scores = Vec::with_capacity(ga.population().len());
+
+        for chrom in ga.population().iter() {
+            // decode chromosome into a comma-separated string for interpreter
+            let decoded = decode_genes(chrom.genes(), bits_per_gene);
+            let generated_string = decoded
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+
+            // run interpreter with GA-produced string
+            run_interpreter(db, submission_id, &generated_string).await?;
+
+            // pull outputs for this submission back for evaluation
+            let task_outputs: Vec<(i64, String)> = fetch_outputs(db, submission_id)?;
+
+            // derive properties required by fitness equations
+            let (n_ltl_props, num_tasks) = derive_props(&task_outputs);
+
+            // dvaluate using your formulas (decoupled here)
+            let score = comps.evaluate(chrom, genernation, n_ltl_props, num_tasks);
+            fitness_scores.push(score);
+        }
+
+        ga.step_with_fitness(&fitness_scores);
+    }
+
+    Ok(())
+}
+
+pub async fn run_interpreter(
+    db: &DatabaseConnection,
+    submission_id: i64,
+    generated_string: &str,
+) -> Result<(), String> {
+    // call your current implementation here (unchanged)
+    // - create_main_from_interpreter(db, submission_id, generated_string).await?;
+    // - create_memo_outputs_for_all_tasks(db, assignment_id).await?;
+    // - create_submission_outputs_for_all_tasks(db, submission_id).await?;
+    // - Ok(())
+    unimplemented!("wire to your existing code_runner::run_interpreter")
+}
+
+
+pub fn fetch_submission_outputs_from_db(
+    _db: &DatabaseConnection,
+    _submission_id: i64,
+) -> Result<Vec<(i64, String)>, String> {
+    // TODO: Implement using your existing models (e.g., SubmissionOutputModel::get_latest_for_submission)
+    // Return Ok(vec![(task_id, output_string), ...])
+    Err("fetch_submission_outputs_from_db not implemented".into())
 }
