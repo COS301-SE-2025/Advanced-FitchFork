@@ -3,7 +3,7 @@ pub use ga::{GeneticAlgorithm, GAConfig, GeneConfig, Chromosome, CrossoverType, 
 
 use std::collections::HashMap;
 use sea_orm::DatabaseConnection;
-
+use code_runner::src::lib::run_interpreter; // check if this actually works when analyzer catches up...
 
 /// Decodes a whole chromosome bitstring into i32 values
 /// using fixed `bits_per_gene` (sign + magnitude).
@@ -153,10 +153,10 @@ impl Components {
 /// Drives the GA across all generations:
 /// For each generation:
 ///   For each chromosome:
-///     - decode → build payload → run interpreter
+///     - decode -> build payload -> run interpreter
 ///     - derive (num_ltl_props, num_tasks) from outputs
 ///     - compute fitness via Components
-///   → step GA with the computed fitness scores
+///   -> step GA with the computed fitness scores
 
 /// TODO: EVERYTHING FROM THIS POINT ON IS A PLACEHOLDER! 
 pub async fn run_ga_end_to_end<D, F>(
@@ -165,12 +165,15 @@ pub async fn run_ga_end_to_end<D, F>(
     ga: &mut GeneticAlgorithm,
     comps: &mut Components,
     mut derive_props: D,
-    mut fetch_outputs: F,
+    mut fetch_outputs: F, // kept for compatibility; unused
 ) -> Result<(), String>
 where
-    D: FnMut(&[(i64, String)]) -> (usize, usize),    // derive (n_ltl_props, num_tasks)
-    F: FnMut(&DatabaseConnection, i64) -> Result<Vec<(i64, String)>, String>, // fetch outputs after interpreter
+    D: FnMut(&[(i64, String)]) -> (usize, usize),
+    F: FnMut(&DatabaseConnection, i64) -> Result<Vec<(i64, String)>, String>,
 {
+    // prevent unused warning without changing signature
+    let _ = &mut fetch_outputs;
+
     let gens = ga.config().number_of_generations;
     let bits_per_gene = ga.bits_per_gene();
 
@@ -178,7 +181,7 @@ where
         let mut fitness_scores = Vec::with_capacity(ga.population().len());
 
         for chrom in ga.population().iter() {
-            // decode chromosome into a comma-separated string for interpreter
+            // decode chromosome into the payload the interpreter expects
             let decoded = decode_genes(chrom.genes(), bits_per_gene);
             let generated_string = decoded
                 .iter()
@@ -186,45 +189,21 @@ where
                 .collect::<Vec<_>>()
                 .join(",");
 
-            // run interpreter with GA-produced string
-            run_interpreter(db, submission_id, &generated_string).await?;
+            // call the external interpreter ONCE; it still writes to DB and also returns outputs
+            let task_outputs: Vec<(i64, String)> =
+                run_interpreter(db, submission_id, &generated_string).await?;
 
-            // pull outputs for this submission back for evaluation
-            let task_outputs: Vec<(i64, String)> = fetch_outputs(db, submission_id)?;
-
-            // derive properties required by fitness equations
+            // map outputs -> (n_ltl_props, num_tasks)
             let (n_ltl_props, num_tasks) = derive_props(&task_outputs);
 
-            // dvaluate using your formulas (decoupled here)
+            // compute fitness via Components
             let score = comps.evaluate(chrom, generation, n_ltl_props, num_tasks);
             fitness_scores.push(score);
         }
 
+        // evolve one generation
         ga.step_with_fitness(&fitness_scores);
     }
 
     Ok(())
-}
-
-pub async fn run_interpreter(
-    db: &DatabaseConnection,
-    submission_id: i64,
-    generated_string: &str,
-) -> Result<(), String> {
-    // call your current implementation here (unchanged)
-    // - create_main_from_interpreter(db, submission_id, generated_string).await?;
-    // - create_memo_outputs_for_all_tasks(db, assignment_id).await?;
-    // - create_submission_outputs_for_all_tasks(db, submission_id).await?;
-    // - Ok(())
-    unimplemented!("wire to your existing code_runner::run_interpreter")
-}
-
-
-pub fn fetch_submission_outputs_from_db(
-    _db: &DatabaseConnection,
-    _submission_id: i64,
-) -> Result<Vec<(i64, String)>, String> {
-    // TODO: Implement using your existing models (e.g., SubmissionOutputModel::get_latest_for_submission)
-    // Return Ok(vec![(task_id, output_string), ...])
-    Err("fetch_submission_outputs_from_db not implemented".into())
 }
