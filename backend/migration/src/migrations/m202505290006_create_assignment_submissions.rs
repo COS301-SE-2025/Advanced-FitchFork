@@ -47,7 +47,7 @@ impl MigrationTrait for Migration {
                             .default(Expr::cust("CURRENT_TIMESTAMP")),
                     )
                     .col(
-                        ColumnDef::new(Alias::new("mark"))
+                        ColumnDef::new(Alias::new("score"))
                             .double()            
                             .not_null()           
                             .default(0.0)

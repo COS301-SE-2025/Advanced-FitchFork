@@ -22,7 +22,6 @@ pub struct Model {
     pub path: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub mark: Option<f64>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -85,7 +84,6 @@ impl Model {
         submission_id: i64,
         filename: &str,
         bytes: &[u8],
-        mark: f64
 
     ) -> Result<Self, DbErr> {
         let now = Utc::now();
@@ -96,7 +94,6 @@ impl Model {
             path: Set("".to_string()),
             created_at: Set(now),
             updated_at: Set(now),
-            mark: Set(Some(mark)),
             
             
             ..Default::default()

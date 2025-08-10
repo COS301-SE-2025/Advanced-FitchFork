@@ -46,8 +46,7 @@ impl Seeder for AssignmentSubmissionOutputSeeder {
                     task.id,
                     submission.id,
                     dummy_filename,
-                    dummy_content.as_bytes(),
-                    0.0,
+                    dummy_content.as_bytes(), 
                 )
                 .await
                 {

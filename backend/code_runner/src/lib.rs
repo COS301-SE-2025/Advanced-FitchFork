@@ -260,7 +260,6 @@ pub async fn create_submission_outputs_for_all_tasks(
             submission_id,
             &filename,
             output.as_bytes(),
-            0.0, // Default mark, can be updated later
         )
         .await
         {
