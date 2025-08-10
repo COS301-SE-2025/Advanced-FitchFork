@@ -4,7 +4,7 @@ pub struct Migration;
 
 impl MigrationName for Migration {
     fn name(&self) -> &str {
-        "m202505290005_create_assignment_files"
+        "m202508020003_create_interpreter"
     }
 }
 
@@ -14,7 +14,7 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Alias::new("assignment_files"))
+                    .table(Alias::new("interpreters"))
                     .if_not_exists()
                     .col(
                         ColumnDef::new(Alias::new("id"))
@@ -30,21 +30,7 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Alias::new("filename")).string().not_null())
                     .col(ColumnDef::new(Alias::new("path")).string().not_null())
-                    .col(
-                        ColumnDef::new(Alias::new("file_type"))
-                            .enumeration(
-                                Alias::new("assignment_file_type"),
-                                vec![
-                                    Alias::new("spec"),
-                                    Alias::new("main"),
-                                    Alias::new("memo"),
-                                    Alias::new("markallocator"),
-                                    Alias::new("makefile"),
-                                    Alias::new("config"),
-                                ],
-                            )
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(Alias::new("command")).string().not_null())
                     .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()
@@ -59,7 +45,7 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .from(Alias::new("assignment_files"), Alias::new("assignment_id"))
+                            .from(Alias::new("interpreters"), Alias::new("assignment_id"))
                             .to(Alias::new("assignments"), Alias::new("id"))
                             .on_delete(ForeignKeyAction::Cascade),
                     )
@@ -70,11 +56,7 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(
-                Table::drop()
-                    .table(Alias::new("assignment_files"))
-                    .to_owned(),
-            )
+            .drop_table(Table::drop().table(Alias::new("interpreters")).to_owned())
             .await
     }
 }

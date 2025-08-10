@@ -21,3 +21,7 @@ script = ["cargo run -p seeder --quiet"]
 [tasks.api]
 description = "Run the API server"
 script = ["cargo run -p api"]
+
+[tasks.code]
+description = "Run the Code Manager server"
+script = ["cargo run -p code_manager"]

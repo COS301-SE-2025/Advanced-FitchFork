@@ -1,5 +1,6 @@
 pub mod assignment;
 pub mod assignment_file;
+pub mod assignment_interpreter;
 pub mod assignment_memo_output;
 pub mod assignment_overwrite_file;
 pub mod assignment_submission;
@@ -8,13 +9,14 @@ pub mod assignment_task;
 pub mod module;
 pub mod password_reset_token;
 pub mod plagiarism_case;
-pub mod user;
-pub mod user_module_role;
 pub mod ticket_messages;
 pub mod tickets;
+pub mod user;
+pub mod user_module_role;
 
 pub use assignment::Entity as Assignment;
 pub use assignment_file::Entity as AssignmentFile;
+pub use assignment_interpreter::Entity as AssignmentInterpreter;
 pub use assignment_memo_output::Entity as AssignmentMemoOutput;
 pub use assignment_overwrite_file::Entity as AssignmentOverwriteFile;
 pub use assignment_submission::Entity as AssignmentSubmission;
@@ -23,8 +25,7 @@ pub use assignment_task::Entity as AssignmentTask;
 pub use module::Entity as Module;
 pub use password_reset_token::Entity as PasswordResetToken;
 pub use plagiarism_case::Entity as PlagiarismCase;
-pub use user::Entity as User;
-pub use user_module_role::Entity as UserModuleRole;
 pub use ticket_messages::Entity as TicketMessages;
 pub use tickets::Entity as Tickets;
-
+pub use user::Entity as User;
+pub use user_module_role::Entity as UserModuleRole;

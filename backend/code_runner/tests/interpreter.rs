@@ -2,9 +2,6 @@ use chrono::Utc;
 use code_runner::run_interpreter;
 use db::models::assignment::AssignmentType;
 use db::models::assignment::{ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity};
-use db::models::assignment_file::{
-    ActiveModel as AssignmentFileActiveModel, Entity as AssignmentFileEntity,
-};
 use db::models::assignment_submission::{
     ActiveModel as SubmissionActiveModel, Model as SubmissionModel,
 };
@@ -12,7 +9,9 @@ use db::models::assignment_task::Model as AssignmentTaskModel;
 use db::models::module::{ActiveModel as ModuleActiveModel, Entity as ModuleEntity};
 use db::models::user::{ActiveModel as UserActiveModel, Entity as UserEntity};
 use db::test_utils::setup_test_db;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::ColumnTrait;
+use sea_orm::QueryFilter;
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 async fn seed_user(db: &DatabaseConnection) -> i64 {
     let user_id = 1;
@@ -144,36 +143,56 @@ async fn seed_submission(
 }
 
 async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, interpreter_id: i64) {
-    use db::models::assignment_file::FileType;
+    use db::models::assignment_interpreter::{
+        ActiveModel as InterpreterActiveModel, Column as InterpreterColumn,
+        Entity as InterpreterEntity,
+    };
 
     let now = Utc::now();
-    let interpreter_filename = "interpreter.cpp";
-    let interpreter_relative_path = format!(
-        "module_{}/assignment_{}/interpreter/{}.zip",
-        assignment_id, assignment_id, interpreter_id
+
+    let assignment = AssignmentEntity::find_by_id(assignment_id)
+        .one(db)
+        .await
+        .expect("Failed to lookup assignment")
+        .expect("Assignment not found");
+
+    let module_id = assignment.module_id;
+
+    // The filename on disk is "{interpreter_id}.zip"
+    let filename = format!("{}.zip", interpreter_id);
+
+    // Path relative to ASSIGNMENT_STORAGE_ROOT, matching your model's logic:
+    let relative_path = format!(
+        "module_{}/assignment_{}/interpreter/{}",
+        module_id, assignment_id, filename
     );
 
-    if AssignmentFileEntity::find()
-        .filter(db::models::assignment_file::Column::AssignmentId.eq(assignment_id))
-        .filter(db::models::assignment_file::Column::FileType.eq("interpreter"))
+    // The command to run the interpreter - put your actual interpreter command here
+    let command = "g++ /code/interpreter.cpp -o /code/interpreter_exe &&
+ /code/interpreter_exe"
+        .to_string();
+
+    // Check if an interpreter for this assignment already exists
+    if InterpreterEntity::find()
+        .filter(InterpreterColumn::AssignmentId.eq(assignment_id))
         .one(db)
         .await
         .expect("DB error")
         .is_none()
     {
-        let interpreter_file = AssignmentFileActiveModel {
+        let interpreter = InterpreterActiveModel {
             assignment_id: Set(assignment_id),
-            filename: Set(interpreter_filename.to_string()),
-            path: Set(interpreter_relative_path),
-            file_type: Set(FileType::Interpreter),
+            filename: Set(filename),
+            path: Set(relative_path),
+            command: Set(command),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
         };
-        interpreter_file
+        interpreter
             .insert(db)
             .await
-            .expect("Failed to insert interpreter file");
+            .expect("Failed to insert interpreter");
     }
 }
 
@@ -203,10 +222,8 @@ async fn test_run_interpreter_9998_cpp() {
     let assignment_id = 9998;
     let module_id = 9998;
     let assignment_submission_id = 602;
-    let interpreter_id = 148;
+    let interpreter_id = 21;
 
-    let interpreter_cmd = "g++ /code/interpreter.cpp -o /code/interpreter_exe &&
- /code/interpreter_exe";
     let gene_string = "01234";
 
     let (db, submission_id) = setup_test_db_for_run_interpreter(
@@ -217,9 +234,7 @@ async fn test_run_interpreter_9998_cpp() {
     )
     .await;
 
-    let compile_and_run_cmd = format!("{} {}", interpreter_cmd, gene_string);
-
-    match run_interpreter(&db, submission_id, &compile_and_run_cmd, "Main.cpp").await {
+    match run_interpreter(&db, submission_id, &gene_string).await {
         Ok(_) => println!("run_interpreter completed successfully for assignment 9998."),
         Err(e) => panic!("run_interpreter failed: {}", e),
     }
