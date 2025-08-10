@@ -26,7 +26,8 @@ mod tests {
             generate_jwt,
             guards::{
                 require_authenticated, require_admin, require_lecturer, require_assistant_lecturer, require_tutor, require_student,
-                require_lecturer_or_assistant_lecturer, require_lecturer_or_tutor, require_assigned_to_module, Empty, validate_known_ids
+                require_lecturer_or_assistant_lecturer, require_lecturer_or_tutor, require_assigned_to_module, require_ready_assignment,
+                Empty, validate_known_ids,
             }
         },
         response::ApiResponse
@@ -430,6 +431,108 @@ mod tests {
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.unassigned_user_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+    }
+
+    mod test_require_ready_assignment {
+        use super::*;
+        use sea_orm::{ActiveModelTrait, Set};
+
+        fn create_assignment_router<G, Fut>(app_state: AppState, guard: G) -> Router
+        where
+            G: Fn(
+                    State<AppState>,
+                    Path<HashMap<String, String>>,
+                    Request<Body>,
+                    Next,
+                ) -> Fut
+                + Clone
+                + Send
+                + Sync
+                + 'static,
+            Fut: Future<Output = Result<Response, (StatusCode, Json<ApiResponse<Empty>>)>> + Send + 'static,
+        {
+            async fn test_handler() -> &'static str {
+                "OK"
+            }
+
+            Router::new()
+                .route(
+                    "/modules/{module_id}/assignments/{assignment_id}",
+                    get(test_handler)
+                        .route_layer(middleware::from_fn_with_state(app_state.clone(), guard)),
+                )
+                .layer(middleware::from_fn(require_authenticated))
+                .with_state(app_state)
+        }
+
+        #[tokio::test]
+        async fn forbids_when_assignment_in_setup() {
+            let ctx = setup().await;
+            let db = ctx.app_state.db();
+
+            let assignment = AssignmentModel::create(db, ctx.module_id, "RS-SETUP", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
+            let mut am: db::models::assignment::ActiveModel = assignment.clone().into();
+            am.status = Set(db::models::assignment::Status::Setup);
+            am.update(db).await.unwrap();
+
+            let app = create_assignment_router(ctx.app_state.clone(), require_ready_assignment);
+            let uri = format!("/modules/{}/assignments/{}", ctx.module_id, assignment.id);
+            let res = app.oneshot(build_request(&uri, Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+
+        #[tokio::test]
+        async fn allows_when_assignment_ready() {
+            let ctx = setup().await;
+            let db = ctx.app_state.db();
+
+            let assignment = AssignmentModel::create(db, ctx.module_id, "RS-READY", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
+            let mut am: db::models::assignment::ActiveModel = assignment.clone().into();
+            am.status = Set(db::models::assignment::Status::Ready);
+            am.update(db).await.unwrap();
+
+            let app = create_assignment_router(ctx.app_state.clone(), require_ready_assignment);
+            let uri = format!("/modules/{}/assignments/{}", ctx.module_id, assignment.id);
+            let res = app.oneshot(build_request(&uri, Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn allows_when_assignment_open_or_closed() {
+            let ctx = setup().await;
+            let db = ctx.app_state.db();
+
+            // Open
+            let assignment_open = AssignmentModel::create(db, ctx.module_id, "RS-OPEN", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
+            let mut am_open: db::models::assignment::ActiveModel = assignment_open.clone().into();
+            am_open.status = Set(db::models::assignment::Status::Open);
+            am_open.update(db).await.unwrap();
+
+            let app = create_assignment_router(ctx.app_state.clone(), require_ready_assignment);
+            let uri_open = format!("/modules/{}/assignments/{}", ctx.module_id, assignment_open.id);
+            let res_open = app.clone().oneshot(build_request(&uri_open, Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res_open.status(), StatusCode::OK);
+
+            // Closed
+            let assignment_closed = AssignmentModel::create(db, ctx.module_id, "RS-CLOSED", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
+            let mut am_closed: db::models::assignment::ActiveModel = assignment_closed.clone().into();
+            am_closed.status = Set(db::models::assignment::Status::Closed);
+            am_closed.update(db).await.unwrap();
+
+            let uri_closed = format!("/modules/{}/assignments/{}", ctx.module_id, assignment_closed.id);
+            let res_closed = app.oneshot(build_request(&uri_closed, Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res_closed.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn returns_not_found_when_assignment_missing() {
+            let ctx = setup().await;
+            let non_existent_assignment_id = 99999;
+            let app = create_assignment_router(ctx.app_state.clone(), require_ready_assignment);
+            let uri = format!("/modules/{}/assignments/{}", ctx.module_id, non_existent_assignment_id);
+            let res = app.oneshot(build_request(&uri, Some(&ctx.admin_token))).await.unwrap();
+            assert_eq!(res.status(), StatusCode::NOT_FOUND);
         }
     }
 
