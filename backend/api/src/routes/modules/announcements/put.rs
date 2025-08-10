@@ -28,11 +28,11 @@ pub async fn edit_announcement(
                 )),
             )
         }
-        Err(err) => {
+        Err(_) => {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::error(
-                    format!("Failed to update announcement: {}", err),
+                    format!("Failed to update announcement"),
                 )),
             )
         }
