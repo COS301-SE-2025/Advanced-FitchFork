@@ -20,6 +20,9 @@ db = { path = "../db" }
 flate2 = "1.1.2"
 util = { path = "../util" }
 shell-escape = "0.1.5"
+base64 = "0.22.1"
+reqwest = { version = "0.12", features = ["json"] }
+
 
 [dev-dependencies]
 dotenvy = "0.15"

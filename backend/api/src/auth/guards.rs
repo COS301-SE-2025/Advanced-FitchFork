@@ -9,6 +9,7 @@ use sea_orm::QueryFilter;
 use sea_orm::ColumnTrait;
 use db::models::{
     module::Entity as ModuleEntity,
+    plagiarism_case::{Entity as PlagiarismEntity, Column as PlagiarismColumn},
     assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
     assignment_task::{Entity as TaskEntity, Column as TaskColumn},
     assignment_submission::{Entity as SubmissionEntity, Column as SubmissionColumn},
@@ -90,7 +91,7 @@ async fn require_role_base(
     required_roles: &[&str],
     failure_msg: &str,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let db =  app_state.db();
+    let db: &DatabaseConnection =  app_state.db();
 
     let (req, user) = extract_and_insert_authuser(req).await?;
     
@@ -232,6 +233,64 @@ pub async fn require_assigned_to_module(
     ).await
 }
 
+pub async fn require_ready_assignment(
+    State(app_state): State<AppState>,
+    Path(params): Path<HashMap<String, String>>,
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    let db = app_state.db();
+
+    let module_id = params.get("module_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Missing or invalid module_id"))
+        ))?;
+
+    let assignment_id = params.get("assignment_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Missing or invalid assignment_id"))
+        ))?;
+
+    if let Err(e) = db::models::assignment::Model::try_transition_to_ready(db, module_id, assignment_id).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(format!("Failed to transition assignment to ready: {}", e)))
+        ));
+    }
+
+    let assignment = match AssignmentEntity::find_by_id(assignment_id).one(db).await {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::error(format!(
+                    "Assignment {} in Module {} not found.",
+                    assignment_id, module_id
+                ))),
+            ));
+        }
+        Err(_) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("Database error while checking assignment")),
+            ));
+        }
+    };
+
+    if assignment.status == db::models::assignment::Status::Setup {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::error("Assignment is still in Setup stage"))
+        ));
+    }
+
+    Ok(next.run(req).await)
+}
+
 // --- Path ID Guards ---
 
 async fn check_module_exists(
@@ -365,6 +424,54 @@ async fn check_file_hierarchy(
     Ok(())
 }
 
+pub async fn check_ticket_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    ticket_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+
+    let found = db::models::tickets::Entity::find()
+        .filter(db::models::tickets::Column::Id.eq(ticket_id))
+        .filter(db::models::tickets::Column::AssignmentId.eq(assignment_id))
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking ticket"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Ticket {} in Assignment {} not found.", ticket_id, assignment_id))),
+        ));
+    }
+    Ok(())
+}
+
+pub async fn check_plagiarism_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    case_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+
+    let found = PlagiarismEntity::find()
+        .filter(PlagiarismColumn::Id.eq(case_id))
+        .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking plagiarism case"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Plagiarism case {} in Assignment {} not found.", case_id, assignment_id))),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn validate_known_ids(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
@@ -379,6 +486,8 @@ pub async fn validate_known_ids(
     let mut submission_id: Option<i32> = None;
     let mut file_id: Option<i32>       = None;
     let mut user_id: Option<i32>       = None;
+    let mut ticket_id: Option<i32>     = None;
+    let mut case_id: Option<i32> = None;
 
     for (key, raw) in &params {
         let id = raw.parse::<i32>().map_err(|_| {
@@ -391,6 +500,8 @@ pub async fn validate_known_ids(
             "submission_id" => submission_id = Some(id),
             "file_id"       => file_id = Some(id),
             "user_id"       => user_id = Some(id),
+            "ticket_id"     => ticket_id = Some(id),
+            "case_id" => case_id = Some(id),
             _ => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Unexpected parameter: '{}'.", key)))).into_response()),
         }
     }
@@ -412,6 +523,12 @@ pub async fn validate_known_ids(
     }
     if let (Some(mid), Some(aid), Some(fid)) = (module_id, assignment_id, file_id) {
         check_file_hierarchy(mid, aid, fid, db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, ticket_id) {
+        check_ticket_hierarchy(mid, aid, tid, db).await.map_err(|e| e.into_response())?;
+    }
+    if let (Some(mid), Some(aid), Some(sid)) = (module_id, assignment_id, case_id) {
+        check_plagiarism_hierarchy(mid, aid, sid, db).await.map_err(|e| e.into_response())?;
     }
 
     Ok(next.run(req).await)

@@ -1,0 +1,250 @@
+name: "Start servers (API, Code Manager, Frontend)"
+description: "Build required Rust binaries and Docker images, run migrations/seeding if requested, then start servers in background, wait for health URLs"
+
+inputs:
+  start-api:
+    description: "Whether to start API (true/false)"
+    required: false
+    default: "true"
+  start-code:
+    description: "Whether to start Code Manager (true/false)"
+    required: false
+    default: "true"
+  start-frontend:
+    description: "Whether to start frontend (true/false)"
+    required: false
+    default: "false"
+
+  # Build controls
+  build-api:
+    description: "Whether to build API binary"
+    required: false
+    default: "true"
+  build-code:
+    description: "Whether to build Code Manager binary"
+    required: false
+    default: "true"
+  build-migration:
+    description: "Whether to build migration binary"
+    required: false
+    default: "true"
+  build-seeder:
+    description: "Whether to build seeder binary"
+    required: false
+    default: "true"
+
+  # Run controls
+  run-migration:
+    description: "Whether to run migration (fresh)"
+    required: false
+    default: "true"
+  run-seeder:
+    description: "Whether to run seeder"
+    required: false
+    default: "true"
+
+  # Command overrides
+  api-cmd:
+    description: "Command to start API"
+    required: false
+    default: "./target/release/api"
+  code-cmd:
+    description: "Command to start Code Manager"
+    required: false
+    default: "./target/release/code_manager"
+  frontend-cmd:
+    description: "Command to start Frontend"
+    required: false
+    default: "npm run dev -- --port 5173 --host 127.0.0.1"
+
+  # Health URLs
+  api-url:
+    description: "API health URL"
+    required: false
+    default: "http://localhost:3000/api/health"
+  code-url:
+    description: "Code Manager health URL"
+    required: false
+    default: "http://localhost:5000/health"
+  frontend-url:
+    description: "Frontend URL to wait for"
+    required: false
+    default: "http://localhost:5173"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install wait-on
+      shell: bash
+      run: npm i -g wait-on
+
+    - name: Export backend env to job (expanded)
+      shell: bash
+      run: |
+        set -a
+        source backend/.env
+        set +a
+        while IFS='=' read -r k _; do
+          [[ "$k" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+          v="${!k}"
+          echo "$k=$v" >> "$GITHUB_ENV"
+        done < <(grep -v '^\s*#' backend/.env | grep -E '^[A-Za-z_][A-Za-z0-9_]*=')
+
+    - name: Export frontend env to job (expanded)
+      if: ${{ inputs.start-frontend == 'true' }}
+      shell: bash
+      run: |
+        set -a
+        source frontend/.env
+        set +a
+        while IFS='=' read -r k _; do
+          [[ "$k" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+          v="${!k}"
+          echo "$k=$v" >> "$GITHUB_ENV"
+        done < <(grep -v '^\s*#' frontend/.env | grep -E '^[A-Za-z_][A-Za-z0-9_]*=')
+
+    - name: Build Docker images
+      shell: bash
+      run: docker build -t universal-runner:latest -f images/Dockerfile .
+      working-directory: backend/code_manager
+
+    # Build all Rust binaries we need
+    - name: Build required Rust binaries (release)
+      shell: bash
+      working-directory: backend
+      run: |
+        pkgs=""
+        if [ "${{ inputs.build-api }}" = "true" ]; then
+          pkgs="$pkgs -p api"
+        fi
+        if [ "${{ inputs.build-code }}" = "true" ]; then
+          pkgs="$pkgs -p code_manager"
+        fi
+        if [ "${{ inputs.build-migration }}" = "true" ]; then
+          pkgs="$pkgs -p migration"
+        fi
+        if [ "${{ inputs.build-seeder }}" = "true" ]; then
+          pkgs="$pkgs -p seeder"
+        fi
+        if [ -n "$pkgs" ]; then
+          echo "Building Rust packages: $pkgs"
+          cargo build --release $pkgs
+        else
+          echo "No Rust packages selected for build"
+        fi
+
+    # Run migrations if requested
+    - name: Run migrations
+      if: ${{ inputs.run-migration == 'true' }}
+      shell: bash
+      working-directory: backend
+      run: |
+        echo "Running migrations..."
+        ./target/release/migration fresh
+
+    # Run seeder if requested
+    - name: Run seeder
+      if: ${{ inputs.run-seeder == 'true' }}
+      shell: bash
+      working-directory: backend
+      run: |
+        echo "Seeding database..."
+        ./target/release/seeder --quiet
+
+    - name: Start API
+      if: ${{ inputs.start-api == 'true' }}
+      shell: bash
+      working-directory: backend
+      run: |
+        nohup ${INPUT_API_CMD} > api.log 2>&1 &
+        echo $! > ../api.pid
+        disown
+      env:
+        INPUT_API_CMD: ${{ inputs.api-cmd }}
+
+    - name: Start Code Manager
+      if: ${{ inputs.start-code == 'true' }}
+      shell: bash
+      working-directory: backend
+      run: |
+        nohup ${INPUT_CODE_CMD} > code.log 2>&1 &
+        echo $! > ../code.pid
+        disown
+      env:
+        INPUT_CODE_CMD: ${{ inputs.code-cmd }}
+
+    - name: Start Frontend
+      if: ${{ inputs.start-frontend == 'true' }}
+      shell: bash
+      working-directory: frontend
+      run: |
+        nohup ${INPUT_FRONTEND_CMD} > frontend.log 2>&1 &
+        echo $! > ../frontend.pid
+        disown
+      env:
+        INPUT_FRONTEND_CMD: ${{ inputs.frontend-cmd }}
+
+    - name: Wait for API
+      if: ${{ inputs.start-api == 'true' }}
+      shell: bash
+      run: |
+        echo "Waiting for API at ${CI_API_URL}"
+        if ! wait-on -t 300000 "${CI_API_URL}"; then
+          echo "❌ API did not become healthy"
+          exit 1
+        fi
+      env:
+        CI_API_URL: ${{ inputs.api-url }}
+
+    - name: Wait for Code Manager
+      if: ${{ inputs.start-code == 'true' }}
+      shell: bash
+      run: |
+        echo "Waiting for Code Manager at ${CI_CODE_URL}"
+        if ! wait-on -t 300000 "${CI_CODE_URL}"; then
+          echo "❌ Code Manager did not become healthy"
+          exit 1
+        fi
+      env:
+        CI_CODE_URL: ${{ inputs.code-url }}
+
+    - name: Wait for Frontend
+      if: ${{ inputs.start-frontend == 'true' }}
+      shell: bash
+      run: |
+        echo "Waiting for Frontend at ${CI_FRONTEND_URL}"
+        if ! wait-on -t 300000 "${CI_FRONTEND_URL}"; then
+          echo "❌ Frontend did not become healthy"
+          exit 1
+        fi
+      env:
+        CI_FRONTEND_URL: ${{ inputs.frontend-url }}
+
+    - name: Check running services
+      shell: bash
+      run: |
+        echo "🔍 Checking running services..."
+        for svc in api code frontend; do
+          if [ -f "../${svc}.pid" ]; then
+            pid=$(cat "../${svc}.pid")
+            if ps -p "$pid" > /dev/null; then
+              echo "✅ $svc is running (PID $pid)"
+            else
+              echo "❌ $svc is NOT running!"
+              exit 1
+            fi
+          fi
+        done
+
+    - name: Register post-job cleanup
+      shell: bash
+      run: |
+        cat > /tmp/stop_servers.sh <<'EOS'
+        set -e
+        for f in api.pid code.pid frontend.pid; do
+          if [ -f "$f" ]; then
+            kill "$(cat "$f")" 2>/dev/null || true
+          fi
+        done
+        EOS
+        chmod +x /tmp/stop_servers.sh

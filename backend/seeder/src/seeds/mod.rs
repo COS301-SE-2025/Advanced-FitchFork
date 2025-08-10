@@ -1,11 +1,12 @@
 pub mod assignment;
 pub mod assignment_file;
+pub mod assignment_interpreter;
 pub mod assignment_memo_output;
 pub mod assignment_overwrite_file;
 pub mod assignment_submission;
 pub mod assignment_submission_output;
 pub mod assignment_task;
 pub mod module;
+pub mod plagiarism_case;
 pub mod user;
 pub mod user_role;
-pub mod plagiarism_case;
