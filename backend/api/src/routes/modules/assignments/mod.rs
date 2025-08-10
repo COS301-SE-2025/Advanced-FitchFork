@@ -7,12 +7,14 @@ use mark_allocator::mark_allocator_routes;
 use config::config_routes;
 use memo_output::memo_output_routes;
 use submissions::submission_routes;
+use grades::grade_routes;
 use files::files_routes;
 use tasks::tasks_routes;
 use tickets::ticket_routes;
 use plagiarism::plagiarism_routes;
 use util::state::AppState;
 use crate::auth::guards::{require_assigned_to_module, require_lecturer, require_lecturer_or_assistant_lecturer};
+
 
 pub mod config;
 pub mod delete;
@@ -27,6 +29,7 @@ pub mod tasks;
 pub mod common;
 pub mod tickets;
 pub mod plagiarism;
+pub mod grades;
 
 /// Expects a module ID.
 /// If an assignment ID is included it will be modified or deleted.
@@ -76,4 +79,5 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .nest("/{assignment_id}/files", files_routes(app_state.clone()))
         .nest("/{assignment_id}/tickets", ticket_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
         .nest("/{assignment_id}/plagiarism", plagiarism_routes().route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
+        .nest("/{assignment_id}/grades", grade_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
 }

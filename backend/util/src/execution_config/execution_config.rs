@@ -18,6 +18,13 @@ pub enum FeedbackScheme {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GradingConfig {
+    pub policy: Option<String>,
+}
+
+
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionLimits {
     #[serde(default = "default_timeout_secs")]
     pub timeout_secs: u64,
@@ -76,6 +83,9 @@ pub struct ExecutionConfig {
 
     #[serde(default)]
     pub marking: MarkingOptions,
+
+    #[serde(default)]
+    pub grading: Option<GradingConfig>,
 }
 
 impl ExecutionConfig {
@@ -83,6 +93,7 @@ impl ExecutionConfig {
         ExecutionConfig {
             execution: ExecutionLimits::default(),
             marking: MarkingOptions::default(),
+            grading: None, 
         }
     }
 
@@ -204,3 +215,4 @@ fn default_feedback_scheme() -> FeedbackScheme {
 fn default_deliminator() -> String {
     "&-=-&".to_string()
 }
+
