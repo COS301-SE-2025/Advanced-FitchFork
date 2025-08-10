@@ -1,5 +1,4 @@
-// lib.rs
-use ga::{GeneticAlgorithm, Chromosome}; 
+//lib.rs
 pub use ga::{GeneticAlgorithm, GAConfig, GeneConfig, Chromosome, CrossoverType, MutationType};
 
 use std::collections::HashMap;
@@ -20,7 +19,7 @@ pub fn decode_genes(bits: &[bool], bits_per_gene: usize) -> Vec<i32> {
 
     if index != bits.len() {
         panic!(
-            "critical GATLAM decoding error! (expected multiple of {}, got {})",
+            "decoding error! (expected multiple of {}, got {})",
             bits_per_gene,
             bits.len()
         );
@@ -175,7 +174,7 @@ where
     let gens = ga.config().number_of_generations;
     let bits_per_gene = ga.bits_per_gene();
 
-    for geneneration in 0..gens {
+    for generation in 0..gens {
         let mut fitness_scores = Vec::with_capacity(ga.population().len());
 
         for chrom in ga.population().iter() {
@@ -197,7 +196,7 @@ where
             let (n_ltl_props, num_tasks) = derive_props(&task_outputs);
 
             // dvaluate using your formulas (decoupled here)
-            let score = comps.evaluate(chrom, genernation, n_ltl_props, num_tasks);
+            let score = comps.evaluate(chrom, generation, n_ltl_props, num_tasks);
             fitness_scores.push(score);
         }
 
