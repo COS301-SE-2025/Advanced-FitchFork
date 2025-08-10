@@ -22,6 +22,7 @@ impl MigratorTrait for Migrator {
             Box::new(migrations::m202506080012_create_plagiarism_cases::Migration),
             Box::new(migrations::m202508020001_create_tickets::Migration),
             Box::new(migrations::m202508020002_create_ticket_messages::Migration),
+            Box::new(migrations::m202508060001_create_announcements::Migration),
             Box::new(migrations::m202508020003_create_interpreter::Migration),
         ]
     }

@@ -472,6 +472,29 @@ pub async fn check_plagiarism_hierarchy(
     Ok(())
 }
 
+pub async fn check_announcement_hierarchy(
+    module_id: i32,
+    announcement_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_module_exists(module_id, db).await?;
+
+    let found = db::models::announcements::Entity::find()
+        .filter(db::models::announcements::Column::Id.eq(announcement_id))
+        .filter(db::models::announcements::Column::ModuleId.eq(module_id))
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking announcement"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Announcement {} in Module {} not found.", announcement_id, module_id))),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn validate_known_ids(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
@@ -488,6 +511,7 @@ pub async fn validate_known_ids(
     let mut user_id: Option<i32>       = None;
     let mut ticket_id: Option<i32>     = None;
     let mut case_id: Option<i32> = None;
+    let mut announcement_id: Option<i32> = None;
 
     for (key, raw) in &params {
         let id = raw.parse::<i32>().map_err(|_| {
@@ -502,6 +526,7 @@ pub async fn validate_known_ids(
             "user_id"       => user_id = Some(id),
             "ticket_id"     => ticket_id = Some(id),
             "case_id" => case_id = Some(id),
+            "announcement_id" => announcement_id = Some(id),
             _ => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Unexpected parameter: '{}'.", key)))).into_response()),
         }
     }
@@ -530,6 +555,11 @@ pub async fn validate_known_ids(
     if let (Some(mid), Some(aid), Some(sid)) = (module_id, assignment_id, case_id) {
         check_plagiarism_hierarchy(mid, aid, sid, db).await.map_err(|e| e.into_response())?;
     }
+
+    if let (Some(mid), Some(ann_id)) = (module_id, announcement_id) {
+        check_announcement_hierarchy(mid, ann_id, db).await.map_err(|e| e.into_response())?;
+    }
+
 
     Ok(next.run(req).await)
 }

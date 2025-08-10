@@ -11,6 +11,7 @@ pub mod password_reset_token;
 pub mod plagiarism_case;
 pub mod ticket_messages;
 pub mod tickets;
+pub mod announcements;
 pub mod user;
 pub mod user_module_role;
 
@@ -27,5 +28,6 @@ pub use password_reset_token::Entity as PasswordResetToken;
 pub use plagiarism_case::Entity as PlagiarismCase;
 pub use ticket_messages::Entity as TicketMessages;
 pub use tickets::Entity as Tickets;
+pub use announcements::Entity as Announcements;
 pub use user::Entity as User;
 pub use user_module_role::Entity as UserModuleRole;
