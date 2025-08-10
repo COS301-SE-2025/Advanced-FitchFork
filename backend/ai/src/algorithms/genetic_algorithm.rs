@@ -233,7 +233,7 @@ impl Components {
         rand::random::<f64>() < 0.3
     }
 
-    fn decode_genes(&self, bits: &[bool]) -> Vec<i32> {
+    pub fn decode_genes(&self, bits: &[bool]) -> Vec<i32> {
         let mut values = Vec::new();
         let mut index = 0;
 
@@ -313,8 +313,34 @@ impl GeneticAlgorithm {
             config,
         }
     }
+        pub fn step_with_fitness(&mut self, fitness_scores: &[f64]) {
+            assert_eq!(fitness_scores.len(), self.population.len(), "fitness/pop size mismatch");
+            let total_fitness: f64 = fitness_scores.iter().sum();
 
-    pub fn run(&mut self, n_ltl: usize, m_tasks: usize) {
+            let mut next_gen = Vec::with_capacity(self.population.len());
+            let mut rng = thread_rng();
+
+            for _ in 0..self.population.len() {
+                let mut child = if rng.gen_range(0.0..1.0) < self.config.reproduction_probability {
+                    let p1 = Self::roulette(&self.population, fitness_scores, total_fitness);
+                    let p2 = Self::roulette(&self.population, fitness_scores, total_fitness);
+                    Self::crossover(&p1, &p2, self.config.crossover_type)
+                } else {
+                    let p = Self::roulette(&self.population, fitness_scores, total_fitness);
+                    Chromosome::new(p.genes().clone())
+                };
+
+                if rng.r#gen::<f64>() < self.config.mutation_probability {
+                    Self::mutate(&mut child, self.config.mutation_type, self.config.mutation_probability);
+                }
+                next_gen.push(child);
+            }
+
+            self.population = next_gen;
+            self.generation += 1;
+        }
+
+        pub fn run(&mut self, n_ltl: usize, m_tasks: usize) {
 
         if self.config.population_size == 0 {
             panic!("Population size must be greater than 0");
@@ -496,6 +522,12 @@ fn initialize_population(config: &GAConfig) -> Vec<Chromosome> {
             }
         }
     }
+        
+
+    // getters for code_runner to read state  
+    pub fn population(&self) -> &[Chromosome] { &self.population }
+    pub fn config(&self) -> &GAConfig { &self.config }
+    pub fn decoder(&self) -> &Components { &self.fitness }
 }
 
 #[cfg(test)]

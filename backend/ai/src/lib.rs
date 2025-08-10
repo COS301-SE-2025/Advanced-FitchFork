@@ -13,29 +13,11 @@ pub fn construct_ga(config: GAConfig, omegas: (f64, f64, f64)) -> GeneticAlgorit
 pub fn run_ga_loop<F>(mut ga: GeneticAlgorithm, mut fetch_run_params: F) -> GeneticAlgorithm where F: FnMut() -> (usize, usize), {
     let (n_ltl_props, n_tasks) = fetch_run_params();
 
+
+
+    run_interpreter(&as_string);
+
     ga.run(n_ltl_props, n_tasks);
     ga
 
 }
-
-// pub fn evaluate_ga<E>(ga: &GeneticAlgorithm, mut evaluator: E)
-// where
-//     E: FnMut(&[Chromosome], &GAConfig, usize),
-// {
-//     evaluator(ga.population(), ga.config(), ga.generation());
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

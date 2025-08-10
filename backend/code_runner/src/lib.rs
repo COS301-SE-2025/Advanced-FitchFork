@@ -14,7 +14,7 @@ use db::models::assignment_task::Model as AssignmentTask;
 use reqwest::Client;
 use serde_json::json;
 use util::execution_config::ExecutionConfig;
-
+use ai::src::algorithms::genetic_algorithm::{GeneticAlgorithm, GAConfig};
 pub mod validate_files;
 
 /// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
@@ -545,4 +545,22 @@ pub async fn run_interpreter(
     create_submission_outputs_for_all_tasks(db, submission_id).await?;
 
     Ok(())
+}
+
+
+// convert to CSV string, and invoke your interpreter.
+// Returns the task outputs so your caller can evaluate.
+pub async fn run_ga_for_submission(
+    db: &DatabaseConnection,
+    submission_id: i64,
+    ga: &GeneticAlgorithm,
+) -> Result<Vec<(i64, String)>, String> {
+    // choose a chromosome; swap this selection logic as you wish
+    let chrom: &Chromosome = ga.population.first()
+        .ok_or_else(|| "GA population is empty".to_string())?;
+
+    let decoded: Vec<i32> = ga.fitness.decode_genes(chrom.genes());
+    let generated_string = decoded.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(",");
+    let outputs = run_interpreter(db, submission_id, &generated_string).await?;
+    Ok(outputs)
 }
