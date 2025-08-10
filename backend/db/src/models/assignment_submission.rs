@@ -36,7 +36,7 @@ pub struct Model {
     /// Timestamp when the submission was last updated.
     pub updated_at: DateTime<Utc>,
     /// Mark.
-    pub mark: Option<f32>,
+    pub score: Option<f32>,
 }
 
 /// Defines relationships between `assignment_submissions` and other tables.
