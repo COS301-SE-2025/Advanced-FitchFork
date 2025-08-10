@@ -91,7 +91,7 @@ async fn require_role_base(
     required_roles: &[&str],
     failure_msg: &str,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let db =  app_state.db();
+    let db: &DatabaseConnection =  app_state.db();
 
     let (req, user) = extract_and_insert_authuser(req).await?;
     
@@ -231,6 +231,64 @@ pub async fn require_assigned_to_module(
         &["Lecturer", "AssistantLecturer", "Tutor", "Student"],
         "User not assigned to this module"
     ).await
+}
+
+pub async fn require_ready_assignment(
+    State(app_state): State<AppState>,
+    Path(params): Path<HashMap<String, String>>,
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    let db = app_state.db();
+
+    let module_id = params.get("module_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Missing or invalid module_id"))
+        ))?;
+
+    let assignment_id = params.get("assignment_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Missing or invalid assignment_id"))
+        ))?;
+
+    if let Err(e) = db::models::assignment::Model::try_transition_to_ready(db, module_id, assignment_id).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(format!("Failed to transition assignment to ready: {}", e)))
+        ));
+    }
+
+    let assignment = match AssignmentEntity::find_by_id(assignment_id).one(db).await {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::error(format!(
+                    "Assignment {} in Module {} not found.",
+                    assignment_id, module_id
+                ))),
+            ));
+        }
+        Err(_) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("Database error while checking assignment")),
+            ));
+        }
+    };
+
+    if assignment.status == db::models::assignment::Status::Setup {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::error("Assignment is still in Setup stage"))
+        ));
+    }
+
+    Ok(next.run(req).await)
 }
 
 // --- Path ID Guards ---

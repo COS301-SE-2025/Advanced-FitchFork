@@ -9,6 +9,6 @@ pub mod m202505290008_create_tasks;
 pub mod m202505290009_create_memo_outputs;
 pub mod m202505290010_create_submission_outputs;
 pub mod m202505290011_create_overwrite_files;
-pub mod m202506080012_plagiarism_case;
+pub mod m202506080012_create_plagiarism_cases;
 pub mod m202508020001_create_tickets;
 pub mod m202508020002_create_ticket_messages;
