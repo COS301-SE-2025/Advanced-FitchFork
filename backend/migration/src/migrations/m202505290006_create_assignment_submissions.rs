@@ -46,6 +46,12 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .default(Expr::cust("CURRENT_TIMESTAMP")),
                     )
+                    .col(
+                        ColumnDef::new(Alias::new("mark"))
+                            .double()            
+                            .not_null()           
+                            .default(0.0)
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .from(
