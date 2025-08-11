@@ -5,7 +5,12 @@ pub mod algorithms {
     pub mod genetic_algorithm;
 }
 
-use crate::algorithms::genetic_algorithm::{GeneticAlgorithm, Chromosome, GAConfig};
+pub mod utils {
+    pub mod evaluator;
+}
+
+use crate::algorithms::genetic_algorithm::{GeneticAlgorithm, Chromosome, GAConfig, GeneConfig, CrossoverType, MutationType};
+use crate::utils::evaluator::{Evaluator, TaskSpec, Language};
 
 // --- External deps ---
 use sea_orm::DatabaseConnection;
@@ -24,14 +29,22 @@ pub async fn run_ga_job(
     let bits_per_gene = ga.bits_per_gene();
     let mut comps = Components::new(omega1, omega2, omega3, bits_per_gene);
 
-    // Replace with your real derivation logic.
-    let mut derive_props = |outs: &[(i64, String)]| -> (usize, usize) {
-        let num_tasks = outs.len();
-        let num_props = outs.iter().map(|(_, s)| s.lines().count()).sum::<usize>();
-        (num_props.max(1), num_tasks.max(1))
+    let mut evaluator = Evaluator::new();
+    
+    let base_spec = TaskSpec {
+        language: Language::Cpp,
+        valid_return_codes: Some(vec![0]),
+        max_runtime_ms: None,          
+        forbidden_outputs: vec![],   
+    }; // TODO: make this configurable later
+
+    let mut derive_props = move |outs: &[(i64, String)]| -> (usize, usize) {
+        // if all tasks share the same spec:
+        let specs = vec![base_spec.clone(); outs.len()];
+        evaluator.derive_props(&specs, outs)
     };
 
-    // Signature compatibility shim (unused for now).
+    // Signature compatibility
     let mut unused_fetch = |_db: &DatabaseConnection, _sid: i64| -> Result<Vec<(i64, String)>, String> {
         Err("unused".into())
     };
@@ -218,3 +231,4 @@ fn decode_gene(bits: &[bool]) -> i32 {
     let decoded = if is_negative { -val } else { val };
     decoded.clamp(-max, max)
 }
+
