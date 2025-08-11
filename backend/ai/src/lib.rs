@@ -3,7 +3,7 @@ pub use ga::{GeneticAlgorithm, GAConfig, GeneConfig, Chromosome, CrossoverType, 
 
 use std::collections::HashMap;
 use sea_orm::DatabaseConnection;
-use code_runner::src::lib::run_interpreter; // check if this actually works when analyzer catches up...
+use code_runner::run_interpreter; 
 
 /// Decodes a whole chromosome bitstring into i32 values
 /// using fixed `bits_per_gene` (sign + magnitude).
@@ -143,11 +143,6 @@ impl Components {
     }
 }
 
-
-
-
-
-
 // Interpreter-in-the-loop driver (async, end-to-end)
 
 /// Drives the GA across all generations:
@@ -171,7 +166,6 @@ where
     D: FnMut(&[(i64, String)]) -> (usize, usize),
     F: FnMut(&DatabaseConnection, i64) -> Result<Vec<(i64, String)>, String>,
 {
-    // prevent unused warning without changing signature
     let _ = &mut fetch_outputs;
 
     let gens = ga.config().number_of_generations;

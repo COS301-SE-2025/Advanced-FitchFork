@@ -3,7 +3,6 @@ use std::{env, fs, path::PathBuf};
 
 // External crates
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
-
 // Your own modules
 use crate::validate_files::validate_memo_files;
 
