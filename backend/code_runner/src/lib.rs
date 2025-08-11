@@ -13,7 +13,6 @@ use db::models::assignment_task::Model as AssignmentTask;
 use reqwest::Client;
 use serde_json::json;
 use util::execution_config::ExecutionConfig;
-use ai::src::algorithms::genetic_algorithm::{GeneticAlgorithm, GAConfig};
 pub mod validate_files;
 
 /// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
@@ -293,7 +292,7 @@ pub async fn create_submission_outputs_for_all_tasks(
 
     if tasks.is_empty() {
         println!("No tasks found for assignment {}", assignment_id);
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     // HTTP client setup
@@ -308,7 +307,7 @@ pub async fn create_submission_outputs_for_all_tasks(
     let config_value = serde_json::to_value(&config)
         .map_err(|e| format!("Failed to serialize execution config: {}", e))?;
 
-    let mut collected: vec<(i64, String)> = Vec::new();    
+    let mut collected: Vec<(i64, String)> = Vec::new();    
 
     for task in tasks {
         let filename = format!(
@@ -362,7 +361,7 @@ pub async fn create_submission_outputs_for_all_tasks(
             println!("Failed to save submission output: {}", e);
         }
 
-        colleceted.push((task.id, output_combined));
+        collected.push((task.id, output_combined));
         
     }
 
@@ -526,7 +525,7 @@ pub async fn create_main_from_interpreter(
 /// This function coordinates the entire workflow for interpreting and processing
 /// a student's submission according to the assignment tasks.
 pub async fn run_interpreter(
-    db: &DatabaseConnection,
+    db: &sea_orm::DatabaseConnection,
     submission_id: i64,
     generated_string: &str,
 ) -> Result<Vec<(i64, String)>, String> {
@@ -540,14 +539,13 @@ pub async fn run_interpreter(
 
     let assignment_id = submission.assignment_id;
 
-    // Step 1: Create main zip from interpreter
+    // Step 1
     create_main_from_interpreter(db, submission_id, generated_string).await?;
 
-    // Step 2: Create memo outputs for all tasks of this assignment
+    // Step 2
     create_memo_outputs_for_all_tasks(db, assignment_id).await?;
 
-    // Step 3: Create submission outputs for all tasks for this submission
+    // Step 3 — now returns outputs
     let outputs = create_submission_outputs_for_all_tasks(db, submission_id).await?;
-
     Ok(outputs)
 }

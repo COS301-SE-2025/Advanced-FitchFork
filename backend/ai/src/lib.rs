@@ -76,7 +76,7 @@ where
                 .collect::<Vec<_>>()
                 .join(",");
 
-            // external interpreter (still persists to DB) and returns outputs
+            // external interpreter 
             let task_outputs: Vec<(i64, String)> =
                 run_interpreter(db, submission_id, &generated_string).await?;
 
