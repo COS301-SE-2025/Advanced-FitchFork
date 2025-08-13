@@ -1,13 +1,29 @@
-use db::models::tickets::Model as TicketModel;
-use sea_orm::{DatabaseConnection};
+use db::models::{tickets::Model as TicketModel, user_module_role::{Column, Role}, UserModuleRole as Entity};
+use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait};
 use serde::{Deserialize, Serialize};
 
-pub async fn is_valid(user_id: i64, ticket_id: i64, db: &DatabaseConnection) -> bool {
+pub async fn is_valid(
+    user_id: i64,
+    ticket_id: i64,
+    module_id: i64,
+    db: &DatabaseConnection,
+) -> bool {
     let is_author = TicketModel::is_author(ticket_id, user_id, db).await;
-    is_author
+    let staff_roles = vec![Role::Lecturer, Role::AssistantLecturer, Role::Tutor];
+
+    let is_staff = Entity::find()
+        .filter(Column::UserId.eq(user_id))
+        .filter(Column::ModuleId.eq(module_id))
+        .filter(Column::Role.is_in(staff_roles))
+        .one(db)
+        .await
+        .unwrap_or(None)
+        .is_some();
+
+    is_author || is_staff
 }
- 
- #[derive(Debug, Serialize, Deserialize)]
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TicketResponse {
     pub id: i64,
     pub assignment_id: i64,
