@@ -2,15 +2,22 @@
 mod tests {
     use crate::helpers::make_test_app;
     use api::auth::generate_jwt;
-    use db::models::{
-        announcements::Model as AnnouncementModel,
-        module::Model as ModuleModel,
-        user::Model as UserModel,
-        user_module_role::{Model as UserModuleRole, Role},
+    use db::{
+        models::{
+            announcements::Model as AnnouncementModel,
+            module::Model as ModuleModel,
+            user::Model as UserModel,
+            user_module_role::{Model as UserModuleRole, Role},
+        },
+        repositories::user_repository::UserRepository,
     };
     use axum::{
         body::Body,
         http::{Request, StatusCode},
+    };
+    use services::{
+        service::Service,
+        user_service::{CreateUser, UserService},
     };
     use tower::ServiceExt;
 
@@ -23,19 +30,37 @@ mod tests {
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let student = UserModel::create(db, "test_user", "test@example.com", "pass", false)
+        let service = UserService::new(UserRepository::new(db.clone()));
+        
+        let student = service
+            .create(CreateUser {
+                username: "test_user".into(),
+                email: "test@example.com".into(),
+                password: "pass".into(),
+                admin: false,
+            })
             .await
             .unwrap();
 
-        let invalid_user =
-            UserModel::create(db, "invalid_user", "invalid@email.com", "pass2", false)
-                .await
-                .unwrap();
+        let invalid_user = service
+            .create(CreateUser {
+                username: "invalid_user".into(),
+                email: "invalid@email.com".into(),
+                password: "pass2".into(),
+                admin: false,
+            })
+            .await
+            .unwrap();
 
-        let lecturer =
-            UserModel::create(db, "lecturer_user", "lecturer@example.com", "pass3", true)
-                .await
-                .unwrap();
+        let lecturer = service
+            .create(CreateUser {
+                username: "lecturer_user".into(),
+                email: "lecturer@example.com".into(),
+                password: "pass3".into(),
+                admin: true,
+            })
+            .await
+            .unwrap();
 
         let module = ModuleModel::create(db, "330", 2025, Some("test description"), 16)
             .await

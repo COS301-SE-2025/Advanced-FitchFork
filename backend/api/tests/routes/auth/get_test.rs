@@ -6,10 +6,15 @@ mod tests {
             module::Model as ModuleModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
         },
+        repositories::user_repository::UserRepository,
     };
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode, header},
+    };
+    use services::{
+        service::Service,
+        user_service::{CreateUser, UserService},
     };
     use tower::ServiceExt;
     use serde_json::Value;
@@ -31,8 +36,9 @@ mod tests {
         let temp_dir = tempdir().expect("Failed to create temporary directory for avatars");
         unsafe { std::env::set_var("USER_PROFILE_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
 
-        let regular_user = UserModel::create(db, "regular_user", "regular@test.com", "password123", false).await.expect("Failed to create regular user");
-        let admin_user = UserModel::create(db, "admin_user", "admin@test.com", "password456", true).await.expect("Failed to create admin user");
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let regular_user = service.create(CreateUser { username: "regular_user".to_string(), email: "regular@test.com".to_string(), password: "password123".to_string(), admin: false }).await.unwrap();
+        let admin_user = service.create(CreateUser { username: "admin_user".to_string(), email: "admin@test.com".to_string(), password: "password456".to_string(), admin: true }).await.unwrap();
         let module = ModuleModel::create(db, "AUTH101", 2024, Some("Auth Test Module"), 16).await.expect("Failed to create test module");
         UserModuleRoleModel::assign_user_to_module(db, regular_user.id, module.id, Role::Student).await.expect("Failed to assign role");
 

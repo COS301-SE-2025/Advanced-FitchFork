@@ -2,6 +2,11 @@
 mod tests {
     use db::{
         models::user::Model as UserModel,
+        repositories::user_repository::UserRepository,
+    };
+    use services::{
+        service::Service,
+        user_service::{UserService, CreateUser}
     };
     use axum::{
         body::Body as AxumBody,
@@ -21,9 +26,10 @@ mod tests {
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let admin_user = UserModel::create(db, "put_admin", "put_admin@test.com", "adminpass", true).await.expect("Failed to create admin user for PUT tests");
-        let non_admin_user = UserModel::create(db, "put_regular", "put_regular@test.com", "userpass", false).await.expect("Failed to create regular user for PUT tests");
-        let user_to_update = UserModel::create(db, "target_for_update", "target_original@test.com", "originalpass", false).await.expect("Failed to create target user for update");
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let admin_user = service.create(CreateUser{ username: "put_admin".to_string(), email: "put_admin@test.com".to_string(), password: "adminpass".to_string(), admin: true }).await.expect("Failed to create admin user for PUT tests");
+        let non_admin_user = service.create(CreateUser{ username: "put_regular".to_string(), email: "put_regular@test.com".to_string(), password: "userpass".to_string(), admin: false }).await.expect("Failed to create regular user for PUT tests");
+        let user_to_update = service.create(CreateUser{ username: "target_for_update".to_string(), email: "target_original@test.com".to_string(), password: "originalpass".to_string(), admin: false }).await.expect("Failed to create target user for update");
 
         TestData {
             admin_user,

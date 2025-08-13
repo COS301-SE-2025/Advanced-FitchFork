@@ -15,7 +15,7 @@
 use crate::error::MarkerError;
 use crate::traits::feedback::{FeedbackEntry, Feedback};
 use crate::types::TaskResult;
-use async_trait::async_trait;
+use std::pin::Pin;
 
 /// Automatic feedback strategy: generates template-based feedback for each task.
 ///
@@ -25,25 +25,26 @@ use async_trait::async_trait;
 #[derive(Debug)]
 pub struct AutoFeedback;
 
-#[async_trait]
 impl Feedback for AutoFeedback {
-    async fn assemble_feedback(&self, results: &[TaskResult]) -> Result<Vec<FeedbackEntry>, MarkerError> {
-        let mut feedback_entries = Vec::new();
+    fn assemble_feedback<'a>(&'a self, results: &'a [TaskResult]) -> Pin<Box<dyn Future<Output = Result<Vec<FeedbackEntry>, MarkerError>> + Send + 'a>> {
+        Box::pin(async move {
+            let mut feedback_entries = Vec::new();
 
-        for result in results {
-            let mut summary = String::new();
-            if !result.missed_patterns.is_empty() {
-                summary.push_str(&format!("Missing: {}", result.missed_patterns.join(", ")));
-            } else if !result.matched_patterns.is_empty() {
-                summary.push_str("All patterns matched");
+            for result in results {
+                let mut summary = String::new();
+                if !result.missed_patterns.is_empty() {
+                    summary.push_str(&format!("Missing: {}", result.missed_patterns.join(", ")));
+                } else if !result.matched_patterns.is_empty() {
+                    summary.push_str("All patterns matched");
+                }
+                feedback_entries.push(FeedbackEntry {
+                    task: result.name.clone(),
+                    message: summary,
+                });
             }
-            feedback_entries.push(FeedbackEntry {
-                task: result.name.clone(),
-                message: summary,
-            });
-        }
 
-        Ok(feedback_entries)
+            Ok(feedback_entries)
+        })
     }
 }
 

@@ -13,9 +13,14 @@ use axum::{
 };
 use util::state::AppState;
 use crate::response::ApiResponse;
-use db::models::user::Model as UserModel;
 use crate::routes::users::common::{CreateUserRequest, BulkCreateUsersRequest, UserResponse};
 use validator::Validate;
+
+use db::repositories::user_repository::UserRepository;
+use services::{
+    service::Service,
+    user_service::{UserService, CreateUser},
+};
 
 /// POST /api/users
 ///
@@ -50,7 +55,13 @@ pub async fn create_user(
             .into_response();
     }
 
-    match UserModel::create(db, &req.username, &req.email, &req.password, false).await {
+    let service = UserService::new(UserRepository::new(db.clone()));
+    match service.create(CreateUser {
+        username: req.username,
+        email: req.email,
+        password: req.password,
+        admin: false,
+    }).await {
         Ok(user) => (
             StatusCode::CREATED,
             Json(ApiResponse::<UserResponse>::success(
@@ -111,8 +122,14 @@ pub async fn bulk_create_users(
 
     let mut results = Vec::new();
 
+    let service = UserService::new(UserRepository::new(db.clone()));
     for user_req in req.users {
-        match UserModel::create(db, &user_req.username, &user_req.email, &user_req.password, false).await {
+        match service.create(CreateUser {
+            username: user_req.username.clone(),
+            email: user_req.email,
+            password: user_req.password,
+            admin: false,
+        }).await {
             Ok(u) => results.push(UserResponse::from(u)),
             Err(e) => {
                 let msg = if e.to_string().contains("UNIQUE constraint failed") {

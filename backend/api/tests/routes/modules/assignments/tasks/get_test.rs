@@ -8,8 +8,16 @@ mod tests {
             assignment_task::Model as AssignmentTaskModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
         },
+        repositories::user_repository::UserRepository,
     };
-    use axum::{body::Body, http::{Request, StatusCode}};
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode}
+    };
+    use services::{
+        service::Service,
+        user_service::{UserService, CreateUser},
+    };
     use tower::ServiceExt;
     use serde_json::Value;
     use api::auth::generate_jwt;
@@ -38,9 +46,10 @@ mod tests {
         unsafe{ std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
 
         let module = ModuleModel::create(db, "TASK101", 2024, Some("Test Task Module"), 16).await.expect("Failed to create test module");
-        let admin_user = UserModel::create(db, "task_admin", "task_admin@test.com", "password", true).await.expect("Failed to create admin user");
-        let forbidden_user = UserModel::create(db, "task_unauthed", "task_unauthed@test.com", "password", false).await.expect("Failed to create forbidden user");
-        let lecturer1 = UserModel::create(db, "task_lecturer1", "task_lecturer1@test.com", "password1", false).await.expect("Failed to create lecturer1");
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let admin_user = service.create(CreateUser{ username: "task_admin".to_string(), email: "task_admin@test.com".to_string(), password: "password".to_string(), admin: true }).await.expect("Failed to create admin user");
+        let forbidden_user = service.create(CreateUser{ username: "task_unauthed".to_string(), email: "task_unauthed@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create forbidden user");
+        let lecturer1 = service.create(CreateUser{ username: "task_lecturer1".to_string(), email: "task_lecturer1@test.com".to_string(), password: "password1".to_string(), admin: false }).await.expect("Failed to create lecturer1");
         UserModuleRoleModel::assign_user_to_module(db, lecturer1.id, module.id, Role::Lecturer).await.expect("Failed to assign lecturer1 to module");
         let assignment = AssignmentModel::create(
             db,
@@ -50,29 +59,21 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 12, 31, 23, 59, 59).unwrap(),
-        )
-        .await
-        .expect("Failed to create test assignment");
-
+        ).await.expect("Failed to create test assignment");
         let task1 = AssignmentTaskModel::create(
             db,
             assignment.id,
             1,
             "echo 'Task 1'",
             "Task 1 Name",
-        )
-        .await
-        .expect("Failed to create task 1");
-    
+        ).await.expect("Failed to create task 1");
         let task2 = AssignmentTaskModel::create(
             db,
             assignment.id,
             2,
             "echo 'Task 2'",
             "Task 2 Name",
-        )
-        .await
-        .expect("Failed to create task 2");
+        ).await.expect("Failed to create task 2");
     
         let allocator_data = json!({
             "allocatorVersion": "1.0",

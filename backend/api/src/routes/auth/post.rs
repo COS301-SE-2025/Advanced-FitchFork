@@ -18,10 +18,16 @@ use crate::{
     services::email::EmailService,
 };
 use db::models::{
-    user::{self, Model as UserModel},
+    user,
     password_reset_token::{self, Model as PasswordResetTokenModel}
 };
 use crate::auth::AuthUser;
+
+use db::repositories::user_repository::UserRepository;
+use services::{
+    service::Service,
+    user_service::{UserService, CreateUser},
+};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -140,13 +146,13 @@ pub async fn register(
         );
     }
 
-    let inserted_user = match UserModel::create(
-        &db,
-        &req.username,
-        &req.email,
-        &req.password,
-        false,
-    ).await {
+    let service = UserService::new(UserRepository::new(db.clone()));
+    let inserted_user = match service.create(CreateUser {
+        username: req.username,
+        email: req.email,
+        password: req.password,
+        admin: false,
+    }).await {
         Ok(user) => user,
         Err(e) => {
             return (
@@ -238,7 +244,8 @@ pub async fn login(
         );
     }
 
-    let user = match UserModel::verify_credentials(db, &req.username, &req.password).await {
+    let service = UserService::new(UserRepository::new(db.clone()));
+    let user = match service.verify_credentials(&req.username, &req.password).await {
         Ok(Some(u)) => u,
         Ok(None) => {
             return (
@@ -588,7 +595,7 @@ pub async fn reset_password(
                     let user_email = user.email.clone();
                     
                     let mut active_model: user::ActiveModel = user.into();
-                    active_model.password_hash = Set(UserModel::hash_password(&req.new_password));
+                    active_model.password_hash = Set(UserService::hash_password(&req.new_password));
                     
                     match active_model.update(db).await {
                         Ok(_) => {
@@ -864,7 +871,7 @@ pub async fn change_password(
         }
     };
 
-    if !user.verify_password(&req.current_password) {
+    if !UserService::verify_password(&user, &req.current_password) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(ApiResponse::<()>::error("Current password is incorrect")),
@@ -872,7 +879,7 @@ pub async fn change_password(
     }
 
     let mut active_user = user.into_active_model();
-    active_user.password_hash = Set(UserModel::hash_password(&req.new_password));
+    active_user.password_hash = Set(UserService::hash_password(&req.new_password));
     
     match active_user.update(db).await {
         Ok(_) => (

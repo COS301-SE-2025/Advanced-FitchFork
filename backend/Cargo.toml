@@ -7,5 +7,6 @@ members = [ "ai",
     "db",
     "marker",
     "migration",
-    "seeder"
+    "seeder",
+    "services"
 ]

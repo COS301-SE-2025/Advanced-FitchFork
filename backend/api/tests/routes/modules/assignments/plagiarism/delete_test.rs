@@ -6,13 +6,20 @@ mod common {
         http::Request,
     };
     use chrono::{Datelike, TimeZone, Utc};
-    use db::models::{
-        assignment::{AssignmentType, Model as AssignmentModel},
-        assignment_submission::Model as SubmissionModel,
-        module::Model as ModuleModel,
-        plagiarism_case::{Model as PlagiarismCaseModel},
-        user::Model as UserModel,
-        user_module_role::{Model as UserModuleRoleModel, Role},
+    use db::{
+        models::{
+            assignment::{AssignmentType, Model as AssignmentModel},
+            assignment_submission::Model as SubmissionModel,
+            module::Model as ModuleModel,
+            plagiarism_case::{Model as PlagiarismCaseModel},
+            user::Model as UserModel,
+            user_module_role::{Model as UserModuleRoleModel, Role},
+        },
+        repositories::user_repository::UserRepository,
+    };
+    use services::{
+        service::Service,
+        user_service::{CreateUser, UserService},
     };
     use sea_orm::{DatabaseConnection};
     
@@ -30,48 +37,16 @@ mod common {
     pub async fn setup_test_data(db: &DatabaseConnection) -> TestData {
         dotenvy::dotenv().ok();
 
-        // Create module
-        let module = ModuleModel::create(db, "CS101", Utc::now().year(), Some("Intro to CS"), 5)
-            .await
-            .expect("Failed to create test module");
-
-        // Create users
-        let lecturer_user =
-            UserModel::create(db, "lecturer", "lecturer@test.com", "password", false)
-                .await
-                .expect("Failed to create lecturer user");
-        let assistant_user =
-            UserModel::create(db, "assistant", "assistant@test.com", "password", false)
-                .await
-                .expect("Failed to create assistant user");
-        let tutor_user = UserModel::create(db, "tutor", "tutor@test.com", "password", false)
-            .await
-            .expect("Failed to create tutor user");
-        let student_user =
-            UserModel::create(db, "student", "student@test.com", "password", false)
-                .await
-                .expect("Failed to create student user");
-
-        // Assign roles
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
-            .await
-            .expect("Failed to assign lecturer role");
-        UserModuleRoleModel::assign_user_to_module(
-            db,
-            assistant_user.id,
-            module.id,
-            Role::AssistantLecturer,
-        )
-        .await
-        .expect("Failed to assign assistant lecturer role");
-        UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor)
-            .await
-            .expect("Failed to assign tutor role");
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
-            .await
-            .expect("Failed to assign student role");
-
-        // Create assignment
+        let module = ModuleModel::create(db, "CS101", Utc::now().year(), Some("Intro to CS"), 5).await.expect("Failed to create test module");
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer_user = service.create(CreateUser { username: "lecturer".into(), email: "lecturer@test.com".into(), password: "password".into(), admin: false }).await.expect("Failed to create lecturer user");
+        let assistant_user = service.create(CreateUser { username: "assistant".into(), email: "assistant@test.com".into(), password: "password".into(), admin: false }).await.expect("Failed to create assistant user");
+        let tutor_user = service.create(CreateUser { username: "tutor".into(), email: "tutor@test.com".into(), password: "password".into(), admin: false }).await.expect("Failed to create tutor user");
+        let student_user = service.create(CreateUser { username: "student".into(), email: "student@test.com".into(), password: "password".into(), admin: false }).await.expect("Failed to create student user");
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.expect("Failed to assign lecturer role");
+        UserModuleRoleModel::assign_user_to_module(db, assistant_user.id, module.id, Role::AssistantLecturer).await.expect("Failed to assign assistant lecturer role");
+        UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor).await.expect("Failed to assign tutor role");
+        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.expect("Failed to assign student role");
         let assignment = AssignmentModel::create(
             db,
             module.id,
@@ -80,11 +55,7 @@ mod common {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        )
-        .await
-        .unwrap();
-
-        // Create submissions
+        ).await.unwrap();
         let submission1 = SubmissionModel::save_file(
             db,
             assignment.id,
@@ -94,10 +65,7 @@ mod common {
             "sub1.txt",
             "hash123#",
             b"ontime",
-        )
-        .await
-        .unwrap();
-
+        ).await.unwrap();
         let submission2 = SubmissionModel::save_file(
             db,
             assignment.id,
@@ -107,20 +75,14 @@ mod common {
             "sub2.txt",
             "hash456#",
             b"ontime",
-        )
-        .await
-        .unwrap();
-
-        // Create plagiarism case
+        ).await.unwrap();
         let plagiarism_case = PlagiarismCaseModel::create_case(
             db,
             assignment.id,
             submission1.id,
             submission2.id,
             "Initial description",
-        )
-        .await
-        .unwrap();
+        ).await.unwrap();
 
         TestData {
             lecturer_user,

@@ -5,7 +5,11 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{Datelike, Utc};
-    use db::{models::{module::Model as Module, user::Model as UserModel, module::Entity as ModuleEntity,}};
+    use db::{models::{module::Model as Module, user::Model as UserModel, module::Entity as ModuleEntity,}, repositories::user_repository::UserRepository};
+    use services::{
+        service::Service,
+        user_service::{UserService, CreateUser}
+    };
     use sea_orm::{DatabaseConnection, EntityTrait};
     use serde_json::json;
     use tower::ServiceExt;
@@ -21,8 +25,9 @@ mod tests {
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let admin_user = UserModel::create(db, "admin", "admin@test.com", "password", true).await.expect("Failed to create admin user");
-        let regular_user = UserModel::create(db, "regular", "regular@test.com", "password", false).await.expect("Failed to create regular user");
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let admin_user = service.create(CreateUser{ username: "admin".to_string(), email: "admin@test.com".to_string(), password: "password".to_string(), admin: true }).await.expect("Failed to create admin user");
+        let regular_user = service.create(CreateUser{ username: "regular".to_string(), email: "regular@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create regular user");
         let module = Module::create(
             db,
             "COS301",

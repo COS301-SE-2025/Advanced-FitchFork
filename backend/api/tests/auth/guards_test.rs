@@ -13,13 +13,14 @@ mod tests {
     };
     use db::{
         models::{
-            module::Model as ModuleModel, user::Model as UserModel,
+            module::Model as ModuleModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
             assignment::{Model as AssignmentModel, AssignmentType},
             assignment_task::Model as TaskModel,
             assignment_submission::Model as SubmissionModel,
             assignment_file::{Model as FileModel, FileType},
         },
+        repositories::user_repository::UserRepository,
     };
     use api::{
         auth::{
@@ -31,6 +32,10 @@ mod tests {
             }
         },
         response::ApiResponse
+    };
+    use services::{
+        service::Service,
+        user_service::{UserService, CreateUser}
     };
     use dotenvy::dotenv;
     use tower::ServiceExt;
@@ -56,14 +61,15 @@ mod tests {
         dotenv().expect("Failed to load .env file for testing");
         let (_, app_state) = make_test_app().await;
         let db = app_state.db();
+        let service = UserService::new(UserRepository::new(db.clone()));
 
         let module = ModuleModel::create(db, "TST101", 2025, Some("Guard Test Module"), 1).await.unwrap();
-        let admin = UserModel::create(db, "guard_admin", "ga@test.com", "pw", true).await.unwrap();
-        let lecturer = UserModel::create(db, "guard_lecturer", "gl@test.com", "pw", false).await.unwrap();
-        let assistant_lecturer = UserModel::create(db, "guard_assistant_lecturer", "gal@test.com", "pw", false).await.unwrap();
-        let tutor = UserModel::create(db, "guard_tutor", "gt@test.com", "pw", false).await.unwrap();
-        let student = UserModel::create(db, "guard_student", "gs@test.com", "pw", false).await.unwrap();
-        let unassigned = UserModel::create(db, "guard_unassigned", "gu@test.com", "pw", false).await.unwrap();
+        let admin = service.create(CreateUser{ username: "guard_admin".to_string(), email: "ga@test.com".to_string(), password: "pw".to_string(), admin: true }).await.unwrap();
+        let lecturer = service.create(CreateUser{ username: "guard_lecturer".to_string(), email: "gl@test.com".to_string(), password: "pw".to_string(), admin: false }).await.unwrap();
+        let assistant_lecturer = service.create(CreateUser{ username: "guard_assistant_lecturer".to_string(), email: "gal@test.com".to_string(), password: "pw".to_string(), admin: false }).await.unwrap();
+        let tutor = service.create(CreateUser{ username: "guard_tutor".to_string(), email: "gt@test.com".to_string(), password: "pw".to_string(), admin: false }).await.unwrap();
+        let student = service.create(CreateUser{ username: "guard_student".to_string(), email: "gs@test.com".to_string(), password: "pw".to_string(), admin: false }).await.unwrap();
+        let unassigned = service.create(CreateUser{ username: "guard_unassigned".to_string(), email: "gu@test.com".to_string(), password: "pw".to_string(), admin: false }).await.unwrap();
 
         UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer).await.unwrap();
         UserModuleRoleModel::assign_user_to_module(db, assistant_lecturer.id, module.id, Role::AssistantLecturer).await.unwrap();

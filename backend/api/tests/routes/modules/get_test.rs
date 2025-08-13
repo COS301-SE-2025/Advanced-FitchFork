@@ -6,6 +6,11 @@ mod tests {
             module::Model as ModuleModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
         },
+        repositories::user_repository::UserRepository,
+    };
+    use services::{
+        service::Service,
+        user_service::{UserService, CreateUser}
     };
     use axum::{
         body::Body as AxumBody,
@@ -30,11 +35,12 @@ mod tests {
         dotenvy::dotenv().expect("Failed to load .env");
 
         let module = ModuleModel::create(db, "MOD101", Utc::now().year() - 1, Some("Test Module Description"), 16).await.expect("Failed to create test module");
-        let admin_user = UserModel::create(db, "module_admin", "module_admin@test.com", "password", true).await.expect("Failed to create admin user");
-        let forbidden_user = UserModel::create(db, "module_forbidden", "module_forbidden@test.com", "password", false).await.expect("Failed to create forbidden user");
-        let lecturer_user = UserModel::create(db, "module_lecturer", "module_lecturer@test.com", "password", false).await.expect("Failed to create lecturer user");
-        let tutor_user = UserModel::create(db, "module_tutor", "module_tutor@test.com", "password", false).await.expect("Failed to create tutor user");
-        let student_user = UserModel::create(db, "module_student", "module_student@test.com", "password", false).await.expect("Failed to create student user");
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let admin_user = service.create(CreateUser{ username: "module_admin".to_string(), email: "module_admin@test.com".to_string(), password: "password".to_string(), admin: true }).await.expect("Failed to create admin user");
+        let forbidden_user = service.create(CreateUser{ username: "module_forbidden".to_string(), email: "module_forbidden@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create forbidden user");
+        let lecturer_user = service.create(CreateUser{ username: "module_lecturer".to_string(), email: "module_lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create lecturer user");
+        let tutor_user = service.create(CreateUser{ username: "module_tutor".to_string(), email: "module_tutor@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create tutor user");
+        let student_user = service.create(CreateUser{ username: "module_student".to_string(), email: "module_student@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create student user");
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.expect("Failed to assign lecturer role");
         UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor).await.expect("Failed to assign tutor role");
         UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.expect("Failed to assign student role");
@@ -281,7 +287,8 @@ mod tests {
         let _ = setup_test_data(app_state.db()).await;
 
         let empty_module = ModuleModel::create(app_state.db(), "EMPTY101", Utc::now().year() - 1, Some("Empty Module"), 10).await.expect("Failed to create empty module");
-        let admin_user = UserModel::create(app_state.db(), "empty_admin", "empty_admin@test.com", "password", true).await.expect("Failed to create admin user for empty module test");
+        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let admin_user = service.create(CreateUser{ username: "empty_admin".to_string(), email: "empty_admin@test.com".to_string(), password: "password".to_string(), admin: true }).await.expect("Failed to create admin user for empty module test");
 
         let (token, _) = generate_jwt(admin_user.id, admin_user.admin);
         let uri = format!("/api/modules/{}", empty_module.id);
@@ -321,10 +328,11 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db()).await;
 
-        let lecturer2 = UserModel::create(db, "module_lecturer2", "module_lecturer2@test.com", "password", false).await.expect("Failed to create second lecturer");
-        let tutor2 = UserModel::create(db, "module_tutor2", "module_tutor2@test.com", "password", false).await.expect("Failed to create second tutor");
-        let student2 = UserModel::create(db, "module_student2", "module_student2@test.com", "password", false).await.expect("Failed to create second student");
-        let student3 = UserModel::create(db, "module_student3", "module_student3@test.com", "password", false).await.expect("Failed to create third student");
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer2 = service.create(CreateUser{ username: "module_lecturer2".to_string(), email: "module_lecturer2@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create second lecturer");
+        let tutor2 = service.create(CreateUser{ username: "module_tutor2".to_string(), email: "module_tutor2@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create second tutor");
+        let student2 = service.create(CreateUser{ username: "module_student2".to_string(), email: "module_student2@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create second student");
+        let student3 = service.create(CreateUser{ username: "module_student3".to_string(), email: "module_student3@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create third student");
         UserModuleRoleModel::assign_user_to_module(db, lecturer2.id, data.module.id, Role::Lecturer).await.expect("Failed to assign second lecturer");
         UserModuleRoleModel::assign_user_to_module(db, tutor2.id, data.module.id, Role::Tutor).await.expect("Failed to assign second tutor");
         UserModuleRoleModel::assign_user_to_module(db, student2.id, data.module.id, Role::Student).await.expect("Failed to assign second student");

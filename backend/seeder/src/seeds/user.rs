@@ -1,33 +1,71 @@
 use crate::seed::Seeder;
-use db::models::user::Model;
+use db::repositories::user_repository::UserRepository;
+use services::{
+    service::Service,
+    user_service::{UserService, CreateUser},
+};
 use fake::{faker::internet::en::SafeEmail, Fake};
 use sea_orm::DatabaseConnection;
+use std::pin::Pin;
 
 pub struct UserSeeder;
 
-#[async_trait::async_trait]
 impl Seeder for UserSeeder {
-    async fn seed(&self, db: &DatabaseConnection) {
-        // Fixed Admin User
-        let _ = Model::create(db, "admin", "admin@example.com", "1", true).await;
+    fn seed<'a>(&'a self, db: &'a DatabaseConnection) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async move {
+            let service = UserService::new(UserRepository::new(db.clone()));
 
-        // Fixed Lecturer User
-        let _ = Model::create(db, "lecturer", "lecturer@example.com", "1", false).await;
+            // Fixed Admin User
+            let _ = service.create(CreateUser {
+                username: "admin".to_string(),
+                email: "admin@example.com".to_string(),
+                password: "1".to_string(),
+                admin: true,
+            }).await;
 
-        // Fixed Assistant Lecturer User
-        let _ = Model::create(db, "assistant_lecturer", "assistant_lecturer@example.com", "1", false).await;
+            // Fixed Lecturer User
+            let _ = service.create(CreateUser {
+                username: "lecturer".to_string(),
+                email: "lecturer@example.com".to_string(),
+                password: "1".to_string(),
+                admin: false,
+            }).await;
 
-        // Fixed Tutor User
-        let _ = Model::create(db, "tutor", "tutor@example.com", "1", false).await;
+            // Fixed Assistant Lecturer User
+            let _ = service.create(CreateUser {
+                username: "assistant_lecturer".to_string(),
+                email: "assistant_lecturer@example.com".to_string(),
+                password: "1".to_string(),
+                admin: false,
+            }).await;
 
-        // Fixed Student User
-        let _ = Model::create(db, "student", "student@example.com", "1", false).await;
+            // Fixed Tutor User
+            let _ = service.create(CreateUser {
+                username: "tutor".to_string(),
+                email: "tutor@example.com".to_string(),
+                password: "1".to_string(),
+                admin: false,
+            }).await;
 
-        // Random Users
-        for _ in 0..10 {
-            let username = format!("u{:08}", fastrand::u32(..100_000_000));
-            let email: String = SafeEmail().fake();
-            let _ = Model::create(db, &username, &email, "password_hash", false).await;
-        }
+            // Fixed Student User
+            let _ = service.create(CreateUser {
+                username: "student".to_string(),
+                email: "student@example.com".to_string(),
+                password: "1".to_string(),
+                admin: false,
+            }).await;
+
+            // Random Users
+            for _ in 0..10 {
+                let username = format!("u{:08}", fastrand::u32(..100_000_000));
+                let email: String = SafeEmail().fake();
+                let _ = service.create(CreateUser {
+                    username,
+                    email,
+                    password: "password_hash".to_string(),
+                    admin: false,
+                }).await;
+            }
+        })
     }
 }

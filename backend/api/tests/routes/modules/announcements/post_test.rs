@@ -6,10 +6,17 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
-    use db::models::{
-        module::Model as ModuleModel,
-        user::Model as UserModel,
-        user_module_role::{Model as UserModuleRole, Role},
+    use db::{
+        models::{
+            module::Model as ModuleModel,
+            user::Model as UserModel,
+            user_module_role::{Model as UserModuleRole, Role},
+        },
+        repositories::user_repository::UserRepository,
+    };
+    use services::{
+        service::Service,
+        user_service::{CreateUser, UserService},
     };
     use serde_json::json;
     use tower::ServiceExt;
@@ -22,19 +29,36 @@ mod tests {
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let student = UserModel::create(db, "student_user", "student@example.com", "pass", false)
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let student = service
+            .create(CreateUser {
+                username: "student_user".into(),
+                email: "student@example.com".into(),
+                password: "pass".into(),
+                admin: false,
+            })
             .await
             .unwrap();
 
-        let lecturer =
-            UserModel::create(db, "lecturer_user", "lecturer@example.com", "pass2", true)
-                .await
-                .unwrap();
+        let lecturer = service
+            .create(CreateUser {
+                username: "lecturer_user".into(),
+                email: "lecturer@example.com".into(),
+                password: "pass2".into(),
+                admin: true,
+            })
+            .await
+            .unwrap();
 
-        let invalid_user =
-            UserModel::create(db, "invalid_user", "invalid@example.com", "pass3", false)
-                .await
-                .unwrap();
+        let invalid_user = service
+            .create(CreateUser {
+                username: "invalid_user".into(),
+                email: "invalid@example.com".into(),
+                password: "pass3".into(),
+                admin: false,
+            })
+            .await
+            .unwrap();
 
         let module = ModuleModel::create(db, "330", 2025, Some("Test module"), 16)
             .await

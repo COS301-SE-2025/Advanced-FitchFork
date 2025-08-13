@@ -1,20 +1,25 @@
 #[cfg(test)]
 mod tests {
-    use crate::helpers::app::make_test_app;
-    use api::auth::generate_jwt;
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode},
-    };
-    use chrono::{TimeZone, Utc};
     use db::{
         models::{
             assignment::Model as AssignmentModel,
             module::Model as ModuleModel,
             user::Model as UserModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
-        }
+        },
+        repositories::user_repository::UserRepository,
     };
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use services::{
+        service::Service,
+        user_service::{CreateUser, UserService}
+    };
+    use crate::helpers::app::make_test_app;
+    use api::auth::generate_jwt;
+    use chrono::{TimeZone, Utc};
     use serial_test::serial;
     use std::{fs, path::PathBuf};
     use tower::ServiceExt;
@@ -34,27 +39,13 @@ mod tests {
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
-            .await
-            .unwrap();
-        let lecturer_user =
-            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
-                .await
-                .unwrap();
-        let student_user =
-            UserModel::create(db, "student1", "student1@test.com", "password2", false)
-                .await
-                .unwrap();
-        let forbidden_user =
-            UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false)
-                .await
-                .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
-            .await
-            .unwrap();
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer_user = service.create(CreateUser { username: "lecturer1".to_string(), email: "lecturer1@test.com".to_string(), password: "password1".to_string(), admin: false }).await.unwrap();
+        let student_user = service.create(CreateUser { username: "student1".to_string(), email: "student1@test.com".to_string(), password: "password2".to_string(), admin: false }).await.unwrap();
+        let forbidden_user = service.create(CreateUser { username: "forbidden".to_string(), email: "forbidden@test.com".to_string(), password: "password3".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
         let assignment = AssignmentModel::create(
             db,
             module.id,
@@ -63,9 +54,7 @@ mod tests {
             db::models::assignment::AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        )
-        .await
-        .unwrap();
+        ).await.unwrap();
 
         TestData {
             lecturer_user,

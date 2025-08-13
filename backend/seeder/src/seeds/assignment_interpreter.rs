@@ -4,49 +4,51 @@ use db::models::assignment_interpreter::Model as InterpreterModel;
 use sea_orm::{DatabaseConnection, EntityTrait};
 use std::io::{Cursor, Write};
 use zip::write::SimpleFileOptions;
+use std::pin::Pin;
 
 pub struct AssignmentInterpreterSeeder;
 
-#[async_trait::async_trait]
 impl Seeder for AssignmentInterpreterSeeder {
-    async fn seed(&self, db: &DatabaseConnection) {
-        let assignments = assignment::Entity::find()
-            .all(db)
-            .await
-            .expect("Failed to fetch assignments");
+    fn seed<'a>(&'a self, db: &'a DatabaseConnection) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async move {
+            let assignments = assignment::Entity::find()
+                .all(db)
+                .await
+                .expect("Failed to fetch assignments");
 
-        // For each assignment, insert an interpreter file with a sample command string
-        for a in &assignments {
-            if a.module_id == 9999 || a.module_id == 9998 {
-                continue;
+            // For each assignment, insert an interpreter file with a sample command string
+            for a in &assignments {
+                if a.module_id == 9999 || a.module_id == 9998 {
+                    continue;
+                }
+
+                let filename = format!("interpreter_{}.zip", a.id);
+                let command = "g++ -std=c++17 main.cpp -o main && ./main".to_string();
+                let content = create_example_interpreter_zip();
+
+                let _ =
+                    InterpreterModel::save_file(db, a.id, a.module_id, &filename, &command, &content)
+                        .await;
             }
 
-            let filename = format!("interpreter_{}.zip", a.id);
-            let command = "g++ -std=c++17 main.cpp -o main && ./main".to_string();
-            let content = create_example_interpreter_zip();
+            // Special assignment with realistic interpreter file
+            let special_module_id: i64 = 9998;
+            let special_assignment_id: i64 = 9998;
 
-            let _ =
-                InterpreterModel::save_file(db, a.id, a.module_id, &filename, &command, &content)
-                    .await;
-        }
+            let special_filename = "interpreter_cpp.zip";
+            let special_command = "g++ -std=c++17 main.cpp -o main && ./main".to_string();
+            let special_content = create_interpreter_zip_cpp();
 
-        // Special assignment with realistic interpreter file
-        let special_module_id: i64 = 9998;
-        let special_assignment_id: i64 = 9998;
-
-        let special_filename = "interpreter_cpp.zip";
-        let special_command = "g++ -std=c++17 main.cpp -o main && ./main".to_string();
-        let special_content = create_interpreter_zip_cpp();
-
-        let _ = InterpreterModel::save_file(
-            db,
-            special_assignment_id,
-            special_module_id,
-            &special_filename,
-            &special_command,
-            &special_content,
-        )
-        .await;
+            let _ = InterpreterModel::save_file(
+                db,
+                special_assignment_id,
+                special_module_id,
+                &special_filename,
+                &special_command,
+                &special_content,
+            )
+            .await;
+        })
     }
 }
 

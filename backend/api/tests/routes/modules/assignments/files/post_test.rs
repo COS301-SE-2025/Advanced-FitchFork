@@ -1,6 +1,18 @@
 #[cfg(test)]
 mod tests {
-    use db::{models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
+    use db::{
+        models::{
+            user::Model as UserModel,
+            module::Model as ModuleModel,
+            assignment::Model as AssignmentModel,
+            user_module_role::{Model as UserModuleRoleModel, Role}
+        },
+        repositories::user_repository::UserRepository,
+    };
+    use services::{
+        service::Service,
+        user_service::{CreateUser, UserService},
+    };
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
     use api::auth::generate_jwt;
@@ -18,8 +30,9 @@ mod tests {
 
     async fn setup_test_data(db: &DatabaseConnection) -> TestData {
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
-        let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer_user = service.create(CreateUser { username: "lecturer1".to_string(), email: "lecturer1@test.com".to_string(), password: "password1".to_string(), admin: false }).await.unwrap();
+        let student_user = service.create(CreateUser { username: "student1".to_string(), email: "student1@test.com".to_string(), password: "password2".to_string(), admin: false }).await.unwrap();
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
         UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
         let assignment = AssignmentModel::create(

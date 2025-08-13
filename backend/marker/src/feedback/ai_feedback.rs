@@ -24,9 +24,8 @@
 use crate::error::MarkerError;
 use crate::traits::feedback::{Feedback, FeedbackEntry};
 use crate::types::TaskResult;
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::env;
+use std::{env, pin::Pin};
 use serde_json;
 
 /// AI feedback strategy: generates feedback using a Large Language Model (LLM).
@@ -100,7 +99,6 @@ struct ThinkingConfig {
     thinking_budget: u32,
 }
 
-#[async_trait]
 impl Feedback for AiFeedback {
     /// Assembles feedback for a list of [`TaskResult`]s using the Gemini LLM API.
     ///
@@ -115,68 +113,70 @@ impl Feedback for AiFeedback {
     /// # Returns
     ///
     /// A `Result` containing a vector of [`FeedbackEntry`]s or a [`MarkerError`].
-    async fn assemble_feedback(&self, results: &[TaskResult]) -> Result<Vec<FeedbackEntry>, MarkerError> {
-        dotenvy::dotenv().ok();
+    fn assemble_feedback<'a>(&'a self, results: &'a [TaskResult]) -> Pin<Box<dyn Future<Output = Result<Vec<FeedbackEntry>, MarkerError>> + Send + 'a>> {
+        Box::pin(async move {
+            dotenvy::dotenv().ok();
 
-        let api_key = env::var("GEMINI_API_KEY")
-            .map_err(|_| MarkerError::InputMismatch("GEMINI_API_KEY environment variable not set".into()))?;
+            let api_key = env::var("GEMINI_API_KEY")
+                .map_err(|_| MarkerError::InputMismatch("GEMINI_API_KEY environment variable not set".into()))?;
 
-        let client = reqwest::Client::new();
-        let mut feedback_entries = Vec::new();
+            let client = reqwest::Client::new();
+            let mut feedback_entries = Vec::new();
 
-        for result in results {
-            let message = if result.missed_patterns.is_empty() {
-                "All patterns matched".to_string()
-            } else {
-                let prompt = format!(
-                    "For a task named '{}', the student missed the following patterns:\n{}\nPlease provide a short and concise hint to the student without giving away the answer.",
-                    result.name,
-                    result.missed_patterns.join("\n")
-                );
+            for result in results {
+                let message = if result.missed_patterns.is_empty() {
+                    "All patterns matched".to_string()
+                } else {
+                    let prompt = format!(
+                        "For a task named '{}', the student missed the following patterns:\n{}\nPlease provide a short and concise hint to the student without giving away the answer.",
+                        result.name,
+                        result.missed_patterns.join("\n")
+                    );
 
-                let request_body = GeminiRequest {
-                    contents: vec![Content {
-                        parts: vec![Part { text: prompt }],
-                    }],
-                    generation_config: Some(GenerationConfig {
-                        thinking_config: ThinkingConfig {
-                            thinking_budget: 0,
-                        },
-                    }),
-                };
+                    let request_body = GeminiRequest {
+                        contents: vec![Content {
+                            parts: vec![Part { text: prompt }],
+                        }],
+                        generation_config: Some(GenerationConfig {
+                            thinking_config: ThinkingConfig {
+                                thinking_budget: 0,
+                            },
+                        }),
+                    };
 
-                let response = client
-                    .post(format!(
-                        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
-                        api_key
-                    ))
-                    .json(&request_body)
-                    .send()
-                    .await
-                    .map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
-                
-                let response_text = response.text().await.map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
-                let response = serde_json::from_str::<GeminiResponse>(&response_text)
-                    .map_err(|e| MarkerError::InputMismatch(format!("error decoding response body: {}. Full response: {}", e, response_text)))?;
+                    let response = client
+                        .post(format!(
+                            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
+                            api_key
+                        ))
+                        .json(&request_body)
+                        .send()
+                        .await
+                        .map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
+                    
+                    let response_text = response.text().await.map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
+                    let response = serde_json::from_str::<GeminiResponse>(&response_text)
+                        .map_err(|e| MarkerError::InputMismatch(format!("error decoding response body: {}. Full response: {}", e, response_text)))?;
 
-                if let Some(candidate) = response.candidates.get(0) {
-                    if let Some(part) = candidate.content.parts.get(0) {
-                        part.text.clone()
+                    if let Some(candidate) = response.candidates.get(0) {
+                        if let Some(part) = candidate.content.parts.get(0) {
+                            part.text.clone()
+                        } else {
+                            "Could not generate AI feedback.".to_string()
+                        }
                     } else {
                         "Could not generate AI feedback.".to_string()
                     }
-                } else {
-                    "Could not generate AI feedback.".to_string()
-                }
-            };
+                };
 
-            feedback_entries.push(FeedbackEntry {
-                task: result.name.clone(),
-                message,
-            });
-        }
+                feedback_entries.push(FeedbackEntry {
+                    task: result.name.clone(),
+                    message,
+                });
+            }
 
-        Ok(feedback_entries)
+            Ok(feedback_entries)
+        })
     }
 }
 

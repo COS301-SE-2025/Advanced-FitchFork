@@ -9,17 +9,27 @@ mod tests {
         response::Response,
     };
     use chrono::{Duration, TimeZone, Utc};
-    use db::models::{
-        assignment::{
-            ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity,
-            Model as AssignmentModel,
+    use db::{
+        models::{
+            assignment::{
+                ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity,
+                Model as AssignmentModel,
+            },
+            assignment_submission::{
+                self,
+                Model as AssignmentSubmissionModel,
+            },
+            assignment_submission_output,
+            assignment_task::Model as AssignmentTaskModel,
+            module::Model as ModuleModel,
+            user::Model as UserModel,
+            user_module_role::{Model as UserModuleRoleModel, Role},
         },
-        assignment_submission::{self, Model as AssignmentSubmissionModel},
-        assignment_submission_output,
-        assignment_task::Model as AssignmentTaskModel,
-        module::Model as ModuleModel,
-        user::Model as UserModel,
-        user_module_role::{Model as UserModuleRoleModel, Role},
+        repositories::user_repository::UserRepository,
+    };
+    use services::{
+        service::Service,
+        user_service::{CreateUser, UserService},
     };
     use flate2::{Compression, write::GzEncoder};
     use sea_orm::{
@@ -52,20 +62,11 @@ mod tests {
     }
 
     async fn setup_test_data(db: &DatabaseConnection, temp_dir: &TempDir) -> TestData {
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
-            .await
-            .unwrap();
-        let student_user =
-            UserModel::create(db, "student1", "student1@test.com", "password2", false)
-                .await
-                .unwrap();
-        let unassigned_user =
-            UserModel::create(&db, "unassigned", "unassigned@test.com", "password", false)
-                .await
-                .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
-            .await
-            .unwrap();
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let student_user = service.create(CreateUser { username: "student1".to_string(), email: "student1@test.com".to_string(), password: "password2".to_string(), admin: false }).await.unwrap();
+        let unassigned_user = service.create(CreateUser { username: "unassigned".to_string(), email: "unassigned@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
         let assignment = AssignmentModel::create(
             db,
             module.id,
@@ -74,16 +75,12 @@ mod tests {
             db::models::assignment::AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        )
-        .await
-        .unwrap();
+        ).await.unwrap();
         let mut active_assignment: db::models::assignment::ActiveModel = assignment.clone().into();
         active_assignment.status = Set(db::models::assignment::Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(db).await.unwrap();
-        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1")
-            .await
-            .unwrap();
+        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1").await.unwrap();
 
         let assignment_base_path = temp_dir
             .path()
@@ -1301,33 +1298,14 @@ mod tests {
         let (app, app_state) = make_test_app().await;
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
-
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
-
-        let sub1 = create_submission(
-            db,
-            data.assignment.module_id,
-            data.assignment.id,
-            data.student_user.id,
-            1,
-            &temp_dir,
-        )
-        .await;
-        let sub2 = create_submission(
-            db,
-            data.assignment.module_id,
-            data.assignment.id,
-            data.student_user.id,
-            2,
-            &temp_dir,
-        )
-        .await;
-
+        
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
+        
+        let sub1 = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        let sub2 = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
+        
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({
             "submission_ids": [sub1.id, sub2.id]
@@ -1350,39 +1328,14 @@ mod tests {
         let (app, app_state) = make_test_app().await;
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
-
-        let assistant =
-            UserModel::create(db, "assistant1", "assistant@test.com", "password", false)
-                .await
-                .unwrap();
-        UserModuleRoleModel::assign_user_to_module(
-            db,
-            assistant.id,
-            data.module.id,
-            Role::AssistantLecturer,
-        )
-        .await
-        .unwrap();
-
-        let sub1 = create_submission(
-            db,
-            data.assignment.module_id,
-            data.assignment.id,
-            data.student_user.id,
-            1,
-            &temp_dir,
-        )
-        .await;
-        let sub2 = create_submission(
-            db,
-            data.assignment.module_id,
-            data.assignment.id,
-            data.student_user.id,
-            2,
-            &temp_dir,
-        )
-        .await;
-
+        
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let assistant = service.create(CreateUser{ username: "assistant1".to_string(), email: "assistant@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, assistant.id, data.module.id, Role::AssistantLecturer).await.unwrap();
+        
+        let sub1 = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        let sub2 = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
+        
         let (token, _) = generate_jwt(assistant.id, assistant.admin);
         let body = json!({
             "submission_ids": [sub1.id, sub2.id]
@@ -1405,32 +1358,13 @@ mod tests {
         let (app, app_state) = make_test_app().await;
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
+    
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
 
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
-
-        create_submission(
-            db,
-            data.assignment.module_id,
-            data.assignment.id,
-            data.student_user.id,
-            1,
-            &temp_dir,
-        )
-        .await;
-        create_submission(
-            db,
-            data.assignment.module_id,
-            data.assignment.id,
-            data.student_user.id,
-            2,
-            &temp_dir,
-        )
-        .await;
+        create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
 
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({
@@ -1454,39 +1388,14 @@ mod tests {
         let (app, app_state) = make_test_app().await;
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
+    
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let assistant = service.create(CreateUser{ username: "assistant1".to_string(), email: "assistant@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, assistant.id, data.module.id, Role::AssistantLecturer).await.unwrap();
 
-        let assistant =
-            UserModel::create(db, "assistant1", "assistant@test.com", "password", false)
-                .await
-                .unwrap();
-        UserModuleRoleModel::assign_user_to_module(
-            db,
-            assistant.id,
-            data.module.id,
-            Role::AssistantLecturer,
-        )
-        .await
-        .unwrap();
-
-        create_submission(
-            db,
-            data.assignment.module_id,
-            data.assignment.id,
-            data.student_user.id,
-            1,
-            &temp_dir,
-        )
-        .await;
-        create_submission(
-            db,
-            data.assignment.module_id,
-            data.assignment.id,
-            data.student_user.id,
-            2,
-            &temp_dir,
-        )
-        .await;
-
+        create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 2, &temp_dir).await;
+        
         let (token, _) = generate_jwt(assistant.id, assistant.admin);
         let body = json!({
             "all": true
@@ -1510,9 +1419,8 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
 
-        let admin = UserModel::create(db, "admin1", "admin@test.com", "password", true)
-            .await
-            .unwrap();
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let admin = service.create(CreateUser{ username: "admin1".to_string(), email: "admin@test.com".to_string(), password: "password".to_string(), admin: true }).await.unwrap();
 
         let (token, _) = generate_jwt(admin.id, admin.admin);
         let body = json!({});
@@ -1537,15 +1445,7 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
 
-        let submission = create_submission(
-            db,
-            data.assignment.module_id,
-            data.assignment.id,
-            data.student_user.id,
-            1,
-            &temp_dir,
-        )
-        .await;
+        let submission = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let body = json!({
@@ -1571,14 +1471,11 @@ mod tests {
         let (app, app_state) = make_test_app().await;
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
-
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
-
+    
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
+        
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({
             "all": true
@@ -1600,13 +1497,10 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
 
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
-
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
+        
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({
             "submission_ids": [9999]
@@ -1632,23 +1526,12 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
 
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
-
-        let submission = create_submission(
-            db,
-            data.assignment.module_id,
-            data.assignment.id,
-            data.student_user.id,
-            1,
-            &temp_dir,
-        )
-        .await;
-
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
+    
+        let submission = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        
         let allocator_path = temp_dir
             .path()
             .join(format!("module_{}", data.module.id))
@@ -1684,23 +1567,13 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
 
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
 
-        let submission = create_submission(
-            db,
-            data.assignment.module_id,
-            data.assignment.id,
-            data.student_user.id,
-            1,
-            &temp_dir,
-        )
-        .await;
-
+        let submission = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
+        
+        // Delete student outputs to cause grading failure
         let student_output_dir = temp_dir
             .path()
             .join(format!("module_{}", data.module.id))
@@ -1743,12 +1616,9 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
 
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
 
         let valid_sub = create_submission(
             db,
@@ -1817,12 +1687,9 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
 
-        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
-            .await
-            .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
-            .await
-            .unwrap();
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer).await.unwrap();
 
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({

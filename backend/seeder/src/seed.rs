@@ -1,15 +1,14 @@
-use async_trait::async_trait;
 use sea_orm::DatabaseConnection;
 use colored::*;
 use futures::FutureExt;
 use std::io::{self, Write};
 use std::time::Instant;
+use std::pin::Pin;
 
 const STATUS_COLUMN: usize = 80;
 
-#[async_trait]
 pub trait Seeder {
-    async fn seed(&self, db: &DatabaseConnection);
+    fn seed<'a>(&'a self, db: &'a DatabaseConnection) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
 pub async fn run_seeder<S: Seeder + ?Sized>(seeder: &S, name: &str, db: &DatabaseConnection) {

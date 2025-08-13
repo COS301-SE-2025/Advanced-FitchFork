@@ -9,7 +9,7 @@
 use crate::error::MarkerError;
 use crate::types::TaskResult;
 use serde::Serialize;
-use async_trait::async_trait;
+use std::pin::Pin;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FeedbackEntry {
@@ -29,7 +29,9 @@ pub struct FeedbackEntry {
 /// - `Ok(Vec<FeedbackEntry>)`: An ordered list of feedback entries for the submission.
 /// - `Err(MarkerError)`: If feedback generation fails.
 /// 
-#[async_trait]
 pub trait Feedback {
-    async fn assemble_feedback(&self, results: &[TaskResult]) -> Result<Vec<FeedbackEntry>, MarkerError>;
+    fn assemble_feedback<'a>(
+        &'a self,
+        results: &'a [TaskResult],
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<FeedbackEntry>, MarkerError>> + Send + 'a>>;
 }

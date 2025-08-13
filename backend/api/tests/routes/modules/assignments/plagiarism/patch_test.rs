@@ -6,13 +6,20 @@ mod patch_plagiarism_tests {
         http::{Request, StatusCode},
     };
     use chrono::{Datelike, TimeZone, Utc};
-    use db::models::{
-        assignment::{AssignmentType, Model as AssignmentModel},
-        assignment_submission::Model as SubmissionModel,
-        module::Model as ModuleModel,
-        plagiarism_case::{Entity as PlagiarismCaseEntity, Model as PlagiarismCaseModel, Status},
-        user::Model as UserModel,
-        user_module_role::{Model as UserModuleRoleModel, Role},
+    use db::{
+        models::{
+            assignment::{AssignmentType, Model as AssignmentModel},
+            assignment_submission::Model as SubmissionModel,
+            module::Model as ModuleModel,
+            plagiarism_case::{Entity as PlagiarismCaseEntity, Model as PlagiarismCaseModel, Status},
+            user::Model as UserModel,
+            user_module_role::{Model as UserModuleRoleModel, Role},
+        },
+        repositories::user_repository::UserRepository,
+    };
+    use services::{
+        service::Service,
+        user_service::{CreateUser, UserService},
     };
     use sea_orm::{DatabaseConnection, EntityTrait};
     use serde_json::Value;
@@ -33,48 +40,16 @@ mod patch_plagiarism_tests {
     pub async fn setup_test_data(db: &DatabaseConnection) -> TestData {
         dotenvy::dotenv().ok();
 
-        // Create module
-        let module = ModuleModel::create(db, "CS101", Utc::now().year(), Some("Intro to CS"), 5)
-            .await
-            .expect("Failed to create test module");
-
-        // Create users
-        let lecturer_user =
-            UserModel::create(db, "lecturer", "lecturer@test.com", "password", false)
-                .await
-                .expect("Failed to create lecturer user");
-        let assistant_user =
-            UserModel::create(db, "assistant", "assistant@test.com", "password", false)
-                .await
-                .expect("Failed to create assistant user");
-        let tutor_user = UserModel::create(db, "tutor", "tutor@test.com", "password", false)
-            .await
-            .expect("Failed to create tutor user");
-        let student_user =
-            UserModel::create(db, "student", "student@test.com", "password", false)
-                .await
-                .expect("Failed to create student user");
-
-        // Assign roles
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
-            .await
-            .expect("Failed to assign lecturer role");
-        UserModuleRoleModel::assign_user_to_module(
-            db,
-            assistant_user.id,
-            module.id,
-            Role::AssistantLecturer,
-        )
-        .await
-        .expect("Failed to assign assistant lecturer role");
-        UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor)
-            .await
-            .expect("Failed to assign tutor role");
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
-            .await
-            .expect("Failed to assign student role");
-
-        // Create assignment
+        let module = ModuleModel::create(db, "CS101", Utc::now().year(), Some("Intro to CS"), 5).await.expect("Failed to create test module");
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer_user = service.create(CreateUser{ username: "lecturer".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create lecturer user");
+        let assistant_user = service.create(CreateUser{ username: "assistant".to_string(), email: "assistant@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create assistant user");
+        let tutor_user = service.create(CreateUser{ username: "tutor".to_string(), email: "tutor@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create tutor user");
+        let student_user = service.create(CreateUser{ username: "student".to_string(), email: "student@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create student user");
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.expect("Failed to assign lecturer role");
+        UserModuleRoleModel::assign_user_to_module(db, assistant_user.id, module.id, Role::AssistantLecturer).await.expect("Failed to assign assistant lecturer role");
+        UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor).await.expect("Failed to assign tutor role");
+        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.expect("Failed to assign student role");
         let assignment = AssignmentModel::create(
             db,
             module.id,
@@ -83,11 +58,7 @@ mod patch_plagiarism_tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        )
-        .await
-        .unwrap();
-
-        // Create submissions
+        ).await.unwrap();
         let submission1 = SubmissionModel::save_file(
             db,
             assignment.id,
@@ -97,10 +68,7 @@ mod patch_plagiarism_tests {
             "sub1.txt",
             "hash123#",
             b"ontime",
-        )
-        .await
-        .unwrap();
-
+        ).await.unwrap();
         let submission2 = SubmissionModel::save_file(
             db,
             assignment.id,
@@ -110,20 +78,14 @@ mod patch_plagiarism_tests {
             "sub2.txt",
             "hash456#",
             b"ontime",
-        )
-        .await
-        .unwrap();
-
-        // Create plagiarism case
+        ).await.unwrap();
         let plagiarism_case = PlagiarismCaseModel::create_case(
             db,
             assignment.id,
             submission1.id,
             submission2.id,
             "Initial description",
-        )
-        .await
-        .unwrap();
+        ).await.unwrap();
 
         TestData {
             lecturer_user,

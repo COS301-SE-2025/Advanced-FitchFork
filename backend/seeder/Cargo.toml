@@ -6,14 +6,13 @@ edition = "2024"
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
 sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
-migration = { path = "../migration" }
 db = { path = "../db" }
 chrono = "0.4"
 dotenvy = "0.15"
-async-trait = "0.1"
 fake = "4.3"
 fastrand = "2.0"
 colored = "3.0"
 futures = "0.3"
 rand = "0.8" # Using older version of rand because sqlx and other packages are behind
 zip = "4.3"
+services = { path = "../services" }

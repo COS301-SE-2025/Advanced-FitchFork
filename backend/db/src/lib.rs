@@ -1,5 +1,7 @@
 pub mod models;
 pub mod test_utils;
+pub mod repositories;
+pub mod filters;
 
 use sea_orm::{Database, DatabaseConnection};
 use std::env;

@@ -3,6 +3,11 @@ mod tests {
     use db::{
         models::user::Model as UserModel,
     };
+    use services::{
+        service::Service,
+        user_service::{UserService, CreateUser}
+    };
+    use db::repositories::user_repository::UserRepository;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode},
@@ -20,8 +25,9 @@ mod tests {
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let admin_user = UserModel::create(db, "admin_user", "admin@test.com", "adminpass", true).await.unwrap();
-        let non_admin_user = UserModel::create(db, "normal_user", "user@test.com", "userpass", false).await.unwrap();
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let admin_user = service.create(CreateUser{ username: "admin_user".to_string(), email: "admin@test.com".to_string(), password: "adminpass".to_string(), admin: true }).await.unwrap();
+        let non_admin_user = service.create(CreateUser{ username: "normal_user".to_string(), email: "user@test.com".to_string(), password: "userpass".to_string(), admin: false }).await.unwrap();
 
         TestData {
             admin_user,
@@ -174,7 +180,8 @@ mod tests {
         let (app, app_state) = make_test_app().await;
         let data = setup_test_data(app_state.db()).await;
 
-        UserModel::create(app_state.db(), "dupe", "dupe@test.com", "pass1234", false).await.unwrap();
+        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        service.create(CreateUser{ username: "dupe".to_string(), email: "dupe@test.com".to_string(), password: "pass1234".to_string(), admin: false }).await.unwrap();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
 
         let req_body = json!({

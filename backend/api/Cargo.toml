@@ -15,6 +15,7 @@ util = { path = "../util" }
 marker = { path = "../marker" }
 migration = { path = "../migration" }
 code-runner = { path = "../code_runner" }
+services = { path = "../services" }
 
 # Web framework and middleware
 axum = { version = "0.8", features = ["multipart", "ws"] }

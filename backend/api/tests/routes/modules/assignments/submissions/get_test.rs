@@ -1,7 +1,23 @@
 #[cfg(test)]
 mod tests {
-    use db::{models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, assignment_submission::Model as AssignmentSubmissionModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
-    use axum::{body::Body, http::{Request, StatusCode}};
+    use db::{
+        models::{
+            user::Model as UserModel,
+            module::Model as ModuleModel,
+            assignment::Model as AssignmentModel,
+            assignment_submission::Model as AssignmentSubmissionModel,
+            user_module_role::{Model as UserModuleRoleModel, Role}
+        },
+        repositories::user_repository::UserRepository,
+    };
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode}
+    };
+    use services::{
+        service::Service,
+        user_service::{CreateUser, UserService}
+    };
     use tower::ServiceExt;
     use serde_json::{json, Value};
     use api::auth::generate_jwt;
@@ -28,9 +44,10 @@ mod tests {
         unsafe{ std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
 
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
-        let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
-        let forbidden_user = UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false).await.unwrap();
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let lecturer_user = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer1@test.com".to_string(), password: "password1".to_string(), admin: false }).await.unwrap();
+        let student_user = service.create(CreateUser{ username: "student1".to_string(), email: "student1@test.com".to_string(), password: "password2".to_string(), admin: false }).await.unwrap();
+        let forbidden_user = service.create(CreateUser{ username: "forbidden".to_string(), email: "forbidden@test.com".to_string(), password: "password3".to_string(), admin: false }).await.unwrap();
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
         UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
         let assignment = AssignmentModel::create(

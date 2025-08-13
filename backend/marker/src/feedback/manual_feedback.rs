@@ -5,14 +5,15 @@
 use crate::error::MarkerError;
 use crate::traits::feedback::{Feedback, FeedbackEntry};
 use crate::types::TaskResult;
-use async_trait::async_trait;
+use std::pin::Pin;
 
 pub struct ManualFeedback;
 
-#[async_trait]
 impl Feedback for ManualFeedback {
-    async fn assemble_feedback(&self, _results: &[TaskResult]) -> Result<Vec<FeedbackEntry>, MarkerError> {
-        // TODO: Implement manual feedback assembly
-        Err(MarkerError::InputMismatch("Manual feedback not implemented".into()))
+    fn assemble_feedback<'a>(&'a self, _results: &[TaskResult]) -> Pin<Box<dyn Future<Output = Result<Vec<FeedbackEntry>, MarkerError>> + Send + 'a>> {
+        Box::pin(async move {
+            // TODO: Implement manual feedback assembly
+            Err(MarkerError::InputMismatch("Manual feedback not implemented".into()))
+        })
     }
 }

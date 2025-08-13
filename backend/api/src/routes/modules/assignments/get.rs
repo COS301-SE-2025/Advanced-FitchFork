@@ -6,8 +6,8 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder, sea_query::Expr,
+    ColumnTrait, /*Condition,*/ EntityTrait, /*PaginatorTrait,*/ QueryFilter,
+    QueryOrder, /*sea_query::Expr,*/
 };
 use util::state::AppState;
 use crate::response::ApiResponse;
@@ -15,7 +15,7 @@ use crate::routes::modules::assignments::common::{File, AssignmentResponse};
 use db::{
     models::{
         assignment::{
-            self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity, Model as AssignmentModel
+            self, /*AssignmentType,*/ Column as AssignmentColumn, Entity as AssignmentEntity, Model as AssignmentModel
         }, 
         assignment_file,
         assignment_submission, 
@@ -189,29 +189,29 @@ pub struct FilterReq {
     pub due_after: Option<String>,
 }
 
-#[derive(Serialize)]
-pub struct FilterResponse {
-    pub assignments: Vec<AssignmentResponse>,
-    pub page: i32,
-    pub per_page: i32,
-    pub total: i32,
-}
+// #[derive(Serialize)]
+// pub struct FilterResponse {
+//     pub assignments: Vec<AssignmentResponse>,
+//     pub page: i32,
+//     pub per_page: i32,
+//     pub total: i32,
+// }
 
-impl FilterResponse {
-    fn new(
-        assignments: Vec<AssignmentResponse>,
-        page: i32,
-        per_page: i32,
-        total: i32,
-    ) -> Self {
-        Self {
-            assignments,
-            page,
-            per_page,
-            total,
-        }
-    }
-}
+// impl FilterResponse {
+//     fn new(
+//         assignments: Vec<AssignmentResponse>,
+//         page: i32,
+//         per_page: i32,
+//         total: i32,
+//     ) -> Self {
+//         Self {
+//             assignments,
+//             page,
+//             per_page,
+//             total,
+//         }
+//     }
+// }
 
 /// GET /api/modules/{module_id}/assignments
 ///
@@ -232,7 +232,7 @@ impl FilterResponse {
 /// - `due_before` (optional, string): Filter assignments due before this date/time (ISO 8601)
 /// - `due_after` (optional, string): Filter assignments due after this date/time (ISO 8601)
 ///
-/// **Allowed sort fields:** `name`, `description`, `due_date`, `available_from`, `assignment_type`, `created_at`, `updated_at`
+/// **Allowed sort fields:** `name`, `description`, `assignment_type`, `status`, `available_from`, `due_date`, `created_at`, `updated_at`
 ///
 /// ### Responses
 ///
@@ -278,195 +278,93 @@ impl FilterResponse {
 /// }
 /// ```
 pub async fn get_assignments(
-    State(app_state): State<AppState>,
-    Path(module_id): Path<i64>,
-    Query(params): Query<FilterReq>,
+    State(_app_state): State<AppState>,
+    Path(_module_id): Path<i64>,
+    Query(_params): Query<FilterReq>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-    
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).min(100).max(1);
+    // let page = params.page.unwrap_or(1).max(1) as u64;
+    // let per_page = (params.per_page.unwrap_or(20).min(100).max(1)) as u64;
 
-    if let Some(sort_field) = &params.sort {
-        let valid_fields = [
-            "name",
-            "description",
-            "due_date",
-            "available_from",
-            "assignment_type",
-            "created_at",
-            "updated_at",
-        ];
-        for field in sort_field.split(',') {
-            let field = field.trim().trim_start_matches('-');
-            if !valid_fields.contains(&field) {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
-                );
-            }
-        }
-    }
+    // // Validate sort fields (keeps existing behavior)
+    // if let Some(ref sort_field) = params.sort {
+    //     let valid_fields = [
+    //         "name",
+    //         "description", 
+    //         "assignment_type",
+    //         "status",
+    //         "available_from",
+    //         "due_date",
+    //         "created_at",
+    //         "updated_at",
+    //     ];
 
-    let mut condition = Condition::all().add(AssignmentColumn::ModuleId.eq(module_id as i32));
+    //     let mut valid = true;
+    //     for field in sort_field.split(',') {
+    //         let field = field.trim().trim_start_matches('-');
+    //         if !valid_fields.contains(&field) {
+    //             valid = false;
+    //             break;
+    //         }
+    //     }
 
-    if let Some(ref query) = params.query {
-        let pattern = format!("%{}%", query.to_lowercase());
-        condition = condition.add(
-            Condition::any()
-                .add(Expr::cust("LOWER(name)").like(&pattern))
-                .add(Expr::cust("LOWER(description)").like(&pattern)),
-        );
-    }
+    //     if !valid {
+    //         return (
+    //             StatusCode::BAD_REQUEST,
+    //             Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
+    //         );
+    //     }
+    // }
 
-    if let Some(ref name) = params.name {
-        let pattern = format!("%{}%", name.to_lowercase());
-        condition = condition.add(Expr::cust("LOWER(name)").like(&pattern));
-    }
+    // // Clone sort out before moving `params` into service
+    // let sort_by = params.sort.clone();
 
-    if let Some(ref assignment_type) = params.assignment_type {
-        match assignment_type.parse::<AssignmentType>() {
-            Ok(atype_enum) => {
-                condition = condition.add(AssignmentColumn::AssignmentType.eq(atype_enum));
-            }
-            Err(_) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<FilterResponse>::error(
-                        "Invalid assignment_type",
-                    )),
-                );
-            }
-        }
-    }
+    // // Move the whole `params` into the service. Service will build AssignmentFilter.
+    // match assignment_service
+    //     .filter_with_req(params, module_id, page, per_page, sort_by)
+    //     .await
+    // {
+    //     Ok(result) => {
+    //         let assignments: Vec<AssignmentResponse> = result
+    //             .assignments
+    //             .into_iter()
+    //             .map(AssignmentResponse::from)
+    //             .collect();
 
-    if let Some(ref before) = params.available_before {
-        if let Ok(date) = DateTime::parse_from_rfc3339(before) {
-            condition = condition.add(AssignmentColumn::AvailableFrom.lt(date.with_timezone(&Utc)));
-        }
-    }
+    //         let response = FilterResponse::new(
+    //             assignments,
+    //             page as i32,
+    //             per_page as i32,
+    //             result.total as i32,
+    //         );
 
-    if let Some(ref after) = params.available_after {
-        if let Ok(date) = DateTime::parse_from_rfc3339(after) {
-            condition = condition.add(AssignmentColumn::AvailableFrom.gt(date.with_timezone(&Utc)));
-        }
-    }
+    //         (
+    //             StatusCode::OK,
+    //             Json(ApiResponse::success(
+    //                 response,
+    //                 "Assignments retrieved successfully",
+    //             )),
+    //         )
+    //     }
 
-    if let Some(ref before) = params.due_before {
-        if let Ok(date) = DateTime::parse_from_rfc3339(before) {
-            condition = condition.add(AssignmentColumn::DueDate.lt(date.with_timezone(&Utc)));
-        }
-    }
-
-    if let Some(ref after) = params.due_after {
-        if let Ok(date) = DateTime::parse_from_rfc3339(after) {
-            condition = condition.add(AssignmentColumn::DueDate.gt(date.with_timezone(&Utc)));
-        }
-    }
-
-    let mut query = AssignmentEntity::find().filter(condition);
-
-    if let Some(sort_param) = &params.sort {
-        for sort in sort_param.split(',') {
-            let (field, asc) = if sort.starts_with('-') {
-                (&sort[1..], false)
-            } else {
-                (sort, true)
-            };
-
-            query = match field {
-                "name" => {
-                    if asc {
-                        query.order_by_asc(AssignmentColumn::Name)
-                    } else {
-                        query.order_by_desc(AssignmentColumn::Name)
-                    }
-                }
-                "description" => {
-                    if asc {
-                        query.order_by_asc(AssignmentColumn::Description)
-                    } else {
-                        query.order_by_desc(AssignmentColumn::Description)
-                    }
-                }
-                "due_date" => {
-                    if asc {
-                        query.order_by_asc(AssignmentColumn::DueDate)
-                    } else {
-                        query.order_by_desc(AssignmentColumn::DueDate)
-                    }
-                }
-                "available_from" => {
-                    if asc {
-                        query.order_by_asc(AssignmentColumn::AvailableFrom)
-                    } else {
-                        query.order_by_desc(AssignmentColumn::AvailableFrom)
-                    }
-                }
-                "assignment_type" => {
-                    if asc {
-                        query.order_by_asc(AssignmentColumn::AssignmentType)
-                    } else {
-                        query.order_by_desc(AssignmentColumn::AssignmentType)
-                    }
-                }
-                "created_at" => {
-                    if asc {
-                        query.order_by_asc(AssignmentColumn::CreatedAt)
-                    } else {
-                        query.order_by_desc(AssignmentColumn::CreatedAt)
-                    }
-                }
-                "updated_at" => {
-                    if asc {
-                        query.order_by_asc(AssignmentColumn::UpdatedAt)
-                    } else {
-                        query.order_by_desc(AssignmentColumn::UpdatedAt)
-                    }
-                }
-                _ => query,
-            };
-        }
-    }
-
-    let paginator = query.clone().paginate(db, per_page as u64);
-    let total = match paginator.num_items().await {
-        Ok(n) => n as i32,
-        Err(e) => {
-            eprintln!("Error counting items: {:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<FilterResponse>::error("Error counting items")),
-            );
-        }
-    };
-
-    match paginator.fetch_page((page - 1) as u64).await {
-        Ok(results) => {
-            let assignments: Vec<AssignmentResponse> = results
-                .into_iter()
-                .map(AssignmentResponse::from)
-                .collect();
-
-            let response = FilterResponse::new(assignments, page, per_page, total);
-            (
-                StatusCode::OK,
-                Json(ApiResponse::success(
-                    response,
-                    "Assignments retrieved successfully",
-                )),
-            )
-        }
-        Err(err) => {
-            eprintln!("DB error: {:?}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<FilterResponse>::error(
-                    "Failed to retrieve assignments",
-                )),
-            )
-        }
-    }
+    //     Err(err) => {
+    //         // Treat custom DB errors (we use them for validation failures) as 400.
+    //         match err {
+    //             sea_orm::DbErr::Custom(msg) => (
+    //                 StatusCode::BAD_REQUEST,
+    //                 Json(ApiResponse::<FilterResponse>::error(&msg)),
+    //             ),
+    //             other => {
+    //                 eprintln!("Service error: {:?}", other);
+    //                 (
+    //                     StatusCode::INTERNAL_SERVER_ERROR,
+    //                     Json(ApiResponse::<FilterResponse>::error(
+    //                         "Failed to retrieve assignments",
+    //                     )),
+    //                 )
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 #[derive(Debug, Serialize)]

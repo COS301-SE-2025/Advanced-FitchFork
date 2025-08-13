@@ -2,7 +2,14 @@
 mod tests {
     use crate::helpers::{connect_ws, make_test_app, spawn_server};
     use api::auth::generate_jwt;
-    use db::models::user::Model as UserModel;
+    use db::{
+        models::user::Model as UserModel,
+        repositories::user_repository::UserRepository,
+    };
+    use services::{
+        service::Service,
+        user_service::{CreateUser, UserService},
+    };
     use tokio_tungstenite::connect_async;
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
     use tokio_tungstenite::{tungstenite::{Error}};
@@ -17,8 +24,10 @@ mod tests {
     }
 
     pub async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let user1 = UserModel::create(db, "chat1", "chat1@test.com", "password123", false).await.unwrap();
-        let user2 = UserModel::create(db, "chat2", "chat2@test.com", "password123", false).await.unwrap();
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let user1 = service.create(CreateUser { username: "chat1".to_string(), email: "chat1@test.com".to_string(), password: "password123".to_string(), admin: false }).await.unwrap();
+        let user2 = service.create(CreateUser { username: "chat2".to_string(), email: "chat2@test.com".to_string(), password: "password123".to_string(), admin: false }).await.unwrap();
+        
         TestData {
             user1,
             user2,

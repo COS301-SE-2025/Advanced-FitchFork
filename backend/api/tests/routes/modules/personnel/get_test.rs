@@ -12,6 +12,11 @@ mod tests {
         },
     };
     use crate::helpers::app::make_test_app;
+    use services::{
+        service::Service,
+        user_service::{UserService, CreateUser}
+    };
+    use db::repositories::user_repository::UserRepository;
 
     struct TestData {
         admin: UserModel,
@@ -23,10 +28,11 @@ mod tests {
 
     async fn setup_data(db: &sea_orm::DatabaseConnection) -> TestData {
         let module = ModuleModel::create(db, "COS999", 2025, Some("Test Module"), 12).await.unwrap();
-        let admin = UserModel::create(db, "admin", "admin@test.com", "pw", true).await.unwrap();
-        let lecturer = UserModel::create(db, "lect1", "lect@test.com", "pw", false).await.unwrap();
-        let tutor = UserModel::create(db, "tut1", "tut@test.com", "pw", false).await.unwrap();
-        let outsider = UserModel::create(db, "out", "out@test.com", "pw", false).await.unwrap();
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let admin = service.create(CreateUser{ username: "admin".to_string(), email: "admin@test.com".to_string(), password: "pw".to_string(), admin: true }).await.unwrap();
+        let lecturer = service.create(CreateUser{ username: "lect1".to_string(), email: "lect@test.com".to_string(), password: "pw".to_string(), admin: false }).await.unwrap();
+        let tutor = service.create(CreateUser{ username: "tut1".to_string(), email: "tut@test.com".to_string(), password: "pw".to_string(), admin: false }).await.unwrap();
+        let outsider = service.create(CreateUser{ username: "out".to_string(), email: "out@test.com".to_string(), password: "pw".to_string(), admin: false }).await.unwrap();
 
         UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer).await.unwrap();
         UserModuleRoleModel::assign_user_to_module(db, tutor.id, module.id, Role::Tutor).await.unwrap();

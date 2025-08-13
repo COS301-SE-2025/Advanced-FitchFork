@@ -1,0 +1,15 @@
+pub mod service;
+pub mod user_service;
+pub mod module_service;
+pub mod assignment_service;
+pub mod assignment_file_service;
+pub mod user_module_role_service;
+pub mod assignment_submission_service;
+pub mod assignment_task_service;
+pub mod assignment_memo_output_service;
+pub mod assignment_submission_output_service;
+pub mod assignment_overwrite_file_service;
+pub mod password_reset_token_service;
+pub mod plagiarism_case_service;
+pub mod ticket_service;
+pub mod ticket_message_service;

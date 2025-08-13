@@ -6,10 +6,15 @@ mod tests {
             module::Model as ModuleModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
         },
+        repositories::user_repository::UserRepository
     };
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode},
+    };
+    use services::{
+        service::Service,
+        user_service::{UserService, CreateUser}
     };
     use tower::ServiceExt;
     use serde_json::Value;
@@ -26,9 +31,10 @@ mod tests {
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let admin_user = UserModel::create(db, "user_admin", "user_admin@test.com", "adminpass", true).await.expect("Failed to create admin user");
-        let non_admin_user = UserModel::create(db, "user_regular", "user_regular@test.com", "userpass", false).await.expect("Failed to create regular user");
-        let user_to_operate_on = UserModel::create(db, "target_user", "target@test.com", "targetpass", false).await.expect("Failed to create target user");
+        let service = UserService::new(UserRepository::new(db.clone()));
+        let admin_user = service.create(CreateUser{ username: "user_admin".to_string(), email: "user_admin@test.com".to_string(), password: "adminpass".to_string(), admin: true }).await.expect("Failed to create admin user");
+        let non_admin_user = service.create(CreateUser{ username: "user_regular".to_string(), email: "user_regular@test.com".to_string(), password: "userpass".to_string(), admin: false }).await.expect("Failed to create regular user");
+        let user_to_operate_on = service.create(CreateUser{ username: "target_user".to_string(), email: "target@test.com".to_string(), password: "targetpass".to_string(), admin: false }).await.expect("Failed to create target user");
         let module = ModuleModel::create(db, "USER101", 2024, Some("User Test Module"), 16).await.expect("Failed to create test module");
         UserModuleRoleModel::assign_user_to_module(db, user_to_operate_on.id, module.id, Role::Student).await.expect("Failed to assign role to target user");
 
