@@ -77,17 +77,17 @@ pub async fn create_message(
         content: message.content,
         created_at: message.created_at.to_rfc3339(),
         updated_at: message.updated_at.to_rfc3339(),
-        user: UserResponse {
+        user: Some(UserResponse {
             id: user.id,
             username: user.username,
-        },
+        }),
     };
 
     (
         StatusCode::OK,
         Json(ApiResponse::success(
             response,
-            "Ticket created successfully",
+            "Message created successfully",
         )),
     )
         .into_response()

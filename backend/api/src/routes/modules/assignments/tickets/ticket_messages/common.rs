@@ -13,7 +13,7 @@ pub struct MessageResponse {
     pub content: String,
     pub created_at: String,
     pub updated_at: String,
-    pub user: UserResponse,
+    pub user: Option<UserResponse>,
 }
 
 impl From<(TicketMessageModel, String)> for MessageResponse {
@@ -24,10 +24,10 @@ impl From<(TicketMessageModel, String)> for MessageResponse {
             content: message.content,
             created_at: message.created_at.to_rfc3339(),
             updated_at: message.updated_at.to_rfc3339(),
-            user: UserResponse {
+            user: Some(UserResponse {
                 id: message.user_id,
                 username,
-            },
+            }),
         }
     }
 }
