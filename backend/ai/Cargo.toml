@@ -12,3 +12,4 @@ sea-orm = { version = "1.1", features = [
 ] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 code-runner = { path = "../code_runner" }  
+dotenv = "0.15"

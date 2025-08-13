@@ -27,8 +27,6 @@ pub async fn health() -> impl IntoResponse {
 }
 
 pub async fn run_code(Json(payload): Json<RunRequest>) -> impl IntoResponse {
-    tracing::info!("Received run request: {:?}", payload);
-
     let manager = MANAGER.get().expect("Manager not initialized");
 
     let config_json = Value::Object(payload.config.into_iter().collect());
@@ -46,6 +44,7 @@ pub async fn run_code(Json(payload): Json<RunRequest>) -> impl IntoResponse {
         .run(&execution_config, payload.commands, payload.files)
         .await
     {
+    
         Ok(output) => (StatusCode::OK, axum::Json(RunResponse { output })).into_response(),
         Err(e) => {
             let msg = format!("Error running container: {}", e);

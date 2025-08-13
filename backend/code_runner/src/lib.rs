@@ -429,7 +429,7 @@ pub async fn create_submission_outputs_for_all_tasks(
     let archive_paths = vec![
         first_archive_in(&submission_path)?,
         first_archive_in(&base_path.join("makefile"))?,
-        first_archive_in(&base_path.join("main"))?,
+        first_archive_in(&base_path.join("Main"))?,
     ];
 
     let mut files = Vec::new();
@@ -534,14 +534,16 @@ pub async fn create_main_from_interpreter(
         Column as InterpreterColumn, Entity as AssignmentInterpreterEntity,
     };
     use db::models::assignment_submission::Entity as AssignmentSubmissionEntity;
+
     use reqwest::Client;
     use serde_json::json;
     use std::env;
     use std::io::Write;
     use util::execution_config::execution_config::Language;
+    use util::execution_config::ExecutionConfig;
     use zip::write::{FileOptions, ZipWriter};
 
-    // Fetch submission, assignment, interpreter
+    // --- Fetch submission, assignment, interpreter rows ---
     let submission = AssignmentSubmissionEntity::find_by_id(submission_id)
         .one(db)
         .await
@@ -565,31 +567,117 @@ pub async fn create_main_from_interpreter(
 
     let module_id = assignment.module_id;
 
-    let interpreter_bytes = interpreter
-        .load_file()
-        .map_err(|e| format!("Failed to load interpreter file from disk: {}", e))?;
+    // Debug: show the interpreter command & payload
+    eprintln!("Using interpreter: {}", interpreter.command);
+    eprintln!("Assignment name: {}", assignment.name);
+    if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
+        eprintln!("[DEBUG] generated_string = {}", generated_string);
+    }
 
-    let command = format!("{} {}", interpreter.command, generated_string);
-
-    let host =
-        env::var("CODE_MANAGER_HOST").map_err(|_| "CODE_MANAGER_HOST not set".to_string())?;
-    let port =
-        env::var("CODE_MANAGER_PORT").map_err(|_| "CODE_MANAGER_PORT not set".to_string())?;
-    let url = format!("http://{}:{}/run", host, port);
-
+    // Load full execution config (includes language)
     let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
-    // Determine main file name based on language
+    // Determine main file name from language
     let main_file_name = match config.project.language {
         Language::Cpp => "Main.cpp",
         Language::Java => "Main.java",
         Language::Python => "Main.py",
     };
 
+    // Heuristic: if the "interpreter" is actually a compile/run line (e.g., g++ Main.cpp),
+    // then there's no source to compile yet. Synthesize a Main.cpp (or Main.*)
+    // from the generated_string and save it as the main archive locally.
+    let looks_like_compile = {
+        let cmd = interpreter.command.to_lowercase();
+        // very basic detection; expand as needed
+        (cmd.contains("g++") || cmd.contains("clang++") || cmd.contains("javac") || cmd.contains("python "))
+            && cmd.contains("main.")
+    };
+
+    if looks_like_compile {
+        // --- STOPGAP BRANCH ---
+        // Build a simple source file from `generated_string`.
+        // Adjust templates per language as needed.
+        let synthesized = match config.project.language {
+            Language::Cpp => format!(
+                r#"#include <bits/stdc++.h>
+int main() {{
+    std::cout << "{}" << std::endl;
+    return 0;
+}}
+"#,
+                generated_string.replace('"', "\\\"")
+            ),
+            Language::Java => format!(
+                r#"public class Main {{
+    public static void main(String[] args) {{
+        System.out.println("{}");
+    }}
+}}
+"#,
+                generated_string.replace('"', "\\\"")
+            ),
+            Language::Python => format!(r#"print("{}")"#, generated_string.replace('"', "\\\"")),
+        };
+
+        // Zip and save as the "main" archive
+        let zip_ext = main_file_name
+            .rsplit('.')
+            .next()
+            .unwrap_or("txt");
+        let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
+
+        let mut zip_data = Vec::new();
+        {
+            let mut zip_writer = ZipWriter::new(std::io::Cursor::new(&mut zip_data));
+            zip_writer
+                .start_file(main_file_name, FileOptions::<()>::default())
+                .map_err(|e| format!("zip start_file failed: {}", e))?;
+            zip_writer
+                .write_all(synthesized.as_bytes())
+                .map_err(|e| format!("zip write failed: {}", e))?;
+            zip_writer
+                .finish()
+                .map_err(|e| format!("zip finish failed: {}", e))?;
+        }
+
+        AssignmentFileModel::save_file(
+            db,
+            assignment_id,
+            module_id,
+            FileType::Main,
+            &zip_filename,
+            &zip_data,
+        )
+        .await
+        .map_err(|e| format!("Failed to save synthesized main zip: {}", e))?;
+
+        if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
+            eprintln!("[DEBUG] synthesized {} ({} bytes) into {}", main_file_name, zip_data.len(), zip_filename);
+        }
+
+        return Ok(());
+    }
+
+    // --- GENERATOR BRANCH (original intent) ---
+    // The interpreter is a true generator: run it and expect source code on stdout.
+    let interpreter_bytes = interpreter
+        .load_file()
+        .map_err(|e| format!("Failed to load interpreter file from disk: {}", e))?;
+
+    // Combine the interpreter command with the GA-produced string.
+    // e.g., "python3 interpreter.py <args>"
+    let command = format!("{} {}", interpreter.command, generated_string);
+
+    let host = env::var("CODE_MANAGER_HOST").map_err(|_| "CODE_MANAGER_HOST not set".to_string())?;
+    let port = env::var("CODE_MANAGER_PORT").map_err(|_| "CODE_MANAGER_PORT not set".to_string())?;
+    let url = format!("http://{}:{}/run", host, port);
+
     let config_value = serde_json::to_value(&config)
         .map_err(|e| format!("Failed to serialize execution config: {}", e))?;
 
+    // Send interpreter.zip + command to the code manager
     let client = Client::new();
     let payload = json!({
         "config": config_value,
@@ -605,7 +693,12 @@ pub async fn create_main_from_interpreter(
         .map_err(|e| format!("Failed to send request to code_manager: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("code_manager returned error: {}", resp.status()));
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "code_manager returned error status {}: Response body: {}",
+            status, body
+        ));
     }
 
     #[derive(serde::Deserialize)]
@@ -620,10 +713,30 @@ pub async fn create_main_from_interpreter(
 
     let combined_output = run_resp.output.join("\n");
 
-    let zip_filename = format!(
-        "main_interpreted.{}.zip",
-        main_file_name.rsplit('.').next().unwrap_or("txt")
-    );
+    if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
+        eprintln!(
+            "[DEBUG] generator output preview = {}",
+            &combined_output.chars().take(200).collect::<String>()
+        );
+    }
+
+    // Sanity-check: generator should produce plausible source
+    let looks_like_source = match config.project.language {
+        Language::Cpp => combined_output.contains("int main") || combined_output.contains("#include"),
+        Language::Java => combined_output.contains("class Main"),
+        Language::Python => combined_output.contains("def ") || combined_output.contains("print("),
+    };
+
+    if !looks_like_source {
+        return Err("Interpreter did not return plausible source code".to_string());
+    }
+
+    // Zip the generated source as Main.*
+    let zip_ext = main_file_name
+        .rsplit('.')
+        .next()
+        .unwrap_or("txt");
+    let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
 
     let mut zip_data = Vec::new();
     {

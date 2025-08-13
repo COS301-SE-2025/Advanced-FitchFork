@@ -30,9 +30,10 @@ pub mod utils {
 
 use crate::algorithms::genetic_algorithm::{GeneticAlgorithm, Chromosome, GAConfig, GeneConfig, CrossoverType, MutationType};
 use crate::utils::evaluator::{Evaluator, TaskSpec, Language};
-use sea_orm::DatabaseConnection;
 use code_runner::run_interpreter;
 use std::collections::HashMap;
+use db::{connect};
+use sea_orm::{Database, DatabaseConnection};
 
 
 
@@ -184,6 +185,7 @@ where
             //    `Components` combines sub-scores via omega weights and returns a scalar.
             let score = comps.evaluate(chrom, generation, n_ltl_props, num_tasks);
             fitness_scores.push(score);
+            println!("Generation {}: Chromosome {:?} has score {}", generation, chrom.genes(), score);
         }
 
         // Evolve the population to the next generation using the scores we computed
@@ -230,14 +232,9 @@ impl Components {
         self.omega1 * ltl + self.omega2 * fail + self.omega3 * mem
     }
 
-    fn compute_ltl(&self, _x: &Chromosome, n: usize) -> f64 {
-        let mut violations = 0;
-        for i in 0..n {
-            if self.simulate_tl_property_violation(_x, i) { //todo: return actual ltl violation from loop
-                violations += 1;
-            }
-        }
-        violations as f64 / (n.max(1) as f64)
+
+    fn compute_ltl(&self, _x: &Chromosome, n_milli: usize) -> f64 {
+        (n_milli as f64 / 1000.0).clamp(0.0, 1.0)
     }
 
     fn compute_fail(&self, _x: &Chromosome, m: usize) -> f64 {
@@ -317,3 +314,54 @@ fn decode_gene(bits: &[bool]) -> i32 {
     decoded.clamp(-max, max)
 }
 
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sea_orm::{Database, DatabaseConnection};
+    use std::collections::HashSet;
+    #[tokio::test(flavor = "multi_thread")]
+    async fn smoke_run_ga_on_submission_9998() {
+ 
+        dotenv::dotenv().ok();
+
+        // Check for opt-in flag
+        if std::env::var("GA_ITEST").is_err() {
+            eprintln!("GA_ITEST not set; skipping smoke test.");
+            return;
+        }
+
+        // Connect to DB
+        let db = connect().await;
+        
+        // Minimal GA config (tiny population / generations for a fast run)
+        let genes = vec![
+            GeneConfig { min_value: -4, max_value: 4, invalid_values: HashSet::new() },
+            GeneConfig { min_value: -2, max_value: 7, invalid_values: HashSet::new() },
+        ];
+
+        let ga_config = GAConfig {
+            population_size: 4,
+            number_of_generations: 1,
+            selection_size: 2,
+            reproduction_probability: 0.9,
+            crossover_probability: 0.8,
+            mutation_probability: 0.05,
+            genes,
+            crossover_type: CrossoverType::Uniform,
+            mutation_type: MutationType::BitFlip,
+        };
+
+        let (omega1, omega2, omega3) = (0.4, 0.4, 0.2);
+
+        let submission_id: i64 = 602;
+
+        let res = run_ga_job(&db, submission_id, ga_config, omega1, omega2, omega3).await;
+
+        match res {
+            Ok(()) => eprintln!("smoke_run_ga_on_submission_9998: OK"),
+            Err(e) => eprintln!("smoke_run_ga_on_submission_9998: ERR: {e}"),
+        }
+    }
+}
