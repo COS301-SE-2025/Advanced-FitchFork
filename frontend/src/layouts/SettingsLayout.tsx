@@ -55,7 +55,7 @@ const SettingsLayout = () => {
       </Sider>
 
       <Layout className="!bg-transparent flex-1 max-h-screen overflow-y-auto">
-        <Content className="p-4 sm:p-6">
+        <Content className="p-4">
           <Outlet />
         </Content>
       </Layout>

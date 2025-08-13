@@ -1,7 +1,6 @@
-// src/components/Notifier.tsx
 import { App as AntApp } from 'antd';
 
-export const useNotifier = () => {
+const useNotifier = () => {
   const { notification } = AntApp.useApp();
 
   const notifyInfo = (message: string, description?: string) => {
@@ -30,3 +29,5 @@ export const useNotifier = () => {
 
   return { notifyInfo, notifyError, notifySuccess };
 };
+
+export default useNotifier;

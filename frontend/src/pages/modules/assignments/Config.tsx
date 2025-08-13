@@ -137,10 +137,10 @@ const Config = () => {
   ];
 
   return (
-    <div className="bg-white dark:bg-gray-900 border-y border-gray-200 dark:border-gray-800 flex overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 flex overflow-hidden">
       {/* Sidebar */}
       {!rawView && (
-        <div className="w-[240px] bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-700 px-2 py-2">
+        <div className="w-[240px] bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2">
           <Menu
             mode="inline"
             theme="light"

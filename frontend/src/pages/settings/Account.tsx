@@ -60,7 +60,7 @@ const Account = () => {
     : '';
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-950 w-full max-w-6xl p-4 sm:p-6 space-y-12">
+    <div className="bg-gray-50 dark:bg-gray-950 w-full max-w-6xl space-y-12">
       <PageHeader
         title="Account Settings"
         description="Manage your profile, contact details, and account info."

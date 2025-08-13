@@ -10,7 +10,7 @@ import { UIProvider } from './context/UIContext.tsx';
 import { ThemeProvider } from './context/ThemeContext.tsx';
 import { AppMuiTheme } from './context/AppMuiTheme.tsx';
 import { MessageContextHolder } from './utils/message.tsx';
-import { MobilePageHeaderProvider } from './context/MobilePageHeaderContext.tsx';
+import { ViewSlotProvider } from './context/ViewSlotContext.tsx';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -21,9 +21,9 @@ createRoot(document.getElementById('root')!).render(
             <AntApp>
               <MessageContextHolder />
               <BreadcrumbProvider>
-                <MobilePageHeaderProvider>
+                <ViewSlotProvider>
                   <App />
-                </MobilePageHeaderProvider>
+                </ViewSlotProvider>
               </BreadcrumbProvider>
             </AntApp>
           </AuthProvider>

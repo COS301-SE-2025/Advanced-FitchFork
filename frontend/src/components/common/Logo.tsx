@@ -32,14 +32,14 @@ interface LogoProps {
   shadow?: boolean;
 }
 
-export default function Logo({
+const Logo = ({
   collapsed = false,
   className = '',
   showText = true,
   size = 'md',
   variant = 'auto',
   shadow = false,
-}: LogoProps) {
+}: LogoProps) => {
   const { isDarkMode } = useTheme();
 
   const { img: imgSize, text: textSize, shadow: shadowClass } = sizeMap[size];
@@ -88,4 +88,6 @@ export default function Logo({
       </div>
     </Link>
   );
-}
+};
+
+export default Logo;

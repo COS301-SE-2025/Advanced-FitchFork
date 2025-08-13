@@ -23,15 +23,16 @@ import { openTicket, closeTicket } from '@/services/modules/assignments/tickets/
 import TicketStatusTag from '@/components/tickets/TicketStatusTag';
 import TicketCard from '@/components/tickets/TicketCard';
 import { useNavigate } from 'react-router-dom';
-import { List, Typography } from 'antd';
-import { useMobilePageHeader } from '@/context/MobilePageHeaderContext';
+import { Typography } from 'antd';
+import { useViewSlot } from '@/context/ViewSlotContext';
+import TicketListItem from '@/components/tickets/TicketListItem';
 
 const Tickets = () => {
   const auth = useAuth();
   const module = useModule();
   const { assignment } = useAssignment();
   const navigate = useNavigate();
-  const { setContent } = useMobilePageHeader();
+  const { setValue } = useViewSlot();
 
   const listRef = useRef<EntityListHandle>(null);
 
@@ -41,7 +42,7 @@ const Tickets = () => {
   const isStudent = auth.isStudent(module.id);
 
   useEffect(() => {
-    setContent(
+    setValue(
       <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100">
         Tickets
       </Typography.Text>,
@@ -106,7 +107,7 @@ const Tickets = () => {
   };
 
   return (
-    <div className="m-4">
+    <div>
       <EntityList<Ticket>
         ref={listRef}
         name="Tickets"
@@ -123,31 +124,13 @@ const Tickets = () => {
             }
           />
         )}
-        listMode
         renderListItem={(ticket) => (
-          <List.Item
-            key={ticket.id}
-            className="dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition"
-            onClick={() =>
-              navigate(`/modules/${module.id}/assignments/${assignment.id}/tickets/${ticket.id}`)
+          <TicketListItem
+            ticket={ticket}
+            onClick={(t) =>
+              navigate(`/modules/${module.id}/assignments/${assignment.id}/tickets/${t.id}`)
             }
-          >
-            <List.Item.Meta
-              title={
-                <div className="flex justify-between items-center">
-                  <span>{ticket.title}</span>
-                  <TicketStatusTag status={ticket.status} />
-                </div>
-              }
-              description={
-                <div className="text-gray-700">
-                  {ticket.description || (
-                    <span className="text-gray-400">No description available.</span>
-                  )}
-                </div>
-              }
-            />
-          </List.Item>
+          />
         )}
         columnToggleEnabled
         columns={[

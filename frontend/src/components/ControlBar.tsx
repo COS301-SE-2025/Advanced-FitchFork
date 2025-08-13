@@ -1,17 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Input,
-  Button,
-  Dropdown,
-  Segmented,
-  Select,
-  Modal,
-  Col,
-  Row,
-  Space,
-  Checkbox,
-  Popconfirm,
-} from 'antd';
+import { Input, Button, Dropdown, Segmented, Col, Space, Checkbox, Popconfirm } from 'antd';
 import {
   ReloadOutlined,
   TableOutlined,
@@ -22,6 +10,8 @@ import {
 } from '@ant-design/icons';
 import type { MenuItemType } from 'antd/es/menu/interface';
 import type { EntityAction } from './EntityList';
+import FilterModal from './common/FilterModal';
+import SortModal from './common/SortModal';
 
 const { Search } = Input;
 
@@ -97,6 +87,9 @@ const ControlBar = <T,>({
   const hasSort = (currentSort?.length ?? 0) > 0;
   const hasFilters = (activeFilters?.length ?? 0) > 0;
 
+  // show Clear control on mobile if any state is active
+  const showClearInlineMobile = hasSearch || hasSort || hasFilters;
+
   const clearMenuItems: MenuItemType[] = [
     hasSearch && {
       key: 'clear-search',
@@ -153,9 +146,7 @@ const ControlBar = <T,>({
               </div>
             ),
           })),
-
           { type: 'divider' },
-
           {
             key: 'showAll',
             label: (
@@ -165,9 +156,7 @@ const ControlBar = <T,>({
                 onClick={(e) => {
                   e.stopPropagation();
                   columns?.forEach((col) => {
-                    if (hiddenColumns?.has(col.key)) {
-                      onToggleColumn?.(col.key);
-                    }
+                    if (hiddenColumns?.has(col.key)) onToggleColumn?.(col.key);
                   });
                 }}
               >
@@ -175,7 +164,6 @@ const ControlBar = <T,>({
               </Button>
             ),
           },
-
           {
             key: 'hideAll',
             label: (
@@ -185,9 +173,7 @@ const ControlBar = <T,>({
                 onClick={(e) => {
                   e.stopPropagation();
                   columns?.forEach((col) => {
-                    if (!hiddenColumns?.has(col.key)) {
-                      onToggleColumn?.(col.key);
-                    }
+                    if (!hiddenColumns?.has(col.key)) onToggleColumn?.(col.key);
                   });
                 }}
               >
@@ -195,7 +181,6 @@ const ControlBar = <T,>({
               </Button>
             ),
           },
-
           {
             key: 'resetDefault',
             label: (
@@ -207,11 +192,7 @@ const ControlBar = <T,>({
                   columns?.forEach((col) => {
                     const shouldBeHidden = !!(col as any).defaultHidden;
                     const currentlyHidden = hiddenColumns?.has(col.key);
-
-                    // if current != default, toggle
-                    if (shouldBeHidden !== currentlyHidden) {
-                      onToggleColumn?.(col.key);
-                    }
+                    if (shouldBeHidden !== currentlyHidden) onToggleColumn?.(col.key);
                   });
                 }}
               >
@@ -226,13 +207,214 @@ const ControlBar = <T,>({
     </Dropdown>
   );
 
+  // Reusable pieces
+  const FiltersButton = (
+    <Dropdown
+      menu={{
+        items: [
+          ...(filterGroups.length > 0
+            ? [
+                {
+                  key: 'open-filters',
+                  icon: <FilterOutlined />,
+                  label: <span data-cy="open-filter-modal">Filters</span>,
+                  onClick: () => setFilterModalOpen(true),
+                },
+              ]
+            : []),
+          ...(sortOptions.length > 0
+            ? [
+                {
+                  key: 'open-sort',
+                  icon: <SortAscendingOutlined />,
+                  label: <span data-cy="open-sort-modal">Sort</span>,
+                  onClick: () => setSortModalOpen(true),
+                },
+              ]
+            : []),
+        ],
+      }}
+      trigger={['click']}
+    >
+      <Button data-cy="filters-dropdown" className="whitespace-nowrap">
+        Filters
+      </Button>
+    </Dropdown>
+  );
+
+  const ClearControl = (
+    <>
+      {clearMenuItems.length === 1 ? (
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={() => clearMenuItems[0].onClick?.({ key: clearMenuItems[0].key } as any)}
+          data-cy={clearMenuItems[0].key}
+          className="w-full sm:w-auto"
+        >
+          {clearMenuItems[0].label}
+        </Button>
+      ) : (
+        <Dropdown menu={{ items: clearMenuItems }}>
+          <Button icon={<ReloadOutlined />} className="w-full sm:w-auto">
+            Clear
+          </Button>
+        </Dropdown>
+      )}
+    </>
+  );
+
+  const ActionsGroup = (
+    <div className="w-full sm:w-auto !m-0 flex flex-wrap items-center gap-2">
+      {primaryAction && (
+        <div className="w-full sm:w-auto">
+          <Space.Compact className="w-full sm:w-auto">
+            {primaryAction.confirm ? (
+              <Popconfirm
+                title={`Are you sure you want to ${primaryAction.label.toLowerCase()}?`}
+                okText="Yes"
+                cancelText="Cancel"
+                placement="topRight"
+                onConfirm={() =>
+                  primaryAction.handler({
+                    selected: selectedRowKeys,
+                    refresh: () => {},
+                  })
+                }
+              >
+                <Button
+                  type="primary"
+                  data-cy={`control-action-${primaryAction.key}`}
+                  className="w-full sm:w-auto"
+                >
+                  {primaryAction.icon} {primaryAction.label}
+                </Button>
+              </Popconfirm>
+            ) : (
+              <Button
+                type="primary"
+                data-cy={`control-action-${primaryAction.key}`}
+                onClick={() =>
+                  primaryAction.handler({
+                    selected: selectedRowKeys,
+                    refresh: () => {},
+                  })
+                }
+                className="w-full sm:w-auto"
+              >
+                {primaryAction.icon} {primaryAction.label}
+              </Button>
+            )}
+
+            {secondaryActions.length > 0 && (
+              <Dropdown
+                data-cy="control-action-dropdown"
+                menu={{
+                  items: secondaryActions.map((a) => ({
+                    key: a.key,
+                    icon: a.icon,
+                    label: a.confirm ? (
+                      <Popconfirm
+                        title={`Are you sure you want to ${a.label.toLowerCase()}?`}
+                        okText="Yes"
+                        cancelText="Cancel"
+                        placement="topRight"
+                        onConfirm={() =>
+                          a.handler({
+                            selected: selectedRowKeys,
+                            refresh: () => {},
+                          })
+                        }
+                      >
+                        <span data-cy={`control-action-${a.key}`}>{a.label}</span>
+                      </Popconfirm>
+                    ) : (
+                      <span
+                        data-cy={`control-action-${a.key}`}
+                        onClick={() =>
+                          a.handler({
+                            selected: selectedRowKeys,
+                            refresh: () => {},
+                          })
+                        }
+                      >
+                        {a.label}
+                      </span>
+                    ),
+                  })),
+                }}
+                placement="bottomRight"
+              >
+                <Button type="primary" icon={<MoreOutlined />} />
+              </Dropdown>
+            )}
+          </Space.Compact>
+        </div>
+      )}
+
+      {hasBulk && resolvedPrimaryBulk && (
+        <div className="w-full sm:w-auto">
+          {secondaryBulkActions.length === 0 ? (
+            <Button
+              data-cy={`bulk-action-${resolvedPrimaryBulk.key}`}
+              onClick={() =>
+                resolvedPrimaryBulk.handler({
+                  selected: selectedRowKeys,
+                  refresh: () => {},
+                })
+              }
+              className="w-full sm:w-auto"
+            >
+              {resolvedPrimaryBulk.icon} {resolvedPrimaryBulk.label}
+            </Button>
+          ) : (
+            <Space.Compact className="w-full sm:w-auto">
+              <Button
+                data-cy={`bulk-action-${resolvedPrimaryBulk.key}`}
+                onClick={() =>
+                  resolvedPrimaryBulk.handler({
+                    selected: selectedRowKeys,
+                    refresh: () => {},
+                  })
+                }
+                className="w-full sm:w-auto"
+              >
+                {resolvedPrimaryBulk.icon} {resolvedPrimaryBulk.label}
+              </Button>
+              <Dropdown
+                menu={{
+                  items: secondaryBulkActions.map((a) => ({
+                    key: a.key,
+                    label: <span data-cy={`bulk-action-${a.key}`}>{a.label}</span>,
+                    icon: a.icon,
+                    onClick: a.confirm
+                      ? undefined
+                      : () =>
+                          a.handler({
+                            selected: selectedRowKeys,
+                            refresh: () => {},
+                          }),
+                  })),
+                }}
+                placement="bottomRight"
+              >
+                <Button icon={<MoreOutlined />} data-cy="bulk-action-dropdown" />
+              </Dropdown>
+            </Space.Compact>
+          )}
+        </div>
+      )}
+
+      {columnToggleEnabled && columns?.length && !listMode && <div>{columnToggleMenu}</div>}
+    </div>
+  );
+
   return (
     <div className="bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-800 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      <div className="flex flex-row items-center gap-2 w-full sm:w-auto">
-        {viewMode &&
-          onViewModeChange &&
-          typeof window !== 'undefined' &&
-          window.innerWidth >= 640 && (
+      {/* LEFT: view toggle (desktop only), search, filters */}
+      <div className="flex items-center gap-2 w-full sm:w-auto">
+        {/* View toggle: absolutely hidden on mobile via wrapper */}
+        {viewMode && onViewModeChange && (
+          <div className="hidden sm:flex">
             <Segmented
               size="middle"
               value={viewMode}
@@ -257,324 +439,74 @@ const ControlBar = <T,>({
               ]}
               className="dark:!bg-gray-950"
             />
-          )}
+          </div>
+        )}
 
+        {/* Search grows to fill on mobile */}
         <Search
           placeholder={searchPlaceholder}
           allowClear
           onChange={(e) => handleSearch(e.target.value)}
           value={searchTerm}
-          className="w-full sm:w-[320px]"
-          style={{ width: '100%' }}
+          className="flex-1 sm:w-[320px]"
           data-cy="entity-search"
         />
 
-        {(filterGroups.length > 0 || sortOptions.length > 0) &&
-          (viewMode === 'grid' || listMode) && (
-            <Dropdown
-              menu={{
-                items: [
-                  ...(filterGroups.length > 0
-                    ? [
-                        {
-                          key: 'open-filters',
-                          icon: <FilterOutlined />,
-                          label: <span data-cy="open-filter-modal">Filters</span>,
-                          onClick: () => setFilterModalOpen(true),
-                        },
-                      ]
-                    : []),
-                  ...(sortOptions.length > 0
-                    ? [
-                        {
-                          key: 'open-sort',
-                          icon: <SortAscendingOutlined />,
-                          label: <span data-cy="open-sort-modal">Sort</span>,
-                          onClick: () => setSortModalOpen(true),
-                        },
-                      ]
-                    : []),
-                ],
-              }}
-              trigger={['click']}
-            >
-              <Button data-cy="filters-dropdown" className="whitespace-nowrap">
-                Filters
-              </Button>
-            </Dropdown>
-          )}
+        {/* Filters button:
+            - Mobile: always show if sorts/filters exist
+            - Desktop: follow original condition (grid or listMode) */}
+        <div className="sm:hidden">
+          {(filterGroups.length > 0 || sortOptions.length > 0) && FiltersButton}
+        </div>
 
-        {clearMenuItems.length > 0 && (
-          <Col>
-            {clearMenuItems.length === 1 ? (
-              <Button
-                icon={<ReloadOutlined />}
-                onClick={() => clearMenuItems[0].onClick?.({ key: clearMenuItems[0].key } as any)}
-                data-cy={clearMenuItems[0].key}
-              >
-                {clearMenuItems[0].label}
-              </Button>
-            ) : (
-              <Dropdown menu={{ items: clearMenuItems }}>
-                <Button icon={<ReloadOutlined />}>Clear</Button>
-              </Dropdown>
-            )}
-          </Col>
-        )}
+        <div className="hidden sm:block">
+          {(filterGroups.length > 0 || sortOptions.length > 0) &&
+            (viewMode === 'grid' || listMode) &&
+            FiltersButton}
+        </div>
+
+        {/* Desktop Clear (left area); mobile version is below next to actions */}
+        <div className="hidden sm:block">
+          {clearMenuItems.length > 0 && <Col>{ClearControl}</Col>}
+        </div>
       </div>
 
-      <Row gutter={8} align="middle" wrap={false}>
-        {primaryAction && (
-          <Col>
-            <Space.Compact>
-              {primaryAction.confirm ? (
-                <Popconfirm
-                  title={`Are you sure you want to ${primaryAction.label.toLowerCase()}?`}
-                  okText="Yes"
-                  cancelText="Cancel"
-                  placement="topRight"
-                  onConfirm={() =>
-                    primaryAction.handler({
-                      selected: selectedRowKeys,
-                      refresh: () => {},
-                    })
-                  }
-                >
-                  <Button type="primary" data-cy={`control-action-${primaryAction.key}`}>
-                    {primaryAction.icon} {primaryAction.label}
-                  </Button>
-                </Popconfirm>
-              ) : (
-                <Button
-                  type="primary"
-                  data-cy={`control-action-${primaryAction.key}`}
-                  onClick={() =>
-                    primaryAction.handler({
-                      selected: selectedRowKeys,
-                      refresh: () => {},
-                    })
-                  }
-                >
-                  {primaryAction.icon} {primaryAction.label}
-                </Button>
-              )}
+      {/* RIGHT: Actions (desktop) */}
+      <div className="hidden sm:block">{ActionsGroup}</div>
 
-              {secondaryActions.length > 0 && (
-                <Dropdown
-                  data-cy="control-action-dropdown"
-                  menu={{
-                    items: secondaryActions.map((a) => ({
-                      key: a.key,
-                      icon: a.icon,
-                      label: a.confirm ? (
-                        <Popconfirm
-                          title={`Are you sure you want to ${a.label.toLowerCase()}?`}
-                          okText="Yes"
-                          cancelText="Cancel"
-                          placement="topRight"
-                          onConfirm={() =>
-                            a.handler({
-                              selected: selectedRowKeys,
-                              refresh: () => {},
-                            })
-                          }
-                        >
-                          <span data-cy={`control-action-${a.key}`}>{a.label}</span>
-                        </Popconfirm>
-                      ) : (
-                        <span
-                          data-cy={`control-action-${a.key}`}
-                          onClick={() =>
-                            a.handler({
-                              selected: selectedRowKeys,
-                              refresh: () => {},
-                            })
-                          }
-                        >
-                          {a.label}
-                        </span>
-                      ),
-                    })),
-                  }}
-                  placement="bottomRight"
-                >
-                  <Button type="primary" icon={<MoreOutlined />} />
-                </Dropdown>
-              )}
-            </Space.Compact>
-          </Col>
-        )}
+      {/* MOBILE BELOW:
+         - If Clear exists -> Actions + Clear in a 2-col grid (50/50)
+         - If no Clear -> render Actions alone (no grid, no extra gap) */}
+      {(primaryAction ||
+        hasBulk ||
+        (columnToggleEnabled && columns?.length) ||
+        showClearInlineMobile) &&
+        (showClearInlineMobile ? (
+          <div className="sm:hidden grid grid-cols-2 gap-2 w-full">
+            <div className="col-span-1">{ActionsGroup}</div>
+            <div className="col-span-1 flex justify-end items-center">{ClearControl}</div>
+          </div>
+        ) : (
+          <div className="sm:hidden w-full">{ActionsGroup}</div>
+        ))}
 
-        {hasBulk && resolvedPrimaryBulk && (
-          <Col>
-            {secondaryBulkActions.length === 0 ? (
-              <Button
-                data-cy={`bulk-action-${resolvedPrimaryBulk.key}`}
-                onClick={() =>
-                  resolvedPrimaryBulk.handler({
-                    selected: selectedRowKeys,
-                    refresh: () => {},
-                  })
-                }
-              >
-                {resolvedPrimaryBulk.icon} {resolvedPrimaryBulk.label}
-              </Button>
-            ) : (
-              <Space.Compact>
-                <Button
-                  data-cy={`bulk-action-${resolvedPrimaryBulk.key}`}
-                  onClick={() =>
-                    resolvedPrimaryBulk.handler({
-                      selected: selectedRowKeys,
-                      refresh: () => {},
-                    })
-                  }
-                >
-                  {resolvedPrimaryBulk.icon} {resolvedPrimaryBulk.label}
-                </Button>
-                <Dropdown
-                  menu={{
-                    items: secondaryBulkActions.map((a) => ({
-                      key: a.key,
-                      label: <span data-cy={`bulk-action-${a.key}`}>{a.label}</span>,
-                      icon: a.icon,
-                      onClick: a.confirm
-                        ? undefined
-                        : () =>
-                            a.handler({
-                              selected: selectedRowKeys,
-                              refresh: () => {},
-                            }),
-                    })),
-                  }}
-                  placement="bottomRight"
-                >
-                  <Button icon={<MoreOutlined />} data-cy="bulk-action-dropdown" />
-                </Dropdown>
-              </Space.Compact>
-            )}
-          </Col>
-        )}
-
-        {columnToggleEnabled && columns?.length && !listMode && <Col>{columnToggleMenu}</Col>}
-      </Row>
-
-      <Modal
+      {/* Sort Modal (extracted) */}
+      <SortModal
         open={sortModalOpen}
-        title="Sort Options"
-        onCancel={() => setSortModalOpen(false)}
-        footer={null}
-        centered
-      >
-        <div className="space-y-4">
-          {sortOptions.map((opt) => {
-            const field = opt.field;
-            const active = currentSort?.find((s) => s.startsWith(`${field}.`));
-            const currentOrder = active?.split('.')[1] || 'none';
+        onClose={() => setSortModalOpen(false)}
+        sortOptions={sortOptions}
+        currentSort={currentSort}
+        onChange={(val) => onSortChange?.(val)}
+      />
 
-            return (
-              <div key={field} className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-center">
-                <span className="font-medium truncate">{opt.label}</span>
-                <Select
-                  value={currentOrder}
-                  className="w-full"
-                  onChange={(order) => {
-                    const updated = currentSort?.filter((s) => !s.startsWith(`${field}.`)) || [];
-                    if (order !== 'none') updated.push(`${field}.${order}`);
-                    onSortChange?.(updated);
-                  }}
-                  options={[
-                    { label: 'None', value: 'none' },
-                    { label: 'Ascending', value: 'ascend' },
-                    { label: 'Descending', value: 'descend' },
-                  ]}
-                />
-              </div>
-            );
-          })}
-        </div>
-      </Modal>
-
-      <Modal
+      {/* Filter Modal (extracted) */}
+      <FilterModal
         open={filterModalOpen}
-        title="Filters"
-        onCancel={() => setFilterModalOpen(false)}
-        footer={null}
-        centered
-      >
-        <div className="space-y-4">
-          {filterGroups.map((group) => {
-            const value =
-              activeFilters.find((f) => f.startsWith(`${group.key}:`))?.split(':')[1] || '';
-            const values = activeFilters
-              .filter((f) => f.startsWith(`${group.key}:`))
-              .map((f) => f.split(':')[1]);
-
-            return (
-              <div key={group.key} className="space-y-1">
-                <label className="block font-medium">{group.label}</label>
-
-                {group.type === 'select' && group.options && (
-                  <Select
-                    className="w-full"
-                    placeholder={`Select ${group.label}`}
-                    value={value || undefined}
-                    onChange={(v) => {
-                      const updated = activeFilters.filter((f) => !f.startsWith(`${group.key}:`));
-                      if (v) updated.push(`${group.key}:${v}`);
-                      onFilterChange?.(updated);
-                    }}
-                    options={group.options}
-                    allowClear
-                  />
-                )}
-
-                {group.type === 'multi-select' && group.options && (
-                  <Select
-                    mode="multiple"
-                    className="w-full"
-                    placeholder={`Select ${group.label}`}
-                    value={values}
-                    onChange={(vals) => {
-                      const updated = activeFilters.filter((f) => !f.startsWith(`${group.key}:`));
-                      vals.forEach((v) => updated.push(`${group.key}:${v}`));
-                      onFilterChange?.(updated);
-                    }}
-                    options={group.options}
-                  />
-                )}
-
-                {group.type === 'text' && (
-                  <Input
-                    placeholder={`Enter ${group.label}`}
-                    value={value}
-                    onChange={(e) => {
-                      const updated = activeFilters.filter((f) => !f.startsWith(`${group.key}:`));
-                      const val = e.target.value;
-                      if (val) updated.push(`${group.key}:${val}`);
-                      onFilterChange?.(updated);
-                    }}
-                  />
-                )}
-
-                {group.type === 'number' && (
-                  <Input
-                    type="number"
-                    placeholder={`Enter ${group.label}`}
-                    value={value}
-                    onChange={(e) => {
-                      const updated = activeFilters.filter((f) => !f.startsWith(`${group.key}:`));
-                      const val = e.target.value;
-                      if (val) updated.push(`${group.key}:${val}`);
-                      onFilterChange?.(updated);
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Modal>
+        onClose={() => setFilterModalOpen(false)}
+        filterGroups={filterGroups}
+        activeFilters={activeFilters}
+        onChange={(vals) => onFilterChange?.(vals)}
+      />
     </div>
   );
 };

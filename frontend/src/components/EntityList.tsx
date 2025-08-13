@@ -4,7 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useState, type JSX } from '
 import type { ColumnsType } from 'antd/es/table';
 import type { SortOption } from '@/types/common';
 
-import { useNotifier } from '@/components/common/Notifier';
+import { useNotifier } from '@/components/common';
 import { useEntityViewState } from '@/hooks/useEntityViewState';
 import type { ModuleRole } from '@/types/modules';
 import ControlBar from './ControlBar';
@@ -214,6 +214,29 @@ const EntityList = forwardRef(function <T>(
     });
   }
 
+  // Reusable empty-state (matches table's style)
+  const renderEmptyState = () => (
+    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data found.">
+      {clearMenuItems.length === 1 ? (
+        <Button icon={<ReloadOutlined />} onClick={clearMenuItems[0].onClick}>
+          {clearMenuItems[0].label}
+        </Button>
+      ) : (
+        <Dropdown
+          menu={{
+            items: clearMenuItems.map((item) => ({
+              key: item.key,
+              label: item.label,
+              onClick: item.onClick,
+            })),
+          }}
+        >
+          <Button icon={<ReloadOutlined />}>Clear</Button>
+        </Dropdown>
+      )}
+    </Empty>
+  );
+
   const controlActions = actions?.control ?? [];
   const bulkActions = actions?.bulk ?? [];
 
@@ -395,124 +418,134 @@ const EntityList = forwardRef(function <T>(
 
       {viewMode === 'grid' && renderGridItem ? (
         <div>
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {items.map((item) => {
-              const allActions = actions?.entity?.(item) ?? [];
-              const inlineLimit = allActions.length >= 4 ? 2 : 3;
-              const inlineActions = allActions.slice(0, inlineLimit);
-              const dropdownActions = allActions.slice(inlineLimit);
+          {!loading && items.length === 0 ? (
+            <div className="py-16 flex items-center justify-center">{renderEmptyState()}</div>
+          ) : (
+            <>
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {items.map((item) => {
+                  const allActions = actions?.entity?.(item) ?? [];
+                  const inlineLimit = allActions.length >= 4 ? 2 : 3;
+                  const inlineActions = allActions.slice(0, inlineLimit);
+                  const dropdownActions = allActions.slice(inlineLimit);
 
-              const actionButtons = [
-                ...inlineActions.map((a) => (
-                  <Tooltip title={a.label} key={a.key}>
-                    {a.confirm ? (
-                      <Popconfirm
-                        title={`Are you sure you want to ${a.label.toLowerCase()}?`}
-                        okText="Yes"
-                        cancelText="No"
-                        onConfirm={(e) => {
-                          e?.stopPropagation?.();
-                          a.handler({
-                            entity: item,
-                            refresh: fetchData,
-                            selected: selectedRowKeys,
-                          });
-                        }}
-                        onCancel={(e) => {
-                          e?.stopPropagation?.();
-                        }}
-                      >
-                        <Button icon={a.icon} type="text" onClick={(e) => e.stopPropagation()} />
-                      </Popconfirm>
-                    ) : (
-                      <Button
-                        icon={a.icon}
-                        type="text"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          a.handler({
-                            entity: item,
-                            refresh: fetchData,
-                            selected: selectedRowKeys,
-                          });
-                        }}
-                      />
-                    )}
-                  </Tooltip>
-                )),
-              ];
-
-              if (dropdownActions.length > 0) {
-                actionButtons.push(
-                  <Dropdown
-                    key="more"
-                    menu={{
-                      items: dropdownActions.map((a) => ({
-                        key: a.key,
-                        label: a.confirm ? (
+                  const actionButtons = [
+                    ...inlineActions.map((a) => (
+                      <Tooltip title={a.label} key={a.key}>
+                        {a.confirm ? (
                           <Popconfirm
                             title={`Are you sure you want to ${a.label.toLowerCase()}?`}
                             okText="Yes"
                             cancelText="No"
-                            onConfirm={() =>
+                            onConfirm={(e) => {
+                              e?.stopPropagation?.();
                               a.handler({
                                 entity: item,
                                 refresh: fetchData,
                                 selected: selectedRowKeys,
-                              })
-                            }
+                              });
+                            }}
                             onCancel={(e) => {
                               e?.stopPropagation?.();
                             }}
                           >
-                            <span>{a.label}</span>
+                            <Button
+                              icon={a.icon}
+                              type="text"
+                              onClick={(e) => e.stopPropagation()}
+                            />
                           </Popconfirm>
                         ) : (
-                          <span
-                            onClick={() =>
+                          <Button
+                            icon={a.icon}
+                            type="text"
+                            onClick={(e) => {
+                              e.stopPropagation();
                               a.handler({
                                 entity: item,
                                 refresh: fetchData,
                                 selected: selectedRowKeys,
-                              })
-                            }
-                          >
-                            {a.label}
-                          </span>
-                        ),
-                        icon: a.icon,
-                      })),
-                    }}
-                    placement="bottomRight"
+                              });
+                            }}
+                          />
+                        )}
+                      </Tooltip>
+                    )),
+                  ];
+
+                  if (dropdownActions.length > 0) {
+                    actionButtons.push(
+                      <Dropdown
+                        key="more"
+                        menu={{
+                          items: dropdownActions.map((a) => ({
+                            key: a.key,
+                            label: a.confirm ? (
+                              <Popconfirm
+                                title={`Are you sure you want to ${a.label.toLowerCase()}?`}
+                                okText="Yes"
+                                cancelText="No"
+                                onConfirm={() =>
+                                  a.handler({
+                                    entity: item,
+                                    refresh: fetchData,
+                                    selected: selectedRowKeys,
+                                  })
+                                }
+                                onCancel={(e) => {
+                                  e?.stopPropagation?.();
+                                }}
+                              >
+                                <span>{a.label}</span>
+                              </Popconfirm>
+                            ) : (
+                              <span
+                                onClick={() =>
+                                  a.handler({
+                                    entity: item,
+                                    refresh: fetchData,
+                                    selected: selectedRowKeys,
+                                  })
+                                }
+                              >
+                                {a.label}
+                              </span>
+                            ),
+                            icon: a.icon,
+                          })),
+                        }}
+                        placement="bottomRight"
+                      >
+                        <Button type="text" icon={<MoreOutlined />} />
+                      </Dropdown>,
+                    );
+                  }
+
+                  return <div key={getRowKey(item)}>{renderGridItem(item, actionButtons)}</div>;
+                })}
+              </div>
+
+              {/* Pagination */}
+              {pagination.total > pagination.pageSize && (
+                <div className="mt-6 flex justify-between items-center pb-4">
+                  <Button
+                    onClick={() => goToPage(pagination.current - 1)}
+                    disabled={pagination.current === 1}
                   >
-                    <Button type="text" icon={<MoreOutlined />} />
-                  </Dropdown>,
-                );
-              }
-
-              return <div key={getRowKey(item)}>{renderGridItem(item, actionButtons)}</div>;
-            })}
-          </div>
-
-          {/* Pagination inside scrollable area */}
-          {pagination.total > pagination.pageSize && (
-            <div className="mt-6 flex justify-between items-center pb-4">
-              <Button
-                onClick={() => goToPage(pagination.current - 1)}
-                disabled={pagination.current === 1}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-gray-500">
-                Page {pagination.current} of {Math.ceil(pagination.total / pagination.pageSize)}
-              </span>
-              <Button
-                onClick={() => goToPage(pagination.current + 1)}
-                disabled={pagination.current * pagination.pageSize >= pagination.total}
-              >
-                Next
-              </Button>
-            </div>
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-500">
+                    Page {pagination.current} of {Math.ceil(pagination.total / pagination.pageSize)}
+                  </span>
+                  <Button
+                    onClick={() => goToPage(pagination.current + 1)}
+                    disabled={pagination.current * pagination.pageSize >= pagination.total}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : listMode && renderListItem ? (
@@ -522,7 +555,7 @@ const EntityList = forwardRef(function <T>(
             dataSource={items}
             renderItem={renderListItem}
             bordered
-            locale={{ emptyText: 'No data yet.' }}
+            locale={{ emptyText: renderEmptyState() }}
             className="overflow-hidden bg-white dark:bg-gray-950 !border-gray-200 dark:!border-gray-800"
           />
           {items.length < pagination.total! && (

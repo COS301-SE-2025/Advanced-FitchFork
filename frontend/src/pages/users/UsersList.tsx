@@ -13,6 +13,7 @@ import { listUsers, editUser, deleteUser } from '@/services/users';
 import type { User } from '@/types/users';
 import dayjs from 'dayjs';
 import { createUser } from '@/services/users/post';
+import UserListItem from '@/components/users/UserListItem';
 
 const UsersList = () => {
   const navigate = useNavigate();
@@ -177,6 +178,9 @@ const UsersList = () => {
         name="Users"
         fetchItems={fetchUsers}
         renderGridItem={(user, actions) => <UserCard user={user} actions={actions} />}
+        renderListItem={(u) => (
+          <UserListItem user={u} onClick={(user) => navigate(`/users/${user.id}`)} />
+        )}
         getRowKey={(item) => item.id}
         onRowClick={(item) => navigate(`/users/${item.id}`)}
         columnToggleEnabled

@@ -7,6 +7,7 @@ import { useModule } from '@/context/ModuleContext';
 import { downloadAssignmentFile, uploadAssignmentFile } from '@/services/modules/assignments';
 
 import type { AssignmentFile, FileType } from '@/types/modules/assignments';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Text } = Typography;
 
@@ -22,8 +23,21 @@ const fileTypeLabels: Record<FileType, string> = {
 const AssignmentFiles = () => {
   const { assignment } = useAssignment();
   const module = useModule();
+  const { setValue } = useViewSlot();
+
   const [selectedType, setSelectedType] = useState<FileType>('main');
   const [files, setFiles] = useState<AssignmentFile[]>(assignment.files ?? []);
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text
+        className="text-base font-medium text-gray-900 dark:text-gray-100 truncate"
+        title={'Files'}
+      >
+        Files
+      </Typography.Text>,
+    );
+  }, []);
 
   useEffect(() => {
     setFiles(assignment.files ?? []);
@@ -51,7 +65,7 @@ const AssignmentFiles = () => {
   const filesForSelectedType = files.filter((f) => f.file_type === selectedType);
 
   return (
-    <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-700 rounded-md p-6 space-y-6 max-w-3xl">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md p-6 space-y-6 max-w-3xl">
       <div className="flex flex-wrap gap-2 items-center">
         <Title level={4} className="!m-0">
           Manage

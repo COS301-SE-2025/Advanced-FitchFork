@@ -1,7 +1,8 @@
-// src/context/UIContext.tsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { ConfigProvider, theme as antdTheme } from 'antd';
+import { ConfigProvider, Grid, theme as antdTheme } from 'antd';
 import { useTheme } from './ThemeContext';
+
+const { useBreakpoint } = Grid;
 
 interface UIContextType {
   compact: boolean;
@@ -9,6 +10,9 @@ interface UIContextType {
   motion: boolean;
   setMotion: (val: boolean) => void;
   isMobile: boolean;
+  isSm: boolean;
+  isMd: boolean;
+  isLg: boolean;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
@@ -25,6 +29,12 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
 
   const { isDarkMode } = useTheme();
+  const screens = useBreakpoint();
+
+  // Derive screen size booleans (≥breakpoint)
+  const isSm = !!screens.sm;
+  const isMd = !!screens.md;
+  const isLg = !!screens.lg;
 
   useEffect(() => {
     localStorage.setItem('compact', String(compact));
@@ -45,7 +55,18 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   }, []);
 
   return (
-    <UIContext.Provider value={{ compact, setCompact, motion, setMotion, isMobile }}>
+    <UIContext.Provider
+      value={{
+        compact,
+        setCompact,
+        motion,
+        setMotion,
+        isMobile,
+        isSm,
+        isMd,
+        isLg,
+      }}
+    >
       <ConfigProvider
         theme={{
           algorithm: [

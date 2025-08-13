@@ -12,6 +12,7 @@ export interface Submission extends Timestamp {
   mark: SubmissionMark;
   is_practice: boolean;
   is_late: boolean;
+  score?: number;
   tasks?: TaskBreakdown[];
   code_coverage?: CodeCoverageEntry[];
   user?: SubmissionUserInfo;

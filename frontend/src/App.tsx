@@ -27,8 +27,7 @@ import Account from './pages/settings/Account';
 import Security from './pages/settings/Security';
 import Appearance from './pages/settings/Appearance';
 import AssignmentLayout from './layouts/AssignmentLayout';
-import SubmissionView from './pages/modules/assignments/submissions/show/SubmissionView';
-import Submissions from './pages/modules/assignments/submissions/index/Submissions';
+import SubmissionView from './pages/modules/assignments/submissions/SubmissionView';
 import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
 import MemoOutput from './pages/modules/assignments/MemoOutput';
 import MarkAllocator from './pages/modules/assignments/MarkAllocator';
@@ -39,7 +38,6 @@ import HelpContact from './pages/help/HelpContact';
 import HelpSubmissions from './pages/help/HelpSubmissions';
 import HelpTroubleshooting from './pages/help/HelpTroubleshooting';
 import Landing from './pages/Landing';
-import Config from './pages/modules/assignments/Config';
 import Dashboard from './pages/Dashboard';
 import Tasks from './pages/modules/assignments/Tasks';
 import AuthLayout from './layouts/AuthLayout';
@@ -55,10 +53,17 @@ import Tickets from './pages/modules/assignments/tickets/Tickets';
 import TicketView from './pages/modules/assignments/tickets/TicketView';
 import WithModuleContext from './components/providers/WithModuleContext';
 import WithAssignmentContext from './components/providers/WithAssignmentContext';
-import AssignmentIndexPage from './pages/modules/assignments/AssignmentIndexPage';
-import ModuleIndexPage from './pages/modules/ModuleIndexPage';
+import AssignmentConfigLayout from './layouts/ConfigLayout';
+import ExecutionPage from './pages/modules/assignments/config/ExecutionPage';
+import MarkingPage from './pages/modules/assignments/config/MarkingPage';
+import { useUI } from './context/UIContext';
+import AssignmentMobileMenu from './pages/modules/assignments/AssignmentMobileMenu';
+import ModuleMobileMenu from './pages/modules/ModuleMobileMenu';
+import ConfigMobileMenu from './pages/modules/assignments/config/ConfigMobileMenu';
+import SubmissionsList from './pages/modules/assignments/submissions/SubmissionsList';
 
 export default function App() {
+  const { isMobile } = useUI();
   const { user, loading, isExpired } = useAuth();
 
   if (loading) return null;
@@ -110,14 +115,22 @@ export default function App() {
             <Route path="/modules" element={<ModulesList />} />
             <Route path="/modules/:id" element={<WithModuleContext />}>
               <Route path="/modules/:id" element={<ModuleLayout />}>
-                <Route index element={<ModuleIndexPage />} />
+                <Route
+                  index
+                  element={isMobile ? <ModuleMobileMenu /> : <Navigate to="overview" replace />}
+                />
                 <Route path="overview" element={<ModuleOverview />} />
                 <Route path="assignments" element={<AssignmentsList />} />
                 <Route path="assignments/:assignment_id" element={<WithAssignmentContext />}>
                   <Route element={<AssignmentLayout />}>
-                    <Route index element={<AssignmentIndexPage />} />
+                    <Route
+                      index
+                      element={
+                        isMobile ? <AssignmentMobileMenu /> : <Navigate to="submissions" replace />
+                      }
+                    />
                     <Route path="files" element={<AssignmentFiles />} />
-                    <Route path="submissions" element={<Submissions />} />
+                    <Route path="submissions" element={<SubmissionsList />} />
                     <Route path="submissions/:submission_id" element={<SubmissionView />} />
                     <Route path="tasks" element={<Tasks />}>
                       <Route index element={<></>} />
@@ -127,7 +140,16 @@ export default function App() {
                     <Route path="memo-output" element={<MemoOutput />} />
                     <Route path="mark-allocator" element={<MarkAllocator />} />
                     <Route path="stats" element={<UnderConstruction />} />
-                    <Route path="config" element={<Config />} />
+                    <Route path="config" element={<AssignmentConfigLayout />}>
+                      <Route
+                        index
+                        element={
+                          isMobile ? <ConfigMobileMenu /> : <Navigate to="execution" replace />
+                        }
+                      />
+                      <Route path="execution" element={<ExecutionPage />} />
+                      <Route path="marking" element={<MarkingPage />} />
+                    </Route>
                   </Route>
 
                   <Route path="tickets/:ticket_id" element={<TicketView />} />

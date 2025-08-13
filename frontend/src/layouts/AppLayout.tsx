@@ -121,7 +121,7 @@ const AppLayout = () => {
       )}
 
       <Layout className="!bg-transparent flex flex-col flex-1 min-h-0">
-        <Header className="border-b !bg-white dark:!bg-gray-950 dark:!bg-gray border-gray-200 dark:border-gray-800 !px-4 sm:px-6">
+        <Header className="border-b !bg-white dark:!bg-gray-900 dark:!bg-gray border-gray-200 dark:border-gray-800 !px-4 sm:px-6">
           <HeaderBar
             notifications={notifications}
             profileMenuItems={profileMenuItems}

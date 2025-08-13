@@ -35,11 +35,19 @@ interface AuthContextType {
   isAdmin: boolean;
   isUser: boolean;
   getModuleRole: (moduleId: number) => ModuleRole | null;
-  hasModuleRole: (moduleId: number, role: ModuleRole) => boolean;
+
   isLecturer: (moduleId: number) => boolean;
   isAssistantLecturer: (moduleId: number) => boolean;
   isTutor: (moduleId: number) => boolean;
   isStudent: (moduleId: number) => boolean;
+  isStaff: (moduleId: number) => boolean;
+
+  hasModuleRole: (role: ModuleRole) => boolean;
+  hasLecturerRole: () => boolean;
+  hasAssistantLecturerRole: () => boolean;
+  hasTutorRole: () => boolean;
+  hasStudentRole: () => boolean;
+  hasStaffRole: () => boolean;
 
   print: () => void;
 }
@@ -165,15 +173,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return mod?.role || null;
   };
 
-  const hasModuleRole = (moduleId: number, role: ModuleRole): boolean => {
-    return getModuleRole(moduleId) === role;
-  };
-
   const isLecturer = (moduleId: number): boolean => getModuleRole(moduleId) === 'lecturer';
   const isAssistantLecturer = (moduleId: number): boolean =>
     getModuleRole(moduleId) === 'assistant_lecturer';
   const isTutor = (moduleId: number): boolean => getModuleRole(moduleId) === 'tutor';
   const isStudent = (moduleId: number): boolean => getModuleRole(moduleId) === 'student';
+  const isStaff = (moduleId: number): boolean =>
+    isTutor(moduleId) || isAssistantLecturer(moduleId) || isLecturer(moduleId);
+
+  const hasModuleRole = (role: ModuleRole): boolean => {
+    const candidateModules = modules.filter((m) => m.role === role);
+    return candidateModules.length === 0 ? false : true;
+  };
+
+  const hasLecturerRole = (): boolean => hasModuleRole('lecturer');
+  const hasAssistantLecturerRole = (): boolean => hasModuleRole('assistant_lecturer');
+  const hasTutorRole = (): boolean => hasModuleRole('tutor');
+  const hasStudentRole = (): boolean => hasModuleRole('student');
+  const hasStaffRole = (): boolean =>
+    hasLecturerRole() || hasAssistantLecturerRole() || hasTutorRole();
 
   const print = () => {
     console.group('%c[AuthContext State]', 'color: #4CAF50; font-weight: bold;');
@@ -219,6 +237,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAssistantLecturer,
         isTutor,
         isStudent,
+        isStaff,
+        hasLecturerRole,
+        hasAssistantLecturerRole,
+        hasTutorRole,
+        hasStudentRole,
+        hasStaffRole,
         print,
       }}
     >

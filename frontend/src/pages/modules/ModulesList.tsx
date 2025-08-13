@@ -13,12 +13,16 @@ import EditModal from '@/components/common/EditModal';
 import { message } from '@/utils/message';
 import dayjs from 'dayjs';
 import { useAuth } from '@/context/AuthContext';
+import { Space } from 'antd';
+import { useUI } from '@/context/UIContext';
+import ModuleListItem from '@/components/modules/ModuleListItem';
 
 const currentYear = new Date().getFullYear();
 
 const ModulesList = () => {
   const auth = useAuth();
   const navigate = useNavigate();
+  const { isSm } = useUI();
   const listRef = useRef<EntityListHandle>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -174,113 +178,106 @@ const ModulesList = () => {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <PageHeader title="Modules" description="All the modules in the COS department" />
+      <div className="flex-1 overflow-y-auto p-4">
+        <Space direction="vertical" size="middle" className="w-full">
+          <PageHeader title="Modules" description="All the modules in the COS department" />
 
-        <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard title="Total Modules" value={42} />
-          <StatCard title="Modules This Year" value={12} />
-          <StatCard title="Unique Years" value={6} />
-          <StatCard title="Avg Credits" value={18} />
-        </div>
-
-        <EntityList<Module>
-          ref={listRef}
-          name="Modules"
-          defaultViewMode={auth.isUser ? 'grid' : 'table'}
-          fetchItems={fetchModules}
-          getRowKey={(mod) => mod.id}
-          onRowClick={(mod) => navigate(`/modules/${mod.id}`)}
-          renderGridItem={(mod, actions) => (
-            <ModuleCard
-              key={mod.id}
-              module={mod}
-              isFavorite={false}
-              onToggleFavorite={() => {}}
-              showFavorite={false}
-              actions={actions}
-            />
+          {isSm && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard title="Total Modules" value={42} />
+              <StatCard title="Modules This Year" value={12} />
+              <StatCard title="Unique Years" value={6} />
+              <StatCard title="Avg Credits" value={18} />
+            </div>
           )}
-          // listMode
-          // renderListItem={(mod) => (
-          //   <List.Item
-          //     key={mod.id}
-          //     onClick={() => navigate(`/modules/${mod.id}`)}
-          //     className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          //   >
-          //     <List.Item.Meta
-          //       title={
-          //         <div className="flex justify-between items-center">
-          //           <span className="font-semibold">
-          //             {mod.code.replace(/([A-Za-z]+)(\d+)/, '$1 $2')} ({mod.year})
-          //           </span>
-          //           <ModuleCreditsTag credits={mod.credits} />
-          //         </div>
-          //       }
-          //       description={mod.description}
-          //     />
-          //   </List.Item>
-          // )}
-          columnToggleEnabled
-          actions={actions}
-          columns={[
-            {
-              title: 'ID',
-              dataIndex: 'id',
-              key: 'id',
-              sorter: { multiple: 0 },
-              defaultHidden: true,
-            },
-            {
-              title: 'Code',
-              dataIndex: 'code',
-              key: 'code',
-              sorter: { multiple: 1 },
-              render: (_: unknown, record: Module) =>
-                record.code.replace(/([A-Za-z]+)(\d+)/, '$1 $2'),
-            },
-            {
-              title: 'Year',
-              dataIndex: 'year',
-              key: 'year',
-              sorter: { multiple: 2 },
-              filters: Array.from({ length: 10 }, (_, i) => {
-                const year = String(currentYear - i);
-                return { text: year, value: year };
-              }),
-            },
-            {
-              title: 'Description',
-              dataIndex: 'description',
-              key: 'description',
-              sorter: { multiple: 3 },
-              defaultHidden: true,
-            },
-            {
-              title: 'Credits',
-              dataIndex: 'credits',
-              key: 'credits',
-              sorter: { multiple: 4 },
-              render: (_, record) => <ModuleCreditsTag credits={record.credits} />,
-            },
-            {
-              title: 'Created At',
-              dataIndex: 'created_at',
-              key: 'created_at',
-              sorter: { multiple: 5 },
-              defaultHidden: true,
-              render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
-            },
-            {
-              title: 'Updated At',
-              dataIndex: 'updated_at',
-              key: 'updated_at',
-              sorter: { multiple: 6 },
-              defaultHidden: true,
-              render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
-            },
-          ]}
-        />
+
+          <EntityList<Module>
+            ref={listRef}
+            name="Modules"
+            defaultViewMode={auth.isUser ? 'grid' : 'table'}
+            fetchItems={fetchModules}
+            getRowKey={(mod) => mod.id}
+            onRowClick={(mod) => navigate(`/modules/${mod.id}`)}
+            renderGridItem={(mod, actions) => (
+              <ModuleCard
+                key={mod.id}
+                module={mod}
+                isFavorite={false}
+                onToggleFavorite={() => {}}
+                showFavorite={false}
+                actions={actions}
+              />
+            )}
+            renderListItem={(m) => (
+              <ModuleListItem
+                module={m}
+                isFavorite={false}
+                onToggleFavorite={() => {}}
+                onClick={(mod) => navigate(`/modules/${mod.id}`)}
+                showFavorite
+              />
+            )}
+            columnToggleEnabled
+            actions={actions}
+            columns={[
+              {
+                title: 'ID',
+                dataIndex: 'id',
+                key: 'id',
+                sorter: { multiple: 0 },
+                defaultHidden: true,
+              },
+              {
+                title: 'Code',
+                dataIndex: 'code',
+                key: 'code',
+                sorter: { multiple: 1 },
+                render: (_: unknown, record: Module) =>
+                  record.code.replace(/([A-Za-z]+)(\d+)/, '$1 $2'),
+              },
+              {
+                title: 'Year',
+                dataIndex: 'year',
+                key: 'year',
+                sorter: { multiple: 2 },
+                filters: Array.from({ length: 10 }, (_, i) => {
+                  const year = String(currentYear - i);
+                  return { text: year, value: year };
+                }),
+              },
+              {
+                title: 'Description',
+                dataIndex: 'description',
+                key: 'description',
+                sorter: { multiple: 3 },
+                defaultHidden: true,
+              },
+              {
+                title: 'Credits',
+                dataIndex: 'credits',
+                key: 'credits',
+                sorter: { multiple: 4 },
+                render: (_, record) => <ModuleCreditsTag credits={record.credits} />,
+              },
+              {
+                title: 'Created At',
+                dataIndex: 'created_at',
+                key: 'created_at',
+                sorter: { multiple: 5 },
+                defaultHidden: true,
+                render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+              },
+              {
+                title: 'Updated At',
+                dataIndex: 'updated_at',
+                key: 'updated_at',
+                sorter: { multiple: 6 },
+                defaultHidden: true,
+                render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+              },
+            ]}
+          />
+        </Space>
 
         <CreateModal
           open={createOpen}

@@ -1,0 +1,8 @@
+export { default as ModuleCard } from './ModuleCard';
+export { default as ModuleCreditsTag } from './ModuleCreditsTag';
+export { default as ModuleHeader } from './ModuleHeader';
+export { default as ModuleRoleTag } from './ModuleRoleTag';
+export { default as ModuleStaffPanel } from './ModuleStaffPanel';
+export {default as MyModules} from "./MyModules";
+export {default as ModuleYearTag} from "./ModuleYearTag";
+export {default as ModuleListItem} from "./ModuleListItem";

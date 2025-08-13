@@ -13,7 +13,7 @@ import TicketStatusTag from '@/components/tickets/TicketStatusTag';
 import { closeTicket, openTicket } from '@/services/modules/assignments/tickets/put';
 import UserAvatar from '@/components/common/UserAvatar';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
-import { useMobilePageHeader } from '@/context/MobilePageHeaderContext';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -22,7 +22,7 @@ const TicketView = () => {
   const ticketId = Number(ticket_id);
   const module = useModule();
   const { assignment } = useAssignment();
-  const { setContent } = useMobilePageHeader();
+  const { setValue } = useViewSlot();
   const { setBreadcrumbLabel } = useBreadcrumbContext();
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -57,7 +57,7 @@ const TicketView = () => {
         ? `${ticket.title.slice(0, maxLength)}…`
         : ticket?.title || `Ticket #${ticket_id}`;
 
-    setContent(
+    setValue(
       <div className="flex items-center justify-between w-full gap-2">
         {/* Left: title + status tag */}
         <div className="flex items-center gap-2 min-w-0">

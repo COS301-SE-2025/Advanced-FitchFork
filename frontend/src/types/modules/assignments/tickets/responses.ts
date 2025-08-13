@@ -12,7 +12,7 @@ export type GetTicketsResponse = ApiResponse<{
 
 export type GetTicketResponse = ApiResponse<{
   ticket: Ticket;
-  user: Omit<User, "admin">;
+  user: User;
 }>;
 
 // ─────────────────────────────────────────────────────────────

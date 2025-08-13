@@ -84,7 +84,7 @@ const Appearance = () => {
   const { compact, setCompact, motion, setMotion } = useUI();
 
   return (
-    <div className="w-full max-w-6xl p-4 sm:p-6 space-y-12 bg-gray-50 dark:bg-gray-950">
+    <div className="w-full max-w-6xl space-y-12 bg-gray-50 dark:bg-gray-950">
       <PageHeader title="Appearance" description="Customize how the interface looks and feels." />
 
       <SettingsGroup

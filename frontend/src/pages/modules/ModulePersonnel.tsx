@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Segmented, Table, Transfer, Button, Input } from 'antd';
+import { Segmented, Table, Transfer, Button, Input, Typography } from 'antd';
 import type { Key } from 'react';
 import type { TablePaginationConfig, TableProps } from 'antd';
 import { MODULE_ROLES, type ModuleRole } from '@/types/modules';
@@ -16,6 +16,7 @@ import {
 } from '@/services/modules/personnel';
 import type { TableRowSelection } from 'antd/es/table/interface';
 import ModuleRoleTag, { roleLabels } from '@/components/modules/ModuleRoleTag';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 interface TableTransferItem {
   key: string;
@@ -30,6 +31,7 @@ const ModulePersonnel = () => {
   const { id } = useParams();
   const moduleId = Number(id);
   const auth = useAuth();
+  const { setValue } = useViewSlot();
 
   const [targetRole, setTargetRole] = useState<ModuleRole>('tutor');
   const [eligibleUsers, setEligibleUsers] = useState<TableTransferItem[]>([]);
@@ -43,6 +45,14 @@ const ModulePersonnel = () => {
   const availableRoles = useMemo(() => {
     return MODULE_ROLES.filter((r) => auth.user?.admin || r !== 'lecturer');
   }, [auth.user]);
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+        Personnel
+      </Typography.Text>,
+    );
+  }, []);
 
   const fetchEligibleUsers = async () => {
     const res = await getEligibleUsers(moduleId, {

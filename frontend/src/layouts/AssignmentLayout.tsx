@@ -11,6 +11,7 @@ import {
   Tag,
   Typography,
   Segmented,
+  Space,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -35,16 +36,17 @@ import type { AssignmentReadiness } from '@/types/modules/assignments';
 import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
 import AssignmentStatusTag from '@/components/assignments/AssignmentStatusTag';
 import EventBus from '@/utils/EventBus';
+import { useUI } from '@/context/UIContext';
 
 const { Title, Paragraph } = Typography;
 
 const AssignmentLayout = () => {
   const module = useModule();
+  const { assignment, readiness, refreshAssignment } = useAssignment();
   const auth = useAuth();
+  const { isMobile } = useUI();
   const navigate = useNavigate();
   const location = useLocation();
-
-  const { assignment, readiness, refreshAssignment } = useAssignment();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -56,6 +58,11 @@ const AssignmentLayout = () => {
   const isLecturerOrAdmin = auth.isLecturer(module.id) || auth.isAdmin;
   const isStudentOrTutor = auth.isStudent(module.id) || auth.isTutor(module.id);
   const showTabs = !auth.isStudent(module.id);
+
+  const isOnSubmissions =
+    location.pathname.startsWith(`${basePath}/submissions`) || location.pathname === `${basePath}`;
+
+  const showHeaderCard = !isMobile || (isMobile && isOnSubmissions);
 
   const segments = [
     {
@@ -78,16 +85,6 @@ const AssignmentLayout = () => {
             value: `${basePath}/files`,
             label: 'Files',
             disabled: !readiness?.config_present,
-          },
-          {
-            value: `${basePath}/memo-output`,
-            label: 'Memo Output',
-            disabled: !readiness?.config_present || !readiness?.tasks_present,
-          },
-          {
-            value: `${basePath}/mark-allocator`,
-            label: 'Mark Allocator',
-            disabled: !readiness?.memo_output_present,
           },
           { value: `${basePath}/config`, label: 'Config' },
           {
@@ -264,162 +261,164 @@ const AssignmentLayout = () => {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
-        <div className="bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-800 p-4 mb-0 hidden md:block">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
-            {/* Left section: Info */}
-            <div className="flex-1 space-y-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <Title
-                  level={3}
-                  className="!mb-0 !text-gray-900 dark:!text-gray-100 !leading-none !text-2xl"
-                >
-                  {assignment.name}
-                </Title>
+      <div className="flex-1 overflow-y-auto p-4">
+        <Space direction="vertical" size="middle" className="w-full">
+          {showHeaderCard && (
+            <div className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 mb-0 p-4 rounded-md border ">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
+                {/* Left section: Info */}
+                <div className="flex-1 space-y-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Title
+                      level={3}
+                      className="!mb-0 !text-gray-900 dark:!text-gray-100 !leading-none !text-2xl"
+                    >
+                      {assignment.name}
+                    </Title>
 
-                <div className="flex items-center">
-                  <AssignmentStatusTag status={assignment.status} />
+                    <div className="flex items-center">
+                      <AssignmentStatusTag status={assignment.status} />
+                    </div>
+
+                    {auth.isStudent(module.id) && (
+                      <Tag
+                        color="green"
+                        className="!text-xs !font-medium !h-6 !px-2 !flex items-center"
+                      >
+                        Best Mark: 85%
+                      </Tag>
+                    )}
+                  </div>
+
+                  {assignment.description?.length > 0 && (
+                    <Paragraph className="!text-sm !text-gray-600 dark:!text-gray-400">
+                      {assignment.description}
+                    </Paragraph>
+                  )}
+
+                  <Button
+                    type="link"
+                    onClick={handleDownloadSpec}
+                    icon={<DownloadOutlined />}
+                    size="small"
+                    className="!p-0"
+                  >
+                    Download Specification
+                  </Button>
                 </div>
 
-                {auth.isStudent(module.id) && (
-                  <Tag
-                    color="green"
-                    className="!text-xs !font-medium !h-6 !px-2 !flex items-center"
-                  >
-                    Best Mark: 85%
-                  </Tag>
-                )}
+                {/* Right section: Actions */}
+                <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
+                  {(!isSetupIncomplete || isStudentOrTutor) &&
+                    (isStudentOrTutor ? (
+                      <Button
+                        type="primary"
+                        onClick={() => setModalOpen(true)}
+                        loading={loading}
+                        className="w-full sm:w-auto"
+                      >
+                        Submit Assignment
+                      </Button>
+                    ) : (
+                      <Dropdown.Button
+                        menu={{ items: menuItems }}
+                        type="primary"
+                        disabled={loading}
+                        onClick={() => setModalOpen(true)}
+                        loading={loading}
+                        className="w-full sm:w-auto"
+                        rootClassName="!w-full [&>button:first-child]:w-full"
+                      >
+                        Submit Assignment
+                      </Dropdown.Button>
+                    ))}
+                </div>
               </div>
-
-              {assignment.description?.length > 0 && (
-                <Paragraph className="!text-sm !text-gray-600 dark:!text-gray-400">
-                  {assignment.description}
-                </Paragraph>
+              {showTabs && (
+                <div className=" hidden md:block mt-4">
+                  <Segmented
+                    options={segments}
+                    value={activeKey}
+                    onChange={(key) => navigate(key as string)}
+                    size="middle"
+                    block
+                    className="dark:!bg-gray-950"
+                  />
+                </div>
               )}
+            </div>
+          )}
+
+          {assignment.due_date && new Date() > new Date(assignment.due_date) && (
+            <Alert
+              message="Past Due Date - Practice submissions only"
+              description="Practice submissions won't be considered for your final mark."
+              type="warning"
+              showIcon
+              className="!mb-4"
+            />
+          )}
+
+          {isStudentOrTutor ? (
+            <Outlet />
+          ) : isSetupIncomplete && isLecturerOrAdmin ? (
+            <div className="flex flex-col items-center justify-center text-center bg-white dark:bg-gray-950 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-12 space-y-6">
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                Assignment setup incomplete
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400 max-w-xl">
+                This assignment is not yet ready for use. Please complete the setup process to
+                configure the necessary files, tasks, and settings before students can submit or
+                view it.
+              </p>
+              <div className="space-y-2 w-full max-w-2xl text-left">
+                {[
+                  { key: 'config_present', label: 'Configuration file' },
+                  { key: 'main_present', label: 'Main file' },
+                  { key: 'makefile_present', label: 'Makefile' },
+                  { key: 'memo_present', label: 'Memo file' },
+                  { key: 'tasks_present', label: 'Tasks' },
+                  { key: 'memo_output_present', label: 'Memo Output' },
+                  { key: 'mark_allocator_present', label: 'Mark Allocator' },
+                ].map((item) => {
+                  const complete = readiness?.[item.key as keyof AssignmentReadiness];
+                  return (
+                    <div
+                      key={item.key}
+                      className="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
+                    >
+                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                        {item.label}
+                      </span>
+
+                      <span
+                        className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
+                          complete
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                            : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                        }`}
+                      >
+                        {complete ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+                        {complete ? 'Complete' : 'Incomplete'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
 
               <Button
-                type="link"
-                onClick={handleDownloadSpec}
-                icon={<DownloadOutlined />}
-                size="small"
-                className="!p-0"
+                type="primary"
+                size="large"
+                onClick={() => setSetupOpen(true)}
+                loading={loading}
               >
-                Download Specification
+                Complete Setup
               </Button>
             </div>
-
-            {/* Right section: Actions */}
-            <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
-              {(!isSetupIncomplete || isStudentOrTutor) &&
-                (isStudentOrTutor ? (
-                  <Button
-                    type="primary"
-                    onClick={() => setModalOpen(true)}
-                    loading={loading}
-                    className="w-full sm:w-auto"
-                  >
-                    Submit Assignment
-                  </Button>
-                ) : (
-                  <Dropdown.Button
-                    menu={{ items: menuItems }}
-                    type="primary"
-                    disabled={loading}
-                    onClick={() => setModalOpen(true)}
-                    loading={loading}
-                    className="w-full sm:w-auto"
-                  >
-                    Submit Assignment
-                  </Dropdown.Button>
-                ))}
-            </div>
-          </div>
-        </div>
-
-        {assignment.due_date && new Date() > new Date(assignment.due_date) && (
-          <Alert
-            message="Past Due Date - Practice submissions only"
-            description="Practice submissions won't be considered for your final mark."
-            type="warning"
-            showIcon
-            className="!mb-4"
-          />
-        )}
-
-        {isStudentOrTutor ? (
-          <Outlet />
-        ) : isSetupIncomplete && isLecturerOrAdmin ? (
-          <div className="flex flex-col items-center justify-center text-center bg-white dark:bg-gray-950 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-12 space-y-6">
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-              Assignment setup incomplete
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 max-w-xl">
-              This assignment is not yet ready for use. Please complete the setup process to
-              configure the necessary files, tasks, and settings before students can submit or view
-              it.
-            </p>
-            <div className="space-y-2 w-full max-w-2xl text-left">
-              {[
-                { key: 'config_present', label: 'Configuration file' },
-                { key: 'main_present', label: 'Main file' },
-                { key: 'makefile_present', label: 'Makefile' },
-                { key: 'memo_present', label: 'Memo file' },
-                { key: 'tasks_present', label: 'Tasks' },
-                { key: 'memo_output_present', label: 'Memo Output' },
-                { key: 'mark_allocator_present', label: 'Mark Allocator' },
-              ].map((item) => {
-                const complete = readiness?.[item.key as keyof AssignmentReadiness];
-                return (
-                  <div
-                    key={item.key}
-                    className="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
-                  >
-                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                      {item.label}
-                    </span>
-
-                    <span
-                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
-                        complete
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                          : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                      }`}
-                    >
-                      {complete ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
-                      {complete ? 'Complete' : 'Incomplete'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <Button
-              type="primary"
-              size="large"
-              onClick={() => setSetupOpen(true)}
-              loading={loading}
-            >
-              Complete Setup
-            </Button>
-          </div>
-        ) : (
-          <>
-            {showTabs && (
-              <div className="!m-4 hidden md:block">
-                <Segmented
-                  options={segments}
-                  value={activeKey}
-                  onChange={(key) => navigate(key as string)}
-                  size="middle"
-                  block
-                  className="dark:!bg-gray-950"
-                />
-              </div>
-            )}
-
+          ) : (
             <Outlet />
-          </>
-        )}
+          )}
+        </Space>
 
         <AssignmentSetup
           open={setupOpen}

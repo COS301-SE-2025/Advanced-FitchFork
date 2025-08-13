@@ -43,7 +43,7 @@ const SidebarContent = ({
   ];
 
   return (
-    <div className="bg-white dark:bg-gray-950 h-full flex flex-col justify-between">
+    <div className="bg-white dark:bg-gray-900 h-full flex flex-col justify-between">
       <div>
         <div
           className="py-4 mb-4 flex items-center justify-center cursor-pointer"

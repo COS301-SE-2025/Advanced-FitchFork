@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import {
@@ -42,11 +42,15 @@ import ConfirmModal from '@/components/utils/ConfirmModal';
 import { useAuth } from '@/context/AuthContext';
 import CreateModal from '@/components/common/CreateModal';
 import AssignmentSetup from './steps/AssignmentSetup';
+import { Space, Typography } from 'antd';
+import { useViewSlot } from '@/context/ViewSlotContext';
+import AssignmentListItem from '@/components/assignments/AssignmentListItem';
 
 const AssignmentsList = () => {
   const auth = useAuth();
   const module = useModule();
   const navigate = useNavigate();
+  const { setValue } = useViewSlot();
 
   const listRef = useRef<EntityListHandle>(null);
 
@@ -59,6 +63,14 @@ const AssignmentsList = () => {
 
   const isAdminOrLecturer = auth.isAdmin || auth.isLecturer(module.id);
   const isStudent = auth.isStudent(module.id);
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+        Assignments
+      </Typography.Text>,
+    );
+  }, []);
 
   const fetchAssignments = async ({
     page,
@@ -176,164 +188,172 @@ const AssignmentsList = () => {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <PageHeader title="Assignments" description={`All the assignments for ${module.code}`} />
+      <div className="flex-1 overflow-y-auto p-4">
+        <Space direction="vertical" size="middle" className="w-full">
+          <PageHeader title="Assignments" description={`All the assignments for ${module.code}`} />
 
-        <EntityList<Assignment>
-          ref={listRef}
-          name="Assignments"
-          defaultViewMode={isStudent ? 'grid' : 'table'}
-          fetchItems={fetchAssignments}
-          getRowKey={(a) => a.id}
-          onRowClick={(a) => navigate(`/modules/${module.id}/assignments/${a.id}/submissions`)}
-          renderGridItem={(assignment, actions) => (
-            <AssignmentCard key={assignment.id} assignment={assignment} actions={actions} />
-          )}
-          columnToggleEnabled
-          columns={[
-            { title: 'ID', dataIndex: 'id', key: 'id', defaultHidden: true },
-            { title: 'Name', dataIndex: 'name', key: 'name', sorter: { multiple: 1 } },
-            {
-              title: 'Description',
-              dataIndex: 'description',
-              key: 'description',
-              defaultHidden: true,
-            },
-            {
-              title: 'Type',
-              dataIndex: 'assignment_type',
-              key: 'assignment_type',
-              sorter: { multiple: 2 },
-              filters: ASSIGNMENT_TYPES.map((t) => ({ text: t, value: t })),
-              render: (_, record) => <AssignmentTypeTag type={record.assignment_type} />,
-            },
-            {
-              title: 'Available From',
-              dataIndex: 'available_from',
-              key: 'available_from',
-              sorter: { multiple: 3 },
-              render: (_, r) => dayjs(r.available_from).format('YYYY-MM-DD HH:mm'),
-            },
-            {
-              title: 'Due Date',
-              dataIndex: 'due_date',
-              key: 'due_date',
-              sorter: { multiple: 4 },
-              render: (_, r) => dayjs(r.due_date).format('YYYY-MM-DD HH:mm'),
-            },
-            {
-              title: 'Status',
-              key: 'status',
-              render: (_, r) => <AssignmentStatusTag status={r.status} />,
-            },
-          ]}
-          actions={
-            isAdminOrLecturer
-              ? {
-                  control: [
-                    {
-                      key: 'create',
-                      label: 'Add Assignment',
-                      icon: <PlusOutlined />,
-                      isPrimary: true,
-                      handler: () => setSetupOpen(true),
-                    },
-                  ],
-                  entity: (entity) => [
-                    {
-                      key: 'edit',
-                      label: 'Edit',
-                      icon: <EditOutlined />,
-                      handler: () => {
-                        setEditingItem(entity);
-                        setEditOpen(true);
+          <EntityList<Assignment>
+            ref={listRef}
+            name="Assignments"
+            defaultViewMode={isStudent ? 'grid' : 'table'}
+            fetchItems={fetchAssignments}
+            getRowKey={(a) => a.id}
+            onRowClick={(a) => navigate(`/modules/${module.id}/assignments/${a.id}/submissions`)}
+            renderGridItem={(assignment, actions) => (
+              <AssignmentCard key={assignment.id} assignment={assignment} actions={actions} />
+            )}
+            renderListItem={(assignment) => (
+              <AssignmentListItem
+                assignment={assignment}
+                onClick={(a) => navigate(`/modules/${module.id}/assignments/${a.id}`)}
+              />
+            )}
+            columnToggleEnabled
+            columns={[
+              { title: 'ID', dataIndex: 'id', key: 'id', defaultHidden: true },
+              { title: 'Name', dataIndex: 'name', key: 'name', sorter: { multiple: 1 } },
+              {
+                title: 'Description',
+                dataIndex: 'description',
+                key: 'description',
+                defaultHidden: true,
+              },
+              {
+                title: 'Type',
+                dataIndex: 'assignment_type',
+                key: 'assignment_type',
+                sorter: { multiple: 2 },
+                filters: ASSIGNMENT_TYPES.map((t) => ({ text: t, value: t })),
+                render: (_, record) => <AssignmentTypeTag type={record.assignment_type} />,
+              },
+              {
+                title: 'Available From',
+                dataIndex: 'available_from',
+                key: 'available_from',
+                sorter: { multiple: 3 },
+                render: (_, r) => dayjs(r.available_from).format('YYYY-MM-DD HH:mm'),
+              },
+              {
+                title: 'Due Date',
+                dataIndex: 'due_date',
+                key: 'due_date',
+                sorter: { multiple: 4 },
+                render: (_, r) => dayjs(r.due_date).format('YYYY-MM-DD HH:mm'),
+              },
+              {
+                title: 'Status',
+                key: 'status',
+                render: (_, r) => <AssignmentStatusTag status={r.status} />,
+              },
+            ]}
+            actions={
+              isAdminOrLecturer
+                ? {
+                    control: [
+                      {
+                        key: 'create',
+                        label: 'Add Assignment',
+                        icon: <PlusOutlined />,
+                        isPrimary: true,
+                        handler: () => setSetupOpen(true),
                       },
-                    },
-                    {
-                      key: 'delete',
-                      label: 'Delete',
-                      icon: <DeleteOutlined />,
-                      confirm: true,
-                      handler: ({ refresh }) => handleDelete(entity, refresh),
-                    },
-                    ...(entity.status === 'ready' ||
-                    entity.status === 'closed' ||
-                    entity.status === 'archived'
-                      ? [
-                          {
-                            key: 'open',
-                            label: 'Open',
-                            icon: <UnlockOutlined />,
-                            handler: async ({ refresh }: { refresh: () => void }) => {
-                              const res = await openAssignment(module.id, entity.id);
-                              res.success
-                                ? message.success(`${entity.name} opened`)
-                                : message.error(res.message);
-                              refresh();
-                            },
-                          },
-                        ]
-                      : entity.status === 'open'
+                    ],
+                    entity: (entity) => [
+                      {
+                        key: 'edit',
+                        label: 'Edit',
+                        icon: <EditOutlined />,
+                        handler: () => {
+                          setEditingItem(entity);
+                          setEditOpen(true);
+                        },
+                      },
+                      {
+                        key: 'delete',
+                        label: 'Delete',
+                        icon: <DeleteOutlined />,
+                        confirm: true,
+                        handler: ({ refresh }) => handleDelete(entity, refresh),
+                      },
+                      ...(entity.status === 'ready' ||
+                      entity.status === 'closed' ||
+                      entity.status === 'archived'
                         ? [
                             {
-                              key: 'close',
-                              label: 'Close',
-                              icon: <LockOutlined />,
+                              key: 'open',
+                              label: 'Open',
+                              icon: <UnlockOutlined />,
                               handler: async ({ refresh }: { refresh: () => void }) => {
-                                const res = await closeAssignment(module.id, entity.id);
+                                const res = await openAssignment(module.id, entity.id);
                                 res.success
-                                  ? message.success(`${entity.name} closed`)
+                                  ? message.success(`${entity.name} opened`)
                                   : message.error(res.message);
                                 refresh();
                               },
                             },
                           ]
+                        : entity.status === 'open'
+                          ? [
+                              {
+                                key: 'close',
+                                label: 'Close',
+                                icon: <LockOutlined />,
+                                handler: async ({ refresh }: { refresh: () => void }) => {
+                                  const res = await closeAssignment(module.id, entity.id);
+                                  res.success
+                                    ? message.success(`${entity.name} closed`)
+                                    : message.error(res.message);
+                                  refresh();
+                                },
+                              },
+                            ]
+                          : []),
+                      ...(entity.status === 'setup'
+                        ? [
+                            {
+                              key: 'setup',
+                              label: 'Setup',
+                              isPrimary: true,
+                              icon: <ToolOutlined />,
+                              handler: () => setSetupAssignmentId(entity.id),
+                            },
+                          ]
                         : []),
-                    ...(entity.status === 'setup'
-                      ? [
-                          {
-                            key: 'setup',
-                            label: 'Setup',
-                            isPrimary: true,
-                            icon: <ToolOutlined />,
-                            handler: () => setSetupAssignmentId(entity.id),
-                          },
-                        ]
-                      : []),
-                  ],
-                  bulk: [
-                    {
-                      key: 'bulk-delete',
-                      label: 'Bulk Delete',
-                      icon: <DeleteOutlined />,
-                      handler: () => {
-                        const selected = listRef.current?.getSelectedRowKeys() ?? [];
-                        if (selected.length === 0) {
-                          message.warning('No assignments selected');
-                          return;
-                        }
-                        setConfirmOpen(true);
+                    ],
+                    bulk: [
+                      {
+                        key: 'bulk-delete',
+                        label: 'Bulk Delete',
+                        icon: <DeleteOutlined />,
+                        handler: () => {
+                          const selected = listRef.current?.getSelectedRowKeys() ?? [];
+                          if (selected.length === 0) {
+                            message.warning('No assignments selected');
+                            return;
+                          }
+                          setConfirmOpen(true);
+                        },
                       },
-                    },
-                    {
-                      key: 'bulk-edit',
-                      label: 'Bulk Edit',
-                      icon: <EditOutlined />,
-                      isPrimary: true,
-                      handler: () => {
-                        const selected = listRef.current?.getSelectedRowKeys() ?? [];
-                        if (selected.length === 0) {
-                          message.warning('No assignments selected');
-                          return;
-                        }
-                        setBulkEditOpen(true);
+                      {
+                        key: 'bulk-edit',
+                        label: 'Bulk Edit',
+                        icon: <EditOutlined />,
+                        isPrimary: true,
+                        handler: () => {
+                          const selected = listRef.current?.getSelectedRowKeys() ?? [];
+                          if (selected.length === 0) {
+                            message.warning('No assignments selected');
+                            return;
+                          }
+                          setBulkEditOpen(true);
+                        },
                       },
-                    },
-                  ],
-                }
-              : undefined
-          }
-        />
+                    ],
+                  }
+                : undefined
+            }
+          />
+        </Space>
 
         <CreateModal
           open={setupOpen}

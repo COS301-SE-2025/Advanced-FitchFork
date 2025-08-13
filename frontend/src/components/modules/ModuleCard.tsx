@@ -53,9 +53,9 @@ const ModuleCard = ({
     <Card
       hoverable
       onClick={handleClick}
-      className="w-full cursor-pointer dark:bg-neutral-800 dark:border-neutral-700"
+      className="w-full cursor-pointer !bg-white dark:!bg-gray-900 !border-gray-200 dark:!border-gray-800 "
       cover={
-        <div className="h-[140px] !flex items-center justify-center bg-gray-100 dark:bg-neutral-700 relative">
+        <div className="h-[140px] !flex items-center justify-center !border-gray-200 bg-gray-100 dark:bg-neutral-700 relative">
           <BookOutlined className="text-5xl !text-gray-400 dark:!text-neutral-400" />
           {showFavorite && (
             <Tooltip title={isFavorite ? 'Unfavorite' : 'Favorite'}>
