@@ -56,7 +56,7 @@ const ModuleLayout = () => {
       {!isMobile && (
         <Sider
           width={240}
-          className="!bg-white dark:!bg-gray-900 border-r border-gray-200 dark:border-gray-800"
+          className="!bg-white dark:!bg-gray-950 border-r border-gray-200 dark:border-gray-800"
         >
           <div className="flex items-center gap-2 px-4 py-5 border-b border-gray-200 dark:border-gray-800">
             <Title level={5} className="!mb-0">

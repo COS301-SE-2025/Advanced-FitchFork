@@ -1,6 +1,5 @@
 import { Card, Avatar, Typography } from 'antd';
 import { MessageOutlined } from '@ant-design/icons';
-import dayjs from 'dayjs';
 import type { Ticket } from '@/types/modules/assignments/tickets';
 import TicketStatusTag from './TicketStatusTag';
 
@@ -39,10 +38,6 @@ const TicketCard = ({ ticket, actions, onClick }: Props) => {
             <Paragraph ellipsis={{ rows: 2 }} className="mb-1">
               {ticket.description || 'No description available.'}
             </Paragraph>
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              <div>Created: {dayjs(ticket.created_at).format('YYYY-MM-DD HH:mm')}</div>
-              <div>Updated: {dayjs(ticket.updated_at).format('YYYY-MM-DD HH:mm')}</div>
-            </div>
           </div>
         }
       />

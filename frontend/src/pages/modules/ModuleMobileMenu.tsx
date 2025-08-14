@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import { ModuleHeader } from '@/components/modules';
+import { formatModuleCode } from '@/utils/modules';
 
 const ModuleMobileMenu = () => {
   const navigate = useNavigate();
@@ -25,7 +26,7 @@ const ModuleMobileMenu = () => {
   useEffect(() => {
     setValue(
       <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
-        {module.code} ({module.year})
+        {formatModuleCode(module.code)}
       </Typography.Text>,
     );
   }, [module]);

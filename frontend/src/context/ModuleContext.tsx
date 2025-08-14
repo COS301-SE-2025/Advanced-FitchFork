@@ -1,4 +1,3 @@
-// src/context/ModuleContext.tsx
 import { createContext, useContext } from 'react';
 import type { User } from '@/types/users';
 import type { Module } from '@/types/modules';

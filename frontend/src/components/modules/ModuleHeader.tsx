@@ -1,5 +1,7 @@
-import { Typography, Tag, Space, Divider } from 'antd';
+import { Typography, Space, Divider } from 'antd';
 import type { Module } from '@/types/modules';
+import { formatModuleCode } from '@/utils/modules';
+import ModuleCreditsTag from './ModuleCreditsTag';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -12,14 +14,13 @@ const ModuleHeader = ({ module }: ModuleHeaderProps) => {
     <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4 sm:p-6">
       {/* Top: Code + Name */}
       <Title level={3} className="!mb-1">
-        {module.code} · {module.description}
+        {formatModuleCode(module.code)} · {module.description}
       </Title>
 
       {/* Meta Info */}
       <Space size="middle" className="flex-wrap text-sm text-gray-600">
         <Text type="secondary">Academic Year: {module.year}</Text>
-        <Tag color="blue">Semester 2</Tag>
-        <Tag color="geekblue">{module.credits} Credits</Tag>
+        <ModuleCreditsTag credits={module.credits} />
       </Space>
 
       <Divider className="!my-4" />

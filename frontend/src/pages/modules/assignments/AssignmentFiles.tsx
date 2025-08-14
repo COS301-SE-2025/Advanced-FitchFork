@@ -6,12 +6,12 @@ import { useAssignment } from '@/context/AssignmentContext';
 import { useModule } from '@/context/ModuleContext';
 import { downloadAssignmentFile, uploadAssignmentFile } from '@/services/modules/assignments';
 
-import type { AssignmentFile, FileType } from '@/types/modules/assignments';
+import type { AssignmentFile, AssignmentFileType } from '@/types/modules/assignments';
 import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Text } = Typography;
 
-const fileTypeLabels: Record<FileType, string> = {
+const fileTypeLabels: Record<AssignmentFileType, string> = {
   main: 'Main File',
   makefile: 'Makefile',
   memo: 'Memo File',
@@ -25,7 +25,7 @@ const AssignmentFiles = () => {
   const module = useModule();
   const { setValue } = useViewSlot();
 
-  const [selectedType, setSelectedType] = useState<FileType>('main');
+  const [selectedType, setSelectedType] = useState<AssignmentFileType>('main');
   const [files, setFiles] = useState<AssignmentFile[]>(assignment.files ?? []);
 
   useEffect(() => {
@@ -72,7 +72,7 @@ const AssignmentFiles = () => {
         </Title>
         <Select
           value={selectedType}
-          onChange={(val) => setSelectedType(val as FileType)}
+          onChange={(val) => setSelectedType(val as AssignmentFileType)}
           size="middle"
           style={{ width: 'auto' }}
           popupMatchSelectWidth={false}

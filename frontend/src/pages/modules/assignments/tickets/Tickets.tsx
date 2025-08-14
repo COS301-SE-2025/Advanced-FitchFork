@@ -135,16 +135,13 @@ const Tickets = () => {
         columnToggleEnabled
         columns={[
           { title: 'ID', dataIndex: 'id', key: 'id', defaultHidden: true },
-
           { title: 'Title', dataIndex: 'title', key: 'title' },
-
           {
             title: 'Description',
             dataIndex: 'description',
             key: 'description',
             defaultHidden: true,
           },
-
           {
             title: 'Status',
             dataIndex: 'status',
@@ -153,7 +150,6 @@ const Tickets = () => {
             filters: TICKET_STATUSES.map((s) => ({ text: s, value: s })),
             render: (v) => <TicketStatusTag status={v} />,
           },
-
           {
             title: 'Created At',
             dataIndex: 'created_at',

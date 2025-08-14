@@ -1,8 +1,11 @@
-import { List, Avatar, Tag, Typography, Tooltip } from 'antd';
+import { List, Avatar, Typography, Tooltip } from 'antd';
 import { BookOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { useAuth } from '@/context/AuthContext';
 import type { Module } from '@/types/modules';
 import React from 'react';
+import { formatModuleCode } from '@/utils/modules';
+import ModuleRoleTag from './ModuleRoleTag';
+import ModuleYearTag from './ModuleYearTag';
 
 const { Paragraph } = Typography;
 
@@ -12,22 +15,8 @@ interface Props {
   onToggleFavorite: (moduleId: number) => void;
   showFavorite?: boolean;
   onClick?: (m: Module) => void;
-  actions?: React.ReactNode[]; // if you want per-entity actions rendered externally
+  actions?: React.ReactNode[];
 }
-
-const roleColorMap = {
-  student: 'green',
-  tutor: 'orange',
-  lecturer: 'purple',
-  assistant_lecturer: 'pink',
-} as const;
-
-const roleLabelMap = {
-  student: 'Enrolled',
-  tutor: 'Tutoring',
-  lecturer: 'Lecturing',
-  assistant_lecturer: 'Assistant',
-} as const;
 
 const ModuleListItem: React.FC<Props> = ({
   module,
@@ -56,11 +45,13 @@ const ModuleListItem: React.FC<Props> = ({
         avatar={<Avatar icon={<BookOutlined />} style={{ backgroundColor: '#1890ff' }} />}
         title={
           <div className="flex items-center gap-2">
-            <span className="text-black dark:text-white font-medium">{module.code}</span>
+            <span className="text-black dark:text-white font-medium">
+              {formatModuleCode(module.code)}
+            </span>
 
             <div className="ml-auto flex items-center gap-1">
-              {role && <Tag color={roleColorMap[role]}>{roleLabelMap[role]}</Tag>}
-              <Tag color="blue">{module.year}</Tag>
+              {role && <ModuleRoleTag role={role} />}
+              <ModuleYearTag year={module.year} />
 
               {showFavorite && (
                 <Tooltip title={isFavorite ? 'Unfavorite' : 'Favorite'}>

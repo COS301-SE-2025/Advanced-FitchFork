@@ -123,7 +123,7 @@ export default function SubmissionsList() {
       dataIndex: 'attempt',
       key: 'attempt',
       sorter: { multiple: 2 },
-      render: (attempt) => <Tag color="blue">#{attempt}</Tag>,
+      render: (v) => <Tag color="blue">#{v}</Tag>,
     },
     { title: 'Filename', dataIndex: 'filename', key: 'filename', defaultHidden: true },
     {
@@ -131,15 +131,15 @@ export default function SubmissionsList() {
       dataIndex: 'is_practice',
       key: 'is_practice',
       defaultHidden: true,
-      render: (val) => (val ? <Tag color="gold">Yes</Tag> : <Tag>No</Tag>),
+      render: (v) => (v ? <Tag color="gold">Yes</Tag> : <Tag>No</Tag>),
     },
     {
       title: 'Mark (%)',
       key: 'percentageMark',
       sorter: { multiple: 3 },
-      render: (_, record) =>
-        record.status === 'Graded' && typeof record.percentageMark === 'number' ? (
-          <Tag color={getMarkColor(record.percentageMark)}>{record.percentageMark}%</Tag>
+      render: (_, r) =>
+        r.status === 'Graded' && typeof r.percentageMark === 'number' ? (
+          <Tag color={getMarkColor(r.percentageMark)}>{r.percentageMark}%</Tag>
         ) : (
           <Tag color="default">Not marked</Tag>
         ),
@@ -149,21 +149,22 @@ export default function SubmissionsList() {
       dataIndex: 'is_late',
       key: 'is_late',
       defaultHidden: true,
-      render: (val) => (val ? <Tag color="red">Yes</Tag> : <Tag>On Time</Tag>),
+      render: (v) => (v ? <Tag color="red">Yes</Tag> : <Tag>On Time</Tag>),
     },
     {
       title: 'Created At',
       dataIndex: 'created_at',
       key: 'created_at',
+      sorter: { multiple: 4 },
       defaultHidden: true,
-      render: (value) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+      render: (v) => dayjs(v).format('YYYY-MM-DD HH:mm'),
     },
     {
       title: 'Updated At',
       dataIndex: 'updated_at',
       key: 'updated_at',
       defaultHidden: true,
-      render: (value) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+      render: (v) => dayjs(v).format('YYYY-MM-DD HH:mm'),
     },
   ];
 

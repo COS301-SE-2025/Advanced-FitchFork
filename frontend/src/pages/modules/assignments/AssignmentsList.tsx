@@ -202,6 +202,7 @@ const AssignmentsList = () => {
             renderGridItem={(assignment, actions) => (
               <AssignmentCard key={assignment.id} assignment={assignment} actions={actions} />
             )}
+            listMode={auth.isStudent(module.id) || auth.isTutor(module.id)}
             renderListItem={(assignment) => (
               <AssignmentListItem
                 assignment={assignment}
@@ -216,34 +217,51 @@ const AssignmentsList = () => {
                 title: 'Description',
                 dataIndex: 'description',
                 key: 'description',
+                sorter: { multiple: 2 },
                 defaultHidden: true,
               },
               {
                 title: 'Type',
                 dataIndex: 'assignment_type',
                 key: 'assignment_type',
-                sorter: { multiple: 2 },
+                sorter: { multiple: 3 },
                 filters: ASSIGNMENT_TYPES.map((t) => ({ text: t, value: t })),
-                render: (_, record) => <AssignmentTypeTag type={record.assignment_type} />,
+                render: (_, r) => <AssignmentTypeTag type={r.assignment_type} />,
               },
               {
                 title: 'Available From',
                 dataIndex: 'available_from',
                 key: 'available_from',
-                sorter: { multiple: 3 },
+                sorter: { multiple: 4 },
                 render: (_, r) => dayjs(r.available_from).format('YYYY-MM-DD HH:mm'),
               },
               {
                 title: 'Due Date',
                 dataIndex: 'due_date',
                 key: 'due_date',
-                sorter: { multiple: 4 },
+                sorter: { multiple: 5 },
                 render: (_, r) => dayjs(r.due_date).format('YYYY-MM-DD HH:mm'),
               },
               {
                 title: 'Status',
                 key: 'status',
                 render: (_, r) => <AssignmentStatusTag status={r.status} />,
+              },
+              {
+                title: 'Created At',
+                dataIndex: 'created_at',
+                key: 'created_at',
+                sorter: { multiple: 6 },
+                defaultHidden: true,
+                render: (_, r) => dayjs(r.created_at).format('YYYY-MM-DD HH:mm'),
+              },
+              {
+                title: 'Updated At',
+                dataIndex: 'updated_at',
+                key: 'updated_at',
+                sorter: { multiple: 7 },
+                defaultHidden: true,
+                render: (_, r) => dayjs(r.updated_at).format('YYYY-MM-DD HH:mm'),
               },
             ]}
             actions={

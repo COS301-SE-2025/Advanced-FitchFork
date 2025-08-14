@@ -84,88 +84,101 @@ const Appearance = () => {
   const { compact, setCompact, motion, setMotion } = useUI();
 
   return (
-    <div className="w-full max-w-6xl space-y-12 bg-gray-50 dark:bg-gray-950">
-      <PageHeader title="Appearance" description="Customize how the interface looks and feels." />
+    <div className="bg-gray-50 dark:bg-gray-950 h-full flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="space-y-12  max-w-6xl">
+          <PageHeader
+            title="Appearance"
+            description="Customize how the interface looks and feels."
+          />
 
-      <SettingsGroup
-        title="Theme"
-        description="Choose between light and dark mode or follow your system preference."
-      >
-        <div className="flex gap-4">
-          <ThemeOption
-            value="system"
-            selected={mode === 'system'}
-            onClick={() => setMode('system')}
+          <SettingsGroup
+            title="Theme"
+            description="Choose between light and dark mode or follow your system preference."
           >
-            <SystemWindow />
-          </ThemeOption>
-
-          <ThemeOption value="light" selected={mode === 'light'} onClick={() => setMode('light')}>
-            <FakeWindow variant="light" />
-          </ThemeOption>
-
-          <ThemeOption value="dark" selected={mode === 'dark'} onClick={() => setMode('dark')}>
-            <FakeWindow variant="dark" />
-          </ThemeOption>
-        </div>
-      </SettingsGroup>
-      <Divider />
-      <SettingsGroup
-        title="Interface Density"
-        description="Adjust spacing and sizing for a more comfortable experience."
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {[
-            { key: false, label: 'Comfortable', icon: ColumnHeightOutlined },
-            { key: true, label: 'Compact', icon: CompressOutlined },
-          ].map(({ key, label, icon: Icon }) => {
-            const isSelected = compact === key;
-            return (
-              <div
-                key={String(key)}
-                onClick={() => setCompact(key)}
-                className={`cursor-pointer p-4 rounded-xl border transition ${
-                  isSelected
-                    ? 'border-blue-500 ring-2 ring-blue-500'
-                    : 'border-gray-200 dark:border-gray-800'
-                } hover:bg-gray-100 dark:hover:bg-gray-800`}
+            <div className="flex gap-4">
+              <ThemeOption
+                value="system"
+                selected={mode === 'system'}
+                onClick={() => setMode('system')}
               >
-                <div className="flex items-center gap-3">
-                  <Icon className="text-lg" />
-                  <div>
-                    <div className="text-sm font-semibold">{label}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {key
-                        ? 'Condensed layout to fit more info.'
-                        : 'Spacious layout with room to breathe.'}
+                <SystemWindow />
+              </ThemeOption>
+
+              <ThemeOption
+                value="light"
+                selected={mode === 'light'}
+                onClick={() => setMode('light')}
+              >
+                <FakeWindow variant="light" />
+              </ThemeOption>
+
+              <ThemeOption value="dark" selected={mode === 'dark'} onClick={() => setMode('dark')}>
+                <FakeWindow variant="dark" />
+              </ThemeOption>
+            </div>
+          </SettingsGroup>
+          <Divider />
+          <SettingsGroup
+            title="Interface Density"
+            description="Adjust spacing and sizing for a more comfortable experience."
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[
+                { key: false, label: 'Comfortable', icon: ColumnHeightOutlined },
+                { key: true, label: 'Compact', icon: CompressOutlined },
+              ].map(({ key, label, icon: Icon }) => {
+                const isSelected = compact === key;
+                return (
+                  <div
+                    key={String(key)}
+                    onClick={() => setCompact(key)}
+                    className={`cursor-pointer p-4 rounded-xl border transition ${
+                      isSelected
+                        ? 'border-blue-500 ring-2 ring-blue-500'
+                        : 'border-gray-200 dark:border-gray-800'
+                    } hover:bg-gray-100 dark:hover:bg-gray-800`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className="text-lg" />
+                      <div>
+                        <div className="text-sm font-semibold">{label}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {key
+                            ? 'Condensed layout to fit more info.'
+                            : 'Spacious layout with room to breathe.'}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                );
+              })}
+            </div>
+          </SettingsGroup>
+          <Divider />
+          <SettingsGroup
+            title="Animations"
+            description="Enable or disable interface animations and transitions."
+          >
+            <div
+              onClick={() => setMotion(!motion)}
+              className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition border ${
+                motion
+                  ? 'border-blue-500 ring-2 ring-blue-500'
+                  : 'border-gray-200 dark:border-gray-800'
+              } hover:bg-gray-100 dark:hover:bg-gray-800`}
+            >
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold">Enable animations</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Smooth transitions and UI feedback.
+                </span>
               </div>
-            );
-          })}
+              <Switch checked={motion} onChange={setMotion} />
+            </div>
+          </SettingsGroup>
         </div>
-      </SettingsGroup>
-      <Divider />
-      <SettingsGroup
-        title="Animations"
-        description="Enable or disable interface animations and transitions."
-      >
-        <div
-          onClick={() => setMotion(!motion)}
-          className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition border ${
-            motion ? 'border-blue-500 ring-2 ring-blue-500' : 'border-gray-200 dark:border-gray-800'
-          } hover:bg-gray-100 dark:hover:bg-gray-800`}
-        >
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold">Enable animations</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Smooth transitions and UI feedback.
-            </span>
-          </div>
-          <Switch checked={motion} onChange={setMotion} />
-        </div>
-      </SettingsGroup>
+      </div>
     </div>
   );
 };

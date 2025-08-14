@@ -27,7 +27,11 @@ import { useAssignment } from '@/context/AssignmentContext';
 
 import { message } from '@/utils/message';
 
-import { closeAssignment, openAssignment } from '@/services/modules/assignments';
+import {
+  closeAssignment,
+  downloadAssignmentFile,
+  openAssignment,
+} from '@/services/modules/assignments';
 import { generateMemoOutput } from '@/services/modules/assignments/memo-output';
 import { generateMarkAllocator } from '@/services/modules/assignments/mark-allocator';
 import { submitAssignment } from '@/services/modules/assignments/submissions/post';
@@ -53,6 +57,7 @@ const AssignmentLayout = () => {
   const [isPractice, setIsPractice] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [downloadingSpec, setDownloadingSpec] = useState(false);
 
   const basePath = `/modules/${module.id}/assignments/${assignment.id}`;
   const isLecturerOrAdmin = auth.isLecturer(module.id) || auth.isAdmin;
@@ -204,9 +209,27 @@ const AssignmentLayout = () => {
     }
   };
 
-  // TODO: Implement download of assignment specification file
-  const handleDownloadSpec = () => {
-    message.info('Download Specification: feature not yet implemented.');
+  const handleDownloadSpec = async () => {
+    const specFile = assignment.files?.find((f) => f.file_type === 'spec');
+
+    if (!specFile) {
+      message.error('No specification file found for this assignment.');
+      return;
+    }
+
+    setDownloadingSpec(true);
+    const hide = message.loading('Starting specification download...');
+
+    try {
+      await downloadAssignmentFile(module.id, assignment.id, specFile.id);
+      // apiDownload should trigger the browser download; nothing else to do here
+      message.success('Download started');
+    } catch (e) {
+      message.error('Failed to download specification');
+    } finally {
+      hide();
+      setDownloadingSpec(false);
+    }
   };
 
   const menuItems: MenuProps['items'] = [
@@ -296,18 +319,23 @@ const AssignmentLayout = () => {
                     </Paragraph>
                   )}
 
-                  <Button
-                    type="link"
-                    onClick={handleDownloadSpec}
-                    icon={<DownloadOutlined />}
-                    size="small"
-                    className="!p-0"
-                  >
-                    Download Specification
-                  </Button>
+                  {assignment.files?.some((f) => f.file_type === 'spec') && (
+                    <Button
+                      type="link"
+                      onClick={handleDownloadSpec}
+                      icon={<DownloadOutlined />}
+                      size="small"
+                      className="!p-0"
+                      loading={downloadingSpec}
+                      disabled={downloadingSpec}
+                    >
+                      Download Specification
+                    </Button>
+                  )}
                 </div>
 
                 {/* Right section: Actions */}
+
                 <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
                   {(!isSetupIncomplete || isStudentOrTutor) &&
                     (isStudentOrTutor ? (

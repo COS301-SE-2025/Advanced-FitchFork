@@ -61,6 +61,7 @@ import AssignmentMobileMenu from './pages/modules/assignments/AssignmentMobileMe
 import ModuleMobileMenu from './pages/modules/ModuleMobileMenu';
 import ConfigMobileMenu from './pages/modules/assignments/config/ConfigMobileMenu';
 import SubmissionsList from './pages/modules/assignments/submissions/SubmissionsList';
+import SettingsMobileMenu from './pages/settings/SettingsMobileMenu';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -96,7 +97,10 @@ export default function App() {
             <Route path="/chat" element={<Chat />} />
 
             <Route path="/settings" element={<SettingsLayout />}>
-              <Route index element={<Navigate to="account" replace />} />
+              <Route
+                index
+                element={isMobile ? <SettingsMobileMenu /> : <Navigate to="account" replace />}
+              />
               <Route path="account" element={<Account />} />
               <Route path="security" element={<Security />} />
               <Route path="appearance" element={<Appearance />} />

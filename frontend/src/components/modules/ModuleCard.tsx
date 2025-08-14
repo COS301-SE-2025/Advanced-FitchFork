@@ -1,8 +1,11 @@
-import { Card, Avatar, Tag, Typography, Tooltip } from 'antd';
+import { Card, Avatar, Typography, Tooltip } from 'antd';
 import { BookOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import type { Module } from '@/types/modules';
+import { formatModuleCode } from '@/utils/modules';
+import ModuleYearTag from './ModuleYearTag';
+import ModuleRoleTag from './ModuleRoleTag';
 
 const { Meta } = Card;
 const { Paragraph } = Typography;
@@ -14,20 +17,6 @@ interface Props {
   actions?: React.ReactNode[];
   showFavorite?: boolean;
 }
-
-const roleColorMap = {
-  student: 'green',
-  tutor: 'orange',
-  lecturer: 'purple',
-  assistant_lecturer: 'pink',
-} as const;
-
-const roleLabelMap = {
-  student: 'Enrolled',
-  tutor: 'Tutoring',
-  lecturer: 'Lecturing',
-  assistant_lecturer: 'Assistant',
-} as const;
 
 const ModuleCard = ({
   module,
@@ -76,10 +65,10 @@ const ModuleCard = ({
         avatar={<Avatar icon={<BookOutlined />} style={{ backgroundColor: '#1890ff' }} />}
         title={
           <div className="flex justify-between items-center">
-            <span className="text-black dark:text-white">{module.code}</span>
+            <span className="text-black dark:text-white">{formatModuleCode(module.code)}</span>
             <div className="flex gap-1">
-              {role && <Tag color={roleColorMap[role]}>{roleLabelMap[role]}</Tag>}
-              <Tag color="blue">{module.year}</Tag>
+              {role && <ModuleRoleTag role={role} />}
+              <ModuleYearTag year={module.year} />
             </div>
           </div>
         }

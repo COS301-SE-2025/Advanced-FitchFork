@@ -16,6 +16,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Space } from 'antd';
 import { useUI } from '@/context/UIContext';
 import ModuleListItem from '@/components/modules/ModuleListItem';
+import { formatModuleCode } from '@/utils/modules';
 
 const currentYear = new Date().getFullYear();
 
@@ -182,7 +183,7 @@ const ModulesList = () => {
         <Space direction="vertical" size="middle" className="w-full">
           <PageHeader title="Modules" description="All the modules in the COS department" />
 
-          {isSm && (
+          {isSm && auth.isAdmin && (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <StatCard title="Total Modules" value={42} />
               <StatCard title="Modules This Year" value={12} />
@@ -208,6 +209,7 @@ const ModulesList = () => {
                 actions={actions}
               />
             )}
+            listMode={!auth.isAdmin && !auth.hasLecturerRole()}
             renderListItem={(m) => (
               <ModuleListItem
                 module={m}
@@ -224,7 +226,6 @@ const ModulesList = () => {
                 title: 'ID',
                 dataIndex: 'id',
                 key: 'id',
-                sorter: { multiple: 0 },
                 defaultHidden: true,
               },
               {
@@ -232,8 +233,7 @@ const ModulesList = () => {
                 dataIndex: 'code',
                 key: 'code',
                 sorter: { multiple: 1 },
-                render: (_: unknown, record: Module) =>
-                  record.code.replace(/([A-Za-z]+)(\d+)/, '$1 $2'),
+                render: (_, m) => formatModuleCode(m.code),
               },
               {
                 title: 'Year',
@@ -257,7 +257,7 @@ const ModulesList = () => {
                 dataIndex: 'credits',
                 key: 'credits',
                 sorter: { multiple: 4 },
-                render: (_, record) => <ModuleCreditsTag credits={record.credits} />,
+                render: (_, m) => <ModuleCreditsTag credits={m.credits} />,
               },
               {
                 title: 'Created At',
@@ -265,15 +265,14 @@ const ModulesList = () => {
                 key: 'created_at',
                 sorter: { multiple: 5 },
                 defaultHidden: true,
-                render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+                render: (_, m) => dayjs(m.created_at).format('YYYY-MM-DD HH:mm'),
               },
               {
                 title: 'Updated At',
                 dataIndex: 'updated_at',
                 key: 'updated_at',
-                sorter: { multiple: 6 },
                 defaultHidden: true,
-                render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+                render: (_, m) => dayjs(m.updated_at).format('YYYY-MM-DD HH:mm'),
               },
             ]}
           />

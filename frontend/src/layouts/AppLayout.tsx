@@ -104,7 +104,11 @@ const AppLayout = () => {
           className="!p-0"
           styles={{ body: { padding: 0 }, header: { display: 'none' } }}
         >
-          <SidebarContent {...sidebarProps} collapsed={false} />
+          <SidebarContent
+            {...sidebarProps}
+            collapsed={false}
+            onMobileNavigate={() => setMobileSidebarVisible(false)}
+          />
         </Drawer>
       ) : (
         <Sider

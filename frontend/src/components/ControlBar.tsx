@@ -236,8 +236,9 @@ const ControlBar = <T,>({
       }}
       trigger={['click']}
     >
-      <Button data-cy="filters-dropdown" className="whitespace-nowrap">
-        Filters
+      <Button data-cy="filters-dropdown" className="whitespace-nowrap flex items-center gap-1">
+        <FilterOutlined />
+        <span className="hidden sm:inline">Filters</span>
       </Button>
     </Dropdown>
   );
@@ -408,8 +409,11 @@ const ControlBar = <T,>({
     </div>
   );
 
+  const hasActionsMobile = !!primaryAction || hasBulk || (columnToggleEnabled && !!columns?.length);
+  const hasClearMobile = showClearInlineMobile && clearMenuItems.length > 0;
+
   return (
-    <div className="bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-800 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="sm:bg-white dark:sm:bg-gray-900 sm:p-2 sm:rounded-lg sm:border border-gray-200 dark:border-gray-800 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       {/* LEFT: view toggle (desktop only), search, filters */}
       <div className="flex items-center gap-2 w-full sm:w-auto">
         {/* View toggle: absolutely hidden on mobile via wrapper */}
@@ -442,30 +446,35 @@ const ControlBar = <T,>({
           </div>
         )}
 
-        {/* Search grows to fill on mobile */}
-        <Search
-          placeholder={searchPlaceholder}
-          allowClear
-          onChange={(e) => handleSearch(e.target.value)}
-          value={searchTerm}
-          className="flex-1 sm:w-[320px]"
-          data-cy="entity-search"
-        />
+        {/* Search + Filters:
+          - Use Space.Compact ONLY in grid or listMode
+          - Ensure the Filters button is a DIRECT child to preserve rounded corners */}
+        {viewMode === 'grid' || listMode ? (
+          <Space.Compact className="flex-1 sm:w-auto">
+            <Search
+              placeholder={searchPlaceholder}
+              allowClear
+              onChange={(e) => handleSearch(e.target.value)}
+              value={searchTerm}
+              className="flex-1 sm:w-[320px]"
+              data-cy="entity-search"
+            />
 
-        {/* Filters button:
-            - Mobile: always show if sorts/filters exist
-            - Desktop: follow original condition (grid or listMode) */}
-        <div className="sm:hidden">
-          {(filterGroups.length > 0 || sortOptions.length > 0) && FiltersButton}
-        </div>
+            {/* Filters (mobile): icon-only, always shown if available */}
+            {(filterGroups.length > 0 || sortOptions.length > 0) && FiltersButton}
+          </Space.Compact>
+        ) : (
+          <Search
+            placeholder={searchPlaceholder}
+            allowClear
+            onChange={(e) => handleSearch(e.target.value)}
+            value={searchTerm}
+            className="flex-1 sm:w-[320px]"
+            data-cy="entity-search"
+          />
+        )}
 
-        <div className="hidden sm:block">
-          {(filterGroups.length > 0 || sortOptions.length > 0) &&
-            (viewMode === 'grid' || listMode) &&
-            FiltersButton}
-        </div>
-
-        {/* Desktop Clear (left area); mobile version is below next to actions */}
+        {/* Desktop Clear (left area); mobile version is handled below */}
         <div className="hidden sm:block">
           {clearMenuItems.length > 0 && <Col>{ClearControl}</Col>}
         </div>
@@ -474,23 +483,27 @@ const ControlBar = <T,>({
       {/* RIGHT: Actions (desktop) */}
       <div className="hidden sm:block">{ActionsGroup}</div>
 
-      {/* MOBILE BELOW:
-         - If Clear exists -> Actions + Clear in a 2-col grid (50/50)
-         - If no Clear -> render Actions alone (no grid, no extra gap) */}
-      {(primaryAction ||
-        hasBulk ||
-        (columnToggleEnabled && columns?.length) ||
-        showClearInlineMobile) &&
-        (showClearInlineMobile ? (
-          <div className="sm:hidden grid grid-cols-2 gap-2 w-full">
-            <div className="col-span-1">{ActionsGroup}</div>
-            <div className="col-span-1 flex justify-end items-center">{ClearControl}</div>
-          </div>
-        ) : (
-          <div className="sm:hidden w-full">{ActionsGroup}</div>
-        ))}
+      {/* MOBILE BELOW: responsive rules
+        - actions && clear   -> 2-col grid (50/50)
+        - actions && !clear  -> actions full width
+        - !actions && clear  -> clear full width
+        - !actions && !clear -> render nothing */}
+      {(hasActionsMobile || hasClearMobile) && (
+        <div className="sm:hidden w-full">
+          {hasActionsMobile && hasClearMobile ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="col-span-1">{ActionsGroup}</div>
+              <div className="col-span-1">{ClearControl}</div>
+            </div>
+          ) : hasActionsMobile ? (
+            <div className="w-full">{ActionsGroup}</div>
+          ) : (
+            <div className="w-full">{ClearControl}</div>
+          )}
+        </div>
+      )}
 
-      {/* Sort Modal (extracted) */}
+      {/* Sort Modal */}
       <SortModal
         open={sortModalOpen}
         onClose={() => setSortModalOpen(false)}
@@ -499,7 +512,7 @@ const ControlBar = <T,>({
         onChange={(val) => onSortChange?.(val)}
       />
 
-      {/* Filter Modal (extracted) */}
+      {/* Filter Modal */}
       <FilterModal
         open={filterModalOpen}
         onClose={() => setFilterModalOpen(false)}

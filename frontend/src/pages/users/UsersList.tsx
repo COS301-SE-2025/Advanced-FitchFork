@@ -14,6 +14,7 @@ import type { User } from '@/types/users';
 import dayjs from 'dayjs';
 import { createUser } from '@/services/users/post';
 import UserListItem from '@/components/users/UserListItem';
+import { Space } from 'antd';
 
 const UsersList = () => {
   const navigate = useNavigate();
@@ -170,114 +171,118 @@ const UsersList = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 h-full">
-      <PageHeader title="Users" description="Manage all registered users in the system." />
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4">
+        <Space direction="vertical" size="middle" className="w-full">
+          <PageHeader title="Users" description="Manage all registered users in the system." />
 
-      <EntityList<User>
-        ref={listRef}
-        name="Users"
-        fetchItems={fetchUsers}
-        renderGridItem={(user, actions) => <UserCard user={user} actions={actions} />}
-        renderListItem={(u) => (
-          <UserListItem user={u} onClick={(user) => navigate(`/users/${user.id}`)} />
-        )}
-        getRowKey={(item) => item.id}
-        onRowClick={(item) => navigate(`/users/${item.id}`)}
-        columnToggleEnabled
-        columns={[
-          {
-            title: 'ID',
-            dataIndex: 'id',
-            key: 'id',
-            sorter: { multiple: 0 },
-            defaultHidden: true,
-          },
-          {
-            title: 'Username',
-            dataIndex: 'username',
-            key: 'username',
-            sorter: { multiple: 1 },
-          },
-          {
-            title: 'Email',
-            dataIndex: 'email',
-            key: 'email',
-            sorter: { multiple: 2 },
-            render: (_, record) => <a href={`mailto:${record.email}`}>{record.email}</a>,
-          },
-          {
-            title: 'Admin',
-            dataIndex: 'admin',
-            key: 'admin',
-            sorter: { multiple: 3 },
-            filters: [
-              { text: 'Admin', value: 'true' },
-              { text: 'Regular', value: 'false' },
-            ],
-            render: (_, record) => <UserAdminTag admin={record.admin} />,
-          },
-          {
-            title: 'Created At',
-            dataIndex: 'created_at',
-            key: 'created_at',
-            sorter: { multiple: 4 },
-            defaultHidden: true,
-            render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
-          },
-          {
-            title: 'Updated At',
-            dataIndex: 'updated_at',
-            key: 'updated_at',
-            sorter: { multiple: 5 },
-            defaultHidden: true,
-            render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
-          },
-        ]}
-        actions={actions}
-      />
+          <EntityList<User>
+            ref={listRef}
+            name="Users"
+            fetchItems={fetchUsers}
+            renderGridItem={(user, actions) => <UserCard user={user} actions={actions} />}
+            renderListItem={(u) => (
+              <UserListItem user={u} onClick={(user) => navigate(`/users/${user.id}`)} />
+            )}
+            getRowKey={(item) => item.id}
+            onRowClick={(item) => navigate(`/users/${item.id}`)}
+            columnToggleEnabled
+            columns={[
+              {
+                title: 'ID',
+                dataIndex: 'id',
+                key: 'id',
+                sorter: { multiple: 0 },
+                defaultHidden: true,
+              },
+              {
+                title: 'Username',
+                dataIndex: 'username',
+                key: 'username',
+                sorter: { multiple: 1 },
+              },
+              {
+                title: 'Email',
+                dataIndex: 'email',
+                key: 'email',
+                sorter: { multiple: 2 },
+                render: (_, record) => <a href={`mailto:${record.email}`}>{record.email}</a>,
+              },
+              {
+                title: 'Admin',
+                dataIndex: 'admin',
+                key: 'admin',
+                sorter: { multiple: 3 },
+                filters: [
+                  { text: 'Admin', value: 'true' },
+                  { text: 'Regular', value: 'false' },
+                ],
+                render: (_, record) => <UserAdminTag admin={record.admin} />,
+              },
+              {
+                title: 'Created At',
+                dataIndex: 'created_at',
+                key: 'created_at',
+                sorter: { multiple: 4 },
+                defaultHidden: true,
+                render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+              },
+              {
+                title: 'Updated At',
+                dataIndex: 'updated_at',
+                key: 'updated_at',
+                sorter: { multiple: 5 },
+                defaultHidden: true,
+                render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+              },
+            ]}
+            actions={actions}
+          />
 
-      <CreateModal
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onCreate={handleAddUser}
-        initialValues={{
-          username: '',
-          email: '',
-          admin: false,
-        }}
-        fields={[
-          { name: 'username', label: 'Username', type: 'text', required: true },
-          { name: 'email', label: 'Email', type: 'email', required: true },
-          {
-            name: 'password',
-            label: 'Password',
-            type: 'password',
-            required: true,
-            defaultValue: 'changeme123',
-          },
-        ]}
-        title="Add User"
-      />
+          <CreateModal
+            open={createOpen}
+            onCancel={() => setCreateOpen(false)}
+            onCreate={handleAddUser}
+            initialValues={{
+              username: '',
+              email: '',
+              admin: false,
+            }}
+            fields={[
+              { name: 'username', label: 'Username', type: 'text', required: true },
+              { name: 'email', label: 'Email', type: 'email', required: true },
+              {
+                name: 'password',
+                label: 'Password',
+                type: 'password',
+                required: true,
+                defaultValue: 'changeme123',
+              },
+            ]}
+            title="Add User"
+          />
 
-      <EditModal
-        open={editOpen}
-        onCancel={() => {
-          setEditOpen(false);
-          setEditingItem(null);
-        }}
-        onEdit={handleEditUser}
-        initialValues={{
-          username: editingItem?.username ?? '',
-          email: editingItem?.email ?? '',
-          admin: editingItem?.admin ?? false,
-        }}
-        fields={[
-          { name: 'username', label: 'Username', type: 'text', required: true },
-          { name: 'email', label: 'Email', type: 'email', required: true },
-          { name: 'admin', label: 'Admin', type: 'boolean' },
-        ]}
-        title="Edit User"
-      />
+          <EditModal
+            open={editOpen}
+            onCancel={() => {
+              setEditOpen(false);
+              setEditingItem(null);
+            }}
+            onEdit={handleEditUser}
+            initialValues={{
+              username: editingItem?.username ?? '',
+              email: editingItem?.email ?? '',
+              admin: editingItem?.admin ?? false,
+            }}
+            fields={[
+              { name: 'username', label: 'Username', type: 'text', required: true },
+              { name: 'email', label: 'Email', type: 'email', required: true },
+              { name: 'admin', label: 'Admin', type: 'boolean' },
+            ]}
+            title="Edit User"
+          />
+        </Space>
+      </div>
     </div>
   );
 };
