@@ -272,9 +272,6 @@ impl Components {
         }
     }
 
-    fn simulate_tl_property_violation(&self, _x: &Chromosome, _i: usize) -> bool {
-        rand::random::<f64>() < 0.2
-    }
     fn simulate_task_failure(&self, _x: &Chromosome, _i: usize) -> bool {
         rand::random::<f64>() < 0.3
     }
@@ -337,8 +334,8 @@ mod tests {
         
         // Minimal GA config (tiny population / generations for a fast run)
         let genes = vec![
-            GeneConfig { min_value: -4, max_value: 4, invalid_values: HashSet::new() },
-            GeneConfig { min_value: -2, max_value: 7, invalid_values: HashSet::new() },
+            GeneConfig { min_value: -5, max_value: 5, invalid_values: HashSet::new() },
+            GeneConfig { min_value: -4, max_value: 9, invalid_values: HashSet::new() },
         ];
 
         let ga_config = GAConfig {
@@ -355,7 +352,7 @@ mod tests {
 
         let (omega1, omega2, omega3) = (0.4, 0.4, 0.2);
 
-        let submission_id: i64 = 602;
+        let submission_id: i64 = 542;
 
         let res = run_ga_job(&db, submission_id, ga_config, omega1, omega2, omega3).await;
 

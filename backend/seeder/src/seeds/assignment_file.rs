@@ -95,7 +95,7 @@ public class Main {
 
     static void runTask3() {
         System.out.println("&-=-&Task3Subtask1");
-        System.out.println(HelperThree.subtaskAlpha());
+        System.out.println(HelperThree.subtaskAlpha())
         System.out.println("&-=-&Task3Subtask2");
         System.out.println(HelperOne.subtaskBeta());
         System.out.println("&-=-&Task3Subtask3");

@@ -74,6 +74,8 @@ impl Evaluator {
         let (exit_code, stdout, stderr) = split_exit_stdout_stderr(blob);
         let runtime_ms = extract_marker_int(blob, "runtime_ms").map(|v| v.max(0) as u64);
         let terminated = exit_code.is_some() || !(stdout.is_empty() && stderr.is_empty());
+        println!("Parsed TaskView for task {}: exit_code={:?}, runtime_ms={:?}, stdout='{}', stderr='{}', terminated={}",
+                 task_id, exit_code, runtime_ms, stdout, stderr, terminated);
         TaskView { task_id, exit_code, runtime_ms, stdout, stderr, terminated }
     }
 
@@ -224,6 +226,7 @@ fn normalized_lines(s: &str) -> Vec<String> {
 
 fn violates_safety(lang: Language, stderr: &str) -> bool {
     let s = stderr.to_ascii_lowercase();
+    
     match lang {
         Language::Cpp => {
             s.contains("double free") ||
