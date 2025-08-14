@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 // use code_runner::ExecutionConfig;
-use sea_orm::ActiveValue::Set;
+use sea_orm::{ActiveValue::Set, DbErr, DatabaseConnection};
 use sea_orm::entity::prelude::*;
 use std::env;
 use std::fs;
@@ -60,9 +60,6 @@ pub enum FileType {
     #[strum(serialize = "config")]
     #[sea_orm(string_value = "config")]
     Config,
-    #[strum(serialize = "interpreter")]
-    #[sea_orm(string_value = "interpreter")]
-    Interpreter,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -105,6 +102,10 @@ impl Model {
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{assignment_id}"))
             .join(file_type.to_string())
+    }
+
+    pub fn full_path(&self) -> PathBuf {
+        Self::storage_root().join(&self.path)
     }
 
     pub async fn save_file(
@@ -188,12 +189,23 @@ impl Model {
         let full_path = Self::storage_root().join(&self.path);
         fs::remove_file(full_path)
     }
+    
+    pub async fn get_base_files(
+        db: &DatabaseConnection,
+        assignment_id: i64,
+    ) -> Result<Vec<Self>, DbErr> {
+        Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .filter(Column::FileType.eq(FileType::Main))
+            .all(db)
+            .await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::assignment::{AssignmentType};
+    use crate::models::assignment::AssignmentType;
     use crate::test_utils::setup_test_db;
     use chrono::Utc;
     use sea_orm::Set;
@@ -210,26 +222,6 @@ mod tests {
         }
     }
 
-    //TODO - this test failed on github and I don't know why
-    //ERROR:
-    /*
-        failures:
-
-    ---- models::assignment_file::tests::test_save_and_load_file stdout ----
-
-    thread 'models::assignment_file::tests::test_save_and_load_file' panicked at db/src/models/assignment_file.rs:434:9:
-    assertion failed: full_path.exists()
-    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-
-
-    failures:
-        models::assignment_file::tests::test_save_and_load_file
-
-    test result: FAILED. 11 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.85s
-
-    error: test failed, to rerun pass `-p db --lib`
-    Error: Process completed with exit code 101.
-    */
     #[tokio::test]
     #[ignore]
     async fn test_save_and_load_file() {

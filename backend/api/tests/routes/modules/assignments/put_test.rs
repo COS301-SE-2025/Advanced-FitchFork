@@ -581,7 +581,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     /// Test Case: Not Found for Wrong Module
@@ -741,7 +741,7 @@ mod tests {
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
 
-        for state in &[Status::Setup, Status::Ready, Status::Closed, Status::Archived] {
+        for state in &[Status::Ready, Status::Closed, Status::Archived] {
             let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
             active_assignment.status = Set(state.clone());
             active_assignment.updated_at = Set(Utc::now());
@@ -761,6 +761,28 @@ mod tests {
             let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
             let json: Value = serde_json::from_slice(&body).unwrap();
             assert_eq!(json["message"], "Assignment can only be closed if it is in Open state");
+        }
+
+        for state in &[Status::Setup] {
+            let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+            active_assignment.status = Set(state.clone());
+            active_assignment.updated_at = Set(Utc::now());
+            let assignment = active_assignment.update(app_state.db()).await.unwrap();
+
+            let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
+            let req = Request::builder()
+                .method("PUT")
+                .uri(&uri)
+                .header("Authorization", format!("Bearer {}", token))
+                .body(Body::empty())
+                .unwrap();
+
+            let response = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let json: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json["message"], "Assignment is still in Setup stage");
         }
     }
 

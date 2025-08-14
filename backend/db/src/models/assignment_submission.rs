@@ -1,7 +1,7 @@
 use crate::models::assignment;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait};
+use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -228,6 +228,29 @@ impl Model {
             .await?;
 
         Ok(submissions.into_iter().map(|s| s.id as i64).collect())
+    }
+    
+    pub async fn get_latest_submissions_for_users(
+        db: &DatabaseConnection,
+        assignment_id: i64,
+        user_ids: Vec<i64>,
+    ) -> Result<Vec<Self>, DbErr> {
+        let mut latest_submissions = Vec::new();
+
+        for user_id in user_ids {
+            let latest_submission = Entity::find()
+                .filter(Column::AssignmentId.eq(assignment_id))
+                .filter(Column::UserId.eq(user_id))
+                .order_by_desc(Column::Attempt)
+                .one(db)
+                .await?;
+
+            if let Some(submission) = latest_submission {
+                latest_submissions.push(submission);
+            }
+        }
+
+        Ok(latest_submissions)
     }
 }
 

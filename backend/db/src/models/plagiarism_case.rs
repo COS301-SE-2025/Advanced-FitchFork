@@ -15,6 +15,9 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
 
+    /// ID of the assignment this case belongs to.
+    pub assignment_id: i64,
+
     /// ID of the first submission involved in the case.
     pub submission_id_1: i64,
 
@@ -29,6 +32,24 @@ pub struct Model {
 
     /// Timestamp when the case was last updated.
     pub updated_at: DateTime<Utc>,
+
+    /// The review status of the case.
+    pub status: Status,
+}
+
+/// Defines the possible review statuses for a plagiarism case.
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, sea_orm::strum::Display, sea_orm::strum::EnumString)]
+#[sea_orm(rs_type = "String", db_type = "Text")]
+pub enum Status {
+    /// The case has not yet been reviewed.
+    #[sea_orm(string_value = "review")]
+    Review,
+    /// The case has been flagged for potential plagiarism.
+    #[sea_orm(string_value = "flagged")]
+    Flagged,
+    /// The case has been reviewed and cleared.
+    #[sea_orm(string_value = "reviewed")]
+    Reviewed,
 }
 
 /// Defines relationships to assignment submissions.
@@ -65,6 +86,7 @@ impl Model {
     /// - `Err(DbErr)` if the insert fails.
     pub async fn create_case(
         db: &DatabaseConnection,
+        assignment_id: i64,
         submission_id_1: i64,
         submission_id_2: i64,
         description: &str,
@@ -72,9 +94,11 @@ impl Model {
         let now = Utc::now();
 
         let active = ActiveModel {
+            assignment_id: Set(assignment_id),
             submission_id_1: Set(submission_id_1),
             submission_id_2: Set(submission_id_2),
             description: Set(description.to_string()),
+            status: Set(Status::Review),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
@@ -83,5 +107,3 @@ impl Model {
         active.insert(db).await
     }
 }
-
-// TODO add tests for plagiarism.

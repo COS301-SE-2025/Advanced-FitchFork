@@ -8,12 +8,12 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use db::models::tickets::{
+use db::models::{tickets::{
     Column as TicketColumn, Entity as TicketEntity, TicketStatus,
-};
+}, user, user_module_role::{self, Role}};
 use db::models::user::{Entity as UserEntity};
 use migration::Expr;
-use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
+use sea_orm::{ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait};
 use serde::{Deserialize, Serialize};
 use util::state::AppState;
 
@@ -152,11 +152,29 @@ impl FilterResponse {
         }
     }
 }
+
+
+async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bool {
+    user_module_role::Entity::find()
+        .filter(user_module_role::Column::UserId.eq(user_id))
+        .filter(user_module_role::Column::ModuleId.eq(module_id))
+        .filter(user_module_role::Column::Role.eq(Role::Student))
+        .join(JoinType::InnerJoin, user_module_role::Relation::User.def())
+        .filter(user::Column::Admin.eq(false))
+        .one(db)
+        .await
+        .map(|opt| opt.is_some())
+        .unwrap_or(false)
+}
+
 pub async fn get_tickets(
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    Extension(AuthUser(claims)): Extension<AuthUser>,
     State(app_state): State<AppState>,
     Query(params): Query<FilterReq>,
 ) -> impl IntoResponse {
     let db = app_state.db();
+    let user_id = claims.sub;
 
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100);
@@ -175,7 +193,11 @@ pub async fn get_tickets(
         }
     }
 
-    let mut condition = Condition::all();
+    let mut condition = Condition::all().add(TicketColumn::AssignmentId.eq(assignment_id));
+
+    if is_student(module_id, user_id, db).await {
+        condition = condition.add(TicketColumn::UserId.eq(user_id));
+    }
 
     if let Some(ref query) = params.query {
         let pattern = format!("%{}%", query.to_lowercase());
