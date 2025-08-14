@@ -6,6 +6,7 @@ import { getModuleDetails } from '@/services/modules';
 import type { Module } from '@/types/modules';
 import type { User } from '@/types/users';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { formatModuleCode } from '@/utils/modules';
 
 export interface ModuleDetails extends Module {
   lecturers: User[];
@@ -27,7 +28,7 @@ export default function WithModuleContext() {
       if (res.success && res.data) {
         setModule(res.data);
 
-        setBreadcrumbLabel(`modules/${moduleId}`, res.data.code);
+        setBreadcrumbLabel(`modules/${moduleId}`, formatModuleCode(res.data.code));
       }
       setLoading(false);
     };

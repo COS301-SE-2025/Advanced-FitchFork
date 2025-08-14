@@ -12,6 +12,7 @@ import { useMediaQuery } from 'react-responsive';
 import { useAuth } from '@/context/AuthContext';
 import { useModule } from '@/context/ModuleContext';
 import MobilePageHeader from '@/components/common/MobilePageHeader';
+import { formatModuleCode } from '@/utils/modules';
 
 const { Sider, Content } = Layout;
 const { Title } = Typography;
@@ -60,7 +61,8 @@ const ModuleLayout = () => {
         >
           <div className="flex items-center gap-2 px-4 py-5 border-b border-gray-200 dark:border-gray-800">
             <Title level={5} className="!mb-0">
-              {code} <span className="text-gray-400 dark:text-gray-500">{year}</span>
+              {formatModuleCode(code) + ' '}
+              <span className="text-gray-400 dark:text-gray-500">{year}</span>
             </Title>
           </div>
           <Menu

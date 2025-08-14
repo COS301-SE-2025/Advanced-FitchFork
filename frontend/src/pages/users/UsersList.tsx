@@ -15,6 +15,7 @@ import dayjs from 'dayjs';
 import { createUser } from '@/services/users/post';
 import UserListItem from '@/components/users/UserListItem';
 import { Space } from 'antd';
+import { UsersEmptyState } from '@/components/users';
 
 const UsersList = () => {
   const navigate = useNavigate();
@@ -237,6 +238,12 @@ const UsersList = () => {
               },
             ]}
             actions={actions}
+            emptyNoEntities={
+              <UsersEmptyState
+                onCreate={() => setCreateOpen(true)}
+                onRefresh={() => listRef.current?.refresh()}
+              />
+            }
           />
 
           <CreateModal

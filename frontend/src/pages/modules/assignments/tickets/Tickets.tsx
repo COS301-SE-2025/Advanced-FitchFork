@@ -26,6 +26,7 @@ import { useNavigate } from 'react-router-dom';
 import { Typography } from 'antd';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import TicketListItem from '@/components/tickets/TicketListItem';
+import { TicketsEmptyState } from '@/components/tickets';
 
 const Tickets = () => {
   const auth = useAuth();
@@ -226,6 +227,7 @@ const Tickets = () => {
               }
             : undefined
         }
+        emptyNoEntities={<TicketsEmptyState onCreate={() => setCreateOpen(true)} />}
       />
 
       <CreateModal

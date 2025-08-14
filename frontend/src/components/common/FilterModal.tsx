@@ -187,14 +187,14 @@ const FilterModal: React.FC<FilterModalProps> = ({
       />
 
       <div className="mt-4 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
-        <Space.Compact className="w-full sm:w-auto">
+        <div className="flex gap-2">
           <Button size={controlSize} onClick={onClose} className="w-full sm:w-auto">
             Close
           </Button>
           <Button size={controlSize} type="primary" onClick={apply} className="w-full sm:w-auto">
             Apply
           </Button>
-        </Space.Compact>
+        </div>
       </div>
     </Modal>
   );

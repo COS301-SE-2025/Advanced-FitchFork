@@ -17,6 +17,7 @@ import { Space } from 'antd';
 import { useUI } from '@/context/UIContext';
 import ModuleListItem from '@/components/modules/ModuleListItem';
 import { formatModuleCode } from '@/utils/modules';
+import { ModulesEmptyState } from '@/components/modules';
 
 const currentYear = new Date().getFullYear();
 
@@ -275,6 +276,9 @@ const ModulesList = () => {
                 render: (_, m) => dayjs(m.updated_at).format('YYYY-MM-DD HH:mm'),
               },
             ]}
+            emptyNoEntities={
+              <ModulesEmptyState isAdmin={auth.isAdmin} onCreate={() => setCreateOpen(true)} />
+            }
           />
         </Space>
 

@@ -1,7 +1,7 @@
 import { Tag, Typography } from 'antd';
 import { DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 
 import {
@@ -20,9 +20,16 @@ import EventBus from '@/utils/EventBus';
 import type { Submission } from '@/types/modules/assignments/submissions';
 import SubmissionCard from '@/components/submissions/SubmissionCard';
 import { message } from '@/utils/message';
-import { remarkSubmissions } from '@/services/modules/assignments/submissions/post';
+import {
+  remarkSubmissions,
+  submitAssignment,
+} from '@/services/modules/assignments/submissions/post';
 import { useViewSlot } from '@/context/ViewSlotContext';
-import SubmissionListItem from '@/components/submissions/SubmissionListItem';
+import {
+  SubmissionListItem,
+  SubmissionsEmptyState,
+  SubmitAssignmentModal,
+} from '@/components/submissions';
 
 const getMarkColor = (mark: number): string => {
   if (mark >= 75) return 'green';
@@ -40,8 +47,13 @@ export default function SubmissionsList() {
   const navigate = useNavigate();
   const module = useModule();
   const { setValue } = useViewSlot();
-  const { assignment } = useAssignment();
+  const { assignment, refreshAssignment } = useAssignment();
   const auth = useAuth();
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const isAssignmentOpen = assignment.status === 'open';
 
   const entityListRef = useRef<EntityListHandle>(null);
 
@@ -66,6 +78,10 @@ export default function SubmissionsList() {
       EventBus.off('submission:updated', listener);
     };
   }, []);
+
+  const handleOpenSubmit = () => {
+    setModalOpen(true);
+  };
 
   const fetchItems = async ({
     page,
@@ -108,6 +124,24 @@ export default function SubmissionsList() {
     );
 
     return { items, total };
+  };
+
+  const handleSubmitAssignment = async (file: File, isPractice: boolean) => {
+    setModalOpen(false);
+    setLoading(true);
+    const hide = message.loading('Submitting assignment...');
+    try {
+      await submitAssignment(module.id, assignment.id, file, isPractice);
+      await refreshAssignment();
+      message.success('Submission successful');
+      EventBus.emit('submission:updated');
+      entityListRef.current?.refresh();
+    } catch {
+      message.error('Submission failed');
+    } finally {
+      hide();
+      setLoading(false);
+    }
   };
 
   const columns: EntityColumnType<StudentSubmission>[] = [
@@ -294,6 +328,25 @@ export default function SubmissionsList() {
             }
           />
         )}
+        emptyNoEntities={
+          <SubmissionsEmptyState
+            assignmentName={assignment.name}
+            isAssignmentOpen={isAssignmentOpen}
+            onSubmit={isAssignmentOpen ? handleOpenSubmit : undefined}
+            onRefresh={() => entityListRef.current?.refresh()}
+          />
+        }
+      />
+
+      <SubmitAssignmentModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSubmit={handleSubmitAssignment}
+        loading={loading}
+        title="Submit Assignment"
+        accept=".zip,.tar,.gz,.tgz"
+        maxSizeMB={50}
+        defaultIsPractice={false}
       />
     </div>
   );

@@ -45,6 +45,8 @@ import AssignmentSetup from './steps/AssignmentSetup';
 import { Space, Typography } from 'antd';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import AssignmentListItem from '@/components/assignments/AssignmentListItem';
+import { AssignmentsEmptyState } from '@/components/assignments';
+import { formatModuleCode } from '@/utils/modules';
 
 const AssignmentsList = () => {
   const auth = useAuth();
@@ -190,7 +192,10 @@ const AssignmentsList = () => {
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4">
         <Space direction="vertical" size="middle" className="w-full">
-          <PageHeader title="Assignments" description={`All the assignments for ${module.code}`} />
+          <PageHeader
+            title="Assignments"
+            description={`All the assignments for ${formatModuleCode(module.code)}`}
+          />
 
           <EntityList<Assignment>
             ref={listRef}
@@ -369,6 +374,14 @@ const AssignmentsList = () => {
                     ],
                   }
                 : undefined
+            }
+            emptyNoEntities={
+              <AssignmentsEmptyState
+                moduleLabel={formatModuleCode(module.code)}
+                canCreate={isAdminOrLecturer}
+                onCreate={() => setSetupOpen(true)}
+                onRefresh={() => listRef.current?.refresh()}
+              />
             }
           />
         </Space>

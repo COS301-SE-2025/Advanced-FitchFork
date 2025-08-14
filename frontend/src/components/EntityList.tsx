@@ -46,6 +46,7 @@ export type EntityListProps<T> = {
   columnToggleEnabled?: boolean;
   renderListItem?: (item: T) => React.ReactNode;
   listMode?: boolean;
+  emptyNoEntities?: React.ReactNode;
 };
 
 export type EntityListHandle = {
@@ -71,6 +72,7 @@ const EntityList = forwardRef(function <T>(
     columnToggleEnabled = false,
     listMode = false,
     renderListItem,
+    emptyNoEntities,
   } = props;
 
   const {
@@ -215,27 +217,37 @@ const EntityList = forwardRef(function <T>(
   }
 
   // Reusable empty-state (matches table's style)
-  const renderEmptyState = () => (
-    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data found.">
-      {clearMenuItems.length === 1 ? (
-        <Button icon={<ReloadOutlined />} onClick={clearMenuItems[0].onClick}>
-          {clearMenuItems[0].label}
-        </Button>
-      ) : (
-        <Dropdown
-          menu={{
-            items: clearMenuItems.map((item) => ({
-              key: item.key,
-              label: item.label,
-              onClick: item.onClick,
-            })),
-          }}
-        >
-          <Button icon={<ReloadOutlined />}>Clear</Button>
-        </Dropdown>
-      )}
-    </Empty>
+  const renderFilteredEmptyState = () => (
+    <div className="w-full py-8 sm:py-12 rounded-xl border-2 border-dashed bg-white border-gray-200 dark:border-gray-800 text-center">
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No results found.">
+        {clearMenuItems.length === 1 ? (
+          <Button icon={<ReloadOutlined />} onClick={clearMenuItems[0].onClick}>
+            {clearMenuItems[0].label}
+          </Button>
+        ) : (
+          <Dropdown
+            menu={{
+              items: clearMenuItems.map((item) => ({
+                key: item.key,
+                label: item.label,
+                onClick: item.onClick,
+              })),
+            }}
+          >
+            <Button icon={<ReloadOutlined />}>Clear</Button>
+          </Dropdown>
+        )}
+      </Empty>
+    </div>
   );
+
+  const isPristine = !hasSearch && !hasSort && !hasFilters;
+  const showPristineEmpty =
+    !loading &&
+    items.length === 0 &&
+    isPristine &&
+    !!emptyNoEntities &&
+    ((viewMode === 'grid' && !!renderGridItem) || (listMode && !!renderListItem));
 
   const controlActions = actions?.control ?? [];
   const bulkActions = actions?.bulk ?? [];
@@ -343,6 +355,11 @@ const EntityList = forwardRef(function <T>(
     });
   }
 
+  // EARLY RETURN: pristine + no entities (grid/list) => only show custom empty
+  if (showPristineEmpty) {
+    return <div className="w-full flex items-center justify-center">{emptyNoEntities}</div>;
+  }
+
   return (
     <div>
       <ControlBar
@@ -403,26 +420,14 @@ const EntityList = forwardRef(function <T>(
         listMode={listMode}
       />
 
-      {/* <TagSummary
-        searchTerm={searchTerm}
-        onClearSearch={clearSearch}
-        filters={filterState}
-        onClearFilter={(key) => {
-          const updated = { ...filterState };
-          delete updated[key];
-          setFilterState(updated);
-        }}
-        sorters={sorterState.map((s) => ({ columnKey: s.field, order: s.order }))}
-        onClearSorter={(key) => setSorterState(sorterState.filter((s) => s.field !== key))}
-      /> */}
-
       {viewMode === 'grid' && renderGridItem ? (
         <div>
           {!loading && items.length === 0 ? (
-            <div className="py-16 flex items-center justify-center">{renderEmptyState()}</div>
+            // Filtered/no-match case in GRID: use filtered empty (not custom)
+            <div className="flex items-center justify-center">{renderFilteredEmptyState()}</div>
           ) : (
             <>
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {items.map((item) => {
                   const allActions = actions?.entity?.(item) ?? [];
                   const inlineLimit = allActions.length >= 4 ? 2 : 3;
@@ -525,7 +530,6 @@ const EntityList = forwardRef(function <T>(
                 })}
               </div>
 
-              {/* Pagination */}
               {pagination.total > pagination.pageSize && (
                 <div className="mt-6 flex justify-between items-center pb-4">
                   <Button
@@ -549,16 +553,17 @@ const EntityList = forwardRef(function <T>(
           )}
         </div>
       ) : listMode && renderListItem ? (
-        <div className="mt-4">
+        <>
           <List
             itemLayout="vertical"
             dataSource={items}
             renderItem={renderListItem}
             bordered
-            locale={{ emptyText: renderEmptyState() }}
+            // For filtered/no-match inside List, still show filtered empty
+            locale={{ emptyText: renderFilteredEmptyState() }}
             className="overflow-hidden bg-white dark:bg-gray-950 !border-gray-200 dark:!border-gray-800"
           />
-          {items.length < pagination.total! && (
+          {items.length < (pagination.total ?? 0) && (
             <div className="flex justify-between items-center mt-4">
               <Button
                 onClick={() => goToPage(pagination.current - 1)}
@@ -578,7 +583,7 @@ const EntityList = forwardRef(function <T>(
               </Button>
             </div>
           )}
-        </div>
+        </>
       ) : (
         <div id="scrollable-entity-table" className="h-full flex flex-col overflow-hidden">
           <Table<T>
@@ -619,6 +624,7 @@ const EntityList = forwardRef(function <T>(
               onClick: () => onRowClick?.(record),
               'data-cy': `entity-${getRowKey(record)}`,
             })}
+            // Table path doesn't use the custom empty state
             locale={{
               emptyText: (
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data found.">
@@ -642,7 +648,7 @@ const EntityList = forwardRef(function <T>(
                 </Empty>
               ),
             }}
-            className="bg-white dark:bg-gray-900 border-1 border-gray-200 dark:border-gray-800 rounded-lg"
+            className="bg-white dark:bg-gray-900 border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
           />
         </div>
       )}

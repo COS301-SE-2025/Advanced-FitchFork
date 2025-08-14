@@ -1,25 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
-import {
-  Spin,
-  Dropdown,
-  Button,
-  Alert,
-  Modal,
-  Upload,
-  Checkbox,
-  Tag,
-  Typography,
-  Segmented,
-  Space,
-} from 'antd';
+import { Spin, Dropdown, Button, Alert, Tag, Typography, Segmented, Space } from 'antd';
 import type { MenuProps } from 'antd';
-import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  DownloadOutlined,
-  UploadOutlined,
-} from '@ant-design/icons';
+import { CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined } from '@ant-design/icons';
 
 import { useModule } from '@/context/ModuleContext';
 import { useAuth } from '@/context/AuthContext';
@@ -41,6 +24,7 @@ import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
 import AssignmentStatusTag from '@/components/assignments/AssignmentStatusTag';
 import EventBus from '@/utils/EventBus';
 import { useUI } from '@/context/UIContext';
+import SubmitAssignmentModal from '@/components/submissions/SubmitAssignmentModal';
 
 const { Title, Paragraph } = Typography;
 
@@ -53,8 +37,6 @@ const AssignmentLayout = () => {
   const location = useLocation();
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isPractice, setIsPractice] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [downloadingSpec, setDownloadingSpec] = useState(false);
@@ -62,7 +44,7 @@ const AssignmentLayout = () => {
   const basePath = `/modules/${module.id}/assignments/${assignment.id}`;
   const isLecturerOrAdmin = auth.isLecturer(module.id) || auth.isAdmin;
   const isStudentOrTutor = auth.isStudent(module.id) || auth.isTutor(module.id);
-  const showTabs = !auth.isStudent(module.id);
+  const showTabs = !auth.isStudent(module.id) && readiness?.is_ready;
 
   const isOnSubmissions =
     location.pathname.startsWith(`${basePath}/submissions`) || location.pathname === `${basePath}`;
@@ -186,16 +168,12 @@ const AssignmentLayout = () => {
     }
   };
 
-  const handleSubmitAssignment = async () => {
-    if (!selectedFile) {
-      message.error('Please select a file to submit.');
-      return;
-    }
+  const handleSubmitAssignment = async (file: File, isPractice: boolean) => {
     setModalOpen(false);
     setLoading(true);
     const hide = message.loading('Submitting assignment...');
     try {
-      await submitAssignment(module.id, assignment.id, selectedFile, isPractice);
+      await submitAssignment(module.id, assignment.id, file, isPractice);
       await refreshAssignment();
       message.success('Submission successful');
       EventBus.emit('submission:updated');
@@ -204,8 +182,6 @@ const AssignmentLayout = () => {
     } finally {
       hide();
       setLoading(false);
-      setSelectedFile(null);
-      setIsPractice(false);
     }
   };
 
@@ -456,53 +432,16 @@ const AssignmentLayout = () => {
           onStepComplete={refreshAssignment}
         />
 
-        <Modal
+        <SubmitAssignmentModal
           open={modalOpen}
-          onCancel={() => setModalOpen(false)}
-          footer={null}
-          title={<Typography.Title level={4}>Submit Assignment</Typography.Title>}
-          centered
-        >
-          <div>
-            <Upload
-              maxCount={1}
-              beforeUpload={(file) => {
-                setSelectedFile(file);
-                return false; // prevent automatic upload
-              }}
-              accept=".zip,.tar,.gz,.tgz"
-              disabled={loading}
-            >
-              <Button icon={<UploadOutlined />} disabled={loading}>
-                Click to select file
-              </Button>
-            </Upload>
-
-            <Checkbox
-              checked={isPractice}
-              onChange={(e) => setIsPractice(e.target.checked)}
-              disabled={loading}
-              className="!mt-4"
-            >
-              This is a practice submission
-            </Checkbox>
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button onClick={() => setModalOpen(false)} data-cy="submit-modal-cancel">
-                Cancel
-              </Button>
-              <Button
-                type="primary"
-                onClick={handleSubmitAssignment}
-                loading={loading}
-                disabled={!selectedFile}
-                data-cy="submit-modal-submit"
-              >
-                Submit
-              </Button>
-            </div>
-          </div>
-        </Modal>
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleSubmitAssignment}
+          loading={loading}
+          title="Submit Assignment"
+          accept=".zip,.tar,.gz,.tgz"
+          maxSizeMB={50}
+          defaultIsPractice={false}
+        />
       </div>
     </div>
   );

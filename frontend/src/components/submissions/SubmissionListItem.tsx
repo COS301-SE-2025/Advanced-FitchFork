@@ -1,7 +1,8 @@
 import { List, Avatar, Tag, Space } from 'antd';
-import { FileTextOutlined, UserOutlined } from '@ant-design/icons';
+import { FileTextOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Submission } from '@/types/modules/assignments/submissions';
+import { UserAvatar } from '../common';
 
 type Props = {
   submission: Submission & {
@@ -31,7 +32,7 @@ const SubmissionListItem = ({ submission, onClick }: Props) => {
       data-cy={`entity-${submission.id}`}
     >
       <List.Item.Meta
-        avatar={user ? <Avatar icon={<UserOutlined />} /> : <Avatar icon={<FileTextOutlined />} />}
+        avatar={user ? <UserAvatar user={user} /> : <Avatar icon={<FileTextOutlined />} />}
         title={
           <div className="flex justify-between items-center">
             <span className="font-semibold text-black dark:text-white">

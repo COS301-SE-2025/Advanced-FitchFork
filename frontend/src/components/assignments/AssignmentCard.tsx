@@ -11,7 +11,7 @@ import { useUI } from '@/context/UIContext';
 
 dayjs.extend(relativeTime);
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 interface Props {
   assignment: Assignment;
@@ -69,14 +69,6 @@ const AssignmentCard = ({ assignment, actions }: Props) => {
         actions: { margin: 0, padding: 0 },
       }}
     >
-      <Paragraph
-        className={`text-gray-700 dark:text-gray-300 mb-3 ${
-          isMobile ? 'text-[13px] line-clamp-3' : 'text-sm'
-        }`}
-      >
-        {assignment.description || 'No description provided.'}
-      </Paragraph>
-
       <Space
         direction="vertical"
         size={6}

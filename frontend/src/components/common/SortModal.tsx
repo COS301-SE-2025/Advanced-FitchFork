@@ -203,14 +203,14 @@ const SortModal: React.FC<SortModalProps> = ({
           </Button>
         </Tooltip>
 
-        <Space.Compact className="w-full sm:w-auto">
+        <div className="flex gap-2">
           <Button size={controlSize} onClick={onClose} className="w-full sm:w-auto">
             Close
           </Button>
           <Button size={controlSize} type="primary" onClick={apply} className="w-full sm:w-auto">
             Apply
           </Button>
-        </Space.Compact>
+        </div>
       </div>
     </Modal>
   );

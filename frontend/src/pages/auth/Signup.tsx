@@ -28,20 +28,17 @@ export default function Signup() {
   };
 
   return (
-    <Card className="w-full max-w-md sm:max-w-xl rounded-2xl shadow-xl">
-      <div className="flex justify-start mb-6">
-        <Logo size="md" showText={false} shadow />
-      </div>
-
-      <div className="text-center mb-8">
-        <Title level={2} className="!mb-2 text-2xl sm:text-3xl md:text-4xl">
-          Create your account
-        </Title>
-        <Text className="block text-sm sm:text-base md:text-lg text-gray-600">
-          Sign up to join FitchFork
-        </Text>
-      </div>
-
+    <Card
+      title={
+        <div className="flex items-center my-2 gap-2 justify-start rounded-md">
+          <Logo size="md" showText={false} />
+          <Title level={4} className="!m-0">
+            Signup
+          </Title>
+        </div>
+      }
+      className="w-full max-w-md sm:max-w-lg !rounded-xl shadow-xl"
+    >
       {formError && (
         <Alert
           message={formError}

@@ -57,17 +57,13 @@ const Logo = ({
     <Link
       to="/"
       className={clsx(
-        'inline-flex items-center gap-4 no-underline text-inherit',
+        'inline-flex items-center gap-4 no-underline text-inherit bg-white  rounded-md overflow-hidden',
         collapsed && 'scale-90',
         shadow && shadowClass,
         className,
       )}
     >
-      <div
-        className={clsx(
-          'flex items-center gap-4 transition-all duration-300 ease-in-out rounded-md',
-        )}
-      >
+      <div className={clsx('flex  items-center gap-4 transition-all duration-300 ease-in-out')}>
         <img
           src={logoSrc}
           alt="FitchFork Logo"
