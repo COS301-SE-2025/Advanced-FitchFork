@@ -214,10 +214,10 @@ use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 /// 2. Extracting archive files (submission, makefile, main)
 /// 3. Running the configured commands inside Docker
 /// 4. Saving the output to disk and database as `assignment_submission_output`
-pub async fn create_submission_outputs_for_all_tasks_for_interpreter (
+pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
     db: &DatabaseConnection,
     submission_id: i64,
-) -> Result<Vec<(i64, String)>, String>  {
+) -> Result<Vec<(i64, String)>, String> {
     use crate::validate_files::validate_submission_files;
     use db::models::assignment::Entity as Assignment;
     use db::models::assignment_submission::Entity as AssignmentSubmission;
@@ -307,7 +307,7 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter (
     let config_value = serde_json::to_value(&config)
         .map_err(|e| format!("Failed to serialize execution config: {}", e))?;
 
-    let mut collected: Vec<(i64, String)> = Vec::new();    
+    let mut collected: Vec<(i64, String)> = Vec::new();
 
     for task in tasks {
         let filename = format!(
@@ -362,12 +362,10 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter (
         }
 
         collected.push((task.id, output_combined));
-        
     }
 
     Ok(collected)
 }
-
 
 /// Runs all configured tasks for a given assignment ID and student attempt by:
 /// 1. Validating submission files
@@ -429,7 +427,7 @@ pub async fn create_submission_outputs_for_all_tasks(
     let archive_paths = vec![
         first_archive_in(&submission_path)?,
         first_archive_in(&base_path.join("makefile"))?,
-        first_archive_in(&base_path.join("Main"))?,
+        first_archive_in(&base_path.join("main"))?,
     ];
 
     let mut files = Vec::new();
@@ -539,8 +537,8 @@ pub async fn create_main_from_interpreter(
     use serde_json::json;
     use std::env;
     use std::io::Write;
-    use util::execution_config::execution_config::Language;
     use util::execution_config::ExecutionConfig;
+    use util::execution_config::execution_config::Language;
     use zip::write::{FileOptions, ZipWriter};
 
     // --- Fetch submission, assignment, interpreter rows ---
@@ -591,7 +589,10 @@ pub async fn create_main_from_interpreter(
     let looks_like_compile = {
         let cmd = interpreter.command.to_lowercase();
         // very basic detection; expand as needed
-        (cmd.contains("g++") || cmd.contains("clang++") || cmd.contains("javac") || cmd.contains("python "))
+        (cmd.contains("g++")
+            || cmd.contains("clang++")
+            || cmd.contains("javac")
+            || cmd.contains("python "))
             && cmd.contains("main.")
     };
 
@@ -622,10 +623,7 @@ int main() {{
         };
 
         // Zip and save as the "main" archive
-        let zip_ext = main_file_name
-            .rsplit('.')
-            .next()
-            .unwrap_or("txt");
+        let zip_ext = main_file_name.rsplit('.').next().unwrap_or("txt");
         let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
 
         let mut zip_data = Vec::new();
@@ -654,7 +652,12 @@ int main() {{
         .map_err(|e| format!("Failed to save synthesized main zip: {}", e))?;
 
         if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
-            eprintln!("[DEBUG] synthesized {} ({} bytes) into {}", main_file_name, zip_data.len(), zip_filename);
+            eprintln!(
+                "[DEBUG] synthesized {} ({} bytes) into {}",
+                main_file_name,
+                zip_data.len(),
+                zip_filename
+            );
         }
 
         return Ok(());
@@ -670,8 +673,10 @@ int main() {{
     // e.g., "python3 interpreter.py <args>"
     let command = format!("{} {}", interpreter.command, generated_string);
 
-    let host = env::var("CODE_MANAGER_HOST").map_err(|_| "CODE_MANAGER_HOST not set".to_string())?;
-    let port = env::var("CODE_MANAGER_PORT").map_err(|_| "CODE_MANAGER_PORT not set".to_string())?;
+    let host =
+        env::var("CODE_MANAGER_HOST").map_err(|_| "CODE_MANAGER_HOST not set".to_string())?;
+    let port =
+        env::var("CODE_MANAGER_PORT").map_err(|_| "CODE_MANAGER_PORT not set".to_string())?;
     let url = format!("http://{}:{}/run", host, port);
 
     let config_value = serde_json::to_value(&config)
@@ -722,7 +727,9 @@ int main() {{
 
     // Sanity-check: generator should produce plausible source
     let looks_like_source = match config.project.language {
-        Language::Cpp => combined_output.contains("int main") || combined_output.contains("#include"),
+        Language::Cpp => {
+            combined_output.contains("int main") || combined_output.contains("#include")
+        }
         Language::Java => combined_output.contains("class Main"),
         Language::Python => combined_output.contains("def ") || combined_output.contains("print("),
     };
@@ -732,10 +739,7 @@ int main() {{
     }
 
     // Zip the generated source as Main.*
-    let zip_ext = main_file_name
-        .rsplit('.')
-        .next()
-        .unwrap_or("txt");
+    let zip_ext = main_file_name.rsplit('.').next().unwrap_or("txt");
     let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
 
     let mut zip_data = Vec::new();
@@ -814,6 +818,7 @@ pub async fn run_interpreter(
     create_memo_outputs_for_all_tasks(db, assignment_id).await?;
 
     // Step 3 — now returns outputs
-    let outputs = create_submission_outputs_for_all_tasks_for_interpreter(db, submission_id).await?;
+    let outputs =
+        create_submission_outputs_for_all_tasks_for_interpreter(db, submission_id).await?;
     Ok(outputs)
 }
