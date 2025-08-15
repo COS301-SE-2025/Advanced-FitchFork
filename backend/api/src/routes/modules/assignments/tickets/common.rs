@@ -1,44 +1,28 @@
-use db::models::tickets::Model as TicketModel;
+use db::models::{tickets::Model as TicketModel, user_module_role::{Column, Role}, UserModuleRole as Entity};
 use db::models::user::Model as UserModel;
-use db::models::assignment::{Entity as AssignmentEntity, Column as AssignmentColumn};
 use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait};
 use serde::{Deserialize, Serialize};
 
-pub async fn is_valid(user_id: i64, ticket_id: i64, db: &DatabaseConnection) -> bool {
-    // If author, always allowed
-    if TicketModel::is_author(ticket_id, user_id, db).await {
-        return true;
-    }
-
-    // Get ticket
-    let ticket = match TicketModel::get_by_id(db, ticket_id).await {
-        Ok(Some(t)) => t,
-        _ => return false,
-    };
-
-    // Get assignment to find module ID
-    let assignment = match AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(ticket.assignment_id))
+pub async fn is_valid(
+    user_id: i64,
+    ticket_id: i64,
+    module_id: i64,
+    db: &DatabaseConnection,
+) -> bool {
+    let is_author = TicketModel::is_author(ticket_id, user_id, db).await;
+    let staff_roles = vec![Role::Lecturer, Role::AssistantLecturer, Role::Tutor];
+    let is_staff = Entity::find()
+        .filter(Column::UserId.eq(user_id))
+        .filter(Column::ModuleId.eq(module_id))
+        .filter(Column::Role.is_in(staff_roles))
         .one(db)
         .await
-    {
-        Ok(Some(a)) => a,
-        _ => return false,
-    };
+        .unwrap_or(None)
+        .is_some();
 
-    // If the user is a student and not the author → deny
-    if UserModel::is_in_role(db, user_id, assignment.module_id, "Student")
-        .await
-        .unwrap_or(false)
-    {
-        return false;
-    }
-
-    // All other roles (tutor, lecturer, etc.) → allow
-    true
+    is_author || is_staff
 }
 
- 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TicketResponse {
     pub id: i64,
