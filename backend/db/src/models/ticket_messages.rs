@@ -1,4 +1,4 @@
-use sea_orm::{entity::prelude::*, ActiveValue::Set, QueryOrder};
+use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
@@ -69,15 +69,21 @@ impl Model {
         active.insert(db).await
     }
 
-    pub async fn find_all_for_ticket(
+    pub async fn update(
         db: &DbConn,
-        ticket_id: i64,
-    ) -> Result<Vec<Model>, DbErr> {
-        Entity::find()
-            .filter(Column::TicketId.eq(ticket_id))
-            .order_by_asc(Column::CreatedAt)
-            .all(db)
-            .await
+        message_id: i64,
+        content: &str,
+    ) -> Result<Model, DbErr> {
+        let now = Utc::now();
+
+        let active = ActiveModel {
+            id: Set(message_id),
+            content: Set(content.to_owned()),
+            updated_at: Set(now),
+            ..Default::default()
+        };
+
+        active.update(db).await
     }
 
     pub async fn delete(
