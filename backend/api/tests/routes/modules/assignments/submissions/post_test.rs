@@ -1524,7 +1524,7 @@ mod tests {
         assert_eq!(json["success"], false);
         assert_eq!(
             json["message"],
-            "Must provide either submission_ids or all=true"
+            "Must provide exactly one of submission_ids or all=true"
         );
     }
 
@@ -1835,5 +1835,256 @@ mod tests {
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Module 9999 not found.");
+    }
+
+    async fn send_resubmit_request(
+        app: &BoxCloneService<Request<Body>, Response, Infallible>,
+        token: &str,
+        module_id: i64,
+        assignment_id: i64,
+        body: Value,
+    ) -> Response {
+        let req = Request::builder()
+            .method("POST")
+            .uri(&format!(
+                "/api/modules/{}/assignments/{}/submissions/resubmit",
+                module_id, assignment_id
+            ))
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+
+        app.clone().oneshot(req).await.unwrap()
+    }
+
+    async fn response_body_to_json(response: Response) -> Value {
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice(&body).unwrap()
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_resubmit_specific_submissions() {
+        let temp_dir = setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(app_state.db(), &temp_dir).await;
+
+        // Create submissions
+        let sub1 = create_submission(
+            db,
+            data.assignment.module_id,
+            data.assignment.id,
+            data.student_user.id,
+            1,
+            &temp_dir,
+        ).await;
+        let sub2 = create_submission(
+            db,
+            data.assignment.module_id,
+            data.assignment.id,
+            data.student_user.id,
+            2,
+            &temp_dir,
+        ).await;
+
+        // Create lecturer user
+        let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+
+        // Send resubmit request
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let body = json!({
+            "submission_ids": [sub1.id, sub2.id]
+        });
+
+        let response = send_resubmit_request(
+            &app,
+            &token,
+            data.module.id,
+            data.assignment.id,
+            body
+        ).await;
+
+        // Verify response
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body_to_json(response).await;
+        assert_eq!(body["success"], true);
+        assert_eq!(body["data"]["resubmitted"], 2);
+        assert!(body["data"]["failed"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_resubmit_all_submissions() {
+        let temp_dir = setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(app_state.db(), &temp_dir).await;
+
+        // Create submissions
+        create_submission(
+            db,
+            data.assignment.module_id,
+            data.assignment.id,
+            data.student_user.id,
+            1,
+            &temp_dir,
+        ).await;
+        create_submission(
+            db,
+            data.assignment.module_id,
+            data.assignment.id,
+            data.student_user.id,
+            2,
+            &temp_dir,
+        ).await;
+
+        // Create admin user
+        let admin = UserModel::create(db, "admin1", "admin@test.com", "password", true)
+            .await
+            .unwrap();
+
+        // Send resubmit request
+        let (token, _) = generate_jwt(admin.id, admin.admin);
+        let body = json!({
+            "all": true
+        });
+
+        let response = send_resubmit_request(
+            &app,
+            &token,
+            data.module.id,
+            data.assignment.id,
+            body
+        ).await;
+
+        // Verify response
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body_to_json(response).await;
+        assert_eq!(body["success"], true);
+        assert_eq!(body["data"]["resubmitted"], 2);
+        assert!(body["data"]["failed"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_resubmit_invalid_parameters() {
+        let temp_dir = setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db(), &temp_dir).await;
+
+        // Create lecturer user
+        let lecturer = UserModel::create(app_state.db(), "lecturer1", "lecturer@test.com", "password", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(app_state.db(), lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+
+        // Test cases
+        let test_cases = vec![
+            (json!({}), "Must provide exactly one of submission_ids or all=true"),
+            (json!({"submission_ids": [], "all": true}), "Must provide exactly one of submission_ids or all=true"),
+            (json!({"submission_ids": []}), "submission_ids cannot be empty"),
+        ];
+
+        for (body, expected_error) in test_cases {
+            let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+            let response = send_resubmit_request(
+                &app,
+                &token,
+                data.module.id,
+                data.assignment.id,
+                body
+            ).await;
+
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let body = response_body_to_json(response).await;
+            assert_eq!(body["success"], false);
+            assert_eq!(body["message"], expected_error);
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_resubmit_unauthorized_access() {
+        let temp_dir = setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(app_state.db(), &temp_dir).await;
+
+        // Create submission
+        let submission = create_submission(
+            db,
+            data.assignment.module_id,
+            data.assignment.id,
+            data.student_user.id,
+            1,
+            &temp_dir,
+        ).await;
+
+        // Create student token
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let body = json!({
+            "submission_ids": [submission.id]
+        });
+
+        let response = send_resubmit_request(
+            &app,
+            &token,
+            data.module.id,
+            data.assignment.id,
+            body
+        ).await;
+
+        // Verify unauthorized response
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let body = response_body_to_json(response).await;
+        assert_eq!(body["success"], false);
+        assert_eq!(
+            body["message"],
+            "Lecturer or assistant lecturer access required for this module"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_resubmit_assignment_not_found() {
+        let temp_dir = setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(app_state.db(), &temp_dir).await;
+
+        // Create admin user
+        let admin = UserModel::create(db, "admin1", "admin@test.com", "password", true)
+            .await
+            .unwrap();
+
+        let (token, _) = generate_jwt(admin.id, admin.admin);
+        let body = json!({
+            "all": true
+        });
+
+        let response = send_resubmit_request(
+            &app,
+            &token,
+            data.module.id,
+            9999, // Invalid assignment ID
+            body
+        ).await;
+
+        // Verify not found response
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response_body_to_json(response).await;
+        assert_eq!(body["success"], false);
+        assert_eq!(body["message"], "Assignment 9999 in Module 1 not found.");
     }
 }
