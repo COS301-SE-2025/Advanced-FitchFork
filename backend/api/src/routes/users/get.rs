@@ -1,12 +1,11 @@
 use axum::{
-    extract::{State, Path, Query},
+    extract::{Path, Query},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
-use util::state::AppState;
 use validator::Validate;
 use crate::response::ApiResponse;
 use crate::routes::common::UserModule;
@@ -111,10 +110,9 @@ impl From<UserModel> for UserListItem {
 /// - `403 Forbidden` - Authenticated but not admin user
 /// - `500 Internal Server Error` - Database error
 pub async fn list_users(
-    State(app_state): State<AppState>,
     Query(query): Query<ListUsersQuery>
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
     
     if let Err(e) = query.validate() {
         return (
@@ -229,10 +227,9 @@ pub async fn list_users(
 /// - `404 Not Found`: User does not exist
 /// - `500 Internal Server Error`: DB error
 pub async fn get_user(
-    State(app_state): State<AppState>,
     Path(user_id): Path<i64>
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     match UserEntity::find_by_id(user_id).one(db).await {
         Ok(Some(user)) => {
@@ -308,10 +305,9 @@ pub async fn get_user(
 /// }
 /// ```
 pub async fn get_user_modules(
-    State(app_state): State<AppState>,
     Path(user_id): Path<i64>
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let roles = match UserModel::get_module_roles(db, user_id).await {
         Ok(r) => r,

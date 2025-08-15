@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -12,7 +12,6 @@ use db::models::{
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use crate::{response::ApiResponse, services::moss::MossService};
-use util::state::AppState;
 use std::env;
 
 #[derive(Serialize, Deserialize)]
@@ -124,7 +123,6 @@ pub struct PlagiarismCaseResponse {
 /// }
 /// ```
 pub async fn create_plagiarism_case(
-    State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
     Json(payload): Json<CreatePlagiarismCasePayload>,
 ) -> impl IntoResponse {
@@ -138,13 +136,13 @@ pub async fn create_plagiarism_case(
 
     let submission1 = SubmissionEntity::find_by_id(payload.submission_id_1)
         .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
-        .one(app_state.db())
+        .one(db::get_connection().await)
         .await
         .unwrap_or(None);
 
     let submission2 = SubmissionEntity::find_by_id(payload.submission_id_2)
         .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
-        .one(app_state.db())
+        .one(db::get_connection().await)
         .await
         .unwrap_or(None);
 
@@ -157,7 +155,7 @@ pub async fn create_plagiarism_case(
     }
 
     let new_case = plagiarism_case::Model::create_case(
-        app_state.db(),
+        db::get_connection().await,
         assignment_id,
         payload.submission_id_1,
         payload.submission_id_2,
@@ -238,13 +236,12 @@ pub struct MossRequest {
 /// }
 /// ```
 pub async fn run_moss_check(
-    State(app_state): State<AppState>,
     Path((_module_id, assignment_id)): Path<(i64, i64)>,
     Json(payload): Json<MossRequest>,
 ) -> impl IntoResponse {
     let submissions =
         assignment_submission::Model::get_latest_submissions_for_users(
-            app_state.db(),
+            db::get_connection().await,
             assignment_id,
             payload.user_ids,
         )
@@ -254,7 +251,7 @@ pub async fn run_moss_check(
         Ok(submissions) => {
             let submission_files: Vec<_> = submissions.iter().map(|s| s.full_path()).collect();
             
-            let base_files = match assignment_file::Model::get_base_files(app_state.db(), assignment_id).await {
+            let base_files = match assignment_file::Model::get_base_files(db::get_connection().await, assignment_id).await {
                 Ok(files) => files.into_iter().map(|f| f.full_path()).collect(),
                 Err(_) => vec![],
             };

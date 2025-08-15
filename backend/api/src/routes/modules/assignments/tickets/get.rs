@@ -5,7 +5,7 @@ use crate::{
 };
 use axum::{
     Extension,
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
@@ -15,14 +15,12 @@ use db::models::{tickets::{
 use migration::Expr;
 use sea_orm::{ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait};
 use serde::{Deserialize, Serialize};
-use util::state::AppState;
 
 pub async fn get_ticket(
-    State(app_state): State<AppState>,
     Path((_, _, ticket_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
     let user_id = claims.sub;
 
     if !is_valid(user_id, ticket_id, db).await {
@@ -100,10 +98,9 @@ async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bo
 pub async fn get_tickets(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
-    State(app_state): State<AppState>,
     Query(params): Query<FilterReq>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
     let user_id = claims.sub;
 
     let page = params.page.unwrap_or(1).max(1);

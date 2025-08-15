@@ -2,8 +2,7 @@
 //!
 //! This module defines the routing for assignment file-related endpoints, including uploading, listing, downloading, and deleting files. It applies access control middleware to ensure appropriate permissions for each operation.
 
-use axum::{middleware::from_fn_with_state, Router, routing::{get, post, delete}};
-use util::state::AppState;
+use axum::{middleware::from_fn, Router, routing::{get, post, delete}};
 use crate::auth::guards::{require_assigned_to_module, require_lecturer};
 use get::{list_files, download_file};
 use post::upload_files;
@@ -28,10 +27,10 @@ pub mod delete;
 ///
 /// # Returns
 /// An [`axum::Router`] with the file endpoints and their associated middleware.
-pub fn files_routes(app_state: AppState) -> Router<AppState> {
+pub fn files_routes() -> Router {
     Router::new()
-        .route("/", post(upload_files).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)))
-        .route("/", get(list_files).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
-        .route("/", delete(delete_files).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)))
-        .route("/{file_id}", get(download_file).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
+        .route("/", post(upload_files).route_layer(from_fn(require_lecturer)))
+        .route("/", get(list_files).route_layer(from_fn(require_assigned_to_module)))
+        .route("/", delete(delete_files).route_layer(from_fn(require_lecturer)))
+        .route("/{file_id}", get(download_file).route_layer(from_fn(require_assigned_to_module)))
 }

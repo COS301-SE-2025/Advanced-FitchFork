@@ -17,6 +17,7 @@ mod tests {
     use serde_json::json;
     use futures_util::sink::SinkExt;
     use futures_util::stream::StreamExt;
+    use serial_test::serial;
 
     pub struct TestData {
         pub user1: UserModel,
@@ -35,9 +36,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn authenticated_user_can_connect_to_chat() {
-        let (app, state) = make_test_app().await;
-        let data = setup_test_data(state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         let addr = spawn_server(app).await;
         let (token, _) = generate_jwt(data.user1.id, data.user1.admin);
 
@@ -46,8 +48,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn unauthenticated_user_cannot_connect_to_chat() {
-        let (app, _) = make_test_app().await;
+        let app = make_test_app().await;
         let addr = spawn_server(app).await;
         let url = format!("ws://{}/ws/chat", addr);
 
@@ -67,9 +70,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn users_can_exchange_chat_messages() {
-        let (app, state) = make_test_app().await;
-        let data = setup_test_data(state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         let addr = spawn_server(app).await;
 
         let (token1, _) = generate_jwt(data.user1.id, data.user1.admin);
@@ -100,9 +104,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn server_responds_to_ping_with_pong() {
-        let (app, state) = make_test_app().await;
-        let data = setup_test_data(state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         let addr = spawn_server(app).await;
         let (token, _) = generate_jwt(data.user1.id, data.user1.admin);
         let (mut ws, _) = connect_ws(&addr.to_string(), "chat", &token).await.unwrap();

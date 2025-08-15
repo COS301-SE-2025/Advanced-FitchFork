@@ -16,12 +16,11 @@ use axum::{
 };
 use get::{get_assignment_config, get_default_assignment_config};
 use post::set_assignment_config;
-use util::state::AppState;
 
 pub mod get;
 pub mod post;
 
-pub fn config_routes() -> Router<AppState> {
+pub fn config_routes() -> Router {
     Router::new()
         .route("/", post(set_assignment_config))
         .route("/", get(get_assignment_config))

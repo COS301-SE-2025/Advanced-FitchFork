@@ -26,6 +26,7 @@ mod create_plagiarism_tests {
     use crate::helpers::app::make_test_app;
     use chrono::{Datelike, TimeZone, Utc};
     use api::routes::modules::assignments::plagiarism::post::CreatePlagiarismCasePayload;
+    use serial_test::serial;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -116,9 +117,10 @@ mod create_plagiarism_tests {
 
     /// Test Case: Successful Creation by Lecturer
     #[tokio::test]
+    #[serial]
     async fn test_create_plagiarism_case_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let payload = CreatePlagiarismCasePayload {
             submission_id_1: data.submission1.id,
@@ -154,7 +156,7 @@ mod create_plagiarism_tests {
         
         // Verify case exists in database
         let case = PlagiarismCaseEntity::find_by_id(case_data["id"].as_i64().unwrap())
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap()
             .expect("Plagiarism case should exist");
@@ -163,9 +165,10 @@ mod create_plagiarism_tests {
 
     /// Test Case: Successful Creation by Assistant Lecturer
     #[tokio::test]
+    #[serial]
     async fn test_create_plagiarism_case_success_as_assistant() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let payload = CreatePlagiarismCasePayload {
             submission_id_1: data.submission1.id,
@@ -186,9 +189,10 @@ mod create_plagiarism_tests {
 
     /// Test Case: Forbidden Access for Tutor
     #[tokio::test]
+    #[serial]
     async fn test_create_plagiarism_case_forbidden_as_tutor() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let payload = CreatePlagiarismCasePayload {
             submission_id_1: data.submission1.id,
@@ -209,9 +213,10 @@ mod create_plagiarism_tests {
 
     /// Test Case: Same Submission IDs Validation
     #[tokio::test]
+    #[serial]
     async fn test_create_plagiarism_case_same_submission_ids() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let payload = CreatePlagiarismCasePayload {
             submission_id_1: data.submission1.id,
@@ -237,9 +242,10 @@ mod create_plagiarism_tests {
 
     /// Test Case: Submission Not Found Validation
     #[tokio::test]
+    #[serial]
     async fn test_create_plagiarism_case_submission_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let payload = CreatePlagiarismCasePayload {
             submission_id_1: data.submission1.id,
@@ -268,13 +274,14 @@ mod create_plagiarism_tests {
 
     /// Test Case: Submission from Different Assignment
     #[tokio::test]
+    #[serial]
     async fn test_create_plagiarism_case_wrong_assignment() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         // Create another assignment and submission
         let other_assignment = AssignmentModel::create(
-            app_state.db(),
+            db::get_connection().await,
             data.module.id,
             "Other Assignment",
             None,
@@ -284,7 +291,7 @@ mod create_plagiarism_tests {
         ).await.unwrap();
         
         let other_submission = SubmissionModel::save_file(
-            app_state.db(),
+            db::get_connection().await,
             other_assignment.id,
             data.student_user1.id,
             1,
@@ -321,9 +328,10 @@ mod create_plagiarism_tests {
 
     /// Test Case: Missing Authorization Header
     #[tokio::test]
+    #[serial]
     async fn test_create_plagiarism_case_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let payload = CreatePlagiarismCasePayload {
             submission_id_1: data.submission1.id,
@@ -349,9 +357,10 @@ mod create_plagiarism_tests {
 
     /// Test Case: Invalid Payload Format
     #[tokio::test]
+    #[serial]
     async fn test_create_plagiarism_case_invalid_payload() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let invalid_payload = json!({
             "submission_id_1": "not_a_number",

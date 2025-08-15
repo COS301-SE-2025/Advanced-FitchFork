@@ -1,5 +1,4 @@
 use axum::{Router, routing::get, Json, response::IntoResponse};
-use util::state::AppState;
 use crate::response::ApiResponse;
 
 /// Builds the `/health` route group.
@@ -9,7 +8,7 @@ use crate::response::ApiResponse;
 ///
 /// # Returns
 /// An Axum `Router` with the `GET /health` route configured.
-pub fn health_routes() -> Router<AppState> {
+pub fn health_routes() -> Router {
     Router::new().route("/", get(health_check))
 }
 

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -12,7 +12,6 @@ use sea_orm::{
 };
 use serde_json::json;
 use db::models::assignment_file;
-use util::state::AppState;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/files
 ///
@@ -60,11 +59,10 @@ use util::state::AppState;
 /// ```
 ///
 pub async fn delete_files(
-    State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let file_ids: Vec<i64> = req
         .get("file_ids")

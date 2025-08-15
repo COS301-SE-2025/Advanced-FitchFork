@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use axum::{
-    extract::{State, Query, Path},
+    extract::{Query, Path},
     http::{StatusCode, header, HeaderMap, HeaderValue},
     response::IntoResponse,
     Json,
@@ -9,7 +9,6 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use tokio::fs::File as FsFile;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
-use util::state::AppState;
 use crate::{
     auth::claims::AuthUser,
     response::ApiResponse,
@@ -87,10 +86,9 @@ pub struct HasRoleResponse {
 /// - `404 Not Found` – User not found
 /// - `500 Internal Server Error` – Database failure
 pub async fn get_me(
-    State(app_state): State<AppState>,
     AuthUser(claims): AuthUser
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
     let user_id = claims.sub;
 
     let user = match user::Entity::find()
@@ -205,10 +203,9 @@ pub async fn get_me(
 /// }
 /// ```
 pub async fn get_avatar(
-    State(app_state): State<AppState>,
     Path(user_id): Path<i64>
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let user = user::Entity::find_by_id(user_id).one(db).await.unwrap().unwrap();
 
@@ -291,11 +288,10 @@ pub async fn get_avatar(
 /// - `403 Forbidden` – Missing or invalid token
 /// - `500 Internal Server Error` – Database failure
 pub async fn has_role_in_module(
-    State(app_state): State<AppState>,
     AuthUser(claims): AuthUser,
     Query(params): Query<HasRoleQuery>
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let role = match params.role.to_lowercase().as_str() {
         "lecturer" => Role::Lecturer,
@@ -367,11 +363,10 @@ pub struct ModuleRoleResponse {
 /// ```
 /// #[derive(Debug, Deserialize)]
 pub async fn get_module_role(
-    State(app_state): State<AppState>,
     AuthUser(claims): AuthUser,
     Query(params): Query<ModuleRoleQuery>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let role = match user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(claims.sub))

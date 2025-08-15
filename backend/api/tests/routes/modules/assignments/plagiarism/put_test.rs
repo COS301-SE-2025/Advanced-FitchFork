@@ -26,6 +26,7 @@ mod update_plagiarism_tests {
     use crate::helpers::app::make_test_app;
     use chrono::{Datelike, TimeZone, Utc};
     use api::routes::modules::assignments::plagiarism::put::UpdatePlagiarismCasePayload;
+    use serial_test::serial;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -123,9 +124,10 @@ mod update_plagiarism_tests {
 
     /// Test Case: Successful Update by Lecturer
     #[tokio::test]
+    #[serial]
     async fn test_update_plagiarism_case_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let original_updated_at = data.plagiarism_case.updated_at;
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -159,7 +161,7 @@ mod update_plagiarism_tests {
         assert!(*case_data["updated_at"].as_str().unwrap() > *original_updated_at.to_rfc3339());
 
         let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap()
             .expect("Case should exist");
@@ -170,9 +172,10 @@ mod update_plagiarism_tests {
 
     /// Test Case: Partial Update by Assistant Lecturer
     #[tokio::test]
+    #[serial]
     async fn test_update_plagiarism_case_partial_update() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         
         let original_updated_at = data.plagiarism_case.updated_at;
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -202,7 +205,7 @@ mod update_plagiarism_tests {
         assert!(*case_data["updated_at"].as_str().unwrap() > *original_updated_at.to_rfc3339());
         
         let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap()
             .expect("Case should exist");
@@ -212,9 +215,10 @@ mod update_plagiarism_tests {
 
     /// Test Case: Forbidden Access for Non-Permitted Roles
     #[tokio::test]
+    #[serial]
     async fn test_update_plagiarism_case_forbidden_roles() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let payload = UpdatePlagiarismCasePayload {
             description: Some("Unauthorized update".to_string()),
@@ -244,9 +248,10 @@ mod update_plagiarism_tests {
 
     /// Test Case: Validation Failures
     #[tokio::test]
+    #[serial]
     async fn test_update_plagiarism_case_validation_errors() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let payload = UpdatePlagiarismCasePayload {
             description: None,
@@ -288,9 +293,10 @@ mod update_plagiarism_tests {
 
     /// Test Case: Case Not Found
     #[tokio::test]
+    #[serial]
     async fn test_update_plagiarism_case_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let payload = UpdatePlagiarismCasePayload {
             description: Some("Update non-existent case".to_string()),
@@ -316,9 +322,10 @@ mod update_plagiarism_tests {
 
     /// Test Case: Unauthorized Access
     #[tokio::test]
+    #[serial]
     async fn test_update_plagiarism_case_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let payload = UpdatePlagiarismCasePayload {
             description: Some("Unauthorized update".to_string()),

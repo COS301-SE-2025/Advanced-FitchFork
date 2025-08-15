@@ -3,14 +3,13 @@ use api::auth::guards::validate_known_ids;
 use api::routes::routes;
 use axum::{
     http::header::{CONTENT_DISPOSITION, CONTENT_TYPE},
-    middleware::{from_fn, from_fn_with_state},
+    middleware::from_fn,
     Router,
 };
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 use tracing_appender::rolling;
-use util::{config::AppConfig, state::AppState, ws::WebSocketManager};
-use db::connect;
+use util::{config::AppConfig, state::AppState};
 
 #[tokio::main]
 async fn main() {
@@ -19,21 +18,17 @@ async fn main() {
     let _log_guard = init_logging(&config.log_file, &config.log_level);
 
     // Set up dependencies
-    let db = connect().await;
-    let ws = WebSocketManager::new();
-    let app_state = AppState::new(db, ws);
+    let _ = AppState::init(false);
 
     // Configure middleware
     let cors = CorsLayer::very_permissive().expose_headers([CONTENT_DISPOSITION, CONTENT_TYPE]);
 
     // Build app router
     let app = Router::new()
-        .nest("/api", routes(app_state.clone()).layer(from_fn_with_state(app_state.clone(), validate_known_ids)))
-        .nest("/ws", ws_routes(app_state.clone()))
+        .nest("/api", routes().layer(from_fn(validate_known_ids)))
+        .nest("/ws", ws_routes())
         .layer(from_fn(log_request))
-        .layer(cors)
-        .with_state(app_state);
-
+        .layer(cors);
     // Start server
     let addr: SocketAddr = format!("{}:{}", config.host, config.port)
         .parse()

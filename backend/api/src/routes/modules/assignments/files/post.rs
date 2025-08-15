@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Multipart, Path},
+    extract::{Multipart, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -9,7 +9,6 @@ use db::models::assignment_file::{
     FileType,
     Model as FileModel,
 };
-use util::state::AppState;
 use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
@@ -88,11 +87,10 @@ pub struct AssignmentSubmissionMetadata {
 /// ```
 ///
 pub async fn upload_files(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let mut file_type: Option<FileType> = None;
     let mut file_name: Option<String> = None;

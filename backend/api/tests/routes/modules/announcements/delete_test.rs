@@ -20,6 +20,7 @@ mod tests {
         user_service::{CreateUser, UserService},
     };
     use tower::ServiceExt;
+    use serial_test::serial;
 
     struct TestData {
         student: UserModel,
@@ -95,9 +96,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn delete_announcement_success() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
         let uri = format!(
@@ -117,9 +119,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn delete_announcement_forbidden_student() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.student.id, data.student.admin);
         let uri = format!(
@@ -139,9 +142,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn delete_announcement_forbidden_invalid_user() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.invalid_user.id, data.invalid_user.admin);
         let uri = format!(
@@ -161,9 +165,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn delete_nonexistent_announcement() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
         let uri = format!(

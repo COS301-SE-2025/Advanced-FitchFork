@@ -16,6 +16,7 @@ mod tests {
     use serde_json::{json, Value};
     use api::auth::generate_jwt;
     use crate::helpers::app::make_test_app;
+    use serial_test::serial;
 
     struct TestData {
         admin_user: UserModel,
@@ -42,9 +43,10 @@ mod tests {
 
     /// Test Case: Successful Creation of Single User as Admin
     #[tokio::test]
+    #[serial]
     async fn test_create_user_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
@@ -71,9 +73,10 @@ mod tests {
 
     /// Test Case: Creating Single User is Forbidden for Non-Admin
     #[tokio::test]
+    #[serial]
     async fn test_create_user_forbidden_as_non_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
         let req_body = json!({
@@ -96,9 +99,10 @@ mod tests {
 
     /// Test Case: Single User Creation Validation Failure
     #[tokio::test]
+    #[serial]
     async fn test_create_user_validation_failure() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
@@ -121,9 +125,10 @@ mod tests {
 
     /// Test Case: Successful Bulk User Creation
     #[tokio::test]
+    #[serial]
     async fn test_bulk_create_users_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
@@ -151,9 +156,10 @@ mod tests {
 
     /// Test Case: Bulk User Creation Validation Failure
     #[tokio::test]
+    #[serial]
     async fn test_bulk_create_users_validation_failure() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
@@ -176,11 +182,12 @@ mod tests {
 
     /// Test Case: Bulk User Creation Conflict on Duplicate
     #[tokio::test]
+    #[serial]
     async fn test_bulk_create_users_conflict() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         service.create(CreateUser{ username: "dupe".to_string(), email: "dupe@test.com".to_string(), password: "pass1234".to_string(), admin: false }).await.unwrap();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
 

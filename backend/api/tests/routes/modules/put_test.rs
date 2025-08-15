@@ -15,6 +15,7 @@ mod tests {
     use tower::ServiceExt;
     use api::auth::generate_jwt;
     use crate::helpers::app::make_test_app;
+    use serial_test::serial;
 
     struct TestData {
         admin_user: UserModel,
@@ -47,9 +48,10 @@ mod tests {
 
     /// Test Case: Admin updates module successfully
     #[tokio::test]
+    #[serial]
     async fn test_edit_module_success() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
@@ -80,9 +82,10 @@ mod tests {
 
     /// Test Case: Non-admin user attempts to update module
     #[tokio::test]
+    #[serial]
     async fn test_edit_module_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
@@ -106,9 +109,10 @@ mod tests {
 
     /// Test Case: Invalid module code format
     #[tokio::test]
+    #[serial]
     async fn test_edit_module_invalid_code() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "abc123", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
@@ -132,9 +136,10 @@ mod tests {
 
     /// Test Case: Year in the past
     #[tokio::test]
+    #[serial]
     async fn test_edit_module_year_in_past() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() - 1, "description": "Updated description", "credits": 20});
@@ -158,9 +163,10 @@ mod tests {
 
     /// Test Case: Invalid credits value
     #[tokio::test]
+    #[serial]
     async fn test_edit_module_invalid_credits() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 0});
@@ -184,9 +190,10 @@ mod tests {
 
     /// Test Case: Description too long
     #[tokio::test]
+    #[serial]
     async fn test_edit_module_description_too_long() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
@@ -215,12 +222,13 @@ mod tests {
 
     /// Test Case: Duplicate module code
     #[tokio::test]
+    #[serial]
     async fn test_edit_module_duplicate_code() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let _other_module = Module::create(
-            app_state.db(),
+            db::get_connection().await,
             "COS302",
             Utc::now().year(),
             Some("Other module"),
@@ -251,9 +259,10 @@ mod tests {
 
     /// Test Case: Update non-existent module
     #[tokio::test]
+    #[serial]
     async fn test_edit_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS302", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
@@ -277,9 +286,10 @@ mod tests {
 
     /// Test Case: Multiple validation errors
     #[tokio::test]
+    #[serial]
     async fn test_edit_module_multiple_errors() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "invalid", "year": 2000, "description": "a".repeat(1001), "credits": 0});
@@ -306,9 +316,10 @@ mod tests {
 
     /// Test Case: Update with same code (should succeed)
     #[tokio::test]
+    #[serial]
     async fn test_edit_module_same_code() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS301", "year": Utc::now().year() + 1, "description": "Updated description", "credits": 20});
@@ -349,9 +360,10 @@ mod tests {
 
     /// Test Case: Admin bulk updates modules successfully
     #[tokio::test]
+    #[serial]
     async fn test_bulk_update_modules_success() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
 
         let modules = create_multiple_modules(&db, 3).await;
@@ -395,9 +407,10 @@ mod tests {
 
     /// Test Case: Attempt to update module code
     #[tokio::test]
+    #[serial]
     async fn test_bulk_update_code_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
 
         let modules = create_multiple_modules(&db, 2).await;
@@ -427,9 +440,10 @@ mod tests {
 
     /// Test Case: Bulk update with no module IDs
     #[tokio::test]
+    #[serial]
     async fn test_bulk_update_no_ids() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -456,9 +470,10 @@ mod tests {
 
     /// Test Case: Partial success with some updates failing
     #[tokio::test]
+    #[serial]
     async fn test_bulk_update_partial_success() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
 
         let modules = create_multiple_modules(&db, 2).await;
@@ -506,9 +521,10 @@ mod tests {
 
     /// Test Case: Validation errors in bulk update
     #[tokio::test]
+    #[serial]
     async fn test_bulk_update_validation_errors() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
 
         let modules = create_multiple_modules(&db, 2).await;
@@ -541,9 +557,10 @@ mod tests {
 
     /// Test Case: Non-admin attempts bulk update
     #[tokio::test]
+    #[serial]
     async fn test_bulk_update_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
 
         let modules = create_multiple_modules(&db, 2).await;

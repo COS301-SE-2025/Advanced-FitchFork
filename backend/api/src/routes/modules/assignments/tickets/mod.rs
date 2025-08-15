@@ -1,5 +1,4 @@
 use axum::{Router, routing::{post, put, delete, get}};
-use util::state::AppState;
 pub mod post;
 pub mod put;
 pub mod common;
@@ -11,7 +10,7 @@ use delete::delete_ticket;
 use get::{get_ticket, get_tickets};
 
 
-pub fn ticket_routes(_app_state: AppState) -> Router<AppState> {
+pub fn ticket_routes() -> Router {
 	Router::new()
 	.route("/", post(create_ticket))
 	.route("/{ticket_id}/close", put(close_ticket))

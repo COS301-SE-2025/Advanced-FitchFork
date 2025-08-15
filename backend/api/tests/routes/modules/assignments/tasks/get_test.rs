@@ -133,8 +133,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_list_tasks_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
@@ -171,8 +171,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_list_tasks_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer1.id, data.lecturer1.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
@@ -197,8 +197,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_list_tasks_assignment_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, 9999);
@@ -221,8 +221,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_list_tasks_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks", 9999, data.assignment.id);
@@ -245,8 +245,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_list_tasks_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
@@ -267,8 +267,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_task_details_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);
@@ -312,8 +312,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_task_details_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer1.id, data.lecturer1.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);
@@ -331,8 +331,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_task_details_task_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, 99999);
@@ -355,13 +355,13 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_task_details_task_wrong_assignment() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let open_date = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
         let due_date = Utc.with_ymd_and_hms(2024, 12, 31, 23, 59, 59).unwrap();
         let assignment2 = AssignmentModel::create(
-            app_state.db(),
+            db::get_connection().await,
             data.module.id,
             "Assignment 2",
             Some("Desc 2"),
@@ -372,7 +372,7 @@ mod tests {
         .await
         .expect("Failed to create second assignment");
         let task_in_assignment2 = AssignmentTaskModel::create(
-            app_state.db(),
+            db::get_connection().await,
             assignment2.id,
             1,
             "echo 'Other'",
@@ -402,8 +402,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_task_details_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);

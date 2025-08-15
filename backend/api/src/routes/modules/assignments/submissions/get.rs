@@ -4,7 +4,7 @@ use super::common::{
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -18,7 +18,6 @@ use sea_orm::{
 };
 use serde::Serialize;
 use serde_json::Value;
-use util::state::AppState;
 use std::{fs, path::PathBuf};
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
@@ -544,12 +543,11 @@ async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bo
 /// - Students: `username` is ignored, only their own submissions returned.
 /// - Late submissions are calculated based on `due_date`.
 pub async fn list_submissions(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Query(params): Query<ListSubmissionsQuery>,
 ) -> axum::response::Response {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let user_id = claims.sub;
     if is_student(module_id, user_id, db).await {
@@ -673,11 +671,10 @@ pub async fn list_submissions(
 ///   code coverage/complexity analysis
 /// - Access is restricted to users with appropriate permissions for the module
 pub async fn get_submission(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let submission = SubmissionEntity::find_by_id(submission_id)
         .one(db)
@@ -802,10 +799,9 @@ struct MemoResponse {
 }
 
 pub async fn get_submission_output(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let output = match SubmissionOutput::get_output(db, module_id, assignment_id, submission_id).await {
         Ok(output) => output,

@@ -17,6 +17,7 @@ mod tests {
         user_service::{UserService, CreateUser}
     };
     use db::repositories::user_repository::UserRepository;
+    use serial_test::serial;
 
     struct TestData {
         admin: UserModel,
@@ -41,9 +42,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn get_personnel_as_admin_success() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel?role=tutor", data.module.id);
@@ -65,9 +67,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn get_personnel_as_lecturer_for_tutors_success() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
         let uri = format!("/api/modules/{}/personnel?role=tutor", data.module.id);
@@ -84,9 +87,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn get_personnel_as_lecturer_for_lecturer_role_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
         let uri = format!("/api/modules/{}/personnel?role=lecturer", data.module.id);
@@ -103,9 +107,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn get_personnel_as_non_member_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.outsider.id, false);
         let uri = format!("/api/modules/{}/personnel?role=student", data.module.id);
@@ -122,9 +127,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn get_eligible_users_as_admin_success() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel/eligible", data.module.id);
@@ -155,9 +161,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn get_eligible_users_pagination_and_filtering() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel/eligible?page=1&per_page=1&username=out", data.module.id);

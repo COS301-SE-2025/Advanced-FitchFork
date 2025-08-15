@@ -1,6 +1,6 @@
 use crate::response::ApiResponse;
 use axum::{
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -9,7 +9,7 @@ use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEnt
 use db::models::assignment_file::{Entity as AssignmentFile, Column as AssignmentFileColumn, FileType, Model as AssignmentFileModel};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::to_value;
-use util::{execution_config::ExecutionConfig, state::AppState};
+use util::execution_config::ExecutionConfig;
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -69,10 +69,9 @@ use util::{execution_config::ExecutionConfig, state::AppState};
 /// - Config format uses [`ExecutionConfig`] as the schema
 /// - This is an example schema and will evolve over time
 pub async fn get_assignment_config(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     // Verify the assignment exists
     match AssignmentEntity::find()

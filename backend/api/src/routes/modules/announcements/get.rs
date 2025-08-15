@@ -1,12 +1,11 @@
 use crate::response::ApiResponse;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
 use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
-use util::state::AppState;
 use db::models::announcements::{
     Column as AnnouncementColumn, Entity as AnnouncementEntity, Model as AnnouncementModel,
 };
@@ -41,10 +40,9 @@ impl FilterResponse {
 
 pub async fn get_announcements(
     Path(module_id): Path<i64>,
-    State(app_state): State<AppState>,
     Query(params): Query<FilterReq>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100);

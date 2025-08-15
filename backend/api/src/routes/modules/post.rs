@@ -1,11 +1,9 @@
 use axum::{
-    extract::State,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use chrono::{Datelike, Utc};
-use util::state::AppState;
 use validator::Validate;
 use db::models::module::{Model as Module};
 use crate::response::ApiResponse;
@@ -82,10 +80,9 @@ use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
 /// }
 /// ```
 pub async fn create(
-    State(state): State<AppState>,
     Json(req): Json<ModuleRequest>
 ) -> impl IntoResponse {
-    let db = state.db();
+    let db = db::get_connection().await;
 
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);

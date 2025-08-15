@@ -17,6 +17,7 @@ mod tests {
         user_service::{UserService, CreateUser}
     };
     use db::repositories::user_repository::UserRepository;
+    use serial_test::serial;
 
     struct TestData {
         admin: UserModel,
@@ -39,9 +40,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn assign_personnel_as_admin_success() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin.id, data.admin.admin);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -67,9 +69,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn assign_personnel_as_lecturer_success_for_non_lecturer_roles() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -87,9 +90,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn assign_lecturer_role_as_lecturer_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -107,9 +111,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn assign_personnel_as_non_lecturer_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.outsider.id, false);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -127,9 +132,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn assign_personnel_as_student_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         // Student is assigned to the module, but still shouldn't have assign permissions
         let (token, _) = generate_jwt(data.student.id, false);
@@ -148,9 +154,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn assign_personnel_user_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -168,9 +175,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn assign_personnel_empty_user_ids() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);

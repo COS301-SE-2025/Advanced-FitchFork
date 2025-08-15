@@ -14,6 +14,7 @@ mod tests {
     use crate::helpers::app::make_test_app;
     use serde_json::json;
     use tower::ServiceExt;
+    use serial_test::serial;
 
     struct TestData {
         admin_user: UserModel,
@@ -35,9 +36,10 @@ mod tests {
 
     /// Test Case: Admin creates module successfully
     #[tokio::test]
+    #[serial]
     async fn test_create_module_success() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS301", "year": Utc::now().year(), "description": "Advanced Software Engineering", "credits": 16});
@@ -68,9 +70,10 @@ mod tests {
 
     /// Test Case: Non-admin user attempts to create module
     #[tokio::test]
+    #[serial]
     async fn test_create_module_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let req_body = json!({"code": "COS301", "year": Utc::now().year(), "credits": 16});
@@ -93,9 +96,10 @@ mod tests {
 
     /// Test Case: Invalid module code format
     #[tokio::test]
+    #[serial]
     async fn test_create_module_invalid_code() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "abc123", "year": Utc::now().year(), "credits": 16});
@@ -118,9 +122,10 @@ mod tests {
 
     /// Test Case: Year in the past
     #[tokio::test]
+    #[serial]
     async fn test_create_module_year_in_past() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let current_year = Utc::now().year();
@@ -144,9 +149,10 @@ mod tests {
 
     /// Test Case: Invalid credits value
     #[tokio::test]
+    #[serial]
     async fn test_create_module_invalid_credits() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "COS301", "year": Utc::now().year(), "credits": 0});
@@ -169,9 +175,10 @@ mod tests {
 
     /// Test Case: Description too long
     #[tokio::test]
+    #[serial]
     async fn test_create_module_description_too_long() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let long_description = "a".repeat(1001);
@@ -195,9 +202,10 @@ mod tests {
 
     /// Test Case: Duplicate module code
     #[tokio::test]
+    #[serial]
     async fn test_create_module_duplicate_code() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body1 = json!({"code": "COS301", "year": Utc::now().year(), "credits": 16});
@@ -232,9 +240,10 @@ mod tests {
 
     /// Test Case: Multiple validation errors
     #[tokio::test]
+    #[serial]
     async fn test_create_module_multiple_errors() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"code": "invalid", "year": 2000, "credits": 0});
@@ -259,9 +268,10 @@ mod tests {
 
     /// Test Case: Missing required fields
     #[tokio::test]
+    #[serial]
     async fn test_create_module_missing_fields() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({"year": Utc::now().year()});

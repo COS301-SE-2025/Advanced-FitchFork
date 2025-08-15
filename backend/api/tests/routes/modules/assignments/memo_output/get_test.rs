@@ -90,8 +90,8 @@ mod tests {
     #[serial]
     async fn test_get_memo_output_success_as_lecturer() {
         set_test_assignment_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         setup_memo_output_file(data.module.id, data.assignment.id, 1);
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -128,8 +128,8 @@ mod tests {
     #[serial]
     async fn test_get_memo_output_success_as_admin() {
         set_test_assignment_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         setup_memo_output_file(data.module.id, data.assignment.id, 1);
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -152,8 +152,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         setup_memo_output_file(data.module.id, data.assignment.id, 1);
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -176,8 +176,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_forbidden_for_unassigned_user() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         setup_memo_output_file(data.module.id, data.assignment.id, 1);
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
@@ -199,8 +199,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_not_found_if_file_doesnt_exist() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -222,8 +222,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_assignment_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -245,8 +245,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output",

@@ -14,6 +14,7 @@ mod tests {
     use api::auth::generate_jwt;
     use crate::helpers::app::make_test_app;
     use sea_orm::{DatabaseConnection, EntityTrait};
+    use serial_test::serial;
 
     struct TestData {
         admin_user: UserModel,
@@ -46,9 +47,10 @@ mod tests {
 
     /// Test Case: Admin deletes module successfully
     #[tokio::test]
+    #[serial]
     async fn test_delete_module_success() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -70,7 +72,7 @@ mod tests {
         assert!(json["data"].is_null());
 
         let exists = module::Entity::find_by_id(data.module.id)
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap()
             .is_some();
@@ -79,9 +81,10 @@ mod tests {
 
     /// Test Case: Non-admin user attempts to delete module
     #[tokio::test]
+    #[serial]
     async fn test_delete_module_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -101,7 +104,7 @@ mod tests {
         assert_eq!(json["message"], "Admin access required");
 
         let exists = module::Entity::find_by_id(data.module.id)
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap()
             .is_some();
@@ -110,9 +113,10 @@ mod tests {
 
     /// Test Case: Delete non-existent module
     #[tokio::test]
+    #[serial]
     async fn test_delete_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", 99999);
@@ -134,9 +138,10 @@ mod tests {
 
     /// Test Case: Missing authorization header
     #[tokio::test]
+    #[serial]
     async fn test_delete_module_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -149,7 +154,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
         let exists = module::Entity::find_by_id(data.module.id)
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap()
             .is_some();
@@ -175,9 +180,10 @@ mod tests {
 
     /// Test Case: Admin bulk deletes modules successfully
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_modules_success() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
         let modules = create_multiple_modules(db, 3).await;
         let module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
@@ -215,9 +221,10 @@ mod tests {
 
     /// Test Case: Bulk delete with no module IDs
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_no_ids() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -241,9 +248,10 @@ mod tests {
 
     /// Test Case: Non-admin attempts bulk delete
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
 
         let modules = create_multiple_modules(&db, 2).await;
@@ -274,9 +282,10 @@ mod tests {
 
     /// Test Case: Partial success with some modules not found
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_partial_success() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
 
         let modules = create_multiple_modules(&db, 2).await;
@@ -311,9 +320,10 @@ mod tests {
 
     /// Test Case: Database error during bulk delete
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_database_error() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
 
         // Create invalid ID (negative)

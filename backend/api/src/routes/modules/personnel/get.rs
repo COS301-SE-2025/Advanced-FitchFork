@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State, Extension},
+    extract::{Path, Query, Extension},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
@@ -14,7 +14,6 @@ use db::models::{
     user_module_role::{self, Column as RoleCol, Role},
     user::Model as UserModel
 };
-use util::state::AppState;
 use crate::{
     auth::AuthUser,
     response::{ApiResponse},
@@ -94,13 +93,12 @@ pub struct RoleParam {
 /// }
 /// ```
 pub async fn get_personnel(
-    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Query(role_param): Query<RoleParam>,
     Query(params): Query<RoleQuery>,
 ) -> Response {
-    let db = app_state.db();
+    let db = db::get_connection().await;
     let user_id = claims.sub;
     let requested_role = &role_param.role;
 
@@ -272,11 +270,10 @@ pub struct EligibleUserListResponse {
 /// }
 /// ```
 pub async fn get_eligible_users_for_module(
-    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Query(params): Query<EligibleUserQuery>,
 ) -> Response {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let assigned_ids: Vec<i64> = user_module_role::Entity::find()
         .select_only()

@@ -1,6 +1,6 @@
 use axum::{
     Extension, Json,
-    extract::{State, Path, Query},
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -9,7 +9,6 @@ use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait,
     QueryFilter, QueryOrder, QuerySelect,
 };
-use util::state::AppState;
 use crate::{auth::AuthUser, response::ApiResponse};
 use crate::routes::common::UserResponse;
 use db::models::{
@@ -134,10 +133,9 @@ impl From<db::models::module::Model> for ModuleResponse {
 /// }
 /// ```
 pub async fn get_module(
-    State(state): State<AppState>,
     Path(module_id): Path<i64>
 ) -> Response {
-    let db = state.db();
+    let db = db::get_connection().await;
 
     let module = ModuleEntity::find_by_id(module_id)
         .one(db).await.unwrap().unwrap();
@@ -333,10 +331,9 @@ impl From<(Vec<Module>, i32, i32, i32)> for FilterResponse {
 /// }
 /// ```
 pub async fn get_modules(
-    State(state): State<AppState>,
     Query(params): Query<FilterReq>
 ) -> impl IntoResponse {    
-    let db = state.db();
+    let db = db::get_connection().await;
 
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100).max(1);
@@ -538,10 +535,9 @@ impl From<(Vec<Module>, Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsRes
 /// }
 /// ```
 pub async fn get_my_details(
-    State(state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {    
-    let db = state.db();
+    let db = db::get_connection().await;
 
     let user_id = claims.sub;
 

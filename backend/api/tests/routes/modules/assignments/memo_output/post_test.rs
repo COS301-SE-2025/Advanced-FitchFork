@@ -182,8 +182,8 @@ mod tests {
     #[serial]
     async fn test_post_memo_output_success_as_lecturer() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         setup_input_dirs(data.module.id, data.assignment.id, temp_dir.path());
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -225,8 +225,8 @@ mod tests {
     #[serial]
     async fn test_post_memo_output_success_as_admin() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         setup_input_dirs(data.module.id, data.assignment.id, temp_dir.path());
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -268,8 +268,8 @@ mod tests {
     #[serial]
     async fn test_post_memo_output_forbidden_for_student() {
         setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
@@ -291,8 +291,8 @@ mod tests {
     #[serial]
     async fn test_post_memo_output_forbidden_for_unassigned_user() {
         setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!(
@@ -314,8 +314,8 @@ mod tests {
     #[serial]
     async fn test_post_memo_output_unauthorized() {
         setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output/generate",
@@ -335,8 +335,8 @@ mod tests {
     #[serial]
     async fn test_post_memo_output_assignment_not_found() {
         setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(

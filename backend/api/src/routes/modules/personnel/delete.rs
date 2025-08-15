@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State, Extension},
+    extract::{Path, Extension},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -13,7 +13,6 @@ use db::models::{
     user::Entity as UserEntity,
     user_module_role::{Entity as RoleEntity, Column as RoleCol, Role},
 };
-use util::state::AppState;
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
@@ -109,12 +108,11 @@ pub struct RemovePersonnelRequest {
 /// }
 /// ```
 pub async fn remove_personnel(
-    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(body): Json<RemovePersonnelRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
     let requester_id = claims.sub;
 
     if body.user_ids.is_empty() {

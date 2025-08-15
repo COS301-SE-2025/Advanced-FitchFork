@@ -1,35 +1,47 @@
 use axum::{
     body::Body,
     http::Request,
-    middleware::from_fn_with_state,
+    middleware::from_fn,
     response::Response,
     Router,
 };
-use sea_orm::DatabaseConnection;
-use util::{config::AppConfig, state::AppState, ws::WebSocketManager};
+use util::state::AppState;
 use api::{
     auth::guards::validate_known_ids,
     routes::routes,
     ws::ws_routes,
 };
+use services::util_service::UtilService;
 use tower::util::BoxCloneService;
 use tower::ServiceExt;
 use std::convert::Infallible;
+use ctor::{ctor, dtor};
 
-pub async fn make_test_app() -> (
-    BoxCloneService<Request<Body>, Response, Infallible>,
-    AppState,
-) {
-    let db: DatabaseConnection = db::test_utils::setup_test_db().await;
-    let _ = AppConfig::from_env(); // Initialize the config singleton
-    let ws = WebSocketManager::new();
-    let app_state = AppState::new(db, ws);
+#[ctor]
+fn setup_tests() {
+    println!("🚀 Setting up test environment...");
+
+    let _ = AppState::init(true);
+
+    println!("✅ Test environment set up");
+}
+
+#[dtor]
+fn cleanup_tests() {
+    println!("🧹 Cleaning up test environment...");
+
+    let _ = std::fs::remove_dir_all("./tmp");
+    let _ = std::fs::remove_file("test.db");
+    
+    println!("✅ Test environment cleaned up");
+}
+
+pub async fn make_test_app() -> BoxCloneService<Request<Body>, Response, Infallible> {
+    UtilService::clean_db().await.expect("Failed to clean db");
 
     let router = Router::new()
-        .nest("/api", routes(app_state.clone()).layer(from_fn_with_state(app_state.clone(), validate_known_ids)))
-        .nest("/ws", ws_routes(app_state.clone())) // <-- Add this line
-        .with_state(app_state.clone());
+        .nest("/api", routes().layer(from_fn(validate_known_ids)))
+        .nest("/ws", ws_routes());
 
-    let boxed = router.into_service().boxed_clone();
-    (boxed, app_state)
+    router.into_service().boxed_clone()
 }

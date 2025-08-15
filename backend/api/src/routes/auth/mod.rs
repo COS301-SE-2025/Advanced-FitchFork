@@ -16,7 +16,6 @@ use post::{
     reset_password, upload_profile_picture, change_password
 };
 use get::{get_me, get_avatar, has_role_in_module, get_module_role};
-use util::state::AppState;
 
 pub mod post;
 pub mod get;
@@ -44,7 +43,7 @@ pub mod get;
 // ## Usage
 // Use the `auth_routes()` function to mount all `/auth` endpoints under the main application router.
 
-pub fn auth_routes() -> Router<AppState> {
+pub fn auth_routes() -> Router {
     Router::new()        
         .route("/register", post(register))
         .route("/login", post(login))

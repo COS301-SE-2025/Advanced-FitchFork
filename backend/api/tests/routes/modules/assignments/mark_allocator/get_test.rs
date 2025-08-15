@@ -73,8 +73,8 @@ mod tests {
     #[serial]
     async fn test_get_mark_allocator_success_as_lecturer() {
         set_test_assignment_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         
         let allocator_path = PathBuf::from("./tmp")
             .join(format!("module_{}", data.module.id))
@@ -106,8 +106,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_mark_allocator_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
@@ -124,8 +124,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_mark_allocator_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
@@ -142,8 +142,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_mark_allocator_forbidden_for_unassigned_user() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
@@ -160,8 +160,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_mark_allocator_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
         let req = Request::builder()

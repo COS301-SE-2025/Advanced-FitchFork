@@ -348,8 +348,8 @@ mod tests {
     #[serial]
     async fn test_valid_submission_zip() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -384,8 +384,8 @@ mod tests {
     #[serial]
     async fn test_valid_submission_tar() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_tar();
 
         let (boundary, body) = multipart_body("solution.tar", &file, None);
@@ -420,8 +420,8 @@ mod tests {
     #[serial]
     async fn test_valid_submission_tgz() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_tgz();
 
         let (boundary, body) = multipart_body("solution.tgz", &file, None);
@@ -456,8 +456,8 @@ mod tests {
     #[serial]
     async fn test_valid_submission_gz() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_gz();
 
         let (boundary, body) = multipart_body("solution.gz", &file, None);
@@ -492,8 +492,8 @@ mod tests {
     #[serial]
     async fn test_practice_submission() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, Some("true"));
@@ -528,8 +528,8 @@ mod tests {
     #[serial]
     async fn test_multiple_attempts_increments() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -613,20 +613,20 @@ mod tests {
     #[serial]
     async fn test_submission_exactly_at_due_date() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_zip();
 
         let mut assignment_active_model: AssignmentActiveModel =
             AssignmentEntity::find_by_id(data.assignment.id)
-                .one(app_state.db())
+                .one(db::get_connection().await)
                 .await
                 .unwrap()
                 .unwrap()
                 .into();
         assignment_active_model.due_date = Set(Utc::now());
         assignment_active_model
-            .update(app_state.db())
+            .update(db::get_connection().await)
             .await
             .unwrap();
 
@@ -662,20 +662,20 @@ mod tests {
     #[serial]
     async fn test_submission_just_after_due_date() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_zip();
 
         let mut assignment_active_model: AssignmentActiveModel =
             AssignmentEntity::find_by_id(data.assignment.id)
-                .one(app_state.db())
+                .one(db::get_connection().await)
                 .await
                 .unwrap()
                 .unwrap()
                 .into();
         assignment_active_model.due_date = Set(Utc::now() - Duration::hours(1));
         assignment_active_model
-            .update(app_state.db())
+            .update(db::get_connection().await)
             .await
             .unwrap();
 
@@ -711,20 +711,20 @@ mod tests {
     #[serial]
     async fn test_submission_just_before_due_date() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_zip();
 
         let mut assignment_active_model: AssignmentActiveModel =
             AssignmentEntity::find_by_id(data.assignment.id)
-                .one(app_state.db())
+                .one(db::get_connection().await)
                 .await
                 .unwrap()
                 .unwrap()
                 .into();
         assignment_active_model.due_date = Set(Utc::now() + Duration::hours(1));
         assignment_active_model
-            .update(app_state.db())
+            .update(db::get_connection().await)
             .await
             .unwrap();
 
@@ -761,8 +761,8 @@ mod tests {
     #[serial]
     async fn test_large_file_submission() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_large_zip_file(1000 * 1000);
 
         let (boundary, body) = multipart_body("large.zip", &file, None);
@@ -797,8 +797,8 @@ mod tests {
     #[serial]
     async fn test_missing_file() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
 
         let boundary = "----BoundaryTest".to_string();
         let mut body = Vec::new();
@@ -836,8 +836,8 @@ mod tests {
     #[serial]
     async fn test_empty_file() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = Vec::new();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -872,8 +872,8 @@ mod tests {
     #[serial]
     async fn test_invalid_file_extension() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_exe_file();
 
         let (boundary, body) = multipart_body("solution.exe", &file, None);
@@ -911,8 +911,8 @@ mod tests {
     #[serial]
     async fn test_corrupted_archive() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_corrupted_zip();
 
         let (boundary, body) = multipart_body("corrupted.zip", &file, None);
@@ -949,8 +949,8 @@ mod tests {
     #[serial]
     async fn test_assignment_not_found() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -986,8 +986,8 @@ mod tests {
     #[serial]
     async fn test_user_not_assigned() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -1022,8 +1022,8 @@ mod tests {
     #[serial]
     async fn test_submitting_to_invalid_assignment() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_zip();
 
         let (boundary, body) = multipart_body("solution.zip", &file, None);
@@ -1095,8 +1095,8 @@ mod tests {
     #[serial]
     async fn test_failed_to_load_mark_allocator() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_zip();
 
         let allocator_path = std::path::PathBuf::from(temp_dir.path())
@@ -1139,8 +1139,8 @@ mod tests {
     #[serial]
     async fn test_failed_marking_due_to_broken_allocator() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         let file = create_submission_zip();
 
         let base_path = temp_dir
@@ -1295,9 +1295,9 @@ mod tests {
     #[serial]
     async fn test_remark_specific_submissions_as_lec() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         
         let service = UserService::new(UserRepository::new(db.clone()));
         let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
@@ -1325,9 +1325,9 @@ mod tests {
     #[serial]
     async fn test_remark_specific_submissions_as_al() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
         
         let service = UserService::new(UserRepository::new(db.clone()));
         let assistant = service.create(CreateUser{ username: "assistant1".to_string(), email: "assistant@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
@@ -1355,9 +1355,9 @@ mod tests {
     #[serial]
     async fn test_remark_all_submissions_as_lec() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
     
         let service = UserService::new(UserRepository::new(db.clone()));
         let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
@@ -1385,9 +1385,9 @@ mod tests {
     #[serial]
     async fn test_remark_all_submissions() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
     
         let service = UserService::new(UserRepository::new(db.clone()));
         let assistant = service.create(CreateUser{ username: "assistant1".to_string(), email: "assistant@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
@@ -1415,9 +1415,9 @@ mod tests {
     #[serial]
     async fn test_remark_missing_parameters() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
 
         let service = UserService::new(UserRepository::new(db.clone()));
         let admin = service.create(CreateUser{ username: "admin1".to_string(), email: "admin@test.com".to_string(), password: "password".to_string(), admin: true }).await.unwrap();
@@ -1441,9 +1441,9 @@ mod tests {
     #[serial]
     async fn test_remark_unauthorized_user() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
 
         let submission = create_submission(db, data.assignment.module_id, data.assignment.id, data.student_user.id, 1, &temp_dir).await;
 
@@ -1468,9 +1468,9 @@ mod tests {
     #[serial]
     async fn test_remark_assignment_not_found() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
     
         let service = UserService::new(UserRepository::new(db.clone()));
         let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
@@ -1493,9 +1493,9 @@ mod tests {
     #[serial]
     async fn test_remark_submission_not_found() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
 
         let service = UserService::new(UserRepository::new(db.clone()));
         let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
@@ -1522,9 +1522,9 @@ mod tests {
     #[serial]
     async fn test_remark_failed_allocator() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
 
         let service = UserService::new(UserRepository::new(db.clone()));
         let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
@@ -1563,9 +1563,9 @@ mod tests {
     #[serial]
     async fn test_remark_grading_failure() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
 
         let service = UserService::new(UserRepository::new(db.clone()));
         let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
@@ -1612,9 +1612,9 @@ mod tests {
     #[serial]
     async fn test_remark_mixed_results() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
 
         let service = UserService::new(UserRepository::new(db.clone()));
         let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();
@@ -1683,9 +1683,9 @@ mod tests {
     #[serial]
     async fn test_remark_invalid_module() {
         let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await, &temp_dir).await;
 
         let service = UserService::new(UserRepository::new(db.clone()));
         let lecturer = service.create(CreateUser{ username: "lecturer1".to_string(), email: "lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.unwrap();

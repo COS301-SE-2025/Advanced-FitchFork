@@ -189,7 +189,6 @@ impl Model {
     }
 
     pub async fn filter(
-        db: &DatabaseConnection,
         page: u64,
         per_page: u64,
         sort_by: Option<String>,
@@ -239,7 +238,7 @@ impl Model {
             };
         }
 
-        query_builder.paginate(db, per_page).fetch_page(page - 1).await
+        query_builder.paginate(crate::get_connection().await, per_page).fetch_page(page - 1).await
     }
 
     fn validate_dates(available_from: DateTime<Utc>, due_date: DateTime<Utc>) -> Result<(), DbErr> {
@@ -282,7 +281,6 @@ impl Model {
     /// File presence is checked on the file system under the expected directories for each file type.
     /// Missing directories or I/O errors are treated as absence of the respective component.
     pub async fn compute_readiness_report(
-        db: &DatabaseConnection,
         module_id: i64,
         assignment_id: i64,
     ) -> Result<ReadinessReport, DbErr> {
@@ -298,7 +296,7 @@ impl Model {
         let tasks_present = TaskEntity::find()
             .filter(TaskColumn::AssignmentId.eq(assignment_id))
             .limit(1)
-            .all(db)
+            .all(crate::get_connection().await)
             .await
             .map(|tasks| !tasks.is_empty())
             .unwrap_or(false);
@@ -384,17 +382,16 @@ impl Model {
     /// * `Ok(false)` if the assignment is not ready.
     /// * `Err(DbErr)` if a database error occurs.
     pub async fn try_transition_to_ready(
-        db: &DatabaseConnection,
         module_id: i64,
         assignment_id: i64,
     ) -> Result<bool, DbErr> {
-        let report = Self::compute_readiness_report(db, module_id, assignment_id).await?;
+        let report = Self::compute_readiness_report(module_id, assignment_id).await?;
 
         if report.is_ready() {
             let mut active = Entity::find()
                 .filter(Column::Id.eq(assignment_id))
                 .filter(Column::ModuleId.eq(module_id))
-                .one(db)
+                .one(crate::get_connection().await)
                 .await?
                 .ok_or(DbErr::RecordNotFound("Assignment not found".into()))?
                 .into_active_model();
@@ -402,7 +399,7 @@ impl Model {
             if active.status.as_ref() == &Status::Setup {
                 active.status = Set(Status::Ready);
                 active.updated_at = Set(Utc::now());
-                active.update(db).await?;
+                active.update(crate::get_connection().await).await?;
             }
         }
 
@@ -415,7 +412,6 @@ impl Model {
 mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
-    use crate::test_utils::setup_test_db;
     use crate::models::module::ActiveModel as ModuleActiveModel;
 
     fn sample_dates() -> (DateTime<Utc>, DateTime<Utc>) {

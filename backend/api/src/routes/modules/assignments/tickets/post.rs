@@ -1,12 +1,11 @@
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
 };
 use db::models::tickets::Model as TicketModel;
 use serde::Deserialize;
-use util::state::AppState;
 
 use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::tickets::common::TicketResponse};
 
@@ -17,12 +16,11 @@ pub struct TicketRequest {
 }
 
 pub async fn create_ticket(
-    State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(req): Json<TicketRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
     let user_id = claims.sub;
     match TicketModel::create(db, assignment_id, user_id, &req.title, &req.description).await {
         Ok(ticket) => {

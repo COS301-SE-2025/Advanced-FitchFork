@@ -56,8 +56,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_me_success_regular_user() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = "/api/auth/me";
@@ -97,8 +97,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_me_success_admin_user() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = "/api/auth/me";
@@ -132,8 +132,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_me_user_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let _  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let _  = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(999999, false);
         let uri = "/api/auth/me";
@@ -157,8 +157,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_me_missing_auth_header() {
-        let (app, app_state) = make_test_app().await;
-        let _  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let _  = setup_test_data(db::get_connection().await).await;
 
         let uri = "/api/auth/me";
         let req = Request::builder()
@@ -175,8 +175,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_me_invalid_token() {
-        let (app, app_state) = make_test_app().await;
-        let _  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let _  = setup_test_data(db::get_connection().await).await;
 
         let uri = "/api/auth/me";
         let req = Request::builder()
@@ -194,8 +194,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_avatar_success() {
-        let (app, app_state) = make_test_app().await;
-        let (data, temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let avatar_filename = format!("avatar_{}.png", data.regular_user.id);
         let avatar_path = temp_dir.path().join(&avatar_filename);
@@ -205,7 +205,7 @@ mod tests {
 
         let mut user_active_model: db::models::user::ActiveModel = data.regular_user.clone().into();
         user_active_model.profile_picture_path = Set(Some(avatar_filename.clone()));
-        let _ = user_active_model.update(app_state.db()).await.expect("Failed to update user profile picture path");
+        let _ = user_active_model.update(db::get_connection().await).await.expect("Failed to update user profile picture path");
 
         let uri = format!("/api/auth/avatar/{}", data.regular_user.id);
         let req = Request::builder()
@@ -228,8 +228,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_avatar_user_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let _  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let _  = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/auth/avatar/{}", 999999);
         let req = Request::builder()
@@ -251,8 +251,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_avatar_no_avatar_set() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/auth/avatar/{}", data.regular_user.id);
         let req = Request::builder()
@@ -274,8 +274,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_avatar_file_missing() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/auth/avatar/{}", data.regular_user.id);
         let req = Request::builder()
@@ -297,8 +297,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_has_role_in_module_success_has_role() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = format!("/api/auth/has-role?module_id={}&role=student", data.module.id);
@@ -323,8 +323,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_has_role_in_module_success_does_not_have_role() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = format!("/api/auth/has-role?module_id={}&role=lecturer", data.module.id);
@@ -349,8 +349,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_has_role_in_module_invalid_role() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = format!("/api/auth/has-role?module_id={}&role=invalidrole", data.module.id);
@@ -374,8 +374,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_has_role_in_module_missing_parameters() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = "/api/auth/has-role";
@@ -394,8 +394,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_has_role_in_module_missing_auth() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/auth/has-role?module_id={}&role=student", data.module.id);
         let req = Request::builder()
@@ -412,8 +412,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_role_success_with_role() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = format!("/api/auth/module-role?module_id={}", data.module.id);
@@ -439,11 +439,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_role_success_no_role() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         // Create a new module that user is not assigned to
-        let new_module = ModuleModel::create(app_state.db(), "MATH101", 2024, Some("Math Module"), 16)
+        let new_module = ModuleModel::create(db::get_connection().await, "MATH101", 2024, Some("Math Module"), 16)
             .await
             .expect("Failed to create test module");
 
@@ -471,8 +471,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_role_missing_module_id() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = "/api/auth/module-role";
@@ -491,8 +491,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_role_unauthenticated() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/auth/module-role?module_id={}", data.module.id);
         let req = Request::builder()
@@ -509,8 +509,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_role_invalid_module_id() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir)  = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = "/api/auth/module-role?module_id=invalid";

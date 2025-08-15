@@ -4,7 +4,6 @@ use post::{create_plagiarism_case, run_moss_check};
 use put::update_plagiarism_case;
 use delete::{delete_plagiarism_case, bulk_delete_plagiarism_cases};
 use patch::{patch_plagiarism_flag, patch_plagiarism_review};
-use util::state::AppState;
 
 pub mod get;
 pub mod post;
@@ -24,7 +23,7 @@ pub mod patch;
 /// - `DELETE /assignments/plagiarism/bulk`                 → Bulk delete plagiarism cases
 /// - `PATCH  /assignments/plagiarism/{case_id}/flag`       → Flag a plagiarism case
 /// - `PATCH  /assignments/plagiarism/{case_id}/review`     → Review a plagiarism case
-pub fn plagiarism_routes() -> Router<AppState> {
+pub fn plagiarism_routes() -> Router {
     Router::new()
         .route("/", get(list_plagiarism_cases))
         .route("/graph", get(get_graph))

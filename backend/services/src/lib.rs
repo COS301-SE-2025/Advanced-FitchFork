@@ -13,3 +13,4 @@ pub mod password_reset_token_service;
 pub mod plagiarism_case_service;
 pub mod ticket_service;
 pub mod ticket_message_service;
+pub mod util_service;

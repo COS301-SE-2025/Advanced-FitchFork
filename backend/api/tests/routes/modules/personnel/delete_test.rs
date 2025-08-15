@@ -17,6 +17,7 @@ mod tests {
         user_service::{UserService, CreateUser}
     };
     use db::repositories::user_repository::UserRepository;
+    use serial_test::serial;
 
     struct TestData {
         admin: UserModel,
@@ -39,9 +40,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn remove_personnel_as_admin_success() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -62,9 +64,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn remove_personnel_as_lecturer_success() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -85,9 +88,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn remove_personnel_as_lecturer_forbidden_target_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -108,9 +112,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn remove_personnel_as_outsider_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.outsider.id, false);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -131,9 +136,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn remove_personnel_user_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -154,9 +160,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn remove_personnel_empty_user_ids() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -177,9 +184,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn remove_personnel_conflict_user_not_assigned() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);

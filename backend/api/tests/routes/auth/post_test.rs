@@ -27,8 +27,9 @@ mod tests {
 
     /// Test Case: Successful User Registration
     #[tokio::test]
+    #[serial]
     async fn test_register_success() {
-        let (app, _) = make_test_app().await;
+        let app = make_test_app().await;
 
         let payload = json!({"username": "testuser123", "email": "testuser123@example.com", "password": "securepassword123"});
         let uri = "/api/auth/register";
@@ -58,8 +59,9 @@ mod tests {
 
     /// Test Case: User Registration with Invalid Email
     #[tokio::test]
+    #[serial]
     async fn test_register_invalid_email() {
-        let (app, _) = make_test_app().await;
+        let app = make_test_app().await;
         
         let payload = json!({"username": "testuser456", "email": "not-an-email", "password": "securepassword456"});
         let uri = "/api/auth/register";
@@ -80,8 +82,9 @@ mod tests {
 
     /// Test Case: User Registration with Short Password
     #[tokio::test]
+    #[serial]
     async fn test_register_short_password() {
-        let (app, _) = make_test_app().await;
+        let app = make_test_app().await;
         
         let payload = json!({"username": "testuser789", "email": "testuser789@example.com", "password": "short"});
         let uri = "/api/auth/register";
@@ -102,10 +105,11 @@ mod tests {
 
     /// Test Case: User Registration with Duplicate Email
     #[tokio::test]
+    #[serial]
     async fn test_register_duplicate_email() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let _existing_user = service.create(CreateUser { username: "existinguser".to_string(), email: "duplicate@test.com".to_string(), password: "existingpass".to_string(), admin: false })
             .await
             .expect("Failed to create existing user");
@@ -129,10 +133,11 @@ mod tests {
 
     /// Test Case: User Registration with Duplicate Username
     #[tokio::test]
+    #[serial]
     async fn test_register_duplicate_username() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let _existing_user = service.create(CreateUser { username: "duplicateuser".to_string(), email: "original@test.com".to_string(), password: "existingpass".to_string(), admin: false })
             .await
             .expect("Failed to create existing user");
@@ -156,10 +161,11 @@ mod tests {
 
     /// Test Case: Successful User Login
     #[tokio::test]
+    #[serial]
     async fn test_login_success() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let user = service.create(CreateUser { username: "logintestuser".to_string(), email: "login@test.com".to_string(), password: "correctpassword".to_string(), admin: false })
             .await
             .expect("Failed to create user for login");
@@ -192,10 +198,11 @@ mod tests {
 
     /// Test Case: User Login with Invalid Credentials (Wrong Password)
     #[tokio::test]
+    #[serial]
     async fn test_login_invalid_password() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let _user = service.create(CreateUser { username: "wrongpasstest".to_string(), email: "wrongpass@test.com".to_string(), password: "realpassword".to_string(), admin: false })
             .await
             .expect("Failed to create user for login");
@@ -219,8 +226,9 @@ mod tests {
 
     /// Test Case: User Login with Non-Existent User
     #[tokio::test]
+    #[serial]
     async fn test_login_nonexistent_user() {
-        let (app, _) = make_test_app().await;
+        let app = make_test_app().await;
         
         let payload = json!({"username": "nonexistentuser", "password": "anypassword"});
         let uri = "/api/auth/login";
@@ -241,10 +249,11 @@ mod tests {
 
     /// Test Case: Successful Password Reset Request
     #[tokio::test]
+    #[serial]
     async fn test_request_password_reset_success() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let _user = service.create(CreateUser { username: "resetrequser".to_string(), email: "resetreq@test.com".to_string(), password: "oldpassword".to_string(), admin: false })
             .await
             .expect("Failed to create user for reset request");
@@ -269,8 +278,9 @@ mod tests {
 
     /// Test Case: Password Reset Request with Invalid Email Format
     #[tokio::test]
+    #[serial]
     async fn test_request_password_reset_invalid_email() {
-        let (app, _) = make_test_app().await;
+        let app = make_test_app().await;
         
         let payload = json!({"email": "invalid-email-format"});
         let uri = "/api/auth/request-password-reset";
@@ -291,15 +301,16 @@ mod tests {
 
      /// Test Case: Successful Password Reset Token Verification
     #[tokio::test]
+    #[serial]
     async fn test_verify_reset_token_success() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let user = service.create(CreateUser { username: "verifytokenuser".to_string(), email: "verifytoken@test.com".to_string(), password: "oldpassword".to_string(), admin: false })
             .await
             .expect("Failed to create user for token verification");
 
-        let token_model = PasswordResetTokenModel::create(app_state.db(), user.id, 15)
+        let token_model = PasswordResetTokenModel::create(db::get_connection().await, user.id, 15)
             .await
             .expect("Failed to create reset token");
 
@@ -324,8 +335,9 @@ mod tests {
 
     /// Test Case: Password Reset Token Verification with Invalid/Expired Token
     #[tokio::test]
+    #[serial]
     async fn test_verify_reset_token_invalid() {
-        let (app, _) = make_test_app().await;
+        let app = make_test_app().await;
         
         let payload = json!({"token": "definitelynotavalidtoken123456"});
         let uri = "/api/auth/verify-reset-token";
@@ -346,15 +358,16 @@ mod tests {
 
     /// Test Case: Successful Password Reset
     #[tokio::test]
+    #[serial]
     async fn test_reset_password_success() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let user = service.create(CreateUser { username: "resetpassuser".to_string(), email: "resetpass@test.com".to_string(), password: "originalpassword".to_string(), admin: false })
             .await
             .expect("Failed to create user for password reset");
 
-        let token_model = PasswordResetTokenModel::create(app_state.db(), user.id, 15)
+        let token_model = PasswordResetTokenModel::create(db::get_connection().await, user.id, 15)
             .await
             .expect("Failed to create reset token for password reset");
 
@@ -402,8 +415,9 @@ mod tests {
 
     /// Test Case: Password Reset with Invalid Token
     #[tokio::test]
+    #[serial]
     async fn test_reset_password_invalid_token() {
-        let (app, _) = make_test_app().await;
+        let app = make_test_app().await;
 
         let payload = json!({"token": "invalidresettoken123456", "new_password": "newpassword123"});
         let uri = "/api/auth/reset-password";
@@ -424,14 +438,15 @@ mod tests {
 
     /// Test Case: Password Reset with Short New Password
     #[tokio::test]
+    #[serial]
     async fn test_reset_password_short_new_password() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let user = service.create(CreateUser { username: "shortpassuser".to_string(), email: "shortpass@test.com".to_string(), password: "oldpass".to_string(), admin: false })
             .await
             .expect("Failed to create user");
-        let token_model = PasswordResetTokenModel::create(app_state.db(), user.id, 15)
+        let token_model = PasswordResetTokenModel::create(db::get_connection().await, user.id, 15)
             .await
             .expect("Failed to create token");
 
@@ -456,9 +471,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_profile_picture_success() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let user = service.create(CreateUser { username: "avataruser".to_string(), email: "avatar@test.com".to_string(), password: "avatarpass".to_string(), admin: false })
             .await
             .expect("Failed to create user for avatar upload");
@@ -506,9 +521,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_profile_picture_invalid_type() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let user = service.create(CreateUser { username: "invalidtypeuser".to_string(), email: "invalidtype@test.com".to_string(), password: "pass".to_string(), admin: false })
             .await
             .expect("Failed to create user");
@@ -546,7 +561,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_profile_picture_missing_auth() {
-        let (app, _) = make_test_app().await;
+        let app = make_test_app().await;
 
         let temp_dir = tempdir().expect("Failed to create temp dir");
         unsafe { std::env::set_var("USER_PROFILE_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
@@ -573,10 +588,11 @@ mod tests {
 
     /// Test Case: Successful Password Change
     #[tokio::test]
+    #[serial]
     async fn test_change_password_success() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let user = service.create(CreateUser { username: "changepassuser".to_string(), email: "changepass@test.com".to_string(), password: "originalPassword123".to_string(), admin: false })
             .await
             .expect("Failed to create user for password change");
@@ -627,10 +643,11 @@ mod tests {
 
     /// Test Case: Incorrect Current Password
     #[tokio::test]
+    #[serial]
     async fn test_change_password_incorrect_current() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let user = service.create(CreateUser { username: "wrongpassuser".to_string(), email: "wrongpass@test.com".to_string(), password: "correctPassword".to_string(), admin: false })
             .await
             .expect("Failed to create user");
@@ -659,10 +676,11 @@ mod tests {
 
     /// Test Case: Short New Password
     #[tokio::test]
+    #[serial]
     async fn test_change_password_short_new() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let user = service.create(CreateUser { username: "shortpassuser".to_string(), email: "shortpass@test.com".to_string(), password: "currentPassword".to_string(), admin: false })
             .await
             .expect("Failed to create user");
@@ -691,8 +709,9 @@ mod tests {
 
     /// Test Case: Missing Authentication Token
     #[tokio::test]
+    #[serial]
     async fn test_change_password_missing_token() {
-        let (app, _) = make_test_app().await;
+        let app = make_test_app().await;
 
         let payload = json!({
             "current_password": "anyPassword",
@@ -716,10 +735,11 @@ mod tests {
 
     /// Test Case: Invalid Authentication Token
     #[tokio::test]
+    #[serial]
     async fn test_change_password_invalid_token() {
-        let (app, app_state) = make_test_app().await;
+        let app = make_test_app().await;
 
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let user = service.create(CreateUser { username: "invalidtokenuser".to_string(), email: "invalidtoken@test.com".to_string(), password: "password".to_string(), admin: false })
             .await
             .expect("Failed to create user");

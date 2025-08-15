@@ -1,13 +1,11 @@
-use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use db::models::announcements::Model as AnnouncementModel;
-use util::state::AppState;
 use crate::response::ApiResponse;
 
 pub async fn delete_announcement(
-    State(app_state): State<AppState>,
     Path((_, announcement_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
     match AnnouncementModel::delete(db, announcement_id).await {
         Ok(_) => {
             (

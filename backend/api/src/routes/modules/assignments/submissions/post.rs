@@ -2,7 +2,7 @@ use super::common::{CodeComplexity, CodeComplexitySummary, MarkSummary, Submissi
 use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late};
 use axum::{
     Json,
-    extract::{Extension, Multipart, Path, State},
+    extract::{Extension, Multipart, Path},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -14,7 +14,7 @@ use db::models::{
 use marker::MarkingJob;
 use md5;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
-use util::{mark_allocator::mark_allocator::load_allocator, state::AppState};
+use util::mark_allocator::mark_allocator::load_allocator;
 use util::execution_config::ExecutionConfig;
 use serde::{Serialize, Deserialize};
 
@@ -228,12 +228,11 @@ async fn grade_submission(
 /// - The endpoint is restricted to authenticated students assigned to the module
 /// - All errors are returned in a consistent JSON format
 pub async fn submit_assignment(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let assignment = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
@@ -492,11 +491,10 @@ pub struct FailedRemark {
 /// { "success": false, "message": "Failed to load mark allocator" }
 /// ```
 pub async fn remark_submissions(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<RemarkRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let submission_ids = match (req.submission_ids, req.all) {
         (Some(ids), _) if !ids.is_empty() => ids,

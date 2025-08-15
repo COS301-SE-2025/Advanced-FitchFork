@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -7,7 +7,6 @@ use axum::{
 use db::models::{plagiarism_case::{Entity as PlagiarismEntity, Column as PlagiarismColumn}};
 use sea_orm::{TransactionTrait, EntityTrait, QueryFilter, ColumnTrait};
 use serde::Deserialize;
-use util::state::AppState;
 use crate::response::ApiResponse;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/{case_id}
@@ -63,11 +62,10 @@ use crate::response::ApiResponse;
 /// This operation is irreversible and permanently removes the plagiarism case record.
 /// Only users with lecturer or assistant lecturer roles assigned to the module can perform this action.
 pub async fn delete_plagiarism_case(
-    State(app_state): State<AppState>,
     Path((_, _, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
     match PlagiarismEntity::delete_by_id(case_id)
-        .exec(app_state.db())
+        .exec(db::get_connection().await)
         .await
     {
         Ok(result) => {
@@ -172,7 +170,6 @@ pub struct BulkDeletePayload {
 /// - Returns an error if any specified case doesn't exist or belongs to a different assignment
 /// - Only users with lecturer or assistant lecturer roles assigned to the module can perform this action
 pub async fn bulk_delete_plagiarism_cases(
-    State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
     Json(payload): Json<BulkDeletePayload>,
 ) -> impl IntoResponse {
@@ -183,7 +180,7 @@ pub async fn bulk_delete_plagiarism_cases(
         );
     }
 
-    let txn = match app_state.db().begin().await {
+    let txn = match db::get_connection().await.begin().await {
         Ok(txn) => txn,
         Err(e) => {
             return (

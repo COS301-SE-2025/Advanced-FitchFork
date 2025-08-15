@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, WebSocketUpgrade},
+    extract::WebSocketUpgrade,
     response::IntoResponse,
 };
 use axum::extract::ws::{Message, WebSocket};
@@ -12,11 +12,10 @@ use crate::state::AppState;
 
 pub async fn default_websocket_handler(
     ws: WebSocketUpgrade,
-    State(state): State<AppState>,
 ) -> impl IntoResponse {
     // Fixed topic used internally, but clients don’t see it or set it
     let topic = "__default".to_string();
-    let manager = state.ws_clone();
+    let manager = AppState::get().ws().clone();
 
     ws.on_upgrade(move |socket: WebSocket| async move {
         let mut rx = manager.subscribe(&topic).await;

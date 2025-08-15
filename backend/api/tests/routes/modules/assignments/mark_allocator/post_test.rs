@@ -69,8 +69,8 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_success_as_lecturer() {
         setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let memo_output_dir = PathBuf::from("./tmp")
             .join(format!("module_{}", data.module.id))
@@ -105,8 +105,8 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_not_found() {
         setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -128,8 +128,8 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_forbidden_for_student() {
         setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
@@ -151,8 +151,8 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_forbidden_for_unassigned_user() {
         setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!(
@@ -174,8 +174,8 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_unauthorized() {
         setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/mark_allocator/generate",
@@ -195,8 +195,8 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_missing_memo_or_config() {
         setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -218,8 +218,8 @@ mod tests {
     #[serial]
     async fn test_post_mark_allocator_missing_memo_output() {
         setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(

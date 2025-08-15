@@ -1,11 +1,10 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use chrono::Utc;
-use util::state::AppState;
 use validator::Validate;
 use sea_orm::{
     IntoActiveModel,
@@ -103,11 +102,10 @@ use serde_json::Value;
 /// }
 /// ```
 pub async fn edit_module(
-    State(state): State<AppState>,
     Path(module_id): Path<i64>,
     Json(req): Json<ModuleRequest>,
 ) -> impl IntoResponse {
-    let db = state.db();
+    let db = db::get_connection().await;
 
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
@@ -228,10 +226,9 @@ pub struct FailedUpdate {
 /// }
 /// ```
 pub async fn bulk_edit_modules(
-    State(app_state): State<AppState>,
     Json(raw_value): Json<Value>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     // First check for forbidden 'code' field
     if let Some(obj) = raw_value.as_object() {

@@ -1,6 +1,6 @@
 use std::{env, path::PathBuf};
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Json, Response},
 };
@@ -10,7 +10,6 @@ use sea_orm::{
     EntityTrait,
     QueryFilter,
 };
-use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::assignment_file::{
     Column as FileColumn,
@@ -47,10 +46,9 @@ use crate::routes::modules::assignments::common::File;
 /// ```
 ///
 pub async fn download_file(
-    State(app_state): State<AppState>,
     Path((_module_id, assignment_id, file_id)): Path<(i64, i64, i64)>,
 ) -> Response {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let file = FileEntity::find()
         .filter(FileColumn::Id.eq(file_id as i32))
@@ -149,10 +147,9 @@ pub async fn download_file(
 /// ```
 ///
 pub async fn list_files(
-    State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>
 ) -> Response {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     match FileEntity::find()
         .filter(FileColumn::AssignmentId.eq(assignment_id as i32))

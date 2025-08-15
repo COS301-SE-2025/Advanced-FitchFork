@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -8,7 +8,6 @@ use chrono::Utc;
 use db::models::plagiarism_case::{Entity as PlagiarismEntity, Status, Column as PlagiarismColumn};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, ActiveModelTrait, IntoActiveModel};
 use serde::{Deserialize, Serialize};
-use util::state::AppState;
 use crate::response::ApiResponse;
 
 #[derive(Serialize, Deserialize)]
@@ -121,7 +120,6 @@ pub struct PlagiarismCaseResponse {
 /// }
 /// ```
 pub async fn update_plagiarism_case(
-    State(app_state): State<AppState>,
     Path((_, assignment_id, case_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<UpdatePlagiarismCasePayload>,
 ) -> impl IntoResponse {
@@ -136,7 +134,7 @@ pub async fn update_plagiarism_case(
 
     let case = match PlagiarismEntity::find_by_id(case_id)
         .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
-        .one(app_state.db())
+        .one(db::get_connection().await)
         .await
     {
         Ok(Some(case)) => case,
@@ -184,7 +182,7 @@ pub async fn update_plagiarism_case(
 
     case.updated_at = sea_orm::ActiveValue::Set(Utc::now());
 
-    let updated_case = match case.update(app_state.db()).await {
+    let updated_case = match case.update(db::get_connection().await).await {
         Ok(updated) => updated,
         Err(e) => {
             return (

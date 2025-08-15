@@ -20,6 +20,7 @@ mod tests {
     use serde_json::Value;
     use api::auth::generate_jwt;
     use crate::helpers::app::make_test_app;
+    use serial_test::serial;
 
     struct TestData {
         admin_user: UserModel,
@@ -54,9 +55,10 @@ mod tests {
     // --- GET /api/users (list_users) ---
 
     #[tokio::test]
+    #[serial]
     async fn test_list_users_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = "/api/users";
@@ -81,9 +83,10 @@ mod tests {
 
     /// Test Case: Listing Users without Admin Role
     #[tokio::test]
+    #[serial]
     async fn test_list_users_forbidden_non_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
         let uri = "/api/users";
@@ -100,9 +103,10 @@ mod tests {
 
     /// Test Case: Listing Users without Authentication
     #[tokio::test]
+    #[serial]
     async fn test_list_users_missing_auth() {
-        let (app, app_state) = make_test_app().await;
-        let _ = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let _ = setup_test_data(db::get_connection().await).await;
 
         let uri = "/api/users";
         let req = Request::builder()
@@ -117,9 +121,10 @@ mod tests {
 
     /// Test Case: Listing Users with Pagination
     #[tokio::test]
+    #[serial]
     async fn test_list_users_with_pagination() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = "/api/users?page=1&per_page=2";
@@ -142,9 +147,10 @@ mod tests {
 
     /// Test Case: Listing Users with Filtering/Sorting
     #[tokio::test]
+    #[serial]
     async fn test_list_users_with_query_params() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = "/api/users?query=target&sort=-username";
@@ -166,9 +172,10 @@ mod tests {
 
     /// Test Case: Successful Retrieval of User Modules as Admin
     #[tokio::test]
+    #[serial]
     async fn test_get_user_modules_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/users/{}/modules", data.user_to_operate_on.id);
@@ -194,9 +201,10 @@ mod tests {
 
     /// Test Case: Retrieving User Modules without Admin Role
     #[tokio::test]
+    #[serial]
     async fn test_get_user_modules_forbidden_non_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
         let uri = format!("/api/users/{}/modules", data.user_to_operate_on.id);
@@ -213,9 +221,10 @@ mod tests {
 
     /// Test Case: Retrieving Modules for Non-Existent User
     #[tokio::test]
+    #[serial]
     async fn test_get_user_modules_user_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/users/{}/modules", 999999);
@@ -235,9 +244,10 @@ mod tests {
 
      /// Test Case: Retrieving User Modules without Authentication
     #[tokio::test]
+    #[serial]
     async fn test_get_user_modules_missing_auth() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/users/{}/modules", data.user_to_operate_on.id);
         let req = Request::builder()
@@ -254,9 +264,10 @@ mod tests {
 
     /// Test Case: Successful Retrieval of Specific User as Admin
     #[tokio::test]
+    #[serial]
     async fn test_get_user_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/users/{}", data.user_to_operate_on.id);
@@ -281,9 +292,10 @@ mod tests {
 
     /// Test Case: Retrieving Specific User without Admin Role
     #[tokio::test]
+    #[serial]
     async fn test_get_user_forbidden_non_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
         
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
         let uri = format!("/api/users/{}", data.user_to_operate_on.id);
@@ -300,9 +312,10 @@ mod tests {
 
     /// Test Case: Retrieving Non-Existent User
     #[tokio::test]
+    #[serial]
     async fn test_get_user_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/users/{}", 999999);
@@ -322,9 +335,10 @@ mod tests {
 
      /// Test Case: Retrieving Specific User without Authentication
     #[tokio::test]
+    #[serial]
     async fn test_get_user_missing_auth() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/users/{}", data.user_to_operate_on.id);
         let req = Request::builder()

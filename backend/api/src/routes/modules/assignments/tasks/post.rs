@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -7,7 +7,6 @@ use axum::{
 use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
-use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::assignment_task::{ActiveModel, Column, Entity};
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
@@ -128,11 +127,10 @@ pub struct CreateTaskRequest {
 /// - The `command` field supports any shell command that can be executed in the evaluation environment
 /// - Task creation is restricted to users with appropriate module permissions
 pub async fn create_task(
-    State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
     Json(payload): Json<CreateTaskRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if payload.task_number <= 0 || payload.command.trim().is_empty() {
         return (

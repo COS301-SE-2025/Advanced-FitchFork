@@ -1,14 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
 use axum::{
-    extract::{State, Multipart},
+    extract::Multipart,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set, IntoActiveModel};
 use serde::{Deserialize, Serialize};
-use util::state::AppState;
 use validator::Validate;
 use chrono::{Utc, Duration};
 use tokio::io::AsyncWriteExt;
@@ -107,10 +106,9 @@ pub struct UserResponse {
 /// }
 /// ```
 pub async fn register(
-    State(app_state): State<AppState>,
     Json(req): Json<RegisterRequest>
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
@@ -231,10 +229,9 @@ pub struct LoginRequest {
 /// }
 /// ```
 pub async fn login(
-    State(app_state): State<AppState>,
     Json(req): Json<LoginRequest>
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
@@ -329,10 +326,9 @@ pub struct RequestPasswordResetRequest {
 /// }
 /// ```
 pub async fn request_password_reset(
-    State(app_state): State<AppState>,
     Json(req): Json<RequestPasswordResetRequest>
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
@@ -474,10 +470,9 @@ pub struct VerifyResetTokenResponse {
 /// }
 /// ```
 pub async fn verify_reset_token(
-    State(app_state): State<AppState>,
     Json(req): Json<VerifyResetTokenRequest>
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
@@ -575,10 +570,9 @@ pub struct ResetPasswordRequest {
 /// }
 /// ```
 pub async fn reset_password(
-    State(app_state): State<AppState>,
     Json(req): Json<ResetPasswordRequest>
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
@@ -702,11 +696,10 @@ struct ProfilePictureResponse {
 ///   }
 ///   ```
 pub async fn upload_profile_picture(
-    State(app_state): State<AppState>,
     AuthUser(claims): AuthUser,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     const MAX_SIZE: u64 = 2 * 1024 * 1024;
     const ALLOWED_MIME: &[&str] = &["image/jpeg", "image/png", "image/gif"];
@@ -841,11 +834,10 @@ pub struct ChangePasswordRequest {
 /// }
 /// ```
 pub async fn change_password(
-    State(app_state): State<AppState>,
     AuthUser(claims): AuthUser,
     Json(req): Json<ChangePasswordRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);

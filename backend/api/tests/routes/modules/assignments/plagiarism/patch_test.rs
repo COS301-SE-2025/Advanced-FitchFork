@@ -24,8 +24,8 @@ mod patch_plagiarism_tests {
     use sea_orm::{DatabaseConnection, EntityTrait};
     use serde_json::Value;
     use tower::ServiceExt;
-
     use crate::helpers::app::make_test_app;
+    use serial_test::serial;
 
     pub struct TestData {
         pub lecturer_user: UserModel,
@@ -119,9 +119,10 @@ mod patch_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_flag_plagiarism_case_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let req = make_patch_request(
             &data.lecturer_user,
@@ -143,7 +144,7 @@ mod patch_plagiarism_tests {
         assert_eq!(json["data"]["status"], "Flagged");
 
         let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap()
             .unwrap();
@@ -151,9 +152,10 @@ mod patch_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_flag_plagiarism_case_success_as_assistant() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let req = make_patch_request(
             &data.assistant_user,
@@ -166,7 +168,7 @@ mod patch_plagiarism_tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap()
             .unwrap();
@@ -174,9 +176,10 @@ mod patch_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_flag_plagiarism_case_forbidden_roles() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         // Test tutor
         let req = make_patch_request(
@@ -200,9 +203,10 @@ mod patch_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_flag_plagiarism_case_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let req = make_patch_request(
             &data.lecturer_user,
@@ -216,9 +220,10 @@ mod patch_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_flag_plagiarism_case_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/plagiarism/{}/flag",
@@ -261,6 +266,7 @@ mod review_plagiarism_tests {
     use sea_orm::EntityTrait;
     use serde_json::Value;
     use tower::ServiceExt;
+    use serial_test::serial;
 
     use crate::helpers::app::make_test_app;
 
@@ -285,9 +291,10 @@ mod review_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_review_plagiarism_case_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let req = make_review_request(
             &data.lecturer_user,
@@ -309,7 +316,7 @@ mod review_plagiarism_tests {
         assert_eq!(json["data"]["status"], "Reviewed");
 
         let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap()
             .unwrap();
@@ -317,9 +324,10 @@ mod review_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_review_plagiarism_case_success_as_assistant() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let req = make_review_request(
             &data.assistant_user,
@@ -332,7 +340,7 @@ mod review_plagiarism_tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap()
             .unwrap();
@@ -340,9 +348,10 @@ mod review_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_review_plagiarism_case_forbidden_roles() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         // Test tutor
         let req = make_review_request(
@@ -366,9 +375,10 @@ mod review_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_review_plagiarism_case_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let req = make_review_request(
             &data.lecturer_user,
@@ -382,9 +392,10 @@ mod review_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_review_plagiarism_case_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/plagiarism/{}/review",

@@ -21,6 +21,7 @@ mod tests {
     use api::auth::generate_jwt;
     use crate::helpers::app::make_test_app;
     use chrono::{Datelike, Utc};
+    use serial_test::serial;
 
     struct TestData {
         admin_user: UserModel,
@@ -57,9 +58,10 @@ mod tests {
 
     /// Test Case: Successful Retrieval of Module Info as Admin
     #[tokio::test]
+    #[serial]
     async fn test_get_module_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -103,9 +105,10 @@ mod tests {
 
     /// Test Case: Successful Retrieval of Module Info as Lecturer
     #[tokio::test]
+    #[serial]
     async fn test_get_module_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -122,9 +125,10 @@ mod tests {
 
     /// Test Case: Successful Retrieval of Module Info as Tutor
     #[tokio::test]
+    #[serial]
     async fn test_get_module_success_as_tutor() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.tutor_user.id, data.tutor_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -141,9 +145,10 @@ mod tests {
 
     /// Test Case: Successful Retrieval of Module Info as Student
     #[tokio::test]
+    #[serial]
     async fn test_get_module_success_as_student() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -160,9 +165,10 @@ mod tests {
 
     /// Test Case: Retrieving Non-Existent Module
     #[tokio::test]
+    #[serial]
     async fn test_get_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", 99999);
@@ -184,9 +190,10 @@ mod tests {
 
     /// Test Case: Accessing Module without Required Role (Forbidden)
     #[tokio::test]
+    #[serial]
     async fn test_get_module_forbidden_user() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -203,9 +210,10 @@ mod tests {
 
     /// Test Case: Accessing Module without Authorization Header
     #[tokio::test]
+    #[serial]
     async fn test_get_module_missing_auth_header() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -220,9 +228,10 @@ mod tests {
 
     /// Test Case: Accessing Module with Invalid JWT Token
     #[tokio::test]
+    #[serial]
     async fn test_get_module_invalid_token() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -238,9 +247,10 @@ mod tests {
 
     /// Test Case: Module Info Includes Correct User Details in Personnel
     #[tokio::test]
+    #[serial]
     async fn test_get_module_personnel_user_details() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -282,12 +292,13 @@ mod tests {
 
     /// Test Case: Module with No Assigned Personnel
     #[tokio::test]
+    #[serial]
     async fn test_get_module_no_personnel() {
-        let (app, app_state) = make_test_app().await;
-        let _ = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let _ = setup_test_data(db::get_connection().await).await;
 
-        let empty_module = ModuleModel::create(app_state.db(), "EMPTY101", Utc::now().year() - 1, Some("Empty Module"), 10).await.expect("Failed to create empty module");
-        let service = UserService::new(UserRepository::new(app_state.db().clone()));
+        let empty_module = ModuleModel::create(db::get_connection().await, "EMPTY101", Utc::now().year() - 1, Some("Empty Module"), 10).await.expect("Failed to create empty module");
+        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         let admin_user = service.create(CreateUser{ username: "empty_admin".to_string(), email: "empty_admin@test.com".to_string(), password: "password".to_string(), admin: true }).await.expect("Failed to create admin user for empty module test");
 
         let (token, _) = generate_jwt(admin_user.id, admin_user.admin);
@@ -323,10 +334,11 @@ mod tests {
 
     /// Test Case: Module with Multiple Users per Role
     #[tokio::test]
+    #[serial]
     async fn test_get_module_multiple_personnel_per_role() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let service = UserService::new(UserRepository::new(db.clone()));
         let lecturer2 = service.create(CreateUser{ username: "module_lecturer2".to_string(), email: "module_lecturer2@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create second lecturer");

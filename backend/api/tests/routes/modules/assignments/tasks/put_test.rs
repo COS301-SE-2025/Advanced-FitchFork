@@ -80,8 +80,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "Updated Task Name", "command": "echo 'Updated Command'"});
@@ -117,8 +117,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer1.id, data.lecturer1.admin);
         let payload = json!({"name": "Lecturer Updated Name", "command": "ls -l"});
@@ -139,8 +139,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "Any Name", "command": "echo 'Any Command'"});
@@ -166,11 +166,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_assignment_not_found_path_mismatch() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let assignment2 = AssignmentModel::create(
-            app_state.db(),
+            db::get_connection().await,
             data.module.id,
             "Assignment 2",
             Some("Desc 2"),
@@ -181,7 +181,7 @@ mod tests {
         .await
         .expect("Failed to create second assignment");
         let task_in_assignment2 = AssignmentTaskModel::create(
-            app_state.db(),
+            db::get_connection().await,
             assignment2.id,
             1,
             "echo 'Other Assignment'",
@@ -215,8 +215,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "Any Name", "command": "echo 'Any Command'"});
@@ -243,8 +243,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let payload = json!({"name": "Forbidden Name", "command": "echo 'Forbidden Command'"});
@@ -265,8 +265,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_invalid_name_empty() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "", "command": "echo 'Valid Command'"});
@@ -292,8 +292,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_invalid_name_whitespace() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "   \n\t  ", "command": "echo 'Valid Command'"});
@@ -319,8 +319,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_invalid_command_empty() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "Valid Name", "command": ""});
@@ -346,8 +346,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_edit_task_invalid_command_whitespace() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({"name": "Valid Name", "command": "   \n\t  "});

@@ -1,6 +1,5 @@
-use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use chrono::{DateTime, Utc};
-use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::assignment::{self, AssignmentType, Status};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, IntoActiveModel, DbErr};
@@ -62,11 +61,10 @@ use super::common::{AssignmentRequest, AssignmentResponse, BulkUpdateRequest, Bu
 /// - The `status` field of the assignment cannot be updated with this endpoint.
 /// - Status is managed automatically by the system when all readiness checks pass.
 pub async fn edit_assignment(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
         .map(|dt| dt.with_timezone(&Utc))
@@ -207,11 +205,10 @@ pub async fn edit_assignment(
 /// }
 /// ```
 pub async fn bulk_update_assignments(
-    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Json(req): Json<BulkUpdateRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if req.assignment_ids.is_empty() {
         return (
@@ -284,10 +281,9 @@ pub async fn bulk_update_assignments(
 ///
 /// Only works if current status is `Ready`, `Closed`, or `Archived`.
 pub async fn open_assignment(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let assignment = assignment::Entity::find()
         .filter(assignment::Column::Id.eq(assignment_id))
@@ -348,10 +344,9 @@ pub async fn open_assignment(
 ///
 /// Only works if current status is `Open`.
 pub async fn close_assignment(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
     let assignment = assignment::Entity::find()
         .filter(assignment::Column::Id.eq(assignment_id))
         .filter(assignment::Column::ModuleId.eq(module_id))

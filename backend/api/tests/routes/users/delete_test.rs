@@ -16,6 +16,7 @@ mod tests {
     use serde_json::Value;
     use api::auth::generate_jwt;
     use crate::helpers::app::make_test_app;
+    use serial_test::serial;
 
     struct TestData {
         admin_user: UserModel,
@@ -45,9 +46,10 @@ mod tests {
 
     /// Test Case: Successful Deletion of User as Admin
     #[tokio::test]
+    #[serial]
     async fn test_delete_user_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/users/{}", data.user_to_delete.id);
@@ -84,9 +86,10 @@ mod tests {
 
     /// Test Case: Attempt to Delete Own Account as Admin
     #[tokio::test]
+    #[serial]
     async fn test_delete_user_forbidden_delete_self_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/users/{}", data.admin_user.id);
@@ -107,9 +110,10 @@ mod tests {
 
      /// Test Case: Attempt to Delete Own Account as Non-Admin
     #[tokio::test]
+    #[serial]
     async fn test_delete_user_forbidden_delete_self_as_non_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
         let uri = format!("/api/users/{}", data.non_admin_user.id);
@@ -126,9 +130,10 @@ mod tests {
 
     /// Test Case: Delete User without Admin Role
     #[tokio::test]
+    #[serial]
     async fn test_delete_user_forbidden_non_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
         let uri = format!("/api/users/{}", data.user_to_delete.id);
@@ -145,9 +150,10 @@ mod tests {
 
     /// Test Case: Delete Non-Existent User
     #[tokio::test]
+    #[serial]
     async fn test_delete_user_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/users/{}", 999999);
@@ -168,9 +174,10 @@ mod tests {
 
     /// Test Case: Delete User without Authentication Header
     #[tokio::test]
+    #[serial]
     async fn test_delete_user_missing_auth_header() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/users/{}", data.user_to_delete.id);
         let req = Request::builder()
@@ -185,9 +192,10 @@ mod tests {
 
     /// Test Case: Delete User with Invalid JWT Token
     #[tokio::test]
+    #[serial]
     async fn test_delete_user_invalid_token() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/users/{}", data.user_to_delete.id);
         let req = Request::builder()

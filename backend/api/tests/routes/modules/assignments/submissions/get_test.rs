@@ -135,8 +135,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_student_sees_only_own_submissions() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
@@ -159,8 +159,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_lecturer_sees_all_submissions_with_pagination() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions?per_page=2&page=1", data.module.id, data.assignment.id);
@@ -185,8 +185,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_query_by_username_returns_only_that_user() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions?username=student1", data.module.id, data.assignment.id);
@@ -208,8 +208,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_filter_by_late_status() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions?late=true", data.module.id, data.assignment.id);
@@ -237,8 +237,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_forbidden_user_gets_403() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
@@ -257,8 +257,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_student_gets_own_submission() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let sub = &data.submissions[0];
@@ -281,8 +281,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_lecturer_gets_any_submission_with_user_info() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let sub = &data.submissions[0];
@@ -306,8 +306,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_forbidden_user_gets_403_on_submission() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let sub = &data.submissions[0];
@@ -325,8 +325,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_not_found_returns_404() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions/999999", data.module.id, data.assignment.id);
@@ -343,8 +343,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_report_missing_returns_404() {
-        let (app, app_state) = make_test_app().await;
-        let (data, temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let sub = &data.submissions[0];
         let path = PathBuf::from(temp_dir.path())

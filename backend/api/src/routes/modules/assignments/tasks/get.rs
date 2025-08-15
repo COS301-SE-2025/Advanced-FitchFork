@@ -6,7 +6,7 @@ use crate::response::ApiResponse;
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
 };
@@ -15,7 +15,7 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
 use serde_json::Value;
 use std::{env, fs, path::PathBuf};
-use util::{execution_config::ExecutionConfig, state::AppState};
+use util::execution_config::ExecutionConfig;
 use util::mark_allocator::mark_allocator::load_allocator;
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
@@ -103,10 +103,9 @@ pub struct TaskDetailResponse {
 /// ```
 ///
 pub async fn get_task_details(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let task = Entity::find_by_id(task_id).one(db).await.unwrap().unwrap();
 
@@ -293,10 +292,9 @@ pub async fn get_task_details(
 /// ```
 ///
 pub async fn list_tasks(
-    State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     match Entity::find()
         .filter(Column::AssignmentId.eq(assignment_id))

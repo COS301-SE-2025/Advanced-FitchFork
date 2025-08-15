@@ -85,7 +85,6 @@ impl Model {
     }
     
     pub async fn is_in_role(
-        db: &DatabaseConnection,
         user_id: i64,
         module_id: i64,
         role: &str,
@@ -98,7 +97,7 @@ impl Model {
             .filter(RoleColumn::UserId.eq(user_id))
             .filter(RoleColumn::ModuleId.eq(module_id))
             .filter(RoleColumn::Role.eq(parsed_role))
-            .one(db)
+            .one(crate::get_connection().await)
             .await?;
 
         Ok(exists.is_some())

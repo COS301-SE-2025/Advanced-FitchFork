@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -10,7 +10,6 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, IntoActiveM
 use serde::Deserialize;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use util::state::AppState;
 use validator::Validate;
 use crate::{response::ApiResponse};
 use common::format_validation_errors;
@@ -97,11 +96,10 @@ lazy_static::lazy_static! {
 /// }
 /// ```
 pub async fn update_user(
-    State(app_state): State<AppState>,
     Path(user_id): Path<i64>,
     Json(req): Json<UpdateUserRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if let Err(e) = req.validate() {
         return (
@@ -275,11 +273,10 @@ struct ProfilePictureResponse {
 ///   ```
 ///
 pub async fn upload_avatar(
-    State(app_state): State<AppState>,
     Path(user_id): Path<i64>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     const MAX_SIZE: u64 = 2 * 1024 * 1024;
     const ALLOWED_MIME: &[&str] = &["image/jpeg", "image/png", "image/gif"];

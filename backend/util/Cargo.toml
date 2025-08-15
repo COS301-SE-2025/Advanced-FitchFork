@@ -8,7 +8,6 @@ serde_json = { version = "1.0", default-features = false, features = ["std"] }
 chrono = { version = "0.4", features = ["clock", "std"] }
 serde = { version = "1.0", features = ["derive"] }
 tempfile = "3.0"
-sea-orm = { version = "1.1.14", features = ["sqlx-sqlite", "runtime-tokio-native-tls"] }
 jsonwebtoken = "9"
 axum = { version = "0.8.4", features = ["ws"] }
 futures = "0.3"

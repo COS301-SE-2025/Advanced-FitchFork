@@ -22,6 +22,8 @@ mod tests {
         user_service::{CreateUser, UserService}
     };
     use tower::ServiceExt;
+    use serial_test::serial;
+    
     struct TestData {
         user: UserModel,
         invalid_user: UserModel,
@@ -63,9 +65,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn set_open_ticket_test() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.user.id, data.user.admin);
         let uri = format!(
@@ -90,9 +93,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn set_invalid_open_ticket_test() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.invalid_user.id, data.invalid_user.admin);
         let uri = format!(
@@ -111,9 +115,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn set_close_ticket_test() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.user.id, data.user.admin);
         let uri = format!(
@@ -139,9 +144,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn set_invalid_close_ticket_test() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.invalid_user.id, data.invalid_user.admin);
         let uri = format!(

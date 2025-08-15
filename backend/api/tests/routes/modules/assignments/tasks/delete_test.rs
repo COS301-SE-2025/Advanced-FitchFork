@@ -80,8 +80,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_task_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);
@@ -123,8 +123,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_task_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer1.id, data.lecturer1.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);
@@ -143,8 +143,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_task_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, 99999);
@@ -168,8 +168,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_task_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks/{}", data.module.id, data.assignment.id, data.task1.id);

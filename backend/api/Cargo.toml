@@ -42,7 +42,7 @@ headers = "0.4"
 
 # Misc
 lazy_static = "1.4"
-regex = "1.10"
+regex = "1.11"
 
 # Database
 sqlx = { version = "0.8", features = [ "sqlite", "runtime-tokio-rustls", "macros", ] }
@@ -62,11 +62,11 @@ sea-orm-migration = "1.1"
 futures-util = "0.3"
 tokio-tungstenite = { version = "0.27", features = ["connect"] }
 url = "2.5"
-portpicker = "0.1"
 
 [dev-dependencies]
 serial_test = "3.2"
-zip = "4.3.0"
-tar = "0.4.44"
-flate2 = "1.1.2"
-tempfile = "3.5.0"
+zip = "4.3"
+tar = "0.4"
+flate2 = "1.1"
+tempfile = "3.5"
+ctor = "0.5"

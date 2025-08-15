@@ -25,6 +25,7 @@ mod tests {
     use chrono::{Utc, TimeZone};
     use sea_orm::{Set, ActiveModelTrait, EntityTrait};
     use crate::helpers::app::make_test_app;
+    use serial_test::serial;
 
     struct TestData {
         admin_user: UserModel,
@@ -111,9 +112,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_delete_assignment_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
@@ -130,14 +132,15 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        let found = db::models::assignment::Entity::find_by_id(data.assignments[0].id).one(app_state.db()).await.unwrap();
+        let found = db::models::assignment::Entity::find_by_id(data.assignments[0].id).one(db::get_connection().await).await.unwrap();
         assert!(found.is_none());
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_delete_assignment_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[1].id);
@@ -154,14 +157,15 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        let found = db::models::assignment::Entity::find_by_id(data.assignments[1].id).one(app_state.db()).await.unwrap();
+        let found = db::models::assignment::Entity::find_by_id(data.assignments[1].id).one(db::get_connection().await).await.unwrap();
         assert!(found.is_none());
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_delete_assignment_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
@@ -177,9 +181,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_delete_assignment_forbidden_for_unassigned_user() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
@@ -195,9 +200,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_delete_assignment_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
         let req = Request::builder()
@@ -211,9 +217,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_delete_assignment_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/9999", data.module.id);
@@ -229,9 +236,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_delete_assignment_wrong_module() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.empty_module.id, data.assignments[0].id);
@@ -247,9 +255,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_delete_assignment_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.dummy_module_id, data.assignments[0].id);
@@ -265,9 +274,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_delete_assignment_with_related_data_cleanup() {
-        let (app, app_state) = make_test_app().await;
-        let db = app_state.db();
+        let app = make_test_app().await;
+        let db = db::get_connection().await;
         let data = setup_test_data(db).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -295,9 +305,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_delete_assignment_already_deleted() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
@@ -323,9 +334,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_delete_assignment_cross_module_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.empty_module.id, data.assignments[0].id);
@@ -342,9 +354,10 @@ mod tests {
 
     /// Test Case: Successful Bulk Delete by Lecturer
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_assignments_success_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
@@ -374,9 +387,10 @@ mod tests {
 
     /// Test Case: Successful Bulk Delete by Admin
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_assignments_success_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
@@ -405,9 +419,10 @@ mod tests {
 
     /// Test Case: Mixed Success/Failure with Invalid IDs
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_assignments_mixed_results() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
@@ -441,9 +456,10 @@ mod tests {
 
     /// Test Case: Forbidden for Student
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_assignments_forbidden_student() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
@@ -462,9 +478,10 @@ mod tests {
 
     /// Test Case: Empty Assignment IDs
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_assignments_empty_ids() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);

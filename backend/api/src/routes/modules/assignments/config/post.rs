@@ -1,6 +1,6 @@
 use db::models::assignment_file::{FileType, Model as AssignmentFile};
 use axum::{
-    extract::{State, Json, Path},
+    extract::{Json, Path},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -8,7 +8,7 @@ use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 use serde_json::Value;
 use crate::response::ApiResponse;
 use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
-use util::{execution_config::ExecutionConfig, state::AppState};
+use util::execution_config::ExecutionConfig;
 
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/config
@@ -58,11 +58,10 @@ use util::{execution_config::ExecutionConfig, state::AppState};
 /// - Configuration is saved to disk under `ASSIGNMENT_STORAGE_ROOT/module_{id}/assignment_{id}/config/config.json`.
 /// - Only valid `ExecutionConfig` objects are accepted.
 pub async fn set_assignment_config(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(config_json): Json<Value>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if !config_json.is_object() {
         return (

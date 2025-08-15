@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Path, Query},
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
@@ -9,7 +9,6 @@ use sea_orm::{
     ColumnTrait, /*Condition,*/ EntityTrait, /*PaginatorTrait,*/ QueryFilter,
     QueryOrder, /*sea_query::Expr,*/
 };
-use util::state::AppState;
 use crate::response::ApiResponse;
 use crate::routes::modules::assignments::common::{File, AssignmentResponse};
 use db::{
@@ -105,10 +104,9 @@ impl From<AssignmentModel> for AssignmentFileResponse {
 /// }
 /// ```
 pub async fn get_assignment(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let assignment_res = assignment::Entity::find()
         .filter(assignment::Column::Id.eq(assignment_id as i32))
@@ -278,7 +276,6 @@ pub struct FilterReq {
 /// }
 /// ```
 pub async fn get_assignments(
-    State(_app_state): State<AppState>,
     Path(_module_id): Path<i64>,
     Query(_params): Query<FilterReq>,
 ) -> impl IntoResponse {
@@ -445,10 +442,9 @@ pub fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
 /// }
 /// ```
 pub async fn get_assignment_stats(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
@@ -621,16 +617,13 @@ pub struct AssignmentReadiness {
 /// ```
 ///
 pub async fn get_assignment_readiness(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> (StatusCode, Json<ApiResponse<AssignmentReadiness>>) {
-    let db = app_state.db();
-
-    match AssignmentModel::compute_readiness_report(db, module_id, assignment_id).await {
+    match AssignmentModel::compute_readiness_report(module_id, assignment_id).await {
         Ok(report) => {
             if report.is_ready() {
                 if let Err(e) =
-                    AssignmentModel::try_transition_to_ready(db, module_id, assignment_id).await
+                    AssignmentModel::try_transition_to_ready(module_id, assignment_id).await
                 {
                     tracing::warn!(
                         "Failed to transition assignment {} to Ready: {:?}",

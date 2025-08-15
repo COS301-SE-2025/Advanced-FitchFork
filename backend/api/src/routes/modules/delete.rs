@@ -1,11 +1,10 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::module;
 use serde::{Serialize, Deserialize};
@@ -45,10 +44,9 @@ use validator::Validate;
 /// }
 /// ```
 pub async fn delete_module(
-    State(state): State<AppState>,
     Path(module_id): Path<i64>
 ) -> impl IntoResponse {
-    let db = state.db();
+    let db = db::get_connection().await;
 
     match module::Entity::find()
         .filter(module::Column::Id.eq(module_id))
@@ -133,10 +131,9 @@ pub struct FailedDelete {
 /// }
 /// ```
 pub async fn bulk_delete_modules(
-    State(app_state): State<AppState>,
     Json(req): Json<BulkDeleteRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     // Validate the request
     if let Err(validation_errors) = req.validate() {

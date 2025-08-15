@@ -17,7 +17,7 @@ mod seeds;
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
-    let db = db::connect().await;
+    let db = db::get_connection().await;
 
     for (seeder, name) in [
         (

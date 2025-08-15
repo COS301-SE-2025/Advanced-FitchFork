@@ -1,11 +1,10 @@
 use axum::{
-    extract::{State, Extension, Path},
+    extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use sea_orm::{EntityTrait};
-use util::state::AppState;
 use crate::{
     auth::claims::AuthUser,
     response::ApiResponse,
@@ -62,11 +61,10 @@ use db::models::user::{Entity as UserEntity};
 /// }
 /// ```
 pub async fn delete_user(
-    State(app_state): State<AppState>,
     Path(user_id): Path<i64>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if user_id == claims.sub {
         return (

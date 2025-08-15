@@ -1,8 +1,13 @@
-use axum::{extract::{Path, State, FromRequestParts}, http::{Request, StatusCode}, middleware::Next, body::Body, response::{Response, IntoResponse}, Json};
-use util::state::AppState;
+use axum::{
+    extract::{Path, FromRequestParts},
+    http::{Request, StatusCode},
+    middleware::Next,
+    body::Body,
+    response::{Response, IntoResponse},
+    Json
+};
 use crate::auth::claims::AuthUser;
 use crate::response::ApiResponse;
-use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
 use sea_orm::EntityTrait;
 use sea_orm::QueryFilter;
@@ -42,13 +47,12 @@ async fn extract_and_insert_authuser(
 
 /// Helper to check if user has any of the specified roles
 async fn user_has_any_role(
-    db: &DatabaseConnection,
     user_id: i64,
     module_id: i64,
     roles: &[&str],
 ) -> bool {
     for role in roles {
-        if user::Model::is_in_role(db, user_id, module_id, role).await.unwrap_or(false) {
+        if user::Model::is_in_role(user_id, module_id, role).await.unwrap_or(false) {
             return true;
         }
     }
@@ -84,15 +88,12 @@ pub async fn require_admin(
 
 /// Base role-based access guard that other guards can build upon
 async fn require_role_base(
-    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
     required_roles: &[&str],
     failure_msg: &str,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let db: &DatabaseConnection =  app_state.db();
-
     let (req, user) = extract_and_insert_authuser(req).await?;
     
     let module_id = params.get("module_id")
@@ -106,7 +107,7 @@ async fn require_role_base(
         return Ok(next.run(req).await);
     }
 
-    if user_has_any_role(&db, user.0.sub, module_id, required_roles).await {
+    if user_has_any_role(user.0.sub, module_id, required_roles).await {
         Ok(next.run(req).await)
     } else {
         Err((StatusCode::FORBIDDEN, Json(ApiResponse::error(failure_msg))))
@@ -115,13 +116,11 @@ async fn require_role_base(
 
 /// Guard for requiring lecturer access.
 pub async fn require_lecturer(
-    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(app_state),
         Path(params),
         req,
         next,
@@ -132,13 +131,11 @@ pub async fn require_lecturer(
 
 /// Guard for requiring assistant lecturer access.
 pub async fn require_assistant_lecturer(
-    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(app_state),
         Path(params),
         req,
         next,
@@ -149,13 +146,11 @@ pub async fn require_assistant_lecturer(
 
 /// Guard for requiring tutor access.
 pub async fn require_tutor(
-    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(app_state),
         Path(params),
         req,
         next,
@@ -166,13 +161,11 @@ pub async fn require_tutor(
 
 /// Guard for requiring student access.
 pub async fn require_student(
-    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(app_state),
         Path(params),
         req,
         next,
@@ -183,13 +176,11 @@ pub async fn require_student(
 
 /// Guard for requiring lecturer or assistant lecturer access.
 pub async fn require_lecturer_or_assistant_lecturer(
-    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(app_state),
         Path(params),
         req,
         next,
@@ -201,13 +192,11 @@ pub async fn require_lecturer_or_assistant_lecturer(
 /// Guard for requiring lecturer or tutor access.
 /// TODO: Add ALs to this?
 pub async fn require_lecturer_or_tutor(
-    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(app_state),
         Path(params),
         req,
         next,
@@ -218,13 +207,11 @@ pub async fn require_lecturer_or_tutor(
 
 /// Guard for requiring any assigned role (lecturer, tutor, student).
 pub async fn require_assigned_to_module(
-    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
     require_role_base(
-        State(app_state),
         Path(params),
         req,
         next,
@@ -234,13 +221,10 @@ pub async fn require_assigned_to_module(
 }
 
 pub async fn require_ready_assignment(
-    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let db = app_state.db();
-
     let module_id = params.get("module_id")
         .and_then(|s| s.parse::<i64>().ok())
         .ok_or((
@@ -255,14 +239,14 @@ pub async fn require_ready_assignment(
             Json(ApiResponse::error("Missing or invalid assignment_id"))
         ))?;
 
-    if let Err(e) = db::models::assignment::Model::try_transition_to_ready(db, module_id, assignment_id).await {
+    if let Err(e) = db::models::assignment::Model::try_transition_to_ready(module_id, assignment_id).await {
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::error(format!("Failed to transition assignment to ready: {}", e)))
         ));
     }
 
-    let assignment = match AssignmentEntity::find_by_id(assignment_id).one(db).await {
+    let assignment = match AssignmentEntity::find_by_id(assignment_id).one(db::get_connection().await).await {
         Ok(Some(a)) => a,
         Ok(None) => {
             return Err((
@@ -295,10 +279,9 @@ pub async fn require_ready_assignment(
 
 async fn check_module_exists(
     module_id: i32,
-    db: &DatabaseConnection,
 ) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
     let found = ModuleEntity::find_by_id(module_id)
-        .one(db)
+        .one(db::get_connection().await)
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking module"))))?;
 
@@ -313,10 +296,9 @@ async fn check_module_exists(
 
 async fn check_user_exists(
     user_id: i32,
-    db: &DatabaseConnection,
 ) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
     let found = UserEntity::find_by_id(user_id)
-        .one(db)
+        .one(db::get_connection().await)
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking user"))))?;
 
@@ -332,14 +314,13 @@ async fn check_user_exists(
 async fn check_assignment_hierarchy(
     module_id: i32,
     assignment_id: i32,
-    db: &DatabaseConnection,
 ) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
-    check_module_exists(module_id, db).await?;
+    check_module_exists(module_id).await?;
 
     let found = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id))
         .filter(AssignmentColumn::ModuleId.eq(module_id))
-        .one(db)
+        .one(db::get_connection().await)
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking assignment"))))?;
 
@@ -356,14 +337,13 @@ async fn check_task_hierarchy(
     module_id: i32,
     assignment_id: i32,
     task_id: i32,
-    db: &DatabaseConnection,
 ) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
-    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+    check_assignment_hierarchy(module_id, assignment_id).await?;
 
     let found = TaskEntity::find()
         .filter(TaskColumn::Id.eq(task_id))
         .filter(TaskColumn::AssignmentId.eq(assignment_id))
-        .one(db)
+        .one(db::get_connection().await)
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking task"))))?;
 
@@ -380,14 +360,13 @@ async fn check_submission_hierarchy(
     module_id: i32,
     assignment_id: i32,
     submission_id: i32,
-    db: &DatabaseConnection,
 ) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
-    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+    check_assignment_hierarchy(module_id, assignment_id).await?;
 
     let found = SubmissionEntity::find()
         .filter(SubmissionColumn::Id.eq(submission_id))
         .filter(SubmissionColumn::AssignmentId.eq(assignment_id))
-        .one(db)
+        .one(db::get_connection().await)
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking submission"))))?;
 
@@ -404,14 +383,13 @@ async fn check_file_hierarchy(
     module_id: i32,
     assignment_id: i32,
     file_id: i32,
-    db: &DatabaseConnection,
 ) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
-    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+    check_assignment_hierarchy(module_id, assignment_id).await?;
 
     let found = FileEntity::find()
         .filter(FileColumn::Id.eq(file_id))
         .filter(FileColumn::AssignmentId.eq(assignment_id))
-        .one(db)
+        .one(db::get_connection().await)
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking file"))))?;
 
@@ -428,14 +406,13 @@ pub async fn check_ticket_hierarchy(
     module_id: i32,
     assignment_id: i32,
     ticket_id: i32,
-    db: &DatabaseConnection,
 ) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
-    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+    check_assignment_hierarchy(module_id, assignment_id).await?;
 
     let found = db::models::tickets::Entity::find()
         .filter(db::models::tickets::Column::Id.eq(ticket_id))
         .filter(db::models::tickets::Column::AssignmentId.eq(assignment_id))
-        .one(db)
+        .one(db::get_connection().await)
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking ticket"))))?;
 
@@ -452,14 +429,13 @@ pub async fn check_plagiarism_hierarchy(
     module_id: i32,
     assignment_id: i32,
     case_id: i32,
-    db: &DatabaseConnection,
 ) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
-    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+    check_assignment_hierarchy(module_id, assignment_id).await?;
 
     let found = PlagiarismEntity::find()
         .filter(PlagiarismColumn::Id.eq(case_id))
         .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
-        .one(db)
+        .one(db::get_connection().await)
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking plagiarism case"))))?;
 
@@ -475,14 +451,13 @@ pub async fn check_plagiarism_hierarchy(
 pub async fn check_announcement_hierarchy(
     module_id: i32,
     announcement_id: i32,
-    db: &DatabaseConnection,
 ) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
-    check_module_exists(module_id, db).await?;
+    check_module_exists(module_id).await?;
 
     let found = db::models::announcements::Entity::find()
         .filter(db::models::announcements::Column::Id.eq(announcement_id))
         .filter(db::models::announcements::Column::ModuleId.eq(module_id))
-        .one(db)
+        .one(db::get_connection().await)
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking announcement"))))?;
 
@@ -496,13 +471,10 @@ pub async fn check_announcement_hierarchy(
 }
 
 pub async fn validate_known_ids(
-    State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, Response> {
-    let db = app_state.db();
-
     let mut module_id: Option<i32>     = None;
     let mut assignment_id: Option<i32> = None;
     let mut task_id: Option<i32>       = None;
@@ -532,34 +504,32 @@ pub async fn validate_known_ids(
     }
     
     if let Some(uid) = user_id {
-        check_user_exists(uid, db).await.map_err(|e| e.into_response())?;
+        check_user_exists(uid).await.map_err(|e| e.into_response())?;
     }
     if let Some(mid) = module_id {
-        check_module_exists(mid, db).await.map_err(|e| e.into_response())?;
+        check_module_exists(mid).await.map_err(|e| e.into_response())?;
     }
     if let (Some(mid), Some(aid)) = (module_id, assignment_id) {
-        check_assignment_hierarchy(mid, aid, db).await.map_err(|e| e.into_response())?;
+        check_assignment_hierarchy(mid, aid).await.map_err(|e| e.into_response())?;
     }
     if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, task_id) {
-        check_task_hierarchy(mid, aid, tid, db).await.map_err(|e| e.into_response())?;
+        check_task_hierarchy(mid, aid, tid).await.map_err(|e| e.into_response())?;
     }
     if let (Some(mid), Some(aid), Some(sid)) = (module_id, assignment_id, submission_id) {
-        check_submission_hierarchy(mid, aid, sid, db).await.map_err(|e| e.into_response())?;
+        check_submission_hierarchy(mid, aid, sid).await.map_err(|e| e.into_response())?;
     }
     if let (Some(mid), Some(aid), Some(fid)) = (module_id, assignment_id, file_id) {
-        check_file_hierarchy(mid, aid, fid, db).await.map_err(|e| e.into_response())?;
+        check_file_hierarchy(mid, aid, fid).await.map_err(|e| e.into_response())?;
     }
     if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, ticket_id) {
-        check_ticket_hierarchy(mid, aid, tid, db).await.map_err(|e| e.into_response())?;
+        check_ticket_hierarchy(mid, aid, tid).await.map_err(|e| e.into_response())?;
     }
     if let (Some(mid), Some(aid), Some(sid)) = (module_id, assignment_id, case_id) {
-        check_plagiarism_hierarchy(mid, aid, sid, db).await.map_err(|e| e.into_response())?;
+        check_plagiarism_hierarchy(mid, aid, sid).await.map_err(|e| e.into_response())?;
     }
-
     if let (Some(mid), Some(ann_id)) = (module_id, announcement_id) {
-        check_announcement_hierarchy(mid, ann_id, db).await.map_err(|e| e.into_response())?;
+        check_announcement_hierarchy(mid, ann_id).await.map_err(|e| e.into_response())?;
     }
-
 
     Ok(next.run(req).await)
 }

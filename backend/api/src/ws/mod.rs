@@ -5,10 +5,8 @@
 //! each protected via appropriate access control middleware.
 
 use axum::{
-    middleware::from_fn_with_state, routing::get, Router
+    middleware::from_fn, routing::get, Router
 };
-use util::state::AppState;
-
 use crate::{auth::guards::require_authenticated, ws::{handlers::chat_handler, modules::ws_module_routes}};
 
 pub mod modules;
@@ -27,8 +25,8 @@ pub mod handlers;
 /// /ws/modules/{module_id}/announcements
 /// /ws/modules/assignments/{assignment_id}/submissions/{submission_id}/progress
 /// ```
-pub fn ws_routes(app_state: AppState) -> Router<AppState> {
+pub fn ws_routes() -> Router {
     Router::new()
-        .route("/chat", get(chat_handler).route_layer(from_fn_with_state(app_state.clone(), require_authenticated)))
-        .nest("/modules", ws_module_routes(app_state))
+        .route("/chat", get(chat_handler).route_layer(from_fn(require_authenticated)))
+        .nest("/modules", ws_module_routes())
 }

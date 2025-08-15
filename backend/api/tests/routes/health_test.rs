@@ -7,10 +7,12 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::Value;
     use crate::helpers::app::make_test_app;
+    use serial_test::serial;
 
     #[tokio::test]
+    #[serial]
     async fn health_check_returns_ok_json() {
-        let (app, _) = make_test_app().await;
+        let app = make_test_app().await;
 
         let req = Request::builder()
             .method("GET")

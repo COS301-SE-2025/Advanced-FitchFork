@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 use db::models::plagiarism_case::{Entity as PlagiarismEntity, Status, Column as PlagiarismColumn};
 use sea_orm::{ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, ActiveModelTrait, Set};
 use serde::Serialize;
-use util::state::AppState;
 use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
@@ -77,13 +76,12 @@ pub struct FlaggedCaseResponse {
 /// - Only users with lecturer or assistant lecturer roles assigned to the module can perform this action
 /// - Considered an irreversible action indicating confirmed plagiarism
 pub async fn patch_plagiarism_flag(
-    State(app_state): State<AppState>,
     Path((_, assignment_id, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
     let case = match PlagiarismEntity::find()
         .filter(PlagiarismColumn::Id.eq(case_id))
         .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
-        .one(app_state.db())
+        .one(db::get_connection().await)
         .await
     {
         Ok(Some(case)) => case,
@@ -105,7 +103,7 @@ pub async fn patch_plagiarism_flag(
     active_case.status = Set(Status::Flagged);
     active_case.updated_at = Set(Utc::now());
 
-    let updated_case = match active_case.update(app_state.db()).await {
+    let updated_case = match active_case.update(db::get_connection().await).await {
         Ok(case) => case,
         Err(e) => {
             return (
@@ -193,13 +191,12 @@ pub struct ReviewedCaseResponse {
 /// - Only users with lecturer or assistant lecturer roles assigned to the module can perform this action
 /// - Typically indicates the case was investigated and determined not to be plagiarism
 pub async fn patch_plagiarism_review(
-    State(app_state): State<AppState>,
     Path((_, assignment_id, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
     let case = match PlagiarismEntity::find()
         .filter(PlagiarismColumn::Id.eq(case_id))
         .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
-        .one(app_state.db())
+        .one(db::get_connection().await)
         .await
     {
         Ok(Some(case)) => case,
@@ -221,7 +218,7 @@ pub async fn patch_plagiarism_review(
     active_case.status = Set(Status::Reviewed);
     active_case.updated_at = Set(Utc::now());
 
-    let updated_case = match active_case.update(app_state.db()).await {
+    let updated_case = match active_case.update(db::get_connection().await).await {
         Ok(case) => case,
         Err(e) => {
             return (

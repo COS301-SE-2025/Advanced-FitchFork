@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Path},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -7,7 +7,6 @@ use axum::{
 use sqlx::types::JsonValue;
 use serde_json::json;
 use db::models::assignment;
-use util::state::AppState;
 use crate::response::ApiResponse;
 use super::common::BulkDeleteRequest;
 
@@ -46,10 +45,9 @@ use super::common::BulkDeleteRequest;
 /// }
 /// ```
 pub async fn delete_assignment(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     match assignment::Model::delete(db, assignment_id as i32, module_id as i32).await {
         Ok(()) => (
@@ -98,11 +96,10 @@ pub async fn delete_assignment(
 /// }
 /// ```
 pub async fn bulk_delete_assignments(
-    State(app_state): State<AppState>,
     Path(module_id): Path<i64>,
     Json(req): Json<BulkDeleteRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if req.assignment_ids.is_empty() {
         return (

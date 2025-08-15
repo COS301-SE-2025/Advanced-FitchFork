@@ -12,7 +12,6 @@
 //! This route group is protected by `require_lecturer` middleware in the parent router.
 
 use axum::{Router, routing::{get, post, delete}};
-use util::state::AppState;
 
 mod get;
 mod post;
@@ -25,7 +24,7 @@ mod delete;
 /// - `POST   /personnel`           → assign one or more users to a role
 /// - `DELETE /personnel`           → remove one or more users from a role
 /// - `GET    /personnel/eligible`  → fetch users not assigned to any role in the module
-pub fn personnel_routes() -> Router<AppState> {
+pub fn personnel_routes() -> Router {
     Router::new()
         .route("/", get(get::get_personnel))
         .route("/", post(post::assign_personnel))

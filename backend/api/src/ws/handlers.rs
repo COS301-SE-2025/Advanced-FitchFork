@@ -7,15 +7,15 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        State, WebSocketUpgrade,
+        WebSocketUpgrade,
     },
     response::IntoResponse,
 };
+use util::state::AppState;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use util::state::AppState;
 
 /// Incoming WebSocket message types sent by clients.
 ///
@@ -72,10 +72,9 @@ struct ChatPayload {
 /// An Axum `IntoResponse` that performs the WebSocket upgrade.
 pub async fn chat_handler(
     ws: WebSocketUpgrade,
-    State(state): State<AppState>,
 ) -> impl IntoResponse {
     let topic = "chat".to_string();
-    let manager = state.ws_clone();
+    let manager = AppState::get().ws().clone();
 
     ws.on_upgrade(move |socket: WebSocket| async move {
         let mut rx = manager.subscribe(&topic).await;

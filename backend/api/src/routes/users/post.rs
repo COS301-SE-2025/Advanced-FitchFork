@@ -6,12 +6,10 @@
 //! All routes require admin privileges.
 
 use axum::{
-    extract::State,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use util::state::AppState;
 use crate::response::ApiResponse;
 use crate::routes::users::common::{CreateUserRequest, BulkCreateUsersRequest, UserResponse};
 use validator::Validate;
@@ -42,10 +40,9 @@ use services::{
 /// - 400 Bad Request — Validation failure
 /// - 409 Conflict — Duplicate username/email
 pub async fn create_user(
-    State(app_state): State<AppState>,
     Json(req): Json<CreateUserRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if let Err(e) = req.validate() {
         return (
@@ -107,10 +104,9 @@ pub async fn create_user(
 /// - 400 Bad Request — If validation fails
 /// - 409 Conflict — If one user fails to insert (first error returned)
 pub async fn bulk_create_users(
-    State(app_state): State<AppState>,
     Json(req): Json<BulkCreateUsersRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
+    let db = db::get_connection().await;
 
     if let Err(e) = req.validate() {
         return (

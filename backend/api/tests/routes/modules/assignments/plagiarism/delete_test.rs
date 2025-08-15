@@ -127,12 +127,14 @@ mod delete_plagiarism_tests {
     use sea_orm::EntityTrait;
     use serde_json::Value;
     use tower::ServiceExt;
+    use serial_test::serial;
 
     /// Test Case: Successful Deletion by Lecturer
     #[tokio::test]
+    #[serial]
     async fn test_delete_plagiarism_case_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let req = make_delete_request(
             &data.lecturer_user,
@@ -154,7 +156,7 @@ mod delete_plagiarism_tests {
 
         // Verify database deletion
         let deleted_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap();
         assert!(deleted_case.is_none());
@@ -162,9 +164,10 @@ mod delete_plagiarism_tests {
 
     /// Test Case: Successful Deletion by Assistant Lecturer
     #[tokio::test]
+    #[serial]
     async fn test_delete_plagiarism_case_success_as_assistant() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let req = make_delete_request(
             &data.assistant_user,
@@ -178,7 +181,7 @@ mod delete_plagiarism_tests {
 
         // Verify database deletion
         let deleted_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
-            .one(app_state.db())
+            .one(db::get_connection().await)
             .await
             .unwrap();
         assert!(deleted_case.is_none());
@@ -186,9 +189,10 @@ mod delete_plagiarism_tests {
 
     /// Test Case: Forbidden Access for Non-Permitted Roles
     #[tokio::test]
+    #[serial]
     async fn test_delete_plagiarism_case_forbidden_roles() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         // Test tutor
         let req = make_delete_request(
@@ -213,9 +217,10 @@ mod delete_plagiarism_tests {
 
     /// Test Case: Case Not Found
     #[tokio::test]
+    #[serial]
     async fn test_delete_plagiarism_case_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let req = make_delete_request(
             &data.lecturer_user,
@@ -237,9 +242,10 @@ mod delete_plagiarism_tests {
 
     /// Test Case: Unauthorized Access
     #[tokio::test]
+    #[serial]
     async fn test_delete_plagiarism_case_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/plagiarism/{}",
@@ -284,6 +290,7 @@ mod bulk_delete_plagiarism_tests {
     use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
     use serde_json::{json, Value};
     use tower::ServiceExt;
+    use serial_test::serial;
 
     async fn setup_bulk_test_data(
         db: &DatabaseConnection,
@@ -361,9 +368,10 @@ mod bulk_delete_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_success() {
-        let (app, app_state) = make_test_app().await;
-        let (data, extra_cases) = setup_bulk_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, extra_cases) = setup_bulk_test_data(db::get_connection().await).await;
         let req = make_bulk_delete_request(
             &data.lecturer_user,
             data.module.id,
@@ -390,16 +398,17 @@ mod bulk_delete_plagiarism_tests {
                 extra_cases[0].id,
                 extra_cases[1].id,
             ]))
-            .all(app_state.db())
+            .all(db::get_connection().await)
             .await
             .unwrap();
         assert!(remaining_cases.is_empty());
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_empty_list() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let req =
             make_bulk_delete_request(&data.lecturer_user, data.module.id, data.assignment.id, &[]);
@@ -414,9 +423,10 @@ mod bulk_delete_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _) = setup_bulk_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, _) = setup_bulk_test_data(db::get_connection().await).await;
         let case_ids_to_delete = vec![data.plagiarism_case.id, 999999];
 
         let req = make_bulk_delete_request(
@@ -439,9 +449,10 @@ mod bulk_delete_plagiarism_tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_bulk_delete_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let (data, extra_cases) = setup_bulk_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let (data, extra_cases) = setup_bulk_test_data(db::get_connection().await).await;
         let case_ids_to_delete = vec![data.plagiarism_case.id, extra_cases[0].id];
 
         let req = make_bulk_delete_request(

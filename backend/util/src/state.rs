@@ -1,58 +1,64 @@
-//! Application state container shared across Axum route handlers and services.
-//!
-//! This struct holds shared resources such as the database connection and WebSocket manager.
-//! It is typically wrapped in an `Arc` and passed into route handlers via Axum's `State<T>` extractor.
-
-use sea_orm::DatabaseConnection;
 use crate::ws::WebSocketManager;
+use jsonwebtoken::{EncodingKey, DecodingKey};
+use std::env;
+use std::sync::OnceLock;
+use dotenvy::dotenv;
 
-/// Central application state shared across the server.
-///
-/// This includes:
-/// - A cloned, thread-safe database connection for use with SeaORM.
-/// - A global `WebSocketManager` for broadcasting and subscribing to topics.
+static APP_STATE: OnceLock<AppState> = OnceLock::new();
+
 #[derive(Clone)]
 pub struct AppState {
-    db: DatabaseConnection,
     ws: WebSocketManager,
+    jwt_encoding_key: EncodingKey,
+    jwt_decoding_key: DecodingKey,
+    jwt_duration_minutes: i64,
+    test_mode: bool,
 }
 
 impl AppState {
-    /// Creates a new `AppState` with the given database connection and WebSocket manager.
-    ///
-    /// # Arguments
-    ///
-    /// * `db` - A SeaORM `DatabaseConnection`, typically cloned from the main pool.
-    /// * `ws` - A `WebSocketManager` responsible for managing topic-based communication.
-    pub fn new(db: DatabaseConnection, ws: WebSocketManager) -> Self {
-        Self { db, ws }
+    pub fn init(test_mode: bool) -> &'static Self {
+        APP_STATE.get_or_init(|| {
+            dotenv().ok();
+
+            let secret = env::var("JWT_SECRET")
+                .expect("JWT_SECRET must be set at startup");
+            
+            let jwt_duration_minutes = env::var("JWT_DURATION_MINUTES")
+                .expect("JWT_DURATION_MINUTES must be set at startup")
+                .parse::<i64>()
+                .expect("JWT_DURATION_MINUTES must be a valid integer");
+
+            Self {
+                ws: WebSocketManager::new(),
+                jwt_encoding_key: EncodingKey::from_secret(secret.as_bytes()),
+                jwt_decoding_key: DecodingKey::from_secret(secret.as_bytes()),
+                jwt_duration_minutes,
+                test_mode,
+            }
+        })
     }
 
-    /// Returns a shared reference to the internal `DatabaseConnection`.
-    ///
-    /// This is ideal when the caller does not need ownership.
-    pub fn db(&self) -> &DatabaseConnection {
-        &self.db
+    pub fn get() -> &'static Self {
+        APP_STATE.get().expect("AppState not initialized")
     }
 
-    /// Returns a shared reference to the internal `WebSocketManager`.
     pub fn ws(&self) -> &WebSocketManager {
         &self.ws
     }
-}
 
-impl AppState {
-    /// Returns a cloned copy of the database connection.
-    ///
-    /// Useful for async contexts or spawning tasks that require ownership.
-    pub fn db_clone(&self) -> DatabaseConnection {
-        self.db.clone()
+    pub fn encoding_key(&self) -> &EncodingKey {
+        &self.jwt_encoding_key
     }
 
-    /// Returns a cloned instance of the `WebSocketManager`.
-    ///
-    /// This allows handlers to send or subscribe without holding a reference.
-    pub fn ws_clone(&self) -> WebSocketManager {
-        self.ws.clone()
+    pub fn decoding_key(&self) -> &DecodingKey {
+        &self.jwt_decoding_key
+    }
+
+    pub fn jwt_duration_minutes(&self) -> i64 {
+        self.jwt_duration_minutes
+    }
+
+    pub fn is_test_mode(&self) -> bool {
+        self.test_mode
     }
 }

@@ -22,6 +22,7 @@ mod tests {
     use chrono::{Utc, TimeZone};
     use db::models::assignment::AssignmentType;
     use crate::helpers::app::make_test_app;
+    use serial_test::serial;
 
     struct TestData {
         admin_user: UserModel,
@@ -85,9 +86,10 @@ mod tests {
     // --- GET /api/modules/{module_id}/assignments (List) ---
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignments_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments", data.module.id);
@@ -111,9 +113,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignments_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments", data.module.id);
@@ -133,9 +136,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignments_forbidden_for_unassigned_user() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments", data.module.id);
@@ -150,9 +154,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignments_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments", 9999);
@@ -167,9 +172,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignments_filtering_and_sorting() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments?query=Assignment&sort=-name", data.module.id);
@@ -190,9 +196,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignments_pagination() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments?page=2&per_page=2", data.module.id);
@@ -215,9 +222,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignments_invalid_sort_field() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments?sort=invalid_field", data.module.id);
@@ -232,9 +240,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignments_invalid_assignment_type() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments?assignment_type=invalid", data.module.id);
@@ -249,9 +258,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignments_no_assignments_in_module() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments", data.empty_module.id);
@@ -271,9 +281,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignments_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/modules/{}/assignments", data.module.id);
         let req = Request::builder()
@@ -288,9 +299,10 @@ mod tests {
     // --- GET /api/modules/{module_id}/assignments/{assignment_id} (Detail) ---
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_detail_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
@@ -310,9 +322,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_detail_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
@@ -327,9 +340,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_detail_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/9999", data.module.id);
@@ -344,9 +358,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_detail_forbidden_for_unassigned_user() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
@@ -361,9 +376,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_detail_wrong_module() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", data.empty_module.id, data.assignments[0].id);
@@ -378,9 +394,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_detail_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
         let req = Request::builder()
@@ -393,9 +410,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_detail_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}", 9999, data.assignments[0].id);
@@ -412,9 +430,10 @@ mod tests {
     // --- GET /api/modules/{module_id}/assignments/{assignment_id}/readiness ---
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_readiness_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/readiness", data.module.id, data.assignments[0].id);
@@ -429,9 +448,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_readiness_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/readiness", data.module.id, data.assignments[0].id);
@@ -446,9 +466,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_readiness_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/readiness", data.module.id, data.assignments[0].id);
@@ -463,9 +484,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_readiness_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/9999/readiness", data.module.id);
@@ -480,9 +502,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_readiness_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/readiness", 9999, data.assignments[0].id);
@@ -499,9 +522,10 @@ mod tests {
     // --- GET /api/modules/{module_id}/assignments/{assignment_id}/stats ---
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_stats_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/stats", data.module.id, data.assignments[0].id);
@@ -516,9 +540,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_stats_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/stats", data.module.id, data.assignments[0].id);
@@ -533,9 +558,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_stats_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/stats", data.module.id, data.assignments[0].id);
@@ -550,9 +576,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_stats_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/9999/stats", data.module.id);
@@ -567,9 +594,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_assignment_stats_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+        let app = make_test_app().await;
+        let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/stats", 9999, data.assignments[0].id);
