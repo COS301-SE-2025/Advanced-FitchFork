@@ -141,20 +141,19 @@ mod tests {
     fn create_execution_config(base_path: &Path) {
         let path = base_path.join("config");
         let config_content = r#"{
-          "execution": {
-    "timeout_secs": 10,
-    "max_memory": 8589934592,
-    "max_cpus": 2,
-    "max_uncompressed_size": 100000000,
-    "max_processes": 256
-  },
-  "marking": {
-    "marking_scheme": "exact",
-    "feedback_scheme": "auto",
-    "deliminator": "&-=-&"
-  }
-    }
-        "#;
+            "execution": {
+                "timeout_secs": 10,
+                "max_memory": 8589934592,
+                "max_cpus": 2,
+                "max_uncompressed_size": 100000000,
+                "max_processes": 256
+            },
+            "marking": {
+                "marking_scheme": "exact",
+                "feedback_scheme": "auto",
+                "deliminator": "&-=-&"
+            }
+        }"#;
         fs::write(path.join("config.json"), config_content).unwrap();
     }
 
@@ -1201,7 +1200,7 @@ mod tests {
     }
 
     // Helper function to create a submission
-    async fn create_submission(
+    async fn create_remarkable_submission(
         db: &DatabaseConnection,
         module_id: i64,
         assignment_id: i64,
@@ -1309,7 +1308,7 @@ mod tests {
             .await
             .unwrap();
 
-        let sub1 = create_submission(
+        let sub1 = create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1318,7 +1317,7 @@ mod tests {
             &temp_dir,
         )
         .await;
-        let sub2 = create_submission(
+        let sub2 = create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1364,7 +1363,7 @@ mod tests {
         .await
         .unwrap();
 
-        let sub1 = create_submission(
+        let sub1 = create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1373,7 +1372,7 @@ mod tests {
             &temp_dir,
         )
         .await;
-        let sub2 = create_submission(
+        let sub2 = create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1413,7 +1412,7 @@ mod tests {
             .await
             .unwrap();
 
-        create_submission(
+        create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1422,7 +1421,7 @@ mod tests {
             &temp_dir,
         )
         .await;
-        create_submission(
+        create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1468,7 +1467,7 @@ mod tests {
         .await
         .unwrap();
 
-        create_submission(
+        create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1477,7 +1476,7 @@ mod tests {
             &temp_dir,
         )
         .await;
-        create_submission(
+        create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1537,7 +1536,7 @@ mod tests {
         let db = app_state.db();
         let data = setup_test_data(app_state.db(), &temp_dir).await;
 
-        let submission = create_submission(
+        let submission = create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1639,7 +1638,7 @@ mod tests {
             .await
             .unwrap();
 
-        let submission = create_submission(
+        let submission = create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1691,7 +1690,7 @@ mod tests {
             .await
             .unwrap();
 
-        let submission = create_submission(
+        let submission = create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1750,7 +1749,7 @@ mod tests {
             .await
             .unwrap();
 
-        let valid_sub = create_submission(
+        let valid_sub = create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1761,7 +1760,7 @@ mod tests {
         .await;
         let invalid_sub_id = 9999;
 
-        let broken_sub = create_submission(
+        let broken_sub = create_remarkable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1865,6 +1864,53 @@ mod tests {
         serde_json::from_slice(&body).unwrap()
     }
 
+    async fn create_resubmitable_submission(
+        db: &DatabaseConnection,
+        module_id: i64,
+        assignment_id: i64,
+        user_id: i64,
+        attempt: i64,
+        temp_dir: &TempDir,
+    ) -> AssignmentSubmissionModel {
+        let submission = assignment_submission::ActiveModel {
+            assignment_id: Set(assignment_id),
+            user_id: Set(user_id),
+            attempt: Set(attempt),
+            filename: Set("test_submission.zip".to_string()),
+            file_hash: Set("d41d8cd98f00b204e9800998ecf8427e".to_string()),
+            path: Set(format!(
+                "module_{}/assignment_{}/assignment_submissions/user_{}/attempt_{}/submission.zip",
+                module_id, assignment_id, user_id, attempt
+            )),
+            is_practice: Set(false),
+            ..Default::default()
+        };
+        let submission = submission.insert(db).await.unwrap();
+
+        let task = db::models::assignment_task::Entity::find()
+            .filter(db::models::assignment_task::Column::AssignmentId.eq(assignment_id))
+            .one(db)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let output = assignment_submission_output::ActiveModel {
+            task_id: Set(task.id),
+            submission_id: Set(submission.id),
+            path: Set("".to_string()),
+            ..Default::default()
+        };
+        let _output = output.insert(db).await.unwrap();
+
+        let submission_file_path = temp_dir.path().join(&submission.path);
+        if let Some(parent) = submission_file_path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&submission_file_path, create_submission_zip()).unwrap();
+
+        submission
+    }
+
     #[tokio::test]
     #[serial]
     async fn test_resubmit_specific_submissions() {
@@ -1874,7 +1920,7 @@ mod tests {
         let data = setup_test_data(app_state.db(), &temp_dir).await;
 
         // Create submissions
-        let sub1 = create_submission(
+        let sub1 = create_resubmitable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1882,7 +1928,7 @@ mod tests {
             1,
             &temp_dir,
         ).await;
-        let sub2 = create_submission(
+        let sub2 = create_resubmitable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1930,7 +1976,7 @@ mod tests {
         let data = setup_test_data(app_state.db(), &temp_dir).await;
 
         // Create submissions
-        create_submission(
+        create_resubmitable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -1938,7 +1984,7 @@ mod tests {
             1,
             &temp_dir,
         ).await;
-        create_submission(
+        create_resubmitable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,
@@ -2022,7 +2068,7 @@ mod tests {
         let data = setup_test_data(app_state.db(), &temp_dir).await;
 
         // Create submission
-        let submission = create_submission(
+        let submission = create_resubmitable_submission(
             db,
             data.assignment.module_id,
             data.assignment.id,

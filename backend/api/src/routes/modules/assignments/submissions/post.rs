@@ -19,10 +19,6 @@ use util::execution_config::ExecutionConfig;
 use serde::{Serialize, Deserialize};
 use tokio_util::bytes;
 
-// ============================================================================
-// Request/Response Types
-// ============================================================================
-
 #[derive(Debug, Deserialize)]
 pub struct RemarkRequest {
     #[serde(default)]
@@ -183,7 +179,6 @@ fn validate_file_upload(
         }
     };
 
-    // Validate file extension
     let allowed_extensions = [".tgz", ".gz", ".tar", ".zip"];
     let file_extension = std::path::Path::new(&file_name)
         .extension()
@@ -202,7 +197,6 @@ fn validate_file_upload(
         ));
     }
 
-    // Validate file is not empty
     if file_bytes.is_empty() {
         return Err((
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -270,7 +264,11 @@ async fn grade_submission(
         mark_allocator_path.to_path_buf(),
         config.clone(),
     );
-    let mark_report = marking_job.mark().await.map_err(|e| format!("{:?}", e))?;
+
+    let mark_report = marking_job.mark().await.map_err(|e| {
+        eprintln!("MARKING ERROR: {:#?}", e);
+        format!("{:?}", e)
+    })?;
 
     let mark = MarkSummary {
         earned: mark_report.data.mark.earned,
@@ -355,11 +353,6 @@ async fn process_submission_code(
 async fn execute_bulk_operation<F, Fut>(
     submission_ids: Vec<i64>,
     assignment_id: i64,
-    assignment: &db::models::assignment::Model,
-    base_path: &std::path::Path,
-    memo_outputs: &[std::path::PathBuf],
-    mark_allocator_path: &std::path::Path,
-    config: &ExecutionConfig,
     db: &sea_orm::DatabaseConnection,
     operation: F,
 ) -> (usize, Vec<FailedOperation>)
@@ -526,7 +519,6 @@ pub async fn submit_assignment(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    // Load and validate assignment
     let assignment = match load_assignment(module_id, assignment_id, db).await {
         Ok(assignment) => assignment,
         Err(_) => {
@@ -539,7 +531,6 @@ pub async fn submit_assignment(
         }
     };
 
-    // Parse multipart form
     let mut is_practice: bool = false;
     let mut file_name: Option<String> = None;
     let mut file_bytes: Option<bytes::Bytes> = None;
@@ -558,7 +549,6 @@ pub async fn submit_assignment(
         }
     }
 
-    // Validate file upload
     let (file_name, file_bytes) = match validate_file_upload(&file_name, &file_bytes) {
         Ok((name, bytes)) => (name, bytes),
         Err(response) => return response,
@@ -566,7 +556,6 @@ pub async fn submit_assignment(
 
     let file_hash = format!("{:x}", md5::compute(&file_bytes));
 
-    // Get next attempt number
     let attempt = match get_next_attempt(assignment_id, claims.sub, db).await {
         Ok(attempt) => attempt,
         Err(e) => {
@@ -580,7 +569,6 @@ pub async fn submit_assignment(
         }
     };
 
-    // Save submission
     let submission = match AssignmentSubmissionModel::save_file(
         db,
         assignment_id,
@@ -605,7 +593,6 @@ pub async fn submit_assignment(
         }
     };
 
-    // Process code execution
     if let Err(e) = process_submission_code(db, submission.id).await {
         eprintln!("Code execution failed: {}", e);
         return (
@@ -616,7 +603,6 @@ pub async fn submit_assignment(
         );
     }
 
-    // Load mark allocator
     if let Err(e) = load_assignment_allocator(assignment.module_id, assignment.id).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -624,7 +610,6 @@ pub async fn submit_assignment(
         );
     }
 
-    // Get assignment paths and config
     let (base_path, mark_allocator_path, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
         Ok(paths) => paths,
         Err(e) => {
@@ -645,7 +630,6 @@ pub async fn submit_assignment(
         }
     };
 
-    // Grade submission
     match grade_submission(
         submission,
         &assignment,
@@ -670,7 +654,6 @@ pub async fn submit_assignment(
     }
 }
 
-// TODO: Allow ALs to use this endpoint. At the time of implementing this, ALs were not implemented.
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions/remark
 ///
 /// Regrade (remark) assignment submissions. Accessible to lecturers, assistant lecturers, and admins.
@@ -735,7 +718,6 @@ pub async fn remark_submissions(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    // Validate request
     if let Err(e) = validate_bulk_request(&req.submission_ids, &req.all) {
         return (
             StatusCode::BAD_REQUEST,
@@ -743,7 +725,6 @@ pub async fn remark_submissions(
         );
     }
 
-    // Load assignment
     let assignment = match load_assignment(module_id, assignment_id, db).await {
         Ok(assignment) => assignment,
         Err(_) => {
@@ -754,7 +735,6 @@ pub async fn remark_submissions(
         }
     };
 
-    // Resolve submission IDs
     let submission_ids = match resolve_submission_ids(req.submission_ids, req.all, assignment_id, db).await {
         Ok(ids) => ids,
         Err(e) => {
@@ -765,7 +745,6 @@ pub async fn remark_submissions(
         }
     };
 
-    // Load mark allocator
     if let Err(e) = load_assignment_allocator(assignment.module_id, assignment.id).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -773,7 +752,6 @@ pub async fn remark_submissions(
         );
     }
 
-    // Get assignment paths and config
     let (base_path, mark_allocator_path, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
         Ok(paths) => paths,
         Err(e) => {
@@ -794,15 +772,9 @@ pub async fn remark_submissions(
         }
     };
 
-    // Execute remark operation
     let (regraded, failed) = execute_bulk_operation(
         submission_ids.clone(),
         assignment_id,
-        &assignment,
-        &base_path,
-        &memo_outputs,
-        &mark_allocator_path,
-        &config,
         db,
         |submission| {
             let assignment = assignment.clone();
@@ -918,7 +890,6 @@ pub async fn resubmit_submissions(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    // Validate request
     if let Err(e) = validate_bulk_request(&req.submission_ids, &req.all) {
         return (
             StatusCode::BAD_REQUEST,
@@ -926,7 +897,6 @@ pub async fn resubmit_submissions(
         );
     }
 
-    // Load assignment
     let assignment = match load_assignment(module_id, assignment_id, db).await {
         Ok(assignment) => assignment,
         Err(_) => {
@@ -937,7 +907,6 @@ pub async fn resubmit_submissions(
         }
     };
 
-    // Resolve submission IDs
     let submission_ids = match resolve_submission_ids(req.submission_ids, req.all, assignment_id, db).await {
         Ok(ids) => ids,
         Err(e) => {
@@ -948,7 +917,6 @@ pub async fn resubmit_submissions(
         }
     };
 
-    // Load mark allocator
     if let Err(e) = load_assignment_allocator(assignment.module_id, assignment.id).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -956,7 +924,6 @@ pub async fn resubmit_submissions(
         );
     }
 
-    // Get assignment paths and config
     let (base_path, mark_allocator_path, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
         Ok(paths) => paths,
         Err(e) => {
@@ -977,15 +944,9 @@ pub async fn resubmit_submissions(
         }
     };
 
-    // Execute resubmit operation
     let (resubmitted, failed) = execute_bulk_operation(
         submission_ids.clone(),
         assignment_id,
-        &assignment,
-        &base_path,
-        &memo_outputs,
-        &mark_allocator_path,
-        &config,
         db,
         |submission| {
             let db = db.clone();
@@ -1013,15 +974,8 @@ pub async fn resubmit_submissions(
         },
     ).await;
 
-    let failed_count = failed.len();
     let response = ResubmitResponse { resubmitted, failed };
     let message = format!("Resubmitted {}/{} submissions", resubmitted, submission_ids.len());
-
-    // Log structured information for metrics/monitoring
-    eprintln!(
-        "Resubmit operation completed: module_id={}, assignment_id={}, total={}, resubmitted={}, failed={}",
-        module_id, assignment_id, submission_ids.len(), resubmitted, failed_count
-    );
 
     (
         StatusCode::OK,
