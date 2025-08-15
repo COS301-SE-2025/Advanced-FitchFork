@@ -9,13 +9,13 @@ use crate::routes::modules::assignments::tickets::common::is_valid;
 
 pub async fn delete_ticket(
     State(app_state): State<AppState>,
-    Path((_, _, ticket_id)): Path<(i64, i64, i64)>,
+    Path((module_id, _, ticket_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
     let db = app_state.db();
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, db).await {
+    if !is_valid(user_id, ticket_id, module_id, db).await {
         return (StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("Forbidden"))).into_response();
     }
 
