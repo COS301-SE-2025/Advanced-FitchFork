@@ -10,7 +10,6 @@ pub async fn is_valid(
 ) -> bool {
     let is_author = TicketModel::is_author(ticket_id, user_id, db).await;
     let staff_roles = vec![Role::Lecturer, Role::AssistantLecturer, Role::Tutor];
-
     let is_staff = Entity::find()
         .filter(Column::UserId.eq(user_id))
         .filter(Column::ModuleId.eq(module_id))
