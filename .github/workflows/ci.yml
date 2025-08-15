@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  cypress:
-    name: E2E (Cypress)
+  e2e:
+    name: E2E (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -63,6 +63,17 @@ jobs:
         run: npm ci
         working-directory: tests
 
+      # cache Playwright browsers
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-ms-playwright-${{ hashFiles('tests/package-lock.json') }}
+
+      - name: Install Playwright browsers & deps
+        run: npx playwright install --with-deps
+        working-directory: tests
+
       # --- Build, migrate, seed & start servers ---
       - name: Build, migrate, seed & start servers
         uses: ./.github/actions/start-servers
@@ -80,20 +91,23 @@ jobs:
           code-url: "http://localhost:5000/health"
           frontend-url: "http://localhost:5173"
 
-      - name: Run Cypress
+      - name: Run Playwright
         env:
           CI: "1"
-        run: npm run e2e
+        # If your config lives at tests/e2e/playwright.config.ts, add:  -c e2e/playwright.config.ts
+        run: npx playwright test
         working-directory: tests
 
-      - name: Upload logs on failure
+      - name: Upload Playwright artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-logs
+          name: playwright-artifacts
           path: |
-            tests/cypress/screenshots
-            tests/cypress/videos
+            tests/playwright-report
+            tests/.playwright
+            tests/test-results
+            tests/blob-report
           if-no-files-found: ignore
 
       - name: Stop servers

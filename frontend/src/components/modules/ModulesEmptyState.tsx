@@ -44,12 +44,13 @@ const ModulesEmptyState = ({ isAdmin = false, onCreate, onRefresh }: Props) => {
                   onClick={onCreate}
                   className="min-w-[200px]"
                   disabled={!onCreate}
+                  data-testid="empty-add"
                 >
                   Add module
                 </Button>
               )}
               {onRefresh && (
-                <Button icon={<ReloadOutlined />} onClick={onRefresh}>
+                <Button icon={<ReloadOutlined />} onClick={onRefresh} data-testid="empty-refesh">
                   Refresh
                 </Button>
               )}

@@ -12,6 +12,7 @@ import type { MenuItemType } from 'antd/es/menu/interface';
 import type { EntityAction } from './EntityList';
 import FilterModal from './common/FilterModal';
 import SortModal from './common/SortModal';
+import { useUI } from '@/context/UIContext';
 
 const { Search } = Input;
 
@@ -19,9 +20,7 @@ interface SortOption {
   label: string;
   field: string;
 }
-
 type FilterType = 'select' | 'text' | 'number' | 'multi-select';
-
 interface FilterGroup {
   key: string;
   label: string;
@@ -34,26 +33,20 @@ interface Props<T> {
   searchTerm: string;
   viewMode?: 'table' | 'grid';
   onViewModeChange?: (val: 'table' | 'grid') => void;
-
   selectedRowKeys?: React.Key[];
   searchPlaceholder?: string;
-
   sortOptions?: SortOption[];
   currentSort?: string[];
   onSortChange?: (value: string[]) => void;
-
   filterGroups?: FilterGroup[];
   activeFilters?: string[];
   onFilterChange?: (values: string[]) => void;
-
   actions?: EntityAction<T>[];
   bulkActions?: EntityAction<T>[];
-
   columnToggleEnabled?: boolean;
   columns?: { key: string; label: string; defaultHidden?: boolean }[];
   hiddenColumns?: Set<string>;
   onToggleColumn?: (key: string) => void;
-
   listMode?: boolean;
 }
 
@@ -78,32 +71,31 @@ const ControlBar = <T,>({
   onToggleColumn = () => {},
   listMode = false,
 }: Props<T>) => {
+  const { isSm } = useUI();
+  const isDesktop = isSm;
+
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
 
-  const hasBulk = selectedRowKeys.length > 0 && bulkActions.length > 0;
-
+  const hasBulk = (selectedRowKeys?.length ?? 0) > 0 && (bulkActions?.length ?? 0) > 0;
   const hasSearch = !!searchTerm.trim();
   const hasSort = (currentSort?.length ?? 0) > 0;
   const hasFilters = (activeFilters?.length ?? 0) > 0;
 
-  // show Clear control on mobile if any state is active
-  const showClearInlineMobile = hasSearch || hasSort || hasFilters;
-
   const clearMenuItems: MenuItemType[] = [
     hasSearch && {
       key: 'clear-search',
-      label: <span data-cy="clear-search">Clear Search</span>,
+      label: <span data-testid="clear-search">Clear Search</span>,
       onClick: () => handleSearch(''),
     },
     hasSort && {
       key: 'clear-sort',
-      label: <span data-cy="clear-sort">Clear Sort</span>,
+      label: <span data-testid="clear-sort">Clear Sort</span>,
       onClick: () => onSortChange?.([]),
     },
     hasFilters && {
       key: 'clear-filters',
-      label: <span data-cy="clear-filters">Clear Filters</span>,
+      label: <span data-testid="clear-filters">Clear Filters</span>,
       onClick: () => onFilterChange?.([]),
     },
   ].filter(Boolean) as MenuItemType[];
@@ -111,7 +103,7 @@ const ControlBar = <T,>({
   if (clearMenuItems.length > 1) {
     clearMenuItems.push({
       key: 'clear-all',
-      label: <span data-cy="clear-all">Clear All</span>,
+      label: <span data-testid="clear-all">Clear All</span>,
       onClick: () => {
         handleSearch('');
         onSortChange?.([]);
@@ -123,7 +115,9 @@ const ControlBar = <T,>({
   const primaryAction = actions.find((a) => a.isPrimary) ?? actions[0] ?? null;
   const secondaryActions = primaryAction ? actions.filter((a) => a.key !== primaryAction.key) : [];
 
-  const resolvedPrimaryBulk = bulkActions.find((a) => a.isPrimary) ?? bulkActions[0] ?? null;
+  const resolvedPrimaryBulk = hasBulk
+    ? (bulkActions.find((a) => a.isPrimary) ?? bulkActions[0] ?? null)
+    : null;
   const secondaryBulkActions = resolvedPrimaryBulk
     ? bulkActions.filter((a) => a.key !== resolvedPrimaryBulk.key)
     : [];
@@ -207,7 +201,6 @@ const ControlBar = <T,>({
     </Dropdown>
   );
 
-  // Reusable pieces
   const FiltersButton = (
     <Dropdown
       menu={{
@@ -217,7 +210,7 @@ const ControlBar = <T,>({
                 {
                   key: 'open-filters',
                   icon: <FilterOutlined />,
-                  label: <span data-cy="open-filter-modal">Filters</span>,
+                  label: <span data-testid="open-filter-modal">Filters</span>,
                   onClick: () => setFilterModalOpen(true),
                 },
               ]
@@ -227,7 +220,7 @@ const ControlBar = <T,>({
                 {
                   key: 'open-sort',
                   icon: <SortAscendingOutlined />,
-                  label: <span data-cy="open-sort-modal">Sort</span>,
+                  label: <span data-testid="open-sort-modal">Sort</span>,
                   onClick: () => setSortModalOpen(true),
                 },
               ]
@@ -236,9 +229,9 @@ const ControlBar = <T,>({
       }}
       trigger={['click']}
     >
-      <Button data-cy="filters-dropdown" className="whitespace-nowrap flex items-center gap-1">
+      <Button data-testid="filters-dropdown" className="whitespace-nowrap flex items-center gap-1">
         <FilterOutlined />
-        <span className="hidden sm:inline">Filters</span>
+        {isDesktop && <span>Filters</span>}
       </Button>
     </Dropdown>
   );
@@ -249,14 +242,14 @@ const ControlBar = <T,>({
         <Button
           icon={<ReloadOutlined />}
           onClick={() => clearMenuItems[0].onClick?.({ key: clearMenuItems[0].key } as any)}
-          data-cy={clearMenuItems[0].key}
-          className="w-full sm:w-auto"
+          data-testid={clearMenuItems[0].key}
+          className={isDesktop ? undefined : 'w-full'}
         >
           {clearMenuItems[0].label}
         </Button>
       ) : (
         <Dropdown menu={{ items: clearMenuItems }}>
-          <Button icon={<ReloadOutlined />} className="w-full sm:w-auto">
+          <Button icon={<ReloadOutlined />} className={isDesktop ? undefined : 'w-full'}>
             Clear
           </Button>
         </Dropdown>
@@ -265,27 +258,26 @@ const ControlBar = <T,>({
   );
 
   const ActionsGroup = (
-    <div className="w-full sm:w-auto !m-0 flex flex-wrap items-center gap-2">
+    <div className={isDesktop ? 'flex items-center gap-2' : 'w-full flex flex-col gap-2'}>
       {primaryAction && (
-        <div className="w-full sm:w-auto">
-          <Space.Compact className="w-full sm:w-auto">
+        <div className={isDesktop ? undefined : 'w-full'}>
+          <Space.Compact className={isDesktop ? undefined : 'w-full'}>
             {primaryAction.confirm ? (
               <Popconfirm
                 title={`Are you sure you want to ${primaryAction.label.toLowerCase()}?`}
                 okText="Yes"
-                cancelText="Cancel"
+                cancelText="No"
+                okButtonProps={{ 'data-testid': 'confirm-yes' }}
+                cancelButtonProps={{ 'data-testid': 'confirm-no' }}
                 placement="topRight"
                 onConfirm={() =>
-                  primaryAction.handler({
-                    selected: selectedRowKeys,
-                    refresh: () => {},
-                  })
+                  primaryAction.handler({ selected: selectedRowKeys, refresh: () => {} })
                 }
               >
                 <Button
                   type="primary"
-                  data-cy={`control-action-${primaryAction.key}`}
-                  className="w-full sm:w-auto"
+                  data-testid={`control-action-${primaryAction.key}`}
+                  className={isDesktop ? undefined : 'w-full'}
                 >
                   {primaryAction.icon} {primaryAction.label}
                 </Button>
@@ -293,14 +285,11 @@ const ControlBar = <T,>({
             ) : (
               <Button
                 type="primary"
-                data-cy={`control-action-${primaryAction.key}`}
+                data-testid={`control-action-${primaryAction.key}`}
                 onClick={() =>
-                  primaryAction.handler({
-                    selected: selectedRowKeys,
-                    refresh: () => {},
-                  })
+                  primaryAction.handler({ selected: selectedRowKeys, refresh: () => {} })
                 }
-                className="w-full sm:w-auto"
+                className={isDesktop ? undefined : 'w-full'}
               >
                 {primaryAction.icon} {primaryAction.label}
               </Button>
@@ -308,7 +297,7 @@ const ControlBar = <T,>({
 
             {secondaryActions.length > 0 && (
               <Dropdown
-                data-cy="control-action-dropdown"
+                data-testid="control-action-dropdown"
                 menu={{
                   items: secondaryActions.map((a) => ({
                     key: a.key,
@@ -317,26 +306,20 @@ const ControlBar = <T,>({
                       <Popconfirm
                         title={`Are you sure you want to ${a.label.toLowerCase()}?`}
                         okText="Yes"
-                        cancelText="Cancel"
+                        cancelText="No"
+                        okButtonProps={{ 'data-testid': 'confirm-yes' }}
+                        cancelButtonProps={{ 'data-testid': 'confirm-no' }}
                         placement="topRight"
                         onConfirm={() =>
-                          a.handler({
-                            selected: selectedRowKeys,
-                            refresh: () => {},
-                          })
+                          a.handler({ selected: selectedRowKeys, refresh: () => {} })
                         }
                       >
-                        <span data-cy={`control-action-${a.key}`}>{a.label}</span>
+                        <span data-testid={`control-action-${a.key}`}>{a.label}</span>
                       </Popconfirm>
                     ) : (
                       <span
-                        data-cy={`control-action-${a.key}`}
-                        onClick={() =>
-                          a.handler({
-                            selected: selectedRowKeys,
-                            refresh: () => {},
-                          })
-                        }
+                        data-testid={`control-action-${a.key}`}
+                        onClick={() => a.handler({ selected: selectedRowKeys, refresh: () => {} })}
                       >
                         {a.label}
                       </span>
@@ -353,31 +336,25 @@ const ControlBar = <T,>({
       )}
 
       {hasBulk && resolvedPrimaryBulk && (
-        <div className="w-full sm:w-auto">
+        <div className={isDesktop ? undefined : 'w-full'}>
           {secondaryBulkActions.length === 0 ? (
             <Button
-              data-cy={`bulk-action-${resolvedPrimaryBulk.key}`}
+              data-testid={`bulk-action-${resolvedPrimaryBulk.key}`}
               onClick={() =>
-                resolvedPrimaryBulk.handler({
-                  selected: selectedRowKeys,
-                  refresh: () => {},
-                })
+                resolvedPrimaryBulk.handler({ selected: selectedRowKeys, refresh: () => {} })
               }
-              className="w-full sm:w-auto"
+              className={isDesktop ? undefined : 'w-full'}
             >
               {resolvedPrimaryBulk.icon} {resolvedPrimaryBulk.label}
             </Button>
           ) : (
-            <Space.Compact className="w-full sm:w-auto">
+            <Space.Compact className={isDesktop ? undefined : 'w-full'}>
               <Button
-                data-cy={`bulk-action-${resolvedPrimaryBulk.key}`}
+                data-testid={`bulk-action-${resolvedPrimaryBulk.key}`}
                 onClick={() =>
-                  resolvedPrimaryBulk.handler({
-                    selected: selectedRowKeys,
-                    refresh: () => {},
-                  })
+                  resolvedPrimaryBulk.handler({ selected: selectedRowKeys, refresh: () => {} })
                 }
-                className="w-full sm:w-auto"
+                className={isDesktop ? undefined : 'w-full'}
               >
                 {resolvedPrimaryBulk.icon} {resolvedPrimaryBulk.label}
               </Button>
@@ -385,20 +362,16 @@ const ControlBar = <T,>({
                 menu={{
                   items: secondaryBulkActions.map((a) => ({
                     key: a.key,
-                    label: <span data-cy={`bulk-action-${a.key}`}>{a.label}</span>,
+                    label: <span data-testid={`bulk-action-${a.key}`}>{a.label}</span>,
                     icon: a.icon,
                     onClick: a.confirm
                       ? undefined
-                      : () =>
-                          a.handler({
-                            selected: selectedRowKeys,
-                            refresh: () => {},
-                          }),
+                      : () => a.handler({ selected: selectedRowKeys, refresh: () => {} }),
                   })),
                 }}
                 placement="bottomRight"
               >
-                <Button icon={<MoreOutlined />} data-cy="bulk-action-dropdown" />
+                <Button icon={<MoreOutlined />} data-testid="bulk-action-dropdown" />
               </Dropdown>
             </Space.Compact>
           )}
@@ -409,58 +382,65 @@ const ControlBar = <T,>({
     </div>
   );
 
-  const hasActionsMobile = !!primaryAction || hasBulk || (columnToggleEnabled && !!columns?.length);
-  const hasClearMobile = showClearInlineMobile && clearMenuItems.length > 0;
+  const rootClasses = isDesktop
+    ? 'mb-4 flex flex-row items-center justify-between gap-4 bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-800'
+    : 'mb-4 flex flex-col gap-4';
+
+  const leftClasses = isDesktop
+    ? 'flex items-center gap-2 flex-1'
+    : 'flex items-center gap-2 w-full';
+
+  const hasActionsMobile =
+    !isDesktop &&
+    (!!primaryAction || !!resolvedPrimaryBulk || (columnToggleEnabled && !!columns?.length));
+  const showClearMobile =
+    !isDesktop && (hasSearch || hasSort || hasFilters) && clearMenuItems.length > 0;
+
+  // unified classes for Search max width
+  const searchClasses = isDesktop ? 'w-full max-w-[360px]' : 'flex-1 min-w-0 w-full';
+  const compactClasses = isDesktop ? '' : 'w-full';
 
   return (
-    <div className="sm:bg-white dark:sm:bg-gray-900 sm:p-2 sm:rounded-lg sm:border border-gray-200 dark:border-gray-800 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      {/* LEFT: view toggle (desktop only), search, filters */}
-      <div className="flex items-center gap-2 w-full sm:w-auto">
-        {/* View toggle: absolutely hidden on mobile via wrapper */}
-        {viewMode && onViewModeChange && (
-          <div className="hidden sm:flex">
-            <Segmented
-              size="middle"
-              value={viewMode}
-              onChange={(val) => onViewModeChange(val as 'table' | 'grid')}
-              options={[
-                {
-                  value: 'table',
-                  label: (
-                    <span data-cy="view-toggle-table">
-                      <TableOutlined />
-                    </span>
-                  ),
-                },
-                {
-                  value: 'grid',
-                  label: (
-                    <span data-cy="view-toggle-grid">
-                      <AppstoreOutlined />
-                    </span>
-                  ),
-                },
-              ]}
-              className="dark:!bg-gray-950"
-            />
-          </div>
+    <div className={rootClasses}>
+      {/* LEFT: view toggle (desktop), search, filters, clear (desktop inline) */}
+      <div className={leftClasses}>
+        {viewMode && onViewModeChange && isDesktop && (
+          <Segmented
+            size="middle"
+            value={viewMode}
+            onChange={(val) => onViewModeChange(val as 'table' | 'grid')}
+            options={[
+              {
+                value: 'table',
+                label: (
+                  <span data-testid="view-toggle-table">
+                    <TableOutlined />
+                  </span>
+                ),
+              },
+              {
+                value: 'grid',
+                label: (
+                  <span data-testid="view-toggle-grid">
+                    <AppstoreOutlined />
+                  </span>
+                ),
+              },
+            ]}
+            className="dark:!bg-gray-950"
+          />
         )}
 
-        {/* Search + Filters:
-          - Use Space.Compact ONLY in grid or listMode
-          - Ensure the Filters button is a DIRECT child to preserve rounded corners */}
         {viewMode === 'grid' || listMode ? (
-          <Space.Compact className="flex-1 sm:w-auto">
+          <Space.Compact className={compactClasses}>
             <Search
               placeholder={searchPlaceholder}
               allowClear
               onChange={(e) => handleSearch(e.target.value)}
               value={searchTerm}
-              className="flex-1 sm:w-[320px]"
-              data-cy="entity-search"
+              className={searchClasses}
+              data-testid="entity-search"
             />
-
-            {/* Filters (mobile): icon-only, always shown if available */}
             {(filterGroups.length > 0 || sortOptions.length > 0) && FiltersButton}
           </Space.Compact>
         ) : (
@@ -469,28 +449,26 @@ const ControlBar = <T,>({
             allowClear
             onChange={(e) => handleSearch(e.target.value)}
             value={searchTerm}
-            className="flex-1 sm:w-[320px]"
-            data-cy="entity-search"
+            className={searchClasses}
+            data-testid="entity-search"
           />
         )}
 
-        {/* Desktop Clear (left area); mobile version is handled below */}
-        <div className="hidden sm:block">
-          {clearMenuItems.length > 0 && <Col>{ClearControl}</Col>}
-        </div>
+        {isDesktop && clearMenuItems.length > 0 && (
+          <Col>
+            {/* Clear on desktop */}
+            {ClearControl}
+          </Col>
+        )}
       </div>
 
-      {/* RIGHT: Actions (desktop) */}
-      <div className="hidden sm:block">{ActionsGroup}</div>
+      {/* RIGHT: desktop actions + column toggle in the SAME row */}
+      {isDesktop && <div className="flex items-center gap-2">{ActionsGroup}</div>}
 
-      {/* MOBILE BELOW: responsive rules
-        - actions && clear   -> 2-col grid (50/50)
-        - actions && !clear  -> actions full width
-        - !actions && clear  -> clear full width
-        - !actions && !clear -> render nothing */}
-      {(hasActionsMobile || hasClearMobile) && (
-        <div className="sm:hidden w-full">
-          {hasActionsMobile && hasClearMobile ? (
+      {/* MOBILE: actions/clear below */}
+      {(hasActionsMobile || showClearMobile) && (
+        <div className="w-full">
+          {hasActionsMobile && showClearMobile ? (
             <div className="grid grid-cols-2 gap-2">
               <div className="col-span-1">{ActionsGroup}</div>
               <div className="col-span-1">{ClearControl}</div>
@@ -503,7 +481,7 @@ const ControlBar = <T,>({
         </div>
       )}
 
-      {/* Sort Modal */}
+      {/* Modals */}
       <SortModal
         open={sortModalOpen}
         onClose={() => setSortModalOpen(false)}
@@ -511,8 +489,6 @@ const ControlBar = <T,>({
         currentSort={currentSort}
         onChange={(val) => onSortChange?.(val)}
       />
-
-      {/* Filter Modal */}
       <FilterModal
         open={filterModalOpen}
         onClose={() => setFilterModalOpen(false)}

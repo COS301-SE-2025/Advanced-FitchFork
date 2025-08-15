@@ -73,6 +73,7 @@ const CreateModal = ({
       footer={null}
       title={<Typography.Title level={4}>{title}</Typography.Title>}
       centered
+      data-testid="create-modal"
     >
       <Form layout="vertical" form={form} onValuesChange={handleValuesChange} className="space-y-4">
         {fields.map(({ name, label, type, placeholder, options, required }) => {
@@ -103,10 +104,10 @@ const CreateModal = ({
 
         <Form.Item>
           <div className="flex justify-end gap-2 pt-2">
-            <Button onClick={onCancel} data-cy="create-modal-cancel">
+            <Button onClick={onCancel} data-testid="create-modal-cancel">
               Cancel
             </Button>
-            <Button type="primary" onClick={handleSubmit} data-cy="create-modal-submit">
+            <Button type="primary" onClick={handleSubmit} data-testid="create-modal-submit">
               Create
             </Button>
           </div>

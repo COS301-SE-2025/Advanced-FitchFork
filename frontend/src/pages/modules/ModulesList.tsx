@@ -17,7 +17,7 @@ import { Space } from 'antd';
 import { useUI } from '@/context/UIContext';
 import ModuleListItem from '@/components/modules/ModuleListItem';
 import { formatModuleCode } from '@/utils/modules';
-import { ModulesEmptyState } from '@/components/modules';
+import { ModulesEmptyState, ModuleYearTag } from '@/components/modules';
 
 const currentYear = new Date().getFullYear();
 
@@ -245,6 +245,7 @@ const ModulesList = () => {
                   const year = String(currentYear - i);
                   return { text: year, value: year };
                 }),
+                render: (_, m) => <ModuleYearTag year={m.year} />,
               },
               {
                 title: 'Description',

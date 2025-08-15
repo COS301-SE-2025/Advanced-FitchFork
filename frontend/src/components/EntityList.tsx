@@ -218,7 +218,7 @@ const EntityList = forwardRef(function <T>(
 
   // Reusable empty-state (matches table's style)
   const renderFilteredEmptyState = () => (
-    <div className="w-full py-8 sm:py-12 rounded-xl border-2 border-dashed bg-white border-gray-200 dark:border-gray-800 text-center">
+    <div className="flex justify-center w-full py-8 sm:py-12 rounded-xl border-2 border-dashed bg-white border-gray-200 dark:border-gray-800 text-center">
       <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No results found.">
         {clearMenuItems.length === 1 ? (
           <Button icon={<ReloadOutlined />} onClick={clearMenuItems[0].onClick}>
@@ -242,12 +242,7 @@ const EntityList = forwardRef(function <T>(
   );
 
   const isPristine = !hasSearch && !hasSort && !hasFilters;
-  const showPristineEmpty =
-    !loading &&
-    items.length === 0 &&
-    isPristine &&
-    !!emptyNoEntities &&
-    ((viewMode === 'grid' && !!renderGridItem) || (listMode && !!renderListItem));
+  const showPristineEmpty = !loading && items.length === 0 && isPristine && !!emptyNoEntities;
 
   const controlActions = actions?.control ?? [];
   const bulkActions = actions?.bulk ?? [];
@@ -280,12 +275,12 @@ const EntityList = forwardRef(function <T>(
         const secondaryActions = entityActions.filter((a) => a.key !== resolvedPrimary.key);
 
         return (
-          <div onClick={(e) => e.stopPropagation()} data-cy="entity-actions">
+          <div onClick={(e) => e.stopPropagation()} data-testid="entity-actions">
             {secondaryActions.length === 0 ? (
               <Button
                 size="small"
                 icon={resolvedPrimary.icon}
-                data-cy={`entity-action-${resolvedPrimary.key}`}
+                data-testid={`entity-action-${resolvedPrimary.key}`}
                 onClick={() => resolvedPrimary.handler({ entity: record, refresh: fetchData })}
               >
                 {resolvedPrimary.label}
@@ -297,6 +292,8 @@ const EntityList = forwardRef(function <T>(
                     title={`Are you sure you want to ${resolvedPrimary.label.toLowerCase()}?`}
                     okText="Yes"
                     cancelText="No"
+                    okButtonProps={{ 'data-testid': 'confirm-yes' }}
+                    cancelButtonProps={{ 'data-testid': 'confirm-no' }}
                     onConfirm={() =>
                       resolvedPrimary.handler({ entity: record, refresh: fetchData })
                     }
@@ -304,7 +301,7 @@ const EntityList = forwardRef(function <T>(
                     <Button
                       size="small"
                       icon={resolvedPrimary.icon}
-                      data-cy={`entity-action-${resolvedPrimary.key}`}
+                      data-testid={`entity-action-${resolvedPrimary.key}`}
                     >
                       {resolvedPrimary.label}
                     </Button>
@@ -313,7 +310,7 @@ const EntityList = forwardRef(function <T>(
                   <Button
                     size="small"
                     icon={resolvedPrimary.icon}
-                    data-cy={`entity-action-${resolvedPrimary.key}`}
+                    data-testid={`entity-action-${resolvedPrimary.key}`}
                     onClick={() => resolvedPrimary.handler({ entity: record, refresh: fetchData })}
                   >
                     {resolvedPrimary.label}
@@ -328,13 +325,15 @@ const EntityList = forwardRef(function <T>(
                           title={`Are you sure you want to ${a.label.toLowerCase()}?`}
                           okText="Yes"
                           cancelText="No"
+                          okButtonProps={{ 'data-testid': 'confirm-yes' }}
+                          cancelButtonProps={{ 'data-testid': 'confirm-no' }}
                           onConfirm={() => a.handler({ entity: record, refresh: fetchData })}
                         >
-                          <span data-cy={`entity-action-${a.key}`}>{a.label}</span>
+                          <span data-testid={`entity-action-${a.key}`}>{a.label}</span>
                         </Popconfirm>
                       ) : (
                         <span
-                          data-cy={`entity-action-${a.key}`}
+                          data-testid={`entity-action-${a.key}`}
                           onClick={() => a.handler({ entity: record, refresh: fetchData })}
                         >
                           {a.label}
@@ -345,7 +344,11 @@ const EntityList = forwardRef(function <T>(
                   }}
                   placement="bottomRight"
                 >
-                  <Button data-cy="entity-action-dropdown" size="small" icon={<MoreOutlined />} />
+                  <Button
+                    data-testid="entity-action-dropdown"
+                    size="small"
+                    icon={<MoreOutlined />}
+                  />
                 </Dropdown>
               </Space.Compact>
             )}
@@ -427,91 +430,121 @@ const EntityList = forwardRef(function <T>(
             <div className="flex items-center justify-center">{renderFilteredEmptyState()}</div>
           ) : (
             <>
-              <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div
+                className="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+                data-testid="entity-grid"
+              >
                 {items.map((item) => {
                   const allActions = actions?.entity?.(item) ?? [];
-                  const inlineLimit = allActions.length >= 4 ? 2 : 3;
-                  const inlineActions = allActions.slice(0, inlineLimit);
-                  const dropdownActions = allActions.slice(inlineLimit);
+                  if (!allActions.length) {
+                    return <div key={getRowKey(item)}>{renderGridItem(item, [])}</div>;
+                  }
 
-                  const actionButtons = [
-                    ...inlineActions.map((a) => (
-                      <Tooltip title={a.label} key={a.key}>
-                        {a.confirm ? (
-                          <Popconfirm
-                            title={`Are you sure you want to ${a.label.toLowerCase()}?`}
-                            okText="Yes"
-                            cancelText="No"
-                            onConfirm={(e) => {
-                              e?.stopPropagation?.();
-                              a.handler({
-                                entity: item,
-                                refresh: fetchData,
-                                selected: selectedRowKeys,
-                              });
-                            }}
-                            onCancel={(e) => {
-                              e?.stopPropagation?.();
-                            }}
-                          >
-                            <Button
-                              icon={a.icon}
-                              type="text"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </Popconfirm>
-                        ) : (
+                  // swallow card navigation
+                  const swallow = (e: React.MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  };
+
+                  // 1 inline action max: prefer explicitly flagged primary, else first
+                  const primary = allActions.find((a) => a.isPrimary) ?? allActions[0];
+                  const secondary = allActions.filter((a) => a.key !== primary.key);
+
+                  const InlineButton = (
+                    <Tooltip title={primary.label} key={primary.key}>
+                      {primary.confirm ? (
+                        <Popconfirm
+                          title={`Are you sure you want to ${primary.label.toLowerCase()}?`}
+                          okText="Yes"
+                          cancelText="No"
+                          okButtonProps={{ 'data-testid': 'confirm-yes' }}
+                          cancelButtonProps={{ 'data-testid': 'confirm-no' }}
+                          onConfirm={(e) => {
+                            // still swallow on confirm click
+                            e?.preventDefault?.();
+                            e?.stopPropagation?.();
+                            primary.handler({
+                              entity: item,
+                              refresh: fetchData,
+                              selected: selectedRowKeys,
+                            });
+                          }}
+                          onCancel={(e) => {
+                            e?.preventDefault?.();
+                            e?.stopPropagation?.();
+                          }}
+                        >
                           <Button
-                            icon={a.icon}
+                            icon={primary.icon}
                             type="text"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              a.handler({
-                                entity: item,
-                                refresh: fetchData,
-                                selected: selectedRowKeys,
-                              });
-                            }}
+                            data-testid={`entity-action-${primary.key}`}
+                            onClick={swallow} // don't navigate the card
                           />
-                        )}
-                      </Tooltip>
-                    )),
-                  ];
+                        </Popconfirm>
+                      ) : (
+                        <Button
+                          icon={primary.icon}
+                          type="text"
+                          data-testid={`entity-action-${primary.key}`}
+                          onClick={(e) => {
+                            swallow(e);
+                            primary.handler({
+                              entity: item,
+                              refresh: fetchData,
+                              selected: selectedRowKeys,
+                            });
+                          }}
+                        />
+                      )}
+                    </Tooltip>
+                  );
 
-                  if (dropdownActions.length > 0) {
-                    actionButtons.push(
+                  const DropdownButton =
+                    secondary.length > 0 ? (
                       <Dropdown
                         key="more"
                         menu={{
-                          items: dropdownActions.map((a) => ({
+                          items: secondary.map((a) => ({
                             key: a.key,
                             label: a.confirm ? (
                               <Popconfirm
                                 title={`Are you sure you want to ${a.label.toLowerCase()}?`}
                                 okText="Yes"
                                 cancelText="No"
-                                onConfirm={() =>
+                                okButtonProps={{ 'data-testid': 'confirm-yes' }}
+                                cancelButtonProps={{ 'data-testid': 'confirm-no' }}
+                                onConfirm={(e) => {
+                                  e?.preventDefault?.();
+                                  e?.stopPropagation?.();
                                   a.handler({
                                     entity: item,
                                     refresh: fetchData,
                                     selected: selectedRowKeys,
-                                  })
-                                }
+                                  });
+                                }}
                                 onCancel={(e) => {
+                                  e?.preventDefault?.();
                                   e?.stopPropagation?.();
                                 }}
                               >
-                                <span>{a.label}</span>
+                                <span
+                                  data-testid={`entity-action-${a.key}`}
+                                  onClick={swallow} // open Popconfirm, but don't bubble to card
+                                >
+                                  {a.label}
+                                </span>
                               </Popconfirm>
                             ) : (
                               <span
-                                onClick={() =>
+                                onClick={(e) => {
+                                  swallow(e);
                                   a.handler({
                                     entity: item,
                                     refresh: fetchData,
                                     selected: selectedRowKeys,
-                                  })
-                                }
+                                  });
+                                }}
+                                data-testid={`entity-action-${a.key}`}
                               >
                                 {a.label}
                               </span>
@@ -521,10 +554,16 @@ const EntityList = forwardRef(function <T>(
                         }}
                         placement="bottomRight"
                       >
-                        <Button type="text" icon={<MoreOutlined />} />
-                      </Dropdown>,
-                    );
-                  }
+                        <Button
+                          type="text"
+                          icon={<MoreOutlined />}
+                          data-testid="entity-action-dropdown"
+                          onClick={swallow} // don't let dropdown trigger click navigate card
+                        />
+                      </Dropdown>
+                    ) : null;
+
+                  const actionButtons = [InlineButton, DropdownButton].filter(Boolean);
 
                   return <div key={getRowKey(item)}>{renderGridItem(item, actionButtons)}</div>;
                 })}
@@ -535,6 +574,7 @@ const EntityList = forwardRef(function <T>(
                   <Button
                     onClick={() => goToPage(pagination.current - 1)}
                     disabled={pagination.current === 1}
+                    data-testid="grid-previous"
                   >
                     Previous
                   </Button>
@@ -544,6 +584,7 @@ const EntityList = forwardRef(function <T>(
                   <Button
                     onClick={() => goToPage(pagination.current + 1)}
                     disabled={pagination.current * pagination.pageSize >= pagination.total}
+                    data-testid="grid-next"
                   >
                     Next
                   </Button>
@@ -562,12 +603,14 @@ const EntityList = forwardRef(function <T>(
             // For filtered/no-match inside List, still show filtered empty
             locale={{ emptyText: renderFilteredEmptyState() }}
             className="overflow-hidden bg-white dark:bg-gray-950 !border-gray-200 dark:!border-gray-800"
+            data-testid="entity-list"
           />
           {items.length < (pagination.total ?? 0) && (
             <div className="flex justify-between items-center mt-4">
               <Button
                 onClick={() => goToPage(pagination.current - 1)}
                 disabled={pagination.current === 1}
+                data-testid="list-previous"
               >
                 Previous
               </Button>
@@ -578,6 +621,7 @@ const EntityList = forwardRef(function <T>(
               <Button
                 onClick={() => goToPage(pagination.current + 1)}
                 disabled={pagination.current * pagination.pageSize >= (pagination.total ?? 0)}
+                data-testid="list-next"
               >
                 Next
               </Button>
@@ -622,7 +666,7 @@ const EntityList = forwardRef(function <T>(
             }}
             onRow={(record) => ({
               onClick: () => onRowClick?.(record),
-              'data-cy': `entity-${getRowKey(record)}`,
+              'data-testid': 'entity-row',
             })}
             // Table path doesn't use the custom empty state
             locale={{
@@ -648,6 +692,7 @@ const EntityList = forwardRef(function <T>(
                 </Empty>
               ),
             }}
+            data-testid="entity-table"
             className="bg-white dark:bg-gray-900 border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
           />
         </div>

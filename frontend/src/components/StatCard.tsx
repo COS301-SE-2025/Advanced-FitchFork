@@ -17,7 +17,7 @@ export default function StatCard({
   return (
     <div
       className={clsx(
-        'bg-white dark:bg-gray-900 p-4 rounded-lg border border-gray-200 dark:border-gray-700 h-full',
+        'bg-white dark:bg-gray-900 p-4 rounded-lg border border-gray-200 dark:border-gray-800 h-full',
         className,
       )}
     >

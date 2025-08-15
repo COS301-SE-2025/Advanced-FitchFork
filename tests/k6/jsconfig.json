@@ -1,0 +1,11 @@
+{
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			"@shared/*": ["shared/*"],
+			"@scenarios/*": ["scenarios/*"],
+			"@test_files/*": ["test_files/*"]
+		}
+	},
+	"include": ["**/*.js"]
+}

@@ -59,7 +59,7 @@ const ModuleCard = ({
         </div>
       }
       actions={actions}
-      data-cy={`entity-${module.id}`}
+      data-testid="entity-card"
     >
       <Meta
         avatar={<Avatar icon={<BookOutlined />} style={{ backgroundColor: '#1890ff' }} />}

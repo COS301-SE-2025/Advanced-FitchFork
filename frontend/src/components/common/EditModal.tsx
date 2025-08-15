@@ -64,6 +64,7 @@ const EditModal = ({
       footer={null}
       title={<Typography.Title level={4}>{title}</Typography.Title>}
       centered
+      data-testid="edit-modal"
     >
       <Form layout="vertical" form={form} onValuesChange={handleValuesChange} className="space-y-4">
         {fields.map(({ name, label, type, placeholder, options, required }) => {
@@ -98,8 +99,10 @@ const EditModal = ({
 
         <Form.Item>
           <div className="flex justify-end gap-2 pt-2">
-            <Button onClick={onCancel}>Cancel</Button>
-            <Button type="primary" onClick={handleSubmit} data-cy="edit-modal-submit">
+            <Button onClick={onCancel} data-testid="edit-modal-cancel">
+              Cancel
+            </Button>
+            <Button type="primary" onClick={handleSubmit} data-testid="edit-modal-submit">
               Save
             </Button>
           </div>

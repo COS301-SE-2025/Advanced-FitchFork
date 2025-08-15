@@ -39,7 +39,7 @@ const ModuleListItem: React.FC<Props> = ({
       key={module.id}
       className="dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition"
       onClick={handleRowClick}
-      data-cy={`entity-${module.id}`}
+      data-cy="entity-list-item"
     >
       <List.Item.Meta
         avatar={<Avatar icon={<BookOutlined />} style={{ backgroundColor: '#1890ff' }} />}
