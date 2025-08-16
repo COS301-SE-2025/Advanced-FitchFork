@@ -7,7 +7,7 @@
 // For each code generation and each chromosome
 // 1) Decode the chromosome bits into an interpreter payload string
 // 2) Call the interpreter (runs code, writes to DB, returns per-task outputs)
-// 3) Derive (num_ltl_props, num_tasks) from those outputs via the evaluator
+/// 3) Map outputs to `(ltl_milli, fail_milli)` via `derive_props`
 // 4) Compute fitness using Components
 // 5) Evolve teh population with the fitness scores
 // Notes:
@@ -179,11 +179,11 @@ where
             //    - `n_ltl_props`: total number of violated properties across tasks
             //    - `num_tasks`  : number of tasks we evaluated
             //    Components will internally normalize (e.g., divide by counts).
-            let (n_ltl_props, num_tasks) = derive_props(&task_outputs);
+            let (ltl_milli, fail_milli) = derive_props(&task_outputs);
 
             // Compute fitness for this chromosome in this generation.
             //    `Components` combines sub-scores via omega weights and returns a scalar.
-            let score = comps.evaluate(chrom, generation, n_ltl_props, num_tasks);
+            let score = comps.evaluate(chrom, generation, ltl_milli, fail_milli);
             fitness_scores.push(score);
             println!("Generation {}: Chromosome {:?} has score {}", generation, chrom.genes(), score);
         }
@@ -237,14 +237,10 @@ impl Components {
         (n_milli as f64 / 1000.0).clamp(0.0, 1.0)
     }
 
-    fn compute_fail(&self, _x: &Chromosome, m: usize) -> f64 {
-        let mut failed = 0;
-        for i in 0..m {
-            if self.simulate_task_failure(_x, i) { //todo: return actual fail from loop
-                failed += 1;
-            }
-        }
-        failed as f64 / (m.max(1) as f64)
+    fn compute_fail(&self, _x: &Chromosome, fail_milli: usize) -> f64 {
+        // 0   => 0.0 failure fraction
+        // 1000=> 1.0 failure fraction
+        (fail_milli as f64 / 1000.0).clamp(0.0, 1.0)
     }
 
     fn compute_mem(&self, x: &Chromosome, _gen: usize) -> f64 {
@@ -340,7 +336,7 @@ mod tests {
 
         let ga_config = GAConfig {
             population_size: 4,
-            number_of_generations: 1,
+            number_of_generations: 3,
             selection_size: 2,
             reproduction_probability: 0.9,
             crossover_probability: 0.8,
@@ -352,7 +348,7 @@ mod tests {
 
         let (omega1, omega2, omega3) = (0.4, 0.4, 0.2);
 
-        let submission_id: i64 = 542;
+        let submission_id: i64 = 602;
 
         let res = run_ga_job(&db, submission_id, ga_config, omega1, omega2, omega3).await;
 

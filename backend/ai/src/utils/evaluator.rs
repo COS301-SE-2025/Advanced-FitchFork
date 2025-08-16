@@ -49,7 +49,6 @@ pub struct TaskView {
     pub runtime_ms: Option<u64>,
     pub stdout: String,
     pub stderr: String,
-    /// I treat “terminated” as: we have an exit code OR any output. May change later!
     pub terminated: bool,
 }
 
@@ -73,7 +72,7 @@ impl Evaluator {
     pub fn parse(&self, task_id: i64, blob: &str) -> TaskView {
         let (exit_code, stdout, stderr) = split_exit_stdout_stderr(blob);
         let runtime_ms = extract_marker_int(blob, "runtime_ms").map(|v| v.max(0) as u64);
-        let terminated = exit_code.is_some() || !(stdout.is_empty() && stderr.is_empty());
+        let terminated = exit_code.is_some();
         println!("Parsed TaskView for task {}: exit_code={:?}, runtime_ms={:?}, stdout='{}', stderr='{}', terminated={}",
                  task_id, exit_code, runtime_ms, stdout, stderr, terminated);
         TaskView { task_id, exit_code, runtime_ms, stdout, stderr, terminated }
@@ -89,8 +88,11 @@ impl Evaluator {
         }
 
         // Proper Termination: G(ter => VRC)
-        if view.terminated && !is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref()) {
-            violated.push(Property::ProperTermination);
+        if view.terminated {
+            let ok = is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref());
+            if !ok {
+                violated.push(Property::ProperTermination);
+            }
         }
 
         // Segmentation Fault: G(¬segfault)
@@ -126,20 +128,82 @@ impl Evaluator {
         TaskEvaluation { task_id: view.task_id, violated }
     }
 
-    /// Helper for GA
-    /// Count total violations across tasks as `num_ltl_props`.
+    /// Helper for GA.
+    /// Returns milli-fractions in 0..=1000:
+    ///   (ltl_milli, fail_milli)
+    /// - ltl_milli: fraction of violated LTL-ish properties across all tasks checked
+    /// - fail_milli: fraction of tasks considered failed
     pub fn derive_props(&self, specs: &[TaskSpec], outs: &[(i64, String)]) -> (usize, usize) {
-        let num_tasks = outs.len();
-        let mut total = 0usize;
+        let total_tasks = outs.len().max(1);
 
-        for ((task_id, blob), spec) in outs.iter().zip(specs.iter()) {
+        let mut ltl_checks      = 0usize;
+        let mut ltl_violations  = 0usize;
+        let mut failed_tasks    = 0usize;
+
+        for (i, (task_id, blob)) in outs.iter().enumerate() {
+            let spec = specs.get(i).unwrap_or_else(|| specs.first().expect("non-empty specs"));
             let view = self.parse(*task_id, blob);
             let eval = self.evaluate_task(spec, &view);
-            total += eval.violated.len();
+
+            // Count how many checks we applied for this task (exclude the output-based ones handled elsewhere).
+            // Here we’re using: Safety, ProperTermination, SegmentationFault, Exceptions, ExecutionTime, IllegalOutput
+            // Note: ExecutionTime and IllegalOutput are only applicable if terminated and configured accordingly.
+            let mut checks = 0usize;
+            let mut viols  = 0usize;
+
+            // Safety
+            checks += 1;
+            if eval.violated.contains(&Property::Safety) { viols += 1; }
+
+            // ProperTermination
+            checks += 1;
+            if eval.violated.contains(&Property::ProperTermination) { viols += 1; }
+
+            // Segfault
+            checks += 1;
+            if eval.violated.contains(&Property::SegmentationFault) { viols += 1; }
+
+            // Exceptions
+            checks += 1;
+            if eval.violated.contains(&Property::Exceptions) { viols += 1; }
+
+            // ExecutionTime (only counted if there was a bound and task terminated with measured runtime) TODO: we have to time how long the task took and parse it back to here
+            if spec.max_runtime_ms.is_some() && view.terminated && view.runtime_ms.is_some() {
+                checks += 1;
+                if eval.violated.contains(&Property::ExecutionTime) { viols += 1; }
+            }
+
+            // IllegalOutput (only if there are forbidden outputs configured and task terminated)
+            if !spec.forbidden_outputs.is_empty() && view.terminated {
+                checks += 1;
+                if eval.violated.contains(&Property::IllegalOutput) { viols += 1; }
+            }
+
+            ltl_checks     += checks;
+            ltl_violations += viols;
+
+            // A task is “failed” if any “hard” bad condition is present.
+            let ret_ok = is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref());
+            let failed = !ret_ok
+                || view.terminated && has_segfault(spec.language, &view.stderr)
+                || view.terminated && has_exception(spec.language, &view.stderr)
+                || self.contains_forbidden_output(&view.stdout, &spec.forbidden_outputs);
+
+            if failed { failed_tasks += 1; }
         }
 
-        (total.max(1), num_tasks.max(1))
+        let ltl_milli  = if ltl_checks == 0 { 0 } else { ((ltl_violations * 1000) / ltl_checks).min(1000) };
+        let fail_milli = ((failed_tasks   * 1000) / total_tasks).min(1000);
+
+        (ltl_milli, fail_milli)
     }
+
+    fn contains_forbidden_output(&self, stdout: &str, forbidden: &[String]) -> bool {
+        if forbidden.is_empty() { return false; }
+        let hay = stdout.to_ascii_lowercase();
+        forbidden.iter().any(|needle| hay.contains(&needle.to_ascii_lowercase()))
+    }
+
 }
 
 fn split_exit_stdout_stderr(blob: &str) -> (Option<i32>, String, String) {
@@ -162,7 +226,9 @@ fn split_exit_stdout_stderr(blob: &str) -> (Option<i32>, String, String) {
         let rest = tail[label_len..].trim_start_matches(':').trim_start();
         stderr.push_str(rest);
     } else {
-        // Heuristic: if it looks like an error, call it stderr
+       // Heuristic for errors if no STDERR section is found
+        // This is a fallback for cases where the output does not follow the expected format.
+        // We assume that if the blob contains error-like messages, they should go to stderr.
         let lower = blob.to_ascii_lowercase();
         let looks_error = [
             "error:", "exception", "segmentation fault", "sigsegv",
