@@ -28,12 +28,11 @@ pub mod utils {
 }
 
 
-use crate::algorithms::genetic_algorithm::{GeneticAlgorithm, Chromosome, GAConfig, GeneConfig, CrossoverType, MutationType};
+use crate::algorithms::genetic_algorithm::{GeneticAlgorithm, Chromosome, GAConfig};
 use crate::utils::evaluator::{Evaluator, TaskSpec, Language};
 use code_runner::run_interpreter;
 use std::collections::HashMap;
-use db::{connect};
-use sea_orm::{Database, DatabaseConnection};
+use sea_orm::{DatabaseConnection};
 
 
 
@@ -266,10 +265,6 @@ impl Components {
             *entry.entry(val).or_insert(0) += 1;
         }
     }
-
-    fn simulate_task_failure(&self, _x: &Chromosome, _i: usize) -> bool {
-        rand::random::<f64>() < 0.3
-    }
 }
 
 // Decoding utilities
@@ -307,43 +302,94 @@ fn decode_gene(bits: &[bool]) -> i32 {
 }
 
 
-
 #[cfg(test)]
-mod tests {
+mod component_unit_tests {
     use super::*;
-    use sea_orm::{Database, DatabaseConnection};
-    use std::collections::HashSet;
-    #[tokio::test(flavor = "multi_thread")]
-    async fn smoke_run_ga_on_submission_9998() {
- 
-        dotenv::dotenv().ok();
+    use crate::algorithms::genetic_algorithm::Chromosome;
 
-        if std::env::var("GA_ITEST").is_err() {
-            return;
+    // local helper: encode a single i32 into sign+magnitude (MSB-first) bits
+    fn encode_val(v: i32, bits_per_gene: usize) -> Vec<bool> {
+        assert!(bits_per_gene >= 2, "need >= 2 bits (sign + >=1 magnitude)");
+        let sign = v < 0;
+        let mag_bits = bits_per_gene - 1;
+        let mut out = Vec::with_capacity(bits_per_gene);
+        out.push(sign);
+        let m = (v.abs() as u32) & ((1u32 << mag_bits) - 1);
+        for i in (0..mag_bits).rev() {
+            out.push(((m >> i) & 1) == 1);
         }
+        out
+    }
 
-        let db = connect().await;
-        let genes = vec![
-            GeneConfig { min_value: -5, max_value: 5, invalid_values: HashSet::new() },
-            GeneConfig { min_value: -4, max_value: 9, invalid_values: HashSet::new() },
-        ];
+    fn chrom_from_vals(vals: &[i32], bits_per_gene: usize) -> Chromosome {
+        let mut bits = Vec::new();
+        for &v in vals {
+            bits.extend(encode_val(v, bits_per_gene));
+        }
+        Chromosome::new(bits)
+    }
 
-        let ga_config = GAConfig {
-            population_size: 4,
-            number_of_generations: 3,
-            selection_size: 2,
-            reproduction_probability: 0.9,
-            crossover_probability: 0.8,
-            mutation_probability: 0.05,
-            genes,
-            crossover_type: CrossoverType::Uniform,
-            mutation_type: MutationType::BitFlip,
-        };
+    #[test]
+    fn compute_ltl_maps_milli_fraction() {
+        let mut comps = Components::new(0.5, 0.3, 0.2, 4);
+        // ltl=0.0
+        let s0 = comps.evaluate(&chrom_from_vals(&[1,2], 4), 0, 0, 0);
+        // ltl=0.5
+        let s1 = comps.evaluate(&chrom_from_vals(&[1,2], 4), 0, 500, 0);
+        // ltl=1.0
+        let s2 = comps.evaluate(&chrom_from_vals(&[1,2], 4), 0, 1000, 0);
+        assert!(s0 < s1 && s1 < s2, "scores should increase with ltl_milli");
+    }
 
-        let (omega1, omega2, omega3) = (0.4, 0.4, 0.2);
+    #[test]
+    fn compute_fail_maps_milli_fraction() {
+        let mut comps = Components::new(0.0, 1.0, 0.0, 4); // only 'fail' weight
+        // 0.0 -> 0
+        let s0 = comps.evaluate(&chrom_from_vals(&[1], 4), 0, 0, 0);
+        // 0.3 -> 300/1000
+        let s1 = comps.evaluate(&chrom_from_vals(&[1], 4), 0, 0, 300);
+        // 1.0 -> 1000/1000
+        let s2 = comps.evaluate(&chrom_from_vals(&[1], 4), 0, 0, 1000);
+        assert!((s0 - 0.0).abs() < 1e-9);
+        assert!((s1 - 0.3).abs() < 1e-9);
+        assert!((s2 - 1.0).abs() < 1e-9);
+    }
 
-        let submission_id: i64 = 602;
+    #[test]
+    fn decode_genes_decodes_sign_and_magnitude() {
+        // bits_per_gene = 4 (1 sign + 3 magnitude)
+        // vals: [ 3, -2, 0 ]  => ensure sign handling + clamping path is stable
+        let bpg = 4;
+        let c = chrom_from_vals(&[3, -2, 0], bpg);
+        let decoded = super::decode_genes(c.genes(), bpg);
+        assert_eq!(decoded, vec![3, -2, 0]);
+    }
 
-        let res = run_ga_job(&db, submission_id, ga_config, omega1, omega2, omega3).await;
+    #[test]
+    fn memory_component_increases_when_ltl_positive() {
+        // mem contributes only when ltl > 0.0 triggers update_memory()
+        let bpg = 4;
+        let mut comps = Components::new(0.0, 0.0, 1.0, bpg); // only memory weight
+        let ch = chrom_from_vals(&[3, 3, 3], bpg);
+
+        let s0 = comps.evaluate(&ch, 0, 0, 0);
+        // Now call with ltl>0 => update_memory occurs
+        let _ = comps.evaluate(&ch, 0, 1000, 0);
+        // Another evaluation should see higher memory score than first one
+        let s2 = comps.evaluate(&ch, 1, 0, 0);
+
+        assert!(s2 > s0, "memory score should increase after a positive LTL triggers update_memory");
+    }
+
+    #[test]
+    fn components_weights_must_sum_to_one() {
+        let _ok = Components::new(0.3, 0.3, 0.4, 4);
+    }
+
+    #[test]
+    #[should_panic]
+    fn components_weights_invalid_sum_panics() {
+        let _ = Components::new(0.5, 0.5, 0.5, 4);
     }
 }
+
