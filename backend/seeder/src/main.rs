@@ -8,7 +8,8 @@ use crate::seeds::{
     assignment_submission::AssignmentSubmissionSeeder,
     assignment_submission_output::AssignmentSubmissionOutputSeeder,
     assignment_task::AssignmentTaskSeeder, module::ModuleSeeder,
-    plagiarism_case::PlagiarismCaseSeeder, user::UserSeeder, user_role::UserRoleSeeder,
+    plagiarism_case::PlagiarismCaseSeeder, tickets::TicketSeeder, user::UserSeeder,
+    user_role::UserRoleSeeder,
 };
 
 mod seed;
@@ -44,6 +45,7 @@ async fn main() {
             Box::new(AssignmentInterpreterSeeder),
             "AssignmentInterpreter",
         ),
+        (Box::new(TicketSeeder), "Ticket"),
     ] {
         run_seeder(&*seeder, name, &db).await;
     }
