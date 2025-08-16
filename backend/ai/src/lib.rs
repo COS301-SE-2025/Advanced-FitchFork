@@ -185,7 +185,6 @@ where
             //    `Components` combines sub-scores via omega weights and returns a scalar.
             let score = comps.evaluate(chrom, generation, ltl_milli, fail_milli);
             fitness_scores.push(score);
-            println!("Generation {}: Chromosome {:?} has score {}", generation, chrom.genes(), score);
         }
 
         // Evolve the population to the next generation using the scores we computed
