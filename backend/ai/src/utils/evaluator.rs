@@ -1,5 +1,7 @@
 // ai/src/utils/evaluator.rs
 
+
+// IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
 #[derive(Debug, Clone, Copy)]
 pub enum Language {
     Cpp,
@@ -285,10 +287,10 @@ fn normalized_lines(s: &str) -> Vec<String> {
         .collect()
 }
 
-
+ // IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
 fn violates_safety(lang: Language, stderr: &str) -> bool {
     let s = stderr.to_ascii_lowercase();
-    // IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
+   
     match lang {
         Language::Cpp => {
             s.contains("double free") ||
