@@ -319,16 +319,11 @@ mod tests {
  
         dotenv::dotenv().ok();
 
-        // Check for opt-in flag
         if std::env::var("GA_ITEST").is_err() {
-            eprintln!("GA_ITEST not set; skipping smoke test.");
             return;
         }
 
-        // Connect to DB
         let db = connect().await;
-        
-        // Minimal GA config (tiny population / generations for a fast run)
         let genes = vec![
             GeneConfig { min_value: -5, max_value: 5, invalid_values: HashSet::new() },
             GeneConfig { min_value: -4, max_value: 9, invalid_values: HashSet::new() },
@@ -351,10 +346,5 @@ mod tests {
         let submission_id: i64 = 602;
 
         let res = run_ga_job(&db, submission_id, ga_config, omega1, omega2, omega3).await;
-
-        match res {
-            Ok(()) => eprintln!("smoke_run_ga_on_submission_9998: OK"),
-            Err(e) => eprintln!("smoke_run_ga_on_submission_9998: ERR: {e}"),
-        }
     }
 }
