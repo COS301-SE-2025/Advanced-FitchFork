@@ -180,7 +180,6 @@ impl Evaluator {
             ltl_checks     += checks;
             ltl_violations += viols;
 
-            // A task is “failed” if any “hard” bad condition is present.
             let ret_ok = is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref());
             let failed = !ret_ok
                 || view.terminated && has_segfault(spec.language, &view.stderr)
@@ -241,7 +240,6 @@ fn split_exit_stdout_stderr(blob: &str) -> (Option<i32>, String, String) {
 }
 
 fn extract_marker_int(blob: &str, key: &str) -> Option<i32> {
-    // matches KEY: <n> or KEY=<n> (case-insensitive)
     let key_lower = key.to_ascii_lowercase();
     for line in blob.lines() {
         let l = line.trim();
@@ -290,7 +288,7 @@ fn normalized_lines(s: &str) -> Vec<String> {
 
 fn violates_safety(lang: Language, stderr: &str) -> bool {
     let s = stderr.to_ascii_lowercase();
-    
+    // IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
     match lang {
         Language::Cpp => {
             s.contains("double free") ||
@@ -304,8 +302,13 @@ fn violates_safety(lang: Language, stderr: &str) -> bool {
             s.contains("asan:")
         }
         Language::Java => {
-            // fill later
-            false
+            s.contains("hs_err_pid")                      // JVM fatal log header
+                || s.contains("a fatal error has been detected by the java runtime environment")
+                || s.contains("sigsegv")                  // native segv bubbled up by JVM
+                || s.contains("exception_access_violation")
+                || s.contains("problematic frame:")
+                || s.contains("outofmemoryerror: direct buffer memory") // catastrophic OOM kind
+                || s.contains("internal error (")         // hotspot internal error
         }
     }
 }
@@ -315,19 +318,40 @@ fn has_segfault(lang: Language, stderr: &str) -> bool {
     let s = stderr.to_ascii_lowercase();
     match lang {
         Language::Cpp => s.contains("segmentation fault") || s.contains("sigsegv"),
-        Language::Java => false,
+        Language::Java => {
+            s.contains("sigsegv")
+                || s.contains("exception_access_violation")
+                || s.contains("hs_err_pid")
+                || s.contains("problematic frame:")
+
+        }
     }
 }
 
-fn has_exception(_lang: Language, stderr: &str) -> bool {
-    // For C++,  I am treating "terminate called", "std::exception", etc. as exception-ish signals.
+fn has_exception(lang: Language, stderr: &str) -> bool {
     let s = stderr.to_ascii_lowercase();
-    s.contains("exception")
-        || s.contains("terminate called")
-        || s.contains("std::terminate")
-        || s.contains("std::bad_alloc")
+    match lang {
+        Language::Cpp => {
+            s.contains("exception")
+                || s.contains("terminate called")
+                || s.contains("std::terminate")
+                || s.contains("std::bad_alloc")
+        }
+        Language::Java => {
+            s.contains("exception in thread")
+                || s.contains("java.lang.exception")
+                || s.contains("java.lang.runtimeexception")
+                || s.contains("java.lang.nullpointerexception")
+                || s.contains("java.lang.illegalargumentexception")
+                || s.contains("java.lang.indexoutofboundsexception")
+                || s.contains("java.lang.arrayindexoutofboundsexception")
+                || s.contains("java.lang.outofmemoryerror")
+                || s.contains("java.lang.stackoverflowerror")
+                || s.contains("exception:")
+                || s.contains("error:")
+        }
+    }
 }
-
 
 fn is_valid_return_code(exit: Option<i32>, valid: Option<&[i32]>) -> bool {
     match (exit, valid) {
@@ -539,5 +563,66 @@ mod tests {
         assert!(ev.contains_forbidden_output("Hello FORB\n", &[String::from("forb")]));
         assert!(!ev.contains_forbidden_output("clean\n", &[String::from("bad")]));
     }
+
+    
+    fn spec_java() -> TaskSpec {
+        TaskSpec {
+            language: Language::Java,
+            valid_return_codes: Some(vec![0]),
+            max_runtime_ms: None,
+            forbidden_outputs: vec![],
+        }
+    }
+
+    #[test]
+    fn java_exception_detected() {
+        let ev = Evaluator::new();
+        let spec = spec_java();
+        let view = ev.parse(7,
+            "EXIT_CODE: 1\nSTDERR: Exception in thread \"main\" java.lang.NullPointerException\n\tat Main.main(Main.java:3)\n"
+        );
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::Exceptions));
+        assert!(eval.violated.contains(&Property::ProperTermination)); // exit!=0
+        assert!(!eval.violated.contains(&Property::SegmentationFault)); // normal Java exception
+    }
+
+    #[test]
+    fn java_vm_crash_counts_as_safety_and_segfault() {
+        let ev = Evaluator::new();
+        let spec = spec_java();
+        let view = ev.parse(8,
+            "EXIT_CODE=134\nSTDERR: A fatal error has been detected by the Java Runtime Environment:\nSIGSEGV (0xb) at pc 0x00007f..., pid=123, tid=456\n#  Problematic frame:\n#  C  [libsomething.so+0x1a2b]\n#  An hs_err_pid123.log file is generated\n"
+        );
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::Safety));            // VM fatal
+        assert!(eval.violated.contains(&Property::SegmentationFault)); // SIGSEGV marker
+        assert!(eval.violated.contains(&Property::ProperTermination)); // exit!=0
+    }
+
+    #[test]
+    fn java_clean_run_ok() {
+        let ev = Evaluator::new();
+        let spec = spec_java();
+        let view = ev.parse(9, "EXIT_CODE=0\nSTDERR:\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.is_empty());
+    }
+
+    #[test]
+    fn java_derive_props_milli_values() {
+        let ev = Evaluator::new();
+        let specs = vec![spec_java(), spec_java()];
+        let outs = vec![
+            // clean
+            (1, "EXIT_CODE=0\n".to_string()),
+            // Java exception ⇒ Exceptions + ProperTermination, task fails
+            (2, "EXIT_CODE: 1\nSTDERR: Exception in thread \"main\" java.lang.RuntimeException: boom\n".to_string()),
+        ];
+        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs);
+        assert!(ltl_milli > 0, "should record some LTL violations");
+        assert_eq!(fail_milli, 500, "1/2 tasks failed ⇒ 500");
+    }
+
 }
 

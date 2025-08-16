@@ -42,10 +42,11 @@ use sea_orm::{DatabaseConnection};
 
 /// Runs a genetic algorithm for a given submission
 /// # Parameters
-/// - `db`: shared DB connection (SeaORM)
+/// - `db`: shared DB connection
 /// - `submission_id`: which submission we’re optimizing for
 /// - `ga_config`: fully-configured GA (population size, gens, crossover, etc.)
 /// - `omega1..3`: weights for the Components fitness aggregation (must sum to ~1)
+/// - `base_spec`: base TaskSpec for all tasks (rules for per-task checks)
 ///
 /// # Behavior
 /// - Instantiates the GA population and fitness `Components`
@@ -63,6 +64,8 @@ pub async fn run_ga_job(
     omega1: f64,
     omega2: f64,
     omega3: f64,
+    base_spec: 
+    TaskSpec, 
 ) -> Result<(), String> {
 
     // Build core GA (population + config)
@@ -77,16 +80,6 @@ pub async fn run_ga_job(
     // Evaluator translates raw interpreter outputs into property-violation counts
     // (Safety, ProperTermination, Segfault, Exceptions, ExecutionTime, IllegalOutput)
     let evaluator = Evaluator::new();
-    
-
-    // Base rules for evaluation each task's outputs
-    // replace this single spec with a per-task vector pulled from DB/config.
-    let base_spec = TaskSpec {
-        language: Language::Cpp,
-        valid_return_codes: Some(vec![0]),
-        max_runtime_ms: None,          
-        forbidden_outputs: vec![],   
-    }; // TODO: make this configurable later
 
     // This closure is invoked inside the GA loop for every chromosome’s run:
     // it converts raw outputs into `(num_ltl_props, num_tasks)`.
