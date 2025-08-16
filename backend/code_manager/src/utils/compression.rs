@@ -1,7 +1,7 @@
 //utils/compression.rs
 use flate2::read::GzDecoder;
 use std::fs::{self, File};
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::{Cursor, Read};
 use std::path::Path;
 use tar::Archive;
 use zip::read::ZipArchive;
