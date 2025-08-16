@@ -8,7 +8,7 @@ export interface TableCreateModalField {
   type: 'text' | 'textarea' | 'number' | 'email' | 'password' | 'select' | 'datetime' | 'boolean';
   placeholder?: string;
   required?: boolean;
-  options?: { label: string; value: string }[]; // only for 'select'
+  options?: { label: string; value: string }[];
   defaultValue?: any;
 }
 
@@ -36,26 +36,19 @@ const CreateModal = ({
   useEffect(() => {
     if (open) {
       const values = { ...initialValues };
-
       fields.forEach((field) => {
-        // Use defaultValue only if initialValues does not already have the key
         if (values[field.name] === undefined && field.defaultValue !== undefined) {
           values[field.name] = field.defaultValue;
         }
-
-        // Convert datetime
         if (field.type === 'datetime' && values[field.name]) {
           values[field.name] = dayjs(values[field.name]);
         }
       });
-
       form.setFieldsValue(values);
     }
   }, [open, initialValues, fields, form]);
 
-  const handleValuesChange = (_: any, allValues: any) => {
-    onChange?.(allValues);
-  };
+  const handleValuesChange = (_: any, allValues: any) => onChange?.(allValues);
 
   const handleSubmit = async () => {
     try {
@@ -79,6 +72,14 @@ const CreateModal = ({
         {fields.map(({ name, label, type, placeholder, options, required }) => {
           const rules = required ? [{ required: true, message: `Please enter ${label}` }] : [];
 
+          if (type === 'boolean') {
+            return (
+              <Form.Item key={name} name={name} label={label} valuePropName="checked" rules={rules}>
+                <Checkbox>{placeholder || 'Yes'}</Checkbox>
+              </Form.Item>
+            );
+          }
+
           return (
             <Form.Item key={name} name={name} label={label} rules={rules}>
               {type === 'password' ? (
@@ -95,8 +96,6 @@ const CreateModal = ({
                   format="YYYY-MM-DD HH:mm"
                   style={{ width: '100%' }}
                 />
-              ) : type === 'boolean' ? (
-                <Checkbox>{placeholder || 'Yes'}</Checkbox>
               ) : null}
             </Form.Item>
           );

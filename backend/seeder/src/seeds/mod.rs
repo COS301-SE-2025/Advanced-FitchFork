@@ -1,3 +1,4 @@
+pub mod announcement;
 pub mod assignment;
 pub mod assignment_file;
 pub mod assignment_interpreter;

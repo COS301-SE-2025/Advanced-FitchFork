@@ -62,6 +62,8 @@ import ModuleMobileMenu from './pages/modules/ModuleMobileMenu';
 import ConfigMobileMenu from './pages/modules/assignments/config/ConfigMobileMenu';
 import SubmissionsList from './pages/modules/assignments/submissions/SubmissionsList';
 import SettingsMobileMenu from './pages/settings/SettingsMobileMenu';
+import Announcements from './pages/modules/announcements/Announcements';
+import AnnouncementView from './pages/modules/announcements/AnnouncementView';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -124,6 +126,11 @@ export default function App() {
                   element={isMobile ? <ModuleMobileMenu /> : <Navigate to="overview" replace />}
                 />
                 <Route path="overview" element={<ModuleOverview />} />
+
+                <Route path="announcements">
+                  <Route index element={<Announcements />} />
+                  <Route path=":announcement_id" element={<AnnouncementView />} />
+                </Route>
                 <Route path="assignments" element={<AssignmentsList />} />
                 <Route path="assignments/:assignment_id" element={<WithAssignmentContext />}>
                   <Route element={<AssignmentLayout />}>

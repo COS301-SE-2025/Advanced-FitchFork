@@ -218,7 +218,7 @@ const EntityList = forwardRef(function <T>(
 
   // Reusable empty-state (matches table's style)
   const renderFilteredEmptyState = () => (
-    <div className="flex justify-center w-full py-8 sm:py-12 rounded-xl border-2 border-dashed bg-white border-gray-200 dark:border-gray-800 text-center">
+    <div className="flex justify-center w-full py-8 sm:py-12 rounded-xl border-2 border-dashed bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-center">
       <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No results found.">
         {clearMenuItems.length === 1 ? (
           <Button icon={<ReloadOutlined />} onClick={clearMenuItems[0].onClick}>

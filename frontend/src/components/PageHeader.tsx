@@ -12,7 +12,9 @@ const PageHeader = ({ title, description, extra }: PageHeaderProps) => {
   return (
     <div className="bg-white dark:bg-gray-900 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6 rounded-md border border-gray-200 dark:border-gray-800">
       <div>
-        <Title className="!text-lg sm:!text-2xl !text-gray-800 dark:!text-gray-100 !leading-tight !mb-1">
+        <Title
+          className={`!text-lg sm:!text-2xl !text-gray-800 dark:!text-gray-100 !leading-tight ${description ? '!mb-1' : '!mb-0'}`}
+        >
           {title}
         </Title>
         {description && (

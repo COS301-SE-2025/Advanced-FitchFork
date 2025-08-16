@@ -2,28 +2,19 @@ import { Button, Typography, Space } from 'antd';
 import { InfoCircleOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 
 type Props = {
-  /** e.g. "COS123" or full name; used in the heading */
-  moduleLabel?: string;
-  /** Can the viewer create assignments? (lecturer/admin) */
-  canCreate?: boolean;
-  /** Optional: open the "Create Assignment" flow */
+  /** Can create announcements (lecturer or assistant) */
+  isLecturerOrAssistant?: boolean;
   onCreate?: () => void;
-  /** Optional: refresh the list */
   onRefresh?: () => void;
 };
 
 const { Title, Paragraph } = Typography;
 
-const AssignmentsEmptyState = ({
-  moduleLabel = 'this module',
-  canCreate = false,
-  onCreate,
-  onRefresh,
-}: Props) => {
-  const title = canCreate ? 'No assignments yet' : 'No assignments available';
-  const description = canCreate
-    ? `Create your first assignment for ${moduleLabel}.`
-    : `There aren&apos;t any assignments available for ${moduleLabel} right now.`;
+const AnnouncementsEmptyState = ({ isLecturerOrAssistant = false, onCreate, onRefresh }: Props) => {
+  const title = isLecturerOrAssistant ? 'No announcements yet' : 'No announcements available';
+  const description = isLecturerOrAssistant
+    ? 'Create your first announcement to get started.'
+    : 'There are no announcements to show right now.';
 
   return (
     <div className="w-full">
@@ -32,7 +23,7 @@ const AssignmentsEmptyState = ({
           <Space direction="vertical" size="middle" className="w-full">
             <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 dark:border-gray-800 px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-400">
               <InfoCircleOutlined />
-              No assignments
+              Empty announcements
             </div>
 
             <Title level={3} className="!m-0 !text-gray-900 dark:!text-gray-100">
@@ -44,19 +35,20 @@ const AssignmentsEmptyState = ({
             </Paragraph>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
-              {canCreate && (
+              {isLecturerOrAssistant && (
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
                   onClick={onCreate}
                   className="min-w-[200px]"
                   disabled={!onCreate}
+                  data-testid="empty-add"
                 >
-                  Add assignment
+                  Add announcement
                 </Button>
               )}
               {onRefresh && (
-                <Button icon={<ReloadOutlined />} onClick={onRefresh}>
+                <Button icon={<ReloadOutlined />} onClick={onRefresh} data-testid="empty-refesh">
                   Refresh
                 </Button>
               )}
@@ -68,4 +60,4 @@ const AssignmentsEmptyState = ({
   );
 };
 
-export default AssignmentsEmptyState;
+export default AnnouncementsEmptyState;
