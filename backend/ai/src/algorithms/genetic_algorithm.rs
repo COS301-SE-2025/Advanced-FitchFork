@@ -325,5 +325,170 @@ fn encode_gene(value: i32, bits: usize) -> Vec<bool> {
     binary
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
 
-// TODO: TESTS TESTS TESTS TESTS TESTS
+
+    fn hs(v: &[i32]) -> HashSet<i32> {
+        v.iter().cloned().collect()
+    }
+
+    /// Test-only decode that matches our sign+magnitude encoder.
+    fn test_decode_gene(bits: &[bool]) -> i32 {
+        if bits.is_empty() { return 0; }
+        let sign = bits[0];
+        let mut mag = 0i32;
+        for &b in &bits[1..] {
+            mag = (mag << 1) | (b as i32);
+        }
+        if sign { -mag } else { mag }
+    }
+
+    // --- GeneConfig & GAConfig ----------------------------------------------
+
+    #[test]
+    fn gene_bits_respects_range() {
+        // Max abs=9 -> ceil(log2(9))=4, +1 sign = 5 bits
+        let g = GeneConfig::new(-9, 9, HashSet::new());
+        assert_eq!(g.bits(), 5);
+        let g2 = GeneConfig::new(-1, 1, HashSet::new());
+        assert_eq!(g2.bits(), 1);
+    }
+
+    #[test]
+    fn ga_bits_uses_global_max_abs() {
+        let genes = vec![
+            GeneConfig::new(-3, 3, HashSet::new()),  // needs 3 bits (ceil(log2(3))=2 + sign =3)
+            GeneConfig::new(-9, 9, HashSet::new()),  // needs 5 bits
+            GeneConfig::new(-2, 7, HashSet::new()),  // needs 4 bits
+        ];
+        let cfg = GAConfig::new(
+            8, 10, 4, 0.9, 0.8, 0.05, genes,
+            CrossoverType::Uniform, MutationType::BitFlip,
+        );
+        // Global max abs is 9 -> 5 bits total per gene
+        assert_eq!(cfg.bits(), 5);
+    }
+
+    #[test]
+    fn encode_gene_sign_magnitude_roundtrip_like() {
+        // Using test-only decoder to validate encoder shape.
+        let bits = 5;
+        for v in [-9, -1, 0, 1, 7, 9] {
+            let enc = super::encode_gene(v, bits);
+            assert_eq!(enc.len(), bits);
+
+            // Note: encoder truncates magnitude to available bits; our test decode
+            // reconstructs within that limited width, which matches expectations.
+            let dec = test_decode_gene(&enc);
+            // dec may differ if v was out-of-range for the given bit width.
+            // But for |v| <= 2^(bits-1)-1 it should match exactly.
+            let max = (1 << (bits - 1)) - 1;
+            if v.abs() as i32 <= max {
+                assert_eq!(dec, v);
+            } else {
+                assert_eq!(dec.abs() as i32, max);
+            }
+        }
+    }
+    #[test]
+    fn initialize_population_shapes_are_correct() {
+        let genes = vec![
+            GeneConfig::new(-3, 3, hs(&[2])),  // disallow 2
+            GeneConfig::new(-9, 9, HashSet::new()),
+        ];
+        let cfg = GAConfig::new(
+            6, 5, 3, 0.9, 0.8, 0.05, genes.clone(),
+            CrossoverType::Uniform, MutationType::BitFlip,
+        );
+        let bits_per_gene = cfg.bits(); // global width
+        let num_genes = genes.len();
+
+        let ga = GeneticAlgorithm::new(cfg);
+        assert_eq!(ga.population().len(), 6);
+
+        for chrom in ga.population() {
+            assert_eq!(chrom.genes().len(), num_genes * bits_per_gene);
+        }
+    }
+    #[test]
+    fn uniform_crossover_child_bits_are_from_parents() {
+        let p1 = Chromosome::new(vec![true,  true,  true,  true,  true]);
+        let p2 = Chromosome::new(vec![false, false, false, false, false]);
+
+        let child = GeneticAlgorithm::crossover(&p1, &p2, CrossoverType::Uniform);
+        assert_eq!(child.genes().len(), 5);
+
+        for (i, &b) in child.genes().iter().enumerate() {
+            // must equal either parent's bit at that position
+            assert!(b == p1.genes()[i] || b == p2.genes()[i]);
+        }
+    }
+
+    #[test]
+    fn onepoint_and_twopoint_crossover_lengths_match() {
+        let p1 = Chromosome::new(vec![true; 16]);
+        let p2 = Chromosome::new(vec![false; 16]);
+
+        let c1 = GeneticAlgorithm::crossover(&p1, &p2, CrossoverType::OnePoint);
+        let c2 = GeneticAlgorithm::crossover(&p1, &p2, CrossoverType::TwoPoint);
+
+        assert_eq!(c1.genes().len(), 16);
+        assert_eq!(c2.genes().len(), 16);
+    }
+    #[test]
+    fn bitflip_mutation_with_prob_1_flips_all_bits() {
+        let mut c = Chromosome::new(vec![true, false, true, false, true, false]);
+        GeneticAlgorithm::mutate(&mut c, MutationType::BitFlip, 1.0);
+        assert_eq!(c.genes(), &vec![false, true, false, true, false, true]);
+    }
+
+    #[test]
+    fn swap_mutation_preserves_multiset() {
+        let mut c = Chromosome::new(vec![true, false, false, true, true, false]);
+        let before = c.genes.clone();
+        GeneticAlgorithm::mutate(&mut c, MutationType::Swap, 1.0);
+
+        // same length
+        assert_eq!(c.genes().len(), before.len());
+
+        // same counts of true/false
+        let cnt = |v: &[bool], b: bool| v.iter().filter(|&&x| x == b).count();
+        assert_eq!(cnt(&c.genes, true), cnt(&before, true));
+        assert_eq!(cnt(&c.genes, false), cnt(&before, false));
+    }
+
+    #[test]
+    fn scramble_mutation_preserves_multiset() {
+        let mut c = Chromosome::new(vec![true, false, true, true, false, false, true]);
+        let before = c.genes.clone();
+        GeneticAlgorithm::mutate(&mut c, MutationType::Scramble, 1.0);
+
+        // same length and same multiset of bits
+        let cnt = |v: &[bool], b: bool| v.iter().filter(|&&x| x == b).count();
+        assert_eq!(c.genes().len(), before.len());
+        assert_eq!(cnt(&c.genes, true), cnt(&before, true));
+        assert_eq!(cnt(&c.genes, false), cnt(&before, false));
+    }
+    #[test]
+    fn step_with_fitness_advances_generation_and_keeps_size() {
+        let genes = vec![
+            GeneConfig::new(-3, 3, HashSet::new()),
+            GeneConfig::new(-9, 9, HashSet::new()),
+        ];
+        let cfg = GAConfig::new(
+            10, 20, 5, 0.9, 0.8, 0.1, genes,
+            CrossoverType::Uniform, MutationType::BitFlip,
+        );
+        let mut ga = GeneticAlgorithm::new(cfg);
+        let pop_len = ga.population().len();
+
+        let fitness = vec![1.0; pop_len]; // equal fitness
+        ga.step_with_fitness(&fitness);
+
+        assert_eq!(ga.population().len(), pop_len);
+        assert_eq!(ga.generation(), 1);
+    }
+}

@@ -73,8 +73,6 @@ impl Evaluator {
         let (exit_code, stdout, stderr) = split_exit_stdout_stderr(blob);
         let runtime_ms = extract_marker_int(blob, "runtime_ms").map(|v| v.max(0) as u64);
         let terminated = exit_code.is_some();
-        println!("Parsed TaskView for task {}: exit_code={:?}, runtime_ms={:?}, stdout='{}', stderr='{}', terminated={}",
-                 task_id, exit_code, runtime_ms, stdout, stderr, terminated);
         TaskView { task_id, exit_code, runtime_ms, stdout, stderr, terminated }
     }
 
@@ -339,3 +337,207 @@ fn is_valid_return_code(exit: Option<i32>, valid: Option<&[i32]>) -> bool {
         (None, _)                => false, 
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn spec_cpp() -> TaskSpec {
+        TaskSpec {
+            language: Language::Cpp,
+            valid_return_codes: Some(vec![0]),
+            max_runtime_ms: None,
+            forbidden_outputs: vec![],
+        }
+    }
+
+    fn spec_cpp_with_time(bound: u64) -> TaskSpec {
+        TaskSpec { max_runtime_ms: Some(bound), ..spec_cpp() }
+    }
+
+    fn spec_cpp_with_forbidden(forb: &[&str]) -> TaskSpec {
+        TaskSpec {
+            forbidden_outputs: forb.iter().map(|s| s.to_string()).collect(),
+            ..spec_cpp()
+        }
+    }
+
+    #[test]
+    fn extract_marker_int_handles_colon_and_equals() {
+        let blob = "EXIT_CODE: 0\nRUNTIME_MS=123\n";
+        assert_eq!(super::extract_marker_int(blob, "exit_code"), Some(0));
+        assert_eq!(super::extract_marker_int(blob, "RUNTIME_MS"), Some(123));
+    }
+
+    #[test]
+    fn split_exit_stdout_stderr_with_explicit_stderr() {
+        let blob = "hello\nSTDERR: bad stuff\nline2";
+        let (exit, out, err) = super::split_exit_stdout_stderr(blob);
+        assert_eq!(exit, None);
+        assert_eq!(out, "hello");
+        assert_eq!(err, "bad stuff\nline2");
+    }
+
+    #[test]
+    fn split_heuristic_sends_errors_to_stderr() {
+        let blob = "Segmentation fault (core dumped)";
+        let (exit, out, err) = super::split_exit_stdout_stderr(blob);
+        assert_eq!(exit, None);
+        assert!(out.is_empty());
+        assert!(err.to_ascii_lowercase().contains("segmentation fault"));
+    }
+
+    #[test]
+    fn parse_sets_terminated_if_exit_code_present() {
+        let ev = Evaluator::new();
+        let view = ev.parse(42, "EXIT_CODE: 0\nhello\n");
+        assert_eq!(view.task_id, 42);
+        assert_eq!(view.exit_code, Some(0));
+        assert!(view.terminated);
+        assert_eq!(view.stdout.trim(), "EXIT_CODE: 0\nhello"); // before any “STDERR:” marker
+    }
+
+    #[test]
+    fn parse_runtime_ms_parsed_to_u64() {
+        let ev = Evaluator::new();
+        let view = ev.parse(1, "RUNTIME_MS=200\nEXIT_CODE=0\n");
+        assert_eq!(view.runtime_ms, Some(200));
+        assert!(view.terminated);
+    }
+
+    #[test]
+    fn proper_termination_ok_when_zero_exit() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp();
+        let view = ev.parse(1, "EXIT_CODE: 0\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(!eval.violated.contains(&Property::ProperTermination));
+    }
+
+    #[test]
+    fn proper_termination_violates_on_nonzero_exit() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp();
+        let view = ev.parse(1, "EXIT_CODE=2\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::ProperTermination));
+    }
+
+    #[test]
+    fn safety_detects_asan_and_uaf() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp();
+        let view = ev.parse(1, "STDERR: AddressSanitizer: heap-use-after-free\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::Safety));
+    }
+
+    #[test]
+    fn segfault_detected() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp();
+        let view = ev.parse(1, "STDERR: Segmentation fault\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::SegmentationFault));
+    }
+
+    #[test]
+    fn exception_detected() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp();
+        let view = ev.parse(1, "STDERR: terminate called after throwing an instance of 'std::exception'\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::Exceptions));
+    }
+
+    #[test]
+    fn execution_time_violates_if_over_bound() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp_with_time(100);
+        let view = ev.parse(1, "RUNTIME_MS: 150\nEXIT_CODE: 0\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::ExecutionTime));
+    }
+
+    #[test]
+    fn execution_time_not_checked_if_no_bound() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp(); // max_runtime_ms: None
+        let view = ev.parse(1, "RUNTIME_MS=1000\nEXIT_CODE=0\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(!eval.violated.contains(&Property::ExecutionTime));
+    }
+
+    #[test]
+    fn illegal_output_detected_on_exact_line_match_after_trim() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp_with_forbidden(&["BAD", "forbidden"]);
+        let view = ev.parse(1, "EXIT_CODE:0\n output \n BAD \n ok \n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::IllegalOutput));
+    }
+
+    #[test]
+    fn illegal_output_not_checked_if_forbidden_empty() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp(); // no forbidden_outputs
+        let view = ev.parse(1, "EXIT_CODE:0\nforbidden\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(!eval.violated.contains(&Property::IllegalOutput));
+    }
+
+    // -------------------- derive_props (ltl_milli, fail_milli) --------------------
+
+    #[test]
+    fn derive_props_all_clean_tasks_yield_zero_milli() {
+        let ev = Evaluator::new();
+        let specs = vec![spec_cpp(), spec_cpp()];
+        let outs = vec![
+            (10, "EXIT_CODE: 0\nSTDERR:\n".to_string()),
+            (11, "EXIT_CODE=0\n".to_string()),
+        ];
+        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs);
+        assert_eq!(ltl_milli, 0);
+        assert_eq!(fail_milli, 0);
+    }
+
+    #[test]
+    fn derive_props_counts_violations_and_failures() {
+        // One task segfaults (violates Safety? maybe; definitely Segfault),
+        // nonzero exit (ProperTermination), so expect both ltl and failure > 0.
+        let ev = Evaluator::new();
+        let specs = vec![spec_cpp()];
+        let outs = vec![(
+            99,
+            "EXIT_CODE=139\nSTDERR: Segmentation fault\n".to_string()
+        )];
+        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs);
+        assert!(ltl_milli > 0);
+        assert_eq!(fail_milli, 1000); // 1/1 tasks failed → 1000
+    }
+
+    #[test]
+    fn derive_props_execution_time_included_only_if_bound_and_measured() {
+        let ev = Evaluator::new();
+        let specs = vec![spec_cpp_with_time(50)];
+        // RUNTIME_MS present and exceeds bound -> counts as a check + violation.
+        let outs = vec![(
+            1,
+            "EXIT_CODE: 0\nRUNTIME_MS: 100\n".to_string(),
+        )];
+        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs);
+        assert!(ltl_milli > 0);
+        // Task not “failed” by our definition (return code OK, no segfault/exception/forbidden)
+        assert_eq!(fail_milli, 0);
+    }
+
+
+    #[test]
+    fn contains_forbidden_output_is_case_insensitive_substring() {
+        let ev = Evaluator::new();
+        assert!(ev.contains_forbidden_output("Hello FORB\n", &[String::from("forb")]));
+        assert!(!ev.contains_forbidden_output("clean\n", &[String::from("bad")]));
+    }
+}
+
