@@ -3,7 +3,7 @@ resolver = "3"
 members = [
     "ai",
     "api", 
-    "moss-parser",
+    "moss_parser",
     "code_manager",
     "code_runner",
     "common",
