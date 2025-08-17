@@ -1,5 +1,5 @@
 use axum::{routing::{delete, get, patch, post, put}, Router};
-use get::{list_plagiarism_cases, get_graph};
+use get::{list_plagiarism_cases, get_graph, get_moss_report};
 use post::{create_plagiarism_case, run_moss_check};
 use put::update_plagiarism_case;
 use delete::{delete_plagiarism_case, bulk_delete_plagiarism_cases};
@@ -30,6 +30,7 @@ pub fn plagiarism_routes() -> Router<AppState> {
         .route("/graph", get(get_graph))
         .route("/", post(create_plagiarism_case))
         .route("/moss", post(run_moss_check))
+        .route("/moss", get(get_moss_report))
         .route("/{case_id}", put(update_plagiarism_case))
         .route("/{case_id}", delete(delete_plagiarism_case))
         .route("/bulk", delete(bulk_delete_plagiarism_cases))
