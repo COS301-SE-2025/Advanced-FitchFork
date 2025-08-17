@@ -246,7 +246,6 @@ impl Model {
         let mut latest = Vec::new();
 
         for s in all {
-            // keep the first row we see per user (attempt DESC ensures it's the latest)
             if seen.insert(s.user_id) {
                 latest.push(s);
             }

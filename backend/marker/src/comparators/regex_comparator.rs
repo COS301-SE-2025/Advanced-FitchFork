@@ -78,12 +78,12 @@ impl OutputComparator for RegexComparator {
             }
         } else {
             let ratio = awarded_marks as f32 / total_patterns as f32;
-            (section.value as f32 * ratio).round() as u32
+            (section.value as f32 * ratio).round() as i64
         };
 
         if student_lines.len() > memo_lines.len() && student_lines.len() > 0 {
             let penalty = memo_lines.len() as f32 / student_lines.len() as f32;
-            awarded = (awarded as f32 * penalty).round() as u32;
+            awarded = (awarded as f32 * penalty).round() as i64;
         }
 
         TaskResult {
@@ -106,7 +106,7 @@ mod tests {
         lines.iter().map(|s| s.to_string()).collect()
     }
 
-    fn mock_subsection(value: u32) -> Subsection {
+    fn mock_subsection(value: i64) -> Subsection {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,

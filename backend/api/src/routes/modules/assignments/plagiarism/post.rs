@@ -8,12 +8,15 @@ use db::models::{
     assignment_submission::{self, Entity as SubmissionEntity},
     assignment_file,
     plagiarism_case,
+    user::{Entity as UserEntity},
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use crate::{response::ApiResponse, services::moss::MossService};
 use util::state::AppState;
 use std::env;
+use std::fs;
+use chrono::Utc;
 
 #[derive(Serialize, Deserialize)]
 pub struct CreatePlagiarismCasePayload {
@@ -213,9 +216,6 @@ pub struct MossRequest {
 /// - `language` (string): The programming language of the submissions (e.g., "c", "cpp", "java",
 ///   "python", "javascript").
 ///
-/// > Note: `user_ids` is no longer accepted. The service automatically selects the latest
-/// > attempt per user for this assignment (highest attempt number).
-///
 /// # Returns
 ///
 /// Returns an HTTP response indicating the result:
@@ -245,30 +245,81 @@ pub struct MossRequest {
 /// - The selected submissions are the most recent (highest `attempt`) per user.
 pub async fn run_moss_check(
     State(app_state): State<AppState>,
-    Path((_module_id, assignment_id)): Path<(i64, i64)>,
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(payload): Json<MossRequest>,
 ) -> impl IntoResponse {
-    let submissions = assignment_submission::Model
-        ::get_latest_submissions_for_assignment(app_state.db(), assignment_id)
-        .await;
-
+    let submissions = assignment_submission::Model::get_latest_submissions_for_assignment(
+        app_state.db(),
+        assignment_id
+    ).await;
+    
     match submissions {
         Ok(submissions) => {
-            let submission_files: Vec<_> = submissions.iter().map(|s| s.full_path()).collect();
-
+            let mut submission_files = Vec::new();
+            for submission in &submissions {
+                let user = UserEntity::find_by_id(submission.user_id)
+                    .one(app_state.db())
+                    .await
+                    .map_err(|_| "Failed to fetch user")
+                    .unwrap();
+                
+                let username = user.map(|u| u.username);
+                submission_files.push((
+                    submission.full_path(),
+                    username,
+                    Some(submission.id)
+                ));
+            }
+            
             let base_files = match assignment_file::Model::get_base_files(app_state.db(), assignment_id).await {
                 Ok(files) => files.into_iter().map(|f| f.full_path()).collect(),
                 Err(_) => vec![],
             };
-
-            let moss_user_id = env::var("MOSS_USER_ID").unwrap_or_else(|_| "YOUR_MOSS_USER_ID".to_string());
+            
+            let moss_user_id = env::var("MOSS_USER_ID")
+                .unwrap_or_else(|_| "YOUR_MOSS_USER_ID".to_string());
             let moss_service = MossService::new(&moss_user_id);
 
-            match moss_service.run(base_files, submission_files, &payload.language).await {
-                Ok(result) => (
-                    StatusCode::OK,
-                    Json(ApiResponse::success(result, "MOSS check completed successfully")),
-                ).into_response(),
+            match moss_service.run(
+                base_files,
+                submission_files,
+                &payload.language,
+            ).await {
+                Ok(result) => {
+                    let report_dir = assignment_submission::Model::storage_root()
+                        .join(format!("module_{}", module_id))
+                        .join(format!("assignment_{}", assignment_id));
+
+                    if let Err(e) = fs::create_dir_all(&report_dir) {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(ApiResponse::<()>::error(format!("Failed to create report directory: {}", e))),
+                        ).into_response();
+                    }
+
+                    let report_path = report_dir.join("reports.txt");
+                    let content = format!(
+                        "Report URL: {}\nDate: {}",
+                        result,
+                        Utc::now().to_rfc3339()
+                    );
+
+                    if let Err(e) = fs::write(&report_path, content) {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(ApiResponse::<()>::error(format!("Failed to write MOSS report: {}", e))),
+                        ).into_response();
+                    }
+
+                    (
+                        StatusCode::OK,
+                        Json(ApiResponse::success(
+                            serde_json::json!({ "report_url": result }),
+                            "MOSS check completed successfully",
+                        )),
+                    )
+                        .into_response()
+                }
                 Err(e) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ApiResponse::<()>::error(format!("Failed to run MOSS check: {}", e))),

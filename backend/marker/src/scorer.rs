@@ -44,8 +44,8 @@ use crate::types::TaskResult;
 /// ```
 /// 
 /// TODO: Implement score weighting.
-pub fn compute_overall_score(results: &[TaskResult]) -> Result<u32, MarkerError> {
-    let mut total_awarded = 0u32;
+pub fn compute_overall_score(results: &[TaskResult]) -> Result<i64, MarkerError> {
+    let mut total_awarded = 0;
     for result in results {
         total_awarded += result.awarded;
     }

@@ -13,7 +13,7 @@ use crate::utils::compression::{extract_archive_contents, is_supported_archive};
 pub async fn run_container(
     config: &ExecutionConfig,
     commands: Vec<String>,
-    files: Vec<(String, Vec<u8>)>, // filename + contents
+    files: Vec<(String, Vec<u8>)>,
 ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync + 'static>> {
     let temp_code_dir = tempdir()?;
     let temp_output_dir = tempdir()?;
@@ -69,20 +69,38 @@ pub async fn run_container(
         )
         .await??;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        let retcode = output.status.code().unwrap_or(-1);
 
-        if output.status.success() {
-            outputs.push(stdout.into_owned());
-        } else {
-            return Err(format!(
-                "Execution failed (exit code {}):\nSTDOUT:\n{}\nSTDERR:\n{}",
-                output.status.code().unwrap_or(-1),
-                stdout,
-                stderr
-            )
-            .into());
+        let mut combined_output = String::new();
+
+        if config.output.stdout {
+            combined_output.push_str(&stdout);
         }
+
+        if config.output.stderr {
+            if !combined_output.is_empty() {
+                combined_output.push('\n');
+            }
+            combined_output.push_str(&stderr);
+        }
+
+        if config.output.retcode {
+            if !combined_output.is_empty() {
+                combined_output.push('\n');
+            }
+            combined_output.push_str(&format!("Retcode: {}", retcode));
+        }
+
+        if !output.status.success() {
+            if !combined_output.is_empty() {
+                combined_output.push('\n');
+            }
+            combined_output.push_str(&format!("[ERROR] Command exited with code {}", retcode));
+        }
+
+        outputs.push(combined_output);
     }
 
     Ok(outputs)

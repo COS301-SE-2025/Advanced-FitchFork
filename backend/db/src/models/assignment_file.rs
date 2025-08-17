@@ -190,6 +190,7 @@ impl Model {
         fs::remove_file(full_path)
     }
     
+    // TODO: Change this to get the skeleton files instead of the memo files
     pub async fn get_base_files(
         db: &DatabaseConnection,
         assignment_id: i64,

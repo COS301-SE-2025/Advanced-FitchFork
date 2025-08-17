@@ -77,9 +77,9 @@ use serde::Serialize;
 #[derive(Debug, Serialize, Clone)]
 pub struct Score {
     /// Points earned by the student.
-    pub earned: u32,
+    pub earned: i64,
     /// Total possible points.
-    pub total: u32,
+    pub total: i64,
 }
 
 /// Represents a subsection of a grading task, such as a subtask or rubric item.
@@ -88,9 +88,9 @@ pub struct ReportSubsection {
     /// Label or name of the subsection (e.g., "Subtask 1").
     pub label: String,
     /// Points earned for this subsection.
-    pub earned: u32,
+    pub earned: i64,
     /// Total possible points for this subsection.
-    pub total: u32,
+    pub total: i64,
     /// Feedback or comments for this subsection.
     pub feedback: String,
 }
@@ -99,7 +99,7 @@ pub struct ReportSubsection {
 #[derive(Debug, Serialize, Clone)]
 pub struct ReportTask {
     /// Task number (e.g., 1 for the first task).
-    pub task_number: u32,
+    pub task_number: i64,
     /// Name or description of the task.
     pub name: String,
     /// Score for the task.
@@ -123,9 +123,9 @@ pub struct CoverageFile {
     /// File path (relative or absolute).
     pub path: String,
     /// Lines or items covered in this file.
-    pub earned: u32,
+    pub earned: i64,
     /// Total lines or items in this file.
-    pub total: u32,
+    pub total: i64,
 }
 
 /// Represents a code complexity report, including a summary and per-metric details.
@@ -143,9 +143,9 @@ pub struct ComplexityMetric {
     /// Name of the metric (e.g., "Cyclomatic").
     pub name: String,
     /// Value earned (e.g., number of allowed complexity points used).
-    pub earned: u32,
+    pub earned: i64,
     /// Maximum allowed or total value for this metric.
-    pub total: u32,
+    pub total: i64,
     /// Unit of measurement (e.g., "count").
     pub unit: String,
 }
