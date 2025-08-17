@@ -22,7 +22,7 @@ impl Seeder for AssignmentInterpreterSeeder {
             }
 
             let filename = format!("interpreter_{}.zip", a.id);
-            let command = "g++ -std=c++17 main.cpp -o main && ./main".to_string();
+            let command = "g++ -std=c++17 Main.cpp -o main && ./main".to_string();
             let content = create_example_interpreter_zip();
 
             let _ =
@@ -35,7 +35,7 @@ impl Seeder for AssignmentInterpreterSeeder {
         let special_assignment_id: i64 = 9998;
 
         let special_filename = "interpreter_cpp.zip";
-        let special_command = "g++ -std=c++17 main.cpp -o main && ./main".to_string();
+        let special_command = "g++ -std=c++17 Main.cpp -o main && ./main".to_string();
         let special_content = create_interpreter_zip_cpp();
 
         let _ = InterpreterModel::save_file(
