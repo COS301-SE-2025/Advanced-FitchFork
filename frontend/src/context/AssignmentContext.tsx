@@ -1,5 +1,5 @@
 import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
-import type { MarkAllocatorItem } from '@/types/modules/assignments/mark-allocator';
+import type { MarkAllocatorFile } from '@/types/modules/assignments/mark-allocator';
 import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
 import { createContext, useContext } from 'react';
 
@@ -10,7 +10,7 @@ interface AssignmentDetails extends Assignment {
 export interface AssignmentContextValue {
   assignment: AssignmentDetails;
   memoOutput: MemoTaskOutput[];
-  markAllocator: MarkAllocatorItem[];
+  markAllocator: MarkAllocatorFile | null;
   readiness: AssignmentReadiness | null;
   loading: boolean;
   refreshAssignment: () => Promise<void>;

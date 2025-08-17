@@ -47,6 +47,7 @@ export type EntityListProps<T> = {
   renderListItem?: (item: T) => React.ReactNode;
   listMode?: boolean;
   emptyNoEntities?: React.ReactNode;
+  showControlBar?: boolean;
 };
 
 export type EntityListHandle = {
@@ -73,6 +74,7 @@ const EntityList = forwardRef(function <T>(
     listMode = false,
     renderListItem,
     emptyNoEntities,
+    showControlBar = true,
   } = props;
 
   const {
@@ -365,63 +367,65 @@ const EntityList = forwardRef(function <T>(
 
   return (
     <div>
-      <ControlBar
-        handleSearch={setSearchTerm}
-        searchTerm={searchTerm}
-        viewMode={renderGridItem ? viewMode : undefined}
-        onViewModeChange={renderGridItem ? setViewMode : undefined}
-        selectedRowKeys={selectedRowKeys}
-        searchPlaceholder={`Search ${name.toLowerCase()}`}
-        sortOptions={columns
-          .filter((c) => c.sorter)
-          .map((c) => ({ label: c.title as string, field: c.key as string }))}
-        currentSort={sorterState.map((s) => `${s.field}.${s.order}`)}
-        onSortChange={(vals) =>
-          setSorterState(
-            vals.map((v) => {
-              const [field, order] = v.split('.');
-              return { field, order: order as 'ascend' | 'descend' };
-            }),
-          )
-        }
-        filterGroups={columns
-          .filter((c) => c.filters)
-          .map((c) => ({
-            key: c.key as string,
-            label: c.title as string,
-            type: 'select',
-            options: (c.filters ?? []).map((f) => ({
-              label: f.text as string,
-              value: f.value as string,
-            })),
+      {showControlBar && (
+        <ControlBar
+          handleSearch={setSearchTerm}
+          searchTerm={searchTerm}
+          viewMode={renderGridItem ? viewMode : undefined}
+          onViewModeChange={renderGridItem ? setViewMode : undefined}
+          selectedRowKeys={selectedRowKeys}
+          searchPlaceholder={`Search ${name.toLowerCase()}`}
+          sortOptions={columns
+            .filter((c) => c.sorter)
+            .map((c) => ({ label: c.title as string, field: c.key as string }))}
+          currentSort={sorterState.map((s) => `${s.field}.${s.order}`)}
+          onSortChange={(vals) =>
+            setSorterState(
+              vals.map((v) => {
+                const [field, order] = v.split('.');
+                return { field, order: order as 'ascend' | 'descend' };
+              }),
+            )
+          }
+          filterGroups={columns
+            .filter((c) => c.filters)
+            .map((c) => ({
+              key: c.key as string,
+              label: c.title as string,
+              type: 'select',
+              options: (c.filters ?? []).map((f) => ({
+                label: f.text as string,
+                value: f.value as string,
+              })),
+            }))}
+          activeFilters={Object.entries(filterState ?? {}).flatMap(([k, vals]) =>
+            Array.isArray(vals) ? vals.map((v) => `${k}:${v}`) : [],
+          )}
+          onFilterChange={(vals) => {
+            const grouped: Record<string, string[]> = {};
+            vals.forEach((v) => {
+              const [key, val] = v.split(':');
+              if (!grouped[key]) grouped[key] = [];
+              grouped[key].push(val);
+            });
+            setFilterState(grouped);
+          }}
+          actions={controlActions}
+          bulkActions={bulkActions}
+          columnToggleEnabled={columnToggleEnabled && viewMode !== 'grid'}
+          columns={columns.map((col) => ({
+            key: col.key as string,
+            label:
+              typeof col.title === 'function'
+                ? String(col.key)
+                : (col.title as string) || String(col.key),
+            defaultHidden: !!col.defaultHidden,
           }))}
-        activeFilters={Object.entries(filterState ?? {}).flatMap(([k, vals]) =>
-          Array.isArray(vals) ? vals.map((v) => `${k}:${v}`) : [],
-        )}
-        onFilterChange={(vals) => {
-          const grouped: Record<string, string[]> = {};
-          vals.forEach((v) => {
-            const [key, val] = v.split(':');
-            if (!grouped[key]) grouped[key] = [];
-            grouped[key].push(val);
-          });
-          setFilterState(grouped);
-        }}
-        actions={controlActions}
-        bulkActions={bulkActions}
-        columnToggleEnabled={columnToggleEnabled && viewMode !== 'grid'}
-        columns={columns.map((col) => ({
-          key: col.key as string,
-          label:
-            typeof col.title === 'function'
-              ? String(col.key)
-              : (col.title as string) || String(col.key),
-          defaultHidden: !!col.defaultHidden,
-        }))}
-        hiddenColumns={hiddenColumns}
-        onToggleColumn={toggleColumn}
-        listMode={listMode}
-      />
+          hiddenColumns={hiddenColumns}
+          onToggleColumn={toggleColumn}
+          listMode={listMode}
+        />
+      )}
 
       {viewMode === 'grid' && renderGridItem ? (
         <div>

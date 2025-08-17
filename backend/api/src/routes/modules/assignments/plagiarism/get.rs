@@ -328,65 +328,130 @@ pub struct LinksResponse {
 }
 
 // TODO: Testing and docs @Aidan
-pub async fn get_graph(Query(query): Query<PlagiarismQuery>, State(app_state): State<AppState>) -> impl IntoResponse {
-    let mut query_builder = PlagiarismEntity::find();
-
-    if let Some(status_str) = query.status {
-        if let Ok(status) = status_str.parse::<plagiarism_case::Status>() {
-            query_builder = query_builder.filter(plagiarism_case::Column::Status.eq(status));
-        }
-    }
-
-    let plagiarism_cases = match query_builder.all(app_state.db()).await {
-        Ok(cases) => cases,
+pub async fn get_graph(
+    State(app_state): State<AppState>,
+    Path((_module_id, assignment_id)): Path<(i64, i64)>,
+    Query(query): Query<PlagiarismQuery>,
+) -> impl IntoResponse {
+    // 1) Gather all submission IDs for this assignment
+    let submission_models = match SubmissionEntity::find()
+        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
+        .all(app_state.db())
+        .await
+    {
+        Ok(list) => list,
         Err(_) => {
             return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "Failed to fetch plagiarism cases"})),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<LinksResponse>::error("Failed to fetch submissions")),
             );
         }
     };
 
-    let mut links = Vec::new();
+    let assignment_submission_ids: Vec<i64> = submission_models.iter().map(|s| s.id).collect();
 
-    for case in plagiarism_cases {
-        let submission1 = SubmissionEntity::find_by_id(case.submission_id_1)
-            .one(app_state.db())
-            .await
-            .ok()
-            .flatten();
+    // 2) Base query: plagiarism cases where either side belongs to this assignment
+    let mut q = PlagiarismEntity::find().filter(
+        Condition::any()
+            .add(plagiarism_case::Column::SubmissionId1.is_in(assignment_submission_ids.clone()))
+            .add(plagiarism_case::Column::SubmissionId2.is_in(assignment_submission_ids.clone())),
+    );
 
-        let submission2 = SubmissionEntity::find_by_id(case.submission_id_2)
-            .one(app_state.db())
-            .await
-            .ok()
-            .flatten();
+    // 3) Optional status filter
+    if let Some(status_str) = query.status {
+        match Status::try_from(status_str.as_str()) {
+            Ok(status) => {
+                q = q.filter(plagiarism_case::Column::Status.eq(status));
+            }
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<LinksResponse>::error("Invalid status parameter")),
+                );
+            }
+        }
+    }
 
-        if let (Some(sub1), Some(sub2)) = (submission1, submission2) {
-            let user1 = UserEntity::find_by_id(sub1.user_id)
-                .one(app_state.db())
-                .await
-                .ok()
-                .flatten();
+    // 4) Fetch cases
+    let cases = match q.all(app_state.db()).await {
+        Ok(cs) => cs,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<LinksResponse>::error("Failed to fetch plagiarism cases")),
+            );
+        }
+    };
 
-            let user2 = UserEntity::find_by_id(sub2.user_id)
-                .one(app_state.db())
-                .await
-                .ok()
-                .flatten();
+    if cases.is_empty() {
+        return (
+            StatusCode::OK,
+            Json(ApiResponse::success(
+                LinksResponse { links: vec![] },
+                "Plagiarism graph retrieved successfully",
+            )),
+        );
+    }
 
-            if let (Some(u1), Some(u2)) = (user1, user2) {
+    // 5) Fetch the submissions & users referenced by these cases
+    let all_sub_ids: Vec<i64> = cases
+        .iter()
+        .flat_map(|c| [c.submission_id_1, c.submission_id_2])
+        .collect();
+
+    let submissions = match SubmissionEntity::find()
+        .filter(assignment_submission::Column::Id.is_in(all_sub_ids))
+        .all(app_state.db())
+        .await
+    {
+        Ok(ss) => ss,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<LinksResponse>::error("Failed to fetch submissions for cases")),
+            );
+        }
+    };
+
+    let user_ids: Vec<i64> = submissions.iter().map(|s| s.user_id).collect();
+    let users = match UserEntity::find()
+        .filter(user::Column::Id.is_in(user_ids))
+        .all(app_state.db())
+        .await
+    {
+        Ok(us) => us,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<LinksResponse>::error("Failed to fetch users")),
+            );
+        }
+    };
+
+    let sub_by_id: HashMap<i64, _> = submissions.into_iter().map(|s| (s.id, s)).collect();
+    let user_by_id: HashMap<i64, _> = users.into_iter().map(|u| (u.id, u)).collect();
+
+    // 6) Build username links
+    let mut links = Vec::with_capacity(cases.len());
+    for case in cases {
+        if let (Some(sub1), Some(sub2)) = (
+            sub_by_id.get(&case.submission_id_1),
+            sub_by_id.get(&case.submission_id_2),
+        ) {
+            if let (Some(u1), Some(u2)) = (user_by_id.get(&sub1.user_id), user_by_id.get(&sub2.user_id)) {
                 links.push(Link {
-                    source: u1.username,
-                    target: u2.username,
+                    source: u1.username.clone(),
+                    target: u2.username.clone(),
                 });
             }
         }
     }
 
-    // Step 4: Return response with links
     (
-        axum::http::StatusCode::OK,
-        Json(serde_json::json!({ "links": links })),
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            LinksResponse { links },
+            "Plagiarism graph retrieved successfully",
+        )),
     )
 }

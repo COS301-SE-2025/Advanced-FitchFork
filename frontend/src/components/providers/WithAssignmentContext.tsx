@@ -12,7 +12,7 @@ import { getMarkAllocator } from '@/services/modules/assignments/mark-allocator'
 
 import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
 import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
-import type { MarkAllocatorItem } from '@/types/modules/assignments/mark-allocator';
+import type { MarkAllocatorFile } from '@/types/modules/assignments/mark-allocator';
 
 export interface AssignmentDetails extends Assignment {
   files: AssignmentFile[];
@@ -26,7 +26,7 @@ export default function WithAssignmentContext() {
 
   const [assignment, setAssignment] = useState<AssignmentDetails | null>(null);
   const [memoOutput, setMemoOutput] = useState<MemoTaskOutput[]>([]);
-  const [markAllocator, setMarkAllocator] = useState<MarkAllocatorItem[]>([]);
+  const [markAllocator, setMarkAllocator] = useState<MarkAllocatorFile | null>(null);
   const [readiness, setReadiness] = useState<AssignmentReadiness | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -49,7 +49,7 @@ export default function WithAssignmentContext() {
 
     if (readinessRes.success) setReadiness(readinessRes.data);
     if (memoRes.success && memoRes.data) setMemoOutput(memoRes.data);
-    if (allocatorRes.success && allocatorRes.data) setMarkAllocator(allocatorRes.data.tasks);
+    if (allocatorRes.success && allocatorRes.data) setMarkAllocator(allocatorRes.data);
 
     setLoading(false);
   };

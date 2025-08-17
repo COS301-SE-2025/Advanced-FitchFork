@@ -63,6 +63,7 @@ import SubmissionsList from './pages/modules/assignments/submissions/Submissions
 import SettingsMobileMenu from './pages/settings/SettingsMobileMenu';
 import Announcements from './pages/modules/announcements/Announcements';
 import AnnouncementView from './pages/modules/announcements/AnnouncementView';
+import PlagiarismCases from './pages/modules/assignments/PlagiarismCases';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -149,6 +150,11 @@ export default function App() {
                     <Route path="memo-output" element={<MemoOutput />} />
                     <Route path="mark-allocator" element={<MarkAllocator />} />
                     <Route path="stats" element={<UnderConstruction />} />
+
+                    <Route path="plagiarism">
+                      <Route index element={<PlagiarismCases />} />
+                      <Route path=":plagiarism_id" element={<></>} />
+                    </Route>
                     <Route path="config" element={<AssignmentConfigLayout />}>
                       <Route
                         index

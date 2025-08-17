@@ -73,6 +73,11 @@ const AssignmentLayout = () => {
             label: 'Files',
             disabled: !readiness?.config_present,
           },
+          {
+            value: `${basePath}/plagiarism`,
+            label: 'Plagiarism',
+            disabled: !readiness?.config_present,
+          },
           { value: `${basePath}/config`, label: 'Config' },
           {
             value: `${basePath}/stats`,

@@ -2,6 +2,7 @@ use crate::models::assignment;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -230,27 +231,27 @@ impl Model {
         Ok(submissions.into_iter().map(|s| s.id as i64).collect())
     }
     
-    pub async fn get_latest_submissions_for_users(
+    pub async fn get_latest_submissions_for_assignment(
         db: &DatabaseConnection,
         assignment_id: i64,
-        user_ids: Vec<i64>,
     ) -> Result<Vec<Self>, DbErr> {
-        let mut latest_submissions = Vec::new();
+        let all = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .order_by_asc(Column::UserId)
+            .order_by_desc(Column::Attempt)
+            .all(db)
+            .await?;
 
-        for user_id in user_ids {
-            let latest_submission = Entity::find()
-                .filter(Column::AssignmentId.eq(assignment_id))
-                .filter(Column::UserId.eq(user_id))
-                .order_by_desc(Column::Attempt)
-                .one(db)
-                .await?;
+        let mut seen = HashSet::new();
+        let mut latest = Vec::new();
 
-            if let Some(submission) = latest_submission {
-                latest_submissions.push(submission);
+        for s in all {
+            // keep the first row we see per user (attempt DESC ensures it's the latest)
+            if seen.insert(s.user_id) {
+                latest.push(s);
             }
         }
-
-        Ok(latest_submissions)
+        Ok(latest)
     }
 }
 

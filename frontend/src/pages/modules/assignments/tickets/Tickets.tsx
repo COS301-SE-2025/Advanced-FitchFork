@@ -113,6 +113,8 @@ const Tickets = () => {
         ref={listRef}
         name="Tickets"
         defaultViewMode="table"
+        listMode={isStudent}
+        showControlBar={!isStudent}
         fetchItems={fetchTickets}
         getRowKey={(t) => t.id}
         renderGridItem={(ticket, actions) => (

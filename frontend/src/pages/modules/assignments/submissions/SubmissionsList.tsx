@@ -54,6 +54,7 @@ export default function SubmissionsList() {
   const [loading, setLoading] = useState(false);
 
   const isAssignmentOpen = assignment.status === 'open';
+  const isStudent = auth.isStudent(module.id);
 
   const entityListRef = useRef<EntityListHandle>(null);
 
@@ -309,6 +310,8 @@ export default function SubmissionsList() {
       <EntityList<StudentSubmission>
         ref={entityListRef}
         name="Submissions"
+        listMode={auth.isStudent(module.id)}
+        showControlBar={!isStudent}
         fetchItems={fetchItems}
         columns={columns}
         getRowKey={(item) => item.id}

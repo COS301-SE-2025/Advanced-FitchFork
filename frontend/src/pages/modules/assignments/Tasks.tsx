@@ -410,7 +410,7 @@ const Tasks = () => {
                         <Collapse.Panel header={sub.name} key={index}>
                           <div className="space-y-4 px-1 pt-1 pb-2">
                             <div>
-                              <label className="block font-medium mb-1">Value</label>
+                              <label className="block font-medium mb-1">Mark</label>
                               <div className="flex items-center gap-2">
                                 <Input
                                   type="number"
@@ -539,7 +539,7 @@ const Tasks = () => {
                         <Panel header={sub.name} key={index}>
                           <div className="space-y-4 px-3 pt-1 pb-2">
                             <div>
-                              <label className="block font-medium mb-1">Value</label>
+                              <label className="block font-medium mb-1">Mark</label>
                               <Space.Compact className="flex items-center w-full">
                                 <Input
                                   type="number"

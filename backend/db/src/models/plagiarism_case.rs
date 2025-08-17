@@ -40,6 +40,7 @@ pub struct Model {
 /// Defines the possible review statuses for a plagiarism case.
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, sea_orm::strum::Display, sea_orm::strum::EnumString)]
 #[sea_orm(rs_type = "String", db_type = "Text")]
+#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
 pub enum Status {
     /// The case has not yet been reviewed.
     #[sea_orm(string_value = "review")]

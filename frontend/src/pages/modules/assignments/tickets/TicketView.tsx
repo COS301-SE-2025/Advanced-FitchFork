@@ -215,7 +215,7 @@ const TicketView = () => {
         </div>
 
         {/* Right (desktop sidebar) */}
-        <div className="hidden md:block w-full md:w-[380px] shrink-0 p-4 bg-white dark:bg-gray-900 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-800 overflow-auto">
+        <div className="hidden md:block w-full md:w-[380px] shrink-0 p-4 bg-white dark:bg-gray-900 border-t md:border-t-0 md:border-l-0 border-gray-200 dark:border-gray-800 overflow-auto">
           {TicketInfoContent}
         </div>
       </div>
