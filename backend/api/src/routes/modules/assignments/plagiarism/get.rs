@@ -10,6 +10,73 @@ use std::str::FromStr;
 use std::collections::HashMap;
 use util::state::AppState;
 use crate::response::ApiResponse;
+use std::fs;
+
+#[derive(Serialize)]
+pub struct MossReportResponse {
+    pub report_url: String,
+    pub generated_at: String,
+}
+
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss
+pub async fn get_moss_report(
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    let report_path = assignment_submission::Model::storage_root()
+        .join(format!("module_{}", module_id))
+        .join(format!("assignment_{}", assignment_id))
+        .join("reports.txt");
+
+    if !report_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("MOSS report not found".to_string())),
+        )
+            .into_response();
+    }
+
+    let content = match fs::read_to_string(&report_path) {
+        Ok(content) => content,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!("Failed to read MOSS report: {}", e))),
+            )
+                .into_response();
+        }
+    };
+
+    let mut report_url = "".to_string();
+    let mut generated_at = "".to_string();
+
+    for line in content.lines() {
+        if let Some(url) = line.strip_prefix("Report URL: ") {
+            report_url = url.to_string();
+        } else if let Some(date) = line.strip_prefix("Date: ") {
+            generated_at = date.to_string();
+        }
+    }
+
+    if report_url.is_empty() {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error("Failed to parse MOSS report".to_string())),
+        )
+            .into_response();
+    }
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            MossReportResponse {
+                report_url,
+                generated_at,
+            },
+            "MOSS report retrieved successfully",
+        )),
+    )
+        .into_response()
+}
 
 #[derive(Debug, Deserialize)]
 pub struct ListPlagiarismCaseQueryParams {
