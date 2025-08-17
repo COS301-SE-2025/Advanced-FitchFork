@@ -67,7 +67,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .route("/bulk", delete(bulk_delete_assignments).layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
         .route("/bulk", put(bulk_update_assignments).layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
         .route("/{assignment_id}/stats", get(get_assignment_stats).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .route("/{assignment_id}/readiness", get(get_assignment_readiness).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
+        .route("/{assignment_id}/readiness", get(get_assignment_readiness).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
         .nest("/{assignment_id}/tasks", tasks_routes().route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
         .nest("/{assignment_id}/config", config_routes().layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
         .nest("/{assignment_id}/memo_output", memo_output_routes().layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))

@@ -1,10 +1,8 @@
 import { useParams } from 'react-router-dom';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
-import { Typography, Descriptions, Skeleton, Button } from 'antd';
+import { Typography, Descriptions, Skeleton, Button, Popconfirm } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
-
-import TicketChat from './TicketChat';
 import type { Ticket } from '@/types/modules/assignments/tickets';
 import type { User } from '@/types/users';
 import { useEffect, useState } from 'react';
@@ -14,6 +12,7 @@ import { closeTicket, openTicket } from '@/services/modules/assignments/tickets/
 import UserAvatar from '@/components/common/UserAvatar';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
+import { TicketChat } from '@/components/tickets';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -67,7 +66,7 @@ const TicketView = () => {
           >
             {trimmedTitle}
           </Typography.Text>
-          {ticket && <TicketStatusTag status={ticket.status} caps />}
+          {ticket && <TicketStatusTag status={ticket.status} />}
         </div>
 
         {/* Right: info button */}
@@ -145,17 +144,25 @@ const TicketView = () => {
           </div>
         )}
 
-        {ticket && (
-          <Button
-            block
-            type={ticket.status === 'open' ? 'default' : 'primary'}
-            danger={ticket.status === 'open'}
-            loading={updatingStatus}
-            onClick={handleToggleStatus}
-          >
-            {ticket.status === 'open' ? 'Close Ticket' : 'Reopen Ticket'}
-          </Button>
-        )}
+        {ticket &&
+          (ticket.status === 'open' ? (
+            <Popconfirm
+              title="Close this ticket?"
+              description="Are you sre your issue has been resolved?"
+              okText="Yes"
+              okType="danger"
+              cancelText="No"
+              onConfirm={handleToggleStatus}
+            >
+              <Button block danger loading={updatingStatus}>
+                Close Ticket
+              </Button>
+            </Popconfirm>
+          ) : (
+            <Button block type="primary" loading={updatingStatus} onClick={handleToggleStatus}>
+              Reopen Ticket
+            </Button>
+          ))}
       </div>
     </Skeleton>
   );
@@ -163,7 +170,7 @@ const TicketView = () => {
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Header (desktop only) */}
-      <div className="hidden md:block bg-white dark:bg-gray-950 px-4 py-5 border-b border-gray-200 dark:border-gray-800">
+      <div className="hidden md:block bg-white dark:bg-gray-900 px-4 py-5 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-start justify-between w-full flex-wrap gap-2">
           <div className="flex items-center gap-2 flex-wrap">
             <Title
@@ -172,7 +179,7 @@ const TicketView = () => {
             >
               {ticket?.title || `Ticket #${ticket_id}`}
             </Title>
-            {ticket && <TicketStatusTag status={ticket.status} caps />}
+            {ticket && <TicketStatusTag status={ticket.status} />}
           </div>
 
           {/* Mobile-only toggle button */}
@@ -197,11 +204,18 @@ const TicketView = () => {
       <div className="flex-1 min-h-0 flex flex-col-reverse md:flex-row overflow-hidden">
         {/* Left (chat area) */}
         <div className="flex-1 min-h-0 flex flex-col border-r border-gray-200 dark:border-gray-800">
-          <TicketChat />
+          {ticket ? (
+            <TicketChat ticket={ticket} />
+          ) : (
+            // Fallback while loading / not found yet
+            <div className="flex-1 p-4">
+              <Skeleton active paragraph={{ rows: 10 }} className="w-full " />
+            </div>
+          )}
         </div>
 
         {/* Right (desktop sidebar) */}
-        <div className="hidden md:block w-full md:w-[380px] shrink-0 p-4 bg-white dark:bg-gray-950 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-800 overflow-auto">
+        <div className="hidden md:block w-full md:w-[380px] shrink-0 p-4 bg-white dark:bg-gray-900 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-800 overflow-auto">
           {TicketInfoContent}
         </div>
       </div>

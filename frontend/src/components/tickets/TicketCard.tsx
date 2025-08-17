@@ -28,8 +28,8 @@ const TicketCard = ({ ticket, actions, onClick }: Props) => {
       <Meta
         avatar={<Avatar icon={<MessageOutlined />} style={{ backgroundColor: '#1890ff' }} />}
         title={
-          <div className="flex justify-between items-center">
-            <span className="text-black dark:text-white">{ticket.title}</span>
+          <div className="flex justify-between gap-2 items-center">
+            <span className="text-black dark:text-white truncate">{ticket.title}</span>
             <TicketStatusTag status={ticket.status} />
           </div>
         }

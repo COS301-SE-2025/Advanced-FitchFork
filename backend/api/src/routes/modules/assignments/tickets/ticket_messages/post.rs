@@ -12,11 +12,57 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use util::state::AppState;
 
 use crate::{
-    auth::AuthUser, response::ApiResponse, routes::modules::assignments::tickets::{common::is_valid, ticket_messages::common::{MessageResponse, UserResponse}},
+    auth::AuthUser,
+    response::ApiResponse,
+    routes::modules::assignments::tickets::{
+        common::is_valid,
+        ticket_messages::common::{MessageResponse, UserResponse},
+    }, ws::tickets::topics::ticket_chat_topic,
 };
 
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages
+///
+/// Create a **new message** in a ticket and broadcast a WebSocket event on:
+/// `ws/tickets/{ticket_id}`
+///
+/// ### Path Parameters
+/// - `module_id` (i64)
+/// - `assignment_id` (i64)
+/// - `ticket_id` (i64)
+///
+/// ### Request Body (JSON)
+/// - `content` (string, required)
+///
+/// ### Responses
+/// - `200 OK` — returns the created message; also emits a WS event:
+///   ```json
+///   {
+///     "event": "message_created",
+///     "payload": {
+///       "id": 123,
+///       "ticket_id": 99,
+///       "content": "Hey, I'm blocked on step 3.",
+///       "created_at": "2025-02-18T09:12:33Z",
+///       "updated_at": "2025-02-18T09:12:33Z",
+///       "user": { "id": 42, "username": "alice" }
+///     }
+///   }
+///   ```
+/// - `400 Bad Request` — `{ "success": false, "message": "Content is required" }`
+/// - `403 Forbidden` — `{ "success": false, "message": "Forbidden" }`
+/// - `404 Not Found` — `{ "success": false, "message": "User not found" }`
+/// - `500 Internal Server Error`
+///
+/// ### Example Request
+/// ```http
+/// POST /api/modules/42/assignments/7/tickets/99/messages
+/// Authorization: Bearer <token>
+/// Content-Type: application/json
+///
+/// { "content": "Can someone review my latest attempt?" }
+/// ```
 pub async fn create_message(
-    Path((module_id, _assignment_id, ticket_id)): Path<(i64, i64, i64)>,
+    Path((module_id, _, ticket_id)): Path<(i64, i64, i64)>,
     State(app_state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(req): Json<serde_json::Value>,
@@ -24,7 +70,7 @@ pub async fn create_message(
     let db = app_state.db();
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, module_id, db).await {
+    if !is_valid(user_id, ticket_id, module_id, claims.admin, db).await {
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error("Forbidden")),
@@ -82,6 +128,16 @@ pub async fn create_message(
             username: user.username,
         }),
     };
+
+    // ---- WebSocket broadcast: notify subscribers on this ticket's topic ----
+    // Topic: ws/tickets/{ticket_id}
+    let topic = ticket_chat_topic(ticket_id);
+    let ws = app_state.ws_clone();
+    let event_json = serde_json::json!({
+        "event": "message_created",
+        "payload": &response
+    });
+    ws.broadcast(&topic, event_json.to_string()).await;
 
     (
         StatusCode::OK,

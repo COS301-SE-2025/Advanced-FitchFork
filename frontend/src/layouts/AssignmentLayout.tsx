@@ -44,7 +44,7 @@ const AssignmentLayout = () => {
   const basePath = `/modules/${module.id}/assignments/${assignment.id}`;
   const isLecturerOrAdmin = auth.isLecturer(module.id) || auth.isAdmin;
   const isStudentOrTutor = auth.isStudent(module.id) || auth.isTutor(module.id);
-  const showTabs = !auth.isStudent(module.id) && readiness?.is_ready;
+  const showTabs = readiness?.is_ready;
 
   const isOnSubmissions =
     location.pathname.startsWith(`${basePath}/submissions`) || location.pathname === `${basePath}`;

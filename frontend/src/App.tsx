@@ -48,7 +48,6 @@ import AssignmentsList from './pages/modules/assignments/AssignmentsList';
 import ProtectedAuthRoute from './components/routes/ProtectedAuthRoute';
 import ProtectedAdminRoute from './components/routes/ProtectedAdminRoute';
 import ProtectedModuleRoute from './components/routes/ProtectedModuleRoute';
-import Chat from './pages/Chat';
 import Tickets from './pages/modules/assignments/tickets/Tickets';
 import TicketView from './pages/modules/assignments/tickets/TicketView';
 import WithModuleContext from './components/providers/WithModuleContext';
@@ -96,7 +95,6 @@ export default function App() {
         <Route element={<ProtectedAuthRoute />}>
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/chat" element={<Chat />} />
 
             <Route path="/settings" element={<SettingsLayout />}>
               <Route

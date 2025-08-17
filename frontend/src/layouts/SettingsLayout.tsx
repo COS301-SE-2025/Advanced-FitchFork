@@ -31,7 +31,7 @@ const SettingsLayout = () => {
     <Layout className="flex h-full !bg-transparent">
       <Sider
         width={240}
-        className="!bg-white dark:!bg-gray-950 border-r border-gray-200 dark:border-gray-800 sticky top-0 h-screen hidden sm:block"
+        className="!bg-white dark:!bg-gray-900 border-r border-gray-200 dark:border-gray-800 sticky top-0 h-screen hidden sm:block"
       >
         <div className="py-4 px-6 font-semibold text-gray-700 dark:text-gray-200 text-lg">
           Settings

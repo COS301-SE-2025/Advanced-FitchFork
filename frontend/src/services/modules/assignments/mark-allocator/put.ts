@@ -6,10 +6,10 @@ export const updateMarkAllocator = async (
   moduleId: number,
   assignmentId: number,
   payload: MarkAllocatorFile
-): Promise<ApiResponse<null>> => {
+): Promise<ApiResponse<string>> => {
   return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/mark_allocator`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" }, // ensure JSON parse
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 };

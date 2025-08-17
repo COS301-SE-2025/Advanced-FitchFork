@@ -3,18 +3,17 @@ export interface MarkAllocatorSubsection {
   value: number;
 }
 
-export interface MarkAllocatorTask {
-  name: string;
-  value: number;
-  subsections: MarkAllocatorSubsection[];
+export interface MarkAllocatorTaskEntry {
+  [taskKey: string]: {
+    task_number: number;
+    name: string;
+    value: number;
+    subsections: MarkAllocatorSubsection[];
+  };
 }
 
-// one object per array element, key is "task1", "task2", ...
-export type MarkAllocatorItem = {
-  [taskKey: string]: MarkAllocatorTask;
-};
-
 export interface MarkAllocatorFile {
-  generated_at?: string;
-  tasks: MarkAllocatorItem[];
+  generated_at?: string;          // optional ISO-8601 timestamp
+  tasks: MarkAllocatorTaskEntry[]; // list of { "taskX": { … } } objects
+  total_value: number;            // sum of all task values
 }

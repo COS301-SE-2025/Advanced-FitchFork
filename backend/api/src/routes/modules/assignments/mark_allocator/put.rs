@@ -1,14 +1,7 @@
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crate::response::ApiResponse;
 use serde_json::Value;
 use util::mark_allocator::mark_allocator::{save_allocator, SaveError};
-
-const EPS: f64 = 1e-6;
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
@@ -16,116 +9,69 @@ const EPS: f64 = 1e-6;
 /// Lecturer roles assigned to the module.
 ///
 /// This endpoint saves a mark allocator configuration to the assignment directory. The configuration
-/// defines how many **points** are allocated to each task and its subsections. The saved configuration
-/// is used by the grading system to calculate final marks.
+/// defines how many **points** (values) are allocated to each task and its subsections. The saved
+/// configuration is used by the grading system to calculate final marks.
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): The ID of the module containing the assignment
 /// - `assignment_id` (i64): The ID of the assignment to save the mark allocator for
 ///
-/// ### Request Body (points-based schema)
-/// A JSON object with a `tasks` array. Each element of `tasks` is an object with exactly one key of
-/// the form `"taskN"` (N is a positive integer), whose value specifies the task:
+/// ### Request Body (points-based schema using `value`)
+/// A JSON object with:
+/// - `tasks`: non-empty array of **single-key** task objects: `{ "taskN": { ... } }`
+/// - `total_value`: integer (≥ 0) equal to the sum of all task values
 ///
 /// ```json
 /// {
-///   "generated_at": "2025-08-11T00:56:24.487Z",
+///   "generated_at": "2025-08-17T22:00:00Z",
 ///   "tasks": [
 ///     {
 ///       "task1": {
 ///         "name": "Task 1",
+///         "task_number": 1,
+///         "value": 9,
 ///         "subsections": [
 ///           { "name": "Correctness", "value": 5 },
-///           { "name": "Quality",     "value": 3 },
-///           { "name": "Docs",        "value": 2 }
-///         ],
-///         "value": 10
+///           { "name": "Style",       "value": 4 }
+///         ]
 ///       }
 ///     },
 ///     {
 ///       "task2": {
 ///         "name": "Task 2",
+///         "task_number": 2,
+///         "value": 6,
 ///         "subsections": [
-///           { "name": "Part A", "value": 6 },
-///           { "name": "Part B", "value": 4 }
-///         ],
-///         "value": 10
+///           { "name": "Docs", "value": 2 },
+///           { "name": "Tests","value": 4 }
+///         ]
 ///       }
 ///     }
-///   ]
+///   ],
+///   "total_value": 15
 /// }
 /// ```
 ///
 /// #### Field semantics
-/// - `generated_at` (optional, string): ISO-8601 timestamp indicating when the allocator was generated.
-/// - `tasks` (required, non-empty array): Each element must be an object with exactly one `"taskN"` key.
-///   - `"taskN"` (required): N is a positive integer (1, 2, 3, ...).
-///     - `name` (required, non-empty string): Task display name.
-///     - `value` (required, number ≥ 0): Total points for the task.
-///     - `subsections` (required, non-empty array):
-///       - Each subsection is an object: `{ "name": string (non-empty), "value": number ≥ 0 }`.
-///       - The sum of all subsection `value`s must equal the task `value` (within 1e-6).
-///
-/// ### Example Request
-/// ```bash
-/// curl -X PUT http://localhost:3000/api/modules/1/assignments/2/mark_allocator \
-///   -H "Authorization: Bearer <token>" \
-///   -H "Content-Type": "application/json" \
-///   -d '{
-///     "generated_at": "2025-08-11T01:10:00.000Z",
-///     "tasks": [
-///       {
-///         "task2": {
-///           "name": "Task 2",
-///           "subsections": [
-///             { "name": "Correctness", "value": 5 },
-///             { "name": "Quality",     "value": 3 },
-///             { "name": "Docs",        "value": 2 }
-///           ],
-///           "value": 10
-///         }
-///       }
-///     ]
-///   }'
-/// ```
+/// - `tasks` (required, non-empty array): Each element must be an object with **exactly one** key `"taskN"`.
+///   The value of that key is a task object with:
+///   - `name` (required, non-empty string)
+///   - `task_number` (required, positive integer). Must match the number N in `"taskN"`.
+///   - `value` (required, integer ≥ 0): Total points for the task
+///   - `subsections` (required, array; may be empty):
+///     - Each item: `{ "name": string (non-empty), "value": integer ≥ 0 }`
+///     - The sum of all subsection values must equal the task `value`
+/// - `total_value` (required, integer ≥ 0): Must equal the sum of all task values
 ///
 /// ### Success Response (200 OK)
 /// ```json
-/// {
-///   "success": true,
-///   "message": "Mark allocator successfully saved.",
-///   "data": "{}"
-/// }
+/// { "success": true, "message": "Mark allocator successfully saved.", "data": "{}" }
 /// ```
 ///
 /// ### Error Responses
-/// **400 Bad Request** – Invalid structure or values
-/// ```json
-/// { "success": false, "message": "Invalid mark allocator structure or values" }
-/// ```
-///
-/// **404 Not Found** – Module or assignment directory does not exist
-/// ```json
-/// { "success": false, "message": "Module or assignment directory does not exist" }
-/// ```
-///
-/// **500 Internal Server Error** – Save failure
-/// ```json
-/// { "success": false, "message": "Could not save file" }
-/// ```
-///
-/// ### Validation Rules
-/// - Request body must be a JSON object with a non-empty `tasks` array.
-/// - Each element of `tasks` must be an object with exactly one key named `"taskN"` where N is a positive integer.
-/// - Each task must include `name` (non-empty string), `value` (number ≥ 0), and a non-empty `subsections` array.
-/// - Each subsection must include `name` (non-empty string) and `value` (number ≥ 0).
-/// - For each task, `sum(subsections[].value) == task.value` within a tolerance of `1e-6`.
-/// - User must have Lecturer permissions for the module.
-///
-/// ### Notes
-/// - The mark allocator configuration is saved as a JSON file in the assignment directory.
-/// - This endpoint overwrites any existing mark allocator for the assignment.
-/// - This API uses a **points-based** schema (no weights/percentages).
+/// - **400 Bad Request** – Invalid structure or values  
+/// - **404 Not Found** – Module or assignment directory does not exist  
+/// - **500 Internal Server Error** – Save failure
 pub async fn save(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<Value>,
@@ -138,7 +84,7 @@ pub async fn save(
             .into_response()
     };
 
-    // Root must be an object with "tasks" array
+    // Root must be an object with "tasks" array and "total_value" integer
     let root = match req.as_object() {
         Some(o) => o,
         None => return bad("Body must be a JSON object"),
@@ -149,96 +95,164 @@ pub async fn save(
         _ => return bad("\"tasks\" must be a non-empty array"),
     };
 
-    // Validate each { "taskN": { name, value, subsections[] } }
-    for (idx, item) in tasks.iter().enumerate() {
-        let obj = match item.as_object() {
+    let total_value = match root.get("total_value").and_then(|v| v.as_i64()) {
+        Some(v) if v >= 0 => v,
+        _ => return bad("\"total_value\" must be an integer >= 0"),
+    };
+
+    let mut sum_task_values: i64 = 0;
+
+    for (idx, entry) in tasks.iter().enumerate() {
+        // Each entry must be an object with exactly one key: "taskN"
+        let entry_obj = match entry.as_object() {
             Some(m) if m.len() == 1 => m,
-            _ => return bad(&format!("tasks[{idx}] must be an object with exactly one key")),
+            Some(_) => {
+                return bad(&format!(
+                    "tasks[{}] must be an object with exactly one key (e.g., \"task1\")",
+                    idx
+                ))
+            }
+            None => return bad(&format!("tasks[{}] must be an object", idx)),
         };
 
-        // Extract ("taskN", body)
-        let (task_key, body) = obj.iter().next().unwrap();
+        let (task_key, task_val) = entry_obj.iter().next().unwrap();
 
-        // task key must be taskN where N is a positive integer
+        // Validate key format: taskN, extract N
         if !task_key.starts_with("task") {
-            return bad(&format!("tasks[{idx}] key must start with \"task\""));
+            return bad(&format!(
+                "tasks[{}] invalid key '{}': expected key like \"task1\"",
+                idx, task_key
+            ));
         }
-        let num_part = &task_key[4..];
-        if num_part.is_empty() || num_part.parse::<u32>().is_err() {
-            return bad(&format!("tasks[{idx}] key must be of the form \"taskN\" with numeric N"));
-        }
-
-        // body must be object with name, value, subsections
-        let body_obj = match body.as_object() {
-            Some(b) => b,
-            None => return bad(&format!("tasks[{idx}].{task_key} must be an object")),
+        let key_num_part = &task_key[4..];
+        let key_task_num: i64 = match key_num_part.parse::<i64>() {
+            Ok(n) if n > 0 => n,
+            _ => {
+                return bad(&format!(
+                    "tasks[{}] invalid key '{}': expected positive integer after 'task'",
+                    idx, task_key
+                ))
+            }
         };
 
-        let name = match body_obj.get("name").and_then(|v| v.as_str()) {
+        // Inner task object
+        let task_obj = match task_val.as_object() {
+            Some(o) => o,
+            None => {
+                return bad(&format!(
+                    "tasks[{}].{} value must be an object",
+                    idx, task_key
+                ))
+            }
+        };
+
+        // name
+        let name = match task_obj.get("name").and_then(|v| v.as_str()) {
             Some(s) if !s.trim().is_empty() => s,
-            _ => return bad(&format!("tasks[{idx}].{task_key}.name must be a non-empty string")),
+            _ => {
+                return bad(&format!(
+                    "tasks[{}].{}.name must be a non-empty string",
+                    idx, task_key
+                ))
+            }
         };
 
-        let value = match body_obj.get("value").and_then(|v| v.as_f64()) {
-            Some(v) if v >= 0.0 => v,
-            _ => return bad(&format!("tasks[{idx}].{task_key}.value must be a number >= 0")),
+        // task_number (must match key)
+        let task_number = match task_obj.get("task_number").and_then(|v| v.as_i64()) {
+            Some(n) if n > 0 => n,
+            _ => {
+                return bad(&format!(
+                    "tasks[{}].{}.task_number must be a positive integer",
+                    idx, task_key
+                ))
+            }
+        };
+        if task_number != key_task_num {
+            return bad(&format!(
+                "tasks[{}]: key '{}' does not match inner task_number {}",
+                idx, task_key, task_number
+            ));
+        }
+
+        // task value
+        let task_value = match task_obj.get("value").and_then(|v| v.as_i64()) {
+            Some(v) if v >= 0 => v,
+            _ => {
+                return bad(&format!(
+                    "tasks[{}].{}.value must be an integer >= 0",
+                    idx, task_key
+                ))
+            }
         };
 
-        let subsections = match body_obj.get("subsections").and_then(|v| v.as_array()) {
-            Some(a) if !a.is_empty() => a,
-            _ => return bad(&format!("tasks[{idx}].{task_key}.subsections must be a non-empty array")),
+        // subsections (required array; may be empty)
+        let subsections = match task_obj.get("subsections").and_then(|v| v.as_array()) {
+            Some(a) => a,
+            None => {
+                return bad(&format!(
+                    "tasks[{}].{}.subsections must be an array (can be empty)",
+                    idx, task_key
+                ))
+            }
         };
 
-        // Validate each subsection and sum values
-        let mut sum_vals = 0.0;
+        // Validate subsections and sum values
+        let mut sum_sub_values: i64 = 0;
         for (sidx, s) in subsections.iter().enumerate() {
             let s_obj = match s.as_object() {
                 Some(o) => o,
                 None => {
                     return bad(&format!(
-                        "tasks[{idx}].{task_key}.subsections[{sidx}] must be an object"
+                        "tasks[{}].{}.subsections[{}] must be an object",
+                        idx, task_key, sidx
                     ))
                 }
             };
 
             match s_obj.get("name").and_then(|v| v.as_str()) {
-                Some(sn) if !sn.trim().is_empty() => (),
+                Some(n) if !n.trim().is_empty() => {}
                 _ => {
                     return bad(&format!(
-                        "tasks[{idx}].{task_key}.subsections[{sidx}].name must be a non-empty string"
+                        "tasks[{}].{}.subsections[{}].name must be a non-empty string",
+                        idx, task_key, sidx
                     ))
                 }
             }
 
-            let sval = match s_obj.get("value").and_then(|v| v.as_f64()) {
-                Some(v) if v >= 0.0 => v,
+            let sub_value = match s_obj.get("value").and_then(|v| v.as_i64()) {
+                Some(v) if v >= 0 => v,
                 _ => {
                     return bad(&format!(
-                        "tasks[{idx}].{task_key}.subsections[{sidx}].value must be a number >= 0"
+                        "tasks[{}].{}.subsections[{}].value must be an integer >= 0",
+                        idx, task_key, sidx
                     ))
                 }
             };
-            sum_vals += sval;
+
+            sum_sub_values += sub_value;
         }
 
-        if (sum_vals - value).abs() > EPS {
+        if sum_sub_values != task_value {
             return bad(&format!(
-                "tasks[{idx}].{task_key}.subsections values must sum to {} (got {})",
-                value, sum_vals
+                "tasks[{}] ('{}' / {}): sum of subsection values ({}) must equal task value ({})",
+                idx, name, task_key, sum_sub_values, task_value
             ));
         }
 
-        // Optional: additional invariants can go here
-        let _ = name; // silence unused variable if not used further
+        sum_task_values += task_value;
+    }
+
+    if sum_task_values != total_value {
+        return bad(&format!(
+            "sum of task values must equal total_value ({}), got {}",
+            total_value, sum_task_values
+        ));
     }
 
     match save_allocator(module_id, assignment_id, req).await {
         Ok(_) => (
             StatusCode::OK,
-            Json(ApiResponse::success(
-                "{}",
-                "Mark allocator successfully saved.",
-            )),
+            Json(ApiResponse::success("{}", "Mark allocator successfully saved.")),
         )
             .into_response(),
         Err(SaveError::DirectoryNotFound) => (

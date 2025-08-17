@@ -5,6 +5,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 import type { Task } from '@/types/modules/assignments/tasks';
 import type { GetTaskResponse } from '@/types/modules/assignments/tasks/responses';
+import type {
+  MarkAllocatorFile,
+  MarkAllocatorTaskEntry,
+  MarkAllocatorSubsection,
+} from '@/types/modules/assignments/mark-allocator';
 
 import {
   listTasks,
@@ -24,6 +29,16 @@ import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Panel } = Collapse;
 
+// Normalize subsections -> { name, value (int), memo_output }
+function normalizeSubsections(subs: any[]) {
+  if (!subs) return [];
+  return subs.map((s) => ({
+    name: s?.name ?? s?.label ?? 'Unnamed',
+    value: Number.isFinite(Number(s?.value)) ? parseInt(String(s.value), 10) : 0,
+    memo_output: s?.memo_output ?? s?.output ?? '',
+  }));
+}
+
 const Tasks = () => {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
@@ -38,7 +53,7 @@ const Tasks = () => {
     setValue(
       <Typography.Text
         className="text-base font-medium text-gray-900 dark:text-gray-100 truncate"
-        title={'Tasks'}
+        title="Tasks"
       >
         Tasks
       </Typography.Text>,
@@ -52,7 +67,7 @@ const Tasks = () => {
   const [editedName, setEditedName] = useState('');
   const [editedCommand, setEditedCommand] = useState('');
 
-  // New cache: taskId -> full task (GetTaskResponse['data'])
+  // Cache: taskId -> full task (GetTaskResponse['data'])
   const [taskDetails, setTaskDetails] = useState<Record<number, GetTaskResponse['data']>>({});
 
   const selectedIdMatch = location.pathname.match(/\/tasks\/(\d+)$/);
@@ -68,18 +83,23 @@ const Tasks = () => {
         const sorted = res.data.sort((a, b) => a.task_number - b.task_number);
         setTasks(sorted);
 
-        // Preload details for ALL tasks so we can save allocator for all at once.
+        // Preload all details
         const details = await Promise.all(
           sorted.map((t) => getTask(module.id, assignment.id, t.id)),
         );
 
         const map: Record<number, GetTaskResponse['data']> = {};
         details.forEach((r) => {
-          if (r.success && r.data) map[r.data.id] = r.data;
+          if (r.success && r.data) {
+            map[r.data.id] = {
+              ...r.data,
+              subsections: normalizeSubsections(r.data.subsections),
+            };
+          }
         });
         setTaskDetails(map);
 
-        // Navigate default
+        // Default navigate to first task
         const endsWithTasks = location.pathname.endsWith('/tasks');
         if (endsWithTasks && sorted.length > 0) {
           navigate(`/modules/${module.id}/assignments/${assignment.id}/tasks/${sorted[0].id}`, {
@@ -102,15 +122,18 @@ const Tasks = () => {
 
     getTask(module.id, assignment.id, selectedId)
       .then((res) => {
-        if (res.success) {
-          setSelectedTask(res.data);
-          setEditedCommand(res.data.command);
-          setEditedName(res.data.name ?? '');
+        if (res.success && res.data) {
+          const normalized = {
+            ...res.data,
+            subsections: normalizeSubsections(res.data.subsections),
+          };
+          setSelectedTask(normalized);
+          setEditedCommand(normalized.command);
+          setEditedName(normalized.name ?? '');
 
-          // Set breadcrumb label
           setBreadcrumbLabel(
-            `modules/${module.id}/assignments/${assignment.id}/tasks/${res.data.id}`,
-            res.data.name ?? `Task #${res.data.id}`,
+            `modules/${module.id}/assignments/${assignment.id}/tasks/${normalized.id}`,
+            normalized.name ?? `Task #${normalized.id}`,
           );
         } else {
           message.error(res.message);
@@ -203,14 +226,11 @@ const Tasks = () => {
     }
   };
 
-  type AllocSub = { name: string; value: number };
-  type AllocTaskBody = { name: string; subsections: AllocSub[]; value: number };
-  type AllocItem = { [taskKey: string]: AllocTaskBody };
-
+  /** SAVE ALLOCATOR ACROSS ALL TASKS — keyed as { "taskX": { task_number, name, value, subsections[] } } */
   const saveAllocatorAllTasks = async () => {
     if (!module.id || !assignment.id) return;
 
-    // Ensure we have details for all tasks. If some are missing, fetch them now.
+    // Ensure details loaded
     const missing = tasks.filter((t) => !taskDetails[t.id]);
     if (missing.length > 0) {
       try {
@@ -220,52 +240,54 @@ const Tasks = () => {
         setTaskDetails((prev) => {
           const copy = { ...prev };
           fetched.forEach((r) => {
-            if (r.success && r.data) copy[r.data.id] = r.data;
+            if (r.success && r.data) {
+              copy[r.data.id] = {
+                ...r.data,
+                subsections: normalizeSubsections(r.data.subsections),
+              };
+            }
           });
           return copy;
         });
       } catch {
-        message.error('Failed to load all task details for saving.');
-        return;
+        return message.error('Failed to load all task details for saving.');
       }
     }
 
-    // Build tasks[] = [{ "taskN": { name, value, subsections[] } }, ...] in ascending task_number
+    // Build keyed tasks payload
     const byNumber = [...tasks].sort((a, b) => a.task_number - b.task_number);
 
-    const items: AllocItem[] = byNumber.map((t) => {
+    const tasksPayload: MarkAllocatorTaskEntry[] = byNumber.map((t) => {
       const full = taskDetails[t.id];
-      const name = (full?.name ?? t.name) || `Task ${t.task_number}`;
-
-      const subsections: AllocSub[] =
+      const subsections: MarkAllocatorSubsection[] =
         (full?.subsections ?? []).map((s) => ({
           name: s.name,
-          value: Number(s.mark_value ?? 0),
+          value: Number.isFinite(Number(s.value)) ? parseInt(String(s.value), 10) : 0,
         })) ?? [];
 
-      const value = subsections.reduce((sum, s) => sum + (isFinite(s.value) ? s.value : 0), 0);
+      const value = subsections.reduce((sum, c) => sum + c.value, 0);
+      const name = (full?.name ?? t.name) || `Task ${t.task_number}`;
+      const key = `task${t.task_number}`;
 
       return {
-        [`task${t.task_number}`]: {
+        [key]: {
+          task_number: t.task_number,
           name,
-          subsections,
           value,
+          subsections,
         },
       };
     });
 
-    // Optional: validate before sending
-    for (const [, obj] of items.entries()) {
-      const [key, body] = Object.entries(obj)[0];
-      const sum = body.subsections.reduce((a, b) => a + b.value, 0);
-      if (Math.abs(sum - body.value) > 1e-6) {
-        return message.error(`Task payload invalid at ${key}: subsections do not sum to value`);
-      }
-    }
+    const totalValue = tasksPayload.reduce((sum, entry) => {
+      const body = Object.values(entry)[0];
+      return sum + (body?.value ?? 0);
+    }, 0);
 
-    const payload = {
+    const payload: MarkAllocatorFile = {
       generated_at: new Date().toISOString(),
-      tasks: items,
+      tasks: tasksPayload,
+      total_value: totalValue,
     };
 
     try {
@@ -285,7 +307,7 @@ const Tasks = () => {
     key: task.id.toString(),
     label: (
       <div className="flex justify-between items-center">
-        <span>{task.name}</span>
+        <span>{task.name || `Task ${task.task_number}`}</span>
         <Dropdown
           trigger={['click']}
           menu={{
@@ -331,7 +353,7 @@ const Tasks = () => {
         }}
       >
         {tasks.map((task) => (
-          <Collapse.Panel key={task.id} header={task.name}>
+          <Collapse.Panel key={task.id} header={task.name || `Task ${task.task_number}`}>
             <div className="space-y-6">
               {/* Task Details */}
               <div className="space-y-3">
@@ -388,15 +410,30 @@ const Tasks = () => {
                         <Collapse.Panel header={sub.name} key={index}>
                           <div className="space-y-4 px-1 pt-1 pb-2">
                             <div>
-                              <label className="block font-medium mb-1">Mark</label>
+                              <label className="block font-medium mb-1">Value</label>
                               <div className="flex items-center gap-2">
                                 <Input
                                   type="number"
-                                  value={sub.mark_value ?? 0}
-                                  className="w-20"
-                                  readOnly
+                                  min={0}
+                                  step={1}
+                                  value={sub.value ?? 0}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10) || 0;
+                                    setSelectedTask((prev) => {
+                                      if (!prev) return prev;
+                                      const updatedSubs = prev.subsections?.map((s) =>
+                                        s.name === sub.name ? { ...s, value: val } : s,
+                                      );
+                                      const updated = { ...prev, subsections: updatedSubs };
+                                      setTaskDetails((m) =>
+                                        prev ? { ...m, [prev.id]: updated } : m,
+                                      );
+                                      return updated;
+                                    });
+                                  }}
+                                  className="w-24"
                                 />
-                                <Button size="small" type="primary">
+                                <Button size="small" type="primary" onClick={saveAllocatorAllTasks}>
                                   Save Mark
                                 </Button>
                               </div>
@@ -467,7 +504,7 @@ const Tasks = () => {
             ) : selectedTask ? (
               <div className="!space-y-6">
                 <SettingsGroup
-                  title={`Task`}
+                  title="Task"
                   description="Basic info and execution command for this task."
                 >
                   <div className="space-y-6">
@@ -502,23 +539,21 @@ const Tasks = () => {
                         <Panel header={sub.name} key={index}>
                           <div className="space-y-4 px-3 pt-1 pb-2">
                             <div>
-                              <label className="block font-medium mb-1">Mark</label>
+                              <label className="block font-medium mb-1">Value</label>
                               <Space.Compact className="flex items-center w-full">
                                 <Input
                                   type="number"
-                                  step="0.1"
                                   min={0}
-                                  max={1}
-                                  value={sub.mark_value ?? 0}
+                                  step={1}
+                                  value={sub.value ?? 0}
                                   onChange={(e) => {
-                                    const val = Number(e.target.value);
+                                    const val = parseInt(e.target.value, 10) || 0;
                                     setSelectedTask((prev) => {
                                       if (!prev) return prev;
                                       const updatedSubs = prev.subsections?.map((s) =>
-                                        s.name === sub.name ? { ...s, mark_value: val } : s,
+                                        s.name === sub.name ? { ...s, value: val } : s,
                                       );
                                       const updated = { ...prev, subsections: updatedSubs };
-                                      // sync cache
                                       setTaskDetails((m) =>
                                         prev ? { ...m, [prev.id]: updated } : m,
                                       );
@@ -532,16 +567,14 @@ const Tasks = () => {
                               </Space.Compact>
                             </div>
 
-                            <div>
-                              <div className="mt-2">
-                                <CodeEditor
-                                  title="Memo Output"
-                                  value={sub.memo_output ?? ''}
-                                  language="plaintext"
-                                  height={200}
-                                  readOnly
-                                />
-                              </div>
+                            <div className="mt-2">
+                              <CodeEditor
+                                title="Memo Output"
+                                value={sub.memo_output ?? ''}
+                                language="plaintext"
+                                height={200}
+                                readOnly
+                              />
                             </div>
                           </div>
                         </Panel>

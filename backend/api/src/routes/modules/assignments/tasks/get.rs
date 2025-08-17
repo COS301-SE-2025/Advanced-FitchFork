@@ -23,8 +23,8 @@ use util::mark_allocator::mark_allocator::load_allocator;
 pub struct SubsectionDetail {
     /// The name of the subsection.
     pub name: String,
-    /// The mark value assigned to this subsection.
-    pub mark_value: i64,
+    /// The value value assigned to this subsection.
+    pub value: i64,
     /// The memo output content for this subsection, if available.
     pub memo_output: Option<String>,
 }
@@ -73,12 +73,12 @@ pub struct TaskDetailResponse {
 ///     "subsections": [
 ///       {
 ///         "name": "Compilation",
-///         "mark_value": 10,
+///         "value": 10,
 ///         "memo_output": "Code compiles successfully without errors."
 ///       },
 ///       {
 ///         "name": "Output",
-///         "mark_value": 15,
+///         "value": 15,
 ///         "memo_output": "Program produces correct output for all test cases."
 ///       }
 ///     ]
@@ -108,7 +108,11 @@ pub async fn get_task_details(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    let task = Entity::find_by_id(task_id).one(db).await.unwrap().unwrap();
+    let task = Entity::find_by_id(task_id)
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap();
 
     let base_path =
         env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
@@ -137,6 +141,7 @@ pub async fn get_task_details(
         Err(_) => "&-=-&".to_string(), // fallback if config file missing or unreadable
     };
 
+    // --- keep memo parsing logic unchanged ---
     let outputs: Vec<Option<String>> = if let Some(ref memo) = memo_content {
         let parts: Vec<&str> = memo.split(&separator).collect();
         parts
@@ -155,45 +160,96 @@ pub async fn get_task_details(
     };
 
     let parsed_outputs: Vec<Option<String>> = outputs.into_iter().skip(1).collect();
-    let allocator_json: Option<Value> = load_allocator(module_id, assignment_id).await.ok();
-    let task_key = format!("task{}", task.task_number);
 
-    let (_task_name, _task_value, subsections) = if let Some(tasks) = allocator_json
+    // --- UPDATED: read allocator in new keyed shape (with fallback to legacy flat shape) ---
+    // New shape example:
+    // {
+    //   "tasks": [
+    //     { "task1": { "name": "...", "task_number": 1, "value": 9, "subsections": [ ... ] } },
+    //     { "task2": { ... } }
+    //   ],
+    //   "total_value": 27
+    // }
+    //
+    // Legacy fallback (still supported):
+    // {
+    //   "tasks": [
+    //     { "task_number": 1, "value": 9, "subsections": [ ... ] },
+    //     ...
+    //   ],
+    //   "total_value": 27
+    // }
+    let allocator_json: Option<Value> = load_allocator(module_id, assignment_id).await.ok();
+
+    let ( _task_value, subsections_arr ): (i64, Vec<Value>) = if let Some(tasks_arr) = allocator_json
         .as_ref()
         .and_then(|v| v.get("tasks"))
         .and_then(|t| t.as_array())
     {
-        tasks
-            .iter()
-            .find_map(|obj| {
-                obj.as_object().and_then(|map| {
-                    let task_obj = map.get(&task_key)?.as_object()?;
-                    let name = task_obj
-                        .get("name")
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let value = task_obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
-                    let subsections = task_obj.get("subsections")?.as_array()?.clone();
-                    Some((name, value, subsections))
+        // Try new keyed shape first
+        let desired_key = format!("task{}", task.task_number);
+        let mut found: Option<(i64, Vec<Value>)> = None;
+
+        for entry in tasks_arr {
+            if let Some(entry_obj) = entry.as_object() {
+                if let Some(inner) = entry_obj.get(&desired_key) {
+                    if let Some(inner_obj) = inner.as_object() {
+                        let task_value = inner_obj
+                            .get("value")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+                        let subsections = inner_obj
+                            .get("subsections")
+                            .and_then(|v| v.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+                        found = Some((task_value, subsections));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If not found in keyed shape, fall back to legacy flat shape
+        if let Some(hit) = found {
+            hit
+        } else {
+            tasks_arr
+                .iter()
+                .find_map(|entry| {
+                    let obj = entry.as_object()?;
+                    let tn = obj.get("task_number")?.as_i64()?;
+                    if tn == task.task_number as i64 {
+                        let val = obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let subs = obj
+                            .get("subsections")
+                            .and_then(|v| v.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+                        Some((val, subs))
+                    } else {
+                        None
+                    }
                 })
-            })
-            .unwrap_or_else(|| ("".to_string(), 0, vec![]))
+                .unwrap_or((0, vec![]))
+        }
     } else {
-        ("".to_string(), 0, vec![])
+        (0, vec![])
     };
 
+    // Align memo outputs vector length with number of subsections
     let mut subsection_outputs = parsed_outputs;
-    subsection_outputs.resize(subsections.len(), None);
+    subsection_outputs.resize(subsections_arr.len(), None);
 
-    let detailed_subsections: Vec<SubsectionDetail> = subsections
+    // Build response subsections from subsections (name + value) and attach memo_output
+    let detailed_subsections: Vec<SubsectionDetail> = subsections_arr
         .iter()
         .enumerate()
-        .filter_map(|(i, s)| {
-            let obj = match s.as_object() {
-                Some(obj) => obj,
+        .filter_map(|(i, c)| {
+            let obj = match c.as_object() {
+                Some(o) => o,
                 None => {
-                    eprintln!("Subsection {} is not a JSON object: {:?}", i, s);
+                    eprintln!("Subsection {} is not a JSON object: {:?}", i, c);
                     return None;
                 }
             };
@@ -204,7 +260,7 @@ pub async fn get_task_details(
                 .unwrap_or("<unnamed>")
                 .to_string();
 
-            let mark_value = obj
+            let value = obj
                 .get("value")
                 .and_then(|v| v.as_i64())
                 .unwrap_or_else(|| {
@@ -216,7 +272,7 @@ pub async fn get_task_details(
 
             Some(SubsectionDetail {
                 name,
-                mark_value,
+                value,
                 memo_output,
             })
         })
