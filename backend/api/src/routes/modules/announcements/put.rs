@@ -1,6 +1,11 @@
+//! Edit announcement handler.
+//!
+//! Provides an endpoint to update an existing announcement for a specific module.
+//!
+//! **Permissions:** Only authorized users (lecturer/assistant) can edit announcements.
+
 use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
 use db::models::announcements::Model as AnnouncementModel;
-
 use crate::{response::ApiResponse, routes::modules::announcements::common::AnnouncementRequest};
 use util::state::AppState;
 
@@ -86,31 +91,18 @@ pub async fn edit_announcement(
     Json(req): Json<AnnouncementRequest>,
 ) -> impl IntoResponse {
     let db = app_state.db();
-    match AnnouncementModel::update(
-        db,
-        announcement_id,
-        &req.title,
-        &req.body,
-        req.pinned,
-    )
-    .await
-    {
-        Ok(updated_announcement) => {
-            (
-                StatusCode::OK,
-                Json(ApiResponse::success(
-                    updated_announcement,
-                    "Announcement updated successfully",
-                )),
-            )
-        }
-        Err(_) => {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(
-                    "Failed to update announcement".to_string(),
-                )),
-            )
-        }
+
+    match AnnouncementModel::update(db, announcement_id, &req.title, &req.body, req.pinned).await {
+        Ok(updated_announcement) => (
+            StatusCode::OK,
+            Json(ApiResponse::success(
+                updated_announcement,
+                "Announcement updated successfully",
+            )),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error("Failed to update announcement")),
+        ),
     }
 }

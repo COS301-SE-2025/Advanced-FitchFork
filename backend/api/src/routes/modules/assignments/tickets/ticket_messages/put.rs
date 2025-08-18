@@ -1,3 +1,10 @@
+//! Ticket message edit handler.
+//!
+//! Provides an endpoint to edit an existing message on a ticket.
+//!
+//! Only the author of the message can update it. The endpoint validates
+//! that the `content` field is provided and not empty.
+
 use axum::{
     Extension, Json,
     extract::{Path, State},

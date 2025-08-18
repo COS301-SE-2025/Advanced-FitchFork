@@ -1,3 +1,11 @@
+//! Ticket retrieval handlers.
+//!
+//! Provides endpoints to fetch tickets for an assignment.
+//!
+//! Users can retrieve a single ticket or a list of tickets, with support for
+//! filtering, sorting, and pagination. The endpoints validate that the user
+//! has permission to view the ticket(s) before returning data.
+
 use crate::{
     auth::AuthUser, response::ApiResponse,
     routes::modules::assignments::tickets::common::{is_valid, TicketResponse, TicketWithUserResponse},
@@ -17,7 +25,7 @@ use sea_orm::{ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType,
 use serde::{Deserialize, Serialize};
 use util::state::AppState;
 
-/// GET /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/with-user
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}
 ///
 /// Retrieve a specific ticket along with information about the user who created it.
 /// Accessible to users assigned to the module (e.g., student, tutor, lecturer).
@@ -124,15 +132,22 @@ pub async fn get_ticket(
     }
 }
 
+/// Query parameters for filtering, sorting, and pagination
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
+    /// Page number (default: 1)
     pub page: Option<i32>,
+    /// Items per page (default: 20, max: 100)
     pub per_page: Option<i32>,
+    /// Search query (matches title or description)
     pub query: Option<String>,
+    /// Filter by ticket status
     pub status: Option<String>,
+    /// Sort by fields (e.g., "created_at,-status")
     pub sort: Option<String>,
 }
 
+/// Response for a paginated list of tickets
 #[derive(Serialize)]
 pub struct FilterResponse {
     pub tickets: Vec<TicketResponse>,
@@ -152,7 +167,7 @@ impl FilterResponse {
     }
 }
 
-
+/// Helper to check if a user is a student in a module
 async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bool {
     user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user_id))
@@ -166,6 +181,54 @@ async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bo
         .unwrap_or(false)
 }
 
+/// Retrieves tickets for an assignment with optional filtering, sorting, and pagination.
+///
+/// **Endpoint:** `GET /modules/{module_id}/assignments/{assignment_id}/tickets`  
+/// **Permissions:**  
+/// - Students can only see their own tickets  
+/// - Lecturers/assistants can see all tickets
+///
+/// ### Path parameters
+/// - `module_id`       → ID of the module (used for permission check)
+/// - `assignment_id`   → ID of the assignment
+///
+/// ### Query parameters
+/// - `page` → Page number (default: 1)
+/// - `per_page` → Number of items per page (default: 20, max: 100)
+/// - `query` → Search in ticket title or description
+/// - `status` → Filter by ticket status (`open`, `closed`)
+/// - `sort` → Comma-separated fields to sort by (prefix with `-` for descending)
+///
+/// ### Responses
+/// - `200 OK` → Tickets retrieved successfully
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///     "tickets": [ /* Ticket objects */ ],
+///     "page": 1,
+///     "per_page": 20,
+///     "total": 42
+///   },
+///   "message": "Tickets retrieved successfully"
+/// }
+/// ```
+/// - `400 Bad Request` → Invalid query parameters (sort or status)
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Invalid field used"
+/// }
+/// ```
+/// - `500 Internal Server Error` → Failed to fetch tickets
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Failed to retrieve tickets"
+/// }
+/// ```
 pub async fn get_tickets(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,

@@ -1,3 +1,9 @@
+//! Get announcements handler.
+//!
+//! Provides an endpoint to retrieve a paginated list of announcements for a specific module.
+//!
+//! Supports filtering by search query, pinned status, and sorting by various fields.
+
 use crate::response::ApiResponse;
 use axum::{
     extract::{Path, Query, State},
@@ -138,7 +144,6 @@ impl FilterResponse {
 ///   "message": "Failed to retrieve announcements"
 /// }
 /// ```
-
 pub async fn get_announcements(
     Path(module_id): Path<i64>,
     State(app_state): State<AppState>,

@@ -1,20 +1,21 @@
-//! # Announcements Routes Module
+//! # Announcement Routes Module
 //!
-//! Defines routes for managing announcements under a module's `/announcements` endpoint.
+//! Defines and wires up routes for the `/api/modules/{module_id}/announcements` endpoint group.
 //!
-//! ## Routes
-//! - `POST   /`                  → Create a new announcement (**lecturer or assistant lecturer** only).
-//! - `GET    /`                  → Get a paginated list of announcements for the module.
-//! - `GET    /{announcement_id}` → Get a single announcement by ID (includes only `id` & `username` of author).
-//! - `PUT    /{announcement_id}` → Edit an existing announcement (**lecturer or assistant lecturer** only).
-//! - `DELETE /{announcement_id}` → Delete an announcement (**lecturer or assistant lecturer** only).
+//! ## Structure
+//! - `post.rs` — POST handlers (e.g., create announcement)
+//! - `get.rs` — GET handlers (e.g., list announcements)
+//! - `put.rs` — PUT handlers (e.g., edit announcement)
+//! - `delete.rs` — DELETE handlers (e.g., remove announcement)
+//! - `common.rs` — shared helpers and utilities
 //!
-//! ## Access Control
-//! - Write operations (`POST`, `PUT`, `DELETE`) require `require_lecturer_or_assistant_lecturer`.
-//! - Read operations (`GET`) are open to any user assigned to the module (handled at parent route layer).
+//! ## Usage
+//! Call `announcement_routes(app_state)` to get a configured `Router` for announcements
+//! to be mounted under a module in the main app.
 
 use axum::{middleware::from_fn_with_state, Router};
 use util::state::AppState;
+use axum::routing::{post, delete, put, get};
 
 pub mod post;
 pub mod get;

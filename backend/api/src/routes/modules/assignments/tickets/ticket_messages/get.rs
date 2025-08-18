@@ -1,3 +1,10 @@
+//! Ticket messages retrieval handler.
+//!
+//! Provides an endpoint to retrieve messages for a specific ticket within an assignment.
+//!
+//! Only the user who has access to the ticket can view its messages. Supports pagination
+//! and optional search query for filtering messages by content.
+
 use crate::{
     auth::AuthUser,
     response::ApiResponse,

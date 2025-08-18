@@ -1,3 +1,10 @@
+//! Ticket message deletion handler.
+//!
+//! Provides an endpoint to delete an existing message within a ticket.
+//!
+//! Only the author of the message can delete it. The endpoint validates
+//! that the user is the author before performing the deletion.
+
 use axum::{
     Extension, Json,
     extract::{Path, State},

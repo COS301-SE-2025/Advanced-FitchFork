@@ -1,3 +1,11 @@
+//! Ticket utilities.
+//!
+//! This module provides helper functions and types for ticket-related endpoints.
+//!
+//! It includes:
+//! - `is_valid`: checks whether a user is authorized to access or modify a ticket.
+//! - `TicketResponse`: a serializable response type for ticket API endpoints.
+
 use db::models::{
     tickets::Model as TicketModel,
     user_module_role::{Column, Role},
@@ -43,8 +51,6 @@ pub async fn is_valid(
         .unwrap_or(None)
         .is_some()
 }
-
-// ---- unchanged response types ----
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TicketResponse {

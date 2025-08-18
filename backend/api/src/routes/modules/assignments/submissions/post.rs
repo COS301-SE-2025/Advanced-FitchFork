@@ -14,10 +14,10 @@ use db::models::{
 use marker::MarkingJob;
 use md5;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
-use util::{mark_allocator::mark_allocator::load_allocator, state::AppState};
-use util::execution_config::ExecutionConfig;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use tokio_util::bytes;
+use util::execution_config::{ExecutionConfig, execution_config::SubmissionMode};
+use util::{mark_allocator::mark_allocator::load_allocator, state::AppState};
 
 #[derive(Debug, Deserialize)]
 pub struct RemarkRequest {
@@ -85,11 +85,9 @@ async fn resolve_submission_ids(
 ) -> Result<Vec<i64>, String> {
     match (submission_ids, all) {
         (Some(ids), _) if !ids.is_empty() => Ok(ids),
-        (_, Some(true)) => {
-            AssignmentSubmissionModel::find_by_assignment(assignment_id, db)
-                .await
-                .map_err(|e| format!("Failed to fetch submissions: {}", e))
-        }
+        (_, Some(true)) => AssignmentSubmissionModel::find_by_assignment(assignment_id, db)
+            .await
+            .map_err(|e| format!("Failed to fetch submissions: {}", e)),
         _ => Err("Must provide either submission_ids or all=true".to_string()),
     }
 }
@@ -121,14 +119,21 @@ async fn load_assignment_allocator(module_id: i64, assignment_id: i64) -> Result
 fn get_assignment_paths(
     module_id: i64,
     assignment_id: i64,
-) -> Result<(std::path::PathBuf, std::path::PathBuf, Vec<std::path::PathBuf>), String> {
+) -> Result<
+    (
+        std::path::PathBuf,
+        std::path::PathBuf,
+        Vec<std::path::PathBuf>,
+    ),
+    String,
+> {
     let assignment_storage_root = std::env::var("ASSIGNMENT_STORAGE_ROOT")
         .unwrap_or_else(|_| "data/assignment_files".to_string());
-    
+
     let base_path = std::path::PathBuf::from(&assignment_storage_root)
         .join(format!("module_{}", module_id))
         .join(format!("assignment_{}", assignment_id));
-    
+
     let mark_allocator_path = base_path.join("mark_allocator/allocator.json");
     let memo_output_dir = base_path.join("memo_output");
 
@@ -166,7 +171,7 @@ fn validate_file_upload(
             ));
         }
     };
-    
+
     let file_bytes = match file_bytes {
         Some(bytes) => bytes.clone(),
         None => {
@@ -184,7 +189,7 @@ fn validate_file_upload(
         .extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| format!(".{}", ext.to_lowercase()));
-    
+
     if !file_extension
         .as_ref()
         .map_or(false, |ext| allowed_extensions.contains(&ext.as_str()))
@@ -224,7 +229,7 @@ async fn get_next_attempt(
         .map_err(|e| format!("Database error: {}", e))?
         .map(|s| s.attempt)
         .unwrap_or(0);
-    
+
     Ok(prev_attempt + 1)
 }
 
@@ -343,10 +348,17 @@ async fn grade_submission(
 async fn process_submission_code(
     db: &sea_orm::DatabaseConnection,
     submission_id: i64,
+    config: ExecutionConfig,
 ) -> Result<(), String> {
-    code_runner::create_submission_outputs_for_all_tasks(db, submission_id)
-        .await
-        .map_err(|e| format!("Code runner failed: {}", e))
+    if config.project.submission_mode == SubmissionMode::Manual.clone() {
+        code_runner::create_submission_outputs_for_all_tasks(db, submission_id)
+            .await
+            .map_err(|e| format!("Code runner failed: {}", e))
+    } else {
+        ai::run_ga_job(db, submission_id, config)
+            .await
+            .map_err(|e| format!("GATLAM failed: {}", e))
+    }
 }
 
 /// Executes bulk operation on submissions (remark or resubmit)
@@ -593,7 +605,17 @@ pub async fn submit_assignment(
         }
     };
 
-    if let Err(e) = process_submission_code(db, submission.id).await {
+    let config = match get_execution_config(module_id, assignment_id) {
+        Ok(config) => config,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(&e)),
+            );
+        }
+    };
+
+    if let Err(e) = process_submission_code(db, submission.id, config.clone()).await {
         eprintln!("Code execution failed: {}", e);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -610,25 +632,16 @@ pub async fn submit_assignment(
         );
     }
 
-    let (base_path, mark_allocator_path, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
-        Ok(paths) => paths,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SubmissionDetailResponse>::error(&e)),
-            );
-        }
-    };
-
-    let config = match get_execution_config(module_id, assignment_id) {
-        Ok(config) => config,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SubmissionDetailResponse>::error(&e)),
-            );
-        }
-    };
+    let (base_path, mark_allocator_path, memo_outputs) =
+        match get_assignment_paths(assignment.module_id, assignment.id) {
+            Ok(paths) => paths,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<SubmissionDetailResponse>::error(&e)),
+                );
+            }
+        };
 
     match grade_submission(
         submission,
@@ -642,10 +655,7 @@ pub async fn submit_assignment(
     {
         Ok(resp) => (
             StatusCode::OK,
-            Json(ApiResponse::success(
-                resp,
-                "Submission received and graded",
-            )),
+            Json(ApiResponse::success(resp, "Submission received and graded")),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -735,15 +745,16 @@ pub async fn remark_submissions(
         }
     };
 
-    let submission_ids = match resolve_submission_ids(req.submission_ids, req.all, assignment_id, db).await {
-        Ok(ids) => ids,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<RemarkResponse>::error(e)),
-            );
-        }
-    };
+    let submission_ids =
+        match resolve_submission_ids(req.submission_ids, req.all, assignment_id, db).await {
+            Ok(ids) => ids,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<RemarkResponse>::error(e)),
+                );
+            }
+        };
 
     if let Err(e) = load_assignment_allocator(assignment.module_id, assignment.id).await {
         return (
@@ -752,15 +763,16 @@ pub async fn remark_submissions(
         );
     }
 
-    let (base_path, mark_allocator_path, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
-        Ok(paths) => paths,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<RemarkResponse>::error(e)),
-            );
-        }
-    };
+    let (base_path, mark_allocator_path, memo_outputs) =
+        match get_assignment_paths(assignment.module_id, assignment.id) {
+            Ok(paths) => paths,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<RemarkResponse>::error(e)),
+                );
+            }
+        };
 
     let config = match get_execution_config(module_id, assignment_id) {
         Ok(config) => config,
@@ -772,11 +784,8 @@ pub async fn remark_submissions(
         }
     };
 
-    let (regraded, failed) = execute_bulk_operation(
-        submission_ids.clone(),
-        assignment_id,
-        db,
-        |submission| {
+    let (regraded, failed) =
+        execute_bulk_operation(submission_ids.clone(), assignment_id, db, |submission| {
             let assignment = assignment.clone();
             let base_path = base_path.clone();
             let memo_outputs = memo_outputs.clone();
@@ -794,8 +803,8 @@ pub async fn remark_submissions(
                 .await
                 .map(|_| ())
             }
-        },
-    ).await;
+        })
+        .await;
 
     let response = RemarkResponse { regraded, failed };
     let message = format!("Regraded {}/{} submissions", regraded, submission_ids.len());
@@ -902,20 +911,23 @@ pub async fn resubmit_submissions(
         Err(_) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<ResubmitResponse>::error("Assignment not found")),
+                Json(ApiResponse::<ResubmitResponse>::error(
+                    "Assignment not found",
+                )),
             );
         }
     };
 
-    let submission_ids = match resolve_submission_ids(req.submission_ids, req.all, assignment_id, db).await {
-        Ok(ids) => ids,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ResubmitResponse>::error(e)),
-            );
-        }
-    };
+    let submission_ids =
+        match resolve_submission_ids(req.submission_ids, req.all, assignment_id, db).await {
+            Ok(ids) => ids,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<ResubmitResponse>::error(e)),
+                );
+            }
+        };
 
     if let Err(e) = load_assignment_allocator(assignment.module_id, assignment.id).await {
         return (
@@ -924,15 +936,16 @@ pub async fn resubmit_submissions(
         );
     }
 
-    let (base_path, mark_allocator_path, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
-        Ok(paths) => paths,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ResubmitResponse>::error(e)),
-            );
-        }
-    };
+    let (base_path, mark_allocator_path, memo_outputs) =
+        match get_assignment_paths(assignment.module_id, assignment.id) {
+            Ok(paths) => paths,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<ResubmitResponse>::error(e)),
+                );
+            }
+        };
 
     let config = match get_execution_config(module_id, assignment_id) {
         Ok(config) => config,
@@ -944,11 +957,8 @@ pub async fn resubmit_submissions(
         }
     };
 
-    let (resubmitted, failed) = execute_bulk_operation(
-        submission_ids.clone(),
-        assignment_id,
-        db,
-        |submission| {
+    let (resubmitted, failed) =
+        execute_bulk_operation(submission_ids.clone(), assignment_id, db, |submission| {
             let db = db.clone();
             let assignment = assignment.clone();
             let base_path = base_path.clone();
@@ -956,7 +966,7 @@ pub async fn resubmit_submissions(
             let mark_allocator_path = mark_allocator_path.clone();
             let config = config.clone();
             async move {
-                if let Err(e) = process_submission_code(&db, submission.id).await {
+                if let Err(e) = process_submission_code(&db, submission.id, config.clone()).await {
                     return Err(format!("Failed to run code for submission: {}", e));
                 }
 
@@ -971,11 +981,18 @@ pub async fn resubmit_submissions(
                 .await
                 .map(|_| ())
             }
-        },
-    ).await;
+        })
+        .await;
 
-    let response = ResubmitResponse { resubmitted, failed };
-    let message = format!("Resubmitted {}/{} submissions", resubmitted, submission_ids.len());
+    let response = ResubmitResponse {
+        resubmitted,
+        failed,
+    };
+    let message = format!(
+        "Resubmitted {}/{} submissions",
+        resubmitted,
+        submission_ids.len()
+    );
 
     (
         StatusCode::OK,

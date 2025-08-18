@@ -1,3 +1,9 @@
+//! Ticket message creation handler.
+//!
+//! Provides an endpoint to create a new message for a ticket in a module.
+//!
+//! Only users authorized to view the ticket (author or staff) can create messages.
+
 use axum::{
     Extension, Json,
     extract::{Path, State},
@@ -31,35 +37,57 @@ use crate::{
 /// - `ticket_id` (i64)
 ///
 /// ### Request Body (JSON)
-/// - `content` (string, required)
-///
-/// ### Responses
-/// - `200 OK` — returns the created message; also emits a WS event:
-///   ```json
-///   {
-///     "event": "message_created",
-///     "payload": {
-///       "id": 123,
-///       "ticket_id": 99,
-///       "content": "Hey, I'm blocked on step 3.",
-///       "created_at": "2025-02-18T09:12:33Z",
-///       "updated_at": "2025-02-18T09:12:33Z",
-///       "user": { "id": 42, "username": "alice" }
-///     }
-///   }
-///   ```
-/// - `400 Bad Request` — `{ "success": false, "message": "Content is required" }`
-/// - `403 Forbidden` — `{ "success": false, "message": "Forbidden" }`
-/// - `404 Not Found` — `{ "success": false, "message": "User not found" }`
-/// - `500 Internal Server Error`
-///
-/// ### Example Request
-/// ```http
-/// POST /api/modules/42/assignments/7/tickets/99/messages
-/// Authorization: Bearer <token>
-/// Content-Type: application/json
 ///
 /// { "content": "Can someone review my latest attempt?" }
+/// 
+/// ### Responses
+/// 
+/// - `200 OK` → Message created successfully
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///       "id": 123,
+///       "ticket_id": 456,
+///       "content": "Message content here",
+///       "created_at": "2025-08-18T10:00:00Z",
+///       "updated_at": "2025-08-18T10:00:00Z",
+///       "user": { "id": 789, "username": "john_doe" }
+///   },
+///   "message": "Message created successfully"
+/// }
+/// ```
+/// - `400 Bad Request` → Content missing or empty
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Content is required"
+/// }
+/// ```
+/// - `403 Forbidden` → User not authorized to create a message for this ticket
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Forbidden"
+/// }
+/// ```
+/// - `404 Not Found` → User not found
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "User not found"
+/// }
+/// ```
+/// - `500 Internal Server Error` → Failed to create the message
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Failed to create message"
+/// }
 /// ```
 pub async fn create_message(
     Path((module_id, _, ticket_id)): Path<(i64, i64, i64)>,

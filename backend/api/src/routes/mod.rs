@@ -1,3 +1,15 @@
+//! HTTP route entry point for `/api/...`.
+//!
+//! This module defines all HTTP entry points under the `/api` namespace.
+//! Routes are organized by domain (e.g., authentication, users, modules, health),
+//! each protected via appropriate access control middleware.  
+//!
+//! Route groups include:
+//! - `/health` → Health check endpoint (public)
+//! - `/auth` → Authentication endpoints (login, token handling, public)
+//! - `/users` → User management endpoints (admin-only)
+//! - `/modules` → Module management, personnel, and assignments (authenticated users)
+
 use crate::auth::guards::{require_admin, require_authenticated};
 use crate::routes::auth::get::get_avatar;
 use crate::routes::{
@@ -9,6 +21,10 @@ use crate::routes::{
 };
 use axum::{middleware::from_fn, routing::get, Router};
 use util::{config::AppConfig, state::AppState};
+use crate::routes::me::my_routes;
+use crate::routes::{auth::auth_routes, health::health_routes, modules::modules_routes, users::users_routes};
+use axum::{middleware::from_fn, Router};
+use util::state::AppState;
 
 pub mod auth;
 pub mod common;
@@ -16,6 +32,7 @@ pub mod health;
 pub mod modules;
 pub mod users;
 pub mod test;
+pub mod me;
 
 /// Builds the complete application router for all HTTP endpoints.
 ///
@@ -41,6 +58,7 @@ pub fn routes(app_state: AppState) -> Router<AppState> {
         .nest("/users", users_routes().route_layer(from_fn(require_admin)))
         .route("/users/{user_id}/avatar", get(get_avatar))
         .nest("/modules",modules_routes(app_state.clone()).route_layer(from_fn(require_authenticated)),)
+        .nest("/me", my_routes(app_state.clone()).route_layer(from_fn(require_authenticated)))
         .with_state(app_state.clone());
 
     // Conditionally mount the `/test` route group if *not* in production.
