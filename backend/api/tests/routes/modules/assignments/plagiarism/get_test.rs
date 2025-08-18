@@ -49,8 +49,8 @@ mod plagiarism_tests {
         UserModuleRoleModel::assign_user_to_module(db, student_user1.id, module.id, Role::Student).await.expect("Failed to assign student role");
         UserModuleRoleModel::assign_user_to_module(db, student_user2.id, module.id, Role::Student).await.expect("Failed to assign student role");
         let assignment = AssignmentModel::create(db, module.id, "Assignment 1", Some("Desc 1"), AssignmentType::Assignment, Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(), Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap()).await.unwrap();
-        let submission1 = SubmissionModel::save_file(db, assignment.id, student_user1.id, 1, false, "sub1.txt", "hash123#", b"ontime").await.unwrap();
-        let submission2 = SubmissionModel::save_file(db, assignment.id, student_user2.id, 1, false, "sub2.txt", "hash123#", b"ontime").await.unwrap();
+        let submission1 = SubmissionModel::save_file(db, assignment.id, student_user1.id, 1, 10, 10, false, "sub1.txt", "hash123#", b"ontime").await.unwrap();
+        let submission2 = SubmissionModel::save_file(db, assignment.id, student_user2.id, 1, 10, 10, false, "sub2.txt", "hash123#", b"ontime").await.unwrap();
         let plagiarism_case = PlagiarismCaseModel::create_case(db, assignment.id, submission1.id, submission2.id, "High similarity detected").await.unwrap();
 
         TestData {
@@ -76,10 +76,10 @@ mod plagiarism_tests {
     ) -> Vec<PlagiarismCaseModel> {
         let mut cases = Vec::new();
 
-        let sub3 = SubmissionModel::save_file(db, assignment_id, user1, 1, false, "sub3.txt", "hash123#", b"ontime")
+        let sub3 = SubmissionModel::save_file(db, assignment_id, user1, 1, 10, 10, false, "sub3.txt", "hash123#", b"ontime")
             .await
             .unwrap();
-        let sub4 = SubmissionModel::save_file(db, assignment_id, user2, 1, false, "sub4.txt", "hash123#", b"ontime")
+        let sub4 = SubmissionModel::save_file(db, assignment_id, user2, 1, 10, 10, false, "sub4.txt", "hash123#", b"ontime")
             .await
             .unwrap();
 
@@ -461,6 +461,8 @@ mod plagiarism_tests {
                 data.assignment.id,
                 data.student_user1.id,
                 1,
+                10,
+                10,
                 false,
                 "sub.txt",
                 "hash123#",

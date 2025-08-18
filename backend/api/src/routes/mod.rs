@@ -9,10 +9,12 @@
 //! - `/auth` → Authentication endpoints (login, token handling, public)
 //! - `/users` → User management endpoints (admin-only)
 //! - `/modules` → Module management, personnel, and assignments (authenticated users)
+//! - `/me` → User-specific endpoints (announcements, tickets, assignments)
 
 use crate::auth::guards::{require_admin, require_authenticated};
-use crate::routes::me::my_routes;
-use crate::routes::{auth::auth_routes, health::health_routes, modules::modules_routes, users::users_routes};
+use crate::routes::{
+    auth::auth_routes, health::health_routes, modules::modules_routes, users::users_routes, me::me_routes,
+};
 use axum::{middleware::from_fn, Router};
 use util::state::AppState;
 
@@ -30,6 +32,7 @@ pub mod me;
 /// - `/auth` → authentication endpoints (login, token handling)
 /// - `/users` → user management (admin-only)
 /// - `/modules` → module CRUD, personnel management, assignments (authenticated users)
+/// - `/me` → user-specific endpoints (announcements, tickets, assignments)
 ///
 /// # Returns
 /// An Axum `Router<AppState>` with all route groups and middleware applied.
@@ -39,5 +42,5 @@ pub fn routes(app_state: AppState) -> Router<AppState> {
         .nest("/auth", auth_routes())
         .nest("/users", users_routes().route_layer(from_fn(require_admin)))
         .nest("/modules", modules_routes(app_state.clone()).route_layer(from_fn(require_authenticated)))
-        .nest("/me", my_routes(app_state.clone()).route_layer(from_fn(require_authenticated)))
+        .nest("/me", me_routes().route_layer(from_fn(require_authenticated)))
 }

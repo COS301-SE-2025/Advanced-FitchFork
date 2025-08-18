@@ -1,0 +1,903 @@
+Date : 2025-08-18 20:56:42
+Directory : c:\Users\rxxim\Advanced-FitchFork
+Total : 622 files,  79047 codes, 9487 comments, 9074 blanks, all 97608 lines
+
+Languages
++--------------------+------------+------------+------------+------------+------------+
+| language           | files      | code       | comment    | blank      | total      |
++--------------------+------------+------------+------------+------------+------------+
+| Rust               |        298 |     40,743 |      8,478 |      6,203 |     55,424 |
+| JSON               |         48 |     18,185 |          2 |         15 |     18,202 |
+| TypeScript JSX     |        103 |     10,308 |        125 |      1,308 |     11,741 |
+| TOML               |         15 |      4,970 |         11 |        544 |      5,525 |
+| JavaScript         |         51 |      2,551 |        550 |        465 |      3,566 |
+| TypeScript         |         90 |      1,500 |        272 |        339 |      2,111 |
+| YAML               |          2 |        361 |         15 |         46 |        422 |
+| Markdown           |          5 |        285 |          0 |        127 |        412 |
+| PostCSS            |          2 |         60 |         32 |         14 |        106 |
+| HTML               |          2 |         33 |          0 |          4 |         37 |
+| JSON with Comments |          2 |         25 |          2 |          3 |         30 |
+| Docker             |          1 |         13 |          0 |          3 |         16 |
+| XML                |          3 |         13 |          0 |          3 |         16 |
++--------------------+------------+------------+------------+------------+------------+
+
+Directories
++-----------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                                  | files      | code       | comment    | blank      | total      |
++-----------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                                     |        622 |     79,047 |      9,487 |      9,074 |     97,608 |
+| . (Files)                                                                                                             |          1 |        144 |          0 |         61 |        205 |
+| .github                                                                                                               |          2 |        361 |         15 |         46 |        422 |
+| .github\actions                                                                                                       |          1 |        223 |          7 |         21 |        251 |
+| .github\actions\start-servers                                                                                         |          1 |        223 |          7 |         21 |        251 |
+| .github\workflows                                                                                                     |          1 |        138 |          8 |         25 |        171 |
+| backend                                                                                                               |        356 |     46,227 |      8,489 |      6,806 |     61,522 |
+| backend (Files)                                                                                                       |          6 |      4,829 |          2 |        560 |      5,391 |
+| backend\.cargo                                                                                                        |          1 |          2 |          0 |          0 |          2 |
+| backend\ai                                                                                                            |         10 |      1,595 |        283 |        256 |      2,134 |
+| backend\ai (Files)                                                                                                    |          1 |         15 |          0 |          2 |         17 |
+| backend\ai\src                                                                                                        |          9 |      1,580 |        283 |        254 |      2,117 |
+| backend\ai\src (Files)                                                                                                |          1 |        252 |        151 |         55 |        458 |
+| backend\ai\src\algorithms                                                                                             |          4 |        613 |         60 |         97 |        770 |
+| backend\ai\src\utils                                                                                                  |          4 |        715 |         72 |        102 |        889 |
+| backend\api                                                                                                           |        178 |     27,613 |      6,441 |      4,094 |     38,148 |
+| backend\api (Files)                                                                                                   |          1 |         59 |          9 |         13 |         81 |
+| backend\api\src                                                                                                       |        101 |     11,234 |      6,051 |      1,388 |     18,673 |
+| backend\api\src (Files)                                                                                               |          2 |         78 |          5 |         18 |        101 |
+| backend\api\src\auth                                                                                                  |          5 |        641 |         68 |         89 |        798 |
+| backend\api\src\response                                                                                              |          1 |         37 |         56 |          7 |        100 |
+| backend\api\src\routes                                                                                                |         86 |      9,973 |      5,777 |      1,199 |     16,949 |
+| backend\api\src\routes (Files)                                                                                        |          3 |         63 |         49 |          9 |        121 |
+| backend\api\src\routes\auth                                                                                           |          3 |        752 |        491 |        103 |      1,346 |
+| backend\api\src\routes\me                                                                                             |          6 |      1,024 |        356 |        148 |      1,528 |
+| backend\api\src\routes\modules                                                                                        |         68 |      7,541 |      4,519 |        857 |     12,917 |
+| backend\api\src\routes\modules (Files)                                                                                |          6 |        846 |        524 |        100 |      1,470 |
+| backend\api\src\routes\modules\announcements                                                                          |          6 |        265 |        185 |         35 |        485 |
+| backend\api\src\routes\modules\assignments                                                                            |         52 |      5,965 |      3,521 |        659 |     10,145 |
+| backend\api\src\routes\modules\assignments (Files)                                                                    |          6 |      1,188 |        564 |        109 |      1,861 |
+| backend\api\src\routes\modules\assignments\config                                                                     |          3 |        202 |        147 |         18 |        367 |
+| backend\api\src\routes\modules\assignments\files                                                                      |          4 |        360 |        188 |         32 |        580 |
+| backend\api\src\routes\modules\assignments\interpreter                                                                |          4 |        303 |         85 |         29 |        417 |
+| backend\api\src\routes\modules\assignments\mark_allocator                                                             |          4 |        152 |        304 |         17 |        473 |
+| backend\api\src\routes\modules\assignments\memo_output                                                                |          3 |        185 |        125 |         25 |        335 |
+| backend\api\src\routes\modules\assignments\plagiarism                                                                 |          6 |        880 |        590 |        103 |      1,573 |
+| backend\api\src\routes\modules\assignments\submissions                                                                |          4 |      1,498 |        510 |        173 |      2,181 |
+| backend\api\src\routes\modules\assignments\tasks                                                                      |          6 |        374 |        423 |         44 |        841 |
+| backend\api\src\routes\modules\assignments\tickets                                                                    |         12 |        823 |        585 |        109 |      1,517 |
+| backend\api\src\routes\modules\assignments\tickets (Files)                                                            |          6 |        455 |        324 |         58 |        837 |
+| backend\api\src\routes\modules\assignments\tickets\ticket_messages                                                    |          6 |        368 |        261 |         51 |        680 |
+| backend\api\src\routes\modules\personnel                                                                              |          4 |        465 |        289 |         63 |        817 |
+| backend\api\src\routes\users                                                                                          |          6 |        593 |        362 |         82 |      1,037 |
+| backend\api\src\services                                                                                              |          3 |        346 |         68 |         52 |        466 |
+| backend\api\src\ws                                                                                                    |          4 |        159 |         77 |         23 |        259 |
+| backend\api\src\ws (Files)                                                                                            |          2 |        141 |         57 |         15 |        213 |
+| backend\api\src\ws\modules                                                                                            |          2 |         18 |         20 |          8 |         46 |
+| backend\api\src\ws\modules (Files)                                                                                    |          1 |         11 |         12 |          5 |         28 |
+| backend\api\src\ws\modules\assignments                                                                                |          1 |          7 |          8 |          3 |         18 |
+| backend\api\tests                                                                                                     |         76 |     16,320 |        381 |      2,693 |     19,394 |
+| backend\api\tests (Files)                                                                                             |          1 |          4 |          0 |          0 |          4 |
+| backend\api\tests\auth                                                                                                |          3 |        754 |          2 |        109 |        865 |
+| backend\api\tests\helpers                                                                                             |          3 |         83 |          2 |         12 |         97 |
+| backend\api\tests\routes                                                                                              |         67 |     15,383 |        377 |      2,553 |     18,313 |
+| backend\api\tests\routes (Files)                                                                                      |          2 |         31 |          0 |          4 |         35 |
+| backend\api\tests\routes\auth                                                                                         |          3 |      1,005 |         43 |        211 |      1,259 |
+| backend\api\tests\routes\me                                                                                           |          3 |        504 |          2 |         68 |        574 |
+| backend\api\tests\routes\modules                                                                                      |         54 |     13,049 |        294 |      2,108 |     15,451 |
+| backend\api\tests\routes\modules (Files)                                                                              |          5 |      1,278 |         48 |        239 |      1,565 |
+| backend\api\tests\routes\modules\announcements                                                                        |          4 |        540 |          0 |        109 |        649 |
+| backend\api\tests\routes\modules\assignments                                                                          |         41 |     10,768 |        245 |      1,661 |     12,674 |
+| backend\api\tests\routes\modules\assignments (Files)                                                                  |          5 |      2,210 |         39 |        404 |      2,653 |
+| backend\api\tests\routes\modules\assignments\config                                                                   |          3 |        521 |          7 |         87 |        615 |
+| backend\api\tests\routes\modules\assignments\files                                                                    |          4 |        610 |          0 |         93 |        703 |
+| backend\api\tests\routes\modules\assignments\mark_allocator                                                           |          4 |        581 |          0 |         89 |        670 |
+| backend\api\tests\routes\modules\assignments\memo_output                                                              |          3 |        574 |          1 |         75 |        650 |
+| backend\api\tests\routes\modules\assignments\plagiarism                                                               |          6 |      1,961 |         64 |        300 |      2,325 |
+| backend\api\tests\routes\modules\assignments\submissions                                                              |          3 |      2,103 |         98 |        290 |      2,491 |
+| backend\api\tests\routes\modules\assignments\tasks                                                                    |          5 |      1,124 |         36 |        173 |      1,333 |
+| backend\api\tests\routes\modules\assignments\tickets                                                                  |          8 |      1,084 |          0 |        150 |      1,234 |
+| backend\api\tests\routes\modules\assignments\tickets (Files)                                                          |          4 |        372 |          0 |         52 |        424 |
+| backend\api\tests\routes\modules\assignments\tickets\ticket_messages                                                  |          4 |        712 |          0 |         98 |        810 |
+| backend\api\tests\routes\modules\personnel                                                                            |          4 |        463 |          1 |         99 |        563 |
+| backend\api\tests\routes\users                                                                                        |          5 |        794 |         38 |        162 |        994 |
+| backend\api\tests\ws                                                                                                  |          2 |         96 |          0 |         19 |        115 |
+| backend\code_manager                                                                                                  |         16 |        770 |         48 |        158 |        976 |
+| backend\code_manager (Files)                                                                                          |          1 |         20 |          0 |          2 |         22 |
+| backend\code_manager\images                                                                                           |          1 |         13 |          0 |          3 |         16 |
+| backend\code_manager\src                                                                                              |         12 |        488 |         46 |        105 |        639 |
+| backend\code_manager\src (Files)                                                                                      |          2 |         34 |          8 |          8 |         50 |
+| backend\code_manager\src\api                                                                                          |          2 |         50 |          4 |         12 |         66 |
+| backend\code_manager\src\container                                                                                    |          2 |        154 |          2 |         36 |        192 |
+| backend\code_manager\src\manager                                                                                      |          3 |        109 |         10 |         23 |        142 |
+| backend\code_manager\src\utils                                                                                        |          3 |        141 |         22 |         26 |        189 |
+| backend\code_manager\tests                                                                                            |          2 |        249 |          2 |         48 |        299 |
+| backend\code_runner                                                                                                   |          7 |      1,412 |        197 |        276 |      1,885 |
+| backend\code_runner (Files)                                                                                           |          1 |         28 |          0 |          5 |         33 |
+| backend\code_runner\src                                                                                               |          3 |        894 |        193 |        187 |      1,274 |
+| backend\code_runner\tests                                                                                             |          3 |        490 |          4 |         84 |        578 |
+| backend\common                                                                                                        |          2 |         20 |          0 |          2 |         22 |
+| backend\common (Files)                                                                                                |          1 |          8 |          0 |          1 |          9 |
+| backend\common\src                                                                                                    |          1 |         12 |          0 |          1 |         13 |
+| backend\db                                                                                                            |         20 |      2,582 |        415 |        468 |      3,465 |
+| backend\db (Files)                                                                                                    |          1 |         20 |          0 |          2 |         22 |
+| backend\db\src                                                                                                        |         19 |      2,562 |        415 |        466 |      3,443 |
+| backend\db\src (Files)                                                                                                |          2 |         24 |          0 |          7 |         31 |
+| backend\db\src\models                                                                                                 |         17 |      2,538 |        415 |        459 |      3,412 |
+| backend\marker                                                                                                        |         64 |      3,420 |        916 |        407 |      4,743 |
+| backend\marker (Files)                                                                                                |          1 |         14 |          0 |          2 |         16 |
+| backend\marker\src                                                                                                    |         63 |      3,406 |        916 |        405 |      4,727 |
+| backend\marker\src (Files)                                                                                            |          5 |        937 |        308 |        124 |      1,369 |
+| backend\marker\src\comparators                                                                                        |          4 |        443 |         95 |         59 |        597 |
+| backend\marker\src\feedback                                                                                           |          4 |        256 |         90 |         43 |        389 |
+| backend\marker\src\parsers                                                                                            |          5 |      1,097 |        273 |        143 |      1,513 |
+| backend\marker\src\test_files                                                                                         |         39 |        405 |          0 |          6 |        411 |
+| backend\marker\src\test_files\allocator_parser                                                                        |          5 |         80 |          0 |          5 |         85 |
+| backend\marker\src\test_files\complexity_parser                                                                       |          5 |         47 |          0 |          0 |         47 |
+| backend\marker\src\test_files\coverage_parser                                                                         |          5 |         89 |          0 |          0 |         89 |
+| backend\marker\src\test_files\file_loader                                                                             |         15 |         15 |          0 |          0 |         15 |
+| backend\marker\src\test_files\file_loader\case1                                                                       |          3 |          3 |          0 |          0 |          3 |
+| backend\marker\src\test_files\file_loader\case2                                                                       |          3 |          3 |          0 |          0 |          3 |
+| backend\marker\src\test_files\file_loader\case3                                                                       |          3 |          3 |          0 |          0 |          3 |
+| backend\marker\src\test_files\file_loader\case4                                                                       |          3 |          3 |          0 |          0 |          3 |
+| backend\marker\src\test_files\file_loader\case5                                                                       |          3 |          3 |          0 |          0 |          3 |
+| backend\marker\src\test_files\marker                                                                                  |          9 |        174 |          0 |          1 |        175 |
+| backend\marker\src\test_files\marker\case1                                                                            |          1 |         14 |          0 |          0 |         14 |
+| backend\marker\src\test_files\marker\case2                                                                            |          1 |         25 |          0 |          1 |         26 |
+| backend\marker\src\test_files\marker\case3                                                                            |          1 |         25 |          0 |          0 |         25 |
+| backend\marker\src\test_files\marker\case4                                                                            |          1 |         25 |          0 |          0 |         25 |
+| backend\marker\src\test_files\marker\case5                                                                            |          1 |         25 |          0 |          0 |         25 |
+| backend\marker\src\test_files\marker\case6                                                                            |          1 |         15 |          0 |          0 |         15 |
+| backend\marker\src\test_files\marker\case7                                                                            |          1 |         15 |          0 |          0 |         15 |
+| backend\marker\src\test_files\marker\case8                                                                            |          1 |         15 |          0 |          0 |         15 |
+| backend\marker\src\test_files\marker\case9                                                                            |          1 |         15 |          0 |          0 |         15 |
+| backend\marker\src\traits                                                                                             |          4 |         30 |         88 |          9 |        127 |
+| backend\marker\src\utilities                                                                                          |          2 |        238 |         62 |         21 |        321 |
+| backend\migration                                                                                                     |         22 |      1,242 |          0 |        106 |      1,348 |
+| backend\migration (Files)                                                                                             |          1 |         18 |          0 |          3 |         21 |
+| backend\migration\src                                                                                                 |         21 |      1,224 |          0 |        103 |      1,327 |
+| backend\migration\src (Files)                                                                                         |          4 |        114 |          0 |         22 |        136 |
+| backend\migration\src\migrations                                                                                      |         17 |      1,110 |          0 |         81 |      1,191 |
+| backend\moss_parser                                                                                                   |          2 |        350 |          5 |         50 |        405 |
+| backend\moss_parser (Files)                                                                                           |          1 |         14 |          0 |          2 |         16 |
+| backend\moss_parser\src                                                                                               |          1 |        336 |          5 |         48 |        389 |
+| backend\seeder                                                                                                        |         17 |      1,527 |         34 |        240 |      1,801 |
+| backend\seeder (Files)                                                                                                |          1 |         18 |          0 |          1 |         19 |
+| backend\seeder\src                                                                                                    |         16 |      1,509 |         34 |        239 |      1,782 |
+| backend\seeder\src (Files)                                                                                            |          2 |         76 |          0 |         10 |         86 |
+| backend\seeder\src\seeds                                                                                              |         14 |      1,433 |         34 |        229 |      1,696 |
+| backend\util                                                                                                          |         11 |        865 |        148 |        189 |      1,202 |
+| backend\util (Files)                                                                                                  |          1 |         21 |          0 |          1 |         22 |
+| backend\util\src                                                                                                      |         10 |        844 |        148 |        188 |      1,180 |
+| backend\util\src (Files)                                                                                              |          3 |        181 |         48 |         36 |        265 |
+| backend\util\src\execution_config                                                                                     |          2 |        371 |          7 |         80 |        458 |
+| backend\util\src\mark_allocator                                                                                       |          2 |        139 |         50 |         35 |        224 |
+| backend\util\src\ws                                                                                                   |          3 |        153 |         43 |         37 |        233 |
+| frontend                                                                                                              |        206 |     24,170 |        432 |      1,680 |     26,282 |
+| frontend (Files)                                                                                                      |          9 |     12,300 |          4 |         19 |     12,323 |
+| frontend\public                                                                                                       |          4 |         33 |          0 |          6 |         39 |
+| frontend\src                                                                                                          |        193 |     11,837 |        428 |      1,655 |     13,920 |
+| frontend\src (Files)                                                                                                  |          5 |        222 |         40 |         38 |        300 |
+| frontend\src\components                                                                                               |         35 |      2,850 |         24 |        344 |      3,218 |
+| frontend\src\components (Files)                                                                                       |         13 |      1,581 |         15 |        155 |      1,751 |
+| frontend\src\components\assignments                                                                                   |          3 |        107 |          0 |         21 |        128 |
+| frontend\src\components\dashboard                                                                                     |          5 |        521 |          3 |         67 |        591 |
+| frontend\src\components\layout                                                                                        |          3 |        237 |          5 |         26 |        268 |
+| frontend\src\components\modules                                                                                       |          3 |        126 |          1 |         21 |        148 |
+| frontend\src\components\routes                                                                                        |          3 |         34 |          0 |         16 |         50 |
+| frontend\src\components\submissions                                                                                   |          2 |        166 |          0 |         25 |        191 |
+| frontend\src\components\users                                                                                         |          2 |         44 |          0 |          9 |         53 |
+| frontend\src\components\utils                                                                                         |          1 |         34 |          0 |          4 |         38 |
+| frontend\src\config                                                                                                   |          1 |          2 |          3 |          0 |          5 |
+| frontend\src\constants                                                                                                |          4 |        110 |          9 |         10 |        129 |
+| frontend\src\constants (Files)                                                                                        |          2 |         90 |          9 |          8 |        107 |
+| frontend\src\constants\assignments                                                                                    |          1 |         15 |          0 |          1 |         16 |
+| frontend\src\constants\mock                                                                                           |          1 |          5 |          0 |          1 |          6 |
+| frontend\src\context                                                                                                  |          9 |        401 |          6 |         85 |        492 |
+| frontend\src\hooks                                                                                                    |          4 |        192 |         55 |         52 |        299 |
+| frontend\src\layouts                                                                                                  |          6 |        832 |          2 |         91 |        925 |
+| frontend\src\pages                                                                                                    |         48 |      5,907 |         26 |        721 |      6,654 |
+| frontend\src\pages (Files)                                                                                            |          3 |        433 |         14 |         51 |        498 |
+| frontend\src\pages\auth                                                                                               |          5 |        436 |          0 |         64 |        500 |
+| frontend\src\pages\help                                                                                               |          5 |        445 |          0 |         83 |        528 |
+| frontend\src\pages\modules                                                                                            |         23 |      3,417 |         12 |        400 |      3,829 |
+| frontend\src\pages\modules (Files)                                                                                    |          5 |        948 |          8 |         93 |      1,049 |
+| frontend\src\pages\modules\assignments                                                                                |         18 |      2,469 |          4 |        307 |      2,780 |
+| frontend\src\pages\modules\assignments (Files)                                                                        |          6 |      1,173 |          3 |        120 |      1,296 |
+| frontend\src\pages\modules\assignments\steps                                                                          |          9 |        921 |          1 |        148 |      1,070 |
+| frontend\src\pages\modules\assignments\submissions                                                                    |          3 |        375 |          0 |         39 |        414 |
+| frontend\src\pages\modules\assignments\submissions\index                                                              |          2 |        214 |          0 |         22 |        236 |
+| frontend\src\pages\modules\assignments\submissions\show                                                               |          1 |        161 |          0 |         17 |        178 |
+| frontend\src\pages\settings                                                                                           |          3 |        426 |          0 |         46 |        472 |
+| frontend\src\pages\shared                                                                                             |          7 |        297 |          0 |         38 |        335 |
+| frontend\src\pages\shared (Files)                                                                                     |          2 |        124 |          0 |         17 |        141 |
+| frontend\src\pages\shared\status                                                                                      |          5 |        173 |          0 |         21 |        194 |
+| frontend\src\pages\users                                                                                              |          2 |        453 |          0 |         39 |        492 |
+| frontend\src\routes                                                                                                   |          1 |         16 |          9 |          7 |         32 |
+| frontend\src\services                                                                                                 |         40 |        626 |          2 |         84 |        712 |
+| frontend\src\services\auth                                                                                            |          3 |        106 |          0 |         18 |        124 |
+| frontend\src\services\modules                                                                                         |         32 |        453 |          0 |         58 |        511 |
+| frontend\src\services\modules (Files)                                                                                 |          5 |         62 |          0 |          7 |         69 |
+| frontend\src\services\modules\assignments                                                                             |         23 |        338 |          0 |         43 |        381 |
+| frontend\src\services\modules\assignments (Files)                                                                     |          5 |        161 |          0 |         19 |        180 |
+| frontend\src\services\modules\assignments\config                                                                      |          3 |         25 |          0 |          3 |         28 |
+| frontend\src\services\modules\assignments\mark-allocator                                                              |          4 |         35 |          0 |          4 |         39 |
+| frontend\src\services\modules\assignments\memo-output                                                                 |          3 |         20 |          0 |          4 |         24 |
+| frontend\src\services\modules\assignments\submissions                                                                 |          3 |         37 |          0 |          7 |         44 |
+| frontend\src\services\modules\assignments\tasks                                                                       |          5 |         60 |          0 |          6 |         66 |
+| frontend\src\services\modules\personnel                                                                               |          4 |         53 |          0 |          8 |         61 |
+| frontend\src\services\users                                                                                           |          5 |         67 |          2 |          8 |         77 |
+| frontend\src\types                                                                                                    |         36 |        416 |        171 |        166 |        753 |
+| frontend\src\types\auth                                                                                               |          3 |         21 |          6 |          9 |         36 |
+| frontend\src\types\common                                                                                             |          1 |         36 |          8 |         10 |         54 |
+| frontend\src\types\modules                                                                                            |         28 |        326 |        142 |        128 |        596 |
+| frontend\src\types\modules (Files)                                                                                    |          4 |         48 |         18 |         21 |         87 |
+| frontend\src\types\modules\assignments                                                                                |         20 |        240 |        106 |         92 |        438 |
+| frontend\src\types\modules\assignments (Files)                                                                        |          4 |         94 |         25 |         36 |        155 |
+| frontend\src\types\modules\assignments\config                                                                         |          2 |         29 |         48 |         15 |         92 |
+| frontend\src\types\modules\assignments\mark-allocator                                                                 |          4 |         20 |          9 |         10 |         39 |
+| frontend\src\types\modules\assignments\memo-output                                                                    |          3 |         14 |          3 |          6 |         23 |
+| frontend\src\types\modules\assignments\submissions                                                                    |          3 |         48 |          9 |         13 |         70 |
+| frontend\src\types\modules\assignments\tasks                                                                          |          4 |         35 |         12 |         12 |         59 |
+| frontend\src\types\modules\personnel                                                                                  |          4 |         38 |         18 |         15 |         71 |
+| frontend\src\types\users                                                                                              |          4 |         33 |         15 |         19 |         67 |
+| frontend\src\utils                                                                                                    |          4 |        263 |         81 |         57 |        401 |
+| frontend\src\utils (Files)                                                                                            |          3 |        111 |         44 |         23 |        178 |
+| frontend\src\utils\api                                                                                                |          1 |        152 |         37 |         34 |        223 |
+| tests                                                                                                                 |         57 |      8,145 |        551 |        481 |      9,177 |
+| tests (Files)                                                                                                         |          6 |      5,645 |          2 |         24 |      5,671 |
+| tests\cypress                                                                                                         |         41 |      2,265 |        523 |        404 |      3,192 |
+| tests\cypress\e2e                                                                                                     |         16 |      1,145 |         63 |        215 |      1,423 |
+| tests\cypress\e2e\auth                                                                                                |          2 |        116 |          2 |         29 |        147 |
+| tests\cypress\e2e\roles                                                                                               |         14 |      1,029 |         61 |        186 |      1,276 |
+| tests\cypress\e2e\roles\admin                                                                                         |          5 |        448 |         21 |         86 |        555 |
+| tests\cypress\e2e\roles\lecturer                                                                                      |          5 |        297 |         19 |         53 |        369 |
+| tests\cypress\e2e\roles\student                                                                                       |          1 |         63 |          4 |         11 |         78 |
+| tests\cypress\e2e\roles\tutor                                                                                         |          3 |        221 |         17 |         36 |        274 |
+| tests\cypress\fixtures                                                                                                |          2 |         31 |          0 |          0 |         31 |
+| tests\cypress\support                                                                                                 |         23 |      1,089 |        460 |        189 |      1,738 |
+| tests\cypress\support (Files)                                                                                         |          2 |          3 |          0 |          1 |          4 |
+| tests\cypress\support\commands                                                                                        |         21 |      1,086 |        460 |        188 |      1,734 |
+| tests\cypress\support\commands (Files)                                                                                |          1 |          2 |          0 |          1 |          3 |
+| tests\cypress\support\commands\api                                                                                    |         11 |        789 |        254 |         93 |      1,136 |
+| tests\cypress\support\commands\api (Files)                                                                            |          3 |        194 |         51 |         24 |        269 |
+| tests\cypress\support\commands\api\modules                                                                            |          8 |        595 |        203 |         69 |        867 |
+| tests\cypress\support\commands\api\modules (Files)                                                                    |          2 |        141 |         35 |         16 |        192 |
+| tests\cypress\support\commands\api\modules\assignments                                                                |          6 |        454 |        168 |         53 |        675 |
+| tests\cypress\support\commands\ui                                                                                     |          7 |        264 |        178 |         87 |        529 |
+| tests\cypress\support\commands\utils                                                                                  |          2 |         31 |         28 |          7 |         66 |
+| tests\k6                                                                                                              |         10 |        235 |         26 |         53 |        314 |
+| tests\k6\scenarios                                                                                                    |          6 |        190 |         18 |         44 |        252 |
+| tests\k6\scenarios\submissionLoad                                                                                     |          6 |        190 |         18 |         44 |        252 |
+| tests\k6\scenarios\submissionLoad (Files)                                                                             |          1 |         26 |          1 |          7 |         34 |
+| tests\k6\scenarios\submissionLoad\phases                                                                              |          5 |        164 |         17 |         37 |        218 |
+| tests\k6\shared                                                                                                       |          3 |         35 |          8 |          9 |         52 |
+| tests\k6\test_files                                                                                                   |          1 |         10 |          0 |          0 |         10 |
++-----------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-----------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| filename                                                                                                              | language           | code       | comment    | blank      | total      |
++-----------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| c:\Users\rxxim\Advanced-FitchFork\.github\actions\start-servers\action.yml                                            | YAML               |        223 |          7 |         21 |        251 |
+| c:\Users\rxxim\Advanced-FitchFork\.github\workflows\ci.yml                                                            | YAML               |        138 |          8 |         25 |        171 |
+| c:\Users\rxxim\Advanced-FitchFork\README.md                                                                           | Markdown           |        144 |          0 |         61 |        205 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\.cargo\config.toml                                                          | TOML               |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\Cargo.lock                                                                  | TOML               |      4,698 |          2 |        502 |      5,202 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\Cargo.toml                                                                  | TOML               |         14 |          0 |          1 |         15 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\INTEGRATION_TESTS.md                                                        | Markdown           |         20 |          0 |         10 |         30 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\Makefile.toml                                                               | TOML               |         21 |          0 |          7 |         28 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\README.md                                                                   | Markdown           |         54 |          0 |         29 |         83 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\UNIT_TESTS.md                                                               | Markdown           |         22 |          0 |         11 |         33 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\ai\Cargo.toml                                                               | TOML               |         15 |          0 |          2 |         17 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\ai\src\algorithms\code_coverage.rs                                          | Rust               |         18 |          5 |          6 |         29 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\ai\src\algorithms\genetic_algorithm.rs                                      | Rust               |        459 |         53 |         70 |        582 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\ai\src\algorithms\mod.rs                                                    | Rust               |          3 |          0 |          1 |          4 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\ai\src\algorithms\rng.rs                                                    | Rust               |        133 |          2 |         20 |        155 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\ai\src\lib.rs                                                               | Rust               |        252 |        151 |         55 |        458 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\ai\src\utils\attributes.rs                                                  | Rust               |         27 |         11 |          6 |         44 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\ai\src\utils\evaluator.rs                                                   | Rust               |        582 |         50 |         76 |        708 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\ai\src\utils\mod.rs                                                         | Rust               |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\ai\src\utils\output.rs                                                      | Rust               |        103 |         11 |         20 |        134 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\Cargo.toml                                                              | TOML               |         59 |          9 |         13 |         81 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\auth\claims.rs                                                      | Rust               |          9 |          0 |          2 |         11 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\auth\extractors.rs                                                  | Rust               |         42 |         21 |          7 |         70 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\auth\guards.rs                                                      | Rust               |        515 |         15 |         65 |        595 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\auth\middleware.rs                                                  | Rust               |         46 |         28 |          7 |         81 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\auth\mod.rs                                                         | Rust               |         29 |          4 |          8 |         41 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\lib.rs                                                              | Rust               |          5 |          0 |          0 |          5 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\main.rs                                                             | Rust               |         73 |          5 |         18 |         96 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\response\mod.rs                                                     | Rust               |         37 |         56 |          7 |        100 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\auth\get.rs                                                  | Rust               |        233 |        137 |         29 |        399 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\auth\mod.rs                                                  | Rust               |         24 |         32 |          4 |         60 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\auth\post.rs                                                 | Rust               |        495 |        322 |         70 |        887 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\common.rs                                                    | Rust               |         34 |          0 |          3 |         37 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\health.rs                                                    | Rust               |          9 |         26 |          3 |         38 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\me\announcements.rs                                          | Rust               |        148 |         55 |         26 |        229 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\me\assignments.rs                                            | Rust               |        140 |         54 |         23 |        217 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\me\grades.rs                                                 | Rust               |        246 |         85 |         31 |        362 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\me\mod.rs                                                    | Rust               |         15 |         21 |          4 |         40 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\me\submissions.rs                                            | Rust               |        258 |         75 |         32 |        365 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\me\tickets.rs                                                | Rust               |        217 |         66 |         32 |        315 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\mod.rs                                                       | Rust               |         20 |         23 |          3 |         46 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\announcements\common.rs                              | Rust               |          7 |          4 |          3 |         14 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\announcements\delete.rs                              | Rust               |         25 |         30 |          3 |         58 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\announcements\get.rs                                 | Rust               |        158 |         49 |         16 |        223 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\announcements\mod.rs                                 | Rust               |         23 |         23 |          5 |         51 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\announcements\post.rs                                | Rust               |         28 |         39 |          4 |         71 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\announcements\put.rs                                 | Rust               |         24 |         40 |          4 |         68 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\common.rs                                | Rust               |         69 |         11 |         10 |         90 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\config\get.rs                            | Rust               |        101 |         87 |          7 |        195 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\config\mod.rs                            | Rust               |         15 |         12 |          3 |         30 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\config\post.rs                           | Rust               |         86 |         48 |          8 |        142 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\delete.rs                                | Rust               |         74 |         75 |         11 |        160 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\files\delete.rs                          | Rust               |         82 |         45 |          8 |        135 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\files\get.rs                             | Rust               |        111 |         71 |         11 |        193 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\files\mod.rs                             | Rust               |         16 |         18 |          3 |         37 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\files\post.rs                            | Rust               |        151 |         54 |         10 |        215 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\get.rs                                   | Rust               |        507 |        238 |         51 |        796 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\interpreter\delete.rs                    | Rust               |         53 |         35 |          6 |         94 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\interpreter\get.rs                       | Rust               |         85 |         14 |          9 |        108 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\interpreter\mod.rs                       | Rust               |         33 |         18 |          4 |         55 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\interpreter\post.rs                      | Rust               |        132 |         18 |         10 |        160 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\mark_allocator\get.rs                    | Rust               |         28 |         92 |          3 |        123 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\mark_allocator\mod.rs                    | Rust               |         14 |         13 |          3 |         30 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\mark_allocator\post.rs                   | Rust               |         29 |         72 |          4 |        105 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\mark_allocator\put.rs                    | Rust               |         81 |        127 |          7 |        215 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\memo_output\get.rs                       | Rust               |         95 |         34 |         15 |        144 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\memo_output\mod.rs                       | Rust               |         11 |          6 |          2 |         19 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\memo_output\post.rs                      | Rust               |         79 |         85 |          8 |        172 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\mod.rs                                   | Rust               |        185 |         38 |          4 |        227 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\plagiarism\delete.rs                     | Rust               |        129 |        125 |         11 |        265 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\plagiarism\get.rs                        | Rust               |        310 |        104 |         46 |        460 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\plagiarism\mod.rs                        | Rust               |         25 |         24 |          4 |         53 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\plagiarism\patch.rs                      | Rust               |        116 |        116 |         12 |        244 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\plagiarism\post.rs                       | Rust               |        182 |        132 |         19 |        333 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\plagiarism\put.rs                        | Rust               |        118 |         89 |         11 |        218 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\post.rs                                  | Rust               |        100 |         64 |          6 |        170 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\put.rs                                   | Rust               |        253 |        138 |         27 |        418 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\submissions\common.rs                    | Rust               |         83 |         25 |         12 |        120 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\submissions\get.rs                       | Rust               |        604 |        212 |         66 |        882 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\submissions\mod.rs                       | Rust               |         45 |         19 |          3 |         67 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\submissions\post.rs                      | Rust               |        766 |        254 |         92 |      1,112 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tasks\common.rs                          | Rust               |         10 |          0 |          1 |         11 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tasks\delete.rs                          | Rust               |         33 |         35 |          2 |         70 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tasks\get.rs                             | Rust               |        192 |        120 |         23 |        335 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tasks\mod.rs                             | Rust               |         19 |         17 |          3 |         39 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tasks\post.rs                            | Rust               |         75 |        109 |          8 |        192 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tasks\put.rs                             | Rust               |         45 |        142 |          7 |        194 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\common.rs                        | Rust               |         50 |         25 |          8 |         83 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\delete.rs                        | Rust               |         37 |         42 |          6 |         85 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\get.rs                           | Rust               |        215 |        106 |         22 |        343 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\mod.rs                           | Rust               |         23 |         22 |          3 |         48 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\post.rs                          | Rust               |         43 |         49 |          6 |         98 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\put.rs                           | Rust               |         87 |         80 |         13 |        180 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\ticket_messages\common.rs        | Rust               |         30 |         17 |          5 |         52 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\ticket_messages\delete.rs        | Rust               |         41 |         42 |          8 |         91 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\ticket_messages\get.rs           | Rust               |        123 |         51 |         13 |        187 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\ticket_messages\mod.rs           | Rust               |         18 |         17 |          5 |         40 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\ticket_messages\post.rs          | Rust               |         90 |         70 |         11 |        171 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\assignments\tickets\ticket_messages\put.rs           | Rust               |         66 |         64 |          9 |        139 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\common.rs                                            | Rust               |         89 |          8 |         14 |        111 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\delete.rs                                            | Rust               |        118 |         77 |         13 |        208 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\get.rs                                               | Rust               |        359 |        210 |         36 |        605 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\mod.rs                                               | Rust               |         30 |         26 |          3 |         59 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\personnel\delete.rs                                  | Rust               |        109 |         87 |         15 |        211 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\personnel\get.rs                                     | Rust               |        220 |        102 |         28 |        350 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\personnel\mod.rs                                     | Rust               |         12 |         19 |          4 |         35 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\personnel\post.rs                                    | Rust               |        124 |         81 |         16 |        221 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\post.rs                                              | Rust               |         71 |         74 |          6 |        151 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\modules\put.rs                                               | Rust               |        179 |        129 |         28 |        336 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\users\common.rs                                              | Rust               |         38 |          0 |          7 |         45 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\users\delete.rs                                              | Rust               |         36 |         49 |          3 |         88 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\users\get.rs                                                 | Rust               |        204 |        120 |         23 |        347 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\users\mod.rs                                                 | Rust               |         23 |         27 |          4 |         54 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\users\post.rs                                                | Rust               |         85 |         45 |         12 |        142 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\routes\users\put.rs                                                 | Rust               |        207 |        121 |         33 |        361 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\services\email.rs                                                   | Rust               |        149 |         48 |         11 |        208 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\services\mod.rs                                                     | Rust               |          2 |          3 |          1 |          6 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\services\moss.rs                                                    | Rust               |        195 |         17 |         40 |        252 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\ws\handlers.rs                                                      | Rust               |        129 |         39 |         10 |        178 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\ws\mod.rs                                                           | Rust               |         12 |         18 |          5 |         35 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\ws\modules\assignments\mod.rs                                       | Rust               |          7 |          8 |          3 |         18 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\src\ws\modules\mod.rs                                                   | Rust               |         11 |         12 |          5 |         28 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\auth\extractors_test.rs                                           | Rust               |        116 |          0 |         22 |        138 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\auth\guards_test.rs                                               | Rust               |        636 |          2 |         87 |        725 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\auth\mod.rs                                                       | Rust               |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\helpers\app.rs                                                    | Rust               |         32 |          0 |          4 |         36 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\helpers\mod.rs                                                    | Rust               |          4 |          0 |          2 |          6 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\helpers\ws.rs                                                     | Rust               |         47 |          2 |          6 |         55 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\mod.rs                                                            | Rust               |          4 |          0 |          0 |          4 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\auth\get_test.rs                                           | Rust               |        416 |         20 |         85 |        521 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\auth\mod.rs                                                | Rust               |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\auth\post_test.rs                                          | Rust               |        587 |         23 |        126 |        736 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\health_test.rs                                             | Rust               |         26 |          0 |          4 |         30 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\me\grades_test.rs                                          | Rust               |        309 |          0 |         46 |        355 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\me\mod.rs                                                  | Rust               |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\me\submissions_test.rs                                     | Rust               |        193 |          2 |         22 |        217 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\mod.rs                                                     | Rust               |          5 |          0 |          0 |          5 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\announcements\delete_test.rs                       | Rust               |        134 |          0 |         26 |        160 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\announcements\mod.rs                               | Rust               |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\announcements\post_test.rs                         | Rust               |        189 |          0 |         41 |        230 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\announcements\put_test.rs                          | Rust               |        214 |          0 |         42 |        256 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\config\get_test.rs                     | Rust               |        261 |          3 |         46 |        310 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\config\mod.rs                          | Rust               |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\config\post_test.rs                    | Rust               |        258 |          4 |         41 |        303 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\delete_test.rs                         | Rust               |        398 |          5 |         70 |        473 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\files\delete_test.rs                   | Rust               |        178 |          0 |         24 |        202 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\files\get_test.rs                      | Rust               |        222 |          0 |         38 |        260 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\files\mod.rs                           | Rust               |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\files\post_test.rs                     | Rust               |        207 |          0 |         31 |        238 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\get_test.rs                            | Rust               |        472 |          4 |         94 |        570 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\mark_allocator\get_test.rs             | Rust               |        136 |          0 |         23 |        159 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\mark_allocator\mod.rs                  | Rust               |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\mark_allocator\post_test.rs            | Rust               |        223 |          0 |         29 |        252 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\mark_allocator\put_test.rs             | Rust               |        219 |          0 |         37 |        256 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\memo_output\get_test.rs                | Rust               |        239 |          1 |         36 |        276 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\memo_output\mod.rs                     | Rust               |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\memo_output\post_test.rs               | Rust               |        333 |          0 |         39 |        372 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\mod.rs                                 | Rust               |         12 |          0 |          0 |         12 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\plagiarism\delete_test.rs              | Rust               |        430 |         18 |         54 |        502 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\plagiarism\get_test.rs                 | Rust               |        483 |         16 |         90 |        589 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\plagiarism\mod.rs                      | Rust               |          5 |          0 |          0 |          5 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\plagiarism\patch_test.rs               | Rust               |        384 |         14 |         57 |        455 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\plagiarism\post_test.rs                | Rust               |        339 |         10 |         54 |        403 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\plagiarism\put_test.rs                 | Rust               |        320 |          6 |         45 |        371 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\post_test.rs                           | Rust               |        211 |          0 |         28 |        239 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\put_test.rs                            | Rust               |      1,117 |         30 |        212 |      1,359 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\submissions\get_test.rs                | Rust               |        301 |          2 |         50 |        353 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\submissions\mod.rs                     | Rust               |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\submissions\post_test.rs               | Rust               |      1,800 |         96 |        240 |      2,136 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tasks\delete_test.rs                   | Rust               |        158 |          4 |         22 |        184 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tasks\get_test.rs                      | Rust               |        349 |         12 |         57 |        418 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tasks\mod.rs                           | Rust               |          4 |          0 |          0 |          4 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tasks\post_test.rs                     | Rust               |        301 |         10 |         47 |        358 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tasks\put_test.rs                      | Rust               |        312 |         10 |         47 |        369 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tickets\delete_test.rs                 | Rust               |        113 |          0 |         11 |        124 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tickets\mod.rs                         | Rust               |          4 |          0 |          0 |          4 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tickets\post_test.rs                   | Rust               |        104 |          0 |         19 |        123 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tickets\put_test.rs                    | Rust               |        151 |          0 |         22 |        173 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tickets\ticket_messages\delete_test.rs | Rust               |        237 |          0 |         33 |        270 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tickets\ticket_messages\mod.rs         | Rust               |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tickets\ticket_messages\post_test.rs   | Rust               |        222 |          0 |         31 |        253 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\assignments\tickets\ticket_messages\put_test.rs    | Rust               |        250 |          0 |         34 |        284 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\delete_test.rs                                     | Rust               |        277 |         10 |         53 |        340 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\get_test.rs                                        | Rust               |        297 |         11 |         63 |        371 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\mod.rs                                             | Rust               |          7 |          0 |          0 |          7 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\personnel\delete_test.rs                           | Rust               |        165 |          0 |         31 |        196 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\personnel\get_test.rs                              | Rust               |        145 |          0 |         35 |        180 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\personnel\mod.rs                                   | Rust               |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\personnel\post_test.rs                             | Rust               |        150 |          1 |         33 |        184 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\post_test.rs                                       | Rust               |        223 |          9 |         42 |        274 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\modules\put_test.rs                                        | Rust               |        474 |         18 |         81 |        573 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\users\delete_test.rs                                       | Rust               |        158 |          7 |         32 |        197 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\users\get_test.rs                                          | Rust               |        262 |         15 |         56 |        333 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\users\mod.rs                                               | Rust               |          4 |          0 |          0 |          4 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\users\post_test.rs                                         | Rust               |        163 |          6 |         34 |        203 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\routes\users\put_test.rs                                          | Rust               |        207 |         10 |         40 |        257 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\ws\chat_handler_test.rs                                           | Rust               |         95 |          0 |         19 |        114 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\api\tests\ws\mod.rs                                                         | Rust               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\Cargo.toml                                                     | TOML               |         20 |          0 |          2 |         22 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\images\Dockerfile                                              | Docker             |         13 |          0 |          3 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\api\api.rs                                                 | Rust               |         49 |          3 |         11 |         63 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\api\mod.rs                                                 | Rust               |          1 |          1 |          1 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\container\container.rs                                     | Rust               |        153 |          1 |         35 |        189 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\container\mod.rs                                           | Rust               |          1 |          1 |          1 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\lib.rs                                                     | Rust               |          4 |          1 |          1 |          6 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\main.rs                                                    | Rust               |         30 |          7 |          7 |         44 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\manager\manager.rs                                         | Rust               |         73 |          5 |         16 |         94 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\manager\mod.rs                                             | Rust               |          2 |          1 |          1 |          4 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\manager\queue.rs                                           | Rust               |         34 |          4 |          6 |         44 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\utils\compression.rs                                       | Rust               |        123 |         11 |         20 |        154 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\utils\config_management.rs                                 | Rust               |         16 |         10 |          5 |         31 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\src\utils\mod.rs                                               | Rust               |          2 |          1 |          1 |          4 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\tests\queue.rs                                                 | Rust               |        205 |          1 |         36 |        242 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_manager\tests\run_code.rs                                              | Rust               |         44 |          1 |         12 |         57 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_runner\Cargo.toml                                                      | TOML               |         28 |          0 |          5 |         33 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_runner\src\lib.rs                                                      | Rust               |        597 |        105 |        128 |        830 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_runner\src\mod.rs                                                      | Rust               |          2 |          0 |          1 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_runner\src\validate_files.rs                                           | Rust               |        295 |         88 |         58 |        441 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_runner\tests\interpreter.rs                                            | Rust               |        209 |          4 |         29 |        242 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_runner\tests\memo_outputs.rs                                           | Rust               |         98 |          0 |         21 |        119 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\code_runner\tests\submission_outputs.rs                                     | Rust               |        183 |          0 |         34 |        217 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\common\Cargo.toml                                                           | TOML               |          8 |          0 |          1 |          9 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\common\src\lib.rs                                                           | Rust               |         12 |          0 |          1 |         13 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\Cargo.toml                                                               | TOML               |         20 |          0 |          2 |         22 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\lib.rs                                                               | Rust               |         12 |          0 |          3 |         15 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\announcements.rs                                              | Rust               |         93 |          0 |         17 |        110 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\assignment.rs                                                 | Rust               |        462 |         54 |         59 |        575 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\assignment_file.rs                                            | Rust               |        225 |         21 |         44 |        290 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\assignment_interpreter.rs                                     | Rust               |        102 |         76 |         40 |        218 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\assignment_memo_output.rs                                     | Rust               |        109 |         26 |         26 |        161 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\assignment_overwrite_file.rs                                  | Rust               |        112 |          4 |         24 |        140 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\assignment_submission.rs                                      | Rust               |        249 |         83 |         41 |        373 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\assignment_submission_output.rs                               | Rust               |        193 |         11 |         34 |        238 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\assignment_task.rs                                            | Rust               |         83 |          6 |          8 |         97 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\mod.rs                                                        | Rust               |         32 |          0 |          2 |         34 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\module.rs                                                     | Rust               |        128 |         18 |         27 |        173 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\password_reset_token.rs                                       | Rust               |         79 |          0 |          9 |         88 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\plagiarism_case.rs                                            | Rust               |         64 |         29 |         16 |        109 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\ticket_messages.rs                                            | Rust               |         87 |          0 |         18 |        105 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\tickets.rs                                                    | Rust               |        115 |          0 |         27 |        142 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\user.rs                                                       | Rust               |        241 |         68 |         39 |        348 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\models\user_module_role.rs                                           | Rust               |        164 |         19 |         28 |        211 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\db\src\test_utils.rs                                                        | Rust               |         12 |          0 |          4 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\Cargo.toml                                                           | TOML               |         14 |          0 |          2 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\comparators\exact_comparator.rs                                  | Rust               |        126 |         24 |         14 |        164 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\comparators\mod.rs                                               | Rust               |          3 |         14 |          1 |         18 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\comparators\percentage_comparator.rs                             | Rust               |        151 |         32 |         22 |        205 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\comparators\regex_comparator.rs                                  | Rust               |        163 |         25 |         22 |        210 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\error.rs                                                         | Rust               |         12 |         31 |          1 |         44 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\feedback\ai_feedback.rs                                          | Rust               |        145 |         57 |         27 |        229 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\feedback\auto_feedback.rs                                        | Rust               |         97 |         18 |         12 |        127 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\feedback\manual_feedback.rs                                      | Rust               |         11 |          4 |          3 |         18 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\feedback\mod.rs                                                  | Rust               |          3 |         11 |          1 |         15 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\lib.rs                                                           | Rust               |        585 |         76 |         86 |        747 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\parsers\allocator_parser.rs                                      | Rust               |        258 |         55 |         27 |        340 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\parsers\complexity_parser.rs                                     | Rust               |        187 |         71 |         29 |        287 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\parsers\coverage_parser.rs                                       | Rust               |        270 |         86 |         40 |        396 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\parsers\mod.rs                                                   | Rust               |          4 |         14 |          1 |         19 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\parsers\output_parser.rs                                         | Rust               |        378 |         47 |         46 |        471 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\report.rs                                                        | Rust               |        191 |        122 |         22 |        335 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\scorer.rs                                                        | Rust               |        119 |         50 |          9 |        178 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\allocator_parser\allocator_report_1.json              | JSON               |         15 |          0 |          1 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\allocator_parser\allocator_report_2.json              | JSON               |         22 |          0 |          1 |         23 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\allocator_parser\allocator_report_3.json              | JSON               |         13 |          0 |          1 |         14 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\allocator_parser\allocator_report_4.json              | JSON               |         15 |          0 |          1 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\allocator_parser\allocator_report_5.json              | JSON               |         15 |          0 |          1 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\complexity_parser\complexity_report_1.json            | JSON               |          9 |          0 |          0 |          9 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\complexity_parser\complexity_report_2.json            | JSON               |          9 |          0 |          0 |          9 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\complexity_parser\complexity_report_3.json            | JSON               |          8 |          0 |          0 |          8 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\complexity_parser\complexity_report_4.json            | JSON               |          9 |          0 |          0 |          9 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\complexity_parser\complexity_report_5.json            | JSON               |         12 |          0 |          0 |         12 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\coverage_parser\coverage_report_1.json                | JSON               |         17 |          0 |          0 |         17 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\coverage_parser\coverage_report_2.json                | JSON               |         28 |          0 |          0 |         28 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\coverage_parser\coverage_report_3.json                | JSON               |         11 |          0 |          0 |         11 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\coverage_parser\coverage_report_4.json                | JSON               |         17 |          0 |          0 |         17 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\coverage_parser\coverage_report_5.json                | JSON               |         16 |          0 |          0 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case1\allocator.json                      | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case1\complexity.json                     | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case1\coverage.json                       | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case2\allocator.json                      | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case2\complexity.json                     | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case2\coverage.json                       | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case3\allocator.json                      | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case3\complexity.json                     | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case3\coverage.json                       | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case4\allocator.json                      | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case4\complexity.json                     | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case4\coverage.json                       | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case5\allocator.json                      | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case5\complexity.json                     | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\file_loader\case5\coverage.json                       | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\marker\case1\allocator.json                           | JSON               |         14 |          0 |          0 |         14 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\marker\case2\allocator.json                           | JSON               |         25 |          0 |          1 |         26 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\marker\case3\allocator.json                           | JSON               |         25 |          0 |          0 |         25 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\marker\case4\allocator.json                           | JSON               |         25 |          0 |          0 |         25 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\marker\case5\allocator.json                           | JSON               |         25 |          0 |          0 |         25 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\marker\case6\allocator.json                           | JSON               |         15 |          0 |          0 |         15 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\marker\case7\allocator.json                           | JSON               |         15 |          0 |          0 |         15 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\marker\case8\allocator.json                           | JSON               |         15 |          0 |          0 |         15 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\test_files\marker\case9\allocator.json                           | JSON               |         15 |          0 |          0 |         15 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\traits\comparator.rs                                             | Rust               |          9 |         10 |          1 |         20 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\traits\feedback.rs                                               | Rust               |         13 |         19 |          3 |         35 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\traits\mod.rs                                                    | Rust               |          3 |         10 |          1 |         14 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\traits\parser.rs                                                 | Rust               |          5 |         49 |          4 |         58 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\types.rs                                                         | Rust               |         30 |         29 |          6 |         65 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\utilities\file_loader.rs                                         | Rust               |        237 |         54 |         20 |        311 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\marker\src\utilities\mod.rs                                                 | Rust               |          1 |          8 |          1 |         10 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\Cargo.toml                                                        | TOML               |         18 |          0 |          3 |         21 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\lib.rs                                                        | Rust               |          4 |          0 |          2 |          6 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\main.rs                                                       | Rust               |         45 |          0 |          8 |         53 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202505290001_create_users.rs                      | Rust               |         33 |          0 |          5 |         38 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202505290002_create_modules.rs                    | Rust               |         33 |          0 |          5 |         38 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202505290003_create_user_module_roles.rs          | Rust               |         55 |          0 |          5 |         60 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202505290004_create_assignments.rs                | Rust               |         76 |          0 |          5 |         81 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202505290005_create_assignment_files.rs           | Rust               |         76 |          0 |          5 |         81 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202505290006_create_assignment_submissions.rs     | Rust               |         76 |          0 |          5 |         81 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202505290007_create_password_reset_tokens.rs      | Rust               |         62 |          0 |          5 |         67 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202505290008_create_tasks.rs                      | Rust               |         71 |          0 |          5 |         76 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202505290009_create_memo_outputs.rs               | Rust               |         74 |          0 |          5 |         79 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202505290010_create_submission_outputs.rs         | Rust               |         77 |          0 |          5 |         82 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202505290011_create_overwrite_files.rs            | Rust               |         78 |          0 |          5 |         83 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202506080012_create_plagiarism_cases.rs           | Rust               |         72 |          0 |          5 |         77 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202508020001_create_tickets.rs                    | Rust               |         92 |          0 |          5 |         97 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202508020002_create_ticket_messages.rs            | Rust               |         75 |          0 |          5 |         80 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202508020003_create_interpreter.rs                | Rust               |         58 |          0 |          5 |         63 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\m202508060001_create_announcements.rs              | Rust               |         86 |          0 |          5 |         91 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrations\mod.rs                                             | Rust               |         16 |          0 |          1 |         17 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\migrator.rs                                                   | Rust               |         26 |          0 |          4 |         30 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\migration\src\runner.rs                                                     | Rust               |         39 |          0 |          8 |         47 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\moss_parser\Cargo.toml                                                      | TOML               |         14 |          0 |          2 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\moss_parser\src\main.rs                                                     | Rust               |        336 |          5 |         48 |        389 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\Cargo.toml                                                           | TOML               |         18 |          0 |          1 |         19 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\main.rs                                                          | Rust               |         49 |          0 |          4 |         53 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seed.rs                                                          | Rust               |         27 |          0 |          6 |         33 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\assignment.rs                                              | Rust               |         66 |          0 |          8 |         74 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\assignment_file.rs                                         | Rust               |        434 |          3 |         69 |        506 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\assignment_interpreter.rs                                  | Rust               |        147 |          7 |         31 |        185 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\assignment_memo_output.rs                                  | Rust               |         56 |          3 |          8 |         67 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\assignment_overwrite_file.rs                               | Rust               |         56 |          3 |          8 |         67 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\assignment_submission.rs                                   | Rust               |        245 |          1 |         33 |        279 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\assignment_submission_output.rs                            | Rust               |         57 |          1 |          9 |         67 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\assignment_task.rs                                         | Rust               |         85 |          2 |         13 |        100 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\mod.rs                                                     | Rust               |         13 |          0 |          0 |         13 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\module.rs                                                  | Rust               |         78 |          1 |         11 |         90 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\plagiarism_case.rs                                         | Rust               |         65 |          4 |         12 |         81 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\tickets.rs                                                 | Rust               |         51 |          0 |         11 |         62 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\user.rs                                                    | Rust               |         20 |          6 |          8 |         34 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\seeder\src\seeds\user_role.rs                                               | Rust               |         60 |          3 |          8 |         71 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\util\Cargo.toml                                                             | TOML               |         21 |          0 |          1 |         22 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\util\src\config.rs                                                          | Rust               |        150 |         23 |         28 |        201 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\util\src\execution_config\execution_config.rs                               | Rust               |        369 |          7 |         78 |        454 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\util\src\execution_config\mod.rs                                            | Rust               |          2 |          0 |          2 |          4 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\util\src\lib.rs                                                             | Rust               |          5 |          0 |          0 |          5 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\util\src\mark_allocator\mark_allocator.rs                                   | Rust               |        138 |         50 |         34 |        222 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\util\src\mark_allocator\mod.rs                                              | Rust               |          1 |          0 |          1 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\util\src\state.rs                                                           | Rust               |         26 |         25 |          8 |         59 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\util\src\ws\handler.rs                                                      | Rust               |         69 |          4 |          9 |         82 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\util\src\ws\manager.rs                                                      | Rust               |         80 |         39 |         26 |        145 |
+| c:\Users\rxxim\Advanced-FitchFork\backend\util\src\ws\mod.rs                                                          | Rust               |          4 |          0 |          2 |          6 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\eslint.config.js                                                           | JavaScript         |         51 |          1 |          3 |         55 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\index.html                                                                 | HTML               |         13 |          0 |          1 |         14 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\package-lock.json                                                          | JSON               |     12,080 |          0 |          1 |     12,081 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\package.json                                                               | JSON               |         65 |          0 |          0 |         65 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\public\FitchFork.html                                                      | HTML               |         20 |          0 |          3 |         23 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\public\ff_logo_dark.svg                                                    | XML                |          4 |          0 |          1 |          5 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\public\ff_logo_favicon.svg                                                 | XML                |          5 |          0 |          1 |          6 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\public\ff_logo_light.svg                                                   | XML                |          4 |          0 |          1 |          5 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\App.css                                                                | PostCSS            |          0 |          0 |          1 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\App.tsx                                                                | TypeScript JSX     |        132 |          7 |         21 |        160 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\AdminTag.tsx                                                | TypeScript JSX     |          7 |          1 |          3 |         11 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\CodeDiffEditor.tsx                                          | TypeScript JSX     |         66 |          2 |          8 |         76 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\CodeEditor.tsx                                              | TypeScript JSX     |        105 |          3 |         11 |        119 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\ControlBar.tsx                                              | TypeScript JSX     |        460 |          1 |         41 |        502 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\CreateModal.tsx                                             | TypeScript JSX     |        103 |          3 |         14 |        120 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\EditModal.tsx                                               | TypeScript JSX     |        100 |          1 |         12 |        113 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\EntityList.tsx                                              | TypeScript JSX     |        465 |          0 |         31 |        496 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\Logo.tsx                                                    | TypeScript JSX     |         83 |          0 |          9 |         92 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\Notifier.tsx                                                | TypeScript JSX     |         26 |          1 |          6 |         33 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\PageHeader.tsx                                              | TypeScript JSX     |         25 |          0 |          5 |         30 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\SettingsGroup.tsx                                           | TypeScript JSX     |         31 |          0 |          4 |         35 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\StatCard.tsx                                                | TypeScript JSX     |         35 |          0 |          3 |         38 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\TagSummary.tsx                                              | TypeScript JSX     |         75 |          3 |          8 |         86 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\assignments\AssignmentCard.tsx                              | TypeScript JSX     |         68 |          0 |         10 |         78 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\assignments\AssignmentStatusTag.tsx                         | TypeScript JSX     |         21 |          0 |          6 |         27 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\assignments\AssignmentTypeTag.tsx                           | TypeScript JSX     |         18 |          0 |          5 |         23 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\dashboard\ModuleAssignmentsPanel.tsx                        | TypeScript JSX     |         46 |          0 |          5 |         51 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\dashboard\QuickActionsPanel.tsx                             | TypeScript JSX     |         36 |          0 |          6 |         42 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\dashboard\SubmissionsPanel.tsx                              | TypeScript JSX     |        132 |          2 |         18 |        152 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\dashboard\SystemOverviewPanel.tsx                           | TypeScript JSX     |        250 |          1 |         30 |        281 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\dashboard\UserManagementPanel.tsx                           | TypeScript JSX     |         57 |          0 |          8 |         65 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\layout\HeaderBar.tsx                                        | TypeScript JSX     |         82 |          4 |         11 |         97 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\layout\NotificationDropdown.tsx                             | TypeScript JSX     |         31 |          1 |          6 |         38 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\layout\SidebarContent.tsx                                   | TypeScript JSX     |        124 |          0 |          9 |        133 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\modules\ModuleCard.tsx                                      | TypeScript JSX     |         87 |          0 |         10 |         97 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\modules\ModuleCreditsTag.tsx                                | TypeScript JSX     |         12 |          1 |          5 |         18 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\modules\ModuleRoleTag.tsx                                   | TypeScript JSX     |         27 |          0 |          6 |         33 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\routes\ProtectedAdminRoute.tsx                              | TypeScript JSX     |          8 |          0 |          4 |         12 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\routes\ProtectedAuthRoute.tsx                               | TypeScript JSX     |          7 |          0 |          4 |         11 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\routes\ProtectedModuleRoute.tsx                             | TypeScript JSX     |         19 |          0 |          8 |         27 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\submissions\SubmisisonTasks.tsx                             | TypeScript JSX     |        107 |          0 |         16 |        123 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\submissions\SubmissionCard.tsx                              | TypeScript JSX     |         59 |          0 |          9 |         68 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\users\UserAdminTag.tsx                                      | TypeScript JSX     |          8 |          0 |          4 |         12 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\users\UserCard.tsx                                          | TypeScript JSX     |         36 |          0 |          5 |         41 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\components\utils\ConfirmModal.tsx                                      | TypeScript JSX     |         34 |          0 |          4 |         38 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\config\api.ts                                                          | TypeScript         |          2 |          3 |          0 |          5 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\constants\assignments\index.ts                                         | TypeScript         |         15 |          0 |          1 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\constants\mock\assignment.ts                                           | TypeScript         |          5 |          0 |          1 |          6 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\constants\pagination.ts                                                | TypeScript         |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\constants\sidebar.ts                                                   | TypeScript         |         89 |          9 |          8 |        106 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\context\AppMuiTheme.tsx                                                | TypeScript JSX     |         16 |          1 |          4 |         21 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\context\AssignmentContext.tsx                                          | TypeScript JSX     |         21 |          0 |          6 |         27 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\context\AssignmentSetupContext.tsx                                     | TypeScript JSX     |         21 |          0 |          6 |         27 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\context\AuthContext.tsx                                                | TypeScript JSX     |        203 |          2 |         32 |        237 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\context\BreadcrumbContext.tsx                                          | TypeScript JSX     |         23 |          0 |          8 |         31 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\context\ModuleContext.tsx                                              | TypeScript JSX     |         18 |          1 |          6 |         25 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\context\StepNavigatorContext.tsx                                       | TypeScript JSX     |         13 |          0 |          4 |         17 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\context\ThemeContext.tsx                                               | TypeScript JSX     |         43 |          1 |         10 |         54 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\context\UIContext.tsx                                                  | TypeScript JSX     |         43 |          1 |          9 |         53 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\hooks\useBreadcrumbs.ts                                                | TypeScript         |         25 |          1 |          7 |         33 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\hooks\useEntityViewState.tsx                                           | TypeScript JSX     |         97 |         51 |         29 |        177 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\hooks\useNotImplemented.ts                                             | TypeScript         |          8 |          0 |          4 |         12 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\hooks\useTableQuery.ts                                                 | TypeScript         |         62 |          3 |         12 |         77 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\index.css                                                              | PostCSS            |         60 |         32 |         13 |        105 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\layouts\AppLayout.tsx                                                  | TypeScript JSX     |        126 |          0 |         18 |        144 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\layouts\AssignmentLayout.tsx                                           | TypeScript JSX     |        470 |          2 |         41 |        513 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\layouts\AuthLayout.tsx                                                 | TypeScript JSX     |          8 |          0 |          2 |         10 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\layouts\HelpPageLayout.tsx                                             | TypeScript JSX     |         49 |          0 |          7 |         56 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\layouts\ModuleLayout.tsx                                               | TypeScript JSX     |        119 |          0 |         16 |        135 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\layouts\SettingsLayout.tsx                                             | TypeScript JSX     |         60 |          0 |          7 |         67 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\main.tsx                                                               | TypeScript JSX     |         30 |          0 |          2 |         32 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\Chat.tsx                                                         | TypeScript JSX     |        226 |          4 |         33 |        263 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\Dashboard.tsx                                                    | TypeScript JSX     |         53 |          3 |          5 |         61 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\Landing.tsx                                                      | TypeScript JSX     |        154 |          7 |         13 |        174 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\auth\Login.tsx                                                   | TypeScript JSX     |         88 |          0 |         13 |        101 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\auth\PasswordResetSuccessPage.tsx                                | TypeScript JSX     |         26 |          0 |          4 |         30 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\auth\RequestPasswordResetPage.tsx                                | TypeScript JSX     |         91 |          0 |         15 |        106 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\auth\ResetPasswordPage.tsx                                       | TypeScript JSX     |        110 |          0 |         17 |        127 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\auth\Signup.tsx                                                  | TypeScript JSX     |        121 |          0 |         15 |        136 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\help\HelpAccount.tsx                                             | TypeScript JSX     |         75 |          0 |         15 |         90 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\help\HelpAssignments.tsx                                         | TypeScript JSX     |         96 |          0 |         18 |        114 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\help\HelpContact.tsx                                             | TypeScript JSX     |         77 |          0 |         15 |         92 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\help\HelpSubmissions.tsx                                         | TypeScript JSX     |        104 |          0 |         17 |        121 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\help\HelpTroubleshooting.tsx                                     | TypeScript JSX     |         93 |          0 |         18 |        111 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\ModuleGrades.tsx                                         | TypeScript JSX     |        250 |          5 |         31 |        286 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\ModuleOverview.tsx                                       | TypeScript JSX     |        120 |          3 |         11 |        134 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\ModulePersonnel.tsx                                      | TypeScript JSX     |        231 |          0 |         26 |        257 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\ModuleResources.tsx                                      | TypeScript JSX     |         57 |          0 |          6 |         63 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\ModulesList.tsx                                          | TypeScript JSX     |        290 |          0 |         19 |        309 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\AssignmentFiles.tsx                          | TypeScript JSX     |        124 |          0 |         14 |        138 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\AssignmentsList.tsx                          | TypeScript JSX     |        407 |          0 |         29 |        436 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\Config.tsx                                   | TypeScript JSX     |        244 |          2 |         29 |        275 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\MarkAllocator.tsx                            | TypeScript JSX     |         60 |          0 |         12 |         72 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\MemoOutput.tsx                               | TypeScript JSX     |         51 |          0 |          6 |         57 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\Tasks.tsx                                    | TypeScript JSX     |        287 |          1 |         30 |        318 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\steps\AssignmentSetup.tsx                    | TypeScript JSX     |        210 |          0 |         38 |        248 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\steps\StepConfig.tsx                         | TypeScript JSX     |         88 |          0 |         14 |        102 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\steps\StepFilesResources.tsx                 | TypeScript JSX     |        178 |          0 |         22 |        200 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\steps\StepFinal.tsx                          | TypeScript JSX     |         11 |          0 |          4 |         15 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\steps\StepMarkAllocator.tsx                  | TypeScript JSX     |         72 |          0 |         13 |         85 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\steps\StepMemoAndAllocator.tsx               | TypeScript JSX     |         83 |          1 |         14 |         98 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\steps\StepMemoOutput.tsx                     | TypeScript JSX     |         72 |          0 |         12 |         84 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\steps\StepTasks.tsx                          | TypeScript JSX     |        172 |          0 |         24 |        196 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\steps\StepWelcome.tsx                        | TypeScript JSX     |         35 |          0 |          7 |         42 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\submissions\index\Submissions.tsx            | TypeScript JSX     |         10 |          0 |          4 |         14 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\submissions\index\SubmissionsList.tsx        | TypeScript JSX     |        204 |          0 |         18 |        222 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\modules\assignments\submissions\show\SubmissionView.tsx          | TypeScript JSX     |        161 |          0 |         17 |        178 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\settings\Account.tsx                                             | TypeScript JSX     |        158 |          0 |         20 |        178 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\settings\Appearance.tsx                                          | TypeScript JSX     |        162 |          0 |         12 |        174 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\settings\Security.tsx                                            | TypeScript JSX     |        106 |          0 |         14 |        120 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\shared\CalendarPage.tsx                                          | TypeScript JSX     |         16 |          0 |          2 |         18 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\shared\HelpPage.tsx                                              | TypeScript JSX     |        108 |          0 |         15 |        123 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\shared\status\Forbidden.tsx                                      | TypeScript JSX     |         34 |          0 |          4 |         38 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\shared\status\NotFound.tsx                                       | TypeScript JSX     |         34 |          0 |          4 |         38 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\shared\status\ServerError.tsx                                    | TypeScript JSX     |         34 |          0 |          3 |         37 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\shared\status\Unauthorized.tsx                                   | TypeScript JSX     |         34 |          0 |          4 |         38 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\shared\status\UnderConstruction.tsx                              | TypeScript JSX     |         37 |          0 |          6 |         43 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\users\UserView.tsx                                               | TypeScript JSX     |        191 |          0 |         19 |        210 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\pages\users\UsersList.tsx                                              | TypeScript JSX     |        262 |          0 |         20 |        282 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\routes\ProtectedRoute.tsx                                              | TypeScript JSX     |         16 |          9 |          7 |         32 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\auth\get.ts                                                   | TypeScript         |         44 |          0 |         11 |         55 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\auth\index.ts                                                 | TypeScript         |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\auth\post.ts                                                  | TypeScript         |         60 |          0 |          7 |         67 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\config\get.ts                             | TypeScript         |          8 |          0 |          1 |          9 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\config\index.ts                           | TypeScript         |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\config\post.ts                            | TypeScript         |         15 |          0 |          2 |         17 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\delete.ts                                 | TypeScript         |         29 |          0 |          3 |         32 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\get.ts                                    | TypeScript         |         60 |          0 |          7 |         67 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\index.ts                                  | TypeScript         |          4 |          0 |          0 |          4 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\mark-allocator\get.ts                     | TypeScript         |          8 |          0 |          2 |         10 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\mark-allocator\index.ts                   | TypeScript         |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\mark-allocator\post.ts                    | TypeScript         |         10 |          0 |          1 |         11 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\mark-allocator\put.ts                     | TypeScript         |         14 |          0 |          1 |         15 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\memo-output\get.ts                        | TypeScript         |          8 |          0 |          3 |         11 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\memo-output\index.ts                      | TypeScript         |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\memo-output\post.ts                       | TypeScript         |         10 |          0 |          1 |         11 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\post.ts                                   | TypeScript         |         25 |          0 |          4 |         29 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\put.ts                                    | TypeScript         |         43 |          0 |          5 |         48 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\submissions\get.ts                        | TypeScript         |         21 |          0 |          4 |         25 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\submissions\index.ts                      | TypeScript         |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\submissions\post.ts                       | TypeScript         |         15 |          0 |          3 |         18 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\tasks\delete.ts                           | TypeScript         |         11 |          0 |          1 |         12 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\tasks\get.ts                              | TypeScript         |         15 |          0 |          3 |         18 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\tasks\index.ts                            | TypeScript         |          4 |          0 |          0 |          4 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\tasks\post.ts                             | TypeScript         |         12 |          0 |          1 |         13 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\assignments\tasks\put.ts                              | TypeScript         |         18 |          0 |          1 |         19 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\delete.ts                                             | TypeScript         |          7 |          0 |          1 |          8 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\get.ts                                                | TypeScript         |         28 |          0 |          4 |         32 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\index.ts                                              | TypeScript         |          4 |          0 |          0 |          4 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\personnel\delete.ts                                   | TypeScript         |         14 |          0 |          2 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\personnel\get.ts                                      | TypeScript         |         22 |          0 |          4 |         26 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\personnel\index.ts                                    | TypeScript         |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\personnel\post.ts                                     | TypeScript         |         14 |          0 |          2 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\post.ts                                               | TypeScript         |         12 |          0 |          1 |         13 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\modules\put.ts                                                | TypeScript         |         11 |          0 |          1 |         12 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\users\delete.ts                                               | TypeScript         |          7 |          0 |          1 |          8 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\users\get.ts                                                  | TypeScript         |         23 |          0 |          3 |         26 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\users\index.ts                                                | TypeScript         |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\users\post.ts                                                 | TypeScript         |         23 |          2 |          3 |         28 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\services\users\put.ts                                                  | TypeScript         |         11 |          0 |          1 |         12 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\auth\index.ts                                                    | TypeScript         |          2 |          0 |          1 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\auth\responses.ts                                                | TypeScript         |         13 |          6 |          6 |         25 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\auth\shared.ts                                                   | TypeScript         |          6 |          0 |          2 |          8 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\common\index.ts                                                  | TypeScript         |         36 |          8 |         10 |         54 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\config\index.ts                              | TypeScript         |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\config\shared.ts                             | TypeScript         |         28 |         48 |         15 |         91 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\index.ts                                     | TypeScript         |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\mark-allocator\index.ts                      | TypeScript         |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\mark-allocator\requests.ts                   | TypeScript         |          2 |          3 |          4 |          9 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\mark-allocator\responses.ts                  | TypeScript         |          4 |          6 |          4 |         14 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\mark-allocator\shared.ts                     | TypeScript         |         12 |          0 |          2 |         14 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\memo-output\index.ts                         | TypeScript         |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\memo-output\responses.ts                     | TypeScript         |          3 |          3 |          4 |         10 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\memo-output\shared.ts                        | TypeScript         |         10 |          0 |          2 |         12 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\requests.ts                                  | TypeScript         |         21 |         13 |         11 |         45 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\responses.ts                                 | TypeScript         |         23 |         12 |         16 |         51 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\shared.ts                                    | TypeScript         |         47 |          0 |          9 |         56 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\submissions\index.ts                         | TypeScript         |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\submissions\responses.ts                     | TypeScript         |          7 |          6 |          6 |         19 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\submissions\shared.ts                        | TypeScript         |         39 |          3 |          7 |         49 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\tasks\index.ts                               | TypeScript         |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\tasks\requests.ts                            | TypeScript         |          5 |          0 |          0 |          5 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\tasks\responses.ts                           | TypeScript         |         14 |         12 |         10 |         36 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\assignments\tasks\shared.ts                              | TypeScript         |         13 |          0 |          2 |         15 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\index.ts                                                 | TypeScript         |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\personnel\index.ts                                       | TypeScript         |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\personnel\requests.ts                                    | TypeScript         |         19 |          9 |          8 |         36 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\personnel\responses.ts                                   | TypeScript         |         10 |          9 |          7 |         26 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\personnel\shared.ts                                      | TypeScript         |          6 |          0 |          0 |          6 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\requests.ts                                              | TypeScript         |          3 |          6 |          5 |         14 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\responses.ts                                             | TypeScript         |         27 |         12 |         12 |         51 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\modules\shared.ts                                                | TypeScript         |         15 |          0 |          4 |         19 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\users\index.ts                                                   | TypeScript         |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\users\requests.ts                                                | TypeScript         |          9 |          6 |          8 |         23 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\users\responses.ts                                               | TypeScript         |         14 |          9 |         10 |         33 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\types\users\shared.ts                                                  | TypeScript         |          7 |          0 |          1 |          8 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\utils\EventBus.ts                                                      | TypeScript         |         19 |         44 |          6 |         69 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\utils\api\index.ts                                                     | TypeScript         |        152 |         37 |         34 |        223 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\utils\authSession.ts                                                   | TypeScript         |         49 |          0 |          9 |         58 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\utils\message.tsx                                                      | TypeScript JSX     |         43 |          0 |          8 |         51 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\src\vite-env.d.ts                                                          | TypeScript         |          0 |          1 |          1 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\tailwind.config.ts                                                         | TypeScript         |         11 |          1 |          3 |         15 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\tsconfig.app.json                                                          | JSON               |         28 |          0 |          4 |         32 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\tsconfig.json                                                              | JSON with Comments |         11 |          0 |          1 |         12 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\tsconfig.node.json                                                         | JSON               |         21 |          2 |          3 |         26 |
+| c:\Users\rxxim\Advanced-FitchFork\frontend\vite.config.ts                                                             | TypeScript         |         20 |          0 |          3 |         23 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\README.md                                                                     | Markdown           |         45 |          0 |         16 |         61 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress.config.js                                                             | JavaScript         |         34 |          0 |          3 |         37 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\auth\login.cy.js                                                  | JavaScript         |         56 |          2 |         15 |         73 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\auth\signup.cy.js                                                 | JavaScript         |         60 |          0 |         14 |         74 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\admin\assignments.cy.js                                     | JavaScript         |        204 |         11 |         30 |        245 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\admin\modules.cy.js                                         | JavaScript         |         74 |          1 |         14 |         89 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\admin\personnel.cy.js                                       | JavaScript         |         93 |          4 |         24 |        121 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\admin\submissions.cy.js                                     | JavaScript         |         51 |          3 |          9 |         63 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\admin\users.cy.js                                           | JavaScript         |         26 |          2 |          9 |         37 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\lecturer\assignments.cy.js                                  | JavaScript         |         57 |          9 |         12 |         78 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\lecturer\modules.cy.js                                      | JavaScript         |         71 |          5 |         15 |         91 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\lecturer\personnel.cy.js                                    | JavaScript         |         72 |          5 |         13 |         90 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\lecturer\routes.cy.js                                       | JavaScript         |         11 |          0 |          2 |         13 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\lecturer\submissions.cy.js                                  | JavaScript         |         86 |          0 |         11 |         97 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\student\routes.cy.js                                        | JavaScript         |         63 |          4 |         11 |         78 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\tutor\assignments.cy.js                                     | JavaScript         |         73 |          5 |         13 |         91 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\tutor\routes.cy.js                                          | JavaScript         |         60 |          5 |         11 |         76 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\e2e\roles\tutor\submissions.cy.js                                     | JavaScript         |         88 |          7 |         12 |        107 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\fixtures\config.json                                                  | JSON               |          9 |          0 |          0 |          9 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\fixtures\users.json                                                   | JSON               |         22 |          0 |          0 |         22 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\api\auth.js                                          | JavaScript         |        100 |         32 |         14 |        146 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\api\index.js                                         | JavaScript         |          3 |          0 |          0 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\api\modules\assignments\files.js                     | JavaScript         |         59 |         21 |          9 |         89 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\api\modules\assignments\index.js                     | JavaScript         |        243 |         88 |         27 |        358 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\api\modules\assignments\mark_allocator.js            | JavaScript         |         21 |          9 |          3 |         33 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\api\modules\assignments\memo_output.js               | JavaScript         |         21 |          9 |          3 |         33 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\api\modules\assignments\submissions.js               | JavaScript         |         28 |         10 |          4 |         42 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\api\modules\assignments\tasks.js                     | JavaScript         |         82 |         31 |          7 |        120 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\api\modules\index.js                                 | JavaScript         |         73 |         13 |          8 |         94 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\api\modules\personnel.js                             | JavaScript         |         68 |         22 |          8 |         98 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\api\users.js                                         | JavaScript         |         91 |         19 |         10 |        120 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\index.js                                             | JavaScript         |          2 |          0 |          1 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\ui\assignments.js                                    | JavaScript         |         97 |         49 |         33 |        179 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\ui\auth.js                                           | JavaScript         |         19 |         25 |          5 |         49 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\ui\index.js                                          | JavaScript         |          6 |          0 |          0 |          6 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\ui\modules.js                                        | JavaScript         |         51 |         65 |         16 |        132 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\ui\personnel.js                                      | JavaScript         |         32 |         17 |         16 |         65 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\ui\submissions.js                                    | JavaScript         |         27 |         22 |          8 |         57 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\ui\users.js                                          | JavaScript         |         32 |          0 |          9 |         41 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\utils\api.js                                         | JavaScript         |          1 |          0 |          1 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\commands\utils\auth.js                                        | JavaScript         |         30 |         28 |          6 |         64 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\e2e.js                                                        | JavaScript         |          2 |          0 |          1 |          3 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\cypress\support\index.js                                                      | JavaScript         |          1 |          0 |          0 |          1 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\jsconfig.json                                                                 | JSON with Comments |         14 |          2 |          2 |         18 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\k6\scenarios\submissionLoad\index.js                                          | JavaScript         |         26 |          1 |          7 |         34 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\k6\scenarios\submissionLoad\phases\01_createModule.js                         | JavaScript         |         20 |          0 |          7 |         27 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\k6\scenarios\submissionLoad\phases\02_setupAssignment.js                      | JavaScript         |         65 |          9 |         12 |         86 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\k6\scenarios\submissionLoad\phases\03_registerUsers.js                        | JavaScript         |         41 |          4 |          9 |         54 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\k6\scenarios\submissionLoad\phases\04_enrollUsers.js                          | JavaScript         |         14 |          4 |          3 |         21 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\k6\scenarios\submissionLoad\phases\05_uploadSubmission.js                     | JavaScript         |         24 |          0 |          6 |         30 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\k6\shared\auth.js                                                             | JavaScript         |         19 |          0 |          5 |         24 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\k6\shared\config.js                                                           | JavaScript         |          2 |          0 |          0 |          2 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\k6\shared\http.js                                                             | JavaScript         |         14 |          8 |          4 |         26 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\k6\test_files\config.json                                                     | JSON               |         10 |          0 |          0 |         10 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\package-lock.json                                                             | JSON               |      5,529 |          0 |          1 |      5,530 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\package.json                                                                  | JSON               |         16 |          0 |          0 |         16 |
+| c:\Users\rxxim\Advanced-FitchFork\tests\webpack.config.js                                                             | JavaScript         |          7 |          0 |          2 |          9 |
+| Total                                                                                                                 |                    |     79,047 |      9,487 |      9,074 |     97,608 |
++-----------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+

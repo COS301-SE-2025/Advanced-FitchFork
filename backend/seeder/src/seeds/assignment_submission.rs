@@ -45,12 +45,13 @@ impl Seeder for AssignmentSubmissionSeeder {
                         assignment.id,
                         user.id,
                         counter,
+                        rand::random::<i64>() % 100,
+                        100,
                         false,
                         dummy_filename,
                         "hash123#",
                         dummy_content.as_bytes(),
-                    )
-                    .await;
+                    ).await;
                 }
             }
         }
@@ -232,12 +233,13 @@ struct HelperThree {
             assignment_id_java,
             user_id,
             attempt_number,
+            80,
+            100,
             false,
             filename_java,
             "hash123#",
             &content_java,
-        )
-        .await
+        ).await
         {
             Ok(_) => {}
             Err(e) => {
@@ -257,12 +259,13 @@ struct HelperThree {
             assignment_id_cpp,
             user_id,
             attempt_number,
+            90,
+            100,
             false,
             filename_cpp,
             "hash123#",
             &content_cpp,
-        )
-        .await
+        ).await
         {
             Ok(_) => {}
             Err(e) => {
