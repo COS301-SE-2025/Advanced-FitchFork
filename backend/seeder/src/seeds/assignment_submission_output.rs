@@ -26,7 +26,10 @@ impl Seeder for AssignmentSubmissionOutputSeeder {
         }
 
         for submission in &submissions {
-            if submission.assignment_id == 9999 || submission.assignment_id == 9998 {
+            if submission.assignment_id == 9999
+                || submission.assignment_id == 9998
+                || submission.assignment_id == 10003
+            {
                 continue;
             }
             let relevant_tasks: Vec<_> = tasks

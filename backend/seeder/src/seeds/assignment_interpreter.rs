@@ -17,7 +17,7 @@ impl Seeder for AssignmentInterpreterSeeder {
 
         // For each assignment, insert an interpreter file with a sample command string
         for a in &assignments {
-            if a.module_id == 9999 || a.module_id == 9998 {
+            if a.module_id == 9999 || a.module_id == 9998 || a.module_id == 10003 {
                 continue;
             }
 

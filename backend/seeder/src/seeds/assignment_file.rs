@@ -27,7 +27,7 @@ impl Seeder for AssignmentFileSeeder {
         ];
 
         for a in &assignments {
-            if a.module_id == 9999 || a.module_id == 9998 {
+            if a.module_id == 9999 || a.module_id == 9998 || a.module_id == 10003 {
                 continue;
             }
             for &(ref file_type, filename_fn) in &file_types {
@@ -495,6 +495,144 @@ task4: main
                 db,
                 cpp_assignment_id,
                 cpp_module_id,
+                file_type,
+                filename,
+                &content,
+            )
+            .await;
+        }
+
+        //Plagerism Assignment
+        let plag_module: i64 = 10003;
+        let plag_assignment: i64 = 10003;
+
+        fn create_plag_main_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let main_java = r#"
+public class Main {
+    public static void main(String[] args) {
+        String task = args.length > 0 ? args[0] : "task1";
+
+        switch (task) {
+            case "task1":
+                runTask1();
+                break;
+            default:
+                System.out.println("" + task + " is not a valid task");
+        }
+    }
+
+    static void runTask1() {
+        System.out.println("" + "&-=-&Task1Subtask1");
+
+        // run subtask from student class
+        StudentSolution solution = new StudentSolution();
+        solution.runSubtask();
+    }
+}
+"#;
+
+                zip.start_file("Main.java", options).unwrap();
+                zip.write_all(main_java.as_bytes()).unwrap();
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        fn create_plag_memo_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let helper_one = r#"
+public class StudentSolution {
+    public void runSubtask() {
+        // Each student’s version prints a different (long, weird) string.
+        // The structure is the same, but the content is unique.
+        System.out.println("Here is my unique solution output: "
+            + "aosidj2983j98jasd9jas09dj123nmaoisd908asd!"
+            + "XYZ---long---weird---string---to---differentiate---students---"
+            + "LoremIpsumDolorSitAmet9876543210qwertyQWERTY!!!");
+    }
+}
+"#;
+                zip.start_file("StudentSolution.java", options).unwrap();
+                zip.write_all(helper_one.as_bytes()).unwrap();
+
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        fn create_plag_makefile_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let makefile_content = r#"
+task1:
+	javac -d /output Main.java StudentSolution.java && java -cp /output Main task1
+"#;
+
+                zip.start_file("Makefile", options).unwrap();
+                zip.write_all(makefile_content.as_bytes()).unwrap();
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        // New config file content
+        let config_json = r#"
+{
+  "execution": {
+    "timeout_secs": 10,
+    "max_memory": 8589934592,
+    "max_cpus": 2,
+    "max_uncompressed_size": 100000000,
+    "max_processes": 256
+  },
+  "marking": {
+    "marking_scheme": "exact",
+    "feedback_scheme": "auto",
+    "deliminator": "&-=-&"
+  },
+  "project": {
+    "language": "cpp"
+  },
+  "output": {
+    "stdout": true,
+    "stderr": false,
+    "retcode": false
+  }
+}
+"#;
+
+        let zipped_files = vec![
+            (FileType::Main, "main.zip", create_plag_main_zip()),
+            (FileType::Memo, "memo.zip", create_plag_memo_zip()),
+            (
+                FileType::Makefile,
+                "makefile.zip",
+                create_plag_makefile_zip(),
+            ),
+            (
+                FileType::Config,
+                "config.json",
+                config_json.as_bytes().to_vec(),
+            ),
+        ];
+
+        for (file_type, filename, content) in zipped_files {
+            let _ = Model::save_file(
+                db,
+                plag_assignment,
+                plag_module,
                 file_type,
                 filename,
                 &content,
