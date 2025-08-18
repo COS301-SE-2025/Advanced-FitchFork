@@ -1,12 +1,10 @@
 //! Ticket retrieval handlers.
 //!
-//! These endpoints allow fetching a single ticket or multiple tickets for an assignment,
-//! with filtering, sorting, and pagination support.
+//! Provides endpoints to fetch tickets for an assignment.
 //!
-//! Permissions:
-//! - Only authenticated users can access their tickets.
-//! - Students only see their own tickets.
-//! - Other roles (e.g., lecturers) can view all tickets for the assignment.
+//! Users can retrieve a single ticket or a list of tickets, with support for
+//! filtering, sorting, and pagination. The endpoints validate that the user
+//! has permission to view the ticket(s) before returning data.
 
 use crate::{
     auth::AuthUser,
@@ -29,10 +27,49 @@ use sea_orm::{ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType,
 use serde::{Deserialize, Serialize};
 use util::state::AppState;
 
-/// Retrieve a single ticket by ID
+/// Retrieves a single ticket.
 ///
 /// **Endpoint:** `GET /modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}`  
-/// **Permissions:** Only users with access to the ticket can retrieve it.
+/// **Permissions:** Only the ticket owner or authorized users can view the ticket.
+///
+/// ### Path parameters
+/// - `module_id`       → ID of the module (used for permission check)
+/// - `assignment_id`   → ID of the assignment (unused in handler, kept for route consistency)
+/// - `ticket_id`       → ID of the ticket to retrieve
+///
+/// ### Responses
+/// - `200 OK` → Ticket retrieved successfully
+/// ```json
+/// {
+///   "success": true,
+///   "data": { /* Ticket object */ },
+///   "message": "Ticket retrieved successfully"
+/// }
+/// ```
+/// - `403 Forbidden` → User does not have permission to view this ticket
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Forbidden"
+/// }
+/// ```
+/// - `404 Not Found` → Ticket not found
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Ticket not found"
+/// }
+/// ```
+/// - `500 Internal Server Error` → Failed to retrieve the ticket
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Failed to retrieve ticket"
+/// }
+/// ```
 pub async fn get_ticket(
     State(app_state): State<AppState>,
     Path((module_id, _, ticket_id)): Path<(i64, i64, i64)>,
@@ -120,24 +157,54 @@ async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bo
         .unwrap_or(false)
 }
 
-/// Retrieve tickets for an assignment with optional filtering, sorting, and pagination
+/// Retrieves tickets for an assignment with optional filtering, sorting, and pagination.
 ///
 /// **Endpoint:** `GET /modules/{module_id}/assignments/{assignment_id}/tickets`  
 /// **Permissions:**  
-/// - Students: only see their own tickets  
-/// - Lecturers/assistants: can see all tickets
+/// - Students can only see their own tickets  
+/// - Lecturers/assistants can see all tickets
+///
+/// ### Path parameters
+/// - `module_id`       → ID of the module (used for permission check)
+/// - `assignment_id`   → ID of the assignment
 ///
 /// ### Query parameters
 /// - `page` → Page number (default: 1)
 /// - `per_page` → Number of items per page (default: 20, max: 100)
 /// - `query` → Search in ticket title or description
-/// - `status` → Filter by ticket status (open/closed)
+/// - `status` → Filter by ticket status (`open`, `closed`)
 /// - `sort` → Comma-separated fields to sort by (prefix with `-` for descending)
 ///
 /// ### Responses
 /// - `200 OK` → Tickets retrieved successfully
-/// - `400 Bad Request` → Invalid sort field or status
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///     "tickets": [ /* Ticket objects */ ],
+///     "page": 1,
+///     "per_page": 20,
+///     "total": 42
+///   },
+///   "message": "Tickets retrieved successfully"
+/// }
+/// ```
+/// - `400 Bad Request` → Invalid query parameters (sort or status)
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Invalid field used"
+/// }
+/// ```
 /// - `500 Internal Server Error` → Failed to fetch tickets
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Failed to retrieve tickets"
+/// }
+/// ```
 pub async fn get_tickets(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,

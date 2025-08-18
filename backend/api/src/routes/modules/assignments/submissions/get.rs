@@ -1,3 +1,12 @@
+//! Assignment Submission Handlers
+//!
+//! Provides endpoints to manage and retrieve assignment submissions.
+//!
+//! Users can retrieve their own submissions or, if authorized (lecturers, tutors, admins), 
+//! retrieve all submissions for a given assignment. The endpoints support filtering, sorting, 
+//! and pagination. Submission details include marks, late status, practice status, tasks, 
+//! code coverage, and code complexity analysis.
+
 use super::common::{
     ListSubmissionsQuery, SubmissionListItem, SubmissionsListResponse, UserResponse,
 };
