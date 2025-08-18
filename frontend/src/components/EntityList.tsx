@@ -100,7 +100,6 @@ const EntityList = forwardRef(function <T>(
   const { notifyError } = useNotifier();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<T[] | null>(null); // null => initial not-fetched
-  const hasLoaded = items !== null;
 
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
     new Set(columns.filter((col) => col.defaultHidden).map((col) => col.key as string)),
