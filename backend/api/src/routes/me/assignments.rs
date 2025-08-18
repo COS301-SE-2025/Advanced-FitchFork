@@ -1,3 +1,11 @@
+//! # My Assignments Handlers
+//!
+//! Provides endpoints to fetch assignments for the currently authenticated user.
+//!
+//! Users can retrieve a paginated list of assignments filtered by role, year, status,
+//! search query, and sorted by various fields. Only assignments in modules the user
+//! is associated with are returned.
+
 use axum::{
     Extension, Json,
     extract::{Query, State},
@@ -11,26 +19,35 @@ use sea_orm::{
 };
 use serde::{Deserialize, Serialize};
 use util::state::AppState;
-
 use crate::{auth::AuthUser, response::ApiResponse};
 
+/// Query parameters for filtering, sorting, and pagination of assignments
 #[derive(Debug, Deserialize)]
 pub struct AssignmentFilterReq {
+    /// Page number (default: 1)
     pub page: Option<i32>,
+    /// Items per page (default: 20)
     pub per_page: Option<i32>,
+    /// Search query (matches assignment title or module code)
     pub query: Option<String>,
+    /// Filter assignments by role (lecturer, assistant_lecturer, tutor, student)
     pub role: Option<String>,
+    /// Filter by module year
     pub year: Option<i32>,
+    /// Filter by assignment status
     pub status: Option<String>,
+    /// Sort fields (comma-separated, prefix with `-` for descending)
     pub sort: Option<String>,
 }
 
+/// Response object for a module
 #[derive(Serialize)]
 pub struct ModuleResponse {
     pub id: i64,
     pub code: String,
 }
 
+/// Response object for an assignment
 #[derive(Serialize)]
 pub struct AssignmentResponse {
     pub id: i64,
@@ -43,6 +60,7 @@ pub struct AssignmentResponse {
     pub module: ModuleResponse,
 }
 
+/// Response for a paginated list of assignments
 #[derive(Serialize)]
 pub struct FilterAssignmentResponse {
     pub assignments: Vec<AssignmentResponse>,
@@ -57,6 +75,42 @@ impl FilterAssignmentResponse {
     }
 }
 
+/// Retrieves assignments for the currently authenticated user.
+///
+/// **Endpoint:** `GET /my/assignments`  
+/// **Permissions:** User must be associated with at least one module (student, tutor, lecturer, assistant)
+///
+/// ### Query parameters
+/// - `page` → Page number (default: 1)
+/// - `per_page` → Number of items per page (default: 20, max: 100)
+/// - `query` → Search query in assignment title or module code
+/// - `role` → Filter assignments by user role
+/// - `year` → Filter assignments by module year
+/// - `status` → Filter assignments by assignment status
+/// - `sort` → Sort assignments by fields (e.g., `due_date,-available_from`)
+///
+/// ### Responses
+/// - `200 OK` → Assignments retrieved successfully
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///     "assignments": [ /* Assignment objects */ ],
+///     "page": 1,
+///     "per_page": 20,
+///     "total": 42
+///   },
+///   "message": "Assignments retrieved"
+/// }
+/// ```
+/// - `500 Internal Server Error` → Failed to retrieve assignments
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Failed to retrieve assignments"
+/// }
+/// ```
 pub async fn get_my_assignments(
     State(state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,

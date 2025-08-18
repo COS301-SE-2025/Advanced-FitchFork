@@ -1,3 +1,11 @@
+//! # My Announcements Handlers
+//!
+//! Provides endpoints to fetch announcements for the currently authenticated user.
+//!
+//! Users can retrieve a paginated list of announcements filtered by role, year, pinned status,
+//! search query, and sorted by various fields. Only announcements in modules the user
+//! is associated with are returned.
+
 use axum::{
     Extension, Json,
     extract::{Query, State},
@@ -14,17 +22,40 @@ use util::state::AppState;
 
 use crate::{auth::AuthUser, response::ApiResponse};
 
+/// Query parameters for filtering, sorting, and pagination of announcements
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
+    /// Page number (default: 1)
     pub page: Option<i32>,
+    /// Items per page (default: 20)
     pub per_page: Option<i32>,
+    /// Search query (matches announcement title, module code, or username)
     pub query: Option<String>,
+    /// Filter announcements by role (lecturer, assistant_lecturer, tutor, student)
     pub role: Option<String>,
+    /// Filter by module year
     pub year: Option<i32>,
+    /// Filter by pinned status
     pub pinned: Option<bool>,
+    /// Sort fields (comma-separated, prefix with `-` for descending)
     pub sort: Option<String>,
 }
 
+/// Response object for a user
+#[derive(Serialize)]
+pub struct UserResponse {
+    pub id: i64,
+    pub username: String,
+}
+
+/// Response object for a module
+#[derive(Serialize)]
+pub struct ModuleResponse {
+    pub id: i64,
+    pub code: String,
+}
+
+/// Response object for an announcement
 #[derive(Serialize)]
 pub struct AnnouncementResponse {
     pub id: i64,
@@ -37,18 +68,7 @@ pub struct AnnouncementResponse {
     pub user: UserResponse,
 }
 
-#[derive(Serialize)]
-pub struct UserResponse {
-    pub id: i64,
-    pub username: String,
-}
-
-#[derive(Serialize)]
-pub struct ModuleResponse {
-    pub id: i64,
-    pub code: String,
-}
-
+/// Response for a paginated list of announcements
 #[derive(Serialize)]
 pub struct FilterResponse {
     pub announcements: Vec<AnnouncementResponse>,
@@ -63,6 +83,42 @@ impl FilterResponse {
     }
 }
 
+/// Retrieves announcements for the currently authenticated user.
+///
+/// **Endpoint:** `GET /my/announcements`  
+/// **Permissions:** User must be associated with at least one module (student, tutor, lecturer, assistant)
+///
+/// ### Query parameters
+/// - `page` → Page number (default: 1)
+/// - `per_page` → Number of items per page (default: 20, max: 100)
+/// - `query` → Search query in announcement title, module code, or username
+/// - `role` → Filter announcements by user role
+/// - `year` → Filter announcements by module year
+/// - `pinned` → Filter by pinned status
+/// - `sort` → Sort announcements by fields (e.g., `created_at,-updated_at`)
+///
+/// ### Responses
+/// - `200 OK` → Announcements retrieved successfully
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///     "announcements": [ /* Announcement objects */ ],
+///     "page": 1,
+///     "per_page": 20,
+///     "total": 42
+///   },
+///   "message": "Announcements retrieved"
+/// }
+/// ```
+/// - `500 Internal Server Error` → Failed to retrieve announcements
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Failed to retrieve announcements"
+/// }
+/// ```
 pub async fn get_my_announcements(
     State(state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,

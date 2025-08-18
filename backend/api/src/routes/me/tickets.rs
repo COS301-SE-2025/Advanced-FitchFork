@@ -1,3 +1,11 @@
+//! # My Tickets Handlers
+//!
+//! Provides endpoints to fetch tickets for assignments associated with the currently authenticated user.
+//!
+//! Users can retrieve a paginated list of tickets, filtered by role, year, status, and search query.  
+//! The results include assignment, module, and user details.  
+//! Students only see their own tickets, while lecturers and assistants can view other users' tickets.
+
 use axum::{
     Extension, Json,
     extract::{Query, State},
@@ -14,39 +22,28 @@ use sea_orm::{
 };
 use serde::{Deserialize, Serialize};
 use util::state::AppState;
-
 use crate::{auth::AuthUser, response::ApiResponse};
 
+/// Query parameters for filtering, sorting, and pagination of tickets
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
+    /// Page number (default: 1)
     pub page: Option<i32>,
+    /// Items per page (default: 20)
     pub per_page: Option<i32>,
+    /// Search query (matches ticket title, module code, assignment name, and username for staff)
     pub query: Option<String>,
+    /// Filter tickets by role (student, lecturer, assistant, etc.)
     pub role: Option<String>,
+    /// Filter tickets by module year
     pub year: Option<i32>,
+    /// Filter tickets by ticket status
     pub status: Option<String>,
+    /// Sort fields (comma-separated, prefix with `-` for descending)
     pub sort: Option<String>,
 }
 
-#[derive(Serialize)]
-pub struct FilterResponse {
-    pub tickets: Vec<TicketsResponse>,
-    pub page: i32,
-    pub per_page: i32,
-    pub total: i32,
-}
-
-impl FilterResponse {
-    fn new(tickets: Vec<TicketsResponse>, page: i32, per_page: i32, total: i32) -> Self {
-        Self {
-            tickets,
-            page,
-            per_page,
-            total,
-        }
-    }
-}
-
+/// Response for a single ticket
 #[derive(Serialize)]
 pub struct TicketsResponse {
     pub id: i64,
@@ -59,24 +56,88 @@ pub struct TicketsResponse {
     pub user: UserResponse,
 }
 
+/// Response object for a user
 #[derive(Serialize)]
 pub struct UserResponse {
     pub id: i64,
     pub username: String,
 }
 
+/// Response object for an assignment
 #[derive(Serialize)]
 pub struct AssignmentResponse {
     pub id: i64,
     pub name: String,
 }
 
+/// Response object for a module
 #[derive(Serialize)]
 pub struct ModuleResponse {
     pub id: i64,
     pub code: String,
 }
 
+/// Response for a paginated list of tickets
+#[derive(Serialize)]
+pub struct FilterResponse {
+    pub tickets: Vec<TicketsResponse>,
+    pub page: i32,
+    pub per_page: i32,
+    pub total: i32,
+}
+
+impl FilterResponse {
+    fn new(tickets: Vec<TicketsResponse>, page: i32, per_page: i32, total: i32) -> Self {
+        Self { tickets, page, per_page, total }
+    }
+}
+
+/// Retrieves tickets for the currently authenticated user.
+///
+/// **Endpoint:** `GET /my/tickets`  
+/// **Permissions:**  
+/// - Students see only their own tickets  
+/// - Lecturers and assistants see tickets from other users in modules they are assigned to
+///
+/// ### Query parameters
+/// - `page` → Page number (default: 1)
+/// - `per_page` → Number of items per page (default: 20, max: 100)
+/// - `query` → Search tickets by title, module code, assignment name, and username (staff only)
+/// - `role` → Filter tickets by user role
+/// - `year` → Filter tickets by module year
+/// - `status` → Filter tickets by ticket status
+/// - `sort` → Sort tickets by fields (e.g., `created_at,-updated_at`)
+///
+/// ### Responses
+/// - `200 OK` → Tickets retrieved successfully
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///     "tickets": [ /* Ticket objects */ ],
+///     "page": 1,
+///     "per_page": 20,
+///     "total": 42
+///   },
+///   "message": "Tickets retrieved successfully"
+/// }
+/// ```
+/// - `400 Bad Request` → Invalid status value
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Invalid status value"
+/// }
+/// ```
+/// - `500 Internal Server Error` → Failed to retrieve tickets
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Failed to retrieve tickets"
+/// }
+/// ```
 pub async fn get_my_tickets(
     State(state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
@@ -175,16 +236,9 @@ pub async fn get_my_tickets(
 
     if let Some(sort_param) = &params.sort {
         for sort in sort_param.split(',') {
-            let (field, asc) = if sort.starts_with('-') {
-                (&sort[1..], false)
-            } else {
-                (sort, true)
-            };
+            let (field, asc) = if sort.starts_with('-') { (&sort[1..], false) } else { (sort, true) };
             query = match field {
-                "created_at" => {
-                    if asc { query.order_by_asc(tickets::Column::CreatedAt) }
-                    else { query.order_by_desc(tickets::Column::CreatedAt) }
-                }
+                "created_at" => if asc { query.order_by_asc(tickets::Column::CreatedAt) } else { query.order_by_desc(tickets::Column::CreatedAt) },
                 _ => query,
             };
         }
