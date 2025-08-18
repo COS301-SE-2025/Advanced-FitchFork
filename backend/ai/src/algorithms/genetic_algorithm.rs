@@ -1,19 +1,27 @@
-use rand::{Rng, thread_rng};
 use rand::seq::SliceRandom;
+use rand::{Rng, thread_rng};
 use std::collections::HashSet;
+use util::execution_config::ExecutionConfig;
+use util::execution_config::execution_config::{
+    CrossoverType as ExecCrossoverType, MutationType as ExecMutationType,
+};
 
 /// Gene-level configuration
 #[derive(Clone)]
 pub struct GeneConfig {
-    pub min_value: i32, // minimum valid value 
-    pub max_value: i32, // maximum valid value
+    pub min_value: i32,               // minimum valid value
+    pub max_value: i32,               // maximum valid value
     pub invalid_values: HashSet<i32>, // explicitly disallowed values
 }
 
 impl GeneConfig {
     // creates a new gene config
-    pub fn new(min_value: i32, max_value: i32, invalid_values: HashSet<i32>) -> Self { 
-        Self { min_value, max_value, invalid_values }
+    pub fn new(min_value: i32, max_value: i32, invalid_values: HashSet<i32>) -> Self {
+        Self {
+            min_value,
+            max_value,
+            invalid_values,
+        }
     }
 
     // calculates the number of bits needed to represent the gene value
@@ -24,17 +32,17 @@ impl GeneConfig {
 
 /// GA-wide configuration
 pub struct GAConfig {
-    pub population_size: usize,             // Number of chromosomes per generation
-    pub number_of_generations: usize,       // Total number of generations to run
+    pub population_size: usize,       // Number of chromosomes per generation
+    pub number_of_generations: usize, // Total number of generations to run
     //todo: use this in run
-    pub selection_size: usize,              // Number of individuals selected during selection 
-    pub reproduction_probability: f64,      // Probability of applying crossover during reproduction
+    pub selection_size: usize, // Number of individuals selected during selection
+    pub reproduction_probability: f64, // Probability of applying crossover during reproduction
     //todo: use this probability
-    pub crossover_probability: f64,         // Used in some variants, may control forced crossover
-    pub mutation_probability: f64,          // Probability of mutating a child
-    pub genes: Vec<GeneConfig>,             // Configuration for each gene in the chromosome
-    pub crossover_type: CrossoverType,      // Which crossover operator to use (one-point, two-point, uniform)
-    pub mutation_type: MutationType,        // Which mutation operator to use (bit-flip, swap, scramble)
+    pub crossover_probability: f64, // Used in some variants, may control forced crossover
+    pub mutation_probability: f64,  // Probability of mutating a child
+    pub genes: Vec<GeneConfig>,     // Configuration for each gene in the chromosome
+    pub crossover_type: CrossoverType, // Which crossover operator to use (one-point, two-point, uniform)
+    pub mutation_type: MutationType,   // Which mutation operator to use (bit-flip, swap, scramble)
 }
 
 impl GAConfig {
@@ -49,7 +57,7 @@ impl GAConfig {
         genes: Vec<GeneConfig>,
         crossover_type: CrossoverType,
         mutation_type: MutationType,
-    ) -> Self { 
+    ) -> Self {
         Self {
             population_size,
             number_of_generations,
@@ -126,6 +134,47 @@ pub struct GeneticAlgorithm {
 }
 
 impl GeneticAlgorithm {
+    /// Create a new GA instance using parameters from ExecutionConfig
+    pub fn from_execution_config(config: &ExecutionConfig) -> Self {
+        let gatlam = &config.gatlam;
+
+        let crossover_type = match gatlam.crossover_type {
+            ExecCrossoverType::OnePoint => CrossoverType::OnePoint,
+            ExecCrossoverType::TwoPoint => CrossoverType::TwoPoint,
+            ExecCrossoverType::Uniform => CrossoverType::Uniform,
+        };
+
+        let mutation_type = match gatlam.mutation_type {
+            ExecMutationType::BitFlip => MutationType::BitFlip,
+            ExecMutationType::Swap => MutationType::Swap,
+            ExecMutationType::Scramble => MutationType::Scramble,
+        };
+
+        // Convert GeneConfig if needed
+        let genes = gatlam
+            .genes
+            .iter()
+            .map(|g| {
+                let invalids = HashSet::new(); // or copy invalids if available
+                GeneConfig::new(g.min_value, g.max_value, invalids)
+            })
+            .collect();
+
+        let ga_config = GAConfig::new(
+            gatlam.population_size,
+            gatlam.number_of_generations,
+            gatlam.selection_size,
+            gatlam.reproduction_probability,
+            gatlam.crossover_probability,
+            gatlam.mutation_probability,
+            genes,
+            crossover_type,
+            mutation_type,
+        );
+
+        Self::new(ga_config)
+    }
+
     pub fn new(config: GAConfig) -> Self {
         let population = Self::initialize_population(&config);
         let bits_per_gene = config.bits();
@@ -146,7 +195,11 @@ impl GeneticAlgorithm {
     }
 
     fn build_next_generation(&self, fitness_scores: &[f64]) -> Vec<Chromosome> {
-        assert_eq!(fitness_scores.len(), self.population.len(), "fitness/pop size mismatch");
+        assert_eq!(
+            fitness_scores.len(),
+            self.population.len(),
+            "fitness/pop size mismatch"
+        );
         let total_fitness: f64 = fitness_scores.iter().sum();
 
         let mut next_gen = Vec::with_capacity(self.population.len());
@@ -171,7 +224,11 @@ impl GeneticAlgorithm {
 
             // mutate the child with a probability
             if rng.r#gen::<f64>() < self.config.mutation_probability {
-                Self::mutate(&mut child, self.config.mutation_type, self.config.mutation_probability);
+                Self::mutate(
+                    &mut child,
+                    self.config.mutation_type,
+                    self.config.mutation_probability,
+                );
             }
             // add the child to the next generation
             next_gen.push(child);
@@ -184,8 +241,8 @@ impl GeneticAlgorithm {
         let mut rng = thread_rng(); // random number generator
         let mut pop = Vec::with_capacity(config.population_size); // allocate space for population
 
-        let num_genes = config.genes.len(); 
-        let bits_per_gene = config.bits(); 
+        let num_genes = config.genes.len();
+        let bits_per_gene = config.bits();
 
         // Create each individual
         for _ in 0..config.population_size {
@@ -271,7 +328,7 @@ impl GeneticAlgorithm {
                 // flip each bit with a given probability
                 for bit in genes.iter_mut() {
                     if rng.r#gen::<f64>() < mutation_prob {
-                        *bit = !*bit; 
+                        *bit = !*bit;
                     }
                 }
             }
@@ -300,10 +357,18 @@ impl GeneticAlgorithm {
     }
 
     // getters for external driver
-    pub fn population(&self) -> &[Chromosome] { &self.population }
-    pub fn generation(&self) -> usize { self.generation }
-    pub fn config(&self) -> &GAConfig { &self.config }
-    pub fn bits_per_gene(&self) -> usize { self.bits_per_gene }
+    pub fn population(&self) -> &[Chromosome] {
+        &self.population
+    }
+    pub fn generation(&self) -> usize {
+        self.generation
+    }
+    pub fn config(&self) -> &GAConfig {
+        &self.config
+    }
+    pub fn bits_per_gene(&self) -> usize {
+        self.bits_per_gene
+    }
 }
 
 /// Bit-level encoder (sign + magnitude)
@@ -330,14 +395,15 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
 
-
     fn hs(v: &[i32]) -> HashSet<i32> {
         v.iter().cloned().collect()
     }
 
     /// Test-only decode that matches our sign+magnitude encoder.
     fn test_decode_gene(bits: &[bool]) -> i32 {
-        if bits.is_empty() { return 0; }
+        if bits.is_empty() {
+            return 0;
+        }
         let sign = bits[0];
         let mut mag = 0i32;
         for &b in &bits[1..] {
@@ -360,13 +426,20 @@ mod tests {
     #[test]
     fn ga_bits_uses_global_max_abs() {
         let genes = vec![
-            GeneConfig::new(-3, 3, HashSet::new()),  // needs 3 bits (ceil(log2(3))=2 + sign =3)
-            GeneConfig::new(-9, 9, HashSet::new()),  // needs 5 bits
-            GeneConfig::new(-2, 7, HashSet::new()),  // needs 4 bits
+            GeneConfig::new(-3, 3, HashSet::new()), // needs 3 bits (ceil(log2(3))=2 + sign =3)
+            GeneConfig::new(-9, 9, HashSet::new()), // needs 5 bits
+            GeneConfig::new(-2, 7, HashSet::new()), // needs 4 bits
         ];
         let cfg = GAConfig::new(
-            8, 10, 4, 0.9, 0.8, 0.05, genes,
-            CrossoverType::Uniform, MutationType::BitFlip,
+            8,
+            10,
+            4,
+            0.9,
+            0.8,
+            0.05,
+            genes,
+            CrossoverType::Uniform,
+            MutationType::BitFlip,
         );
         // Global max abs is 9 -> 5 bits total per gene
         assert_eq!(cfg.bits(), 5);
@@ -396,12 +469,19 @@ mod tests {
     #[test]
     fn initialize_population_shapes_are_correct() {
         let genes = vec![
-            GeneConfig::new(-3, 3, hs(&[2])),  // disallow 2
+            GeneConfig::new(-3, 3, hs(&[2])), // disallow 2
             GeneConfig::new(-9, 9, HashSet::new()),
         ];
         let cfg = GAConfig::new(
-            6, 5, 3, 0.9, 0.8, 0.05, genes.clone(),
-            CrossoverType::Uniform, MutationType::BitFlip,
+            6,
+            5,
+            3,
+            0.9,
+            0.8,
+            0.05,
+            genes.clone(),
+            CrossoverType::Uniform,
+            MutationType::BitFlip,
         );
         let bits_per_gene = cfg.bits(); // global width
         let num_genes = genes.len();
@@ -415,7 +495,7 @@ mod tests {
     }
     #[test]
     fn uniform_crossover_child_bits_are_from_parents() {
-        let p1 = Chromosome::new(vec![true,  true,  true,  true,  true]);
+        let p1 = Chromosome::new(vec![true, true, true, true, true]);
         let p2 = Chromosome::new(vec![false, false, false, false, false]);
 
         let child = GeneticAlgorithm::crossover(&p1, &p2, CrossoverType::Uniform);
@@ -479,8 +559,15 @@ mod tests {
             GeneConfig::new(-9, 9, HashSet::new()),
         ];
         let cfg = GAConfig::new(
-            10, 20, 5, 0.9, 0.8, 0.1, genes,
-            CrossoverType::Uniform, MutationType::BitFlip,
+            10,
+            20,
+            5,
+            0.9,
+            0.8,
+            0.1,
+            genes,
+            CrossoverType::Uniform,
+            MutationType::BitFlip,
         );
         let mut ga = GeneticAlgorithm::new(cfg);
         let pop_len = ga.population().len();

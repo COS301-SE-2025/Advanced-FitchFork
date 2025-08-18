@@ -70,6 +70,7 @@ dependencies = [
  "rand 0.8.5",
  "sea-orm",
  "tokio",
+ "util",
 ]
 
 [[package]]
@@ -174,6 +175,7 @@ checksum = "b0674a1ddeecb70197781e945de4b3b8ffb61fa939a5597bcf48503737663100"
 name = "api"
 version = "0.1.0"
 dependencies = [
+ "ai",
  "axum",
  "axum-extra",
  "chrono",

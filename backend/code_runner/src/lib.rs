@@ -1,6 +1,7 @@
 // Core dependencies
 use std::{env, fs, path::PathBuf};
 
+// use db::models::AssignmentSubmissionOutput;
 // External crates
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 // Your own modules
@@ -226,6 +227,10 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
     use serde_json::json;
     use std::env;
     use tokio::fs::read;
+
+    SubmissionOutputModel::delete_for_submission(db, submission_id)
+        .await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?;
 
     // Fetch submission
     let submission = AssignmentSubmission::find_by_id(submission_id)
@@ -580,7 +585,7 @@ pub async fn create_main_from_interpreter(
     let main_file_name = match config.project.language {
         Language::Cpp => "Main.cpp",
         Language::Java => "Main.java",
-        Language::Python => "Main.py",
+        // Language::Python => "Main.py",
     };
 
     // Heuristic: if the "interpreter" is actually a compile/run line (e.g., g++ Main.cpp),
@@ -619,7 +624,7 @@ int main() {{
 "#,
                 generated_string.replace('"', "\\\"")
             ),
-            Language::Python => format!(r#"print("{}")"#, generated_string.replace('"', "\\\"")),
+            // Language::Python => format!(r#"print("{}")"#, generated_string.replace('"', "\\\"")),
         };
 
         // Zip and save as the "main" archive
@@ -731,7 +736,7 @@ int main() {{
             combined_output.contains("int main") || combined_output.contains("#include")
         }
         Language::Java => combined_output.contains("class Main"),
-        Language::Python => combined_output.contains("def ") || combined_output.contains("print("),
+        // Language::Python => combined_output.contains("def ") || combined_output.contains("print("),
     };
 
     if !looks_like_source {
