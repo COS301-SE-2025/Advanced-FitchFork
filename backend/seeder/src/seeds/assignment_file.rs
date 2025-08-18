@@ -95,7 +95,7 @@ public class Main {
 
     static void runTask3() {
         System.out.println("&-=-&Task3Subtask1");
-        System.out.println(HelperThree.subtaskAlpha());
+        System.out.println(HelperThree.subtaskAlpha())
         System.out.println("&-=-&Task3Subtask2");
         System.out.println(HelperOne.subtaskBeta());
         System.out.println("&-=-&Task3Subtask3");
@@ -200,9 +200,9 @@ task3:
         // New config file content
         let config_json = r#"
 {
-          "execution": {
+  "execution": {
     "timeout_secs": 10,
-    "max_memory":  8589934592,
+    "max_memory": 8589934592,
     "max_cpus": 2,
     "max_uncompressed_size": 100000000,
     "max_processes": 256
@@ -211,8 +211,16 @@ task3:
     "marking_scheme": "exact",
     "feedback_scheme": "auto",
     "deliminator": "&-=-&"
+  },
+  "project": {
+    "language": "cpp"
+  },
+  "output": {
+    "stdout": true,
+    "stderr": true,
+    "retcode": true
   }
-    }
+}
 "#;
 
         let zipped_files = vec![
@@ -444,7 +452,7 @@ task4: main
 
         let config_json_cpp = r#"
 {
-          "execution": {
+  "execution": {
     "timeout_secs": 10,
     "max_memory": 8589934592,
     "max_cpus": 2,
@@ -455,8 +463,16 @@ task4: main
     "marking_scheme": "exact",
     "feedback_scheme": "auto",
     "deliminator": "&-=-&"
+  },
+  "project": {
+    "language": "cpp"
+  },
+  "output": {
+    "stdout": true,
+    "stderr": true,
+    "retcode": true
   }
-    }
+}
 "#;
 
         let zipped_files_cpp = vec![

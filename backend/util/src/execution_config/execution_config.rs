@@ -92,6 +92,26 @@ impl Default for ProjectSetup {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ExecutionOutputOptions {
+    #[serde(default = "default_stdout")]
+    pub stdout: bool,
+    #[serde(default)]
+    pub stderr: bool,
+    #[serde(default)]
+    pub retcode: bool,
+}
+
+impl Default for ExecutionOutputOptions {
+    fn default() -> Self {
+        Self {
+            stdout: true,
+            stderr: false,
+            retcode: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionConfig {
     #[serde(default)]
     pub execution: ExecutionLimits,
@@ -101,6 +121,9 @@ pub struct ExecutionConfig {
 
     #[serde(default)]
     pub project: ProjectSetup,
+
+    #[serde(default)]
+    pub output: ExecutionOutputOptions,
 }
 
 impl ExecutionConfig {
@@ -109,6 +132,7 @@ impl ExecutionConfig {
             execution: ExecutionLimits::default(),
             marking: MarkingOptions::default(),
             project: ProjectSetup::default(),
+            output: ExecutionOutputOptions::default(),
         }
     }
 
@@ -233,4 +257,8 @@ fn default_deliminator() -> String {
 
 fn default_language() -> Language {
     Language::Cpp
+}
+
+fn default_stdout() -> bool {
+    true
 }

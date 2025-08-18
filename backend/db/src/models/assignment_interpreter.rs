@@ -59,7 +59,6 @@ impl Model {
             .join("interpreter")
     }
 
-    /// Save the interpreter file and create or update the DB record.
     pub async fn save_file(
         db: &DatabaseConnection,
         assignment_id: i64,
@@ -69,21 +68,17 @@ impl Model {
         bytes: &[u8],
     ) -> Result<Self, sea_orm::DbErr> {
         use crate::models::assignment_interpreter::{Column, Entity as AssignmentInterpreter};
-        use sea_orm::ColumnTrait;
-        use sea_orm::EntityTrait;
-        use sea_orm::QueryFilter;
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
-        // Remove existing record and file if exists
-        if let Some(existing) = AssignmentInterpreter::find()
+        let existing = AssignmentInterpreter::find()
             .filter(Column::AssignmentId.eq(assignment_id))
-            .filter(Column::Filename.eq(filename.to_string()))
-            .one(db)
-            .await?
-        {
-            let existing_path = Self::storage_root().join(&existing.path);
-            let _ = fs::remove_file(existing_path); // ignore failure
+            .all(db)
+            .await?;
 
-            existing.delete(db).await?;
+        for record in existing {
+            let existing_path = Self::storage_root().join(&record.path);
+            let _ = fs::remove_file(existing_path);
+            record.delete(db).await?;
         }
 
         let now = Utc::now();
@@ -91,7 +86,7 @@ impl Model {
         let partial = ActiveModel {
             assignment_id: Set(assignment_id),
             filename: Set(filename.to_string()),
-            path: Set("".to_string()), // updated after file write
+            path: Set("".to_string()),
             command: Set(command.to_string()),
             created_at: Set(now),
             updated_at: Set(now),

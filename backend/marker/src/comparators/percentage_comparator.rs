@@ -74,7 +74,7 @@ impl OutputComparator for PercentageComparator {
 
         TaskResult {
             name: section.name.clone(),
-            awarded,
+            awarded: awarded as i64,
             possible: section.value,
             matched_patterns,
             missed_patterns,
@@ -92,7 +92,7 @@ mod tests {
         lines.iter().map(|s| s.to_string()).collect()
     }
 
-    fn mock_subsection(value: u32) -> Subsection {
+    fn mock_subsection(value: i64) -> Subsection {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,

@@ -24,5 +24,10 @@ base64 = "0.22.1"
 reqwest = { version = "0.12", features = ["json"] }
 
 
+
 [dev-dependencies]
 dotenvy = "0.15"
+
+[lib]
+name = "code_runner"
+path = "src/lib.rs"
