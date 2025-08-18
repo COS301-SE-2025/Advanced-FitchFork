@@ -1,8 +1,7 @@
 // lib.rs
 
-
 // GA ⇄ Interpreter driver
-// 
+//
 // This file wires to Genetic Algorithm to the external code interpreter, the process is as follows
 // For each code generation and each chromosome
 // 1) Decode the chromosome bits into an interpreter payload string
@@ -27,78 +26,71 @@ pub mod utils {
     pub mod evaluator;
 }
 
-
-use crate::algorithms::genetic_algorithm::{GeneticAlgorithm, Chromosome, GAConfig};
-use crate::utils::evaluator::{Evaluator, TaskSpec, Language};
+use crate::algorithms::genetic_algorithm::{Chromosome, GeneticAlgorithm};
+use crate::utils::evaluator::{Evaluator, TaskSpec};
 use code_runner::run_interpreter;
+use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
-use sea_orm::{DatabaseConnection};
-
-
+use util::execution_config::ExecutionConfig;
 
 // -----------------------------------------------------------------------------
 // Public entrypoint: build GA + Evaluator + Components, then run the loop
 // -----------------------------------------------------------------------------
 
-/// Runs a genetic algorithm for a given submission
+/// Runs a genetic algorithm for a given submission using an ExecutionConfig
+///
 /// # Parameters
-/// - `db`: shared DB connection
-/// - `submission_id`: which submission we’re optimizing for
-/// - `ga_config`: fully-configured GA (population size, gens, crossover, etc.)
-/// - `omega1..3`: weights for the Components fitness aggregation (must sum to ~1)
-/// - `base_spec`: base TaskSpec for all tasks (rules for per-task checks)
+/// - `db`: shared database connection
+/// - `submission_id`: which submission we are optimizing for
+/// - `config`: ExecutionConfig containing GA parameters, omegas, language, runtime limits, etc.
 ///
 /// # Behavior
-/// - Instantiates the GA population and fitness `Components`
-/// - Instantiates an `Evaluator` and a base `TaskSpec` (rules for per-task checks)
-/// - Builds a closure `derive_props` that translates interpreter outputs into
-///   `(num_ltl_props, num_tasks)` *per chromosome*, which `Components` expects
-/// - Calls the generic driver `run_ga_end_to_end`
+/// - Instantiates the GA population from `config.ga_config`
+/// - Instantiates `Components` using omegas from `config`
+/// - Builds a `TaskSpec` from `config` for per-task property evaluation
+/// - Instantiates an `Evaluator` to check properties like Safety, ProperTermination,
+///   SegmentationFault, Exceptions, ExecutionTime, IllegalOutput
+/// - Builds a closure `derive_props` that maps interpreter outputs into
+///   `(num_ltl_props, num_tasks)` for fitness evaluation
+/// - Calls the generic driver `run_ga_end_to_end` which runs the GA loop
 ///
 /// # Returns
-/// - `Ok(())` on success, or a `String` error propagated from the interpreter/driver
+/// - `Ok(())` on success, or a `String` error propagated from the interpreter or GA driver
 pub async fn run_ga_job(
     db: &DatabaseConnection,
     submission_id: i64,
-    ga_config: GAConfig,
-    omega1: f64,
-    omega2: f64,
-    omega3: f64,
-    base_spec: 
-    TaskSpec, 
+    config: ExecutionConfig,
 ) -> Result<(), String> {
-
-    // Build core GA (population + config)
-    let mut ga = GeneticAlgorithm::new(ga_config);
-
-    // Number of bits to decode per gene, needed for payload decoding
+    // Build GA from ExecutionConfig
+    let mut ga = GeneticAlgorithm::from_execution_config(&config.clone());
     let bits_per_gene = ga.bits_per_gene();
 
-    // Fitness components 
+    // Fitness Components from omegas
+    let (omega1, omega2, omega3) = (
+        config.gatlam.omega1,
+        config.gatlam.omega2,
+        config.gatlam.omega3,
+    );
     let mut comps = Components::new(omega1, omega2, omega3, bits_per_gene);
 
-    // Evaluator translates raw interpreter outputs into property-violation counts
-    // (Safety, ProperTermination, Segfault, Exceptions, ExecutionTime, IllegalOutput)
+    // Evaluator for property checks
     let evaluator = Evaluator::new();
 
-    // This closure is invoked inside the GA loop for every chromosome’s run:
-    // it converts raw outputs into `(num_ltl_props, num_tasks)`.
+    // TaskSpec(s) derived from ExecutionConfig
+    let base_spec = TaskSpec::from_execution_config(&config);
+
+    // Closure to derive LTL + task counts from interpreter outputs
     let mut derive_props = move |outs: &[(i64, String)]| -> (usize, usize) {
-        // If all tasks share the same rules, replicate the same spec per task.
-        // If tasks differ, replace with a task-specific `Vec<TaskSpec>`.
         let specs = vec![base_spec.clone(); outs.len()];
         evaluator.derive_props(&specs, outs)
     };
-    // Signature compatibility shim (unused in current flow).
-    // `run_ga_end_to_end` still requires a `fetch_outputs` parameter, but we
-    // call the interpreter directly and already have the outputs in memory.
-    // We can change this later if we want to fetch outputs from DB separately.
-    // Such in the case that the interpreter runs in advance
-    let mut unused_fetch = |_db: &DatabaseConnection, _sid: i64| -> Result<Vec<(i64, String)>, String> {
-        Err("unused".into())
-    };
 
-    // Drive the GA ↔ interpreter loop
+    // Unused fetch closure for signature compatibility
+    let mut unused_fetch = |_db: &DatabaseConnection,
+                            _sid: i64|
+     -> Result<Vec<(i64, String)>, String> { Err("unused".into()) };
+
+    // Run the GA ↔ interpreter loop
     run_ga_end_to_end(
         db,
         submission_id,
@@ -106,8 +98,10 @@ pub async fn run_ga_job(
         &mut comps,
         &mut derive_props,
         &mut unused_fetch,
-    ).await
+    )
+    .await
 }
+
 // -----------------------------------------------------------------------------
 // Core driver: decode -> interpreter -> derive -> evaluate -> evolve
 // -----------------------------------------------------------------------------
@@ -150,8 +144,7 @@ where
     for generation in 0..gens {
         let mut fitness_scores = Vec::with_capacity(ga.population().len());
 
-
-         // Inner loop: chromosomes in the current population
+        // Inner loop: chromosomes in the current population
         for chrom in ga.population().iter() {
             // payload for interpreter, decoded bits into integers into strings
             let decoded = decode_genes(chrom.genes(), bits_per_gene);
@@ -199,7 +192,10 @@ pub struct Components {
 impl Components {
     pub fn new(omega1: f64, omega2: f64, omega3: f64, bits_per_gene: usize) -> Self {
         if (omega1 + omega2 + omega3 - 1.0).abs() > 1e-6 {
-            panic!("Weights of omegas should sum to 1, not {}", omega1 + omega2 + omega3);
+            panic!(
+                "Weights of omegas should sum to 1, not {}",
+                omega1 + omega2 + omega3
+            );
         }
         Self {
             omega1,
@@ -212,17 +208,22 @@ impl Components {
     }
 
     /// `num_ltl_props` and `num_tasks` are derived from interpreter outputs upstream.
-    pub fn evaluate(&mut self, x: &Chromosome, generation: usize, num_ltl_props: usize, num_tasks: usize) -> f64 {
-        let ltl  = self.compute_ltl(x, num_ltl_props);
+    pub fn evaluate(
+        &mut self,
+        x: &Chromosome,
+        generation: usize,
+        num_ltl_props: usize,
+        num_tasks: usize,
+    ) -> f64 {
+        let ltl = self.compute_ltl(x, num_ltl_props);
         let fail = self.compute_fail(x, num_tasks);
-        let mem  = self.compute_mem(x, generation);
+        let mem = self.compute_mem(x, generation);
         self.total_checked += 1;
         if ltl > 0.0 {
             self.update_memory(x);
         }
         self.omega1 * ltl + self.omega2 * fail + self.omega3 * mem
     }
-
 
     fn compute_ltl(&self, _x: &Chromosome, n_milli: usize) -> f64 {
         (n_milli as f64 / 1000.0).clamp(0.0, 1.0)
@@ -246,7 +247,9 @@ impl Components {
                 .unwrap_or(0);
             sum += count as f64;
         }
-        if genes.is_empty() { 0.0 } else {
+        if genes.is_empty() {
+            0.0
+        } else {
             sum / (genes.len() as f64 * (self.total_checked.max(1) as f64))
         }
     }
@@ -285,15 +288,18 @@ pub fn decode_genes(bits: &[bool], bits_per_gene: usize) -> Vec<i32> {
 
 /// First bit is sign; rest are magnitude bits. Returns 0 if too short.
 fn decode_gene(bits: &[bool]) -> i32 {
-    if bits.len() < 2 { return 0; }
+    if bits.len() < 2 {
+        return 0;
+    }
     let is_negative = bits[0];
     let mut val = 0i32;
-    for &b in &bits[1..] { val = (val << 1) | (b as i32); }
+    for &b in &bits[1..] {
+        val = (val << 1) | (b as i32);
+    }
     let max = (1 << (bits.len() - 1)) - 1;
     let decoded = if is_negative { -val } else { val };
     decoded.clamp(-max, max)
 }
-
 
 #[cfg(test)]
 mod component_unit_tests {
@@ -326,11 +332,11 @@ mod component_unit_tests {
     fn compute_ltl_maps_milli_fraction() {
         let mut comps = Components::new(0.5, 0.3, 0.2, 4);
         // ltl=0.0
-        let s0 = comps.evaluate(&chrom_from_vals(&[1,2], 4), 0, 0, 0);
+        let s0 = comps.evaluate(&chrom_from_vals(&[1, 2], 4), 0, 0, 0);
         // ltl=0.5
-        let s1 = comps.evaluate(&chrom_from_vals(&[1,2], 4), 0, 500, 0);
+        let s1 = comps.evaluate(&chrom_from_vals(&[1, 2], 4), 0, 500, 0);
         // ltl=1.0
-        let s2 = comps.evaluate(&chrom_from_vals(&[1,2], 4), 0, 1000, 0);
+        let s2 = comps.evaluate(&chrom_from_vals(&[1, 2], 4), 0, 1000, 0);
         assert!(s0 < s1 && s1 < s2, "scores should increase with ltl_milli");
     }
 
@@ -371,7 +377,10 @@ mod component_unit_tests {
         // Another evaluation should see higher memory score than first one
         let s2 = comps.evaluate(&ch, 1, 0, 0);
 
-        assert!(s2 > s0, "memory score should increase after a positive LTL triggers update_memory");
+        assert!(
+            s2 > s0,
+            "memory score should increase after a positive LTL triggers update_memory"
+        );
     }
 
     #[test]
@@ -386,3 +395,63 @@ mod component_unit_tests {
     }
 }
 
+// use crate::algorithms::genetic_algorithm::{CrossoverType, GeneConfig, MutationType};
+// use db::connect;
+// use sea_orm::Database;
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use sea_orm::{Database, DatabaseConnection};
+//     use std::collections::HashSet;
+//     #[tokio::test(flavor = "multi_thread")]
+//     async fn smoke_run_ga_on_submission_9998() {
+//         dotenv::dotenv().ok();
+
+//         // Check for opt-in flag
+//         // if std::env::var("GA_ITEST").is_err() {
+//         //     eprintln!("GA_ITEST not set; skipping smoke test.");
+//         //     return;
+//         // }
+
+//         // Connect to DB
+//         let db = connect().await;
+
+//         // Minimal GA config (tiny population / generations for a fast run)
+//         // let genes = vec![
+//         //     GeneConfig {
+//         //         min_value: -5,
+//         //         max_value: 5,
+//         //         invalid_values: HashSet::new(),
+//         //     },
+//         //     GeneConfig {
+//         //         min_value: -4,
+//         //         max_value: 9,
+//         //         invalid_values: HashSet::new(),
+//         //     },
+//         // ];
+
+//         // let ga_config = GAConfig {
+//         //     population_size: 4,
+//         //     number_of_generations: 1,
+//         //     selection_size: 2,
+//         //     reproduction_probability: 0.9,
+//         //     crossover_probability: 0.8,
+//         //     mutation_probability: 0.05,
+//         //     genes,
+//         //     crossover_type: CrossoverType::Uniform,
+//         //     mutation_type: MutationType::BitFlip,
+//         // };
+
+//         // let (omega1, omega2, omega3) = (0.4, 0.4, 0.2);
+
+//         let submission_id: i64 = 602;
+
+//         let res = run_ga_job(&db, submission_id, ExecutionConfig::default_config()).await;
+
+//         match res {
+//             Ok(()) => eprintln!("smoke_run_ga_on_submission_9998: OK"),
+//             Err(e) => eprintln!("smoke_run_ga_on_submission_9998: ERR: {e}"),
+//         }
+//     }
+// }
