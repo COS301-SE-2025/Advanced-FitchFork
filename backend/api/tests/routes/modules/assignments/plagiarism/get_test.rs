@@ -162,7 +162,7 @@ mod plagiarism_tests {
         
         let case_data = &cases[0];
         assert_eq!(case_data["id"], data.plagiarism_case.id);
-        assert_eq!(case_data["status"], "Review");
+        assert_eq!(case_data["status"], "review");
         assert_eq!(case_data["description"], "High similarity detected");
         
         let sub1 = &case_data["submission_1"];
@@ -286,7 +286,7 @@ mod plagiarism_tests {
         assert_eq!(json["data"]["total"], 0);
     }
 
-    /// Test Case: Filtering by `Review` Status
+    /// Test Case: Filtering by `review` Status
     #[tokio::test]
     async fn test_list_plagiarism_cases_filter_by_review_status() {
         let (app, app_state) = make_test_app().await;
@@ -303,7 +303,7 @@ mod plagiarism_tests {
             &data.admin_user,
             data.module.id,
             data.assignment.id,
-            Some(vec![("status", "Review")]),
+            Some(vec![("status", "review")]),
         );
         let response = app.oneshot(req).await.unwrap();
         
@@ -314,7 +314,7 @@ mod plagiarism_tests {
         
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 1);
-        assert_eq!(cases[0]["status"], "Review");
+        assert_eq!(cases[0]["status"], "review");
     }
 
     /// Test Case: Filtering by `Flagged` Status
@@ -345,10 +345,10 @@ mod plagiarism_tests {
         
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 1);
-        assert_eq!(cases[0]["status"], "Flagged");
+        assert_eq!(cases[0]["status"], "flagged");
     }
 
-    /// Test Case: Filtering by `Reviewed` Status
+    /// Test Case: Filtering by `reviewed` Status
     #[tokio::test]
     async fn test_list_plagiarism_cases_filter_by_reviewed_status() {
         let (app, app_state) = make_test_app().await;
@@ -365,7 +365,7 @@ mod plagiarism_tests {
             &data.admin_user,
             data.module.id,
             data.assignment.id,
-            Some(vec![("status", "Reviewed")]),
+            Some(vec![("status", "reviewed")]),
         );
         let response = app.oneshot(req).await.unwrap();
         
@@ -376,7 +376,7 @@ mod plagiarism_tests {
         
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 1);
-        assert_eq!(cases[0]["status"], "Reviewed");
+        assert_eq!(cases[0]["status"], "reviewed");
     }
 
     /// Test Case: Search by Username

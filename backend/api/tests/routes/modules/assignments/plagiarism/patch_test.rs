@@ -179,7 +179,7 @@ mod patch_plagiarism_tests {
 
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Plagiarism case flagged");
-        assert_eq!(json["data"]["status"], "Flagged");
+        assert_eq!(json["data"]["status"], "flagged");
 
         let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
             .one(app_state.db())
@@ -345,7 +345,7 @@ mod review_plagiarism_tests {
 
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Plagiarism case marked as reviewed");
-        assert_eq!(json["data"]["status"], "Reviewed");
+        assert_eq!(json["data"]["status"], "reviewed");
 
         let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
             .one(app_state.db())
