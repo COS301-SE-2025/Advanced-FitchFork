@@ -1,3 +1,27 @@
+//! Assignment routes and response models.
+//!
+//! Provides endpoints and data structures for managing assignments within modules:
+//!
+//! - `GET /api/modules/{module_id}/assignments/{assignment_id}`  
+//!   Retrieve a specific assignment along with its associated files.
+//!
+//! - `GET /api/modules/{module_id}/assignments`  
+//!   Retrieve a paginated and optionally filtered list of assignments.
+//!
+//! - `GET /api/modules/{module_id}/assignments/{assignment_id}/stats`  
+//!   Retrieve submission statistics for a specific assignment.
+//!
+//! - `GET /api/modules/{module_id}/assignments/{assignment_id}/readiness`  
+//!   Retrieve a readiness report for a specific assignment, checking whether all required components are present.
+//!
+//! **Models:**  
+//! - `AssignmentFileResponse`: Assignment data plus associated files.  
+//! - `FilterReq` / `FilterResponse`: Query and response for paginated assignment lists.  
+//! - `StatResponse` / `PerStudentSubmission`: Assignment submission statistics.  
+//! - `AssignmentReadiness`: Detailed readiness report for an assignment.
+//!
+//! All endpoints use `AppState` for database access and return JSON-wrapped `ApiResponse`.
+
 use axum::{
     extract::{State, Path, Query},
     http::StatusCode,
@@ -298,7 +322,7 @@ pub async fn get_assignments(
             "updated_at",
         ];
         for field in sort_field.split(',') {
-            let field = field.trim_start_matches('-');
+            let field = field.trim().trim_start_matches('-');
             if !valid_fields.contains(&field) {
                 return (
                     StatusCode::BAD_REQUEST,

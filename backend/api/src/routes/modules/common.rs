@@ -1,3 +1,12 @@
+//! Module and role request/response models.
+//!
+//! Provides data structures for:
+//! - Module creation, validation, and response (`ModuleRequest`, `ModuleResponse`).
+//! - Assigning users to modules (`ModifyUsersModuleRequest`, `EditRoleRequest`).
+//! - User role responses and pagination (`RoleResponse`, `PaginatedRoleResponse`).
+//!
+//! Includes `From` implementations to convert database models into API-friendly responses.
+
 use chrono::{Datelike, Utc};
 use serde::{Serialize, Deserialize};
 use validator::Validate;

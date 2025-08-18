@@ -1,10 +1,11 @@
 use crate::models::assignment;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait};
+use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::collections::HashSet;
 use crate::models::user;
 
 /// Represents a user's submission for a specific assignment.
@@ -228,6 +229,28 @@ impl Model {
             .await?;
 
         Ok(submissions.into_iter().map(|s| s.id as i64).collect())
+    }
+    
+    pub async fn get_latest_submissions_for_assignment(
+        db: &DatabaseConnection,
+        assignment_id: i64,
+    ) -> Result<Vec<Self>, DbErr> {
+        let all = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .order_by_asc(Column::UserId)
+            .order_by_desc(Column::Attempt)
+            .all(db)
+            .await?;
+
+        let mut seen = HashSet::new();
+        let mut latest = Vec::new();
+
+        for s in all {
+            if seen.insert(s.user_id) {
+                latest.push(s);
+            }
+        }
+        Ok(latest)
     }
 }
 

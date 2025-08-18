@@ -14,8 +14,8 @@ use db::models::{
 use marker::MarkingJob;
 use md5;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
-use util::{mark_allocator::mark_allocator::load_allocator, state::AppState};
 use util::execution_config::{ExecutionConfig, execution_config::SubmissionMode};
+use util::{mark_allocator::mark_allocator::load_allocator, state::AppState};
 use serde::{Serialize, Deserialize};
 use tokio_util::bytes;
 use chrono::Utc;
@@ -396,31 +396,23 @@ async fn update_submission_report_marks(
         .join(format!("attempt_{}", submission.attempt));
     let report_path = attempt_dir.join("submission_report.json");
 
-    // Read file
     let content = std::fs::read_to_string(&report_path)
         .map_err(|e| format!("Failed to read existing report: {}", e))?;
 
-    // Deserialize into SubmissionDetailResponse
     let mut resp: SubmissionDetailResponse = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to deserialize report into SubmissionDetailResponse: {}", e))?;
 
-    // Update mark
     resp.mark = MarkSummary {
         earned: new_mark.earned,
         total: new_mark.total,
     };
 
-    // Update timestamp (string in the same format you used elsewhere)
     resp.updated_at = Utc::now().to_rfc3339();
 
-    // Serialize pretty and write atomically
-    let tmp_path = report_path.with_extension("json.tmp");
     let output = serde_json::to_string_pretty(&resp)
         .map_err(|e| format!("Failed to serialize updated report: {}", e))?;
-    std::fs::write(&tmp_path, output)
+    std::fs::write(&report_path, output)
         .map_err(|e| format!("Failed to write temp report: {}", e))?;
-    std::fs::rename(&tmp_path, &report_path)
-        .map_err(|e| format!("Failed to move temp report into place: {}", e))?;
 
     Ok(())
 }

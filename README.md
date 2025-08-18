@@ -107,12 +107,20 @@ npm install
 npm run dev
 ```
 
-#### Backend
+#### Backend Code Manager
+
+```bash
+cd backend/code_manager/images
+docker build -t universal-runner .
+cd ../../
+cargo make code
+```
+
+#### Backend API
 
 ```bash
 cd backend
 cp .env.example .env
-docker build -t universal-runner .
 cargo make fresh
 cargo make api
 ```

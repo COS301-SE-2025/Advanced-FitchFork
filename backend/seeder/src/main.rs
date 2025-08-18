@@ -1,14 +1,15 @@
-use crate::seed::run_seeder;
 use crate::seed::Seeder;
+use crate::seed::run_seeder;
 use crate::seeds::{
     assignment::AssignmentSeeder, assignment_file::AssignmentFileSeeder,
+    assignment_interpreter::AssignmentInterpreterSeeder,
     assignment_memo_output::AssignmentMemoOutputSeeder,
     assignment_overwrite_file::AssignmentOverwriteFileSeeder,
     assignment_submission::AssignmentSubmissionSeeder,
     assignment_submission_output::AssignmentSubmissionOutputSeeder,
-    assignment_task::AssignmentTaskSeeder, module::ModuleSeeder, user::UserSeeder,
+    assignment_task::AssignmentTaskSeeder, module::ModuleSeeder,
+    plagiarism_case::PlagiarismCaseSeeder, tickets::TicketSeeder, user::UserSeeder,
     user_role::UserRoleSeeder,
-    plagiarism_case::PlagiarismCaseSeeder
 };
 
 mod seed;
@@ -40,6 +41,11 @@ async fn main() {
             Box::new(AssignmentOverwriteFileSeeder),
             "AssignmentOverwriteFile",
         ),
+        (
+            Box::new(AssignmentInterpreterSeeder),
+            "AssignmentInterpreter",
+        ),
+        (Box::new(TicketSeeder), "Ticket"),
     ] {
         run_seeder(&*seeder, name, &db).await;
     }

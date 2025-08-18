@@ -189,7 +189,7 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
 
                 subsections.push(Subsection {
                     name: sub_name,
-                    value: sub_value,
+                    value: sub_value as i64,
                 });
             }
 
@@ -203,7 +203,7 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
             tasks.push(TaskEntry {
                 id: task_id.clone(),
                 name,
-                value,
+                value: value as i64,
                 subsections,
             });
         }

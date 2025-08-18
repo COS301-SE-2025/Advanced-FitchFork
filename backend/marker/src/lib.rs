@@ -182,8 +182,8 @@ impl<'a> MarkingJob<'a> {
                 .iter()
                 .find(|t| t.task_id.eq_ignore_ascii_case(&task_entry.id));
             let mut subsections: Vec<crate::report::ReportSubsection> = Vec::new();
-            let mut task_earned: i64 = 0;
-            let mut task_possible: i64 = 0;
+            let mut task_earned = 0;
+            let mut task_possible = 0;
             let mut task_results: Vec<TaskResult> = Vec::new();
 
             if let Some(task_output) = submission_task {
@@ -230,7 +230,7 @@ impl<'a> MarkingJob<'a> {
         let mut feedback_iter = feedback_entries.iter();
 
         let mut report_tasks: Vec<crate::report::ReportTask> = Vec::new();
-        let mut task_counter = 1u32;
+        let mut task_counter = 1;
         let mut total_earned = 0;
         let mut total_possible = 0;
         for ((_task_results, mut subsections), (name, (task_earned, task_possible))) in

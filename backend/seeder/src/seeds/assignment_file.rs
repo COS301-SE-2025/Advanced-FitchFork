@@ -24,9 +24,6 @@ impl Seeder for AssignmentFileSeeder {
                 format!("mark_allocator_{}.txt", id)
             }),
             (FileType::Config, |id| format!("config_{}.txt", id)),
-            (FileType::Interpreter, |id| {
-                format!("interpreter_{}.txt", id)
-            }),
         ];
 
         for a in &assignments {
@@ -98,7 +95,7 @@ public class Main {
 
     static void runTask3() {
         System.out.println("&-=-&Task3Subtask1");
-        System.out.println(HelperThree.subtaskAlpha());
+        System.out.println(HelperThree.subtaskAlpha())
         System.out.println("&-=-&Task3Subtask2");
         System.out.println(HelperOne.subtaskBeta());
         System.out.println("&-=-&Task3Subtask3");
@@ -203,9 +200,9 @@ task3:
         // New config file content
         let config_json = r#"
 {
-          "execution": {
+  "execution": {
     "timeout_secs": 10,
-    "max_memory":  8589934592,
+    "max_memory": 8589934592,
     "max_cpus": 2,
     "max_uncompressed_size": 100000000,
     "max_processes": 256
@@ -214,8 +211,16 @@ task3:
     "marking_scheme": "exact",
     "feedback_scheme": "auto",
     "deliminator": "&-=-&"
+  },
+  "project": {
+    "language": "cpp"
+  },
+  "output": {
+    "stdout": true,
+    "stderr": true,
+    "retcode": true
   }
-    }
+}
 "#;
 
         let zipped_files = vec![
@@ -400,128 +405,6 @@ struct HelperThree {
             buf.into_inner()
         }
 
-        fn create_interpreter_zip_cpp() -> Vec<u8> {
-            let mut buf = Cursor::new(Vec::new());
-            {
-                let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = SimpleFileOptions::default().unix_permissions(0o644);
-
-                let interpreter_cpp = r##"
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <string>
-#include <cstdlib>
-#include <ctime>
-
-std::string mapToFunction(char digit) {
-    switch (digit) {
-        case '0': return "HelperOne::subtaskA()";
-        case '1': return "HelperTwo::subtaskB()";
-        case '2': return "HelperThree::subtaskC()";
-        case '3': return "HelperTwo::subtaskX()";
-        case '4': return "HelperThree::subtaskY()";
-        case '5': return "HelperOne::subtaskZ()";
-        case '6': return "HelperThree::subtaskAlpha()";
-        case '7': return "HelperOne::subtaskBeta()";
-        case '8': return "HelperTwo::subtaskGamma()";
-        default: return "INVALID()";
-    }
-}
-
-std::string randomSubtaskName(const std::string& task, int index) {
-    return task + "Subtask" + std::to_string(index + 1);
-}
-
-void writeTask(std::ofstream& out, const std::string& taskName, const std::vector<std::string>& calls) {
-    out << "static void run" << taskName << "() {\n";
-    for (size_t i = 0; i < calls.size(); ++i) {
-        out << "    std::cout << \"&-=-&" << randomSubtaskName(taskName, i) << "\" << std::endl;\n";
-        out << "    std::cout << " << calls[i] << " << std::endl;\n";
-    }
-    out << "}\n\n";
-}
-
-int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: ./interpreter <digit_string>\n";
-        return 1;
-    }
-
-    std::string input = argv[1];
-    std::vector<std::string> task1, task2, task3;
-
-    std::srand(static_cast<unsigned>(std::time(0)));
-
-    // Assign up to 3 digits to each task in order
-    for (size_t i = 0; i < input.size(); ++i) {
-        std::string call = mapToFunction(input[i]);
-        if (call == "INVALID()") continue;
-
-        if (task1.size() < 3) task1.push_back(call);
-        else if (task2.size() < 3) task2.push_back(call);
-        else if (task3.size() < 3) task3.push_back(call);
-        else break; // ignore extra input beyond 9 valid digits
-    }
-
-    std::ofstream out("main.cpp");
-    out << "#include <iostream>\n\n";
-
-    out << "class HelperOne {\n"
-        << "public:\n"
-        << "    static std::string subtaskA() { return \"HelperOne::subtaskA\"; }\n"
-        << "    static std::string subtaskZ() { return \"HelperOne::subtaskZ\"; }\n"
-        << "    static std::string subtaskBeta() { return \"HelperOne::subtaskBeta\"; }\n"
-        << "};\n\n";
-
-    out << "class HelperTwo {\n"
-        << "public:\n"
-        << "    static std::string subtaskB() { return \"HelperTwo::subtaskB\"; }\n"
-        << "    static std::string subtaskX() { return \"HelperTwo::subtaskX\"; }\n"
-        << "    static std::string subtaskGamma() { return \"HelperTwo::subtaskGamma\"; }\n"
-        << "};\n\n";
-
-    out << "class HelperThree {\n"
-        << "public:\n"
-        << "    static std::string subtaskC() { return \"HelperThree::subtaskC\"; }\n"
-        << "    static std::string subtaskY() { return \"HelperThree::subtaskY\"; }\n"
-        << "    static std::string subtaskAlpha() { return \"HelperThree::subtaskAlpha\"; }\n"
-        << "};\n\n";
-
-    // Declare runtask functions before main()
-    out << "static void runtask1();\n";
-    out << "static void runtask2();\n";
-    out << "static void runtask3();\n\n";
-
-    out << "int main(int argc, char* argv[]) {\n";
-    out << "    std::string task = argc > 1 ? argv[1] : \"task1\";\n";
-    out << "    if (task == \"task1\") runtask1();\n";
-    out << "    else if (task == \"task2\") runtask2();\n";
-    out << "    else if (task == \"task3\") runtask3();\n";
-    out << "    else std::cout << task << \" is not a valid task\" << std::endl;\n";
-    out << "    return 0;\n";
-    out << "}\n\n";
-
-    // Define runtask functions after main()
-    writeTask(out, "task1", task1);
-    writeTask(out, "task2", task2);
-    writeTask(out, "task3", task3);
-
-    out.close();
-
-    std::cout << "Generated main.cpp based on input string.\n";
-    return 0;
-}
-
-"##;
-
-                zip.start_file("interpreter.cpp", options).unwrap();
-                zip.write_all(interpreter_cpp.as_bytes()).unwrap();
-                zip.finish().unwrap();
-            }
-            buf.into_inner()
-        }
-
         fn create_makefile_zip_cpp() -> Vec<u8> {
             let mut buf = Cursor::new(Vec::new());
             {
@@ -569,7 +452,7 @@ task4: main
 
         let config_json_cpp = r#"
 {
-          "execution": {
+  "execution": {
     "timeout_secs": 10,
     "max_memory": 8589934592,
     "max_cpus": 2,
@@ -580,8 +463,16 @@ task4: main
     "marking_scheme": "exact",
     "feedback_scheme": "auto",
     "deliminator": "&-=-&"
+  },
+  "project": {
+    "language": "cpp"
+  },
+  "output": {
+    "stdout": true,
+    "stderr": true,
+    "retcode": true
   }
-    }
+}
 "#;
 
         let zipped_files_cpp = vec![
@@ -596,11 +487,6 @@ task4: main
                 FileType::Config,
                 "config.json",
                 config_json_cpp.as_bytes().to_vec(),
-            ),
-            (
-                FileType::Interpreter,
-                "interpreter.zip",
-                create_interpreter_zip_cpp(),
             ),
         ];
 

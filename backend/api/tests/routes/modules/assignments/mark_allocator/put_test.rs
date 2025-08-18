@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use axum::body::to_bytes;
     use db::{models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
     use axum::{body::Body, http::{Request, StatusCode}};
     use tower::ServiceExt;
@@ -208,5 +209,48 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_put_then_get_mark_allocator() {
+        let (app, app_state) = make_test_app().await;
+        let data = setup_test_data(app_state.db()).await;
+        
+        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+        let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
+        
+        let allocator_data = json!({
+            "tasks": [{"task_number": 1, "weight": 1.0, "criteria": [{"name": "Correctness", "weight": 1.0}]}],
+            "total_weight": 1.0
+        });
+
+        let put_req = Request::builder()
+            .uri(&uri)
+            .method("PUT")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(allocator_data.to_string()))
+            .unwrap();
+
+        let put_response = app.clone().oneshot(put_req).await.unwrap();
+        assert_eq!(put_response.status(), StatusCode::OK);
+
+        let get_req = Request::builder()
+            .uri(&uri)
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let get_response = app.oneshot(get_req).await.unwrap();
+        assert_eq!(get_response.status(), StatusCode::OK);
+
+        let body_bytes = to_bytes(get_response.into_body(), usize::MAX).await.unwrap();
+        let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        
+        assert_eq!(body_json["data"], allocator_data);
+
+        let _ = fs::remove_dir_all("./tmp");
     }
 }

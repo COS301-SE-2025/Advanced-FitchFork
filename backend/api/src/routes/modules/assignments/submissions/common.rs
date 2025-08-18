@@ -1,7 +1,22 @@
+//! Submission utilities and response types.
+//!
+//! This module provides types and helpers for submissions-related endpoints.
+//!
+//! It includes:
+//! - `ListSubmissionsQuery` → query parameters for paginated submission listings
+//! - `UserResponse` → represents a user associated with a submission
+//! - `Mark` → represents earned/total marks for a submission
+//! - `SubmissionListItem` → single item in a submissions list
+//! - `SubmissionsListResponse` → paginated submissions list
+//! - `SubmissionResponse` → minimal response for a single submission
+//! - `MarkSummary` → summary of earned vs total marks
+//! - `CodeComplexitySummary` → summary of code complexity metrics
+//! - `CodeComplexity` → detailed code complexity information
+//! - `SubmissionDetailResponse` → detailed response after grading a submission
+
 use serde::{Deserialize, Serialize};
 
 /// Query parameters for submissions listing endpoints.
-/// Supports pagination, search query, sorting, and optional username filter.
 #[derive(Debug, Deserialize)]
 pub struct ListSubmissionsQuery {
     pub page: Option<u32>,
@@ -85,7 +100,6 @@ pub struct CodeComplexity {
 }
 
 /// Detailed response returned after grading a submission.
-/// Includes grading marks, flags, and optional coverage/complexity reports.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SubmissionDetailResponse {
     pub id: i64,

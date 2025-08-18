@@ -1,3 +1,15 @@
+//! Standard API response wrapper.
+//!
+//! `ApiResponse<T>` enforces a consistent JSON structure for all endpoints:
+//! ```json
+//! {
+//!   "success": true|false,
+//!   "data": { ... } | null,
+//!   "message": "Description"
+//! }
+//! ```
+//! Use the provided constructors for success or error responses.
+
 use serde::Serialize;
 
 /// Standardized API response wrapper for all outgoing JSON responses.

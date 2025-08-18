@@ -1,3 +1,18 @@
+//! Assignment management routes.
+//!
+//! Provides endpoints for managing assignments within a module, including:
+//! - Editing assignments (`PUT /api/modules/{module_id}/assignments/{assignment_id}`)
+//! - Bulk updating assignments (`PUT /api/modules/{module_id}/assignments/bulk`)
+//! - Transitioning assignment status (`Open` / `Close`)
+//!
+//! Access control:
+//! - Only lecturers or admins assigned to a module can edit or bulk update assignments.
+//! - Status transitions are controlled and enforced by the system.
+//!
+//! Notes:
+//! - Direct modification of `status` is not allowed through edit/bulk endpoints; status updates are automatic.
+//! - All date fields must be in ISO 8601 format (RFC 3339).
+
 use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
 use chrono::{DateTime, Utc};
 use util::state::AppState;

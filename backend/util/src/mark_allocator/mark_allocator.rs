@@ -147,6 +147,7 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
     let output_path = allocator_dir_path.join("allocator.json");
     let mut file = File::create(&output_path)?;
     write!(file, "{}", serde_json::to_string_pretty(&final_json)?)?;
+    file.flush()?;
 
     Ok(final_json)
 }
@@ -214,6 +215,7 @@ pub async fn save_allocator(module: i64, assignment: i64, json: Value) -> Result
     let mut file = File::create(&file_path)?;
     let content = serde_json::to_string_pretty(&json)?;
     file.write_all(content.as_bytes())?;
+    file.flush()?;
 
     Ok(())
 }
