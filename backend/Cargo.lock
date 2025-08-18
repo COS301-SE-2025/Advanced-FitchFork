@@ -194,6 +194,7 @@ dependencies = [
  "md5",
  "migration",
  "mime_guess",
+ "moss_parser",
  "once_cell",
  "portpicker",
  "regex",
@@ -2173,7 +2174,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "moss-parser"
+name = "moss_parser"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2184,7 +2185,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "zip",
 ]
 
 [[package]]

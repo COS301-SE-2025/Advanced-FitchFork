@@ -5,7 +5,7 @@ import {
   MoonOutlined,
   SunOutlined,
 } from '@ant-design/icons';
-import Logo from '@/components/Logo';
+import Logo from '@/components/common/Logo';
 import type { MenuItem } from '@/constants/sidebar';
 
 type SidebarContentProps = {
@@ -20,6 +20,7 @@ type SidebarContentProps = {
   setCollapsed: (val: boolean) => void;
   setMode: (val: 'light' | 'dark') => void;
   logout: () => void;
+  onMobileNavigate?: () => void;
 };
 
 const SidebarContent = ({
@@ -34,6 +35,7 @@ const SidebarContent = ({
   setCollapsed,
   setMode,
   logout,
+  onMobileNavigate,
 }: SidebarContentProps) => {
   const selectedKeys: string[] = [
     visibleMenuItems
@@ -42,12 +44,28 @@ const SidebarContent = ({
       .sort((a, b) => b.length - a.length)[0] ?? '',
   ];
 
+  const inlineCollapsed = !isMobile && collapsed;
+
+  const handleNavigate = (key: string) => {
+    if (key === 'logout') {
+      logout();
+      navigate('/login');
+    } else if (key !== 'theme-toggle') {
+      navigate(key);
+    }
+    if (isMobile) {
+      onMobileNavigate?.(); // only collapse/close on mobile
+    }
+  };
+
   return (
-    <div className="bg-white dark:bg-gray-950 h-full flex flex-col justify-between">
+    <div className="bg-white dark:bg-gray-900 h-full flex flex-col justify-between">
       <div>
         <div
           className="py-4 mb-4 flex items-center justify-center cursor-pointer"
-          onClick={() => isMobile && setCollapsed(false)}
+          onClick={() => {
+            if (isMobile) onMobileNavigate?.();
+          }}
         >
           <Logo collapsed={collapsed && !isMobile} />
         </div>
@@ -57,13 +75,8 @@ const SidebarContent = ({
             mode="inline"
             theme="light"
             selectedKeys={selectedKeys}
-            onClick={({ key }) => {
-              if (key !== 'logout') {
-                navigate(key);
-              }
-              if (isMobile) setCollapsed(false);
-            }}
-            inlineCollapsed={!isMobile && collapsed}
+            onClick={({ key }) => handleNavigate(String(key))}
+            inlineCollapsed={inlineCollapsed}
             className="!bg-transparent !p-0 mt-2"
             style={{ border: 'none' }}
           >
@@ -82,18 +95,15 @@ const SidebarContent = ({
           theme="light"
           selectedKeys={selectedKeys}
           onClick={({ key, domEvent }) => {
-            if (key === 'logout') {
-              logout();
-              navigate('/login');
-            } else if (key === 'theme-toggle') {
+            if (key === 'theme-toggle') {
               domEvent.stopPropagation();
               setMode(isDark ? 'light' : 'dark');
-            } else {
-              navigate(key);
+              if (isMobile) onMobileNavigate?.();
+              return;
             }
-            if (isMobile) setCollapsed(false);
+            handleNavigate(String(key));
           }}
-          inlineCollapsed={!isMobile && collapsed}
+          inlineCollapsed={inlineCollapsed}
           className="!bg-transparent"
           style={{ border: 'none' }}
         >

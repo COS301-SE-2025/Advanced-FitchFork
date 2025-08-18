@@ -23,5 +23,5 @@ pub mod assignments;
 pub fn ws_module_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route("/{module_id}/announcements", get(default_websocket_handler).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
-        .nest("/{module_id}/assignments", ws_assignment_routes(app_state))
+        .nest("/{module_id}/assignments", ws_assignment_routes())
 }

@@ -18,6 +18,8 @@ use get::{get_assignment_config, get_default_assignment_config};
 use post::set_assignment_config;
 use util::state::AppState;
 
+use crate::routes::modules::assignments::config::post::reset_assignment_config;
+
 pub mod get;
 pub mod post;
 
@@ -26,4 +28,5 @@ pub fn config_routes() -> Router<AppState> {
         .route("/", post(set_assignment_config))
         .route("/", get(get_assignment_config))
         .route("/default", get(get_default_assignment_config))
+        .route("/reset", post(reset_assignment_config)) // TODO Tests 
 }

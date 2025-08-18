@@ -1,8 +1,7 @@
-import type { AuthUser, PostLoginResponse, PostRegisterResponse } from '@/types/auth';
+import type { PostLoginResponse, PostRegisterResponse } from '@/types/auth';
 import type { User } from '@/types/users';
 import type { Module, ModuleRole } from '@/types/modules';
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { ApiResponse } from '@/types/common';
 import { login as loginService, register as registerService } from '@/services/auth';
 import { loadAuthSession } from '@/utils/authSession';
 
@@ -30,21 +29,47 @@ interface AuthContextType {
   register: (username: string, email: string, password: string) => Promise<PostRegisterResponse>;
   logout: () => void;
   isExpired: () => boolean;
+  token: string | null;
 
   // derived info
   isAdmin: boolean;
   isUser: boolean;
   getModuleRole: (moduleId: number) => ModuleRole | null;
-  hasModuleRole: (moduleId: number, role: ModuleRole) => boolean;
+
   isLecturer: (moduleId: number) => boolean;
   isAssistantLecturer: (moduleId: number) => boolean;
   isTutor: (moduleId: number) => boolean;
   isStudent: (moduleId: number) => boolean;
+  isStaff: (moduleId: number) => boolean;
+
+  hasModuleRole: (role: ModuleRole) => boolean;
+  hasLecturerRole: () => boolean;
+  hasAssistantLecturerRole: () => boolean;
+  hasTutorRole: () => boolean;
+  hasStudentRole: () => boolean;
+  hasStaffRole: () => boolean;
 
   print: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+type StoredAuth = {
+  user?: Partial<User>;
+  token?: string;
+  expires_at?: string;
+  modules?: unknown;
+};
+
+const readStoredAuth = (): StoredAuth | null => {
+  const raw = localStorage.getItem('auth');
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StoredAuth;
+  } catch {
+    return null;
+  }
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -57,16 +82,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const [loading, setLoading] = useState(true);
   const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
     const loadUser = async () => {
-      const stored = localStorage.getItem('auth');
-      if (stored) {
+      const stored = readStoredAuth();
+      if (stored?.token) {
+        setToken(stored.token);
         try {
-          const parsed = JSON.parse(stored);
           if (isExpired()) return logout();
 
-          const session = await loadAuthSession(parsed);
+          const session = await loadAuthSession({
+            token: stored.token,
+            expires_at: stored.expires_at,
+          });
           if (!session) return logout();
 
           setUser(session);
@@ -86,20 +115,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     loadUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = async (
-    username: string,
-    password: string,
-  ): Promise<ApiResponse<AuthUser | null>> => {
+  const login = async (username: string, password: string): Promise<PostLoginResponse> => {
     try {
-      const res = await loginService(username, password);
+      const res = await loginService(username, password); // assumed to return PostLoginResponse
       if (!res.success || !res.data) return res;
 
-      const { token, expires_at, ...user } = res.data;
-      localStorage.setItem('auth', JSON.stringify({ user, token, expires_at, modules: [] }));
+      const { token: newToken, expires_at, ...user } = res.data;
+      localStorage.setItem(
+        'auth',
+        JSON.stringify({ user, token: newToken, expires_at, modules: [] }),
+      );
+      setToken(newToken);
 
-      const session = await loadAuthSession({ token, expires_at });
+      const session = await loadAuthSession({ token: newToken, expires_at });
       if (session) {
         setUser(session);
         setProfilePictureUrl(session.profilePictureUrl);
@@ -117,8 +148,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return {
         success: false,
         data: null,
-        message: err.message || 'Unexpected error during login',
-      };
+        message: err?.message || 'Unexpected error during login',
+      } as PostLoginResponse;
     }
   };
 
@@ -126,20 +157,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     username: string,
     email: string,
     password: string,
-  ): Promise<ApiResponse<AuthUser | null>> => {
+  ): Promise<PostRegisterResponse> => {
     try {
       return await registerService(username, email, password);
     } catch (err: any) {
       return {
         success: false,
         data: null,
-        message: err.message || 'Unexpected error during registration',
-      };
+        message: err?.message || 'Unexpected error during registration',
+      } as PostRegisterResponse;
     }
   };
 
   const logout = () => {
     localStorage.removeItem('auth');
+    setToken(null);
     setUser(null);
     setModules([]);
     setModulesByRole({ lecturer: [], assistant_lecturer: [], tutor: [], student: [] });
@@ -147,11 +179,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const isExpired = (): boolean => {
-    const stored = localStorage.getItem('auth');
-    if (!stored) return true;
+    const stored = readStoredAuth();
+    if (!stored?.expires_at) return true;
     try {
-      const { expires_at } = JSON.parse(stored);
-      return !expires_at || new Date(expires_at) < new Date();
+      return new Date(stored.expires_at) < new Date();
     } catch {
       return true;
     }
@@ -165,36 +196,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return mod?.role || null;
   };
 
-  const hasModuleRole = (moduleId: number, role: ModuleRole): boolean => {
-    return getModuleRole(moduleId) === role;
-  };
-
   const isLecturer = (moduleId: number): boolean => getModuleRole(moduleId) === 'lecturer';
   const isAssistantLecturer = (moduleId: number): boolean =>
     getModuleRole(moduleId) === 'assistant_lecturer';
   const isTutor = (moduleId: number): boolean => getModuleRole(moduleId) === 'tutor';
   const isStudent = (moduleId: number): boolean => getModuleRole(moduleId) === 'student';
+  const isStaff = (moduleId: number): boolean =>
+    isTutor(moduleId) || isAssistantLecturer(moduleId) || isLecturer(moduleId);
+
+  const hasModuleRole = (role: ModuleRole): boolean => modules.some((m) => m.role === role);
+
+  const hasLecturerRole = (): boolean => hasModuleRole('lecturer');
+  const hasAssistantLecturerRole = (): boolean => hasModuleRole('assistant_lecturer');
+  const hasTutorRole = (): boolean => hasModuleRole('tutor');
+  const hasStudentRole = (): boolean => hasModuleRole('student');
+  const hasStaffRole = (): boolean =>
+    hasLecturerRole() || hasAssistantLecturerRole() || hasTutorRole();
 
   const print = () => {
     console.group('%c[AuthContext State]', 'color: #4CAF50; font-weight: bold;');
-
     console.log('%cUser:', 'color: #2196F3; font-weight: bold;', user);
+    console.log('%cToken:', 'color: #2196F3;', token ? '[present]' : null);
     console.log('%cProfile Picture URL:', 'color: #2196F3;', profilePictureUrl);
     console.log('%cLoading:', 'color: #2196F3;', loading);
     console.log('%cIs Admin:', 'color: #2196F3;', isAdmin);
     console.log('%cIs User:', 'color: #2196F3;', isUser);
-
     console.groupCollapsed('%cModules (Flat):', 'color: #FF9800; font-weight: bold;');
     console.table(modules);
     console.groupEnd();
-
     console.groupCollapsed('%cModules By Role:', 'color: #FF9800; font-weight: bold;');
     console.log('Lecturer:', modulesByRole.lecturer);
     console.log('Assistant Lecturer:', modulesByRole.assistant_lecturer);
     console.log('Tutor:', modulesByRole.tutor);
     console.log('Student:', modulesByRole.student);
     console.groupEnd();
-
     console.groupEnd();
   };
 
@@ -211,6 +246,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         logout,
         isExpired,
+        token,
         isAdmin,
         isUser,
         getModuleRole,
@@ -219,6 +255,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAssistantLecturer,
         isTutor,
         isStudent,
+        isStaff,
+        hasLecturerRole,
+        hasAssistantLecturerRole,
+        hasTutorRole,
+        hasStudentRole,
+        hasStaffRole,
         print,
       }}
     >

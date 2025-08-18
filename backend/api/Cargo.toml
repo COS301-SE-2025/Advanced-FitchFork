@@ -15,6 +15,7 @@ util = { path = "../util" }
 marker = { path = "../marker" }
 migration = { path = "../migration" }
 code-runner = { path = "../code_runner" }
+moss_parser = { path = "../moss_parser" }
 ai = { path = "../ai" }
 
 # Web framework and middleware

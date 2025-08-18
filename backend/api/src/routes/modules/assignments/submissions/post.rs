@@ -14,10 +14,14 @@ use db::models::{
 use marker::MarkingJob;
 use md5;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
-use util::execution_config::{ExecutionConfig, execution_config::SubmissionMode};
-use util::{mark_allocator::mark_allocator::load_allocator, state::AppState};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use tokio_util::bytes;
+use util::{
+    execution_config::{ExecutionConfig, execution_config::SubmissionMode},
+    mark_allocator::mark_allocator::generate_allocator,
+    mark_allocator::mark_allocator::load_allocator,
+    state::AppState,
+};
 use chrono::Utc;
 
 #[derive(Debug, Deserialize)]
@@ -679,6 +683,17 @@ pub async fn submit_assignment(
                 "Failed to run code for submission",
             )),
         );
+    }
+
+    if config.project.submission_mode != SubmissionMode::Manual {
+        if let Err(_) = generate_allocator(module_id, assignment_id).await {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Failed to generate allocator",
+                )),
+            );
+        }
     }
 
     if let Err(e) = load_assignment_allocator(assignment.module_id, assignment.id).await {

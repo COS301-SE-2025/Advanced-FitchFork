@@ -6,7 +6,6 @@ import { useMediaQuery } from 'react-responsive';
 
 import { useTopMenuItems, BOTTOM_MENU_ITEMS, type MenuItem } from '@/constants/sidebar';
 import { useAuth } from '@/context/AuthContext';
-import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
 import { useTheme } from '@/context/ThemeContext';
 
 import SidebarContent from '@/components/layout/SidebarContent';
@@ -28,7 +27,6 @@ const AppLayout = () => {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const forceCollapsed = useMediaQuery({ maxWidth: 1024 });
 
-  const breadcrumbs = useBreadcrumbs();
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, isAdmin, isUser } = useAuth();
@@ -95,7 +93,7 @@ const AppLayout = () => {
   };
 
   return (
-    <Layout className="min-h-screen !bg-gray-50 dark:!bg-gray-900 !overflow-hidden">
+    <Layout className="h-screen overflow-hidden !bg-gray-50 dark:!bg-gray-950">
       {isMobile ? (
         <Drawer
           placement="right"
@@ -106,7 +104,11 @@ const AppLayout = () => {
           className="!p-0"
           styles={{ body: { padding: 0 }, header: { display: 'none' } }}
         >
-          <SidebarContent {...sidebarProps} collapsed={false} />
+          <SidebarContent
+            {...sidebarProps}
+            collapsed={false}
+            onMobileNavigate={() => setMobileSidebarVisible(false)}
+          />
         </Drawer>
       ) : (
         <Sider
@@ -122,17 +124,16 @@ const AppLayout = () => {
         </Sider>
       )}
 
-      <Layout className="!bg-transparent flex flex-col w-full h-screen">
-        <Header className="border-b !bg-white dark:!bg-gray-950 dark:!bg-gray border-gray-200 dark:border-gray-800 !px-4 sm:px-6">
+      <Layout className="!bg-transparent flex flex-col flex-1 min-h-0">
+        <Header className="border-b !bg-white dark:!bg-gray-900 dark:!bg-gray border-gray-200 dark:border-gray-800 !px-4 sm:px-6">
           <HeaderBar
-            breadcrumbs={breadcrumbs}
             notifications={notifications}
             profileMenuItems={profileMenuItems}
             onMenuClick={() => setMobileSidebarVisible(true)}
           />
         </Header>
 
-        <Content className="flex-1 min-h-0 overflow-y-auto !bg-transparent">
+        <Content className="flex-1 min-h-0 overflow-hidden !bg-transparent">
           <Outlet />
         </Content>
       </Layout>

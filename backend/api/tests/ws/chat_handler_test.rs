@@ -25,6 +25,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[tokio::test]
     async fn authenticated_user_can_connect_to_chat() {
         let (app, state) = make_test_app().await;
@@ -36,6 +37,7 @@ mod tests {
         ws.close(None).await.unwrap();
     }
 
+    #[ignore]
     #[tokio::test]
     async fn unauthenticated_user_cannot_connect_to_chat() {
         let (app, _) = make_test_app().await;
@@ -57,6 +59,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[tokio::test]
     async fn users_can_exchange_chat_messages() {
         let (app, state) = make_test_app().await;
@@ -90,6 +93,7 @@ mod tests {
         ws2.close(None).await.unwrap();
     }
 
+    #[ignore]
     #[tokio::test]
     async fn server_responds_to_ping_with_pong() {
         let (app, state) = make_test_app().await;

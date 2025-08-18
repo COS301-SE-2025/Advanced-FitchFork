@@ -11,49 +11,47 @@ use db::models::{
     user_module_role::{Column, Role},
     UserModuleRole as Entity,
 };
-use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait};
+use db::models::user::Model as UserModel;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 
-/// Checks if a user is authorized to access or modify a ticket.
+/// Returns whether `user_id` is allowed to view/post on a ticket in `module_id`.
 ///
-/// A user is valid if they are either:
-/// - The author of the ticket, or
-/// - A staff member (Lecturer, AssistantLecturer, Tutor) in the module.
+/// Admins are always allowed.
 ///
-/// # Arguments
-/// - `user_id` → ID of the user
-/// - `ticket_id` → ID of the ticket
-/// - `module_id` → ID of the module
-/// - `db` → Reference to the database connection
-///
-/// # Returns
-/// `true` if the user is authorized, `false` otherwise
+/// Rules:
+/// - `is_admin == true` → allowed
+/// - Ticket **author** → allowed
+/// - Module **staff** (Lecturer, AssistantLecturer, Tutor) → allowed
 pub async fn is_valid(
     user_id: i64,
     ticket_id: i64,
     module_id: i64,
+    is_admin: bool,
     db: &DatabaseConnection,
 ) -> bool {
-    // Check if the user is the author of the ticket
-    let is_author = TicketModel::is_author(ticket_id, user_id, db).await;
+    // Admin override
+    if is_admin {
+        return true;
+    }
 
-    // Define staff roles
-    let staff_roles = vec![Role::Lecturer, Role::AssistantLecturer, Role::Tutor];
+    // Author of the ticket?
+    if TicketModel::is_author(ticket_id, user_id, db).await {
+        return true;
+    }
 
-    // Check if the user has a staff role in the module
-    let is_staff = Entity::find()
+    // Staff on this module?
+    let staff_roles = [Role::Lecturer, Role::AssistantLecturer, Role::Tutor];
+    Entity::find()
         .filter(Column::UserId.eq(user_id))
         .filter(Column::ModuleId.eq(module_id))
         .filter(Column::Role.is_in(staff_roles))
         .one(db)
         .await
         .unwrap_or(None)
-        .is_some();
-
-    is_author || is_staff
+        .is_some()
 }
 
-/// Response payload for ticket-related endpoints.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TicketResponse {
     pub id: i64,
@@ -79,4 +77,27 @@ impl From<TicketModel> for TicketResponse {
             updated_at: ticket.updated_at.to_rfc3339(),
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserResponse {
+    pub id: i64,
+    pub username: String,
+    pub email: String,
+}
+
+impl From<UserModel> for UserResponse {
+    fn from(user: UserModel) -> Self {
+        Self {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct TicketWithUserResponse {
+    pub ticket: TicketResponse,
+    pub user: UserResponse,
 }

@@ -17,3 +17,13 @@ export type GetSubmissionListResponse = ApiResponse<{
 // ─────────────────────────────────────────────────────────────
 
 export type PostSubmitAssignmentResponse = ApiResponse<Submission>;
+
+export interface FailedRemark {
+  id?: number;
+  error: string;
+}
+
+export interface RemarkResponse {
+  regraded: number;
+  failed: FailedRemark[];
+}

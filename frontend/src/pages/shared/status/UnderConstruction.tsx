@@ -1,7 +1,7 @@
 import { Result, Button, Typography } from 'antd';
 import { HomeOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import Logo from '@/components/Logo';
+import Logo from '@/components/common/Logo';
 
 const { Title, Text, Paragraph } = Typography;
 

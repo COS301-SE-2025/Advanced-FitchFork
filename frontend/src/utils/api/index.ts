@@ -220,3 +220,74 @@ export async function apiDownload(endpoint: string): Promise<void> {
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
 }
+
+
+// ─────────────────────────────────────────────────────────────
+// Lightweight HTTP verb helpers
+// ─────────────────────────────────────────────────────────────
+type QueryParams = Record<string, any>;
+type RequestOptions = RequestInit & { params?: QueryParams; data?: unknown };
+
+const withQuery = (endpoint: string, params?: QueryParams) => {
+  if (!params || Object.keys(params).length === 0) return endpoint;
+  const qs = buildQuery(params);
+  if (!qs) return endpoint;
+  return `${endpoint}${endpoint.includes('?') ? '&' : '?'}${qs}`;
+};
+
+export const api = {
+  /** Escape hatch for any verb */
+  request<T>(method: string, endpoint: string, opts: RequestOptions = {}) {
+    const { params, data, ...init } = opts;
+    const url = withQuery(endpoint, params);
+    const options: RequestInit = { ...init, method };
+
+    // Only set a body if caller didn't provide one via init.body
+    if (data !== undefined && options.body === undefined) {
+      // Allow passing raw bodies; otherwise JSON-stringify
+      options.body =
+        typeof data === 'string' ||
+        data instanceof Blob ||
+        data instanceof ArrayBuffer ||
+        data instanceof FormData ||
+        data instanceof URLSearchParams
+          ? (data as any)
+          : JSON.stringify(data);
+    }
+
+    return apiFetch<T>(url, options);
+  },
+
+  get<T>(endpoint: string, params?: QueryParams, init: RequestInit = {}) {
+    return apiFetch<T>(withQuery(endpoint, params), { ...init, method: 'GET' });
+  },
+
+  head<T>(endpoint: string, params?: QueryParams, init: RequestInit = {}) {
+    return apiFetch<T>(withQuery(endpoint, params), { ...init, method: 'HEAD' });
+  },
+
+  options<T>(endpoint: string, params?: QueryParams, init: RequestInit = {}) {
+    return apiFetch<T>(withQuery(endpoint, params), { ...init, method: 'OPTIONS' });
+  },
+
+  post<T>(endpoint: string, data?: unknown, init: RequestInit = {}) {
+    return this.request<T>('POST', endpoint, { ...init, data });
+  },
+
+  put<T>(endpoint: string, data?: unknown, init: RequestInit = {}) {
+    return this.request<T>('PUT', endpoint, { ...init, data });
+  },
+
+  patch<T>(endpoint: string, data?: unknown, init: RequestInit = {}) {
+    return this.request<T>('PATCH', endpoint, { ...init, data });
+  },
+
+  delete<T>(endpoint: string, data?: unknown, init: RequestInit = {}) {
+    return this.request<T>('DELETE', endpoint, { ...init, data });
+  },
+
+  // optional alias
+  del<T>(endpoint: string, data?: unknown, init: RequestInit = {}) {
+    return this.delete<T>(endpoint, data, init);
+  },
+};

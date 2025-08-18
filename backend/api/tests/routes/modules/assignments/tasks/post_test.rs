@@ -71,7 +71,11 @@ mod tests {
         let (data, _temp_dir) = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let payload = json!({"task_number": 1, "command": "echo 'Hello, World!'"});
+        let payload = json!({
+            "task_number": 1,
+            "name": "Hello Task",
+            "command": "echo 'Hello, World!'"
+        });
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
@@ -91,6 +95,7 @@ mod tests {
         let task_data = &json["data"];
 
         assert_eq!(task_data["task_number"], 1);
+        assert_eq!(task_data["name"], "Hello Task");
         assert_eq!(task_data["command"], "echo 'Hello, World!'");
         assert!(task_data["id"].as_i64().is_some());
         assert!(task_data["created_at"].as_str().is_some());
@@ -105,7 +110,11 @@ mod tests {
         let (data, _temp_dir) = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer1.id, data.lecturer1.admin);
-        let payload = json!({"task_number": 2, "command": "ls -la"});
+        let payload = json!({
+            "task_number": 2,
+            "name": "List Files",
+            "command": "ls -la"
+        });
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
@@ -127,7 +136,11 @@ mod tests {
         let (data, _temp_dir) = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let payload = json!({"task_number": 1, "command": "echo 'Should fail'"});
+        let payload = json!({
+            "task_number": 1,
+            "name": "Should Fail",
+            "command": "echo 'Should fail'"
+        });
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, 9999);
         let req = Request::builder()
             .method("POST")
@@ -167,7 +180,11 @@ mod tests {
         .expect("Failed to create assignment in second module");
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let payload = json!({"task_number": 1, "command": "echo 'Mismatch'"});
+        let payload = json!({
+            "task_number": 1,
+            "name": "Mismatch",
+            "command": "echo 'Mismatch'"
+        });
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, assignment2_in_module2.id);
         let req = Request::builder()
             .method("POST")
@@ -195,7 +212,11 @@ mod tests {
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
 
-        let payload = json!({"task_number": 1, "command": "echo 'Forbidden'"});
+        let payload = json!({
+            "task_number": 1,
+            "name": "Forbidden",
+            "command": "echo 'Forbidden'"
+        });
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
@@ -217,7 +238,11 @@ mod tests {
         let (data, _temp_dir) = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let payload = json!({"task_number": 0, "command": "echo 'Invalid number'"});
+        let payload = json!({
+            "task_number": 0,
+            "name": "Invalid number",
+            "command": "echo 'Invalid number'"
+        });
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
@@ -233,7 +258,7 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Invalid task_number or command");
+        assert_eq!(json["message"], "Invalid task_number, name, or command");
     }
 
     /// Test Case: Invalid task_number (Negative)
@@ -244,7 +269,11 @@ mod tests {
         let (data, _temp_dir) = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let payload = json!({"task_number": -5, "command": "echo 'Negative number'"});
+        let payload = json!({
+            "task_number": -5,
+            "name": "Negative number",
+            "command": "echo 'Negative number'"
+        });
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
@@ -260,7 +289,7 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Invalid task_number or command");
+        assert_eq!(json["message"], "Invalid task_number, name, or command");
     }
 
     /// Test Case: Invalid command (Empty String)
@@ -271,7 +300,11 @@ mod tests {
         let (data, _temp_dir) = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let payload = json!({"task_number": 1,"command": ""});
+        let payload = json!({
+            "task_number": 1,
+            "name": "Empty Command",
+            "command": ""
+        });
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
@@ -287,7 +320,7 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Invalid task_number or command");
+        assert_eq!(json["message"], "Invalid task_number, name, or command");
     }
 
     /// Test Case: Invalid command (Whitespace Only)
@@ -298,7 +331,11 @@ mod tests {
         let (data, _temp_dir) = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let payload = json!({"task_number": 1, "command": "   \n\t  "});
+        let payload = json!({
+            "task_number": 1,
+            "name": "Whitespace Command",
+            "command": "   \n\t  "
+        });
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
         let req = Request::builder()
             .method("POST")
@@ -314,7 +351,7 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Invalid task_number or command");
+        assert_eq!(json["message"], "Invalid task_number, name, or command");
     }
 
     /// Test Case: Non-Unique task_number (Duplicate)
@@ -325,7 +362,11 @@ mod tests {
         let (data, _temp_dir) = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let initial_payload = json!({"task_number": 1, "command": "echo 'First Task'"});
+        let initial_payload = json!({
+            "task_number": 1,
+            "name": "First Task",
+            "command": "echo 'First Task'"
+        });
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
         let req1 = Request::builder()
             .method("POST")
@@ -338,7 +379,11 @@ mod tests {
         let response1 = app.clone().oneshot(req1).await.unwrap();
         assert_eq!(response1.status(), StatusCode::CREATED);
 
-        let duplicate_payload = json!({"task_number": 1, "command": "echo 'Duplicate Task'"});
+        let duplicate_payload = json!({
+            "task_number": 1,
+            "name": "Duplicate Task",
+            "command": "echo 'Duplicate Task'"
+        });
         let req2 = Request::builder()
             .method("POST")
             .uri(&uri)
