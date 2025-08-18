@@ -22,9 +22,6 @@ use crate::routes::{
 use axum::{middleware::from_fn, routing::get, Router};
 use util::{config::AppConfig, state::AppState};
 use crate::routes::me::my_routes;
-use crate::routes::{auth::auth_routes, health::health_routes, modules::modules_routes, users::users_routes};
-use axum::{middleware::from_fn, Router};
-use util::state::AppState;
 
 pub mod auth;
 pub mod common;

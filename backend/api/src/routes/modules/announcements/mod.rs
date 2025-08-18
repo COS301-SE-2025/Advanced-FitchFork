@@ -16,6 +16,11 @@
 use axum::{middleware::from_fn_with_state, Router};
 use util::state::AppState;
 use axum::routing::{post, delete, put, get};
+use post::create_announcement;
+use delete::delete_announcement;
+use put::edit_announcement;
+use get::{get_announcements, get_announcement};
+use crate::auth::guards::require_lecturer_or_assistant_lecturer;
 
 pub mod post;
 pub mod get;
@@ -23,12 +28,7 @@ pub mod delete;
 pub mod put;
 pub mod common;
 
-use axum::routing::{post, delete, put, get};
-use post::create_announcement;
-use delete::delete_announcement;
-use put::edit_announcement;
-use get::{get_announcements, get_announcement};
-use crate::auth::guards::require_lecturer_or_assistant_lecturer;
+
 
 /// Builds the `/announcements` route group for a specific module.
 ///

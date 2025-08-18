@@ -261,8 +261,7 @@ pub async fn run_moss_check(
     // Map your enum -> MOSS language string
     let moss_language: &str = match cfg.project.language {
         Language::Cpp => "cpp",
-        Language::Java => "java",
-        Language::Python => "python",
+        Language::Java => "java"
     };
 
     // 1) Collect latest submissions
