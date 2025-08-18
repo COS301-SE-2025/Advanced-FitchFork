@@ -71,6 +71,8 @@ tokio-tungstenite = { version = "0.27", features = ["connect"] }
 url = "2.5"
 portpicker = "0.1"
 zip = "4.3"
+tempfile = "3.5.0"
+walkdir = "2.5.0"
 
 [dev-dependencies]
 serial_test = "3.2"

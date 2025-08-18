@@ -309,54 +309,197 @@ struct HelperThree {
         }
 
         // Plagiarism Submissions
-        fn generate_multiline_string(user_id: i64, variation: usize) -> String {
-            // Base pool of lines
-            let base_lines = vec![
-                "Line about recursion",
-                "Line about algorithms",
-                "Line about data structures",
-                "Lorem ipsum dolor sit amet",
-                "This is filler content",
-                "Unique marker line",
-                "Hello World variation",
-                "Some dummy Java code snippet",
-                "Random numbers incoming:",
-                "End of base content",
-            ];
 
-            let mut rng = rand::thread_rng();
-            let mut lines = Vec::new();
+        fn create_student_submission_plagiarism(user_id: i64) -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            let mut zip = zip::ZipWriter::new(&mut buf);
+            let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-            for i in 0..25 {
-                // ensure >20 lines
-                let mut line = match variation {
-                    0 => {
-                        // identical block
-                        base_lines[i % base_lines.len()].to_string()
-                    }
-                    1 => {
-                        // partially similar (mix base + random)
-                        if rng.gen_bool(0.7) {
-                            base_lines.choose(&mut rng).unwrap().to_string()
-                        } else {
-                            format!("RANDOM_{}", random_token(16))
-                        }
-                    }
-                    _ => {
-                        // completely different
-                        format!("TOTALLY_DIFFERENT_{}", random_token(32))
-                    }
+            // Define the group:
+            // 0 = identical (two users)
+            // 1 = partially similar
+            // 2 = mostly unique (completely unique)
+            let similarity_group =
+                if user_id == 10 || user_id == 11 || user_id == 27 || user_id == 41 {
+                    0 // two identical submissions
+                } else if user_id == 15 {
+                    2 // fully unique submission
+                } else {
+                    1 // everything else partially similar
                 };
 
-                // sprinkle user_id for determinism
-                if rng.gen_bool(0.2) {
-                    line.push_str(&format!("_U{}", user_id));
-                }
+            let java_code = generate_convoluted_student_code(user_id, similarity_group);
 
-                lines.push(line);
+            zip.start_file("StudentSolution.java", options).unwrap();
+            zip.write_all(java_code.as_bytes()).unwrap();
+            zip.finish().unwrap();
+
+            buf.into_inner()
+        }
+
+        fn generate_convoluted_student_code(user_id: i64, group: usize) -> String {
+            let mut rng = rand::thread_rng();
+
+            // Pool of base methods with multiple lines
+            let base_methods = vec![
+                (
+                    "sumArray",
+                    "int[] arr",
+                    vec!["int sum = 0;", "for(int n: arr) sum += n;", "return sum;"],
+                ),
+                (
+                    "factorial",
+                    "int n",
+                    vec!["int f = 1;", "for(int i=1;i<=n;i++) f*=i;", "return f;"],
+                ),
+                (
+                    "isPrime",
+                    "int n",
+                    vec![
+                        "if(n<=1) return false;",
+                        "for(int i=2;i*i<=n;i++) if(n%i==0) return false;",
+                        "return true;",
+                    ],
+                ),
+                (
+                    "printPattern",
+                    "int n",
+                    vec![
+                        "for(int i=1;i<=n;i++){",
+                        "for(int j=0;j<i;j++) System.out.print('*');",
+                        "System.out.println();",
+                        "}",
+                    ],
+                ),
+                (
+                    "fibonacci",
+                    "int n",
+                    vec![
+                        "int a=0,b=1;",
+                        "for(int i=2;i<=n;i++){int tmp=b;b=a+b;a=tmp;}",
+                        "return b;",
+                    ],
+                ),
+                (
+                    "reverseString",
+                    "String s",
+                    vec![
+                        "String rev=\"\";",
+                        "for(int i=s.length()-1;i>=0;i--)",
+                        "rev+=s.charAt(i);",
+                        "return rev;",
+                    ],
+                ),
+            ];
+
+            // Pick methods according to group
+            let method_count = match group {
+                0 => base_methods.len(),                    // identical -> use all
+                1 => rng.gen_range(3..=base_methods.len()), // partial
+                2 => rng.gen_range(2..=3),                  // mostly unique
+                _ => 3,
+            };
+
+            let mut chosen_methods = base_methods.clone();
+            chosen_methods.shuffle(&mut rng);
+            let chosen_methods = &chosen_methods[..method_count];
+
+            let mut methods_code = Vec::new();
+            for (idx, (name, args, body_lines)) in chosen_methods.iter().enumerate() {
+                let method_code = match group {
+                    0 => format!(
+                        "public {} {}({}) {{\n{}\n}}",
+                        if name == &"isPrime" {
+                            "boolean"
+                        } else if name == &"reverseString" {
+                            "String"
+                        } else {
+                            "int"
+                        },
+                        name,
+                        args,
+                        body_lines.join("\n")
+                    ),
+                    1 => {
+                        // partially similar: tweak variable names, add extra comments
+                        let name_mod = format!("{}_U{}", name, user_id);
+                        let body_mod: Vec<String> = body_lines
+                            .iter()
+                            .map(|l| {
+                                if rng.gen_bool(0.3) {
+                                    format!("// U{} tweak\n{}", user_id, l)
+                                } else {
+                                    l.to_string()
+                                }
+                            })
+                            .collect();
+                        format!(
+                            "public int {}({}) {{\n{}\n}}",
+                            name_mod,
+                            args,
+                            body_mod.join("\n")
+                        )
+                    }
+                    2 => {
+                        // mostly unique: totally random methods
+                        let random_lines: Vec<String> = (0..rng.gen_range(3..6))
+                            .map(|_| {
+                                format!(
+                                    "System.out.println(\"UNIQUE_{}:{}\");",
+                                    random_token(6),
+                                    random_token(12)
+                                )
+                            })
+                            .collect();
+                        format!(
+                            "public void uniqueMethod{}() {{\n{}\n}}",
+                            idx,
+                            random_lines.join("\n")
+                        )
+                    }
+                    _ => format!("public void dummy() {{}}"),
+                };
+                methods_code.push(method_code);
             }
 
-            lines.join("\n")
+            // Add helper methods for more complexity (except fully unique)
+            if group != 2 {
+                methods_code.push(format!(
+                    "private int helperMultiply{}(int a,int b){{return a*b + {};}}",
+                    user_id,
+                    rng.gen_range(0..10)
+                ));
+                methods_code.push(format!(
+                    "private String helperComment{}(){{return \"Extra comment {}\";}}",
+                    user_id,
+                    random_token(8)
+                ));
+            }
+
+            // Add a conditional or loop to increase complexity
+            if group != 2 {
+                methods_code.push(
+                    r#"
+public String gradeStudent(int score){
+    switch(score/10){
+        case 10: case 9: return "A";
+        case 8: return "B";
+        case 7: return "C";
+        default: return "F";
+    }
+}"#
+                    .to_string(),
+                );
+            }
+
+            // Shuffle methods to vary order per student
+            methods_code.shuffle(&mut rng);
+
+            // Compose final class
+            format!(
+                "public class StudentSolution {{\n{}\n}}",
+                methods_code.join("\n\n")
+            )
         }
 
         fn random_token(len: usize) -> String {
@@ -365,42 +508,6 @@ struct HelperThree {
                 .take(len)
                 .map(char::from)
                 .collect()
-        }
-
-        fn create_student_submission_plagiarism(user_id: i64) -> Vec<u8> {
-            let mut buf = Cursor::new(Vec::new());
-            {
-                let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = SimpleFileOptions::default().unix_permissions(0o644);
-
-                // Decide variation strategy per user
-                let variation = if user_id % 10 == 0 {
-                    0 // identical every 10th user
-                } else if user_id % 3 == 0 {
-                    1 // partially similar
-                } else {
-                    2 // totally different
-                };
-
-                let multi_line = generate_multiline_string(user_id, variation);
-
-                let helper_one = format!(
-                    r#"
-public class StudentSolution {{
-    public void runSubtask() {{
-        System.out.println("{multi}");
-    }}
-}}
-"#,
-                    multi = multi_line.replace("\n", r#"\n"#) // escape for Java string
-                );
-
-                zip.start_file("StudentSolution.java", options).unwrap();
-                zip.write_all(helper_one.as_bytes()).unwrap();
-
-                zip.finish().unwrap();
-            }
-            buf.into_inner()
         }
     }
 }
