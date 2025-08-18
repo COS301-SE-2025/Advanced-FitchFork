@@ -1,5 +1,7 @@
 use crate::seed::Seeder;
 use db::models::{assignment, assignment_submission::Model as AssignmentSubmissionModel, user};
+use rand::seq::SliceRandom;
+use rand::{Rng, distributions::Alphanumeric};
 use sea_orm::{DatabaseConnection, EntityTrait};
 use std::io::{Cursor, Write};
 use zip::write::SimpleFileOptions;
@@ -15,7 +17,7 @@ impl Seeder for AssignmentSubmissionSeeder {
             .await
             .expect("Failed to fetch assignments");
 
-        let users = user::Entity::find()
+        let mut users = user::Entity::find()
             .all(db)
             .await
             .expect("Failed to fetch users");
@@ -24,8 +26,41 @@ impl Seeder for AssignmentSubmissionSeeder {
             panic!("No users found — at least one user must exist to seed assignment_submissions");
         }
 
+        for user in &users {
+            let assignment_id = 10003;
+            let attempt_number = 1;
+            let filename = format!("studentSubmission_user{}.zip", user.id);
+            let content = create_student_submission_plagiarism(user.id);
+
+            match AssignmentSubmissionModel::save_file(
+                db,
+                assignment_id,
+                user.id,
+                attempt_number,
+                false,
+                &filename,
+                "hash123#",
+                &content,
+            )
+            .await
+            {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!(
+                        "Failed to seed plagiarism submission for assignment {} user {}: {}",
+                        assignment_id, user.id, e
+                    );
+                }
+            }
+        }
+
+        users.truncate(2);
+
         for assignment in &assignments {
-            if assignment.module_id == 9999 || assignment.module_id == 9998 {
+            if assignment.module_id == 9999
+                || assignment.module_id == 9998
+                || assignment.module_id == 10003
+            {
                 continue;
             }
             for user in &users {
@@ -271,6 +306,101 @@ struct HelperThree {
                     assignment_id_cpp, user_id, e
                 );
             }
+        }
+
+        // Plagiarism Submissions
+        fn generate_multiline_string(user_id: i64, variation: usize) -> String {
+            // Base pool of lines
+            let base_lines = vec![
+                "Line about recursion",
+                "Line about algorithms",
+                "Line about data structures",
+                "Lorem ipsum dolor sit amet",
+                "This is filler content",
+                "Unique marker line",
+                "Hello World variation",
+                "Some dummy Java code snippet",
+                "Random numbers incoming:",
+                "End of base content",
+            ];
+
+            let mut rng = rand::thread_rng();
+            let mut lines = Vec::new();
+
+            for i in 0..25 {
+                // ensure >20 lines
+                let mut line = match variation {
+                    0 => {
+                        // identical block
+                        base_lines[i % base_lines.len()].to_string()
+                    }
+                    1 => {
+                        // partially similar (mix base + random)
+                        if rng.gen_bool(0.7) {
+                            base_lines.choose(&mut rng).unwrap().to_string()
+                        } else {
+                            format!("RANDOM_{}", random_token(16))
+                        }
+                    }
+                    _ => {
+                        // completely different
+                        format!("TOTALLY_DIFFERENT_{}", random_token(32))
+                    }
+                };
+
+                // sprinkle user_id for determinism
+                if rng.gen_bool(0.2) {
+                    line.push_str(&format!("_U{}", user_id));
+                }
+
+                lines.push(line);
+            }
+
+            lines.join("\n")
+        }
+
+        fn random_token(len: usize) -> String {
+            rand::thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(len)
+                .map(char::from)
+                .collect()
+        }
+
+        fn create_student_submission_plagiarism(user_id: i64) -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                // Decide variation strategy per user
+                let variation = if user_id % 10 == 0 {
+                    0 // identical every 10th user
+                } else if user_id % 3 == 0 {
+                    1 // partially similar
+                } else {
+                    2 // totally different
+                };
+
+                let multi_line = generate_multiline_string(user_id, variation);
+
+                let helper_one = format!(
+                    r#"
+public class StudentSolution {{
+    public void runSubtask() {{
+        System.out.println("{multi}");
+    }}
+}}
+"#,
+                    multi = multi_line.replace("\n", r#"\n"#) // escape for Java string
+                );
+
+                zip.start_file("StudentSolution.java", options).unwrap();
+                zip.write_all(helper_one.as_bytes()).unwrap();
+
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
         }
     }
 }
