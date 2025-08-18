@@ -519,19 +519,11 @@ public class Main {
 
         switch (task) {
             case "task1":
-                runTask1();
+                System.out.println("Hello World!");
                 break;
             default:
                 System.out.println("" + task + " is not a valid task");
         }
-    }
-
-    static void runTask1() {
-        System.out.println("" + "&-=-&Task1Subtask1");
-
-        // run subtask from student class
-        StudentSolution solution = new StudentSolution();
-        solution.runSubtask();
     }
 }
 "#;
@@ -551,14 +543,46 @@ public class Main {
 
                 let helper_one = r#"
 public class StudentSolution {
-    public void runSubtask() {
-        // Each student’s version prints a different (long, weird) string.
-        // The structure is the same, but the content is unique.
-        System.out.println("Here is my unique solution output: "
-            + "aosidj2983j98jasd9jas09dj123nmaoisd908asd!"
-            + "XYZ---long---weird---string---to---differentiate---students---"
-            + "LoremIpsumDolorSitAmet9876543210qwertyQWERTY!!!");
+private int helperMultiply1(int a,int b){return a*b + 9;}
+
+public int fibonacci_U1(int n) {
+int a=0,b=1;
+// U1 tweak
+for(int i=2;i<=n;i++){int tmp=b;b=a+b;a=tmp;}
+return b;
+}
+
+public int factorial_U1(int n) {
+int f = 1;
+for(int i=1;i<=n;i++) f*=i;
+return f;
+}
+
+private String helperComment1(){return "Extra comment TXgZpkUF";}
+
+public int sumArray_U1(int[] arr) {
+int sum = 0;
+for(int n: arr) sum += n;
+// U1 tweak
+return sum;
+}
+
+
+public String gradeStudent(int score){
+    switch(score/10){
+        case 10: case 9: return "A";
+        case 8: return "B";
+        case 7: return "C";
+        default: return "F";
     }
+}
+
+public int reverseString_U1(String s) {
+String rev="";
+for(int i=s.length()-1;i>=0;i--)
+rev+=s.charAt(i);
+return rev;
+}
 }
 "#;
                 zip.start_file("StudentSolution.java", options).unwrap();
