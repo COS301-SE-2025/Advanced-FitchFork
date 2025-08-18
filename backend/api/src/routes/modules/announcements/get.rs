@@ -1,3 +1,9 @@
+//! Get announcements handler.
+//!
+//! Provides an endpoint to retrieve a paginated list of announcements for a specific module.
+//!
+//! Supports filtering by search query, pinned status, and sorting by various fields.
+
 use crate::response::ApiResponse;
 use axum::{
     extract::{Path, Query, State},
@@ -39,6 +45,50 @@ impl FilterResponse {
     }
 }
 
+/// Retrieves announcements for a specific module with optional filtering, pagination, and sorting.
+///
+/// **Endpoint:** `GET /modules/{module_id}/announcements`  
+///
+/// ### Path parameters
+/// - `module_id` → ID of the module to fetch announcements for
+///
+/// ### Query parameters
+/// - `page` → Page number (default: 1)
+/// - `per_page` → Number of items per page (default: 20, max: 100)
+/// - `query` → Search string to filter announcements by title or body (optional)
+/// - `pinned` → Filter by pinned status (`true`/`false`) (optional)
+/// - `sort` → Comma-separated fields to sort by. Prepend field with `-` for descending. Valid fields: `created_at`, `updated_at`, `title`, `pinned`
+///
+/// ### Responses
+/// - `200 OK` → Announcements retrieved successfully
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///     "announcements": [/* Announcement objects */],
+///     "page": 1,
+///     "per_page": 20,
+///     "total": 100
+///   },
+///   "message": "Announcements retrieved successfully"
+/// }
+/// ```
+/// - `400 Bad Request` → Invalid query parameter or sort field
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Invalid pinned value" // or "Invalid field used"
+/// }
+/// ```
+/// - `500 Internal Server Error` → Failed to retrieve announcements
+/// ```json
+/// {
+///   "success": false,
+///   "data": null,
+///   "message": "Failed to retrieve announcements"
+/// }
+/// ```
 pub async fn get_announcements(
     Path(module_id): Path<i64>,
     State(app_state): State<AppState>,
