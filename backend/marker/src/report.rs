@@ -88,7 +88,7 @@ pub struct ReportSubsection {
     /// Label or name of the subsection (e.g., "Subtask 1").
     pub label: String,
     /// Points earned for this subsection.
-    pub earned: i64,
+    pub earned:i64,
     /// Total possible points for this subsection.
     pub total: i64,
     /// Feedback or comments for this subsection.
