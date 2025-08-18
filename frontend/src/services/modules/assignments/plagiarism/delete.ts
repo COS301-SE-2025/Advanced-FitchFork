@@ -20,5 +20,5 @@ export const bulkDeletePlagiarismCases = async (
 
   const payload = { case_ids: caseIds };
 
-  return api.delete(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/bulk`, { data: payload });
+  return api.delete(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/bulk`, payload);
 };

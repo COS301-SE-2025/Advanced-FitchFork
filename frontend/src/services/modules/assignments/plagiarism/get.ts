@@ -1,5 +1,5 @@
-import type { PaginationRequest } from "@/types/common";
-import type { GetListPlagiarismCasesResponse, GetPlagiarismGraphResponse, PlagiarismCaseStatus } from "@/types/modules/assignments/plagiarism";
+import type { ApiResponse, PaginationRequest } from "@/types/common";
+import type { GetListPlagiarismCasesResponse, GetMossReportResponse, GetPlagiarismGraphResponse, PlagiarismCaseStatus } from "@/types/modules/assignments/plagiarism";
 import { api } from "@/utils/api";
 
 
@@ -23,3 +23,10 @@ export const getPlagiarismGraph = async (
 ): Promise<GetPlagiarismGraphResponse> => {
   return api.get(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/graph`, params);
 };
+
+export const getMossReport = async (
+  moduleId: number,
+  assignmentId: number,
+): Promise<ApiResponse<GetMossReportResponse>> => {
+  return api.get(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/moss`);
+}

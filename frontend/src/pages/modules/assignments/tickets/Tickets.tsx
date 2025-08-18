@@ -85,7 +85,7 @@ const Tickets = () => {
     const res = await createTicket(module.id, assignment.id, {
       title: values.title,
       description: values.description,
-      status: values.status,
+      status: 'open',
     });
 
     if (res.success) {
@@ -108,7 +108,7 @@ const Tickets = () => {
   };
 
   return (
-    <div>
+    <>
       <EntityList<Ticket>
         ref={listRef}
         name="Tickets"
@@ -117,6 +117,9 @@ const Tickets = () => {
         showControlBar={!isStudent}
         fetchItems={fetchTickets}
         getRowKey={(t) => t.id}
+        onRowClick={(t) =>
+          navigate(`/modules/${module.id}/assignments/${assignment.id}/tickets/${t.id}`)
+        }
         renderGridItem={(ticket, actions) => (
           <TicketCard
             key={ticket.id}
@@ -240,21 +243,13 @@ const Tickets = () => {
         fields={[
           { name: 'title', label: 'Title', type: 'text', required: true },
           { name: 'description', label: 'Description', type: 'textarea' },
-          {
-            name: 'status',
-            label: 'Status',
-            type: 'select',
-            required: true,
-            options: TICKET_STATUSES.map((s) => ({ label: s, value: s })),
-          },
         ]}
         initialValues={{
           title: '',
           description: '',
-          status: 'open',
         }}
       />
-    </div>
+    </>
   );
 };
 

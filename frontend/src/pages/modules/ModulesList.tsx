@@ -13,7 +13,6 @@ import EditModal from '@/components/common/EditModal';
 import { message } from '@/utils/message';
 import dayjs from 'dayjs';
 import { useAuth } from '@/context/AuthContext';
-import { Space } from 'antd';
 import { useUI } from '@/context/UIContext';
 import ModuleListItem from '@/components/modules/ModuleListItem';
 import { formatModuleCode } from '@/utils/modules';
@@ -181,7 +180,7 @@ const ModulesList = () => {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4">
-        <Space direction="vertical" size="middle" className="w-full">
+        <div className="flex h-full flex-col gap-4">
           <PageHeader title="Modules" description="All the modules in the COS department" />
 
           {isSm && auth.isAdmin && (
@@ -281,7 +280,7 @@ const ModulesList = () => {
               <ModulesEmptyState isAdmin={auth.isAdmin} onCreate={() => setCreateOpen(true)} />
             }
           />
-        </Space>
+        </div>
 
         <CreateModal
           open={createOpen}

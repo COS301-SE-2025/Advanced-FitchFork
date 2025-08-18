@@ -27,14 +27,17 @@ pub struct Model {
     /// Description of the plagiarism incident.
     pub description: String,
 
+    /// The review status of the case.
+    pub status: Status,
+
+    /// Similarity percentage (0–100) as float
+    pub similarity: f32,
+
     /// Timestamp when the case was created.
     pub created_at: DateTime<Utc>,
 
     /// Timestamp when the case was last updated.
     pub updated_at: DateTime<Utc>,
-
-    /// The review status of the case.
-    pub status: Status,
 }
 
 /// Defines the possible review statuses for a plagiarism case.
@@ -91,20 +94,20 @@ impl Model {
         submission_id_1: i64,
         submission_id_2: i64,
         description: &str,
+        similarity: f32, 
     ) -> Result<Self, DbErr> {
         let now = Utc::now();
-
         let active = ActiveModel {
             assignment_id: Set(assignment_id),
             submission_id_1: Set(submission_id_1),
             submission_id_2: Set(submission_id_2),
             description: Set(description.to_string()),
             status: Set(Status::Review),
+            similarity: Set(similarity),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
         };
-
         active.insert(db).await
     }
 }

@@ -123,9 +123,19 @@ const CreateModal = ({
       open={open}
       onCancel={onCancel}
       footer={null}
-      title={<Typography.Title level={4}>{title}</Typography.Title>}
+      title={
+        <Typography.Title level={4} className="!mb-0">
+          {title}
+        </Typography.Title>
+      }
       centered
       data-testid="create-modal"
+      rootClassName="
+    dark:[&_.ant-modal-content]:!bg-gray-900 
+    dark:[&_.ant-modal-content]:!text-gray-100 
+    [&_.ant-modal-header]:!bg-transparent
+    [&_.ant-modal-header]:!border-b-0
+  "
     >
       <Form layout="vertical" form={form} onValuesChange={handleValuesChange} className="space-y-4">
         {fields.map(

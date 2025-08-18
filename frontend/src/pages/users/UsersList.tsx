@@ -14,7 +14,6 @@ import type { User } from '@/types/users';
 import dayjs from 'dayjs';
 import { createUser } from '@/services/users/post';
 import UserListItem from '@/components/users/UserListItem';
-import { Space } from 'antd';
 import { UsersEmptyState } from '@/components/users';
 
 const UsersList = () => {
@@ -174,7 +173,7 @@ const UsersList = () => {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4">
-        <Space direction="vertical" size="middle" className="w-full">
+        <div className="flex h-full flex-col gap-4">
           <PageHeader title="Users" description="Manage all registered users in the system." />
 
           <EntityList<User>
@@ -288,7 +287,7 @@ const UsersList = () => {
             ]}
             title="Edit User"
           />
-        </Space>
+        </div>
       </div>
     </div>
   );

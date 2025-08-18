@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
-import { Spin, Dropdown, Button, Alert, Tag, Typography, Segmented, Space } from 'antd';
+import { Spin, Dropdown, Button, Alert, Tag, Typography, Segmented } from 'antd';
 import type { MenuProps } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined } from '@ant-design/icons';
 
@@ -266,7 +266,7 @@ const AssignmentLayout = () => {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4">
-        <Space direction="vertical" size="middle" className="w-full">
+        <div className="flex h-full flex-col gap-4">
           {showHeaderCard && (
             <div className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 mb-0 p-4 rounded-md border ">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
@@ -427,7 +427,7 @@ const AssignmentLayout = () => {
           ) : (
             <Outlet />
           )}
-        </Space>
+        </div>
 
         <AssignmentSetup
           open={setupOpen}

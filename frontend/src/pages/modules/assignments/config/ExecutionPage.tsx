@@ -18,13 +18,16 @@ export default function ExecutionPage() {
     );
   }, []);
 
+  // tweak here if you want a different cap (e.g. 'max-w-sm' ~ 24rem)
+  const fieldWidth = 'w-full max-w-xs';
+
   return (
     <div>
       <SettingsGroup
         title="Execution Limits"
         description="Control how student code is run and isolated."
       >
-        <Form.Item name={['execution', 'timeout_secs']} label="Timeout">
+        <Form.Item name={['execution', 'timeout_secs']} label="Timeout" className={fieldWidth}>
           <InputNumber min={1} className="w-full" addonAfter="sec" />
         </Form.Item>
 
@@ -33,11 +36,12 @@ export default function ExecutionPage() {
           label="Max Memory"
           getValueProps={(value) => ({ value: toMB(value) })}
           normalize={(value) => toBytes(value)}
+          className={fieldWidth}
         >
           <InputNumber min={1} className="w-full" addonAfter="MB" />
         </Form.Item>
 
-        <Form.Item name={['execution', 'max_cpus']} label="Max CPUs">
+        <Form.Item name={['execution', 'max_cpus']} label="Max CPUs" className={fieldWidth}>
           <InputNumber min={1} step={1} precision={0} className="w-full" addonAfter="cores" />
         </Form.Item>
 
@@ -46,11 +50,16 @@ export default function ExecutionPage() {
           label="Max Uncompressed Size"
           getValueProps={(value) => ({ value: toMB(value) })}
           normalize={(value) => toBytes(value)}
+          className={fieldWidth}
         >
           <InputNumber min={1} className="w-full" addonAfter="MB" />
         </Form.Item>
 
-        <Form.Item name={['execution', 'max_processes']} label="Max Processes">
+        <Form.Item
+          name={['execution', 'max_processes']}
+          label="Max Processes"
+          className={fieldWidth}
+        >
           <InputNumber min={1} className="w-full" />
         </Form.Item>
 

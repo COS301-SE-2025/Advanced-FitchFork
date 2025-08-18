@@ -121,6 +121,7 @@ mod patch_plagiarism_tests {
             submission1.id,
             submission2.id,
             "Initial description",
+            0.0
         )
         .await
         .unwrap();

@@ -1,129 +1,110 @@
-use std::path::Path;
 use anyhow::{Context, Result};
-use clap::{Parser, ValueEnum};
 use regex::Regex;
 use reqwest::{redirect, Client};
 use scraper::{Html, Selector};
+use serde::Serialize;
 use std::collections::HashMap;
-use std::fs::{create_dir_all, File};
 
-#[derive(ValueEnum, Clone, Debug)]
-enum OutputFormat {
-    Full,
-    Minimal,
+/// Public API: control how the report is produced.
+#[derive(Clone, Debug)]
+pub struct ParseOptions {
+    /// Keep only matches with at least this many lines.
+    pub min_lines: i64,
+    /// Include per-file match details in each user-pair report.
+    pub include_matches: bool,
 }
 
-#[derive(Parser, Debug)]
-#[command(version, about)]
-struct Args {
-    /// The MOSS result URL (serves HTML)
-    url: String,
-    /// Print raw HTML (debug)
-    #[arg(long)]
-    print_html: bool,
-    /// Keep only matches with at least this many lines
-    #[arg(long, default_value_t = 0)]
-    min_lines: i64,
-    /// Output JSON path (relative to project). Defaults to "moss_report.json"
-    #[arg(long, default_value = "moss_report.json")]
-    out: String,
-    /// Output format: full (with matches) or minimal (no matches array)
-    #[arg(long, value_enum, default_value_t = OutputFormat::Full)]
-    format: OutputFormat,
-}
-
-#[derive(Debug, serde::Serialize, Clone)]
-struct PairRef {
-    raw: String,
-    username: Option<String>,
-    submission_id: Option<i64>,
-    filename: Option<String>,
-    percent: Option<u32>,
-    href: String,
-}
-
-#[derive(Debug, serde::Serialize, Clone)]
-struct MossPair {
-    file1: PairRef,
-    file2: PairRef,
-    lines_matched: i64,
-    match_href: String,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct FileMatchRow {
-    a_filename: String,
-    b_filename: String,
-    percent: Option<u32>,
-    lines_matched: i64,
-    match_href: String,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct UserPairReport {
-    user_a: String,
-    user_b: String,
-    submission_id_a: Option<i64>,
-    submission_id_b: Option<i64>,
-    total_lines_matched: i64,
-    total_percent: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    matches: Option<Vec<FileMatchRow>>,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct Output {
-    title: Option<String>,
-    reports: Vec<UserPairReport>,
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    let args = Args::parse();
-
-    let html = fetch_html(&args.url).await?;
-    if args.print_html {
-        println!("{html}");
-    }
-
-    let doc = Html::parse_document(&html);
-    let mut pairs = extract_pairs(&doc);
-
-    pairs.retain(|p| p.file1.username.as_deref() != p.file2.username.as_deref());
-
-    if args.min_lines > 0 {
-        pairs.retain(|p| p.lines_matched >= args.min_lines);
-    }
-
-    let pairs = dedupe_pairs_keep_best(pairs);
-    let reports = group_by_user_pair(pairs, matches_included(&args.format));
-    let out = Output {
-        title: extract_title(&doc),
-        reports,
-    };
-
-    println!("{}", serde_json::to_string_pretty(&out)?);
-
-    save_json(&out, &args.out)?;
-
-    eprintln!("Saved report to {}", args.out);
-    Ok(())
-}
-
-fn matches_included(fmt: &OutputFormat) -> bool {
-    matches!(fmt, OutputFormat::Full)
-}
-
-fn save_json(out: &Output, path_str: &str) -> Result<()> {
-    let path = Path::new(path_str);
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            create_dir_all(parent).with_context(|| format!("creating dir {}", parent.display()))?;
+impl Default for ParseOptions {
+    fn default() -> Self {
+        Self {
+            min_lines: 0,
+            include_matches: true,
         }
     }
-    let file = File::create(path).with_context(|| format!("creating {}", path.display()))?;
-    serde_json::to_writer_pretty(file, out).context("writing JSON")
 }
+
+#[derive(Debug, Serialize, Clone)]
+pub struct PairRef {
+    pub raw: String,
+    pub username: Option<String>,
+    pub submission_id: Option<i64>,
+    pub filename: Option<String>,
+    pub percent: Option<u32>,
+    pub href: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct MossPair {
+    pub file1: PairRef,
+    pub file2: PairRef,
+    pub lines_matched: i64,
+    pub match_href: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FileMatchRow {
+    pub a_filename: String,
+    pub b_filename: String,
+    pub percent: Option<u32>,
+    pub lines_matched: i64,
+    pub match_href: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserPairReport {
+    pub user_a: String,
+    pub user_b: String,
+    pub submission_id_a: Option<i64>,
+    pub submission_id_b: Option<i64>,
+    pub total_lines_matched: i64,
+    pub total_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matches: Option<Vec<FileMatchRow>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Output {
+    pub title: Option<String>,
+    pub reports: Vec<UserPairReport>,
+}
+
+/// Main library entrypoint: fetch MOSS HTML, parse, and assemble `Output`.
+///
+/// # Arguments
+/// * `url` - The MOSS result URL that serves HTML.
+/// * `opts` - Controls filtering and whether to include detailed matches.
+///
+/// # Returns
+/// * `Output` - Title + grouped per-user reports (optionally including matches).
+///
+/// # Errors
+/// Returns an error if fetching/parsing fails.
+pub async fn parse_moss(url: &str, opts: ParseOptions) -> Result<Output> {
+    let html = fetch_html(url).await?;
+    let doc = Html::parse_document(&html);
+
+    // Extract raw pairs from the HTML table.
+    let mut pairs = extract_pairs(&doc);
+
+    // Filter out rows where both sides resolve to same username (self matches).
+    pairs.retain(|p| p.file1.username.as_deref() != p.file2.username.as_deref());
+
+    // Apply min_lines filter if requested.
+    if opts.min_lines > 0 {
+        pairs.retain(|p| p.lines_matched >= opts.min_lines);
+    }
+
+    // Keep best per file-pair, then group by user pair.
+    let pairs = dedupe_pairs_keep_best(pairs);
+    let reports = group_by_user_pair(pairs, opts.include_matches);
+
+    Ok(Output {
+        title: extract_title(&doc),
+        reports,
+    })
+}
+
+/* --------------------- Internal helpers (crate-private) -------------------- */
 
 async fn fetch_html(url: &str) -> Result<String> {
     let client = Client::builder()
@@ -167,6 +148,7 @@ fn extract_pairs(doc: &Html) -> Vec<MossPair> {
 
     let mut out = Vec::new();
     for (row_idx, tr) in doc.select(&tr_sel).enumerate() {
+        // skip header row
         if row_idx == 0 && tr.select(&Selector::parse("th").unwrap()).next().is_some() {
             continue;
         }
@@ -230,11 +212,13 @@ fn file_identity(f: &PairRef) -> String {
         _ => f.raw.clone(),
     }
 }
+
 fn canonical_file_key(a: &PairRef, b: &PairRef) -> (String, String) {
     let ia = file_identity(a);
     let ib = file_identity(b);
     if ia <= ib { (ia, ib) } else { (ib, ia) }
 }
+
 fn dedupe_pairs_keep_best(pairs: Vec<MossPair>) -> Vec<MossPair> {
     let mut best: HashMap<(String, String), MossPair> = HashMap::new();
     for p in pairs {

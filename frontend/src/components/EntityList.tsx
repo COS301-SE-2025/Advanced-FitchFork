@@ -1,4 +1,4 @@
-import { Table, Empty, Button, Dropdown, Popconfirm, Space, Tooltip, List } from 'antd';
+import { Table, Empty, Button, Dropdown, Popconfirm, Tooltip, List } from 'antd';
 import { ReloadOutlined, MoreOutlined } from '@ant-design/icons';
 import { forwardRef, useEffect, useImperativeHandle, useState, type JSX } from 'react';
 import type { ColumnsType } from 'antd/es/table';
@@ -268,91 +268,146 @@ const EntityList = forwardRef(function <T>(
       title: 'Actions',
       key: 'actions',
       align: 'right',
-      width: 140,
+      className: 'whitespace-nowrap',
+      onCell: () => ({ style: { width: '1%', whiteSpace: 'nowrap' } }),
       render: (_, record) => {
         const entityActions = actions.entity!(record);
         if (!entityActions.length) return null;
 
-        const resolvedPrimary = entityActions.find((a) => a.isPrimary) ?? entityActions[0];
-        const secondaryActions = entityActions.filter((a) => a.key !== resolvedPrimary.key);
+        const primary = entityActions.find((a) => a.isPrimary) ?? entityActions[0];
+        const secondary = entityActions.filter((a) => a.key !== primary.key);
+
+        const run = (a: (typeof entityActions)[number]) =>
+          a.handler({ entity: record, refresh: fetchData });
+
+        // Build dropdown items: confirm items keep menu open and let Popconfirm handle the click.
+        const menuItems = secondary.map((a) =>
+          a.confirm
+            ? {
+                key: a.key,
+                icon: a.icon,
+                // IMPORTANT: no onClick here — Popconfirm will handle the click.
+                label: (
+                  <Popconfirm
+                    title={`Are you sure you want to ${a.label.toLowerCase()}?`}
+                    okText="Yes"
+                    cancelText="No"
+                    okButtonProps={{
+                      'data-testid': 'confirm-yes',
+                      danger: a.key === 'delete',
+                    }}
+                    cancelButtonProps={{ 'data-testid': 'confirm-no' }}
+                    onConfirm={() => run(a)}
+                  >
+                    <span
+                      data-testid={`entity-action-${a.key}`}
+                      className="block -mx-3 -my-1.5 !px-3 !py-1.5"
+                      // Keep dropdown open so Popconfirm can render; don't bubble to row
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                    >
+                      {a.label}
+                    </span>
+                  </Popconfirm>
+                ),
+              }
+            : {
+                key: a.key,
+                icon: a.icon,
+                label: (
+                  <span
+                    className="block -mx-3 -my-1.5 !px-3 !py-1.5"
+                    data-testid={`entity-action-${a.key}`}
+                  >
+                    {a.label}
+                  </span>
+                ),
+                onClick: ({ domEvent }: any) => {
+                  // Close dropdown normally, but don't trigger row navigation
+                  domEvent.stopPropagation();
+                  run(a);
+                },
+              },
+        );
 
         return (
-          <div onClick={(e) => e.stopPropagation()} data-testid="entity-actions">
-            {secondaryActions.length === 0 ? (
-              <Button
-                size="small"
-                icon={resolvedPrimary.icon}
-                data-testid={`entity-action-${resolvedPrimary.key}`}
-                onClick={() => resolvedPrimary.handler({ entity: record, refresh: fetchData })}
-              >
-                {resolvedPrimary.label}
-              </Button>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            data-testid="entity-actions"
+            className="flex justify-end"
+          >
+            {secondary.length === 0 ? (
+              primary.confirm ? (
+                <Popconfirm
+                  title={`Are you sure you want to ${primary.label.toLowerCase()}?`}
+                  okText="Yes"
+                  cancelText="No"
+                  okButtonProps={{ 'data-testid': 'confirm-yes' }}
+                  cancelButtonProps={{ 'data-testid': 'confirm-no' }}
+                  onConfirm={() => run(primary)}
+                >
+                  <Button
+                    size="small"
+                    icon={primary.icon}
+                    className="!px-2"
+                    data-testid={`entity-action-${primary.key}`}
+                  >
+                    <span className="truncate max-w-[140px] inline-block">{primary.label}</span>
+                  </Button>
+                </Popconfirm>
+              ) : (
+                <Button
+                  size="small"
+                  icon={primary.icon}
+                  className="!px-2"
+                  data-testid={`entity-action-${primary.key}`}
+                  onClick={() => run(primary)}
+                >
+                  <span className="truncate max-w-[140px] inline-block">{primary.label}</span>
+                </Button>
+              )
             ) : (
-              <Space.Compact>
-                {resolvedPrimary.confirm ? (
+              <div className="flex items-center gap-1">
+                {primary.confirm ? (
                   <Popconfirm
-                    title={`Are you sure you want to ${resolvedPrimary.label.toLowerCase()}?`}
+                    title={`Are you sure you want to ${primary.label.toLowerCase()}?`}
                     okText="Yes"
                     cancelText="No"
                     okButtonProps={{ 'data-testid': 'confirm-yes' }}
                     cancelButtonProps={{ 'data-testid': 'confirm-no' }}
-                    onConfirm={() =>
-                      resolvedPrimary.handler({ entity: record, refresh: fetchData })
-                    }
+                    onConfirm={() => run(primary)}
                   >
                     <Button
                       size="small"
-                      icon={resolvedPrimary.icon}
-                      data-testid={`entity-action-${resolvedPrimary.key}`}
+                      icon={primary.icon}
+                      className="!px-2"
+                      data-testid={`entity-action-${primary.key}`}
                     >
-                      {resolvedPrimary.label}
+                      <span className="truncate max-w-[140px] inline-block">{primary.label}</span>
                     </Button>
                   </Popconfirm>
                 ) : (
                   <Button
                     size="small"
-                    icon={resolvedPrimary.icon}
-                    data-testid={`entity-action-${resolvedPrimary.key}`}
-                    onClick={() => resolvedPrimary.handler({ entity: record, refresh: fetchData })}
+                    icon={primary.icon}
+                    className="!px-2"
+                    data-testid={`entity-action-${primary.key}`}
+                    onClick={() => run(primary)}
                   >
-                    {resolvedPrimary.label}
+                    <span className="truncate max-w-[140px] inline-block">{primary.label}</span>
                   </Button>
                 )}
-                <Dropdown
-                  menu={{
-                    items: secondaryActions.map((a) => ({
-                      key: a.key,
-                      label: a.confirm ? (
-                        <Popconfirm
-                          title={`Are you sure you want to ${a.label.toLowerCase()}?`}
-                          okText="Yes"
-                          cancelText="No"
-                          okButtonProps={{ 'data-testid': 'confirm-yes' }}
-                          cancelButtonProps={{ 'data-testid': 'confirm-no' }}
-                          onConfirm={() => a.handler({ entity: record, refresh: fetchData })}
-                        >
-                          <span data-testid={`entity-action-${a.key}`}>{a.label}</span>
-                        </Popconfirm>
-                      ) : (
-                        <span
-                          data-testid={`entity-action-${a.key}`}
-                          onClick={() => a.handler({ entity: record, refresh: fetchData })}
-                        >
-                          {a.label}
-                        </span>
-                      ),
-                      icon: a.icon,
-                    })),
-                  }}
-                  placement="bottomRight"
-                >
+
+                <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: menuItems }}>
                   <Button
                     data-testid="entity-action-dropdown"
                     size="small"
                     icon={<MoreOutlined />}
                   />
                 </Dropdown>
-              </Space.Compact>
+              </div>
             )}
           </div>
         );
@@ -362,7 +417,11 @@ const EntityList = forwardRef(function <T>(
 
   // EARLY RETURN: pristine + no entities (grid/list) => only show custom empty
   if (showPristineEmpty) {
-    return <div className="w-full flex items-center justify-center">{emptyNoEntities}</div>;
+    return (
+      <div className="w-full h-full min-h-0 flex">
+        <div className="flex-1">{emptyNoEntities}</div>
+      </div>
+    );
   }
 
   return (
@@ -639,6 +698,7 @@ const EntityList = forwardRef(function <T>(
             dataSource={items}
             rowKey={getRowKey}
             loading={loading}
+            tableLayout="auto"
             pagination={{
               ...pagination,
               showSizeChanger: true,

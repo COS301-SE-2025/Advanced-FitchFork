@@ -8,7 +8,8 @@ interface CodeEditorProps {
   value: string;
   language?: string;
   onChange?: (value: string | undefined) => void;
-  height?: number;
+  /** accept percentage for fluid height */
+  height?: number | string;
   readOnly?: boolean;
   className?: string;
   title?: string;
@@ -37,18 +38,24 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     setTimeout(() => setCopied(false), 1500);
   };
 
+  // Normalize height for wrapper style and Monaco prop
+  const editorHeight = typeof height === 'number' ? `${height}px` : height;
+
   return (
     <div
-      className={`relative rounded-md overflow-hidden border border-gray-300 dark:border-gray-700 group ${className}`}
+      className={`relative rounded-md overflow-hidden border border-gray-300 dark:border-gray-700 group
+                  flex flex-col min-h-0 ${className}`}
+      /* container can stretch if parent gives it height */
     >
       {/* Standard header */}
       {!minimal && (
         <div
-          className={`flex items-center justify-between px-3 py-2 text-sm font-medium ${
-            isDarkMode
-              ? 'bg-gray-800 text-gray-200 border-b border-gray-700'
-              : 'bg-gray-100 text-gray-700 border-b border-gray-300'
-          }`}
+          className={`flex items-center justify-between px-3 py-2 text-sm font-medium flex-shrink-0
+            ${
+              isDarkMode
+                ? 'bg-gray-800 text-gray-200 border-b border-gray-700'
+                : 'bg-gray-100 text-gray-700 border-b border-gray-300'
+            }`}
         >
           <span>{title || 'Code Editor'}</span>
 
@@ -74,8 +81,11 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         </div>
       )}
 
-      {/* Editor wrapper */}
-      <div style={{ height }} className="relative">
+      {/* Editor wrapper fills remaining height */}
+      <div
+        className="relative flex-1 min-h-0"
+        style={{ height: editorHeight }} /* '100%' makes it fluid; numeric makes fixed */
+      >
         {/* Minimal floating copy button */}
         {minimal && (
           <Tooltip title={copied ? 'Copied!' : 'Copy code'}>
@@ -96,7 +106,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         )}
 
         <Editor
-          height={height}
+          height={editorHeight} // ← accepts "100%" too
           language={language}
           value={value}
           onChange={onChange}

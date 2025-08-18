@@ -64,6 +64,9 @@ import SettingsMobileMenu from './pages/settings/SettingsMobileMenu';
 import Announcements from './pages/modules/announcements/Announcements';
 import AnnouncementView from './pages/modules/announcements/AnnouncementView';
 import PlagiarismCases from './pages/modules/assignments/PlagiarismCases';
+import AssignmentPage from './pages/modules/assignments/config/AssignmentPage';
+import OutputPage from './pages/modules/assignments/config/OutputPage';
+import GatlamPage from './pages/modules/assignments/config/GatlamPage';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -159,11 +162,14 @@ export default function App() {
                       <Route
                         index
                         element={
-                          isMobile ? <ConfigMobileMenu /> : <Navigate to="execution" replace />
+                          isMobile ? <ConfigMobileMenu /> : <Navigate to="assignment" replace />
                         }
                       />
+                      <Route path="assignment" element={<AssignmentPage />} />
                       <Route path="execution" element={<ExecutionPage />} />
                       <Route path="marking" element={<MarkingPage />} />
+                      <Route path="output" element={<OutputPage />} />
+                      <Route path="gatlam" element={<GatlamPage />} />
                     </Route>
                   </Route>
 

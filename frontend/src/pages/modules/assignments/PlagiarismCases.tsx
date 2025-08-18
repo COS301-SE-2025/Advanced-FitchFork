@@ -1,6 +1,6 @@
 // pages/modules/assignments/plagiarism/PlagiarismCases.tsx
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type {
   PlagiarismCaseStatus,
   PlagiarismCaseItem,
@@ -12,7 +12,11 @@ import {
   createPlagiarismCase,
   updatePlagiarismCase,
   getPlagiarismGraph,
-  runMossCheck, // <-- NEW
+  runMossCheck,
+  getMossReport,
+  bulkDeletePlagiarismCases,
+  flagPlagiarismCase,
+  reviewPlagiarismCase,
 } from '@/services/modules/assignments/plagiarism';
 import { getSubmissions } from '@/services/modules/assignments/submissions';
 import type { Submission } from '@/types/modules/assignments/submissions';
@@ -22,13 +26,15 @@ import {
   EditOutlined,
   PlusOutlined,
   ExperimentOutlined,
+  CheckCircleOutlined,
+  FlagOutlined,
 } from '@ant-design/icons';
 import { EntityList, type EntityListHandle, type EntityListProps } from '@/components/EntityList';
 import CreateModal from '@/components/common/CreateModal';
 import EditModal from '@/components/common/EditModal';
 import { message } from '@/utils/message';
 import dayjs from 'dayjs';
-import { Space, Typography, Modal, Select } from 'antd'; // <-- add Modal, Select
+import { Space, Typography, Modal, Alert } from 'antd'; // <-- add Modal, Select
 import type { TreeSelectProps } from 'antd';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
@@ -42,6 +48,9 @@ import {
 import PlagiarismStatusTag from '@/components/plagiarism/PlagiarismStatusTag';
 import PlagiarismGraph from '@/components/plagiarism/PlagiarismGraph';
 import { formatModuleCode } from '@/utils/modules';
+import { DateTime, IdTag, PercentageTag } from '@/components/common';
+import ConfirmModal from '@/components/utils/ConfirmModal';
+import { dateTimeString } from '@/utils/dateTimeString';
 
 /** Build TreeSelect nodes grouped by user: parents (users) are not selectable; children are submissions */
 function buildSubmissionTree(subs: Submission[]) {
@@ -108,6 +117,7 @@ const PlagiarismCases = () => {
   // modal state
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PlagiarismCaseItem | null>(null);
 
   const [graphOpen, setGraphOpen] = useState(false);
@@ -116,9 +126,9 @@ const PlagiarismCases = () => {
 
   // MOSS modal/state
   const [mossOpen, setMossOpen] = useState(false);
-  const [mossLanguage, setMossLanguage] = useState<string>('c');
   const [mossRunning, setMossRunning] = useState(false);
   const [mossReportUrl, setMossReportUrl] = useState<string | null>(null);
+  const [mossGeneratedAt, setMossGeneratedAt] = useState<string | null>(null);
 
   const openGraph = async () => {
     try {
@@ -136,6 +146,26 @@ const PlagiarismCases = () => {
       setGraphLoading(false);
     }
   };
+
+  const loadMossReport = async () => {
+    try {
+      const res = await getMossReport(moduleId, assignmentId);
+      if (res.success && (res.data as any)?.report_url) {
+        setMossReportUrl((res.data as any).report_url);
+        setMossGeneratedAt((res.data as any).generated_at ?? null);
+      } else {
+        setMossReportUrl(null);
+        setMossGeneratedAt(null);
+      }
+    } catch {
+      setMossReportUrl(null);
+      setMossGeneratedAt(null);
+    }
+  };
+
+  useEffect(() => {
+    loadMossReport();
+  }, [moduleId, assignmentId]);
 
   // TreeSelect data for submissions (used in Create modal)
   const [subTree, setSubTree] = useState<{ treeData: any[]; loading: boolean }>({
@@ -256,18 +286,74 @@ const PlagiarismCases = () => {
     }
   };
 
+  // Single-item actions
+  const handleFlag = async (caseItem: PlagiarismCaseItem, refresh: () => void) => {
+    const res = await flagPlagiarismCase(moduleId, assignmentId, caseItem.id);
+    if (res.success) {
+      message.success('Case flagged');
+      refresh();
+    } else {
+      message.error(res.message || 'Failed to flag case');
+    }
+  };
+
+  const handleMarkReviewed = async (caseItem: PlagiarismCaseItem, refresh: () => void) => {
+    const res = await reviewPlagiarismCase(moduleId, assignmentId, caseItem.id);
+    if (res.success) {
+      message.success('Case marked as reviewed');
+      refresh();
+    } else {
+      message.error(res.message || 'Failed to mark as reviewed');
+    }
+  };
+
+  // OPEN confirm if there are selected rows; warn if not
+  const handleBulkDeleteClick = () => {
+    const ids = (listRef.current?.getSelectedRowKeys() ?? []) as number[];
+    if (!ids.length) {
+      message.warning('No cases selected');
+      return;
+    }
+    setConfirmOpen(true);
+  };
+
+  // Do the actual delete on confirm
+  const handleBulkDeleteConfirm = async () => {
+    const ids = (listRef.current?.getSelectedRowKeys() ?? [])
+      .map(Number)
+      .filter((n) => !Number.isNaN(n));
+
+    if (!ids.length) {
+      setConfirmOpen(false);
+      return;
+    }
+
+    const res = await bulkDeletePlagiarismCases(moduleId, assignmentId, ids);
+    if (res.success) {
+      message.success(res.message || `Deleted ${ids.length} case(s)`);
+      listRef.current?.refresh();
+      listRef.current?.clearSelection(); // important
+    } else {
+      message.error(res.message || 'Bulk delete failed');
+    }
+
+    setConfirmOpen(false);
+  };
+
+  const handleBulkDeleteCancel = () => setConfirmOpen(false);
+
   // Run MOSS (all students' latest submissions)
   const doRunMoss = async () => {
     try {
       setMossRunning(true);
-      setMossReportUrl(null);
-      const res = await runMossCheck(moduleId, assignmentId, { language: mossLanguage });
+      const res = await runMossCheck(moduleId, assignmentId);
       if (res.success) {
-        // API may return either data: { report_url } or data: string (legacy). Support both.
         const url =
           (res.data as any)?.report_url ?? (typeof res.data === 'string' ? res.data : '') ?? '';
         if (url) setMossReportUrl(url);
         message.success(res.message || 'MOSS check completed successfully');
+        listRef.current?.refresh();
+        await loadMossReport();
       } else {
         message.error(res.message || 'Failed to run MOSS check');
       }
@@ -306,196 +392,314 @@ const PlagiarismCases = () => {
         },
       },
     ],
-    entity: (entity: PlagiarismCaseItem) => [
-      {
+
+    // Primary entity action depends on status.
+    // - review    -> Flag (primary)
+    // - flagged   -> Mark Reviewed (primary)
+    // - reviewed  -> Edit (primary). No "Reopen".
+    entity: (entity: PlagiarismCaseItem) => {
+      const editAction = {
         key: 'edit',
         label: 'Edit',
         icon: <EditOutlined />,
-        handler: ({ refresh }) => {
+        handler: (ctx: { refresh: () => void }) => {
           setEditingItem(entity);
           setEditOpen(true);
-          refresh();
+          ctx.refresh();
         },
-      },
-      {
+      };
+
+      const deleteAction = {
         key: 'delete',
         label: 'Delete',
         icon: <DeleteOutlined />,
         confirm: true,
-        handler: ({ refresh }) => handleDelete(entity, refresh),
+        handler: (ctx: { refresh: () => void }) => handleDelete(entity, ctx.refresh),
+      };
+
+      let primaryAction: {
+        key: string;
+        label: string;
+        icon: React.ReactNode;
+        isPrimary: true;
+        handler: (ctx: { refresh: () => void }) => void | Promise<void>;
+      } | null = null;
+
+      // By default, Edit lives in the dropdown.
+      let putEditInDropdown = true;
+
+      if (entity.status === 'review') {
+        primaryAction = {
+          key: 'flag',
+          label: 'Flag',
+          icon: <FlagOutlined />,
+          isPrimary: true,
+          handler: (ctx) => handleFlag(entity, ctx.refresh),
+        };
+      } else if (entity.status === 'flagged') {
+        primaryAction = {
+          key: 'mark-reviewed',
+          label: 'Mark Reviewed',
+          icon: <CheckCircleOutlined />,
+          isPrimary: true,
+          handler: (ctx) => handleMarkReviewed(entity, ctx.refresh),
+        };
+      } else if (entity.status === 'reviewed') {
+        // No "Reopen" — make Edit the primary action.
+        primaryAction = {
+          ...editAction,
+          isPrimary: true,
+        };
+        putEditInDropdown = false;
+      }
+
+      const result = [];
+      if (primaryAction) result.push(primaryAction);
+      if (putEditInDropdown) result.push(editAction);
+      result.push(deleteAction);
+
+      return result;
+    },
+
+    // Bulk actions
+    bulk: [
+      {
+        key: 'bulk-delete',
+        label: 'Bulk Delete',
+        icon: <DeleteOutlined />,
+        handler: handleBulkDeleteClick,
       },
     ],
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
-        <Space direction="vertical" size="middle" className="w-full">
-          <EntityList<PlagiarismCaseItem>
-            ref={listRef}
-            name="Plagiarism Cases"
-            fetchItems={fetchCases}
-            getRowKey={(c) => c.id}
-            onRowClick={(c) =>
-              navigate(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/${c.id}`)
-            }
-            renderGridItem={(c, actions) => (
-              <PlagiarismCaseCard
-                key={c.id}
-                caseItem={c}
-                actions={actions}
-                onClick={() =>
-                  navigate(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/${c.id}`)
-                }
-              />
-            )}
-            renderListItem={(c) => (
-              <PlagiarismCaseListItem
-                caseItem={c}
-                onClick={(caseItem) =>
-                  navigate(
-                    `/modules/${moduleId}/assignments/${assignmentId}/plagiarism/${caseItem.id}`,
-                  )
-                }
-              />
-            )}
-            columnToggleEnabled
-            actions={actions}
-            columns={[
-              { title: 'ID', dataIndex: 'id', key: 'id', defaultHidden: true },
-              {
-                title: 'Case',
-                dataIndex: 'id',
-                key: 'case',
-                render: (_, c) =>
-                  `#${c.id}: ${c.submission_1.user.username} vs ${c.submission_2.user.username}`,
-              },
-              {
-                title: 'Status',
-                dataIndex: 'status',
-                key: 'status',
-                filters: [
-                  { text: 'Review', value: 'review' },
-                  { text: 'Flagged', value: 'flagged' },
-                  { text: 'Reviewed', value: 'reviewed' },
-                ],
-                render: (_, c) => <PlagiarismStatusTag status={c.status} />,
-              },
-              {
-                title: 'Description',
-                dataIndex: 'description',
-                key: 'description',
-                defaultHidden: true,
-                render: (_, c) =>
-                  c.description ? (
-                    <div className="max-w-[48ch] line-clamp-2 text-gray-700 dark:text-neutral-300">
-                      {c.description}
-                    </div>
-                  ) : (
-                    'No description'
-                  ),
-              },
-              {
-                title: 'Updated At',
-                dataIndex: 'updated_at',
-                key: 'updated_at',
-                sorter: { multiple: 1 },
-                render: (_, c) => dayjs(c.updated_at).format('YYYY-MM-DD HH:mm'),
-              },
-            ]}
-            emptyNoEntities={
-              <PlagiarismEmptyState
-                onCreate={() => setCreateOpen(true)}
-                onRefresh={() => listRef.current?.refresh()}
-              />
+    <>
+      <div className="flex h-full flex-col gap-4">
+        {/* Latest MOSS report banner */}
+        {mossReportUrl && (
+          <Alert
+            type="info"
+            showIcon
+            message="Latest MOSS report"
+            description={
+              <span>
+                <a href={mossReportUrl} target="_blank" rel="noreferrer" className="text-blue-600">
+                  Open MOSS Report
+                </a>
+                {mossGeneratedAt && (
+                  <>
+                    {' • '}
+                    <Typography.Text type="secondary">
+                      Generated {dateTimeString(mossGeneratedAt, 'relative')}
+                    </Typography.Text>
+                  </>
+                )}
+              </span>
             }
           />
-        </Space>
+        )}
 
-        {/* Create */}
-        <CreateModal
-          open={createOpen}
-          onCancel={() => setCreateOpen(false)}
-          onCreate={handleCreate}
-          title="Add Plagiarism Case"
-          initialValues={{
-            submission_id_1: undefined,
-            submission_id_2: undefined,
-            description: '',
-          }}
-          fields={[
+        <EntityList<PlagiarismCaseItem>
+          ref={listRef}
+          name="Plagiarism Cases"
+          fetchItems={fetchCases}
+          getRowKey={(c) => c.id}
+          onRowClick={(c) =>
+            navigate(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/${c.id}`)
+          }
+          renderGridItem={(c, actions) => (
+            <PlagiarismCaseCard
+              key={c.id}
+              caseItem={c}
+              actions={actions}
+              onClick={() =>
+                navigate(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/${c.id}`)
+              }
+            />
+          )}
+          renderListItem={(c) => (
+            <PlagiarismCaseListItem
+              caseItem={c}
+              onClick={(caseItem) =>
+                navigate(
+                  `/modules/${moduleId}/assignments/${assignmentId}/plagiarism/${caseItem.id}`,
+                )
+              }
+            />
+          )}
+          columnToggleEnabled
+          actions={actions}
+          columns={[
             {
-              name: 'submission_id_1',
-              label: 'Submission #1',
-              type: 'tree-select',
-              required: true,
-              treeData: subTree.treeData, // grouped by user
-              treeSelectProps: {
-                showSearch: true,
-                filterTreeNode: false, // server-side search
-                onSearch: (v) => searchSubmissions(v),
-                placeholder: 'Search by username…',
-                notFoundContent: subTree.loading ? 'Searching…' : 'No submissions',
-                treeNodeLabelProp: 'title', // what shows when selected
-                dropdownMatchSelectWidth: 440,
-              } as TreeSelectProps,
+              title: 'ID',
+              dataIndex: 'id',
+              key: 'id',
+              defaultHidden: true,
+              render: (id: number) => <IdTag id={id} />,
             },
             {
-              name: 'submission_id_2',
-              label: 'Submission #2',
-              type: 'tree-select',
-              required: true,
-              treeData: subTree.treeData,
-              treeSelectProps: {
-                showSearch: true,
-                filterTreeNode: false,
-                onSearch: (v) => searchSubmissions(v),
-                placeholder: 'Search by username…',
-                notFoundContent: subTree.loading ? 'Searching…' : 'No submissions',
-                treeNodeLabelProp: 'title',
-                dropdownMatchSelectWidth: 440,
-              } as TreeSelectProps,
+              title: 'Case',
+              dataIndex: 'id',
+              key: 'case',
+              render: (_, c) =>
+                `${c.submission_1.user.username} vs ${c.submission_2.user.username}`,
             },
-            { name: 'description', label: 'Description', type: 'textarea', required: true },
-          ]}
-        />
-
-        {/* Edit */}
-        <EditModal
-          open={editOpen}
-          onCancel={() => {
-            setEditOpen(false);
-            setEditingItem(null);
-          }}
-          onEdit={handleEdit}
-          title="Edit Plagiarism Case"
-          initialValues={{
-            description: editingItem?.description ?? '',
-            status: editingItem?.status ?? 'review',
-          }}
-          fields={[
-            { name: 'description', label: 'Description', type: 'textarea' },
             {
-              name: 'status',
-              label: 'Status',
-              type: 'select',
-              options: [
-                { label: 'Review', value: 'review' },
-                { label: 'Flagged', value: 'flagged' },
-                { label: 'Reviewed', value: 'reviewed' },
+              title: 'Similarity',
+              dataIndex: 'similarity',
+              key: 'similarity',
+              align: 'right',
+              width: 160,
+              sorter: { multiple: 2 },
+              render: (_, c) => (
+                <PercentageTag
+                  value={c.similarity}
+                  decimals={1}
+                  palette="greenRed" // red → amber → green
+                />
+              ),
+            },
+            {
+              title: 'Status',
+              dataIndex: 'status',
+              key: 'status',
+              sorter: { multiple: 1 },
+              filters: [
+                { text: 'Review', value: 'review' },
+                { text: 'Flagged', value: 'flagged' },
+                { text: 'Reviewed', value: 'reviewed' },
               ],
+              render: (_, c) => <PlagiarismStatusTag status={c.status} />,
+            },
+            {
+              title: 'Description',
+              dataIndex: 'description',
+              key: 'description',
+              defaultHidden: true,
+              render: (_, c) =>
+                c.description ? (
+                  <div className="max-w-[48ch] line-clamp-2 text-gray-700 dark:text-neutral-300">
+                    {c.description}
+                  </div>
+                ) : (
+                  'No description'
+                ),
+            },
+            {
+              title: 'Created At',
+              dataIndex: 'created_at',
+              key: 'created_at',
+              sorter: { multiple: 2 },
+              render: (_, c) => <DateTime value={c.updated_at} variant="datetime" />,
+            },
+            {
+              title: 'Updated At',
+              dataIndex: 'updated_at',
+              key: 'updated_at',
+              defaultHidden: true,
+              render: (_, c) => <DateTime value={c.updated_at} variant="datetime" />,
             },
           ]}
-        />
-
-        {/* Graph Modal */}
-        <PlagiarismGraph
-          open={graphOpen}
-          onClose={() => setGraphOpen(false)}
-          links={graphLinks}
-          title={`Plagiarism Graph (${formatModuleCode(moduleDetails.code)} • ${assignment.name})`}
+          emptyNoEntities={
+            <PlagiarismEmptyState
+              onCreate={() => setCreateOpen(true)}
+              onRefresh={() => listRef.current?.refresh()}
+              onGenerate={() => setMossOpen(true)}
+            />
+          }
         />
       </div>
+
+      {/* Create */}
+      <CreateModal
+        open={createOpen}
+        onCancel={() => setCreateOpen(false)}
+        onCreate={handleCreate}
+        title="Add Plagiarism Case"
+        initialValues={{
+          submission_id_1: undefined,
+          submission_id_2: undefined,
+          description: '',
+        }}
+        fields={[
+          {
+            name: 'submission_id_1',
+            label: 'Submission #1',
+            type: 'tree-select',
+            required: true,
+            treeData: subTree.treeData, // grouped by user
+            treeSelectProps: {
+              showSearch: true,
+              filterTreeNode: false, // server-side search
+              onSearch: (v) => searchSubmissions(v),
+              placeholder: 'Search by username…',
+              notFoundContent: subTree.loading ? 'Searching…' : 'No submissions',
+              treeNodeLabelProp: 'title', // what shows when selected
+              dropdownMatchSelectWidth: 440,
+            } as TreeSelectProps,
+          },
+          {
+            name: 'submission_id_2',
+            label: 'Submission #2',
+            type: 'tree-select',
+            required: true,
+            treeData: subTree.treeData,
+            treeSelectProps: {
+              showSearch: true,
+              filterTreeNode: false,
+              onSearch: (v) => searchSubmissions(v),
+              placeholder: 'Search by username…',
+              notFoundContent: subTree.loading ? 'Searching…' : 'No submissions',
+              treeNodeLabelProp: 'title',
+              dropdownMatchSelectWidth: 440,
+            } as TreeSelectProps,
+          },
+          { name: 'description', label: 'Description', type: 'textarea', required: true },
+        ]}
+      />
+
+      {/* Edit */}
+      <EditModal
+        open={editOpen}
+        onCancel={() => {
+          setEditOpen(false);
+          setEditingItem(null);
+        }}
+        onEdit={handleEdit}
+        title="Edit Plagiarism Case"
+        initialValues={{
+          description: editingItem?.description ?? '',
+          status: editingItem?.status ?? 'review',
+        }}
+        fields={[
+          { name: 'description', label: 'Description', type: 'textarea' },
+          {
+            name: 'status',
+            label: 'Status',
+            type: 'select',
+            options: [
+              { label: 'Review', value: 'review' },
+              { label: 'Flagged', value: 'flagged' },
+              { label: 'Reviewed', value: 'reviewed' },
+            ],
+          },
+        ]}
+      />
+
+      <ConfirmModal
+        open={confirmOpen}
+        title={`Delete ${listRef.current?.getSelectedRowKeys().length ?? 0} selected case(s)?`}
+        onOk={handleBulkDeleteConfirm}
+        onCancel={handleBulkDeleteCancel}
+      />
+
+      {/* Graph Modal */}
+      <PlagiarismGraph
+        open={graphOpen}
+        onClose={() => setGraphOpen(false)}
+        links={graphLinks}
+        title={`Plagiarism Graph (${formatModuleCode(moduleDetails.code)} • ${assignment.name})`}
+      />
 
       {/* Run MOSS modal */}
       <Modal
@@ -503,8 +707,8 @@ const PlagiarismCases = () => {
         open={mossOpen}
         onCancel={() => {
           setMossOpen(false);
-          setMossReportUrl(null);
         }}
+        width={650}
         onOk={doRunMoss}
         okText={mossReportUrl ? 'Run Again' : 'Run MOSS'}
         confirmLoading={mossRunning}
@@ -516,18 +720,22 @@ const PlagiarismCases = () => {
             <strong>{assignment.name}</strong>.
           </Typography.Paragraph>
 
-          <Typography.Text className="block">Language</Typography.Text>
-          <Select
-            value={mossLanguage}
-            onChange={setMossLanguage}
-            options={[
-              { value: 'c', label: 'C' },
-              { value: 'cpp', label: 'C++' },
-              { value: 'java', label: 'Java' },
-              { value: 'python', label: 'Python' },
-              { value: 'javascript', label: 'JavaScript' },
-            ]}
-            style={{ width: '100%' }}
+          <Alert
+            type="warning"
+            showIcon
+            message="MOSS uses the language from Assignment Config"
+            description={
+              <span>
+                Make sure the correct language is set in{' '}
+                <Link
+                  to={`/modules/${moduleId}/assignments/${assignmentId}/config/assignment`}
+                  className="text-blue-600"
+                >
+                  Assignment Config
+                </Link>{' '}
+                before running.
+              </span>
+            }
           />
 
           {mossReportUrl && (
@@ -536,11 +744,19 @@ const PlagiarismCases = () => {
               <a href={mossReportUrl} target="_blank" rel="noreferrer" className="text-blue-600">
                 Open MOSS Report
               </a>
+              {mossGeneratedAt && (
+                <>
+                  {' • '}
+                  <Typography.Text type="secondary">
+                    Generated {dayjs(mossGeneratedAt).format('YYYY-MM-DD HH:mm')}
+                  </Typography.Text>
+                </>
+              )}
             </div>
           )}
         </Space>
       </Modal>
-    </div>
+    </>
   );
 };
 

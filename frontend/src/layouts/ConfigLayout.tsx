@@ -23,9 +23,18 @@ const ConfigLayout = () => {
   const [loading, setLoading] = useState(false);
 
   const location = useLocation();
-  const selectedKey: 'execution' | 'marking' = location.pathname.endsWith('/marking')
+  const path = location.pathname;
+  type MenuKey = 'assignment' | 'execution' | 'marking' | 'output' | 'gatlam';
+
+  const selectedKey: MenuKey = path.endsWith('/marking')
     ? 'marking'
-    : 'execution';
+    : path.endsWith('/execution')
+      ? 'execution'
+      : path.endsWith('/output')
+        ? 'output'
+        : path.endsWith('/gatlam')
+          ? 'gatlam'
+          : 'assignment';
 
   // Load config
   useEffect(() => {
@@ -127,17 +136,20 @@ const ConfigLayout = () => {
   };
 
   const menuItems = [
+    { key: 'assignment', label: <Link to="assignment">Assignment</Link> },
     { key: 'execution', label: <Link to="execution">Execution</Link> },
     { key: 'marking', label: <Link to="marking">Marking & Feedback</Link> },
+    { key: 'output', label: <Link to="output">Output</Link> },
+    { key: 'gatlam', label: <Link to="gatlam">GATLAM</Link> },
   ];
 
   return (
-    <div>
+    <div className="h-full min-h-0 flex flex-col">
       {/* Desktop / tablet */}
-      <div className="hidden sm:flex bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 overflow-hidden">
+      <div className="hidden sm:flex flex-1 min-h-0 bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 overflow-hidden">
         {/* Sidebar (hidden in JSON mode) */}
         {!rawView && (
-          <div className="w-[240px] bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2">
+          <div className="w-[240px] flex-shrink-0 bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2 overflow-auto">
             <Menu
               mode="inline"
               selectedKeys={[selectedKey]}
@@ -149,7 +161,7 @@ const ConfigLayout = () => {
         )}
 
         {/* Main */}
-        <div className="flex-1 p-6 space-y-6 max-w-5xl">
+        <div className="flex-1 min-h-0 p-6 flex flex-col">
           <div className="flex justify-between items-center flex-wrap gap-2">
             <div className="flex items-center gap-4">
               <Typography.Title level={4} className="!mb-0">
@@ -176,33 +188,40 @@ const ConfigLayout = () => {
           </div>
 
           <Typography.Paragraph type="secondary" className="!mt-0">
-            Configure execution limits and marking rules. Edit via the sidebar editor or raw JSON.
+            Configure execution limits, marking & feedback, and output capture. Edit via the sidebar
+            editor or raw JSON.
           </Typography.Paragraph>
 
-          {rawView ? (
-            <CodeEditor
-              title="Config"
-              value={rawText}
-              onChange={(val) => setRawText(val ?? '')}
-              language="json"
-              minimal
-            />
-          ) : (
-            // One shared Form across child pages. Children render Form.Item and get context automatically.
-            <Form layout="vertical" form={form} className="space-y-6">
-              <Outlet context={outletCtx} />
-            </Form>
-          )}
-
-          {/* Buttons removed; child pages render actions using useAssignmentConfig() */}
+          {/* Scrollable content area */}
+          <div className="flex-1 min-h-0 overflow-auto flex flex-col">
+            {rawView ? (
+              <div className="flex-1 min-h-0">
+                <CodeEditor
+                  title="Config"
+                  value={rawText}
+                  onChange={(val) => setRawText(val ?? '')}
+                  language="json"
+                  minimal
+                  height="100%" // ← fluid height
+                  className="h-full" // ← ensure container stretches
+                />
+              </div>
+            ) : (
+              <Form layout="vertical" form={form} className="space-y-6 pb-6">
+                <Outlet context={outletCtx} />
+              </Form>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Mobile: just the children/form; child pages show their own actions */}
-      <div className="block sm:hidden">
-        <Form layout="vertical" form={form}>
-          <Outlet context={outletCtx} />
-        </Form>
+      {/* Mobile */}
+      <div className="block sm:hidden flex-1 min-h-0 overflow-auto">
+        <div className="p-4">
+          <Form layout="vertical" form={form}>
+            <Outlet context={outletCtx} />
+          </Form>
+        </div>
       </div>
     </div>
   );

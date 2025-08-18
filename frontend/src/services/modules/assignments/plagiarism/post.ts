@@ -17,11 +17,6 @@ export const createPlagiarismCase = async (
   );
 };
 
-
-interface RunMossPayload {
-  language: string;
-}
-
 interface RunMossResult {
   report_url: string;   // URL returned by backend
 }
@@ -29,7 +24,6 @@ interface RunMossResult {
 export const runMossCheck = async (
   moduleId: number,
   assignmentId: number,
-  payload: RunMossPayload
 ): Promise<ApiResponse<RunMossResult>> => {
-  return api.post(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/moss`,payload);
+  return api.post(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/moss`);
 };

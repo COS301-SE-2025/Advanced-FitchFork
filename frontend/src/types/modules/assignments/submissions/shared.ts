@@ -53,3 +53,21 @@ export interface SubmissionTaskOutput {
   task_number: number;
   raw: string;
 }
+
+
+// Request payload: either specific IDs or all=true (mutually exclusive)
+export type ResubmitRequest =
+  | { submission_ids: number[]; all?: undefined }
+  | { all: true; submission_ids?: undefined };
+
+// Per-submission failure
+export interface FailedResubmission {
+  id?: number;
+  error: string;
+}
+
+// Response shape from the endpoint
+export interface ResubmitResponse {
+  resubmitted: number;
+  failed: FailedResubmission[];
+}

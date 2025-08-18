@@ -1,5 +1,5 @@
 import { Tag, Typography } from 'antd';
-import { DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, RedoOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
@@ -22,6 +22,7 @@ import SubmissionCard from '@/components/submissions/SubmissionCard';
 import { message } from '@/utils/message';
 import {
   remarkSubmissions,
+  resubmitSubmissions,
   submitAssignment,
 } from '@/services/modules/assignments/submissions/post';
 import { useViewSlot } from '@/context/ViewSlotContext';
@@ -239,6 +240,28 @@ export default function SubmissionsList() {
               }
             },
           },
+          {
+            key: 'resubmit',
+            label: 'Resubmit',
+            icon: <RedoOutlined />,
+            handler: async ({ refresh }) => {
+              try {
+                const res = await resubmitSubmissions(module.id, assignment.id, {
+                  submission_ids: [entity.id],
+                });
+                if (res.success) {
+                  message.success(res.message || `Resubmitted 1/1 submissions`);
+                } else {
+                  message.error(res.message || `Failed to resubmit submission ${entity.id}`);
+                }
+                EventBus.emit('submission:updated');
+                refresh();
+              } catch (err) {
+                console.error(err);
+                message.error(`Failed to resubmit submission ${entity.id}`);
+              }
+            },
+          },
         ],
         bulk: [
           {
@@ -276,6 +299,30 @@ export default function SubmissionsList() {
               }
             },
           },
+          {
+            key: 'bulk-resubmit',
+            label: 'Bulk Resubmit',
+            icon: <RedoOutlined />,
+            handler: async ({ selected, refresh }) => {
+              const ids = selected as number[];
+              if (!ids?.length) return;
+              try {
+                const res = await resubmitSubmissions(module.id, assignment.id, {
+                  submission_ids: ids,
+                });
+                if (res.success) {
+                  message.success(res.message || `Resubmitted ${ids.length} submission(s)`);
+                } else {
+                  message.error(res.message || 'Failed to resubmit some submissions');
+                }
+                EventBus.emit('submission:updated');
+                refresh();
+              } catch (err) {
+                console.error(err);
+                message.error('Failed to resubmit some submissions');
+              }
+            },
+          },
         ],
         control: [
           {
@@ -301,12 +348,33 @@ export default function SubmissionsList() {
               }
             },
           },
+          {
+            key: 'resubmit-all',
+            label: 'Resubmit All',
+            icon: <RedoOutlined />,
+            confirm: true,
+            handler: async ({ refresh }) => {
+              try {
+                const res = await resubmitSubmissions(module.id, assignment.id, { all: true });
+                if (res.success) {
+                  message.success(res.message || 'Resubmitted all submissions');
+                } else {
+                  message.error(res.message || 'Failed to resubmit all submissions');
+                }
+                EventBus.emit('submission:updated');
+                refresh();
+              } catch (err) {
+                console.error(err);
+                message.error('Failed to resubmit all submissions');
+              }
+            },
+          },
         ],
       }
     : undefined;
 
   return (
-    <div>
+    <>
       <EntityList<StudentSubmission>
         ref={entityListRef}
         name="Submissions"
@@ -351,6 +419,6 @@ export default function SubmissionsList() {
         maxSizeMB={50}
         defaultIsPractice={false}
       />
-    </div>
+    </>
   );
 }

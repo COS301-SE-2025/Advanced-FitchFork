@@ -19,21 +19,32 @@ export default function MarkingPage() {
     );
   }, []);
 
+  const fieldWidth = 'w-full max-w-xs'; // ~320px
+  const textFieldWidth = 'w-full max-w-sm'; // ~384px (a touch wider for the delimiter)
+
   return (
     <SettingsGroup
       title="Marking & Feedback"
       description="Determine how submissions are evaluated and feedback is generated."
     >
-      <Form.Item name={['marking', 'marking_scheme']} label="Marking Scheme">
-        <Select className="w-full sm:w-60" options={MARKING_SCHEME_OPTIONS} />
+      <Form.Item name={['marking', 'marking_scheme']} label="Marking Scheme" className={fieldWidth}>
+        <Select className="w-full" options={MARKING_SCHEME_OPTIONS} />
       </Form.Item>
 
-      <Form.Item name={['marking', 'feedback_scheme']} label="Feedback Scheme">
-        <Select className="w-full sm:w-60" options={FEEDBACK_SCHEME_OPTIONS} />
+      <Form.Item
+        name={['marking', 'feedback_scheme']}
+        label="Feedback Scheme"
+        className={fieldWidth}
+      >
+        <Select className="w-full" options={FEEDBACK_SCHEME_OPTIONS} />
       </Form.Item>
 
-      <Form.Item name={['marking', 'deliminator']} label="Delimiter String">
-        <Input className="w-full sm:w-60" addonBefore="Delimiter" />
+      <Form.Item
+        name={['marking', 'deliminator']}
+        label="Delimiter String"
+        className={textFieldWidth}
+      >
+        <Input className="w-full" addonBefore="Delimiter" />
       </Form.Item>
 
       <ConfigActions saveLabel="Save Marking Config" />

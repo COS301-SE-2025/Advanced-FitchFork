@@ -1,7 +1,8 @@
-import { Card, Tag } from 'antd';
+import { Card } from 'antd';
 import { WarningOutlined } from '@ant-design/icons';
 import type { PlagiarismCaseItem } from '@/types/modules/assignments/plagiarism';
 import dayjs from 'dayjs';
+import PlagiarismStatusTag from './PlagiarismStatusTag';
 
 const { Meta } = Card;
 
@@ -35,7 +36,7 @@ const PlagiarismCaseCard = ({ caseItem, actions, onClick }: Props) => {
             <span className="text-black dark:text-white font-medium truncate">
               Case #{caseItem.id}
             </span>
-            <Tag color={statusColors[caseItem.status]}>{caseItem.status}</Tag>
+            <PlagiarismStatusTag status={caseItem.status} />
           </div>
         }
         description={

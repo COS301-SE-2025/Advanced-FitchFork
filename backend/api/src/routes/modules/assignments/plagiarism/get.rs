@@ -18,7 +18,69 @@ pub struct MossReportResponse {
     pub generated_at: String,
 }
 
+
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss
+///
+/// Retrieves metadata for the **most recent MOSS report** generated for the given assignment.
+/// Accessible only to lecturers and assistant lecturers assigned to the module.
+///
+/// This endpoint does **not** trigger a new MOSS run—it only returns the last stored report URL
+/// and its generation timestamp. To generate a new report, use the POST endpoint:
+/// `/api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss`.
+///
+/// # Path Parameters
+///
+/// - `module_id`: The ID of the parent module
+/// - `assignment_id`: The ID of the assignment whose latest MOSS report should be fetched
+///
+/// # Request Body
+///
+/// None.
+///
+/// # Returns
+///
+/// - `200 OK` on success with the latest report metadata:
+///   - `report_url` — The external URL to the MOSS results page
+///   - `generated_at` — RFC 3339 timestamp for when the report file was written
+/// - `404 NOT FOUND` if no report has been generated yet
+/// - `500 INTERNAL SERVER ERROR` if the report file cannot be read or parsed
+///
+/// # Example Response (200 OK)
+///
+/// ```json
+/// {
+///   "success": true,
+///   "message": "MOSS report retrieved successfully",
+///   "data": {
+///     "report_url": "http://moss.stanford.edu/results/123456789",
+///     "generated_at": "2025-05-30T12:34:56Z"
+///   }
+/// }
+/// ```
+///
+/// # Example Response (404 Not Found)
+///
+/// ```json
+/// {
+///   "success": false,
+///   "message": "MOSS report not found"
+/// }
+/// ```
+///
+/// # Example Response (500 Internal Server Error)
+///
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Failed to read MOSS report: <reason>"
+/// }
+/// ```
+///
+/// # Notes
+/// - Internally, the metadata is read from `reports.txt` under the assignment’s storage directory:
+///   `.../module_{module_id}/assignment_{assignment_id}/reports.txt`.
+/// - The `report_url` is hosted by the MOSS service and may expire per MOSS retention policy.
+/// - To refresh the report, run the POST `/plagiarism/moss` endpoint and then call this GET again.
 pub async fn get_moss_report(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
@@ -78,6 +140,7 @@ pub async fn get_moss_report(
         .into_response()
 }
 
+
 #[derive(Debug, Deserialize)]
 pub struct ListPlagiarismCaseQueryParams {
     page: Option<u64>,
@@ -108,6 +171,7 @@ pub struct PlagiarismCaseResponse {
     id: i64,
     status: String,
     description: String,
+    similarity: f32, // <-- NEW
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
     submission_1: SubmissionResponse,
@@ -124,37 +188,28 @@ pub struct PlagiarismCaseListResponse {
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism
 ///
-/// Retrieves paginated plagiarism cases for a specific assignment with filtering and sorting capabilities.
+/// Retrieves paginated plagiarism cases for a specific assignment with filtering and sorting.
 /// Only accessible to lecturers and assistant lecturers assigned to the module.
 ///
 /// # Path Parameters
-///
 /// - `module_id`: The ID of the parent module
 /// - `assignment_id`: The ID of the assignment to retrieve plagiarism cases for
 ///
 /// # Query Parameters
-///
-/// - `page`: (Optional) Page number for pagination (default: 1, minimum: 1)
-/// - `per_page`: (Optional) Number of items per page (default: 20, maximum: 100)
-/// - `status`: (Optional) Filter cases by status ("review", "flagged", or "reviewed")
-/// - `query`: (Optional) Case-insensitive fuzzy search on usernames of either submission's user
-/// - `sort`: (Optional) Comma-separated sorting criteria. Prefix with '-' for descending order.
-///   Valid fields: "created_at", "status"
+/// - `page`: (Optional) Page number (default: 1, min: 1)
+/// - `per_page`: (Optional) Items per page (default: 20, max: 100)
+/// - `status`: (Optional) Filter by status: `"review"`, `"flagged"`, or `"reviewed"`
+/// - `query`: (Optional) Case-insensitive fuzzy search on usernames of either submission’s user
+/// - `sort`: (Optional) Comma-separated sorting criteria; prefix with `-` for descending.
+///   **Valid fields:** `"created_at"`, `"status"`, `"similarity"`
 ///
 /// # Returns
-///
-/// Returns an HTTP response indicating the result:
-/// - `200 OK` with paginated plagiarism cases if successful
-/// - `400 BAD REQUEST` for invalid parameters (status, sort, pagination values)
-/// - `403 FORBIDDEN` if user lacks required permissions
-/// - `500 INTERNAL SERVER ERROR` for database errors or data retrieval failures
-///
-/// The response body follows a standardized JSON format containing:
-/// - Pagination metadata (current page, items per page, total items)
-/// - List of plagiarism cases with enriched submission and user details
+/// - `200 OK` with paginated cases on success
+/// - `400 BAD REQUEST` for invalid params (status/sort/pagination)
+/// - `403 FORBIDDEN` if user lacks permissions
+/// - `500 INTERNAL SERVER ERROR` for database failures
 ///
 /// # Example Response (200 OK)
-///
 /// ```json
 /// {
 ///   "success": true,
@@ -165,29 +220,20 @@ pub struct PlagiarismCaseListResponse {
 ///         "id": 12,
 ///         "status": "flagged",
 ///         "description": "Very similar submissions",
+///         "similarity": 84.3,
 ///         "created_at": "2024-05-15T08:30:00Z",
 ///         "updated_at": "2024-05-16T10:15:00Z",
 ///         "submission_1": {
 ///           "id": 42,
 ///           "filename": "main.cpp",
 ///           "created_at": "2024-05-14T09:00:00Z",
-///           "user": {
-///             "id": 5,
-///             "username": "u12345678",
-///             "email": "abc@example.com",
-///             "profile_picture_path": null
-///           }
+///           "user": { "id": 5, "username": "u12345678", "email": "abc@example.com", "profile_picture_path": null }
 ///         },
 ///         "submission_2": {
 ///           "id": 43,
 ///           "filename": "main.cpp",
 ///           "created_at": "2024-05-14T10:30:00Z",
-///           "user": {
-///             "id": 6,
-///             "username": "u98765432",
-///             "email": "xyz@example.com",
-///             "profile_picture_path": null
-///           }
+///           "user": { "id": 6, "username": "u98765432", "email": "xyz@example.com", "profile_picture_path": null }
 ///         }
 ///       }
 ///     ],
@@ -198,54 +244,34 @@ pub struct PlagiarismCaseListResponse {
 /// }
 /// ```
 ///
-/// # Example Responses
-///
-/// - `400 Bad Request` (invalid status)  
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Invalid status parameter"
-/// }
-/// ```
-///
-/// - `403 Forbidden` (unauthorized role)  
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Forbidden: Insufficient permissions"
-/// }
-/// ```
-///
-/// - `500 Internal Server Error`  
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Failed to retrieve plagiarism cases"
-/// }
-/// ```
+/// # Example Errors
+/// - `400 Bad Request` — `{ "success": false, "message": "Invalid status parameter" }`
+/// - `403 Forbidden` — `{ "success": false, "message": "Forbidden: Insufficient permissions" }`
+/// - `500 Internal Server Error` — `{ "success": false, "message": "Failed to retrieve plagiarism cases" }`
 pub async fn list_plagiarism_cases(
     State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
     Query(params): Query<ListPlagiarismCaseQueryParams>,
 ) -> impl IntoResponse {
-    let page = params.page.unwrap_or(1);
+    let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100);
 
+    // Limit cases to this assignment’s submissions
     let submission_models = SubmissionEntity::find()
         .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
         .all(app_state.db())
         .await
         .unwrap_or_default();
-    
+
     let submission_ids: Vec<i64> = submission_models.iter().map(|s| s.id).collect();
 
-    let mut query = PlagiarismEntity::find()
-        .filter(
-            Condition::any()
-                .add(plagiarism_case::Column::SubmissionId1.is_in(submission_ids.clone()))
-                .add(plagiarism_case::Column::SubmissionId2.is_in(submission_ids))
-        );
+    let mut query = PlagiarismEntity::find().filter(
+        Condition::any()
+            .add(plagiarism_case::Column::SubmissionId1.is_in(submission_ids.clone()))
+            .add(plagiarism_case::Column::SubmissionId2.is_in(submission_ids)),
+    );
 
+    // Filter: status
     if let Some(status_str) = params.status {
         if let Ok(status) = Status::from_str(&status_str) {
             query = query.filter(plagiarism_case::Column::Status.eq(status));
@@ -256,6 +282,8 @@ pub async fn list_plagiarism_cases(
             );
         }
     }
+
+    // Search: username (fuzzy)
     if let Some(search_query) = params.query {
         let user_ids_subquery = UserEntity::find()
             .select_only()
@@ -268,14 +296,15 @@ pub async fn list_plagiarism_cases(
             .column(assignment_submission::Column::Id)
             .filter(assignment_submission::Column::UserId.in_subquery(user_ids_subquery))
             .into_query();
-        
+
         query = query.filter(
             Condition::any()
                 .add(plagiarism_case::Column::SubmissionId1.in_subquery(submission_ids_subquery.clone()))
-                .add(plagiarism_case::Column::SubmissionId2.in_subquery(submission_ids_subquery))
+                .add(plagiarism_case::Column::SubmissionId2.in_subquery(submission_ids_subquery)),
         );
     }
 
+    // Sort: created_at, status, similarity
     if let Some(sort) = params.sort {
         for s in sort.split(',') {
             let (order, column) = if s.starts_with('-') {
@@ -283,11 +312,11 @@ pub async fn list_plagiarism_cases(
             } else {
                 (sea_orm::Order::Asc, s)
             };
-
             match column {
                 "created_at" => query = query.order_by(plagiarism_case::Column::CreatedAt, order),
                 "status" => query = query.order_by(plagiarism_case::Column::Status, order),
-                _ => {}
+                "similarity" => query = query.order_by(plagiarism_case::Column::Similarity, order),
+                _ => {} // silently ignore unknown sort fields
             }
         }
     }
@@ -296,9 +325,10 @@ pub async fn list_plagiarism_cases(
     let total_items = paginator.num_items().await.unwrap_or(0);
     let cases = paginator.fetch_page(page - 1).await.unwrap_or_default();
 
+    // Pull submissions & users for the cases we fetched
     let submission_ids: Vec<i64> = cases
         .iter()
-        .flat_map(|case| vec![case.submission_id_1, case.submission_id_2])
+        .flat_map(|c| [c.submission_id_1, c.submission_id_2])
         .collect();
 
     let submissions = SubmissionEntity::find()
@@ -314,51 +344,45 @@ pub async fn list_plagiarism_cases(
         .await
         .unwrap_or_default();
 
-    let user_map: HashMap<i64, user::Model> =
-        users.into_iter().map(|u| (u.id, u)).collect();
-
+    let user_map: HashMap<i64, user::Model> = users.into_iter().map(|u| (u.id, u)).collect();
     let submission_map: HashMap<i64, (assignment_submission::Model, user::Model)> = submissions
         .into_iter()
-        .filter_map(|s| {
-            user_map
-                .get(&s.user_id)
-                .cloned()
-                .map(|u| (s.id, (s, u)))
-        })
+        .filter_map(|s| user_map.get(&s.user_id).cloned().map(|u| (s.id, (s, u))))
         .collect();
 
     let response_cases: Vec<PlagiarismCaseResponse> = cases
         .into_iter()
         .filter_map(|case| {
-            let sub1_data = submission_map.get(&case.submission_id_1)?;
-            let sub2_data = submission_map.get(&case.submission_id_2)?;
+            let (s1, u1) = submission_map.get(&case.submission_id_1)?.clone();
+            let (s2, u2) = submission_map.get(&case.submission_id_2)?.clone();
 
             Some(PlagiarismCaseResponse {
                 id: case.id,
                 status: case.status.to_string(),
                 description: case.description,
+                similarity: case.similarity,
                 created_at: case.created_at,
                 updated_at: case.updated_at,
                 submission_1: SubmissionResponse {
-                    id: sub1_data.0.id,
-                    filename: sub1_data.0.filename.clone(),
-                    created_at: sub1_data.0.created_at,
+                    id: s1.id,
+                    filename: s1.filename,
+                    created_at: s1.created_at,
                     user: UserResponse {
-                        id: sub1_data.1.id,
-                        username: sub1_data.1.username.clone(),
-                        email: sub1_data.1.email.clone(),
-                        profile_picture_path: sub1_data.1.profile_picture_path.clone(),
+                        id: u1.id,
+                        username: u1.username,
+                        email: u1.email,
+                        profile_picture_path: u1.profile_picture_path,
                     },
                 },
                 submission_2: SubmissionResponse {
-                    id: sub2_data.0.id,
-                    filename: sub2_data.0.filename.clone(),
-                    created_at: sub2_data.0.created_at,
+                    id: s2.id,
+                    filename: s2.filename,
+                    created_at: s2.created_at,
                     user: UserResponse {
-                        id: sub2_data.1.id,
-                        username: sub2_data.1.username.clone(),
-                        email: sub2_data.1.email.clone(),
-                        profile_picture_path: sub2_data.1.profile_picture_path.clone(),
+                        id: u2.id,
+                        username: u2.username,
+                        email: u2.email,
+                        profile_picture_path: u2.profile_picture_path,
                     },
                 },
             })
@@ -374,7 +398,10 @@ pub async fn list_plagiarism_cases(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response, "Plagiarism cases retrieved successfully")),
+        Json(ApiResponse::success(
+            response,
+            "Plagiarism cases retrieved successfully",
+        )),
     )
 }
 
@@ -394,7 +421,86 @@ pub struct LinksResponse {
     pub links: Vec<Link>,
 }
 
-// TODO: Testing and docs @Aidan
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/graph
+///
+/// Builds a **user-to-user plagiarism graph** for the given assignment. Each edge indicates
+/// that there is at least one plagiarism case linking submissions from the two users.
+///
+/// Accessible only to lecturers and assistant lecturers assigned to the module.
+///
+/// # Path Parameters
+///
+/// - `module_id`: The ID of the parent module
+/// - `assignment_id`: The ID of the assignment whose plagiarism graph should be built
+///
+/// # Query Parameters
+///
+/// - `status` (optional): Filter edges by case status. One of:
+///   - `"review"`
+///   - `"flagged"`
+///   - `"reviewed"`
+///
+/// # Semantics
+///
+/// - Nodes are **usernames** derived from the submissions involved in cases.
+/// - Each returned `Link { source, target }` represents a directed edge from `source` user
+///   to `target` user for at least one case. (If multiple cases exist between the same pair,
+///   multiple identical edges **may** appear; if you prefer deduplication, apply it in your client
+///   or adjust the endpoint to de-duplicate.)
+/// - Only cases where **both** submissions belong to the specified assignment are considered.
+///
+/// # Returns
+///
+/// - `200 OK` with a `links` array (possibly empty) on success
+/// - `400 BAD REQUEST` if `status` is provided but invalid
+/// - `500 INTERNAL SERVER ERROR` if submissions, users, or cases could not be fetched
+///
+/// # Example Request
+///
+/// ```http
+/// GET /api/modules/12/assignments/34/plagiarism/graph?status=flagged
+/// ```
+///
+/// # Example Response (200 OK)
+///
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Plagiarism graph retrieved successfully",
+///   "data": {
+///     "links": [
+///       { "source": "u12345678", "target": "u87654321" },
+///       { "source": "u13579246", "target": "u24681357" }
+///     ]
+///   }
+/// }
+/// ```
+///
+/// # Example Response (Empty Graph)
+///
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Plagiarism graph retrieved successfully",
+///   "data": { "links": [] }
+/// }
+/// ```
+///
+/// # Example Response (400 Bad Request)
+///
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Invalid status parameter"
+/// }
+/// ```
+///
+/// # Notes
+/// - This endpoint is optimized for **visualization**. If you need case details, use the list
+///   endpoint (`GET /plagiarism`) instead.
+/// - Edges are derived from the **current** cases in the database after any filtering.
+/// - Usernames are taken from the submissions’ authors at query time.
+// TODO: Testing @Aidan
 pub async fn get_graph(
     State(app_state): State<AppState>,
     Path((_module_id, assignment_id)): Path<(i64, i64)>,

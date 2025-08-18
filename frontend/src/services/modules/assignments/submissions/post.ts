@@ -1,7 +1,7 @@
 import type { ApiResponse } from "@/types/common";
-import type { PostSubmitAssignmentResponse, RemarkResponse } from "@/types/modules/assignments/submissions";
+import type { PostSubmitAssignmentResponse, RemarkResponse, ResubmitRequest, ResubmitResponse } from "@/types/modules/assignments/submissions";
 import type { RemarkRequest } from "@/types/modules/assignments/submissions/requests";
-import { apiFetch, apiUpload } from "@/utils/api";
+import { api, apiUpload } from "@/utils/api";
 
 export const submitAssignment = async (
   moduleId: number,
@@ -23,8 +23,14 @@ export const remarkSubmissions = async (
   assignmentId: number,
   payload: RemarkRequest
 ): Promise<ApiResponse<RemarkResponse>> => {
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/submissions/remark`, { 
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
+  return api.post(`/modules/${moduleId}/assignments/${assignmentId}/submissions/remark`, payload);
+};
+
+// Service function
+export const resubmitSubmissions = async (
+  moduleId: number,
+  assignmentId: number,
+  payload: ResubmitRequest
+): Promise<ApiResponse<ResubmitResponse>> => {
+  return api.post(`/modules/${moduleId}/assignments/${assignmentId}/submissions/resubmit`, payload);
 };

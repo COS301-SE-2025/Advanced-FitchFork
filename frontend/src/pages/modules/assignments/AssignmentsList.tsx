@@ -42,7 +42,7 @@ import ConfirmModal from '@/components/utils/ConfirmModal';
 import { useAuth } from '@/context/AuthContext';
 import CreateModal from '@/components/common/CreateModal';
 import AssignmentSetup from './steps/AssignmentSetup';
-import { Space, Typography } from 'antd';
+import { Typography } from 'antd';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import AssignmentListItem from '@/components/assignments/AssignmentListItem';
 import { AssignmentsEmptyState } from '@/components/assignments';
@@ -191,7 +191,7 @@ const AssignmentsList = () => {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4">
-        <Space direction="vertical" size="middle" className="w-full">
+        <div className="flex h-full flex-col gap-4">
           <PageHeader
             title="Assignments"
             description={`All the assignments for ${formatModuleCode(module.code)}`}
@@ -384,7 +384,7 @@ const AssignmentsList = () => {
               />
             }
           />
-        </Space>
+        </div>
 
         <CreateModal
           open={setupOpen}
