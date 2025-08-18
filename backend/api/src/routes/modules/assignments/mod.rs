@@ -1,3 +1,15 @@
+//! Assignment routes module.
+//!
+//! Provides the `/assignments` route group with full CRUD and nested functionality.
+//!
+//! Routes include:
+//! - Create, read, update, delete assignments (single and bulk)
+//! - Open/close assignments
+//! - Assignment stats and readiness checks
+//! - Nested routes for tasks, config, memo output, mark allocation, submissions, files, interpreter, tickets, and plagiarism
+//!
+//! Access control is enforced via middleware guards for lecturers, assistants, and assigned users.
+
 use crate::auth::guards::{
     require_assigned_to_module, require_lecturer_or_assistant_lecturer, require_ready_assignment,
 };

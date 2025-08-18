@@ -1,3 +1,15 @@
+//! Announcement routes module.
+//!
+//! Provides the `/announcements` route group for managing announcements.
+//!
+//! Routes include:
+//! - `POST /`               → Create a new announcement (lecturer/assistant only)
+//! - `GET /`                → List all announcements
+//! - `PUT /{announcement_id}` → Edit an existing announcement (lecturer/assistant only)
+//! - `DELETE /{announcement_id}` → Delete an announcement (lecturer/assistant only)
+//!
+//! Access control is enforced using the `require_lecturer_or_assistant_lecturer` middleware.
+
 use axum::{middleware::from_fn_with_state, Router};
 use util::state::AppState;
 
