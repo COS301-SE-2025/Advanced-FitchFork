@@ -1,3 +1,9 @@
+//! Module management routes.
+//!
+//! Provides endpoints for editing individual modules (`PUT /api/modules/{id}`)
+//! and bulk updating multiple modules (`PUT /api/modules/bulk`).  
+//! Only accessible by admin users. Responses follow the standard `ApiResponse` format.
+
 use axum::{
     extract::{State, Path},
     http::StatusCode,
