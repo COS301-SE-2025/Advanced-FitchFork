@@ -106,7 +106,7 @@ export interface AssignmentOutputConfig {
 }
 
 /**
- * ---- GA / TLAM-related config (mirrors Rust GATLAM & TaskSpecConfig) ----
+ * ---- GATLAM-related config (mirrors Rust GATLAM & TaskSpecConfig) ----
  */
 
 export interface GeneConfig {
@@ -123,7 +123,7 @@ export interface TaskSpecConfig {
   forbidden_outputs: string[];
 }
 
-export interface GATLAM {
+export interface GatlamConfig {
   // ---- GA Config ----
   population_size: number;
   number_of_generations: number;
@@ -157,5 +157,5 @@ export interface AssignmentConfig {
   marking: AssignmentMarkingConfig;
   project: AssignmentProjectConfig;
   output: AssignmentOutputConfig;
-  gatlam: GATLAM;
+  gatlam: GatlamConfig;
 }

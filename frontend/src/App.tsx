@@ -67,6 +67,8 @@ import PlagiarismCases from './pages/modules/assignments/PlagiarismCases';
 import AssignmentPage from './pages/modules/assignments/config/AssignmentPage';
 import OutputPage from './pages/modules/assignments/config/OutputPage';
 import GatlamPage from './pages/modules/assignments/config/GatlamPage';
+import InterpreterPage from './pages/modules/assignments/config/InterpreterPage';
+import AssignmentFilePage from './pages/modules/assignments/config/AssignmentFilePage';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -170,6 +172,8 @@ export default function App() {
                       <Route path="marking" element={<MarkingPage />} />
                       <Route path="output" element={<OutputPage />} />
                       <Route path="gatlam" element={<GatlamPage />} />
+                      <Route path="interpreter" element={<InterpreterPage />} />
+                      <Route path="files/:fileType" element={<AssignmentFilePage />} />
                     </Route>
                   </Route>
 

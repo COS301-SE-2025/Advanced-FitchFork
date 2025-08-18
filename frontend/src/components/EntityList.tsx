@@ -1,6 +1,6 @@
 import { Table, Empty, Button, Dropdown, Popconfirm, Tooltip, List } from 'antd';
 import { ReloadOutlined, MoreOutlined } from '@ant-design/icons';
-import { forwardRef, useEffect, useImperativeHandle, useState, type JSX } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type JSX } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import type { SortOption } from '@/types/common';
 
@@ -8,6 +8,7 @@ import { useNotifier } from '@/components/common';
 import { useEntityViewState } from '@/hooks/useEntityViewState';
 import type { ModuleRole } from '@/types/modules';
 import ControlBar from './ControlBar';
+import { GridSkeleton, RowsSkeleton } from '@/EntitySkeletons';
 
 export type EntityAction<T> = {
   key: string;
@@ -97,8 +98,10 @@ const EntityList = forwardRef(function <T>(
   });
 
   const { notifyError } = useNotifier();
-  const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState<T[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<T[] | null>(null); // null => initial not-fetched
+  const hasLoaded = items !== null;
+
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
     new Set(columns.filter((col) => col.defaultHidden).map((col) => col.key as string)),
   );
@@ -109,13 +112,10 @@ const EntityList = forwardRef(function <T>(
       const viewportHeight = window.innerHeight;
       const tableTop =
         document.getElementById('scrollable-entity-table')?.getBoundingClientRect().top ?? 0;
-
       const footerHeight = 120; // estimated AntD pagination
       const padding = 32; // safety margin
-
       setScrollHeight(viewportHeight - tableTop - footerHeight - padding);
     };
-
     updateHeight();
     window.addEventListener('resize', updateHeight);
     return () => window.removeEventListener('resize', updateHeight);
@@ -130,44 +130,69 @@ const EntityList = forwardRef(function <T>(
     });
   };
 
-  const fetchData = async () => {
-    setLoading(true);
-    const res = await fetchItems({
-      page: pagination.current,
-      per_page: pagination.pageSize,
-      query: searchTerm,
-      sort: sorterState,
-      filters: filterState,
-    });
+  const fetchSeq = useRef(0);
 
-    if (res) {
+  /** Fetch helpers
+   * - Skeleton only when items === null (first load)
+   * - On subsequent loads, keep old content; just flip loading
+   */
+  const fetchData = async () => {
+    const seq = ++fetchSeq.current;
+    const firstLoad = items === null;
+
+    if (firstLoad) {
+      // show skeleton area while initial fetch happens
+      setItems(null);
+    }
+    setLoading(true);
+
+    try {
+      const res = await fetchItems({
+        page: pagination.current,
+        per_page: pagination.pageSize,
+        query: searchTerm,
+        sort: sorterState,
+        filters: filterState,
+      });
+      if (fetchSeq.current !== seq) return;
       setItems(res.items);
       setPagination({ total: res.total });
-    } else {
+    } catch (e) {
+      if (fetchSeq.current !== seq) return;
+      // If the very first fetch fails, allow the empty-gate to render
+      if (items === null) setItems([]);
       notifyError('Fetch Failed', 'Could not load data');
+    } finally {
+      if (fetchSeq.current === seq) setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const goToPage = async (page: number) => {
-    setLoading(true);
-    const res = await fetchItems({
-      page,
-      per_page: pagination.pageSize,
-      query: searchTerm,
-      sort: sorterState,
-      filters: filterState,
-    });
+    const seq = ++fetchSeq.current;
+    const firstLoad = items === null;
 
-    if (res) {
+    if (firstLoad) {
+      setItems(null);
+    }
+    setLoading(true);
+
+    try {
+      const res = await fetchItems({
+        page,
+        per_page: pagination.pageSize,
+        query: searchTerm,
+        sort: sorterState,
+        filters: filterState,
+      });
+      if (fetchSeq.current !== seq) return;
       setItems(res.items);
       setPagination({ current: page, total: res.total });
-    } else {
+    } catch {
+      if (items === null) setItems([]);
       notifyError('Fetch Failed', 'Could not fetch data');
+    } finally {
+      if (fetchSeq.current === seq) setLoading(false);
     }
-
-    setLoading(false);
   };
 
   useImperativeHandle(ref, () => ({
@@ -218,7 +243,7 @@ const EntityList = forwardRef(function <T>(
     });
   }
 
-  // Reusable empty-state (matches table's style)
+  // Reusable filtered empty-state (table-style)
   const renderFilteredEmptyState = () => (
     <div className="flex justify-center w-full py-8 sm:py-12 rounded-xl border-2 border-dashed bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-center">
       <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No results found.">
@@ -243,8 +268,8 @@ const EntityList = forwardRef(function <T>(
     </div>
   );
 
-  const isPristine = !hasSearch && !hasSort && !hasFilters;
-  const showPristineEmpty = !loading && items.length === 0 && isPristine && !!emptyNoEntities;
+  const isPristine =
+    !searchTerm.trim() && sorterState.length === 0 && Object.keys(filterState).length === 0;
 
   const controlActions = actions?.control ?? [];
   const bulkActions = actions?.bulk ?? [];
@@ -280,13 +305,11 @@ const EntityList = forwardRef(function <T>(
         const run = (a: (typeof entityActions)[number]) =>
           a.handler({ entity: record, refresh: fetchData });
 
-        // Build dropdown items: confirm items keep menu open and let Popconfirm handle the click.
         const menuItems = secondary.map((a) =>
           a.confirm
             ? {
                 key: a.key,
                 icon: a.icon,
-                // IMPORTANT: no onClick here — Popconfirm will handle the click.
                 label: (
                   <Popconfirm
                     title={`Are you sure you want to ${a.label.toLowerCase()}?`}
@@ -302,7 +325,6 @@ const EntityList = forwardRef(function <T>(
                     <span
                       data-testid={`entity-action-${a.key}`}
                       className="block -mx-3 -my-1.5 !px-3 !py-1.5"
-                      // Keep dropdown open so Popconfirm can render; don't bubble to row
                       onMouseDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -325,7 +347,6 @@ const EntityList = forwardRef(function <T>(
                   </span>
                 ),
                 onClick: ({ domEvent }: any) => {
-                  // Close dropdown normally, but don't trigger row navigation
                   domEvent.stopPropagation();
                   run(a);
                 },
@@ -415,18 +436,16 @@ const EntityList = forwardRef(function <T>(
     });
   }
 
-  // EARLY RETURN: pristine + no entities (grid/list) => only show custom empty
-  if (showPristineEmpty) {
-    return (
-      <div className="w-full h-full min-h-0 flex">
-        <div className="flex-1">{emptyNoEntities}</div>
-      </div>
-    );
-  }
+  const isInitialLoading = items === null;
+  const isEmpty = !isInitialLoading && !loading && items!.length === 0;
+
+  // ---- Derived UI state (keeps ControlBar mounted) ----
+  const hasRefinements = hasSearch || hasSort || hasFilters;
+  const shouldShowControlBar = showControlBar && (isInitialLoading || !isEmpty || hasRefinements);
 
   return (
-    <div>
-      {showControlBar && (
+    <div className="h-full flex flex-col">
+      {shouldShowControlBar && (
         <ControlBar
           handleSearch={setSearchTerm}
           searchTerm={searchTerm}
@@ -486,92 +505,55 @@ const EntityList = forwardRef(function <T>(
         />
       )}
 
-      {viewMode === 'grid' && renderGridItem ? (
-        <div>
-          {!loading && items.length === 0 ? (
-            // Filtered/no-match case in GRID: use filtered empty (not custom)
-            <div className="flex items-center justify-center">{renderFilteredEmptyState()}</div>
+      <div className="flex-1 min-h-0">
+        {isInitialLoading ? (
+          // Initial load → skeletons (ControlBar remains mounted → no focus loss)
+          viewMode === 'grid' && renderGridItem ? (
+            <GridSkeleton count={8} />
           ) : (
-            <>
-              <div
-                className="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
-                data-testid="entity-grid"
-              >
-                {items.map((item) => {
-                  const allActions = actions?.entity?.(item) ?? [];
-                  if (!allActions.length) {
-                    return <div key={getRowKey(item)}>{renderGridItem(item, [])}</div>;
-                  }
+            <RowsSkeleton rows={6} />
+          )
+        ) : isEmpty ? (
+          // Global empty gate
+          <div className="w-full h-full min-h-0 flex">
+            <div className="flex-1">
+              {isPristine && !!emptyNoEntities ? emptyNoEntities : renderFilteredEmptyState()}
+            </div>
+          </div>
+        ) : (
+          // Actual content
+          <>
+            {viewMode === 'grid' && renderGridItem ? (
+              <div>
+                {!loading && items!.length === 0 ? (
+                  <div className="flex items-center justify-center">
+                    {renderFilteredEmptyState()}
+                  </div>
+                ) : (
+                  <>
+                    <div
+                      className="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+                      data-testid="entity-grid"
+                    >
+                      {items!.map((item) => {
+                        const allActions = actions?.entity?.(item) ?? [];
+                        if (!allActions.length) {
+                          return <div key={getRowKey(item)}>{renderGridItem(item, [])}</div>;
+                        }
 
-                  // swallow card navigation
-                  const swallow = (e: React.MouseEvent) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  };
+                        const swallow = (e: React.MouseEvent) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        };
 
-                  // 1 inline action max: prefer explicitly flagged primary, else first
-                  const primary = allActions.find((a) => a.isPrimary) ?? allActions[0];
-                  const secondary = allActions.filter((a) => a.key !== primary.key);
+                        const primary = allActions.find((a) => a.isPrimary) ?? allActions[0];
+                        const secondary = allActions.filter((a) => a.key !== primary.key);
 
-                  const InlineButton = (
-                    <Tooltip title={primary.label} key={primary.key}>
-                      {primary.confirm ? (
-                        <Popconfirm
-                          title={`Are you sure you want to ${primary.label.toLowerCase()}?`}
-                          okText="Yes"
-                          cancelText="No"
-                          okButtonProps={{ 'data-testid': 'confirm-yes' }}
-                          cancelButtonProps={{ 'data-testid': 'confirm-no' }}
-                          onConfirm={(e) => {
-                            // still swallow on confirm click
-                            e?.preventDefault?.();
-                            e?.stopPropagation?.();
-                            primary.handler({
-                              entity: item,
-                              refresh: fetchData,
-                              selected: selectedRowKeys,
-                            });
-                          }}
-                          onCancel={(e) => {
-                            e?.preventDefault?.();
-                            e?.stopPropagation?.();
-                          }}
-                        >
-                          <Button
-                            icon={primary.icon}
-                            type="text"
-                            data-testid={`entity-action-${primary.key}`}
-                            onClick={swallow} // don't navigate the card
-                          />
-                        </Popconfirm>
-                      ) : (
-                        <Button
-                          icon={primary.icon}
-                          type="text"
-                          data-testid={`entity-action-${primary.key}`}
-                          onClick={(e) => {
-                            swallow(e);
-                            primary.handler({
-                              entity: item,
-                              refresh: fetchData,
-                              selected: selectedRowKeys,
-                            });
-                          }}
-                        />
-                      )}
-                    </Tooltip>
-                  );
-
-                  const DropdownButton =
-                    secondary.length > 0 ? (
-                      <Dropdown
-                        key="more"
-                        menu={{
-                          items: secondary.map((a) => ({
-                            key: a.key,
-                            label: a.confirm ? (
+                        const InlineButton = (
+                          <Tooltip title={primary.label} key={primary.key}>
+                            {primary.confirm ? (
                               <Popconfirm
-                                title={`Are you sure you want to ${a.label.toLowerCase()}?`}
+                                title={`Are you sure you want to ${primary.label.toLowerCase()}?`}
                                 okText="Yes"
                                 cancelText="No"
                                 okButtonProps={{ 'data-testid': 'confirm-yes' }}
@@ -579,7 +561,7 @@ const EntityList = forwardRef(function <T>(
                                 onConfirm={(e) => {
                                   e?.preventDefault?.();
                                   e?.stopPropagation?.();
-                                  a.handler({
+                                  primary.handler({
                                     entity: item,
                                     refresh: fetchData,
                                     selected: selectedRowKeys,
@@ -590,177 +572,233 @@ const EntityList = forwardRef(function <T>(
                                   e?.stopPropagation?.();
                                 }}
                               >
-                                <span
-                                  data-testid={`entity-action-${a.key}`}
-                                  onClick={swallow} // open Popconfirm, but don't bubble to card
-                                >
-                                  {a.label}
-                                </span>
+                                <Button
+                                  icon={primary.icon}
+                                  type="text"
+                                  data-testid={`entity-action-${primary.key}`}
+                                  onClick={swallow}
+                                />
                               </Popconfirm>
                             ) : (
-                              <span
+                              <Button
+                                icon={primary.icon}
+                                type="text"
+                                data-testid={`entity-action-${primary.key}`}
                                 onClick={(e) => {
                                   swallow(e);
-                                  a.handler({
+                                  primary.handler({
                                     entity: item,
                                     refresh: fetchData,
                                     selected: selectedRowKeys,
                                   });
                                 }}
-                                data-testid={`entity-action-${a.key}`}
-                              >
-                                {a.label}
-                              </span>
-                            ),
-                            icon: a.icon,
-                          })),
-                        }}
-                        placement="bottomRight"
-                      >
+                              />
+                            )}
+                          </Tooltip>
+                        );
+
+                        const DropdownButton =
+                          secondary.length > 0 ? (
+                            <Dropdown
+                              key="more"
+                              menu={{
+                                items: secondary.map((a) => ({
+                                  key: a.key,
+                                  label: a.confirm ? (
+                                    <Popconfirm
+                                      title={`Are you sure you want to ${a.label.toLowerCase()}?`}
+                                      okText="Yes"
+                                      cancelText="No"
+                                      okButtonProps={{ 'data-testid': 'confirm-yes' }}
+                                      cancelButtonProps={{ 'data-testid': 'confirm-no' }}
+                                      onConfirm={(e) => {
+                                        e?.preventDefault?.();
+                                        e?.stopPropagation?.();
+                                        a.handler({
+                                          entity: item,
+                                          refresh: fetchData,
+                                          selected: selectedRowKeys,
+                                        });
+                                      }}
+                                      onCancel={(e) => {
+                                        e?.preventDefault?.();
+                                        e?.stopPropagation?.();
+                                      }}
+                                    >
+                                      <span
+                                        data-testid={`entity-action-${a.key}`}
+                                        onClick={swallow}
+                                      >
+                                        {a.label}
+                                      </span>
+                                    </Popconfirm>
+                                  ) : (
+                                    <span
+                                      onClick={(e) => {
+                                        swallow(e);
+                                        a.handler({
+                                          entity: item,
+                                          refresh: fetchData,
+                                          selected: selectedRowKeys,
+                                        });
+                                      }}
+                                      data-testid={`entity-action-${a.key}`}
+                                    >
+                                      {a.label}
+                                    </span>
+                                  ),
+                                  icon: a.icon,
+                                })),
+                              }}
+                              placement="bottomRight"
+                            >
+                              <Button
+                                type="text"
+                                icon={<MoreOutlined />}
+                                data-testid="entity-action-dropdown"
+                                onClick={swallow}
+                              />
+                            </Dropdown>
+                          ) : null;
+
+                        const actionButtons = [InlineButton, DropdownButton].filter(Boolean);
+                        return (
+                          <div key={getRowKey(item)}>{renderGridItem(item, actionButtons)}</div>
+                        );
+                      })}
+                    </div>
+
+                    {pagination.total > pagination.pageSize && (
+                      <div className="mt-6 flex justify-between items-center pb-4">
                         <Button
-                          type="text"
-                          icon={<MoreOutlined />}
-                          data-testid="entity-action-dropdown"
-                          onClick={swallow} // don't let dropdown trigger click navigate card
-                        />
-                      </Dropdown>
-                    ) : null;
-
-                  const actionButtons = [InlineButton, DropdownButton].filter(Boolean);
-
-                  return <div key={getRowKey(item)}>{renderGridItem(item, actionButtons)}</div>;
-                })}
+                          onClick={() => goToPage(pagination.current - 1)}
+                          disabled={pagination.current === 1}
+                          data-testid="grid-previous"
+                        >
+                          Previous
+                        </Button>
+                        <span className="text-sm text-gray-500">
+                          Page {pagination.current} of{' '}
+                          {Math.ceil(pagination.total / pagination.pageSize)}
+                        </span>
+                        <Button
+                          onClick={() => goToPage(pagination.current + 1)}
+                          disabled={pagination.current * pagination.pageSize >= pagination.total}
+                          data-testid="grid-next"
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-
-              {pagination.total > pagination.pageSize && (
-                <div className="mt-6 flex justify-between items-center pb-4">
-                  <Button
-                    onClick={() => goToPage(pagination.current - 1)}
-                    disabled={pagination.current === 1}
-                    data-testid="grid-previous"
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-gray-500">
-                    Page {pagination.current} of {Math.ceil(pagination.total / pagination.pageSize)}
-                  </span>
-                  <Button
-                    onClick={() => goToPage(pagination.current + 1)}
-                    disabled={pagination.current * pagination.pageSize >= pagination.total}
-                    data-testid="grid-next"
-                  >
-                    Next
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      ) : listMode && renderListItem ? (
-        <>
-          <List
-            itemLayout="vertical"
-            dataSource={items}
-            renderItem={renderListItem}
-            bordered
-            // For filtered/no-match inside List, still show filtered empty
-            locale={{ emptyText: renderFilteredEmptyState() }}
-            className="overflow-hidden bg-white dark:bg-gray-950 !border-gray-200 dark:!border-gray-800"
-            data-testid="entity-list"
-          />
-          {items.length < (pagination.total ?? 0) && (
-            <div className="flex justify-between items-center mt-4">
-              <Button
-                onClick={() => goToPage(pagination.current - 1)}
-                disabled={pagination.current === 1}
-                data-testid="list-previous"
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-gray-500">
-                Page {pagination.current} of{' '}
-                {Math.ceil((pagination.total ?? 0) / pagination.pageSize)}
-              </span>
-              <Button
-                onClick={() => goToPage(pagination.current + 1)}
-                disabled={pagination.current * pagination.pageSize >= (pagination.total ?? 0)}
-                data-testid="list-next"
-              >
-                Next
-              </Button>
-            </div>
-          )}
-        </>
-      ) : (
-        <div id="scrollable-entity-table" className="h-full flex flex-col overflow-hidden">
-          <Table<T>
-            columns={extendedColumns}
-            dataSource={items}
-            rowKey={getRowKey}
-            loading={loading}
-            tableLayout="auto"
-            pagination={{
-              ...pagination,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
-            }}
-            scroll={{ y: scrollHeight }}
-            rowSelection={
-              bulkActions.length > 0
-                ? {
-                    selectedRowKeys,
-                    onChange: setSelectedRowKeys,
-                  }
-                : undefined
-            }
-            onChange={(pagination, filters, sorter) => {
-              const sorterArray = (Array.isArray(sorter) ? sorter : [sorter])
-                .filter(
-                  (s): s is { columnKey: string; order: 'ascend' | 'descend' } =>
-                    !!s.columnKey && !!s.order,
-                )
-                .map((s) => ({ field: String(s.columnKey), order: s.order }));
-              setSorterState(sorterArray);
-              setFilterState(filters as Record<string, string[]>);
-              setPagination({
-                current: pagination.current || 1,
-                pageSize: pagination.pageSize || 10,
-              });
-            }}
-            onRow={(record) => ({
-              onClick: () => onRowClick?.(record),
-              'data-testid': 'entity-row',
-            })}
-            // Table path doesn't use the custom empty state
-            locale={{
-              emptyText: (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data found.">
-                  {clearMenuItems.length === 1 ? (
-                    <Button icon={<ReloadOutlined />} onClick={clearMenuItems[0].onClick}>
-                      {clearMenuItems[0].label}
-                    </Button>
-                  ) : (
-                    <Dropdown
-                      menu={{
-                        items: clearMenuItems.map((item) => ({
-                          key: item.key,
-                          label: item.label,
-                          onClick: item.onClick,
-                        })),
-                      }}
+            ) : listMode && renderListItem ? (
+              <>
+                <List
+                  itemLayout="vertical"
+                  dataSource={items!}
+                  renderItem={renderListItem}
+                  bordered
+                  locale={{ emptyText: renderFilteredEmptyState() }}
+                  className="overflow-hidden bg-white dark:bg-gray-950 !border-gray-200 dark:!border-gray-800"
+                  data-testid="entity-list"
+                />
+                {items!.length < (pagination.total ?? 0) && (
+                  <div className="flex justify-between items-center mt-4">
+                    <Button
+                      onClick={() => goToPage(pagination.current - 1)}
+                      disabled={pagination.current === 1}
+                      data-testid="list-previous"
                     >
-                      <Button icon={<ReloadOutlined />}>Clear</Button>
-                    </Dropdown>
-                  )}
-                </Empty>
-              ),
-            }}
-            data-testid="entity-table"
-            className="bg-white dark:bg-gray-900 border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
-          />
-        </div>
-      )}
+                      Previous
+                    </Button>
+                    <span className="text-sm text-gray-500">
+                      Page {pagination.current} of{' '}
+                      {Math.ceil((pagination.total ?? 0) / pagination.pageSize)}
+                    </span>
+                    <Button
+                      onClick={() => goToPage(pagination.current + 1)}
+                      disabled={pagination.current * pagination.pageSize >= (pagination.total ?? 0)}
+                      data-testid="list-next"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div id="scrollable-entity-table" className="h-full flex flex-col overflow-hidden">
+                <Table<T>
+                  columns={extendedColumns}
+                  dataSource={items!}
+                  rowKey={getRowKey}
+                  loading={loading}
+                  tableLayout="auto"
+                  pagination={{
+                    ...pagination,
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
+                  }}
+                  scroll={{ y: scrollHeight }}
+                  rowSelection={
+                    bulkActions.length > 0
+                      ? {
+                          selectedRowKeys,
+                          onChange: setSelectedRowKeys,
+                        }
+                      : undefined
+                  }
+                  onChange={(pagination_, filters, sorter) => {
+                    const sorterArray = (Array.isArray(sorter) ? sorter : [sorter])
+                      .filter(
+                        (s): s is { columnKey: string; order: 'ascend' | 'descend' } =>
+                          !!s.columnKey && !!s.order,
+                      )
+                      .map((s) => ({ field: String(s.columnKey), order: s.order }));
+                    setSorterState(sorterArray);
+                    setFilterState(filters as Record<string, string[]>);
+                    setPagination({
+                      current: pagination_.current || 1,
+                      pageSize: pagination_.pageSize || 10,
+                    });
+                  }}
+                  onRow={(record) => ({
+                    onClick: () => onRowClick?.(record),
+                    'data-testid': 'entity-row',
+                  })}
+                  locale={{
+                    emptyText: (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data found.">
+                        {clearMenuItems.length === 1 ? (
+                          <Button icon={<ReloadOutlined />} onClick={clearMenuItems[0].onClick}>
+                            {clearMenuItems[0].label}
+                          </Button>
+                        ) : (
+                          <Dropdown
+                            menu={{
+                              items: clearMenuItems.map((item) => ({
+                                key: item.key,
+                                label: item.label,
+                                onClick: item.onClick,
+                              })),
+                            }}
+                          >
+                            <Button icon={<ReloadOutlined />}>Clear</Button>
+                          </Dropdown>
+                        )}
+                      </Empty>
+                    ),
+                  }}
+                  data-testid="entity-table"
+                  className="bg-white dark:bg-gray-900 border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
+                />
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }) as <T>(props: EntityListProps<T> & { ref?: React.Ref<EntityListHandle> }) => JSX.Element;

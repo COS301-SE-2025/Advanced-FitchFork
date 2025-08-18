@@ -34,9 +34,9 @@ export const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
     genes: [
       { min_value: 0, max_value: 1 },
     ],
-    omega1: 1.0,
-    omega2: 1.0,
-    omega3: 1.0,
+    omega1: 0.3,
+    omega2: 0.2,
+    omega3: 0.5,
     task_spec: {
       max_runtime_ms: 5000,
       valid_return_codes: [0],

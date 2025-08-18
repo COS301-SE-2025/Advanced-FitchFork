@@ -1,4 +1,3 @@
-// pages/modules/assignments/files/AssignmentFiles.tsx
 import { useEffect, useMemo, useState } from 'react';
 import {
   Typography,

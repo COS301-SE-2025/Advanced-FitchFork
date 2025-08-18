@@ -1,153 +1,102 @@
-import { useEffect, useState } from 'react';
-import { Typography, Form, Segmented, Menu } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { Typography, Segmented, Menu } from 'antd';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-
 import CodeEditor from '@/components/common/CodeEditor';
-
-import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
-import { getAssignmentConfig, setAssignmentConfig } from '@/services/modules/assignments/config';
 import { DEFAULT_ASSIGNMENT_CONFIG } from '@/constants/assignments';
-import type { AssignmentConfig } from '@/types/modules/assignments/config';
-import { message } from '@/utils/message';
-import type { AssignmentConfigCtx } from '@/context/AssignmentConfigContext';
+
+type MenuKey =
+  | 'assignment'
+  | 'execution'
+  | 'marking'
+  | 'output'
+  | 'gatlam'
+  | 'interpreter'
+  | 'files-main'
+  | 'files-makefile'
+  | 'files-memo'
+  | 'files-spec';
 
 const ConfigLayout = () => {
-  const module = useModule();
-  const { assignment } = useAssignment();
-  const [form] = Form.useForm<AssignmentConfig>();
-
+  const { config } = useAssignment();
   const [rawView, setRawView] = useState(false);
   const [rawText, setRawText] = useState(JSON.stringify(DEFAULT_ASSIGNMENT_CONFIG, null, 2));
-  const [config, setConfig] = useState<AssignmentConfig>(DEFAULT_ASSIGNMENT_CONFIG);
-  const [loading, setLoading] = useState(false);
 
   const location = useLocation();
   const path = location.pathname;
-  type MenuKey = 'assignment' | 'execution' | 'marking' | 'output' | 'gatlam';
 
-  const selectedKey: MenuKey = path.endsWith('/marking')
-    ? 'marking'
-    : path.endsWith('/execution')
-      ? 'execution'
-      : path.endsWith('/output')
-        ? 'output'
-        : path.endsWith('/gatlam')
-          ? 'gatlam'
-          : 'assignment';
+  const selectedKey: MenuKey = useMemo(() => {
+    if (path.endsWith('/marking')) return 'marking';
+    if (path.endsWith('/execution')) return 'execution';
+    if (path.endsWith('/output')) return 'output';
+    if (path.endsWith('/gatlam')) return 'gatlam';
+    if (path.endsWith('/interpreter')) return 'interpreter';
+    if (path.includes('/files/main')) return 'files-main';
+    if (path.includes('/files/makefile')) return 'files-makefile';
+    if (path.includes('/files/memo')) return 'files-memo';
+    if (path.includes('/files/spec')) return 'files-spec';
+    return 'assignment';
+  }, [path]);
 
-  // Load config
+  // keep JSON mirror in sync (viewer-only)
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await getAssignmentConfig(module.id, assignment.id);
-        if (res.success && res.data) {
-          setConfig(res.data);
-          form.setFieldsValue(res.data);
-          setRawText(JSON.stringify(res.data, null, 2));
-        } else {
-          throw new Error('No config found');
-        }
-      } catch {
-        message.warning('Could not load config. Using defaults.');
-        setConfig(DEFAULT_ASSIGNMENT_CONFIG);
-        form.setFieldsValue(DEFAULT_ASSIGNMENT_CONFIG);
-        setRawText(JSON.stringify(DEFAULT_ASSIGNMENT_CONFIG, null, 2));
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [module.id, assignment.id]);
+    setRawText(JSON.stringify(config ?? DEFAULT_ASSIGNMENT_CONFIG, null, 2));
+  }, [config]);
 
-  const syncFormToRaw = () => {
-    const updated = form.getFieldsValue(true) as AssignmentConfig;
-    setConfig(updated);
-    setRawText(JSON.stringify(updated, null, 2));
+  // Mode-aware visibility
+  const submissionMode = config?.project?.submission_mode ?? 'manual';
+  const isGatlam = submissionMode === 'gatlam';
+
+  const fileChildren = [
+    ...(isGatlam ? [] : [{ key: 'files-main', label: <Link to={'files/main'}>Main File</Link> }]),
+    { key: 'files-makefile', label: <Link to={'files/makefile'}>Makefile</Link> },
+    { key: 'files-memo', label: <Link to={'files/memo'}>Memo File</Link> },
+    { key: 'files-spec', label: <Link to={'files/spec'}>Specification</Link> },
+  ];
+
+  // GENERAL group: Assignment + Execution Limits + Marking & Feedback + Output
+  const generalGroup = {
+    key: 'general-group',
+    label: 'General',
+    type: 'group' as const,
+    children: [
+      { key: 'assignment', label: <Link to="assignment">Assignment</Link> },
+      { key: 'execution', label: <Link to="execution">Execution Limits</Link> },
+      { key: 'marking', label: <Link to="marking">Marking & Feedback</Link> },
+      { key: 'output', label: <Link to="output">Output</Link> },
+    ],
   };
 
-  const syncRawToForm = () => {
-    try {
-      const parsed = JSON.parse(rawText) as AssignmentConfig;
-      form.setFieldsValue(parsed);
-      setConfig(parsed);
-    } catch {
-      message.error('Invalid JSON');
-    }
-  };
-
-  const save = async () => {
-    let values: AssignmentConfig;
-    if (rawView) {
-      try {
-        values = JSON.parse(rawText);
-        form.setFieldsValue(values);
-      } catch {
-        message.error('Invalid JSON format');
-        return;
-      }
-    } else {
-      values = form.getFieldsValue(true);
-    }
-
-    try {
-      const res = await setAssignmentConfig(module.id, assignment.id, values);
-      if (res.success) {
-        message.success('Config saved');
-        setConfig(values);
-        setRawText(JSON.stringify(values, null, 2));
-      } else {
-        message.error(res.message);
-      }
-    } catch {
-      message.error('Failed to save config.');
-    }
-  };
-
-  const revert = () => {
-    form.setFieldsValue(DEFAULT_ASSIGNMENT_CONFIG);
-    setRawText(JSON.stringify(DEFAULT_ASSIGNMENT_CONFIG, null, 2));
-    setConfig(DEFAULT_ASSIGNMENT_CONFIG);
-    message.success('Default config restored.');
-  };
-
-  const download = () => {
-    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'config.json';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const outletCtx: AssignmentConfigCtx = {
-    form,
-    rawView,
-    setRawView,
-    rawText,
-    setRawText,
-    loading,
-    save,
-    revert,
-    download,
-    syncFormToRaw,
-    syncRawToForm,
-  };
+  // GATLAM-only group (only when gatlam mode)
+  const gatlamGroup = isGatlam
+    ? [
+        {
+          key: 'gatlam-group',
+          label: 'GATLAM',
+          type: 'group' as const,
+          children: [
+            { key: 'gatlam', label: <Link to="gatlam">GATLAM</Link> },
+            { key: 'interpreter', label: <Link to="interpreter">Interpreter</Link> },
+          ],
+        },
+      ]
+    : [];
 
   const menuItems = [
-    { key: 'assignment', label: <Link to="assignment">Assignment</Link> },
-    { key: 'execution', label: <Link to="execution">Execution</Link> },
-    { key: 'marking', label: <Link to="marking">Marking & Feedback</Link> },
-    { key: 'output', label: <Link to="output">Output</Link> },
-    { key: 'gatlam', label: <Link to="gatlam">GATLAM</Link> },
+    generalGroup,
+    ...gatlamGroup,
+    {
+      key: 'files-group',
+      label: 'Files',
+      type: 'group' as const,
+      children: fileChildren,
+    },
   ];
 
   return (
     <div className="h-full min-h-0 flex flex-col">
-      {/* Desktop / tablet */}
       <div className="hidden sm:flex flex-1 min-h-0 bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 overflow-hidden">
-        {/* Sidebar (hidden in JSON mode) */}
+        {/* Sidebar */}
         {!rawView && (
           <div className="w-[240px] flex-shrink-0 bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2 overflow-auto">
             <Menu
@@ -161,8 +110,9 @@ const ConfigLayout = () => {
         )}
 
         {/* Main */}
-        <div className="flex-1 min-h-0 p-6 flex flex-col">
-          <div className="flex justify-between items-center flex-wrap gap-2">
+        <div className="flex-1 min-h-0 flex flex-col">
+          {/* Full-width bottom border under title/toggle */}
+          <div className="flex justify-between items-center flex-wrap gap-2 border-b border-gray-200 dark:border-gray-800 p-4">
             <div className="flex items-center gap-4">
               <Typography.Title level={4} className="!mb-0">
                 Assignment Configuration
@@ -173,43 +123,28 @@ const ConfigLayout = () => {
                   { label: 'JSON', value: 'raw' },
                 ]}
                 value={rawView ? 'raw' : 'form'}
-                onChange={(val) => {
-                  if (val === 'raw') {
-                    syncFormToRaw();
-                    setRawView(true);
-                  } else {
-                    syncRawToForm();
-                    setRawView(false);
-                  }
-                }}
+                onChange={(val) => setRawView(val === 'raw')}
                 size="small"
               />
             </div>
           </div>
 
-          <Typography.Paragraph type="secondary" className="!mt-0">
-            Configure execution limits, marking & feedback, and output capture. Edit via the sidebar
-            editor or raw JSON.
-          </Typography.Paragraph>
-
-          {/* Scrollable content area */}
-          <div className="flex-1 min-h-0 overflow-auto flex flex-col">
+          <div className="flex-1 min-h-0 overflow-auto flex flex-col p-4">
             {rawView ? (
               <div className="flex-1 min-h-0">
                 <CodeEditor
                   title="Config"
                   value={rawText}
-                  onChange={(val) => setRawText(val ?? '')}
+                  onChange={() => {}}
                   language="json"
                   minimal
-                  height="100%" // ← fluid height
-                  className="h-full" // ← ensure container stretches
+                  height="100%"
+                  className="h-full"
+                  readOnly
                 />
               </div>
             ) : (
-              <Form layout="vertical" form={form} className="space-y-6 pb-6">
-                <Outlet context={outletCtx} />
-              </Form>
+              <Outlet />
             )}
           </div>
         </div>
@@ -217,11 +152,7 @@ const ConfigLayout = () => {
 
       {/* Mobile */}
       <div className="block sm:hidden flex-1 min-h-0 overflow-auto">
-        <div className="p-4">
-          <Form layout="vertical" form={form}>
-            <Outlet context={outletCtx} />
-          </Form>
-        </div>
+        <Outlet />
       </div>
     </div>
   );

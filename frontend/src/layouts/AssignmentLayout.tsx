@@ -30,7 +30,7 @@ const { Title, Paragraph } = Typography;
 
 const AssignmentLayout = () => {
   const module = useModule();
-  const { assignment, readiness, refreshAssignment } = useAssignment();
+  const { assignment, readiness, config, refreshAssignment } = useAssignment();
   const auth = useAuth();
   const { isMobile } = useUI();
   const navigate = useNavigate();
@@ -69,21 +69,16 @@ const AssignmentLayout = () => {
             disabled: !readiness?.config_present,
           },
           {
-            value: `${basePath}/files`,
-            label: 'Files',
-            disabled: !readiness?.config_present,
-          },
-          {
             value: `${basePath}/plagiarism`,
             label: 'Plagiarism',
             disabled: !readiness?.config_present,
           },
-          { value: `${basePath}/config`, label: 'Config' },
           {
             value: `${basePath}/stats`,
             label: 'Statistics',
             disabled: !readiness?.is_ready,
           },
+          { value: `${basePath}/config`, label: 'Config' },
         ]
       : []),
   ];
@@ -214,21 +209,23 @@ const AssignmentLayout = () => {
   };
 
   const menuItems: MenuProps['items'] = [
-    {
-      key: 'memo',
-      label: 'Generate Memo Output',
-      onClick: handleGenerateMemoOutput,
-      disabled: loading,
-    },
-    {
-      key: 'mark',
-      label: 'Generate Mark Allocator',
-      onClick: handleGenerateMarkAllocator,
-      disabled: loading,
-    },
-    {
-      type: 'divider',
-    },
+    ...(config?.project.submission_mode === 'manual'
+      ? [
+          {
+            key: 'memo',
+            label: 'Generate Memo Output',
+            onClick: handleGenerateMemoOutput,
+            disabled: loading,
+          },
+          {
+            key: 'mark',
+            label: 'Generate Mark Allocator',
+            onClick: handleGenerateMarkAllocator,
+            disabled: loading,
+          },
+          { type: 'divider' as const },
+        ]
+      : []),
     {
       key: 'open',
       label: 'Open Assignment',
