@@ -1,3 +1,7 @@
+//! Authentication utilities and JWT helpers.
+//!
+//! Provides claims, guards, extractors, middleware, and a function to generate JWTs.
+
 pub mod middleware;
 pub mod claims;
 pub mod extractors;
