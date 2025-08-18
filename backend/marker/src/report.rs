@@ -77,9 +77,9 @@ use serde::Serialize;
 #[derive(Debug, Serialize, Clone)]
 pub struct Score {
     /// Points earned by the student.
-    pub earned: u32,
+    pub earned: i64,
     /// Total possible points.
-    pub total: u32,
+    pub total: i64,
 }
 
 /// Represents a subsection of a grading task, such as a subtask or rubric item.
@@ -88,9 +88,9 @@ pub struct ReportSubsection {
     /// Label or name of the subsection (e.g., "Subtask 1").
     pub label: String,
     /// Points earned for this subsection.
-    pub earned: u32,
+    pub earned:i64,
     /// Total possible points for this subsection.
-    pub total: u32,
+    pub total: i64,
     /// Feedback or comments for this subsection.
     pub feedback: String,
 }

@@ -23,8 +23,8 @@ pub struct UserResponse {
 /// Represents the mark of a submission.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Mark {
-    pub earned: i32,
-    pub total: i32,
+    pub earned: i64,
+    pub total: i64,
 }
 
 /// Single item in a submissions list response.
@@ -64,21 +64,21 @@ pub struct SubmissionResponse {
 }
 
 /// Represents a summary of earned vs total marks.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MarkSummary {
     pub earned: i64,
     pub total: i64,
 }
 
 /// Represents a summary of code complexity metrics.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CodeComplexitySummary {
     pub earned: i64,
     pub total: i64,
 }
 
 /// Represents code complexity details, including per-metric results.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CodeComplexity {
     pub summary: CodeComplexitySummary,
     pub metrics: Vec<serde_json::Value>,
@@ -86,7 +86,7 @@ pub struct CodeComplexity {
 
 /// Detailed response returned after grading a submission.
 /// Includes grading marks, flags, and optional coverage/complexity reports.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SubmissionDetailResponse {
     pub id: i64,
     pub attempt: i64,

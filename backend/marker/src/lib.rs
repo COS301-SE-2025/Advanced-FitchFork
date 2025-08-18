@@ -174,7 +174,7 @@ impl<'a> MarkingJob<'a> {
         let mut per_task_results: Vec<Vec<TaskResult>> = Vec::new();
         let mut per_task_subsections: Vec<Vec<crate::report::ReportSubsection>> = Vec::new();
         let mut per_task_names: Vec<String> = Vec::new();
-        let mut per_task_scores: Vec<(u32, u32)> = Vec::new();
+        let mut per_task_scores: Vec<(i64, i64)> = Vec::new();
 
         for task_entry in &allocator.0 {
             let submission_task = submission
@@ -182,8 +182,8 @@ impl<'a> MarkingJob<'a> {
                 .iter()
                 .find(|t| t.task_id.eq_ignore_ascii_case(&task_entry.id));
             let mut subsections: Vec<crate::report::ReportSubsection> = Vec::new();
-            let mut task_earned = 0u32;
-            let mut task_possible = 0u32;
+            let mut task_earned: i64 = 0;
+            let mut task_possible: i64 = 0;
             let mut task_results: Vec<TaskResult> = Vec::new();
 
             if let Some(task_output) = submission_task {
@@ -231,8 +231,8 @@ impl<'a> MarkingJob<'a> {
 
         let mut report_tasks: Vec<crate::report::ReportTask> = Vec::new();
         let mut task_counter = 1u32;
-        let mut total_earned = 0u32;
-        let mut total_possible = 0u32;
+        let mut total_earned = 0;
+        let mut total_possible = 0;
         for ((_task_results, mut subsections), (name, (task_earned, task_possible))) in
             per_task_results
                 .into_iter()
