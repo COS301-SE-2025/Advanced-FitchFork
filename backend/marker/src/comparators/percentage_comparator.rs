@@ -65,11 +65,11 @@ impl OutputComparator for PercentageComparator {
         }
 
         let percentage = matched_count as f32 / memo_lines.len() as f32;
-        let mut awarded = (section.value as f32 * percentage).round() as u32;
+        let mut awarded = (section.value as f32 * percentage).round() as i64;
 
         if student_lines.len() > memo_lines.len() && student_lines.len() > 0 {
             let penalty = memo_lines.len() as f32 / student_lines.len() as f32;
-            awarded = (awarded as f32 * penalty).round() as u32;
+            awarded = (awarded as f32 * penalty).round() as i64;
         }
 
         TaskResult {
