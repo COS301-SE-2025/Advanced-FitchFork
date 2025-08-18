@@ -4,7 +4,7 @@ use serde_json::{Value, from_str, json};
 use std::env;
 use std::fs::{self, File};
 use std::io::{self, ErrorKind, Write};
-use std::path::PathBuf; // or adjust path if needed
+use std::path::{Path, PathBuf}; // or adjust path if needed
 
 pub enum SaveError {
     DirectoryNotFound,
@@ -25,12 +25,8 @@ impl From<serde_json::Error> for SaveError {
 }
 
 #[allow(dead_code)]
-//Removed constant deliminator
-// const SEPARATOR: &str = "&-=-&";
-
 /// Generates a mark allocator JSON structure by reading memo output files from
 /// the specified module and assignment directories.
-///
 ///
 /// Reads all files in the `memo_output` folder corresponding to the module and assignment,
 /// parses lines to count marks and subsections, and constructs a JSON structure with
@@ -46,10 +42,30 @@ impl From<serde_json::Error> for SaveError {
 ///
 /// * `Ok(Value)` - A JSON `Value` representing the generated allocator data.
 /// * `Err(SaveError)` - An error if directory/file operations or JSON serialization fail.
+///
+/// # JSON Schema
+///
+/// ```json
+/// {
+///   "generated_at": "2025-08-17T22:00:00Z",
+///   "tasks": [
+///     {
+///       "task_number": 1,
+///       "value": 10,
+///       "subsections": [
+///         { "name": "Correctness", "value": 6 },
+///         { "name": "Style", "value": 4 }
+///       ]
+///     }
+///   ],
+///   "total_value": 10
+/// }
+/// ```
+#[allow(dead_code)]
 pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, SaveError> {
     let base = env::var("ASSIGNMENT_STORAGE_ROOT").map_err(|_| SaveError::DirectoryNotFound)?;
 
-    // Load execution config for this assignment, use default if not found
+    // Delimiter from execution config (fallback if missing)
     let separator = ExecutionConfig::get_execution_config(module, assignment)
         .map(|config| config.marking.deliminator)
         .unwrap_or_else(|_| "&-=-&".to_string());
@@ -67,41 +83,44 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
         }
     })?;
 
-    // Prepare the mark_allocator directory path
+    // Ensure mark_allocator output dir exists
     let allocator_dir_path = PathBuf::from(&base)
         .join(format!("module_{}", module))
         .join(format!("assignment_{}", assignment))
         .join("mark_allocator");
+    fs::create_dir_all(&allocator_dir_path).map_err(SaveError::IoError)?;
 
-    // If it doesn't exist, try to create it (and any parents)
-    if let Err(err) = fs::create_dir_all(&allocator_dir_path) {
-        return Err(SaveError::IoError(err));
-    }
-
-    let mut task_index = 1;
+    let mut task_index: i64 = 1;
     let mut tasks_json: Vec<Value> = vec![];
+    let mut total_value: i64 = 0;
 
     for p in paths {
         let entry = p.map_err(SaveError::IoError)?;
         let file_name = entry.file_name().into_string().map_err(|_| {
             SaveError::IoError(io::Error::new(ErrorKind::InvalidData, "Invalid filename"))
         })?;
-
         let file_path = memo_output_path.join(&file_name);
 
-        let content = fs::read_to_string(&file_path)?;
+        // Derive task display name from file stem; fallback to "Task N"
+        let task_name = Path::new(&file_name)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("Task {}", task_index));
+
+        // Parse memo file into subsections via delimiter; count lines between delimiters as points
+        let content = fs::read_to_string(&file_path).map_err(SaveError::IoError)?;
         let mut subsections = vec![];
         let mut current_section = String::new();
-        let mut mark_counter = 0;
-        let mut task_value = 0;
+        let mut mark_counter: i64 = 0;
+        let mut task_value: i64 = 0;
 
         for line in content.lines() {
-            //No longer harcoded value
-            // let split: Vec<_> = line.split(SEPARATOR).collect();
-
             let split: Vec<_> = line.split(&separator).collect();
 
             if split.len() > 1 {
+                // Close previous subsection
                 if !current_section.is_empty() {
                     subsections.push(json!({
                         "name": current_section,
@@ -109,13 +128,16 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
                     }));
                     task_value += mark_counter;
                 }
+                // Start new subsection with the trailing label after the delimiter
                 current_section = split.last().unwrap().trim().to_string();
                 mark_counter = 0;
             } else if !line.trim().is_empty() {
+                // Count non-empty lines as points
                 mark_counter += 1;
             }
         }
 
+        // Flush final subsection
         if !current_section.is_empty() {
             subsections.push(json!({
                 "name": current_section,
@@ -124,30 +146,32 @@ pub async fn generate_allocator(module: i64, assignment: i64) -> Result<Value, S
             task_value += mark_counter;
         }
 
-        let task_name = format!("task{}", task_index);
-        let task_entry = json!({
-            task_name: {
-                "name": format!("Task {}", task_index),
-                "value": task_value,
-                "subsections": subsections
-            }
+        // Build the single-key task object: { "taskN": { name, task_number, value, subsections } }
+        let task_key = format!("task{}", task_index);
+        let task_body = json!({
+            "name": task_name,
+            "task_number": task_index,
+            "value": task_value,
+            "subsections": subsections
         });
+        let task_entry = json!({ task_key: task_body });
 
         tasks_json.push(task_entry);
+        total_value += task_value;
         task_index += 1;
     }
 
     let now = Utc::now().to_rfc3339();
     let final_json = json!({
         "generated_at": now,
-        "tasks": tasks_json
+        "tasks": tasks_json,
+        "total_value": total_value
     });
 
-    fs::create_dir_all(&allocator_dir_path)?;
     let output_path = allocator_dir_path.join("allocator.json");
-    let mut file = File::create(&output_path)?;
-    write!(file, "{}", serde_json::to_string_pretty(&final_json)?)?;
-    file.flush()?;
+    let mut file = File::create(&output_path).map_err(SaveError::IoError)?;
+    write!(file, "{}", serde_json::to_string_pretty(&final_json)?).map_err(SaveError::IoError)?;
+    file.flush().map_err(SaveError::IoError)?;
 
     Ok(final_json)
 }

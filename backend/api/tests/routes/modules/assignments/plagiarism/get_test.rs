@@ -51,7 +51,7 @@ mod plagiarism_tests {
         let assignment = AssignmentModel::create(db, module.id, "Assignment 1", Some("Desc 1"), AssignmentType::Assignment, Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(), Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap()).await.unwrap();
         let submission1 = SubmissionModel::save_file(db, assignment.id, student_user1.id, 1, 10, 10, false, "sub1.txt", "hash123#", b"ontime").await.unwrap();
         let submission2 = SubmissionModel::save_file(db, assignment.id, student_user2.id, 1, 10, 10, false, "sub2.txt", "hash123#", b"ontime").await.unwrap();
-        let plagiarism_case = PlagiarismCaseModel::create_case(db, assignment.id, submission1.id, submission2.id, "High similarity detected").await.unwrap();
+        let plagiarism_case = PlagiarismCaseModel::create_case(db, assignment.id, submission1.id, submission2.id, "High similarity detected", 0.0).await.unwrap();
 
         TestData {
             admin_user,
@@ -83,7 +83,7 @@ mod plagiarism_tests {
             .await
             .unwrap();
 
-        let mut case1 = PlagiarismCaseModel::create_case(db, assignment_id, sub3.id, sub4.id, "Resolved case")
+        let mut case1 = PlagiarismCaseModel::create_case(db, assignment_id, sub3.id, sub4.id, "Resolved case", 0.0)
             .await
             .unwrap();
 
@@ -94,7 +94,7 @@ mod plagiarism_tests {
         case1 = active_case1.update(db).await.unwrap();
         cases.push(case1);
 
-        let mut case2 = PlagiarismCaseModel::create_case(db, assignment_id, sub3.id, sub4.id, "Pending case")
+        let mut case2 = PlagiarismCaseModel::create_case(db, assignment_id, sub3.id, sub4.id, "Pending case", 0.0)
             .await
             .unwrap();
 
@@ -162,7 +162,7 @@ mod plagiarism_tests {
         
         let case_data = &cases[0];
         assert_eq!(case_data["id"], data.plagiarism_case.id);
-        assert_eq!(case_data["status"], "Review");
+        assert_eq!(case_data["status"], "review");
         assert_eq!(case_data["description"], "High similarity detected");
         
         let sub1 = &case_data["submission_1"];
@@ -286,7 +286,7 @@ mod plagiarism_tests {
         assert_eq!(json["data"]["total"], 0);
     }
 
-    /// Test Case: Filtering by `Review` Status
+    /// Test Case: Filtering by `review` Status
     #[tokio::test]
     async fn test_list_plagiarism_cases_filter_by_review_status() {
         let (app, app_state) = make_test_app().await;
@@ -303,7 +303,7 @@ mod plagiarism_tests {
             &data.admin_user,
             data.module.id,
             data.assignment.id,
-            Some(vec![("status", "Review")]),
+            Some(vec![("status", "review")]),
         );
         let response = app.oneshot(req).await.unwrap();
         
@@ -314,7 +314,7 @@ mod plagiarism_tests {
         
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 1);
-        assert_eq!(cases[0]["status"], "Review");
+        assert_eq!(cases[0]["status"], "review");
     }
 
     /// Test Case: Filtering by `Flagged` Status
@@ -345,10 +345,10 @@ mod plagiarism_tests {
         
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 1);
-        assert_eq!(cases[0]["status"], "Flagged");
+        assert_eq!(cases[0]["status"], "flagged");
     }
 
-    /// Test Case: Filtering by `Reviewed` Status
+    /// Test Case: Filtering by `reviewed` Status
     #[tokio::test]
     async fn test_list_plagiarism_cases_filter_by_reviewed_status() {
         let (app, app_state) = make_test_app().await;
@@ -365,7 +365,7 @@ mod plagiarism_tests {
             &data.admin_user,
             data.module.id,
             data.assignment.id,
-            Some(vec![("status", "Reviewed")]),
+            Some(vec![("status", "reviewed")]),
         );
         let response = app.oneshot(req).await.unwrap();
         
@@ -376,7 +376,7 @@ mod plagiarism_tests {
         
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 1);
-        assert_eq!(cases[0]["status"], "Reviewed");
+        assert_eq!(cases[0]["status"], "reviewed");
     }
 
     /// Test Case: Search by Username
@@ -474,7 +474,8 @@ mod plagiarism_tests {
                 data.assignment.id,
                 data.submission1.id,
                 sub.id,
-                "Test case description"
+                "Test case description",
+                0.0
             ).await.unwrap();
         }
 

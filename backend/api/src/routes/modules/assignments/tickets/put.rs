@@ -74,7 +74,7 @@ pub async fn open_ticket(
     let db = app_state.db();
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, module_id, db).await {
+    if !is_valid(user_id, ticket_id, module_id, claims.admin, db).await {
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error("Forbidden")),
@@ -148,7 +148,7 @@ pub async fn close_ticket(
     let db = app_state.db();
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, module_id, db).await {
+    if !is_valid(user_id, ticket_id, module_id, claims.admin, db).await {
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error("Forbidden")),

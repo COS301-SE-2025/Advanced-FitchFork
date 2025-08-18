@@ -2,10 +2,10 @@ use crate::models::assignment;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::collections::HashSet;
 use crate::models::user;
 
 /// Represents a user's submission for a specific assignment.

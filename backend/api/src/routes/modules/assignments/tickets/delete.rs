@@ -60,13 +60,8 @@ pub async fn delete_ticket(
     let db = app_state.db();
     let user_id = claims.sub;
 
-    // Check if the user is authorized to delete this ticket
-    if !is_valid(user_id, ticket_id, module_id, db).await {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("Forbidden")),
-        )
-            .into_response();
+    if !is_valid(user_id, ticket_id, module_id,claims.admin, db).await {
+        return (StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("Forbidden"))).into_response();
     }
 
     match TicketModel::delete(db, ticket_id).await {

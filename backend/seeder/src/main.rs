@@ -1,5 +1,6 @@
 use crate::seed::Seeder;
 use crate::seed::run_seeder;
+use crate::seeds::announcement::AnnouncementSeeder;
 use crate::seeds::{
     assignment::AssignmentSeeder, assignment_file::AssignmentFileSeeder,
     assignment_interpreter::AssignmentInterpreterSeeder,
@@ -28,23 +29,15 @@ async fn main() {
         (Box::new(ModuleSeeder), "Module"),
         (Box::new(AssignmentSeeder), "Assignment"),
         (Box::new(UserRoleSeeder), "UserRole"),
+        (Box::new(AnnouncementSeeder), "Announcement"), 
         (Box::new(AssignmentFileSeeder), "AssignmentFile"),
         (Box::new(AssignmentSubmissionSeeder), "AssignmentSubmission"),
         (Box::new(AssignmentTaskSeeder), "AssignmentTask"),
         (Box::new(AssignmentMemoOutputSeeder), "AssignmentMemoOutput"),
         (Box::new(PlagiarismCaseSeeder), "Plagiarism"),
-        (
-            Box::new(AssignmentSubmissionOutputSeeder),
-            "AssignmentSubmissionOutput",
-        ),
-        (
-            Box::new(AssignmentOverwriteFileSeeder),
-            "AssignmentOverwriteFile",
-        ),
-        (
-            Box::new(AssignmentInterpreterSeeder),
-            "AssignmentInterpreter",
-        ),
+        (Box::new(AssignmentSubmissionOutputSeeder),"AssignmentSubmissionOutput"),
+        (Box::new(AssignmentOverwriteFileSeeder),"AssignmentOverwriteFile"),
+        (Box::new(AssignmentInterpreterSeeder), "AssignmentInterpreter"),
         (Box::new(TicketSeeder), "Ticket"),
     ] {
         run_seeder(&*seeder, name, &db).await;

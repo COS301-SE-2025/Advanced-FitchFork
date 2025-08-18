@@ -1,8 +1,9 @@
 import { Card } from 'antd';
-import { UserOutlined, MailOutlined } from '@ant-design/icons';
+import { MailOutlined } from '@ant-design/icons';
 import type { User } from '@/types/users';
 import type { ReactNode } from 'react';
 import UserAdminTag from './UserAdminTag';
+import { UserAvatar } from '@/components/common';
 
 const { Meta } = Card;
 
@@ -19,7 +20,7 @@ const UserCard = ({ user, actions = [] }: Props) => {
       className="rounded-xl border border-gray-200 dark:border-gray-800 transition-shadow duration-200 hover:shadow-md"
     >
       <Meta
-        avatar={<UserOutlined style={{ fontSize: 24 }} />}
+        avatar={<UserAvatar user={user} />}
         title={
           <div className="flex justify-between items-center">
             <span className="font-semibold">{user.username}</span>

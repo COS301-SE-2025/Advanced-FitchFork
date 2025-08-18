@@ -1,29 +1,21 @@
-// components/layout/HeaderBar.tsx
-
-import { Avatar, Badge, Breadcrumb, Button, Dropdown, Typography } from 'antd';
-import { BellOutlined, MenuOutlined, UserOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { Badge, Button, Dropdown, Typography } from 'antd';
+import { BellOutlined, MenuOutlined } from '@ant-design/icons';
 import NotificationDropdown from './NotificationDropdown';
 import { useAuth } from '@/context/AuthContext';
 import { useMediaQuery } from 'react-responsive';
+import UserAvatar from '../common/UserAvatar';
+import BreadcrumbNav from '../common/BreadcrumbNav';
 
 const { Text } = Typography;
 
 type HeaderBarProps = {
-  breadcrumbs: { path: string; label: string; isLast: boolean }[];
   notifications: { id: number; title: string; time: string }[];
   profileMenuItems: any;
   onMenuClick: () => void;
 };
 
-const HeaderBar = ({
-  breadcrumbs,
-  notifications,
-  profileMenuItems,
-  onMenuClick,
-}: HeaderBarProps) => {
-  const { user, profilePictureUrl } = useAuth();
-  const navigate = useNavigate();
+const HeaderBar = ({ notifications, profileMenuItems, onMenuClick }: HeaderBarProps) => {
+  const { user } = useAuth();
   const isMobile = useMediaQuery({ maxWidth: 768 });
 
   return (
@@ -33,7 +25,7 @@ const HeaderBar = ({
         <div className="flex items-center justify-between w-full h-full">
           <Dropdown menu={{ items: profileMenuItems }} trigger={['click']} placement="bottomRight">
             <div className="cursor-pointer flex items-center gap-2">
-              <Avatar size="large" icon={<UserOutlined />} src={profilePictureUrl || undefined} />
+              <UserAvatar user={{ id: user?.id ?? -1, username: user?.username ?? 'User' }} />
               <Text className="text-gray-700 dark:text-gray-200 font-medium">
                 {user?.username ?? 'User'}
               </Text>
@@ -50,21 +42,7 @@ const HeaderBar = ({
       )}
 
       {/* Breadcrumbs (desktop only) */}
-      {!isMobile && (
-        <Breadcrumb
-          separator=">"
-          className="hidden sm:flex flex-1"
-          items={breadcrumbs.map(({ path, label, isLast }) => ({
-            title: isLast ? (
-              label
-            ) : (
-              <a onClick={() => navigate(path)} className="text-blue-600 hover:underline">
-                {label}
-              </a>
-            ),
-          }))}
-        />
-      )}
+      {!isMobile && <BreadcrumbNav className="hidden sm:flex flex-1" />}
 
       {/* Desktop: notifications + profile */}
       {!isMobile && (
@@ -81,7 +59,7 @@ const HeaderBar = ({
 
           <Dropdown menu={{ items: profileMenuItems }} trigger={['click']} placement="bottomRight">
             <div className="cursor-pointer flex items-center gap-2 flex-row-reverse">
-              <Avatar size="large" icon={<UserOutlined />} src={profilePictureUrl || undefined} />
+              <UserAvatar user={{ id: user?.id ?? -1, username: user?.username ?? 'User' }} />
               <Text className="hidden sm:inline text-gray-700 dark:text-gray-200 font-medium">
                 {user?.username ?? 'User'}
               </Text>

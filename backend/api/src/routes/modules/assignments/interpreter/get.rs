@@ -8,6 +8,7 @@ use db::models::assignment_interpreter::{
     Column as InterpreterColumn, Entity as InterpreterEntity,
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use serde::Serialize;
 use std::{env, path::PathBuf};
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
 use util::state::AppState;
@@ -104,4 +105,68 @@ pub async fn download_interpreter(
     );
 
     (StatusCode::OK, headers, buffer).into_response()
+}
+
+
+#[derive(Debug, Serialize)]
+pub struct InterpreterInfo {
+    pub id: i64,
+    pub assignment_id: i64,
+    pub filename: String,
+    pub path: String,
+    pub command: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/interpreter/info
+/// 
+/// Returns metadata about the current interpreter (if any).
+/// - 200 OK with metadata
+/// - 404 Not Found if no interpreter present
+/// - 500 on DB or other errors
+pub async fn get_interpreter_info(
+    State(app_state): State<AppState>,
+    Path((_module_id, assignment_id)): Path<(i64, i64)>,
+) -> Response {
+    let db = app_state.db();
+
+    let interpreter = match InterpreterEntity::find()
+        .filter(InterpreterColumn::AssignmentId.eq(assignment_id))
+        .one(db)
+        .await
+    {
+        Ok(Some(m)) => m,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Interpreter not found")),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            eprintln!("DB error fetching interpreter info: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response();
+        }
+    };
+
+    let payload = InterpreterInfo {
+        id: interpreter.id,
+        assignment_id: interpreter.assignment_id,
+        filename: interpreter.filename,
+        path: interpreter.path,
+        command: interpreter.command,
+        created_at: interpreter.created_at.to_rfc3339(),
+        updated_at: interpreter.updated_at.to_rfc3339(),
+    };
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::<InterpreterInfo>::success(payload, "OK")),
+    )
+        .into_response()
 }

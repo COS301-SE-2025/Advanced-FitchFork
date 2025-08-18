@@ -18,7 +18,7 @@ impl Seeder for AssignmentSeeder {
             .expect("Failed to fetch modules");
 
         for m in &modules {
-            if m.id == 9999 || m.id == 9998 {
+            if m.id == 9999 || m.id == 9998 || m.id == 10003 {
                 continue;
             }
             for i in 0..2 {
@@ -69,5 +69,21 @@ impl Seeder for AssignmentSeeder {
         };
 
         let _ = special_assignment2.insert(db).await;
+
+        let plagiarism_assignment = assignment::ActiveModel {
+            id: Set(10003),
+            module_id: Set(10003),
+            name: Set("Plagiarism Assignment".to_string()),
+            description: Set(Some("Assignment used to show plagiarism cases".to_string())),
+            assignment_type: Set(AssignmentType::Practical),
+            status: Set(Status::Setup),
+            available_from: Set(Utc::now()),
+            due_date: Set(Utc::now() + chrono::Duration::days(7)),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+
+        let _ = plagiarism_assignment.insert(db).await;
     }
 }

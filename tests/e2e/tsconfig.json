@@ -1,0 +1,31 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "CommonJS",
+		"moduleResolution": "Node",
+		"lib": ["ESNext", "DOM"],
+		"types": ["node", "@playwright/test"],
+
+		// Base URL + paths for cleaner imports
+		"baseUrl": ".",
+		"paths": {
+			"@fixtures": ["tests/fixtures.ts"],
+			"@helpers/*": ["helpers/*"],
+			"@po/*": ["tests/po/*"],
+			"@tests/*": ["tests/*"]
+		},
+
+		// Additional safety & interop options
+		"esModuleInterop": true,
+		"resolveJsonModule": true,
+		"allowJs": false,
+		"skipLibCheck": true,
+		"strict": true
+	},
+	"include": [
+		"helpers/**/*.ts",
+		"tests/**/*.ts",
+		"setup/**/*.ts",
+		"playwright.config.ts"
+	]
+}

@@ -1,3 +1,4 @@
+// vite.config.ts
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -13,7 +14,12 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
     },
-    dedupe: ['@emotion/react', '@emotion/styled'],
+    // IMPORTANT: prevent multiple "three" instances
+    dedupe: ['@emotion/react', '@emotion/styled', 'three'],
+  },
+  // Help Vite pre-bundle the heavy deps once
+  optimizeDeps: {
+    include: ['three', 'three-spritetext', 'react-force-graph-3d'],
   },
   build: {
     outDir: '/var/www/fitchfork.co.za',

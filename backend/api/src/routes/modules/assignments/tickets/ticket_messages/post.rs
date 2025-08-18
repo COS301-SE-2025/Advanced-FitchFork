@@ -23,27 +23,25 @@ use crate::{
     routes::modules::assignments::tickets::{
         common::is_valid,
         ticket_messages::common::{MessageResponse, UserResponse},
-    },
+    }, ws::tickets::topics::ticket_chat_topic,
 };
 
-/// Creates a new message for a ticket.
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages
 ///
-/// **Endpoint:** `POST /modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages`  
-/// **Permissions:** User must be authorized to view the ticket (author or staff).
+/// Create a **new message** in a ticket and broadcast a WebSocket event on:
+/// `ws/tickets/{ticket_id}`
 ///
-/// ### Path parameters
-/// - `module_id`       → ID of the module containing the ticket
-/// - `assignment_id`   → ID of the assignment (unused in handler, for route consistency)
-/// - `ticket_id`       → ID of the ticket
+/// ### Path Parameters
+/// - `module_id` (i64)
+/// - `assignment_id` (i64)
+/// - `ticket_id` (i64)
 ///
-/// ### Request body
-/// ```json
-/// {
-///   "content": "Message content here"
-/// }
-/// ```
+/// ### Request Body (JSON)
 ///
+/// { "content": "Can someone review my latest attempt?" }
+/// 
 /// ### Responses
+/// 
 /// - `200 OK` → Message created successfully
 /// ```json
 /// {
@@ -92,7 +90,7 @@ use crate::{
 /// }
 /// ```
 pub async fn create_message(
-    Path((module_id, _assignment_id, ticket_id)): Path<(i64, i64, i64)>,
+    Path((module_id, _, ticket_id)): Path<(i64, i64, i64)>,
     State(app_state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(req): Json<serde_json::Value>,
@@ -100,7 +98,7 @@ pub async fn create_message(
     let db = app_state.db();
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, module_id, db).await {
+    if !is_valid(user_id, ticket_id, module_id, claims.admin, db).await {
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error("Forbidden")),
@@ -158,6 +156,16 @@ pub async fn create_message(
             username: user.username,
         }),
     };
+
+    // ---- WebSocket broadcast: notify subscribers on this ticket's topic ----
+    // Topic: ws/tickets/{ticket_id}
+    let topic = ticket_chat_topic(ticket_id);
+    let ws = app_state.ws_clone();
+    let event_json = serde_json::json!({
+        "event": "message_created",
+        "payload": &response
+    });
+    ws.broadcast(&topic, event_json.to_string()).await;
 
     (
         StatusCode::OK,

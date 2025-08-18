@@ -1,8 +1,9 @@
 import { Card, Tag, Space, Avatar } from 'antd';
-import { FileTextOutlined, UserOutlined } from '@ant-design/icons';
+import { FileTextOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { ReactNode } from 'react';
 import type { Submission } from '@/types/modules/assignments/submissions';
+import { UserAvatar } from '@/components/common';
 
 type Props = {
   submission: Submission & {
@@ -29,7 +30,7 @@ const SubmissionCard = ({ submission, actions = [] }: Props) => {
       className="rounded-lg border border-gray-200 dark:border-gray-700"
     >
       <Card.Meta
-        avatar={user ? <Avatar icon={<UserOutlined />} /> : <Avatar icon={<FileTextOutlined />} />}
+        avatar={user ? <UserAvatar user={user} /> : <Avatar icon={<FileTextOutlined />} />}
         title={
           <div className="flex justify-between items-center">
             <span className="font-semibold text-black dark:text-white">

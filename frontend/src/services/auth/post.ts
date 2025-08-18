@@ -5,16 +5,13 @@ import type {
   PostResetPasswordResponse, 
   PostUploadProfilePictureResponse, 
   PostVerifyResetTokenResponse} from "@/types/auth";
-import { apiFetch, apiUpload } from "@/utils/api";
+import { api, apiUpload } from "@/utils/api";
 
 export const login = async (
   username: string,
   password: string,
 ): Promise<PostLoginResponse> => {
-  return apiFetch('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ username, password }),
-  });
+  return api.post('/auth/login', { username, password });
 };
 
 export const register = async (
@@ -22,41 +19,31 @@ export const register = async (
   email: string,
   password: string,
 ): Promise<PostRegisterResponse> => {
-  return apiFetch('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ username, email, password }),
-  });
+  return api.post('/auth/register', { username, email, password });
 };
 
 export const requestPasswordReset = async (
   email: string
 ): Promise<PostRequestPasswordResetResponse> => {
-  return apiFetch('/auth/request-password-reset', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  });
+  return api.post('/auth/request-password-reset', { email });
 };
 
 export const resetPassword = async (
   token: string,
-  newPassword: string
+  new_password: string
 ): Promise<PostResetPasswordResponse> => {
-  return apiFetch('/auth/reset-password', {
-    method: 'POST',
-    body: JSON.stringify({
+  return api.post('/auth/reset-password', {
       token,
-      new_password: newPassword,
-    }),
-  });
+      new_password
+    });
 };
 
 
 export const verifyResetToken = async (
   token: string
 ): Promise<PostVerifyResetTokenResponse> => {
-  return apiFetch('/auth/verify-reset-token', {
-    method: 'POST',
-    body: JSON.stringify({ token }),
+  return api.post('/auth/verify-reset-token', {
+    token
   });
 };
 
@@ -65,3 +52,10 @@ export const uploadProfilePicture = async (
 ): Promise<PostUploadProfilePictureResponse> => {
   return apiUpload('/auth/upload-profile-picture', form);
 };
+
+export const changePassword = async (
+  current_password: string,
+  new_password: string,
+) => {
+  return api.post('/auth/change-password', { current_password, new_password })
+}

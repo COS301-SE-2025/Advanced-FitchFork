@@ -9,38 +9,79 @@ use db::models::announcements::Model as AnnouncementModel;
 use crate::{response::ApiResponse, routes::modules::announcements::common::AnnouncementRequest};
 use util::state::AppState;
 
-/// Updates an existing announcement.
+/// PUT /api/modules/{module_id}/announcements/{announcement_id}
 ///
-/// **Endpoint:** `PUT /modules/{module_id}/announcements/{announcement_id}`  
-/// **Permissions:** Only authorized users (lecturer/assistant) can update the announcement.
+/// Updates a single announcement under the given module.
 ///
-/// ### Path parameters
-/// - `module_id` → ID of the module (used for consistency, may be used for permission checks)
-/// - `announcement_id` → ID of the announcement to update
+/// # AuthZ / AuthN
+/// - Requires a valid `Bearer` token (JWT).
+/// - Caller must be **lecturer** or **assistant_lecturer** on the module
+///   (enforced by `require_lecturer_or_assistant_lecturer` on this route).
 ///
-/// ### Request body
+/// # Path Parameters
+/// - `module_id` — ID of the parent module (used for nesting & auth).
+/// - `announcement_id` — ID of the announcement to update.
+///
+/// # Request Body
+/// JSON matching `AnnouncementRequest`:
 /// ```json
 /// {
-///   "title": "Updated announcement title",
-///   "body": "Updated announcement body",
+///   "title": "New title (or empty string to keep existing)",
+///   "body": "Updated body (or empty string to keep existing)",
 ///   "pinned": true
 /// }
 /// ```
 ///
-/// ### Responses
-/// - `200 OK` → Announcement updated successfully
+/// **Partial update semantics:**
+/// - `title`: if empty string `""`, the existing title is kept.
+/// - `body`: if empty string `""`, the existing body is kept.
+/// - `pinned`: always updated to the provided boolean.
+///
+/// # Example cURL
+/// ```bash
+/// curl -X PUT "https://your.api/api/modules/101/announcements/1234" \
+///   -H "Authorization: Bearer <JWT>" \
+///   -H "Content-Type: application/json" \
+///   -d '{"title":"Exam venue update","body":"**Hall A** instead of Hall B.","pinned":false}'
+/// ```
+///
+/// # Responses
+/// - `200 OK` — Returns the updated announcement.
+/// - `401 UNAUTHORIZED` — Missing/invalid token.
+/// - `403 FORBIDDEN` — Authenticated but not lecturer/assistant on this module.
+/// - `422 UNPROCESSABLE ENTITY` — Malformed/invalid JSON for `AnnouncementRequest`.
+/// - `500 INTERNAL SERVER ERROR` — Database error.
+///
+/// ## 200 OK — Example
 /// ```json
 /// {
 ///   "success": true,
-///   "data": { /* Updated announcement object */ },
+///   "data": {
+///     "id": 1234,
+///     "module_id": 101,
+///     "user_id": 5,
+///     "title": "Exam venue update",
+///     "body": "**Hall A** instead of Hall B.",
+///     "pinned": false,
+///     "created_at": "2025-08-16T12:00:00Z",
+///     "updated_at": "2025-08-16T12:30:00Z"
+///   },
 ///   "message": "Announcement updated successfully"
 /// }
 /// ```
-/// - `500 Internal Server Error` → Failed to update announcement
+///
+/// ## 422 Unprocessable Entity — Example
 /// ```json
 /// {
 ///   "success": false,
-///   "data": null,
+///   "message": "Unprocessable Entity"
+/// }
+/// ```
+///
+/// ## 500 Internal Server Error — Example
+/// ```json
+/// {
+///   "success": false,
 ///   "message": "Failed to update announcement"
 /// }
 /// ```
