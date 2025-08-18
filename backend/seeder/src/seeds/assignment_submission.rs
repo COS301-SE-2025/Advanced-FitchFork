@@ -315,17 +315,16 @@ struct HelperThree {
             let mut zip = zip::ZipWriter::new(&mut buf);
             let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-            // Define the group:
-            // 0 = identical (two users)
+            // 0 = identical
             // 1 = partially similar
-            // 2 = mostly unique (completely unique)
+            // 2 = mostly unique
             let similarity_group =
                 if user_id == 10 || user_id == 11 || user_id == 27 || user_id == 41 {
-                    0 // two identical submissions
+                    0
                 } else if user_id == 15 {
-                    2 // fully unique submission
+                    2
                 } else {
-                    1 // everything else partially similar
+                    1
                 };
 
             let java_code = generate_convoluted_student_code(user_id, similarity_group);
@@ -462,7 +461,7 @@ struct HelperThree {
                 methods_code.push(method_code);
             }
 
-            // Add helper methods for more complexity (except fully unique)
+            // Helper methods added
             if group != 2 {
                 methods_code.push(format!(
                     "private int helperMultiply{}(int a,int b){{return a*b + {};}}",
@@ -476,7 +475,7 @@ struct HelperThree {
                 ));
             }
 
-            // Add a conditional or loop to increase complexity
+            // Increase complexity hurray
             if group != 2 {
                 methods_code.push(
                     r#"
@@ -492,10 +491,9 @@ public String gradeStudent(int score){
                 );
             }
 
-            // Shuffle methods to vary order per student
+            // Shuffle em
             methods_code.shuffle(&mut rng);
 
-            // Compose final class
             format!(
                 "public class StudentSolution {{\n{}\n}}",
                 methods_code.join("\n\n")
