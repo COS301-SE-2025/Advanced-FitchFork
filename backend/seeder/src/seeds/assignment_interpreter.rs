@@ -47,6 +47,18 @@ impl Seeder for AssignmentInterpreterSeeder {
             &special_content,
         )
         .await;
+
+        let gatlam_content = create_gatlam_interpreter_zip();
+
+        let _ = InterpreterModel::save_file(
+            db,
+            10004,
+            10003,
+            "Interpreter.zip",
+            "javac /code/Interpreter.java && java -cp /code Interpreter",
+            &gatlam_content,
+        )
+        .await;
     }
 }
 
@@ -178,6 +190,113 @@ int main(int argc, char* argv[]) {
 
         zip.start_file("interpreter.cpp", options).unwrap();
         zip.write_all(interpreter_cpp.as_bytes()).unwrap();
+        zip.finish().unwrap();
+    }
+    buf.into_inner()
+}
+
+//GATALM
+fn create_gatlam_interpreter_zip() -> Vec<u8> {
+    let mut buf = Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(&mut buf);
+        let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+        let main_java = r#"
+import java.util.*;
+
+public class Interpreter {
+    
+    public static String mapToFunction(String digit) {
+        switch (digit) {
+            case "0": return "solution.fibonacci_U1(5)";
+            case "1": return "solution.factorial_U1(4)";
+            case "2": return "solution.sumArray_U1(new int[]{1,2,3,4,5})";
+            case "3": return "\"Grade: \" + solution.gradeStudent(85)";
+            case "-1": return "solution.fibonacci_U1(8)";
+            case "-2": return "solution.factorial_U1(6)";
+            case "-3": return "solution.sumArray_U1(new int[]{10,20,30})";
+            case "-4": return "\"Grade: \" + solution.gradeStudent(92)";
+            default: return null; // we'll handle invalid below
+        }
+    }
+    
+    public static String getDefaultFunction(int index) {
+        // always returns a function based on index % 4
+        switch (index % 4) {
+            case 0: return "solution.fibonacci_U1(5)";
+            case 1: return "solution.factorial_U1(4)";
+            case 2: return "solution.sumArray_U1(new int[]{1,2,3,4,5})";
+            case 3: return "\"Grade: \" + solution.gradeStudent(85)";
+            default: return "solution.fibonacci_U1(1)"; // fallback
+        }
+    }
+    
+    public static String randomSubtaskName(String task, int index) {
+        return task + "Subtask" + (index + 1);
+    }
+    
+    public static void writeTask(String taskName, List<String> calls) {
+        System.out.println("    public static void run" + taskName + "() {");
+        System.out.println("        StudentSolution solution = new StudentSolution();");
+        for (int i = 0; i < calls.size(); i++) {
+            System.out.println("        System.out.println(\"&-=-&" + randomSubtaskName(taskName, i) + "\");");
+            System.out.println("        System.out.println(" + calls.get(i) + ");");
+        }
+        System.out.println("    }");
+        System.out.println();
+    }
+    
+    public static void main(String[] args) {
+        if (args.length < 1) {
+            System.err.println("Usage: java Interpreter <digit_string>");
+            return;
+        }
+        
+        String input = args[0];
+        
+        List<String> task1 = new ArrayList<>();
+        
+        // Parse the comma-separated input
+        String[] digits = input.split(",");
+        
+        int count = 0;
+        for (String digit : digits) {
+            digit = digit.trim();
+            String call = mapToFunction(digit);
+            if (call == null) {
+                // if invalid, pick a default based on count
+                call = getDefaultFunction(count);
+            }
+            task1.add(call);
+            count++;
+            if (task1.size() >= 3) break; // max 3 calls
+        }
+        
+        // If still empty, force at least one call
+        if (task1.isEmpty()) {
+            task1.add(getDefaultFunction(0));
+        }
+        
+        // Print the generated Main.java to stdout
+        System.out.println("public class Main {");
+        System.out.println();
+        
+        System.out.println("    public static void main(String[] args) {");
+        System.out.println("        runtask1();");
+        System.out.println("    }");
+        System.out.println();
+        
+        // Write only task1
+        writeTask("task1", task1);
+        
+        System.out.println("}");
+    }
+}
+"#;
+
+        zip.start_file("Interpreter.java", options).unwrap();
+        zip.write_all(main_java.as_bytes()).unwrap();
         zip.finish().unwrap();
     }
     buf.into_inner()

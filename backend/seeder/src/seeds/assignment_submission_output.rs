@@ -29,6 +29,7 @@ impl Seeder for AssignmentSubmissionOutputSeeder {
             if submission.assignment_id == 9999
                 || submission.assignment_id == 9998
                 || submission.assignment_id == 10003
+                || submission.assignment_id == 10004
             {
                 continue;
             }

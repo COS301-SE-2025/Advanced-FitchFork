@@ -1,22 +1,24 @@
+use crate::{response::ApiResponse, services::moss::MossService};
 use axum::{
-    extract::{State, Path},
+    Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
+use chrono::Utc;
 use db::models::{
-    assignment_submission::{self, Entity as SubmissionEntity},
     assignment_file,
+    assignment_submission::{self, Entity as SubmissionEntity},
     plagiarism_case,
-    user::{Entity as UserEntity},
+    user::Entity as UserEntity,
 };
+use moss_parser::{ParseOptions, parse_moss};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use crate::{response::ApiResponse, services::moss::MossService};
-use util::{execution_config::{execution_config::Language, ExecutionConfig}, state::AppState};
-use chrono::Utc;
-use moss_parser::{parse_moss, ParseOptions};
-
+use util::{
+    execution_config::{ExecutionConfig, execution_config::Language},
+    state::AppState,
+};
 
 #[derive(Serialize, Deserialize)]
 pub struct CreatePlagiarismCasePayload {
@@ -128,16 +130,22 @@ pub async fn create_plagiarism_case(
     if payload.submission_id_1 == payload.submission_id_2 {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error("Submissions cannot be the same".to_string())),
-        ).into_response();
+            Json(ApiResponse::<()>::error(
+                "Submissions cannot be the same".to_string(),
+            )),
+        )
+            .into_response();
     }
 
     // Validate the similarity range (strictly enforced, no clamping)
     if !(0.0_f32..=100.0_f32).contains(&payload.similarity) || !payload.similarity.is_finite() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error("Similarity must be between 0.0 and 100.0".to_string())),
-        ).into_response();
+            Json(ApiResponse::<()>::error(
+                "Similarity must be between 0.0 and 100.0".to_string(),
+            )),
+        )
+            .into_response();
     }
 
     let submission1 = SubmissionEntity::find_by_id(payload.submission_id_1)
@@ -156,9 +164,11 @@ pub async fn create_plagiarism_case(
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::error(
-                "One or both submissions do not exist or belong to a different assignment".to_string(),
+                "One or both submissions do not exist or belong to a different assignment"
+                    .to_string(),
             )),
-        ).into_response();
+        )
+            .into_response();
     }
 
     let new_case = plagiarism_case::Model::create_case(
@@ -188,11 +198,15 @@ pub async fn create_plagiarism_case(
                 },
                 "Plagiarism case created successfully",
             )),
-        ).into_response(),
+        )
+            .into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error("Failed to create plagiarism case".to_string())),
-        ).into_response(),
+            Json(ApiResponse::<()>::error(
+                "Failed to create plagiarism case".to_string(),
+            )),
+        )
+            .into_response(),
     }
 }
 
@@ -260,8 +274,8 @@ pub async fn run_moss_check(
 
     // Map your enum -> MOSS language string
     let moss_language: &str = match cfg.project.language {
-        Language::Cpp => "cpp",
-        Language::Java => "java"
+        Language::Cpp => "c++",
+        Language::Java => "java",
     };
 
     // 1) Collect latest submissions
@@ -286,17 +300,21 @@ pub async fn run_moss_check(
                 submission_files.push((submission.full_path(), username, Some(submission.id)));
             }
 
-            let base_files = match assignment_file::Model::get_base_files(app_state.db(), assignment_id).await {
-                Ok(files) => files.into_iter().map(|f| f.full_path()).collect::<Vec<_>>(),
-                Err(_) => vec![],
-            };
+            let base_files =
+                match assignment_file::Model::get_base_files(app_state.db(), assignment_id).await {
+                    Ok(files) => files.into_iter().map(|f| f.full_path()).collect::<Vec<_>>(),
+                    Err(_) => vec![],
+                };
 
             let moss_user_id =
                 std::env::var("MOSS_USER_ID").unwrap_or_else(|_| "YOUR_MOSS_USER_ID".to_string());
             let moss_service = MossService::new(&moss_user_id);
 
             // 🔁 Use language from config, not from request payload
-            match moss_service.run(base_files, submission_files, moss_language).await {
+            match moss_service
+                .run(base_files, submission_files, moss_language)
+                .await
+            {
                 Ok(report_url) => {
                     // 1) Persist a tiny text file (unchanged)
                     let report_dir = assignment_submission::Model::storage_root()
@@ -315,7 +333,11 @@ pub async fn run_moss_check(
                     }
 
                     let report_path = report_dir.join("reports.txt");
-                    let content = format!("Report URL: {}\nDate: {}", report_url, Utc::now().to_rfc3339());
+                    let content = format!(
+                        "Report URL: {}\nDate: {}",
+                        report_url,
+                        Utc::now().to_rfc3339()
+                    );
 
                     if let Err(e) = std::fs::write(&report_path, content) {
                         return (
@@ -354,7 +376,8 @@ pub async fn run_moss_check(
                     let mut skipped_count = 0usize;
 
                     for r in parsed.reports {
-                        let (Some(sub_a), Some(sub_b)) = (r.submission_id_a, r.submission_id_b) else {
+                        let (Some(sub_a), Some(sub_b)) = (r.submission_id_a, r.submission_id_b)
+                        else {
                             skipped_count += 1;
                             continue;
                         };
@@ -380,11 +403,8 @@ pub async fn run_moss_check(
                         );
 
                         // Convert Option<f64> -> f32 and clamp to 0..=100
-                        let similarity: f32 = r
-                            .total_percent
-                            .unwrap_or(0.0)
-                            .max(0.0)
-                            .min(100.0) as f32;
+                        let similarity: f32 =
+                            r.total_percent.unwrap_or(0.0).max(0.0).min(100.0) as f32;
 
                         match plagiarism_case::Model::create_case(
                             app_state.db(),
@@ -420,19 +440,23 @@ pub async fn run_moss_check(
                 }
                 Err(e) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error(format!("Failed to run MOSS check: {}", e))),
+                    Json(ApiResponse::<()>::error(format!(
+                        "Failed to run MOSS check: {}",
+                        e
+                    ))),
                 )
                     .into_response(),
             }
         }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error("Failed to retrieve submissions".to_string())),
+            Json(ApiResponse::<()>::error(
+                "Failed to retrieve submissions".to_string(),
+            )),
         )
             .into_response(),
     }
 }
-
 
 fn generate_description(
     user_a: &str,
@@ -440,7 +464,7 @@ fn generate_description(
     sub_a: i64,
     sub_b: i64,
     total_lines: i64,
-    total_percent: Option<f64>
+    total_percent: Option<f64>,
 ) -> String {
     let percent = total_percent.unwrap_or(0.0);
 

@@ -627,7 +627,7 @@ task1:
     "deliminator": "&-=-&"
   },
   "project": {
-    "language": "cpp"
+    "language": "java"
   },
   "output": {
     "stdout": true,
@@ -644,6 +644,190 @@ task1:
                 FileType::Makefile,
                 "makefile.zip",
                 create_plag_makefile_zip(),
+            ),
+            (
+                FileType::Config,
+                "config.json",
+                config_json.as_bytes().to_vec(),
+            ),
+        ];
+
+        for (file_type, filename, content) in zipped_files {
+            let _ = Model::save_file(
+                db,
+                plag_assignment,
+                plag_module,
+                file_type,
+                filename,
+                &content,
+            )
+            .await;
+        }
+
+        //GATLAM
+        //Plagerism Assignment
+        let plag_module: i64 = 10003;
+        let plag_assignment: i64 = 10004;
+
+        fn create_interpreter_main_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let helper_one = r#"
+//Nothing
+"#;
+                zip.start_file("Main.java", options).unwrap();
+                zip.write_all(helper_one.as_bytes()).unwrap();
+
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        fn create_interpreter_memo_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let helper_one = r#"
+public class StudentSolution {
+private int helperMultiply1(int a,int b){return a*b + 9;}
+
+public int fibonacci_U1(int n) {
+int a=0,b=1;
+// U1 tweak
+for(int i=2;i<=n;i++){int tmp=b;b=a+b;a=tmp;}
+return b;
+}
+
+public int factorial_U1(int n) {
+int f = 1;
+for(int i=1;i<=n;i++) f*=i;
+return f;
+}
+
+private String helperComment1(){return "Extra comment TXgZpkUF";}
+
+public int sumArray_U1(int[] arr) {
+int sum = 0;
+for(int n: arr) sum += n;
+// U1 tweak
+return sum;
+}
+
+
+public String gradeStudent(int score){
+    switch(score/10){
+        case 10: case 9: return "A";
+        case 8: return "B";
+        case 7: return "C";
+        default: return "F";
+    }
+}
+
+public String reverseString_U1(String s) {
+    String rev="";
+    for(int i=s.length()-1;i>=0;i--)
+        rev+=s.charAt(i);
+    return rev;
+}
+}
+"#;
+                zip.start_file("StudentSolution.java", options).unwrap();
+                zip.write_all(helper_one.as_bytes()).unwrap();
+
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        fn create_interpreter_makefile_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let makefile_content = r#"
+task1:
+	javac -d /output Main.java StudentSolution.java && java -cp /output Main task1
+"#;
+
+                zip.start_file("Makefile", options).unwrap();
+                zip.write_all(makefile_content.as_bytes()).unwrap();
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        // New config file content
+        let config_json = r#"
+{
+  "execution": {
+    "max_cpus": 2,
+    "max_memory": 8589934592,
+    "max_processes": 256,
+    "max_uncompressed_size": 100000000,
+    "timeout_secs": 10
+  },
+  "gatlam": {
+    "crossover_probability": 0.9,
+    "crossover_type": "onepoint",
+    "genes": [
+      {
+        "max_value": 5,
+        "min_value": -5
+      },
+      {
+        "max_value": 9,
+        "min_value": -4
+      }
+    ],
+    "max_parallel_chromosomes": 4,
+    "mutation_probability": 0.01,
+    "mutation_type": "bitflip",
+    "number_of_generations": 5,
+    "omega1": 0.5,
+    "omega2": 0.3,
+    "omega3": 0.2,
+    "population_size": 1,
+    "reproduction_probability": 0.8,
+    "selection_size": 20,
+    "task_spec": {
+      "forbidden_outputs": [],
+      "max_runtime_ms": null,
+      "valid_return_codes": [
+        0
+      ]
+    },
+    "verbose": false
+  },
+  "marking": {
+    "deliminator": "&-=-&",
+    "feedback_scheme": "auto",
+    "marking_scheme": "exact"
+  },
+  "output": {
+    "retcode": true,
+    "stderr": true,
+    "stdout": true
+  },
+  "project": {
+    "language": "java",
+    "submission_mode": "gatlam"
+  }
+}
+"#;
+
+        let zipped_files = vec![
+            (FileType::Main, "main.zip", create_interpreter_main_zip()),
+            (FileType::Memo, "memo.zip", create_interpreter_memo_zip()),
+            (
+                FileType::Makefile,
+                "makefile.zip",
+                create_interpreter_makefile_zip(),
             ),
             (
                 FileType::Config,

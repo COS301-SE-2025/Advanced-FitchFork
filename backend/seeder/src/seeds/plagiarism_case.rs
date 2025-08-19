@@ -54,7 +54,7 @@ impl Seeder for PlagiarismCaseSeeder {
         let now = Utc::now();
 
         for (assignment_id, pair) in selected_pairs {
-            if assignment_id != 10003 {
+            if assignment_id != 10003 && assignment_id != 10004 {
                 let description = format!(
                     "Possible plagiarism detected between submission {} and {}",
                     pair[0], pair[1]
