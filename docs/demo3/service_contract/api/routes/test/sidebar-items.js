@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["delete_user","get_user","test_routes","upsert_user"],"struct":["TestUserResponse","UpsertUserRequest"]};

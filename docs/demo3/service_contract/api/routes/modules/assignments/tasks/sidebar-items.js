@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["tasks_routes"],"mod":["common","delete","get","post","put"]};

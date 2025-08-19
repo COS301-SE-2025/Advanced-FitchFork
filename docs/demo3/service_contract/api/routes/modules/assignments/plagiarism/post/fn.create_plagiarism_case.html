@@ -1,0 +1,67 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="POST /api/modules/{module_id}/assignments/{assignment_id}/plagiarism"><title>create_plagiarism_case in api::routes::modules::assignments::plagiarism::post - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../../" data-static-root-path="../../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">create_<wbr>plagiarism_<wbr>case</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#path-parameters" title="Path Parameters">Path Parameters</a></li><li><a href="#request-body" title="Request Body">Request Body</a></li><li><a href="#returns" title="Returns">Returns</a></li><li><a href="#example-request" title="Example Request">Example Request</a></li><li><a href="#example-response-201-created" title="Example Response (201 Created)">Example Response (201 Created)</a></li><li><a href="#example-error-responses" title="Example Error Responses">Example Error Responses</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>assignments::<wbr>plagiarism::<wbr>post</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../../index.html">api</a>::<wbr><a href="../../../../index.html">routes</a>::<wbr><a href="../../../index.html">modules</a>::<wbr><a href="../../index.html">assignments</a>::<wbr><a href="../index.html">plagiarism</a>::<wbr><a href="index.html">post</a></div><h1>Function <span class="fn">create_plagiarism_case</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../../src/api/routes/modules/assignments/plagiarism/post.rs.html#125-211">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn create_plagiarism_case(
+    __arg0: <a class="struct" href="../../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;(<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>, <a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>)&gt;,
+    __arg2: <a class="struct" href="../../../../../../axum/json/struct.Json.html" title="struct axum::json::Json">Json</a>&lt;<a class="struct" href="struct.CreatePlagiarismCasePayload.html" title="struct api::routes::modules::assignments::plagiarism::post::CreatePlagiarismCasePayload">CreatePlagiarismCasePayload</a>&gt;,
+) -&gt; impl <a class="trait" href="../../../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>POST /api/modules/{module_id}/assignments/{assignment_id}/plagiarism</p>
+<p>Creates a new plagiarism case between two submissions in a specific assignment.
+Accessible only to lecturers and assistant lecturers assigned to the module.</p>
+<h2 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path Parameters</h2>
+<ul>
+<li><code>module_id</code>: The ID of the parent module</li>
+<li><code>assignment_id</code>: The ID of the assignment containing the submissions</li>
+</ul>
+<h2 id="request-body"><a class="doc-anchor" href="#request-body">§</a>Request Body</h2>
+<p>Requires a JSON payload with the following fields:</p>
+<ul>
+<li><code>submission_id_1</code> (number): First submission ID (must differ from second)</li>
+<li><code>submission_id_2</code> (number): Second submission ID (must differ from first)</li>
+<li><code>description</code> (string): Explanation of the plagiarism case</li>
+<li><code>similarity</code> (number, required): Float <strong>percentage</strong> in the range <strong>0.0–100.0</strong> (inclusive)</li>
+</ul>
+<h2 id="returns"><a class="doc-anchor" href="#returns">§</a>Returns</h2>
+<ul>
+<li><code>201 Created</code> with the newly created plagiarism case on success</li>
+<li><code>400 BAD REQUEST</code> for invalid payload (same submissions, missing/invalid similarity, bad range, etc.)</li>
+<li><code>403 FORBIDDEN</code> if user lacks required permissions</li>
+<li><code>500 INTERNAL SERVER ERROR</code> for database errors or creation failures</li>
+</ul>
+<h2 id="example-request"><a class="doc-anchor" href="#example-request">§</a>Example Request</h2><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;submission_id_1&quot;: 42,
+  &quot;submission_id_2&quot;: 51,
+  &quot;description&quot;: &quot;Similarity in logic and structure between both files.&quot;,
+  &quot;similarity&quot;: 72.5
+}</code></pre></div><h2 id="example-response-201-created"><a class="doc-anchor" href="#example-response-201-created">§</a>Example Response (201 Created)</h2><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Plagiarism case created successfully&quot;,
+  &quot;data&quot;: {
+    &quot;id&quot;: 17,
+    &quot;assignment_id&quot;: 3,
+    &quot;submission_id_1&quot;: 42,
+    &quot;submission_id_2&quot;: 51,
+    &quot;description&quot;: &quot;Similarity in logic and structure between both files.&quot;,
+    &quot;status&quot;: &quot;review&quot;,
+    &quot;similarity&quot;: 72.5,
+    &quot;created_at&quot;: &quot;2024-05-20T14:30:00Z&quot;,
+    &quot;updated_at&quot;: &quot;2024-05-20T14:30:00Z&quot;
+  }
+}</code></pre></div><h2 id="example-error-responses"><a class="doc-anchor" href="#example-error-responses">§</a>Example Error Responses</h2>
+<ul>
+<li><code>400 Bad Request</code> (same submission IDs)</li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Submissions cannot be the same&quot; }</code></pre></div>
+<ul>
+<li><code>400 Bad Request</code> (submission not found)</li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;One or both submissions do not exist or belong to a different assignment&quot; }</code></pre></div>
+<ul>
+<li><code>400 Bad Request</code> (similarity out of range)</li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Similarity must be between 0.0 and 100.0&quot; }</code></pre></div>
+<ul>
+<li><code>403 Forbidden</code></li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Forbidden: Insufficient permissions&quot; }</code></pre></div>
+<ul>
+<li><code>500 Internal Server Error</code></li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Failed to create plagiarism case&quot; }</code></pre></div></div></details></section></div></main></body></html>

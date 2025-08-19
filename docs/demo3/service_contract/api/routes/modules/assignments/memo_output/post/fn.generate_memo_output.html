@@ -1,0 +1,73 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="POST /api/modules/{module_id}/assignments/{assignment_id}/memo_output/generate"><title>generate_memo_output in api::routes::modules::assignments::memo_output::post - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../../" data-static-root-path="../../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">generate_<wbr>memo_<wbr>output</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#path-parameters" title="Path Parameters">Path Parameters</a></li><li><a href="#example-request" title="Example Request">Example Request</a></li><li><a href="#success-response-202-accepted" title="Success Response (202 Accepted)">Success Response (202 Accepted)</a></li><li><a href="#error-responses" title="Error Responses">Error Responses</a></li><li><a href="#directory-requirements" title="Directory Requirements">Directory Requirements</a></li><li><a href="#background-processing" title="Background Processing">Background Processing</a></li><li><a href="#notes" title="Notes">Notes</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>assignments::<wbr>memo_<wbr>output::<wbr>post</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../../index.html">api</a>::<wbr><a href="../../../../index.html">routes</a>::<wbr><a href="../../../index.html">modules</a>::<wbr><a href="../../index.html">assignments</a>::<wbr><a href="../index.html">memo_output</a>::<wbr><a href="index.html">post</a></div><h1>Function <span class="fn">generate_memo_output</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../../src/api/routes/modules/assignments/memo_output/post.rs.html#97-172">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn generate_memo_output(
+    __arg0: <a class="struct" href="../../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;(<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>, <a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>)&gt;,
+) -&gt; (<a class="struct" href="../../../../../../http/status/struct.StatusCode.html" title="struct http::status::StatusCode">StatusCode</a>, <a class="struct" href="../../../../../../axum/json/struct.Json.html" title="struct axum::json::Json">Json</a>&lt;<a class="struct" href="../../../../../response/struct.ApiResponse.html" title="struct api::response::ApiResponse">ApiResponse</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.unit.html">()</a>&gt;&gt;)</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>POST /api/modules/{module_id}/assignments/{assignment_id}/memo_output/generate</p>
+<p>Start asynchronous generation of memo outputs for all tasks in the specified assignment. Accessible
+to users with Lecturer or Admin roles assigned to the module.</p>
+<p>This endpoint validates the presence of required directories and starts a background task to
+generate memo outputs for all tasks in the assignment. The memo outputs are used by the grading
+system to evaluate student submissions against expected results.</p>
+<h4 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path Parameters</h4>
+<ul>
+<li><code>module_id</code> (i64): The ID of the module containing the assignment</li>
+<li><code>assignment_id</code> (i64): The ID of the assignment to generate memo outputs for</li>
+</ul>
+<h4 id="example-request"><a class="doc-anchor" href="#example-request">§</a>Example Request</h4><div class="example-wrap"><pre class="language-bash"><code>curl -X POST http://localhost:3000/api/modules/1/assignments/2/memo_output/generate \
+  -H &quot;Authorization: Bearer &lt;token&gt;&quot;</code></pre></div><h4 id="success-response-202-accepted"><a class="doc-anchor" href="#success-response-202-accepted">§</a>Success Response (202 Accepted)</h4><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Task started&quot;,
+  &quot;data&quot;: null
+}</code></pre></div><h4 id="error-responses"><a class="doc-anchor" href="#error-responses">§</a>Error Responses</h4>
+<p><strong>422 Unprocessable Entity</strong> - Required directories missing or empty</p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Required memo directory is missing or empty&quot;
+}</code></pre></div>
+<p>or</p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Config file not valid&quot;
+}</code></pre></div>
+<p><strong>403 Forbidden</strong> - Insufficient permissions</p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Access denied&quot;
+}</code></pre></div>
+<p><strong>404 Not Found</strong> - Assignment or module not found</p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Assignment or module not found&quot;
+}</code></pre></div><h4 id="directory-requirements"><a class="doc-anchor" href="#directory-requirements">§</a>Directory Requirements</h4>
+<p>The endpoint validates the presence of required directories under:
+<code>ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/</code></p>
+<ul>
+<li><code>memo/</code> directory: Must exist and contain at least one file
+<ul>
+<li>Contains memo files that define expected outputs for each task</li>
+<li>Used as reference for evaluating student submissions</li>
+</ul>
+</li>
+<li><code>config/</code> directory: Must exist and contain at least one file
+<ul>
+<li>Contains configuration files for task execution</li>
+<li>Defines test parameters and evaluation criteria</li>
+</ul>
+</li>
+</ul>
+<h4 id="background-processing"><a class="doc-anchor" href="#background-processing">§</a>Background Processing</h4>
+<ul>
+<li>Memo generation is performed asynchronously in a background task</li>
+<li>The response is returned immediately after validation</li>
+<li>Processing continues even if the client disconnects</li>
+<li>Task completion is logged with success/failure status</li>
+<li>Generated memo outputs are stored in the assignment directory</li>
+</ul>
+<h4 id="notes"><a class="doc-anchor" href="#notes">§</a>Notes</h4>
+<ul>
+<li>This endpoint only starts the generation process; it does not wait for completion</li>
+<li>Memo outputs are essential for the grading system to function properly</li>
+<li>The background task processes all tasks defined in the assignment</li>
+<li>Generation is restricted to users with appropriate module permissions</li>
+<li>Check server logs for detailed progress and error information</li>
+</ul>
+</div></details></section></div></main></body></html>

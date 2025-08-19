@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["bulk_update_assignments","close_assignment","edit_assignment","open_assignment"]};

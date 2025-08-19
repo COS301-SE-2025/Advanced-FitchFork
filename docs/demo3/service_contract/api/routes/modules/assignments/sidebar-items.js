@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["assignment_routes"],"mod":["common","config","delete","files","get","interpreter","mark_allocator","memo_output","plagiarism","post","put","submissions","tasks","tickets"]};

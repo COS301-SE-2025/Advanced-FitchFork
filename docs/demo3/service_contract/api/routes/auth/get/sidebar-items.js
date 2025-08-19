@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_avatar","get_me","get_module_role","has_role_in_module"],"struct":["HasRoleQuery","HasRoleResponse","MeResponse","ModuleRoleQuery","ModuleRoleResponse"]};

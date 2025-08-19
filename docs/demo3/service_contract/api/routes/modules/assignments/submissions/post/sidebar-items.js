@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["remark_submissions","resubmit_submissions","submit_assignment"],"struct":["BulkOperationResponse","FailedOperation","RemarkRequest","RemarkResponse","ResubmitRequest","ResubmitResponse"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["ws_module_routes"],"mod":["assignments"]};

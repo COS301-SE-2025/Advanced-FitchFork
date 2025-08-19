@@ -1,0 +1,41 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="DELETE /api/modules/{module_id}/announcements/{announcement_id}"><title>delete_announcement in api::routes::modules::announcements::delete - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../" data-static-root-path="../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">delete_<wbr>announcement</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#authz--authn" title="AuthZ / AuthN">AuthZ / AuthN</a></li><li><a href="#path-parameters" title="Path Parameters">Path Parameters</a></li><li><a href="#behavior" title="Behavior">Behavior</a></li><li><a href="#example-curl" title="Example cURL">Example cURL</a></li><li><a href="#responses" title="Responses">Responses</a><ul><li><a href="#200-ok--example" title="200 OK — Example">200 OK — Example</a></li><li><a href="#403-forbidden--example" title="403 Forbidden — Example">403 Forbidden — Example</a></li><li><a href="#500-internal-server-error--example" title="500 Internal Server Error — Example">500 Internal Server Error — Example</a></li></ul></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>announcements::<wbr>delete</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../index.html">api</a>::<wbr><a href="../../../index.html">routes</a>::<wbr><a href="../../index.html">modules</a>::<wbr><a href="../index.html">announcements</a>::<wbr><a href="index.html">delete</a></div><h1>Function <span class="fn">delete_announcement</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../src/api/routes/modules/announcements/delete.rs.html#66-86">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn delete_announcement(
+    __arg0: <a class="struct" href="../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;(<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>, <a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>)&gt;,
+) -&gt; impl <a class="trait" href="../../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>DELETE /api/modules/{module_id}/announcements/{announcement_id}</p>
+<p>Deletes a single announcement by ID under the given module.</p>
+<h2 id="authz--authn"><a class="doc-anchor" href="#authz--authn">§</a>AuthZ / AuthN</h2>
+<ul>
+<li>Requires a valid <code>Bearer</code> token (JWT).</li>
+<li>Caller must be <strong>lecturer</strong> or <strong>assistant_lecturer</strong> on the module
+(enforced by <code>require_lecturer_or_assistant_lecturer</code> on this route).</li>
+</ul>
+<h2 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path Parameters</h2>
+<ul>
+<li><code>module_id</code> — ID of the parent module (used for route nesting and auth).</li>
+<li><code>announcement_id</code> — ID of the announcement to delete.</li>
+</ul>
+<h2 id="behavior"><a class="doc-anchor" href="#behavior">§</a>Behavior</h2>
+<ul>
+<li>Deletion is <strong>idempotent</strong>: attempting to delete a non-existent announcement
+will still return <code>200 OK</code> in this implementation (the driver returns
+<code>rows_affected = 0</code>, which we do not currently treat as an error).</li>
+</ul>
+<h2 id="example-curl"><a class="doc-anchor" href="#example-curl">§</a>Example cURL</h2><div class="example-wrap"><pre class="language-bash"><code>curl -X DELETE &quot;https://your.api/api/modules/101/announcements/1234&quot; \
+  -H &quot;Authorization: Bearer &lt;JWT&gt;&quot;</code></pre></div><h2 id="responses"><a class="doc-anchor" href="#responses">§</a>Responses</h2>
+<ul>
+<li><code>200 OK</code> — Always returned on successful DB call, even if the record didn’t exist.</li>
+<li><code>401 UNAUTHORIZED</code> — Missing/invalid token.</li>
+<li><code>403 FORBIDDEN</code> — Authenticated but not lecturer/assistant on this module.</li>
+<li><code>500 INTERNAL SERVER ERROR</code> — Database error.</li>
+</ul>
+<h3 id="200-ok--example"><a class="doc-anchor" href="#200-ok--example">§</a>200 OK — Example</h3><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;data&quot;: null,
+  &quot;message&quot;: &quot;Announcement deleted successfully&quot;
+}</code></pre></div><h3 id="403-forbidden--example"><a class="doc-anchor" href="#403-forbidden--example">§</a>403 Forbidden — Example</h3><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Forbidden&quot;
+}</code></pre></div><h3 id="500-internal-server-error--example"><a class="doc-anchor" href="#500-internal-server-error--example">§</a>500 Internal Server Error — Example</h3><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Failed to delete announcement: &lt;database error details&gt;&quot;
+}</code></pre></div></div></details></section></div></main></body></html>

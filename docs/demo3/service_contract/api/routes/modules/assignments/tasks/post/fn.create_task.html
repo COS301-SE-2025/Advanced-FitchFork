@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="POST /api/modules/{module_id}/assignments/{assignment_id}/tasks"><title>create_task in api::routes::modules::assignments::tasks::post - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../../" data-static-root-path="../../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">create_<wbr>task</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#path-parameters" title="Path Parameters">Path Parameters</a></li><li><a href="#request-body" title="Request Body">Request Body</a></li><li><a href="#request-body-fields" title="Request Body Fields">Request Body Fields</a></li><li><a href="#example-request" title="Example Request">Example Request</a></li><li><a href="#success-response-201-created" title="Success Response (201 Created)">Success Response (201 Created)</a></li><li><a href="#error-responses" title="Error Responses">Error Responses</a></li><li><a href="#validation-rules" title="Validation Rules">Validation Rules</a></li><li><a href="#notes" title="Notes">Notes</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>assignments::<wbr>tasks::<wbr>post</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../../index.html">api</a>::<wbr><a href="../../../../index.html">routes</a>::<wbr><a href="../../../index.html">modules</a>::<wbr><a href="../../index.html">assignments</a>::<wbr><a href="../index.html">tasks</a>::<wbr><a href="index.html">post</a></div><h1>Function <span class="fn">create_task</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../../src/api/routes/modules/assignments/tasks/post.rs.html#137-205">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn create_task(
+    __arg0: <a class="struct" href="../../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;(<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>, <a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>)&gt;,
+    __arg2: <a class="struct" href="../../../../../../axum/json/struct.Json.html" title="struct axum::json::Json">Json</a>&lt;<a class="struct" href="struct.CreateTaskRequest.html" title="struct api::routes::modules::assignments::tasks::post::CreateTaskRequest">CreateTaskRequest</a>&gt;,
+) -&gt; impl <a class="trait" href="../../../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>POST /api/modules/{module_id}/assignments/{assignment_id}/tasks</p>
+<p>Create a new task for a given assignment. Accessible to users with Lecturer or Admin roles
+assigned to the module.</p>
+<p>Each task must have a unique <code>task_number</code> within the assignment. The <code>name</code> field defines a short,
+human-readable title for the task, while the <code>command</code> field defines how the task will be executed
+during evaluation (e.g., test commands, build commands).</p>
+<h4 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path Parameters</h4>
+<ul>
+<li><code>module_id</code> (i64): The ID of the module containing the assignment</li>
+<li><code>assignment_id</code> (i64): The ID of the assignment to add the task to</li>
+</ul>
+<h4 id="request-body"><a class="doc-anchor" href="#request-body">§</a>Request Body</h4><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;task_number&quot;: 1,
+  &quot;name&quot;: &quot;Unit Tests&quot;,
+  &quot;command&quot;: &quot;cargo test --lib&quot;
+}</code></pre></div><h4 id="request-body-fields"><a class="doc-anchor" href="#request-body-fields">§</a>Request Body Fields</h4>
+<ul>
+<li><code>task_number</code> (i64, required): Unique sequential number for the task within the assignment</li>
+<li><code>name</code> (string, required): Short descriptive name for the task (e.g., “Compile”, “Unit Tests”)</li>
+<li><code>command</code> (string, required): Command to execute for this task (e.g., test commands, build scripts)</li>
+</ul>
+<h4 id="example-request"><a class="doc-anchor" href="#example-request">§</a>Example Request</h4><div class="example-wrap"><pre class="language-bash"><code>curl -X POST http://localhost:3000/api/modules/1/assignments/2/tasks \
+  -H &quot;Authorization: Bearer &lt;token&gt;&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#39;{
+    &quot;task_number&quot;: 1,
+    &quot;name&quot;: &quot;Unit Tests&quot;,
+    &quot;command&quot;: &quot;cargo test --lib&quot;
+  }&#39;</code></pre></div><h4 id="success-response-201-created"><a class="doc-anchor" href="#success-response-201-created">§</a>Success Response (201 Created)</h4><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Task created successfully&quot;,
+  &quot;data&quot;: {
+    &quot;id&quot;: 123,
+    &quot;task_number&quot;: 1,
+    &quot;name&quot;: &quot;Unit Tests&quot;,
+    &quot;command&quot;: &quot;cargo test --lib&quot;,
+    &quot;created_at&quot;: &quot;2024-01-01T00:00:00Z&quot;,
+    &quot;updated_at&quot;: &quot;2024-01-01T00:00:00Z&quot;
+  }
+}</code></pre></div><h4 id="error-responses"><a class="doc-anchor" href="#error-responses">§</a>Error Responses</h4>
+<p><strong>400 Bad Request</strong> - Invalid JSON body</p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Invalid JSON body&quot;
+}</code></pre></div>
+<p><strong>403 Forbidden</strong> - Insufficient permissions</p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Access denied&quot;
+}</code></pre></div>
+<p><strong>404 Not Found</strong> - Assignment or module not found</p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Assignment or module not found&quot;
+}</code></pre></div>
+<p><strong>422 Unprocessable Entity</strong> - Validation errors</p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Invalid task_number, name, or command&quot;
+}</code></pre></div>
+<p>or</p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;task_number must be unique&quot;
+}</code></pre></div>
+<p><strong>500 Internal Server Error</strong> - Database or server error</p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Failed to create task&quot;
+}</code></pre></div><h4 id="validation-rules"><a class="doc-anchor" href="#validation-rules">§</a>Validation Rules</h4>
+<ul>
+<li><code>task_number</code> must be greater than 0</li>
+<li><code>name</code> must not be empty or whitespace-only</li>
+<li><code>command</code> must not be empty or whitespace-only</li>
+<li><code>task_number</code> must be unique within the assignment</li>
+<li>Assignment must exist and belong to the specified module</li>
+</ul>
+<h4 id="notes"><a class="doc-anchor" href="#notes">§</a>Notes</h4>
+<ul>
+<li>Tasks are executed in order of their <code>task_number</code> during assignment evaluation</li>
+<li>The <code>command</code> field supports any shell command that can be executed in the evaluation environment</li>
+<li>Task creation is restricted to users with appropriate module permissions</li>
+</ul>
+</div></details></section></div></main></body></html>

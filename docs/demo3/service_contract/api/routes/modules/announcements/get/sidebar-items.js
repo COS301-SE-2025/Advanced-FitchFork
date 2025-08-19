@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_announcement","get_announcements"],"struct":["FilterReq","FilterResponse","MinimalUser","ShowAnnouncementResponse"]};

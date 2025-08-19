@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["change_password","login","register","request_password_reset","reset_password","upload_profile_picture","verify_reset_token"],"struct":["ChangePasswordRequest","LoginRequest","RegisterRequest","RequestPasswordResetRequest","ResetPasswordRequest","UserResponse","VerifyResetTokenRequest","VerifyResetTokenResponse"]};

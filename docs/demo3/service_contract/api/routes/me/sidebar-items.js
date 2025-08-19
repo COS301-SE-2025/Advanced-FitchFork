@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["me_routes"],"mod":["announcements","assignments","events","grades","submissions","tickets"]};

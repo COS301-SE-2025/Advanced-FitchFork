@@ -1,0 +1,69 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="GET /api/me/grades"><title>get_my_grades in api::routes::me::grades - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">get_<wbr>my_<wbr>grades</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#authorization" title="Authorization">Authorization</a></li><li><a href="#query-parameters" title="Query Parameters">Query Parameters</a></li><li><a href="#response-200-ok" title="Response: 200 OK">Response: 200 OK</a></li><li><a href="#error-responses" title="Error Responses">Error Responses</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>me::<wbr>grades</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">api</a>::<wbr><a href="../../index.html">routes</a>::<wbr><a href="../index.html">me</a>::<wbr><a href="index.html">grades</a></div><h1>Function <span class="fn">get_my_grades</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/api/routes/me/grades.rs.html#156-335">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn get_my_grades(
+    __arg0: <a class="struct" href="../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../axum/extension/struct.Extension.html" title="struct axum::extension::Extension">Extension</a>&lt;<a class="struct" href="../../../auth/claims/struct.AuthUser.html" title="struct api::auth::claims::AuthUser">AuthUser</a>&gt;,
+    __arg2: <a class="struct" href="../../../../axum/extract/query/struct.Query.html" title="struct axum::extract::query::Query">Query</a>&lt;<a class="struct" href="struct.GetGradesQuery.html" title="struct api::routes::me::grades::GetGradesQuery">GetGradesQuery</a>&gt;,
+) -&gt; impl <a class="trait" href="../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>GET /api/me/grades</p>
+<p>Retrieves a paginated list of grades for the authenticated user.
+The behavior of this endpoint changes based on the <code>role</code> query parameter,
+allowing users to view grades based on their permissions.</p>
+<h4 id="authorization"><a class="doc-anchor" href="#authorization">§</a>Authorization</h4>
+<p>Requires a valid bearer token.</p>
+<h4 id="query-parameters"><a class="doc-anchor" href="#query-parameters">§</a>Query Parameters</h4>
+<ul>
+<li><code>page</code> (optional, u64, min: 1): The page number for pagination. Defaults to 1.</li>
+<li><code>per_page</code> (optional, u64, min: 1, max: 100): The number of items per page. Defaults to 20.</li>
+<li><code>query</code> (optional, string): A search term to filter grades by assignment title, student username, or module code.</li>
+<li><code>role</code> (optional, string): The role to filter by. Can be <code>Student</code>, <code>Tutor</code>, <code>AssistantLecturer</code>, or <code>Lecturer</code>. Defaults to <code>Student</code>.
+<ul>
+<li>If <code>Student</code>, returns only the authenticated user’s grades.</li>
+<li>If <code>Lecturer</code>, <code>Tutor</code>, etc., returns grades for all students in modules where the user holds that role.</li>
+</ul>
+</li>
+<li><code>year</code> (optional, i32): Filters grades by the module’s academic year.</li>
+<li><code>sort</code> (optional, string): A comma-separated list of fields to sort by. Prefix with <code>-</code> for descending order.
+<ul>
+<li>Allowed fields: <code>score</code>, <code>created_at</code>.</li>
+</ul>
+</li>
+</ul>
+<h4 id="response-200-ok"><a class="doc-anchor" href="#response-200-ok">§</a>Response: 200 OK</h4>
+<p>Returns a paginated list of grades.</p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Grades retrieved successfully&quot;,
+  &quot;data&quot;: {
+    &quot;grades&quot;: [
+      {
+        &quot;id&quot;: 1,
+        &quot;score&quot;: {
+          &quot;earned&quot;: 85,
+          &quot;total&quot;: 100
+        },
+        &quot;percentage&quot;: 85.0,
+        &quot;created_at&quot;: &quot;2025-08-17T10:00:00&quot;,
+        &quot;updated_at&quot;: &quot;2025-08-17T11:30:00&quot;,
+        &quot;module&quot;: {
+          &quot;id&quot;: 101,
+          &quot;code&quot;: &quot;CS101&quot;
+        },
+        &quot;assignment&quot;: {
+          &quot;id&quot;: 201,
+          &quot;title&quot;: &quot;Introduction to Programming&quot;
+        },
+        &quot;user&quot;: {
+          &quot;id&quot;: 42,
+          &quot;username&quot;: &quot;student_user&quot;
+        }
+      }
+    ],
+    &quot;page&quot;: 1,
+    &quot;per_page&quot;: 20,
+    &quot;total&quot;: 1
+  }
+}</code></pre></div><h4 id="error-responses"><a class="doc-anchor" href="#error-responses">§</a>Error Responses</h4>
+<ul>
+<li><code>400 Bad Request</code>: Invalid query parameters (e.g., <code>page</code> out of range).</li>
+<li><code>403 Forbidden</code>: Missing or invalid authentication token.</li>
+<li><code>500 Internal Server Error</code>: Database or other internal errors.</li>
+</ul>
+</div></details></section></div></main></body></html>

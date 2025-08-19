@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["bulk_edit_modules","edit_module"],"struct":["BulkUpdateRequest","BulkUpdateResult","FailedUpdate"]};

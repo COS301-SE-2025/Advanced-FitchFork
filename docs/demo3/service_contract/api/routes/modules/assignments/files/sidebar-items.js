@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["files_routes"],"mod":["delete","get","post"]};

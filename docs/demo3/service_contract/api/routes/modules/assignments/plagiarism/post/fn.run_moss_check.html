@@ -1,0 +1,46 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="POST /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss"><title>run_moss_check in api::routes::modules::assignments::plagiarism::post - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../../" data-static-root-path="../../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">run_<wbr>moss_<wbr>check</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#path-parameters" title="Path Parameters">Path Parameters</a></li><li><a href="#request-body" title="Request Body">Request Body</a></li><li><a href="#returns" title="Returns">Returns</a></li><li><a href="#notes" title="Notes">Notes</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>assignments::<wbr>plagiarism::<wbr>post</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../../index.html">api</a>::<wbr><a href="../../../../index.html">routes</a>::<wbr><a href="../../../index.html">modules</a>::<wbr><a href="../../index.html">assignments</a>::<wbr><a href="../index.html">plagiarism</a>::<wbr><a href="index.html">post</a></div><h1>Function <span class="fn">run_moss_check</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../../src/api/routes/modules/assignments/plagiarism/post.rs.html#265-459">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn run_moss_check(
+    __arg0: <a class="struct" href="../../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;(<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>, <a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>)&gt;,
+) -&gt; impl <a class="trait" href="../../../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>POST /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss</p>
+<p>Runs a MOSS check on the <strong>latest submission for every student</strong> on the assignment,
+then parses the report and <strong>auto-creates plagiarism cases</strong> for each matched pair.
+Each created case is inserted with:</p>
+<ul>
+<li><code>status = "review"</code></li>
+<li><code>similarity</code> as a <strong>float percentage (0.0–100.0)</strong> taken from MOSS’ <code>total_percent</code></li>
+<li>a generated, human-readable <code>description</code></li>
+</ul>
+<p>Accessible only to lecturers and assistant lecturers assigned to the module.</p>
+<h2 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path Parameters</h2>
+<ul>
+<li><code>module_id</code>: The ID of the parent module</li>
+<li><code>assignment_id</code>: The ID of the assignment containing the submissions</li>
+</ul>
+<h2 id="request-body"><a class="doc-anchor" href="#request-body">§</a>Request Body</h2>
+<p><strong>None.</strong> The programming language is read from the assignment configuration
+(<code>project.language</code>) persisted for this assignment.</p>
+<h2 id="returns"><a class="doc-anchor" href="#returns">§</a>Returns</h2>
+<ul>
+<li><code>200 OK</code> on success with details about the MOSS run and case creation:<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;MOSS check completed successfully; cases created from report&quot;,
+  &quot;data&quot;: {
+    &quot;report_url&quot;: &quot;http://moss.stanford.edu/results/123456789&quot;,
+    &quot;cases_created&quot;: 7,
+    &quot;cases_skipped&quot;: 2,
+    &quot;title&quot;: &quot;moss results for ... (optional)&quot;
+  }
+}</code></pre></div></li>
+<li><code>500 INTERNAL SERVER ERROR</code> for MOSS server errors, parsing failures,
+or other unexpected failures. The response body contains an error message.</li>
+</ul>
+<h2 id="notes"><a class="doc-anchor" href="#notes">§</a>Notes</h2>
+<ul>
+<li>Language is taken from the saved assignment config (<code>project.language</code>).</li>
+<li>Base (starter) files attached to the assignment are included in the comparison if present.</li>
+<li>The selected submissions are the most recent (highest <code>attempt</code>) per user.</li>
+<li>Case creation is <strong>deduplicated</strong> per pair of submissions (order-independent).</li>
+<li><code>similarity</code> is stored as an <code>f32</code> percent, clamped to <strong>0.0–100.0</strong>.</li>
+<li>Newly created cases start in <code>"review"</code> status and can be managed via the plagiarism cases API/UI.</li>
+</ul>
+</div></details></section></div></main></body></html>

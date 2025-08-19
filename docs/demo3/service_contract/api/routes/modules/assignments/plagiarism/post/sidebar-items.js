@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_plagiarism_case","run_moss_check"],"struct":["CreatePlagiarismCasePayload","MossRequest","PlagiarismCaseResponse"]};

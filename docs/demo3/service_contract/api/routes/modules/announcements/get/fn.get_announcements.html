@@ -1,0 +1,81 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="GET /api/modules/{module_id}/announcements"><title>get_announcements in api::routes::modules::announcements::get - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../" data-static-root-path="../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">get_<wbr>announcements</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#path-parameters" title="Path Parameters">Path Parameters</a></li><li><a href="#query-parameters" title="Query Parameters">Query Parameters</a></li><li><a href="#sorting-behavior" title="Sorting Behavior">Sorting Behavior</a></li><li><a href="#returns" title="Returns">Returns</a></li><li><a href="#example-response" title="Example Response">Example Response</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>announcements::<wbr>get</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../index.html">api</a>::<wbr><a href="../../../index.html">routes</a>::<wbr><a href="../../index.html">modules</a>::<wbr><a href="../index.html">announcements</a>::<wbr><a href="index.html">get</a></div><h1>Function <span class="fn">get_announcements</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../src/api/routes/modules/announcements/get.rs.html#147-285">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn get_announcements(
+    __arg0: <a class="struct" href="../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg2: <a class="struct" href="../../../../../axum/extract/query/struct.Query.html" title="struct axum::extract::query::Query">Query</a>&lt;<a class="struct" href="struct.FilterReq.html" title="struct api::routes::modules::announcements::get::FilterReq">FilterReq</a>&gt;,
+) -&gt; impl <a class="trait" href="../../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>GET /api/modules/{module_id}/announcements</p>
+<p>Retrieves a paginated and optionally filtered list of announcements for a specific module.
+By default, results are sorted with pinned announcements first (<code>pinned DESC</code>)<br />
+and then by most recent creation date (<code>created_at DESC</code>).<br />
+This ensures pinned announcements always appear at the top, with the newest first.
+If the user explicitly includes <code>pinned</code> in the <code>sort</code> parameter, the default is overridden.</p>
+<h2 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path Parameters</h2>
+<ul>
+<li><code>module_id</code>: The ID of the module to retrieve announcements for.</li>
+</ul>
+<h2 id="query-parameters"><a class="doc-anchor" href="#query-parameters">§</a>Query Parameters</h2>
+<p>Extracted via the <code>FilterReq</code> struct:</p>
+<ul>
+<li><code>page</code>: (Optional) Page number for pagination. Defaults to 1. Minimum is 1.</li>
+<li><code>per_page</code>: (Optional) Number of items per page. Defaults to 20. Maximum is 100. Minimum is 1.</li>
+<li><code>query</code>: (Optional) General search string. Matches announcements by <code>title</code> or <code>body</code>.</li>
+<li><code>pinned</code>: (Optional) Filter by pinned status. Accepts <code>true</code> or <code>false</code>.</li>
+<li><code>sort</code>: (Optional) Comma-separated list of fields to sort by.<br />
+Prefix with <code>-</code> for descending order (e.g., <code>-created_at</code>).<br />
+Allowed fields: <code>"created_at"</code>, <code>"updated_at"</code>, <code>"title"</code>, <code>"pinned"</code>.</li>
+</ul>
+<h2 id="sorting-behavior"><a class="doc-anchor" href="#sorting-behavior">§</a>Sorting Behavior</h2>
+<ul>
+<li><strong>Default</strong>: If <code>sort</code> is not provided or does not include <code>pinned</code>,<br />
+results are automatically sorted by:
+<ol>
+<li><code>pinned DESC</code> (pinned items first)</li>
+<li><code>created_at DESC</code> (newest items first)</li>
+</ol>
+</li>
+<li>If <code>pinned</code> is explicitly included in <code>sort</code>, that order is respected and overrides the default.</li>
+</ul>
+<h2 id="returns"><a class="doc-anchor" href="#returns">§</a>Returns</h2>
+<p>Returns an HTTP response in the standardized API format:</p>
+<ul>
+<li><code>200 OK</code>: Successfully retrieved the paginated list of announcements.</li>
+<li><code>400 BAD REQUEST</code>: Invalid sort field or invalid <code>pinned</code> value.</li>
+<li><code>500 INTERNAL SERVER ERROR</code>: Database query failed.</li>
+</ul>
+<p>Response contains:</p>
+<ul>
+<li><code>announcements</code>: Array of announcement objects.</li>
+<li>Pagination metadata: <code>page</code>, <code>per_page</code>, <code>total</code>.</li>
+</ul>
+<h2 id="example-response"><a class="doc-anchor" href="#example-response">§</a>Example Response</h2>
+<p><strong>200 OK</strong></p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;data&quot;: {
+    &quot;announcements&quot;: [
+      {
+        &quot;id&quot;: 1,
+        &quot;module_id&quot;: 101,
+        &quot;user_id&quot;: 5,
+        &quot;title&quot;: &quot;Important update&quot;,
+        &quot;body&quot;: &quot;Please note the following changes...&quot;,
+        &quot;pinned&quot;: true,
+        &quot;created_at&quot;: &quot;2025-08-16T12:00:00Z&quot;,
+        &quot;updated_at&quot;: &quot;2025-08-16T12:00:00Z&quot;
+      }
+    ],
+    &quot;page&quot;: 1,
+    &quot;per_page&quot;: 20,
+    &quot;total&quot;: 45
+  },
+  &quot;message&quot;: &quot;Announcements retrieved successfully&quot;
+}</code></pre></div>
+<p><strong>400 BAD REQUEST</strong></p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Invalid field used for sorting&quot;
+}</code></pre></div>
+<p><strong>500 INTERNAL SERVER ERROR</strong></p>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Failed to retrieve announcements&quot;
+}</code></pre></div></div></details></section></div></main></body></html>

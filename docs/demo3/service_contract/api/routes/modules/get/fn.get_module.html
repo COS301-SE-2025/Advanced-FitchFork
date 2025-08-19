@@ -1,0 +1,80 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="GET /api/modules/{module_id}"><title>get_module in api::routes::modules::get - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">get_<wbr>module</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#arguments" title="Arguments">Arguments</a></li><li><a href="#returns" title="Returns">Returns</a></li><li><a href="#example-response" title="Example Response">Example Response</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>get</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">api</a>::<wbr><a href="../../index.html">routes</a>::<wbr><a href="../index.html">modules</a>::<wbr><a href="index.html">get</a></div><h1>Function <span class="fn">get_module</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/api/routes/modules/get.rs.html#146-196">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn get_module(__arg0: <a class="struct" href="../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;, __arg1: <a class="struct" href="../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>&gt;) -&gt; <a class="type" href="../../../../axum_core/response/type.Response.html" title="type axum_core::response::Response">Response</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>GET /api/modules/{module_id}</p>
+<p>Retrieves detailed information about a specific module, including assigned lecturers, tutors, and students.</p>
+<h2 id="arguments"><a class="doc-anchor" href="#arguments">§</a>Arguments</h2>
+<p>The argument is extracted automatically from the HTTP route:</p>
+<ul>
+<li>Path parameter <code>module_id</code>: The ID of the module to retrieve.</li>
+</ul>
+<h2 id="returns"><a class="doc-anchor" href="#returns">§</a>Returns</h2>
+<p>Returns an HTTP response indicating the result:</p>
+<ul>
+<li><code>200 OK</code> with the full module details (including associated lecturers, tutors, and students) if successful.</li>
+<li><code>404 NOT FOUND</code> if no module is found with the given <code>module_id</code>.</li>
+<li><code>500 INTERNAL SERVER ERROR</code> if a database error occurs or if related personnel data (lecturers, tutors, or students) fails to load.</li>
+</ul>
+<p>The response body is a JSON object using a standardized API response format, containing:</p>
+<ul>
+<li>Module information.</li>
+<li>Lists of users for each role (lecturers, tutors, students), each mapped to <code>UserResponse</code>.</li>
+</ul>
+<h2 id="example-response"><a class="doc-anchor" href="#example-response">§</a>Example Response</h2>
+<ul>
+<li><code>200 OK</code></li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;data&quot;: {
+    &quot;id&quot;: 1,
+    &quot;code&quot;: &quot;CS101&quot;,
+    &quot;year&quot;: 2024,
+    &quot;description&quot;: &quot;Introduction to Computer Science&quot;,
+    &quot;credits&quot;: 15,
+    &quot;created_at&quot;: &quot;2024-01-15T10:00:00Z&quot;,
+    &quot;updated_at&quot;: &quot;2024-01-15T10:00:00Z&quot;,
+    &quot;lecturers&quot;: [
+      {
+        &quot;id&quot;: 1,
+        &quot;username&quot;: &quot;lecturer1&quot;,
+        &quot;email&quot;: &quot;lecturer1@example.com&quot;,
+        &quot;admin&quot;: false,
+        &quot;created_at&quot;: &quot;2024-01-01T00:00:00Z&quot;,
+        &quot;updated_at&quot;: &quot;2024-01-01T00:00:00Z&quot;
+      }
+    ],
+    &quot;tutors&quot;: [
+      {
+        &quot;id&quot;: 2,
+        &quot;username&quot;: &quot;tutor1&quot;,
+        &quot;email&quot;: &quot;tutor1@example.com&quot;,
+        &quot;admin&quot;: false,
+        &quot;created_at&quot;: &quot;2024-01-01T00:00:00Z&quot;,
+        &quot;updated_at&quot;: &quot;2024-01-01T00:00:00Z&quot;
+      }
+    ],
+    &quot;students&quot;: [
+      {
+        &quot;id&quot;: 3,
+        &quot;username&quot;: &quot;student1&quot;,
+        &quot;email&quot;: &quot;student1@example.com&quot;,
+        &quot;admin&quot;: false,
+        &quot;created_at&quot;: &quot;2024-01-01T00:00:00Z&quot;,
+        &quot;updated_at&quot;: &quot;2024-01-01T00:00:00Z&quot;
+      }
+    ]
+  },
+  &quot;message&quot;: &quot;Module retrieved successfully&quot;
+}</code></pre></div>
+<ul>
+<li><code>404 Not Found</code></li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Module not found&quot;
+}</code></pre></div>
+<ul>
+<li><code>500 Internal Server Error</code></li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Database error retrieving module&quot;
+}</code></pre></div></div></details></section></div></main></body></html>

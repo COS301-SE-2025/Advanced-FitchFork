@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["CodeComplexity","CodeComplexitySummary","ListSubmissionsQuery","Mark","MarkSummary","SubmissionDetailResponse","SubmissionListItem","SubmissionResponse","SubmissionsListResponse","UserResponse"]};

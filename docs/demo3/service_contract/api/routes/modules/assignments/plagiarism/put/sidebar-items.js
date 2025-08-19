@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["update_plagiarism_case"],"struct":["PlagiarismCaseResponse","UpdatePlagiarismCasePayload"]};

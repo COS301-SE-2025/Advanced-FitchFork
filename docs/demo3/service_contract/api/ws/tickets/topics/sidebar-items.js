@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["ticket_chat_topic"]};

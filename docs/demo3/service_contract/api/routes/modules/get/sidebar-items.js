@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_module","get_modules","get_my_details"],"struct":["FilterReq","FilterResponse","ModuleDetailsResponse","ModuleResponse","MyDetailsResponse"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["announcement_routes"],"mod":["common","delete","get","post","put"]};

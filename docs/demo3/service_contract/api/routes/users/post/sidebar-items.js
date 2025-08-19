@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["bulk_create_users","create_user"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["mark_allocator_routes"],"mod":["get","post","put"]};

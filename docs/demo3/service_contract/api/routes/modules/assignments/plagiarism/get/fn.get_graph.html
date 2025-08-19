@@ -1,0 +1,62 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/graph"><title>get_graph in api::routes::modules::assignments::plagiarism::get - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../../" data-static-root-path="../../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">get_<wbr>graph</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#path-parameters" title="Path Parameters">Path Parameters</a></li><li><a href="#query-parameters" title="Query Parameters">Query Parameters</a></li><li><a href="#semantics" title="Semantics">Semantics</a></li><li><a href="#returns" title="Returns">Returns</a></li><li><a href="#example-request" title="Example Request">Example Request</a></li><li><a href="#example-response-200-ok" title="Example Response (200 OK)">Example Response (200 OK)</a></li><li><a href="#example-response-empty-graph" title="Example Response (Empty Graph)">Example Response (Empty Graph)</a></li><li><a href="#example-response-400-bad-request" title="Example Response (400 Bad Request)">Example Response (400 Bad Request)</a></li><li><a href="#notes" title="Notes">Notes</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>assignments::<wbr>plagiarism::<wbr>get</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../../index.html">api</a>::<wbr><a href="../../../../index.html">routes</a>::<wbr><a href="../../../index.html">modules</a>::<wbr><a href="../../index.html">assignments</a>::<wbr><a href="../index.html">plagiarism</a>::<wbr><a href="index.html">get</a></div><h1>Function <span class="fn">get_graph</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../../src/api/routes/modules/assignments/plagiarism/get.rs.html#504-630">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn get_graph(
+    __arg0: <a class="struct" href="../../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;(<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>, <a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>)&gt;,
+    __arg2: <a class="struct" href="../../../../../../axum/extract/query/struct.Query.html" title="struct axum::extract::query::Query">Query</a>&lt;<a class="struct" href="struct.PlagiarismQuery.html" title="struct api::routes::modules::assignments::plagiarism::get::PlagiarismQuery">PlagiarismQuery</a>&gt;,
+) -&gt; impl <a class="trait" href="../../../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/graph</p>
+<p>Builds a <strong>user-to-user plagiarism graph</strong> for the given assignment. Each edge indicates
+that there is at least one plagiarism case linking submissions from the two users.</p>
+<p>Accessible only to lecturers and assistant lecturers assigned to the module.</p>
+<h2 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path Parameters</h2>
+<ul>
+<li><code>module_id</code>: The ID of the parent module</li>
+<li><code>assignment_id</code>: The ID of the assignment whose plagiarism graph should be built</li>
+</ul>
+<h2 id="query-parameters"><a class="doc-anchor" href="#query-parameters">§</a>Query Parameters</h2>
+<ul>
+<li><code>status</code> (optional): Filter edges by case status. One of:
+<ul>
+<li><code>"review"</code></li>
+<li><code>"flagged"</code></li>
+<li><code>"reviewed"</code></li>
+</ul>
+</li>
+</ul>
+<h2 id="semantics"><a class="doc-anchor" href="#semantics">§</a>Semantics</h2>
+<ul>
+<li>Nodes are <strong>usernames</strong> derived from the submissions involved in cases.</li>
+<li>Each returned <code>Link { source, target }</code> represents a directed edge from <code>source</code> user
+to <code>target</code> user for at least one case. (If multiple cases exist between the same pair,
+multiple identical edges <strong>may</strong> appear; if you prefer deduplication, apply it in your client
+or adjust the endpoint to de-duplicate.)</li>
+<li>Only cases where <strong>both</strong> submissions belong to the specified assignment are considered.</li>
+</ul>
+<h2 id="returns"><a class="doc-anchor" href="#returns">§</a>Returns</h2>
+<ul>
+<li><code>200 OK</code> with a <code>links</code> array (possibly empty) on success</li>
+<li><code>400 BAD REQUEST</code> if <code>status</code> is provided but invalid</li>
+<li><code>500 INTERNAL SERVER ERROR</code> if submissions, users, or cases could not be fetched</li>
+</ul>
+<h2 id="example-request"><a class="doc-anchor" href="#example-request">§</a>Example Request</h2><div class="example-wrap"><pre class="language-http"><code>GET /api/modules/12/assignments/34/plagiarism/graph?status=flagged</code></pre></div><h2 id="example-response-200-ok"><a class="doc-anchor" href="#example-response-200-ok">§</a>Example Response (200 OK)</h2><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Plagiarism graph retrieved successfully&quot;,
+  &quot;data&quot;: {
+    &quot;links&quot;: [
+      { &quot;source&quot;: &quot;u12345678&quot;, &quot;target&quot;: &quot;u87654321&quot; },
+      { &quot;source&quot;: &quot;u13579246&quot;, &quot;target&quot;: &quot;u24681357&quot; }
+    ]
+  }
+}</code></pre></div><h2 id="example-response-empty-graph"><a class="doc-anchor" href="#example-response-empty-graph">§</a>Example Response (Empty Graph)</h2><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Plagiarism graph retrieved successfully&quot;,
+  &quot;data&quot;: { &quot;links&quot;: [] }
+}</code></pre></div><h2 id="example-response-400-bad-request"><a class="doc-anchor" href="#example-response-400-bad-request">§</a>Example Response (400 Bad Request)</h2><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Invalid status parameter&quot;
+}</code></pre></div><h2 id="notes"><a class="doc-anchor" href="#notes">§</a>Notes</h2>
+<ul>
+<li>This endpoint is optimized for <strong>visualization</strong>. If you need case details, use the list
+endpoint (<code>GET /plagiarism</code>) instead.</li>
+<li>Edges are derived from the <strong>current</strong> cases in the database after any filtering.</li>
+<li>Usernames are taken from the submissions’ authors at query time.</li>
+</ul>
+</div></details></section></div></main></body></html>

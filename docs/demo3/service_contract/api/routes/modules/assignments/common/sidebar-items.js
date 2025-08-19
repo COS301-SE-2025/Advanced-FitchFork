@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["AssignmentRequest","AssignmentResponse","BulkDeleteRequest","BulkUpdateRequest","BulkUpdateResult","FailedUpdate","File"]};

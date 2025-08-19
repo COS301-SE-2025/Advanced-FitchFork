@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["patch_plagiarism_flag","patch_plagiarism_review"],"struct":["FlaggedCaseResponse","ReviewedCaseResponse"]};

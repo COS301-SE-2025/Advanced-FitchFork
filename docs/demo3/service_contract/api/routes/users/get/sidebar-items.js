@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_avatar","get_user","get_user_modules","list_users"],"struct":["ListUsersQuery","UserListItem","UsersListResponse"]};

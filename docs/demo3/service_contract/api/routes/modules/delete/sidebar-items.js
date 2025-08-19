@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["bulk_delete_modules","delete_module"],"struct":["BulkDeleteRequest","BulkDeleteResult","FailedDelete"]};

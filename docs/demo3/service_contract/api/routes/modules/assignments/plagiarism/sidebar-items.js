@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["plagiarism_routes"],"mod":["delete","get","patch","post","put"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["EditRoleRequest","ModifyUsersModuleRequest","ModuleRequest","ModuleResponse","PaginatedRoleResponse","RoleQuery","RoleResponse"]};

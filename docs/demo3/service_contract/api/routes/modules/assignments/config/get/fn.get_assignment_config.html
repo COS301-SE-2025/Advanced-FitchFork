@@ -1,0 +1,47 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="GET /api/modules/{module_id}/assignments/{assignment_id}/config"><title>get_assignment_config in api::routes::modules::assignments::config::get - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../../" data-static-root-path="../../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">get_<wbr>assignment_<wbr>config</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#path-parameters" title="Path Parameters">Path Parameters</a></li><li><a href="#example-request" title="Example Request">Example Request</a></li><li><a href="#success-response-200-ok---with-configuration" title="Success Response (200 OK) - With Configuration">Success Response (200 OK) - With Configuration</a></li><li><a href="#success-response-200-ok---no-configuration-file" title="Success Response (200 OK) - No Configuration File">Success Response (200 OK) - No Configuration File</a></li><li><a href="#error-responses" title="Error Responses">Error Responses</a></li><li><a href="#notes" title="Notes">Notes</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>assignments::<wbr>config::<wbr>get</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../../index.html">api</a>::<wbr><a href="../../../../index.html">routes</a>::<wbr><a href="../../../index.html">modules</a>::<wbr><a href="../../index.html">assignments</a>::<wbr><a href="../index.html">config</a>::<wbr><a href="index.html">get</a></div><h1>Function <span class="fn">get_assignment_config</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../../src/api/routes/modules/assignments/config/get.rs.html#71-153">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn get_assignment_config(
+    __arg0: <a class="struct" href="../../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;(<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>, <a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>)&gt;,
+) -&gt; impl <a class="trait" href="../../../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>GET /api/modules/{module_id}/assignments/{assignment_id}/config</p>
+<p>Retrieve the JSON configuration object associated with a specific assignment. Accessible to users
+assigned to the module with appropriate permissions.</p>
+<p>The configuration object is loaded from disk using the <a href="../../../../../../util/execution_config/execution_config/struct.ExecutionConfig.html" title="struct util::execution_config::execution_config::ExecutionConfig"><code>ExecutionConfig</code></a> schema. If no configuration
+file is present on disk, an empty config is returned instead.</p>
+<h4 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path Parameters</h4>
+<ul>
+<li><code>module_id</code> (i64): The ID of the module containing the assignment</li>
+<li><code>assignment_id</code> (i64): The ID of the assignment to retrieve configuration for</li>
+</ul>
+<h4 id="example-request"><a class="doc-anchor" href="#example-request">§</a>Example Request</h4><div class="example-wrap"><pre class="language-bash"><code>curl -X GET http://localhost:3000/api/modules/1/assignments/2/config \
+  -H &quot;Authorization: Bearer &lt;token&gt;&quot;</code></pre></div><h4 id="success-response-200-ok---with-configuration"><a class="doc-anchor" href="#success-response-200-ok---with-configuration">§</a>Success Response (200 OK) - With Configuration</h4><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Assignment configuration retrieved successfully&quot;,
+  &quot;data&quot;: {
+    &quot;execution&quot;: {
+      &quot;timeout_secs&quot;: 10,
+      &quot;max_memory&quot;: 8589934592,
+      &quot;max_cpus&quot;: 2,
+      &quot;max_uncompressed_size&quot;: 100000000,
+      &quot;max_processes&quot;: 256
+    },
+    &quot;marking&quot;: {
+      &quot;marking_scheme&quot;: &quot;exact&quot;,
+      &quot;feedback_scheme&quot;: &quot;auto&quot;,
+      &quot;deliminator&quot;: &quot;&amp;-=-&amp;&quot;
+    }
+  }
+}</code></pre></div><h4 id="success-response-200-ok---no-configuration-file"><a class="doc-anchor" href="#success-response-200-ok---no-configuration-file">§</a>Success Response (200 OK) - No Configuration File</h4><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;No configuration set for this assignment&quot;,
+  &quot;data&quot;: {}
+}</code></pre></div><h4 id="error-responses"><a class="doc-anchor" href="#error-responses">§</a>Error Responses</h4>
+<ul>
+<li><strong>404</strong> – Assignment not found</li>
+<li><strong>500</strong> – Failed to load configuration from disk</li>
+</ul>
+<h4 id="notes"><a class="doc-anchor" href="#notes">§</a>Notes</h4>
+<ul>
+<li>Configurations are stored on disk under <code>ASSIGNMENT_STORAGE_ROOT/module_{id}/assignment_{id}/config/config.json</code></li>
+<li>Config format uses <a href="../../../../../../util/execution_config/execution_config/struct.ExecutionConfig.html" title="struct util::execution_config::execution_config::ExecutionConfig"><code>ExecutionConfig</code></a> as the schema</li>
+<li>This is an example schema and will evolve over time</li>
+</ul>
+</div></details></section></div></main></body></html>

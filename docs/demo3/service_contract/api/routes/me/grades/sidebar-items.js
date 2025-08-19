@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_my_grades"],"struct":["AssignmentInfo","GetGradesQuery","GetGradesResponse","GradeItem","GradeWithRelations","ModuleInfo","Score","UserInfo"]};

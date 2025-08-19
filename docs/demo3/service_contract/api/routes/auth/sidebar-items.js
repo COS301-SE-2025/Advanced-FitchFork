@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["auth_routes"],"mod":["get","post"]};

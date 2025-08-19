@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_my_submissions"],"struct":["AssignmentInfo","GetSubmissionsQuery","GetSubmissionsResponse","ModuleInfo","Score","SubmissionItem","SubmissionWithRelations","UserInfo"]};

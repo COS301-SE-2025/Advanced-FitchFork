@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["ticket_routes"],"mod":["common","delete","get","post","put","ticket_messages"]};

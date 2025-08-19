@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_my_announcements"],"struct":["AnnouncementResponse","FilterReq","FilterResponse","ModuleResponse","UserResponse"]};

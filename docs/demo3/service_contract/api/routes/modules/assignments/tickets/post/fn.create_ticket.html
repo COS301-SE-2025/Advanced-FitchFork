@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Creates a new ticket."><title>create_ticket in api::routes::modules::assignments::tickets::post - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../../" data-static-root-path="../../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">create_<wbr>ticket</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#path-parameters" title="Path parameters">Path parameters</a></li><li><a href="#request-body" title="Request body">Request body</a></li><li><a href="#responses" title="Responses">Responses</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>assignments::<wbr>tickets::<wbr>post</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../../index.html">api</a>::<wbr><a href="../../../../index.html">routes</a>::<wbr><a href="../../../index.html">modules</a>::<wbr><a href="../../index.html">assignments</a>::<wbr><a href="../index.html">tickets</a>::<wbr><a href="index.html">post</a></div><h1>Function <span class="fn">create_ticket</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../../src/api/routes/modules/assignments/tickets/post.rs.html#69-97">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn create_ticket(
+    __arg0: <a class="struct" href="../../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;(<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>, <a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>)&gt;,
+    __arg2: <a class="struct" href="../../../../../../axum/extension/struct.Extension.html" title="struct axum::extension::Extension">Extension</a>&lt;<a class="struct" href="../../../../../auth/claims/struct.AuthUser.html" title="struct api::auth::claims::AuthUser">AuthUser</a>&gt;,
+    __arg3: <a class="struct" href="../../../../../../axum/json/struct.Json.html" title="struct axum::json::Json">Json</a>&lt;<a class="struct" href="struct.TicketRequest.html" title="struct api::routes::modules::assignments::tickets::post::TicketRequest">TicketRequest</a>&gt;,
+) -&gt; impl <a class="trait" href="../../../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Creates a new ticket.</p>
+<p><strong>Endpoint:</strong> <code>POST /modules/{module_id}/assignments/{assignment_id}/tickets</code><br />
+<strong>Permissions:</strong> Authenticated users can create tickets for the assignment.</p>
+<h4 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path parameters</h4>
+<ul>
+<li><code>module_id</code>       → ID of the module (unused in handler, kept for route consistency)</li>
+<li><code>assignment_id</code>   → ID of the assignment for which the ticket is created</li>
+</ul>
+<h4 id="request-body"><a class="doc-anchor" href="#request-body">§</a>Request body</h4><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;title&quot;: &quot;Issue with submission&quot;,
+  &quot;description&quot;: &quot;I am unable to submit my assignment due to...&quot;
+}</code></pre></div><h4 id="responses"><a class="doc-anchor" href="#responses">§</a>Responses</h4>
+<ul>
+<li><code>200 OK</code> → Ticket created successfully</li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;data&quot;: {
+      &quot;id&quot;: 123,
+      &quot;title&quot;: &quot;Issue with submission&quot;,
+      &quot;description&quot;: &quot;I am unable to submit my assignment due to...&quot;,
+      &quot;status&quot;: &quot;open&quot;,
+      &quot;user_id&quot;: 456
+  },
+  &quot;message&quot;: &quot;Ticket created successfully&quot;
+}</code></pre></div>
+<ul>
+<li><code>500 Internal Server Error</code> → Failed to create the ticket</li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;data&quot;: null,
+  &quot;message&quot;: &quot;Failed to create ticket: &lt;error message&gt;&quot;
+}</code></pre></div></div></details></section></div></main></body></html>

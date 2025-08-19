@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["interpreter_routes"],"mod":["delete","get","post"]};

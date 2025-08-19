@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_task_details","list_tasks"],"struct":["SubsectionDetail","TaskDetailResponse"]};

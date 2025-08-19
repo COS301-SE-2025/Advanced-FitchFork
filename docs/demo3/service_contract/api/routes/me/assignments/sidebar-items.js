@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_my_assignments"],"struct":["AssignmentFilterReq","AssignmentResponse","FilterAssignmentResponse","ModuleResponse"]};

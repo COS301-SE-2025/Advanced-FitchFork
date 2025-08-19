@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_assignment","get_assignment_readiness","get_assignment_stats","get_assignments","is_late"],"struct":["AssignmentFileResponse","AssignmentReadiness","FilterReq","FilterResponse","PerStudentSubmission","StatResponse"]};

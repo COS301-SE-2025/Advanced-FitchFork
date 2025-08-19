@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["bulk_delete_plagiarism_cases","delete_plagiarism_case"],"struct":["BulkDeletePayload"]};

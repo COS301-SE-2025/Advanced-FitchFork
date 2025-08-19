@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["modules_routes"],"mod":["announcements","assignments","common","delete","get","personnel","post","put"]};

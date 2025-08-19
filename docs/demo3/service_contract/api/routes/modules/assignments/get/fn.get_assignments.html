@@ -1,0 +1,64 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="GET /api/modules/{module_id}/assignments"><title>get_assignments in api::routes::modules::assignments::get - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../" data-static-root-path="../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">get_<wbr>assignments</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#path-parameters" title="Path Parameters">Path Parameters</a></li><li><a href="#query-parameters" title="Query Parameters">Query Parameters</a></li><li><a href="#responses" title="Responses">Responses</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>assignments::<wbr>get</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../index.html">api</a>::<wbr><a href="../../../index.html">routes</a>::<wbr><a href="../../index.html">modules</a>::<wbr><a href="../index.html">assignments</a>::<wbr><a href="index.html">get</a></div><h1>Function <span class="fn">get_assignments</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../src/api/routes/modules/assignments/get.rs.html#304-494">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn get_assignments(
+    __arg0: <a class="struct" href="../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>&gt;,
+    __arg2: <a class="struct" href="../../../../../axum/extract/query/struct.Query.html" title="struct axum::extract::query::Query">Query</a>&lt;<a class="struct" href="struct.FilterReq.html" title="struct api::routes::modules::assignments::get::FilterReq">FilterReq</a>&gt;,
+) -&gt; impl <a class="trait" href="../../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>GET /api/modules/{module_id}/assignments</p>
+<p>Retrieve a paginated and optionally filtered list of assignments for a module. Accessible to users assigned to the module.</p>
+<h4 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path Parameters</h4>
+<ul>
+<li><code>module_id</code> (i64): The ID of the module to retrieve assignments from</li>
+</ul>
+<h4 id="query-parameters"><a class="doc-anchor" href="#query-parameters">§</a>Query Parameters</h4>
+<ul>
+<li><code>page</code> (optional, i32): Page number for pagination. Defaults to 1, minimum value is 1</li>
+<li><code>per_page</code> (optional, i32): Number of items per page. Defaults to 20, maximum is 100, minimum is 1</li>
+<li><code>sort</code> (optional, string): Comma-separated list of fields to sort by. Prefix with <code>-</code> for descending order (e.g., <code>-due_date</code>)</li>
+<li><code>query</code> (optional, string): Case-insensitive substring match applied to both <code>name</code> and <code>description</code></li>
+<li><code>name</code> (optional, string): Case-insensitive filter to match assignment names</li>
+<li><code>assignment_type</code> (optional, string): Filter by assignment type (“Assignment” or “Practical”)</li>
+<li><code>available_before</code> (optional, string): Filter assignments available before this date/time (ISO 8601)</li>
+<li><code>available_after</code> (optional, string): Filter assignments available after this date/time (ISO 8601)</li>
+<li><code>due_before</code> (optional, string): Filter assignments due before this date/time (ISO 8601)</li>
+<li><code>due_after</code> (optional, string): Filter assignments due after this date/time (ISO 8601)</li>
+</ul>
+<p><strong>Allowed sort fields:</strong> <code>name</code>, <code>description</code>, <code>due_date</code>, <code>available_from</code>, <code>assignment_type</code>, <code>created_at</code>, <code>updated_at</code></p>
+<h4 id="responses"><a class="doc-anchor" href="#responses">§</a>Responses</h4>
+<ul>
+<li><code>200 OK</code></li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Assignments retrieved successfully&quot;,
+  &quot;data&quot;: {
+    &quot;assignments&quot;: [
+      {
+        &quot;id&quot;: 123,
+        &quot;module_id&quot;: 456,
+        &quot;name&quot;: &quot;Assignment 1&quot;,
+        &quot;description&quot;: &quot;This is a sample assignment&quot;,
+        &quot;assignment_type&quot;: &quot;Assignment&quot;,
+        &quot;available_from&quot;: &quot;2024-01-01T00:00:00Z&quot;,
+        &quot;due_date&quot;: &quot;2024-01-31T23:59:59Z&quot;,
+        &quot;created_at&quot;: &quot;2024-01-01T00:00:00Z&quot;,
+        &quot;updated_at&quot;: &quot;2024-01-01T00:00:00Z&quot;
+      }
+    ],
+    &quot;page&quot;: 1,
+    &quot;per_page&quot;: 20,
+    &quot;total&quot;: 1
+  }
+}</code></pre></div>
+<ul>
+<li><code>400 Bad Request</code></li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;Invalid field used&quot; // or &quot;Invalid assignment_type&quot;
+}</code></pre></div>
+<ul>
+<li><code>500 Internal Server Error</code></li>
+</ul>
+<div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: false,
+  &quot;message&quot;: &quot;&lt;database error details&gt;&quot;
+}</code></pre></div></div></details></section></div></main></body></html>

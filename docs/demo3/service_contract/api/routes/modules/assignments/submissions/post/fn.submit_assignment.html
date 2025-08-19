@@ -1,0 +1,80 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="POST /api/modules/{module_id}/assignments/{assignment_id}/submissions"><title>submit_assignment in api::routes::modules::assignments::submissions::post - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../../" data-static-root-path="../../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">submit_<wbr>assignment</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#path-parameters" title="Path Parameters">Path Parameters</a></li><li><a href="#request-multipartform-data" title="Request (multipart/form-data)">Request (multipart/form-data)</a></li><li><a href="#example-request" title="Example Request">Example Request</a></li><li><a href="#success-response-200-ok" title="Success Response (200 OK)">Success Response (200 OK)</a></li><li><a href="#error-responses" title="Error Responses">Error Responses</a></li><li><a href="#side-effects" title="Side Effects">Side Effects</a></li><li><a href="#filesystem" title="Filesystem">Filesystem</a></li><li><a href="#notes" title="Notes">Notes</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>assignments::<wbr>submissions::<wbr>post</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../../index.html">api</a>::<wbr><a href="../../../../index.html">routes</a>::<wbr><a href="../../../index.html">modules</a>::<wbr><a href="../../index.html">assignments</a>::<wbr><a href="../index.html">submissions</a>::<wbr><a href="index.html">post</a></div><h1>Function <span class="fn">submit_assignment</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../../src/api/routes/modules/assignments/submissions/post.rs.html#606-761">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn submit_assignment(
+    __arg0: <a class="struct" href="../../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;(<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>, <a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>)&gt;,
+    __arg2: <a class="struct" href="../../../../../../axum/extension/struct.Extension.html" title="struct axum::extension::Extension">Extension</a>&lt;<a class="struct" href="../../../../../auth/claims/struct.AuthUser.html" title="struct api::auth::claims::AuthUser">AuthUser</a>&gt;,
+    multipart: <a class="struct" href="../../../../../../axum/extract/multipart/struct.Multipart.html" title="struct axum::extract::multipart::Multipart">Multipart</a>,
+) -&gt; impl <a class="trait" href="../../../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>POST /api/modules/{module_id}/assignments/{assignment_id}/submissions</p>
+<p>Submit an assignment file for grading. Accessible to authenticated students assigned to the module.</p>
+<p>This endpoint accepts a multipart form upload containing the assignment file and optional flags.
+The file is saved, graded, and a detailed grading report is returned. The grading process includes
+code execution, mark allocation, and optional code coverage/complexity analysis.</p>
+<h4 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path Parameters</h4>
+<ul>
+<li><code>module_id</code> (i64): The ID of the module containing the assignment</li>
+<li><code>assignment_id</code> (i64): The ID of the assignment to submit to</li>
+</ul>
+<h4 id="request-multipartform-data"><a class="doc-anchor" href="#request-multipartform-data">§</a>Request (multipart/form-data)</h4>
+<ul>
+<li><code>file</code> (required): The assignment file to upload (<code>.tgz</code>, <code>.gz</code>, <code>.tar</code>, or <code>.zip</code> only)</li>
+<li><code>is_practice</code> (optional): If set to <code>true</code> or <code>1</code>, marks this as a practice submission</li>
+</ul>
+<h4 id="example-request"><a class="doc-anchor" href="#example-request">§</a>Example Request</h4><div class="example-wrap"><pre class="language-bash"><code>curl -X POST http://localhost:3000/api/modules/1/assignments/2/submissions \
+  -H &quot;Authorization: Bearer &lt;token&gt;&quot; \
+  -F &quot;file=@solution.zip&quot; \
+  -F &quot;is_practice=true&quot;</code></pre></div><h4 id="success-response-200-ok"><a class="doc-anchor" href="#success-response-200-ok">§</a>Success Response (200 OK)</h4><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Submission received and graded&quot;,
+  &quot;data&quot;: {
+    &quot;id&quot;: 123,
+    &quot;attempt&quot;: 2,
+    &quot;filename&quot;: &quot;solution.zip&quot;,
+    &quot;hash&quot;: &quot;d41d8cd98f00b204e9800998ecf8427e&quot;,
+    &quot;created_at&quot;: &quot;2024-01-15T10:30:00Z&quot;,
+    &quot;updated_at&quot;: &quot;2024-01-15T10:30:00Z&quot;,
+    &quot;mark&quot;: { &quot;earned&quot;: 85, &quot;total&quot;: 100 },
+    &quot;is_practice&quot;: true,
+    &quot;is_late&quot;: false,
+    &quot;tasks&quot;: [ ... ],
+    &quot;code_coverage&quot;: [ ... ],
+    &quot;code_complexity&quot;: {
+      &quot;summary&quot;: { &quot;earned&quot;: 10, &quot;total&quot;: 15 },
+      &quot;metrics&quot;: [ ... ]
+    }
+  }
+}</code></pre></div><h4 id="error-responses"><a class="doc-anchor" href="#error-responses">§</a>Error Responses</h4>
+<p><strong>404 Not Found</strong> - Assignment not found</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Assignment not found&quot; }</code></pre></div>
+<p><strong>422 Unprocessable Entity</strong> - File missing, invalid, or empty</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;No file provided&quot; }</code></pre></div>
+<p>or</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Only .tgz, .gz, .tar, and .zip files are allowed&quot; }</code></pre></div>
+<p>or</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Empty file provided&quot; }</code></pre></div>
+<p><strong>500 Internal Server Error</strong> - Grading or system error</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Failed to save submission&quot; }</code></pre></div>
+<p>or</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Failed to run code for submission&quot; }</code></pre></div>
+<p>or</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Failed to load mark allocator&quot; }</code></pre></div>
+<p>or</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Failed to mark submission&quot; }</code></pre></div><h4 id="side-effects"><a class="doc-anchor" href="#side-effects">§</a>Side Effects</h4>
+<ul>
+<li>Saves the uploaded file and generated outputs to disk</li>
+<li>Triggers code execution and marking</li>
+<li>Saves a copy of the grading report as <code>submission_report.json</code> in the attempt folder</li>
+</ul>
+<h4 id="filesystem"><a class="doc-anchor" href="#filesystem">§</a>Filesystem</h4>
+<ul>
+<li>Uploaded file and outputs are stored under:
+<code>ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/assignment_submissions/user_{user_id}/attempt_{n}/</code></li>
+</ul>
+<h4 id="notes"><a class="doc-anchor" href="#notes">§</a>Notes</h4>
+<ul>
+<li>Each submission increments the attempt number for the user/assignment</li>
+<li>Only one file per submission is accepted</li>
+<li>Practice submissions are marked and reported but may not count toward final grade</li>
+<li>The returned report includes detailed per-task grading, code coverage, and complexity if available</li>
+<li>The endpoint is restricted to authenticated students assigned to the module</li>
+<li>All errors are returned in a consistent JSON format</li>
+</ul>
+</div></details></section></div></main></body></html>

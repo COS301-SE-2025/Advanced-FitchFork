@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_assignment_config","get_default_assignment_config"]};

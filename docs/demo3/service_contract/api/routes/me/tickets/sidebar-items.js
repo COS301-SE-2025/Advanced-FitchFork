@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_my_tickets"],"struct":["AssignmentResponse","FilterReq","FilterResponse","ModuleResponse","TicketsResponse","UserResponse"]};

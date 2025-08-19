@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["download_interpreter","get_interpreter_info"],"struct":["InterpreterInfo"]};

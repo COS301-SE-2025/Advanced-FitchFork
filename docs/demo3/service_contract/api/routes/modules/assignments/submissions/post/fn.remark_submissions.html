@@ -1,0 +1,38 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="POST /api/modules/{module_id}/assignments/{assignment_id}/submissions/remark"><title>remark_submissions in api::routes::modules::assignments::submissions::post - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../../static.files/rustdoc-916cea96.css"><meta name="rustdoc-vars" data-root-path="../../../../../../" data-static-root-path="../../../../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0 (17067e9ac 2025-05-09)" data-channel="1.87.0" data-search-js="search-e7298875.js" data-settings-js="settings-d72f25bb.js" ><script src="../../../../../../static.files/storage-82c7156e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../../../static.files/main-fb8c74a8.js"></script><noscript><link rel="stylesheet" href="../../../../../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">remark_<wbr>submissions</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#path-parameters" title="Path Parameters">Path Parameters</a></li><li><a href="#request-body" title="Request Body">Request Body</a></li><li><a href="#success-response-200-ok" title="Success Response (200 OK)">Success Response (200 OK)</a></li><li><a href="#error-responses" title="Error Responses">Error Responses</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>routes::<wbr>modules::<wbr>assignments::<wbr>submissions::<wbr>post</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../../index.html">api</a>::<wbr><a href="../../../../index.html">routes</a>::<wbr><a href="../../../index.html">modules</a>::<wbr><a href="../../index.html">assignments</a>::<wbr><a href="../index.html">submissions</a>::<wbr><a href="index.html">post</a></div><h1>Function <span class="fn">remark_submissions</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../../src/api/routes/modules/assignments/submissions/post.rs.html#820-954">Source</a> </span></div><pre class="rust item-decl"><code>pub async fn remark_submissions(
+    __arg0: <a class="struct" href="../../../../../../axum/extract/state/struct.State.html" title="struct axum::extract::state::State">State</a>&lt;<a class="struct" href="../../../../../../util/state/struct.AppState.html" title="struct util::state::AppState">AppState</a>&gt;,
+    __arg1: <a class="struct" href="../../../../../../axum/extract/path/struct.Path.html" title="struct axum::extract::path::Path">Path</a>&lt;(<a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>, <a class="primitive" href="https://doc.rust-lang.org/1.87.0/std/primitive.i64.html">i64</a>)&gt;,
+    __arg2: <a class="struct" href="../../../../../../axum/json/struct.Json.html" title="struct axum::json::Json">Json</a>&lt;<a class="struct" href="struct.RemarkRequest.html" title="struct api::routes::modules::assignments::submissions::post::RemarkRequest">RemarkRequest</a>&gt;,
+) -&gt; impl <a class="trait" href="../../../../../../axum_core/response/into_response/trait.IntoResponse.html" title="trait axum_core::response::into_response::IntoResponse">IntoResponse</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>POST /api/modules/{module_id}/assignments/{assignment_id}/submissions/remark</p>
+<p>Regrade (remark) assignment submissions. Accessible to lecturers, assistant lecturers, and admins.</p>
+<p>This endpoint allows authorized users to re-run marking logic on either:</p>
+<ul>
+<li>Specific submissions (via <code>submission_ids</code>)</li>
+<li>All submissions in an assignment (via <code>all: true</code>)</li>
+</ul>
+<h4 id="path-parameters"><a class="doc-anchor" href="#path-parameters">§</a>Path Parameters</h4>
+<ul>
+<li><code>module_id</code> (i64): The ID of the module containing the assignment</li>
+<li><code>assignment_id</code> (i64): The ID of the assignment containing the submissions</li>
+</ul>
+<h4 id="request-body"><a class="doc-anchor" href="#request-body">§</a>Request Body</h4>
+<p>Either:</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;submission_ids&quot;: [123, 124, 125] }</code></pre></div>
+<p>or</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;all&quot;: true }</code></pre></div><h4 id="success-response-200-ok"><a class="doc-anchor" href="#success-response-200-ok">§</a>Success Response (200 OK)</h4><div class="example-wrap"><pre class="language-json"><code>{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Regraded 3/4 submissions&quot;,
+  &quot;data&quot;: {
+    &quot;regraded&quot;: 3,
+    &quot;failed&quot;: [
+      { &quot;id&quot;: 125, &quot;error&quot;: &quot;Submission not found&quot; }
+    ]
+  }
+}</code></pre></div><h4 id="error-responses"><a class="doc-anchor" href="#error-responses">§</a>Error Responses</h4>
+<p><strong>400 Bad Request</strong> - Invalid request parameters</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Must provide either submission_ids or all=true&quot; }</code></pre></div>
+<p><strong>403 Forbidden</strong> - User not authorized for operation</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Not authorized to remark submissions&quot; }</code></pre></div>
+<p><strong>404 Not Found</strong> - Assignment not found</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Assignment not found&quot; }</code></pre></div>
+<p><strong>500 Internal Server Error</strong> - Regrading failure</p>
+<div class="example-wrap"><pre class="language-json"><code>{ &quot;success&quot;: false, &quot;message&quot;: &quot;Failed to load mark allocator&quot; }</code></pre></div></div></details></section></div></main></body></html>

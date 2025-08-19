@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_graph","get_moss_report","list_plagiarism_cases"],"struct":["Link","LinksResponse","ListPlagiarismCaseQueryParams","MossReportResponse","PlagiarismCaseListResponse","PlagiarismCaseResponse","PlagiarismQuery","SubmissionResponse","UserResponse"]};
