@@ -157,7 +157,21 @@ impl<'a> MarkingJob<'a> {
                 .parse(&complexity_raw, self.config.clone())?;
         }
 
-        let submission = parsers::output_parser::OutputParser.parse(
+        //TODO - this currently returns an error when the submission code crashes. Temporary fix below to just give 0 (with no reason) - Richard
+        // let submission = parsers::output_parser::OutputParser.parse(
+        //     (
+        //         &files.memo_contents,
+        //         &files.student_contents,
+        //         allocator
+        //             .0
+        //             .iter()
+        //             .map(|task| task.subsections.len())
+        //             .collect(),
+        //     ),
+        //     self.config,
+        // )?;
+
+        let submission = match parsers::output_parser::OutputParser.parse(
             (
                 &files.memo_contents,
                 &files.student_contents,
@@ -168,7 +182,56 @@ impl<'a> MarkingJob<'a> {
                     .collect(),
             ),
             self.config,
-        )?;
+        ) {
+            Ok(sub) => sub,
+            Err(_err) => {
+                // Parser failed → award 0, but still calculate totals from allocator
+                let mut report_tasks: Vec<crate::report::ReportTask> = Vec::new();
+                let mut task_counter = 1;
+                let mut total_possible = 0;
+
+                for task_entry in &allocator.0 {
+                    let mut subsections: Vec<crate::report::ReportSubsection> = Vec::new();
+                    let mut task_possible = 0;
+
+                    for subsection in &task_entry.subsections {
+                        let possible = subsection.value;
+                        task_possible += possible;
+                        total_possible += possible;
+
+                        subsections.push(crate::report::ReportSubsection {
+                            label: subsection.name.clone(),
+                            earned: 0,
+                            total: possible,
+                            feedback: String::new(),
+                        });
+                    }
+
+                    report_tasks.push(crate::report::ReportTask {
+                        task_number: task_counter,
+                        name: task_entry.name.clone(),
+                        score: crate::report::Score {
+                            earned: 0,
+                            total: task_possible,
+                        },
+                        subsections,
+                    });
+
+                    task_counter += 1;
+                }
+
+                let now = Utc::now().to_rfc3339();
+                let mark = crate::report::Score {
+                    earned: 0,
+                    total: total_possible,
+                };
+                let report =
+                    crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
+
+                return Ok(report.into());
+            }
+        };
+        //End of temporary fix
 
         let mut all_results: Vec<TaskResult> = Vec::new();
         let mut per_task_results: Vec<Vec<TaskResult>> = Vec::new();
