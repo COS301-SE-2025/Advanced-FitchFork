@@ -935,6 +935,7 @@ pub async fn remark_submissions(
                         &memo_outputs,
                         &mark_allocator_path,
                         &config,
+                        db,
                     )
                     .await
                     .map(|_| ()),
