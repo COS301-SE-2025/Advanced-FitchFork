@@ -1,11 +1,6 @@
 use db::models::assignment_memo_output::Model as MemoOutputModel;
 use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 
-/*
-So this class is so that you can fetch the memo_output and submission_output easily
-
-This way you don't have to figure out how the db library works :)
-*/
 use std::fs;
 use std::io::{self, ErrorKind};
 
@@ -14,12 +9,9 @@ pub struct Output;
 
 impl Output {
     /// Get all memo output files for the given module and assignment,
-    /// returning Vec<(filename, file_contents_as_string)>
+    /// returning Vec<(task_number, file_contents_as_string)>
     #[allow(dead_code)]
-    pub fn get_memo_output(
-        module_id: i64,
-        assignment_id: i64,
-    ) -> io::Result<Vec<(String, String)>> {
+    pub fn get_memo_output(module_id: i64, assignment_id: i64) -> io::Result<Vec<(i64, String)>> {
         let dir_path = MemoOutputModel::storage_root()
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{assignment_id}"))
@@ -32,33 +24,34 @@ impl Output {
             ));
         }
 
+        let mut entries: Vec<_> = fs::read_dir(dir_path)?
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
+            .collect();
+
+        // Sort files alphabetically for deterministic order
+        entries.sort_by_key(|e| e.file_name());
+
         let mut results = Vec::new();
-
-        for entry in fs::read_dir(dir_path)? {
-            let entry = entry?;
-            if entry.file_type()?.is_file() {
-                let filename = entry.file_name().to_string_lossy().to_string();
-                let path = entry.path();
-
-                let content = fs::read_to_string(&path)?;
-                results.push((filename, content));
-            }
+        for (i, entry) in entries.into_iter().enumerate() {
+            let path = entry.path();
+            let content = fs::read_to_string(&path)?;
+            let task_number = (i + 1) as i64;
+            results.push((task_number, content));
         }
 
         Ok(results)
     }
 
     /// Get all submission output files for the given parameters,
-    /// returning Vec<(filename, file_contents_as_string)>
-    ///
-    /// Now task_number is NOT used to build the path (flat folder structure)
+    /// returning Vec<(task_number, file_contents_as_string)>
     #[allow(dead_code)]
     pub fn get_submission_output(
         module_id: i64,
         assignment_id: i64,
         user_id: i64,
         attempt_number: i64,
-    ) -> io::Result<Vec<(String, String)>> {
+    ) -> io::Result<Vec<(i64, String)>> {
         let dir_path = SubmissionOutputModel::storage_root()
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{assignment_id}"))
@@ -74,17 +67,20 @@ impl Output {
             ));
         }
 
+        let mut entries: Vec<_> = fs::read_dir(dir_path)?
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
+            .collect();
+
+        // Sort files alphabetically for deterministic order
+        entries.sort_by_key(|e| e.file_name());
+
         let mut results = Vec::new();
-
-        for entry in fs::read_dir(dir_path)? {
-            let entry = entry?;
-            if entry.file_type()?.is_file() {
-                let filename = entry.file_name().to_string_lossy().to_string();
-                let path = entry.path();
-
-                let content = fs::read_to_string(&path)?;
-                results.push((filename, content));
-            }
+        for (i, entry) in entries.into_iter().enumerate() {
+            let path = entry.path();
+            let content = fs::read_to_string(&path)?;
+            let task_number = (i + 1) as i64;
+            results.push((task_number, content));
         }
 
         Ok(results)
@@ -104,8 +100,8 @@ mod tests {
         match Output::get_memo_output(module_id, assignment_id) {
             Ok(files) => {
                 println!("Memo output files:");
-                for (filename, contents) in files {
-                    println!("File: {}\nContents:\n{}\n---", filename, contents);
+                for (task_number, contents) in files {
+                    println!("Task {}:\n{}\n---", task_number, contents);
                 }
             }
             Err(e) => println!("Error reading memo output: {}", e),
@@ -123,8 +119,8 @@ mod tests {
         match Output::get_submission_output(module_id, assignment_id, user_id, attempt_number) {
             Ok(files) => {
                 println!("Submission output files:");
-                for (filename, contents) in files {
-                    println!("File: {}\nContents:\n{}\n---", filename, contents);
+                for (task_number, contents) in files {
+                    println!("Task {}:\n{}\n---", task_number, contents);
                 }
             }
             Err(e) => println!("Error reading submission output: {}", e),
