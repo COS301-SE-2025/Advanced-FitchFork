@@ -17,7 +17,7 @@ type TaskRow = {
 
 const StepTasks = () => {
   const module = useModule();
-  const { assignmentId, refreshAssignment, onStepComplete } = useAssignmentSetup();
+  const { assignmentId, refreshAssignment, setStepSaveHandler } = useAssignmentSetup();
 
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -47,6 +47,11 @@ const StepTasks = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
+  // Register a no-op save handler for step 3 (Tasks)
+  useEffect(() => {
+    setStepSaveHandler?.(3, async () => true);
+  }, [setStepSaveHandler]);
+
   const handleCreateTask = async () => {
     if (!assignmentId) return;
 
@@ -62,7 +67,6 @@ const StepTasks = () => {
       message.success('Task created');
       await fetchTasks();
       await refreshAssignment?.();
-      onStepComplete?.();
     } else {
       message.error(res.message || 'Failed to create task');
     }
@@ -111,7 +115,6 @@ const StepTasks = () => {
         message.success(res.message || 'Task deleted');
         await fetchTasks();
         await refreshAssignment?.();
-        onStepComplete?.();
       } else {
         message.error(res.message || 'Failed to delete task');
       }
@@ -141,12 +144,6 @@ const StepTasks = () => {
         Below are the tasks that make up this assignment. You can edit a task inline or add new
         ones.
       </Paragraph>
-
-      <div className="flex justify-end mb-4">
-        <Button icon={<PlusOutlined />} type="primary" onClick={handleCreateTask}>
-          Add Task
-        </Button>
-      </div>
 
       {loading ? (
         <Spin />
@@ -250,6 +247,21 @@ const StepTasks = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Bottom "Add Task" dashed button */}
+      {!loading && (
+        <div className="pt-2">
+          <Button
+            icon={<PlusOutlined />}
+            type="dashed"
+            block
+            onClick={handleCreateTask}
+            data-cy="add-task"
+          >
+            Add Task
+          </Button>
         </div>
       )}
     </div>

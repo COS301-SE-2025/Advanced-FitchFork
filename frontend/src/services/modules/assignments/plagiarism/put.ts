@@ -9,6 +9,7 @@ export const updatePlagiarismCase = async (
   payload: {
     description?: string;
     status?: PlagiarismCaseStatus;
+    similarity?: number,
   }
 ): Promise<ApiResponse<PlagiarismCase>> => {
   return api.put(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/${caseId}`, payload);

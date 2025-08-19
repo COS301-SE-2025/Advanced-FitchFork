@@ -1,103 +1,117 @@
-import { useMemo, useState } from 'react';
-import { List, Tag, Button, Space, Typography, Empty, Tooltip } from 'antd';
-import { CheckCircleOutlined, MessageOutlined } from '@ant-design/icons'; // Added icon
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { List, Tag, Button, Space, Typography, Empty, Tooltip, Alert, Spin, message } from 'antd';
+import { CheckCircleOutlined, MessageOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-import type { Ticket } from '@/types/modules/assignments/tickets';
-import type { Assignment } from '@/types/modules/assignments';
-import type { User } from '@/types/users';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import type { SortOption } from '@/types/common';
+import type { Ticket, TicketStatus } from '@/types/modules/assignments/tickets';
+import type { ModuleRole } from '@/types/modules';
+import { getMyTickets } from '@/services/me/tickets/get';
+import { closeTicket } from '@/services/modules/assignments/tickets/put';
+
+dayjs.extend(relativeTime);
 
 const { Text, Title } = Typography;
 
-type IdMap<T> = Record<number, T>;
+type MyTicketItem = Ticket & {
+  user: { id: number; username: string };
+  module: { id: number; code: string };
+  assignment: { id: number; name: string };
+};
 
-const TicketsPanel = () => {
-  const MOCK_TICKETS: Ticket[] = [
-    {
-      id: 101,
-      assignment_id: 12,
-      user_id: 55,
-      title: 'Issue with submission grading',
-      description: 'My submission shows an error but runs fine locally.',
-      status: 'open',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    } as any,
-    {
-      id: 103,
-      assignment_id: 12,
-      user_id: 55,
-      title: 'Cannot see rubric',
-      description: 'The rubric panel is empty.',
-      status: 'open',
-      created_at: new Date(Date.now() - 7200_000).toISOString(),
-      updated_at: new Date().toISOString(),
-    } as any,
-    {
-      id: 102,
-      assignment_id: 14,
-      user_id: 55,
-      title: 'Clarification on question 3',
-      description: '',
-      status: 'closed',
-      created_at: new Date(Date.now() - 3600_000).toISOString(),
-      updated_at: new Date().toISOString(),
-    } as any,
-  ];
+const DEFAULT_SORT: SortOption[] = [{ field: 'created_at', order: 'descend' }];
 
-  const MOCK_USERS: User[] = [
-    {
-      id: 55,
-      username: 'alice',
-      email: 'alice@u.edu',
-      admin: false,
-      created_at: '',
-      updated_at: '',
-    } as any,
-  ];
+const TicketsPanel: React.FC<{
+  role?: ModuleRole;
+  year?: number;
+  perPage?: number;
+  status?: TicketStatus; // default to 'open'
+}> = ({ role, year, perPage = 20, status = 'open' }) => {
+  const navigate = useNavigate();
+  const [items, setItems] = useState<MyTicketItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<Set<number>>(new Set()); // per-ticket action state
 
-  const MOCK_ASSIGNMENTS: Assignment[] = [
-    {
-      id: 12,
-      module_id: 1,
-      name: 'COS101 A1',
-      description: '',
-      assignment_type: 'assignment' as any,
-      available_from: '',
-      due_date: '',
-      status: 'open' as any,
-      created_at: '',
-      updated_at: '',
-    } as any,
-    {
-      id: 14,
-      module_id: 1,
-      name: 'COS101 A2',
-      description: '',
-      assignment_type: 'assignment' as any,
-      available_from: '',
-      due_date: '',
-      status: 'open' as any,
-      created_at: '',
-      updated_at: '',
-    } as any,
-  ];
+  // pagination scaffolding (UI pager not shown yet)
+  const [page, setPage] = useState(1);
+  const [, setTotal] = useState(0);
 
-  const [tickets, setTickets] = useState<Ticket[]>(MOCK_TICKETS);
-  const [usersById] = useState<IdMap<User>>(Object.fromEntries(MOCK_USERS.map((u) => [u.id, u])));
-  const [assignmentsById] = useState<IdMap<Assignment>>(
-    Object.fromEntries(MOCK_ASSIGNMENTS.map((a) => [a.id, a])),
-  );
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getMyTickets({
+        page,
+        per_page: perPage,
+        sort: DEFAULT_SORT,
+        role,
+        year,
+        status,
+      });
 
-  const openTickets = useMemo(() => tickets.filter((t) => t.status === 'open'), [tickets]);
+      if (!res.success) throw new Error(res.message || 'Failed to load tickets');
+
+      const arr = Array.isArray(res.data.tickets) ? res.data.tickets : [res.data.tickets];
+
+      setItems(arr as MyTicketItem[]);
+      setTotal(res.data.total ?? arr.length);
+    } catch (e: any) {
+      setError(e?.message ?? 'Unknown error');
+      setItems([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, perPage, role, year, status]);
+
+  useEffect(() => setPage(1), [status, role, year, perPage]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const openTickets = useMemo(() => items.filter((t) => t.status === 'open'), [items]);
   const openCount = openTickets.length;
 
-  const handleView = (t: Ticket) => {
-    console.log('Open ticket', t);
+  const buildTicketPath = (t: MyTicketItem) =>
+    `/modules/${t.module.id}/assignments/${t.assignment.id}/tickets/${t.id}`;
+
+  const handleView = (t: MyTicketItem, evt?: React.MouseEvent | React.KeyboardEvent) => {
+    const isMeta = (evt as any)?.metaKey || (evt as any)?.ctrlKey;
+    const path = buildTicketPath(t);
+    if (isMeta) window.open(path, '_blank', 'noopener,noreferrer');
+    else navigate(path);
   };
 
-  const handleClose = (t: Ticket) => {
-    if (t.status !== 'open') return;
-    setTickets((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: 'closed' } : x)));
+  const handleClose = async (t: MyTicketItem) => {
+    if (t.status !== 'open' || pending.has(t.id)) return;
+
+    // optimistic update
+    setPending((p) => new Set(p).add(t.id));
+    const prev = items;
+
+    setItems((prevItems) =>
+      prevItems.map((x) => (x.id === t.id ? { ...x, status: 'closed' as TicketStatus } : x)),
+    );
+
+    try {
+      const res = await closeTicket(t.module.id, t.assignment.id, t.id);
+      if (!res.success || res.data.status !== 'closed') {
+        throw new Error(res.message || 'Close failed');
+      }
+      message.success('Ticket closed');
+    } catch (e: any) {
+      // rollback
+      setItems(prev);
+      message.error(e?.message ?? 'Failed to close ticket');
+    } finally {
+      setPending((p) => {
+        const next = new Set(p);
+        next.delete(t.id);
+        return next;
+      });
+    }
   };
 
   return (
@@ -115,26 +129,36 @@ const TicketsPanel = () => {
         </div>
       </div>
 
+      {/* Error */}
+      {error && (
+        <div className="px-3 py-2">
+          <Alert type="error" showIcon message="Failed to load tickets" description={error} />
+        </div>
+      )}
+
       {/* List */}
       <List
         className="flex-1 overflow-y-auto"
+        loading={loading}
         locale={{
           emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No open tickets." />,
         }}
         dataSource={openTickets}
         renderItem={(t) => {
-          const userName = usersById[t.user_id]?.username ?? `User ${t.user_id}`;
-          const assignmentName = assignmentsById[t.assignment_id]?.name ?? `A-${t.assignment_id}`;
-          const createdText = t.created_at
-            ? (dayjs(t.created_at).fromNow?.() ?? dayjs(t.created_at).format('YYYY-MM-DD HH:mm'))
-            : '—';
+          const createdText = t.created_at ? dayjs(t.created_at).fromNow() : '—';
+          const isClosing = pending.has(t.id);
 
           return (
             <List.Item
               className="!px-3 cursor-pointer"
-              onClick={() => handleView(t)}
+              role="button"
+              tabIndex={0}
+              onClick={(e) => handleView(t, e)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') handleView(t);
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleView(t, e);
+                }
               }}
             >
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 w-full">
@@ -144,7 +168,9 @@ const TicketsPanel = () => {
                     {t.title}
                   </Text>
                   <Text type="secondary" className="text-xs truncate block !text-[12px]">
-                    {userName} • {assignmentName} • {createdText}
+                    {t.user?.username ?? `User ${t.user_id}`} •{' '}
+                    {t.assignment?.name ?? `A-${t.assignment_id}`} •{' '}
+                    {t.module?.code ?? `M-${t.module?.id ?? ''}`} • {createdText}
                   </Text>
                 </div>
 
@@ -157,9 +183,11 @@ const TicketsPanel = () => {
                       ghost
                       danger
                       icon={<CheckCircleOutlined />}
+                      loading={isClosing}
+                      disabled={isClosing}
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleClose(t);
+                        void handleClose(t);
                       }}
                     >
                       Close
@@ -171,6 +199,12 @@ const TicketsPanel = () => {
           );
         }}
       />
+
+      {loading && openTickets.length > 0 && (
+        <div className="py-2 flex justify-center">
+          <Spin />
+        </div>
+      )}
     </div>
   );
 };

@@ -73,12 +73,12 @@ const AssignmentLayout = () => {
             label: 'Plagiarism',
             disabled: !readiness?.config_present,
           },
-          {
-            value: `${basePath}/stats`,
-            label: 'Statistics',
-            disabled: !readiness?.is_ready,
-          },
-          { value: `${basePath}/config`, label: 'Config' },
+          // {
+          //   value: `${basePath}/stats`,
+          //   label: 'Statistics',
+          //   disabled: !readiness?.is_ready,
+          // },
+          { value: `${basePath}/config`, label: 'Files & Config' },
         ]
       : []),
   ];
@@ -209,7 +209,7 @@ const AssignmentLayout = () => {
   };
 
   const menuItems: MenuProps['items'] = [
-    ...(config?.project.submission_mode === 'manual'
+    ...(config?.project?.submission_mode === 'manual'
       ? [
           {
             key: 'memo',
@@ -368,7 +368,7 @@ const AssignmentLayout = () => {
           {isStudentOrTutor ? (
             <Outlet />
           ) : isSetupIncomplete && isLecturerOrAdmin ? (
-            <div className="flex flex-col items-center justify-center text-center bg-white dark:bg-gray-950 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-12 space-y-6">
+            <div className="flex flex-col h-full items-center justify-center text-center bg-white dark:bg-gray-950 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-12 space-y-6">
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                 Assignment setup incomplete
               </h2>
@@ -428,10 +428,14 @@ const AssignmentLayout = () => {
 
         <AssignmentSetup
           open={setupOpen}
-          onClose={() => setSetupOpen(false)}
+          onClose={() => setSetupOpen(false)} // for manual close / click-outside
           assignmentId={assignment.id}
           module={module}
-          onStepComplete={refreshAssignment}
+          onDone={async () => {
+            // only called when user clicks "Finish"
+            await refreshAssignment(); // parent refresh happens once here
+            setSetupOpen(false); // close after refresh
+          }}
         />
 
         <SubmitAssignmentModal

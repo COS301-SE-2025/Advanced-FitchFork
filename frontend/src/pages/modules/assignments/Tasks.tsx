@@ -29,7 +29,6 @@ import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Panel } = Collapse;
 
-// Normalize subsections -> { name, value (int), memo_output }
 function normalizeSubsections(subs: any[]) {
   if (!subs) return [];
   return subs.map((s) => ({
@@ -67,7 +66,6 @@ const Tasks = () => {
   const [editedName, setEditedName] = useState('');
   const [editedCommand, setEditedCommand] = useState('');
 
-  // Cache: taskId -> full task (GetTaskResponse['data'])
   const [taskDetails, setTaskDetails] = useState<Record<number, GetTaskResponse['data']>>({});
 
   const selectedIdMatch = location.pathname.match(/\/tasks\/(\d+)$/);
@@ -83,7 +81,6 @@ const Tasks = () => {
         const sorted = res.data.sort((a, b) => a.task_number - b.task_number);
         setTasks(sorted);
 
-        // Preload all details
         const details = await Promise.all(
           sorted.map((t) => getTask(module.id, assignment.id, t.id)),
         );
@@ -99,7 +96,6 @@ const Tasks = () => {
         });
         setTaskDetails(map);
 
-        // Default navigate to first task
         const endsWithTasks = location.pathname.endsWith('/tasks');
         if (endsWithTasks && sorted.length > 0) {
           navigate(`/modules/${module.id}/assignments/${assignment.id}/tasks/${sorted[0].id}`, {
@@ -226,11 +222,9 @@ const Tasks = () => {
     }
   };
 
-  /** SAVE ALLOCATOR ACROSS ALL TASKS — keyed as { "taskX": { task_number, name, value, subsections[] } } */
   const saveAllocatorAllTasks = async () => {
     if (!module.id || !assignment.id) return;
 
-    // Ensure details loaded
     const missing = tasks.filter((t) => !taskDetails[t.id]);
     if (missing.length > 0) {
       try {
@@ -254,7 +248,6 @@ const Tasks = () => {
       }
     }
 
-    // Build keyed tasks payload
     const byNumber = [...tasks].sort((a, b) => a.task_number - b.task_number);
 
     const tasksPayload: MarkAllocatorTaskEntry[] = byNumber.map((t) => {
@@ -341,137 +334,146 @@ const Tasks = () => {
   }));
 
   const mobileRender = () => (
-    <div>
-      <Collapse
-        accordion
-        onChange={(key) => {
-          const taskId = Number(key);
-          const task = tasks.find((t) => t.id === taskId);
-          if (task) {
-            navigate(`/modules/${module.id}/assignments/${assignment.id}/tasks/${task.id}`);
-          }
-        }}
-      >
-        {tasks.map((task) => (
-          <Collapse.Panel key={task.id} header={task.name || `Task ${task.task_number}`}>
-            <div className="space-y-6">
-              {/* Task Details */}
-              <div className="space-y-3">
-                <div>
-                  <label className="block font-medium mb-1">Task Name</label>
-                  <Input
-                    value={task.id === selectedTask?.id ? editedName : task.name}
-                    onChange={(e) => {
-                      setEditedName(e.target.value);
-                      setSelectedTask((prev) =>
-                        prev?.id === task.id ? { ...prev, name: e.target.value } : prev,
-                      );
-                    }}
-                  />
+    <div className="h-full flex flex-col min-h-0">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <Collapse
+          accordion
+          onChange={(key) => {
+            const taskId = Number(key);
+            const task = tasks.find((t) => t.id === taskId);
+            if (task) {
+              navigate(`/modules/${module.id}/assignments/${assignment.id}/tasks/${task.id}`);
+            }
+          }}
+        >
+          {tasks.map((task) => (
+            <Collapse.Panel key={task.id} header={task.name || `Task ${task.task_number}`}>
+              <div className="space-y-6">
+                {/* Task Details */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-medium mb-1">Task Name</label>
+                    <Input
+                      value={task.id === selectedTask?.id ? editedName : task.name}
+                      onChange={(e) => {
+                        setEditedName(e.target.value);
+                        setSelectedTask((prev) =>
+                          prev?.id === task.id ? { ...prev, name: e.target.value } : prev,
+                        );
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-medium mb-1">Command</label>
+                    <Input
+                      value={task.id === selectedTask?.id ? editedCommand : task.command}
+                      onChange={(e) => {
+                        setEditedCommand(e.target.value);
+                        setSelectedTask((prev) =>
+                          prev?.id === task.id ? { ...prev, command: e.target.value } : prev,
+                        );
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="primary"
+                      icon={<SaveOutlined />}
+                      onClick={handleSaveTask}
+                      className="flex-1"
+                    >
+                      Save Task
+                    </Button>
+                    <Button danger onClick={() => handleDeleteTask(task.id)} className="flex-1">
+                      Delete
+                    </Button>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-medium mb-1">Command</label>
-                  <Input
-                    value={task.id === selectedTask?.id ? editedCommand : task.command}
-                    onChange={(e) => {
-                      setEditedCommand(e.target.value);
-                      setSelectedTask((prev) =>
-                        prev?.id === task.id ? { ...prev, command: e.target.value } : prev,
-                      );
-                    }}
-                  />
-                </div>
+                {/* Subsections */}
+                {task.id === selectedTask?.id &&
+                  selectedTask.subsections &&
+                  selectedTask.subsections.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-gray-700 dark:text-gray-300">Assessment</h4>
 
-                <div className="flex gap-2">
-                  <Button
-                    type="primary"
-                    icon={<SaveOutlined />}
-                    onClick={handleSaveTask}
-                    className="flex-1"
-                  >
-                    Save Task
-                  </Button>
-                  <Button danger onClick={() => handleDeleteTask(task.id)} className="flex-1">
-                    Delete
-                  </Button>
-                </div>
-              </div>
+                      <Collapse accordion>
+                        {selectedTask.subsections.map((sub, index) => (
+                          <Collapse.Panel header={sub.name} key={index}>
+                            <div className="space-y-4 px-1 pt-1 pb-2">
+                              <div>
+                                <label className="block font-medium mb-1">Mark</label>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    step={1}
+                                    value={sub.value ?? 0}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value, 10) || 0;
+                                      setSelectedTask((prev) => {
+                                        if (!prev) return prev;
+                                        const updatedSubs = prev.subsections?.map((s) =>
+                                          s.name === sub.name ? { ...s, value: val } : s,
+                                        );
+                                        const updated = { ...prev, subsections: updatedSubs };
+                                        setTaskDetails((m) =>
+                                          prev ? { ...m, [prev.id]: updated } : m,
+                                        );
+                                        return updated;
+                                      });
+                                    }}
+                                    className="w-24"
+                                  />
+                                  <Button
+                                    size="small"
+                                    type="primary"
+                                    onClick={saveAllocatorAllTasks}
+                                  >
+                                    Save Mark
+                                  </Button>
+                                </div>
+                              </div>
 
-              {/* Subsections */}
-              {task.id === selectedTask?.id &&
-                selectedTask.subsections &&
-                selectedTask.subsections.length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="font-semibold text-gray-700 dark:text-gray-300">Assessment</h4>
-
-                    <Collapse accordion>
-                      {selectedTask.subsections.map((sub, index) => (
-                        <Collapse.Panel header={sub.name} key={index}>
-                          <div className="space-y-4 px-1 pt-1 pb-2">
-                            <div>
-                              <label className="block font-medium mb-1">Mark</label>
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  step={1}
-                                  value={sub.value ?? 0}
-                                  onChange={(e) => {
-                                    const val = parseInt(e.target.value, 10) || 0;
-                                    setSelectedTask((prev) => {
-                                      if (!prev) return prev;
-                                      const updatedSubs = prev.subsections?.map((s) =>
-                                        s.name === sub.name ? { ...s, value: val } : s,
-                                      );
-                                      const updated = { ...prev, subsections: updatedSubs };
-                                      setTaskDetails((m) =>
-                                        prev ? { ...m, [prev.id]: updated } : m,
-                                      );
-                                      return updated;
-                                    });
-                                  }}
-                                  className="w-24"
+                              <div>
+                                <CodeEditor
+                                  title="Memo Output"
+                                  value={sub.memo_output ?? ''}
+                                  language="plaintext"
+                                  height={200}
+                                  readOnly
                                 />
-                                <Button size="small" type="primary" onClick={saveAllocatorAllTasks}>
-                                  Save Mark
-                                </Button>
                               </div>
                             </div>
+                          </Collapse.Panel>
+                        ))}
+                      </Collapse>
+                    </div>
+                  )}
+              </div>
+            </Collapse.Panel>
+          ))}
+        </Collapse>
+      </div>
 
-                            <div>
-                              <CodeEditor
-                                title="Memo Output"
-                                value={sub.memo_output ?? ''}
-                                language="plaintext"
-                                height={200}
-                                readOnly
-                              />
-                            </div>
-                          </div>
-                        </Collapse.Panel>
-                      ))}
-                    </Collapse>
-                  </div>
-                )}
-            </div>
-          </Collapse.Panel>
-        ))}
-      </Collapse>
-
-      <Button block type="dashed" className="!mt-6" onClick={handleCreateTask}>
+      <Button block type="dashed" className="!mt-4" onClick={handleCreateTask}>
         + New Task
       </Button>
     </div>
   );
 
   return (
-    <>
+    // Make the entire page claim the available height provided by the route/layout
+    <div className="h-full flex flex-col min-h-0">
       {isMobile ? (
         mobileRender()
       ) : (
-        <div className="bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 flex overflow-hidden">
-          <div className="w-[240px] bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2">
+        // Outer frame: allow children to shrink for scrolling
+        <div className="bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 flex h-full min-h-0 overflow-hidden">
+          {/* Left rail – make it scroll when long */}
+          <div className="w-[240px] bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2 overflow-y-auto">
             <Menu
               mode="inline"
               theme="light"
@@ -490,106 +492,114 @@ const Tasks = () => {
             </div>
           </div>
 
-          <div className="flex-1 p-6 max-w-6xl">
-            {loading ? (
-              <div className="text-gray-400">Loading tasks...</div>
-            ) : tasks.length === 0 ? (
-              <Empty
-                description={<div className="text-gray-700 dark:text-gray-300">No Tasks Found</div>}
-              >
-                <Button type="primary" onClick={handleCreateTask}>
-                  + New Task
-                </Button>
-              </Empty>
-            ) : selectedTask ? (
-              <div className="!space-y-6">
-                <SettingsGroup
-                  title="Task"
-                  description="Basic info and execution command for this task."
+          {/* Right pane – the important part: min-h-0 + overflow-y-auto */}
+          <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-6">
+            <div className="mx-auto w-full max-w-6xl">
+              {loading ? (
+                <div className="text-gray-400">Loading tasks...</div>
+              ) : tasks.length === 0 ? (
+                <Empty
+                  description={
+                    <div className="text-gray-700 dark:text-gray-300">No Tasks Found</div>
+                  }
                 >
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block font-medium mb-1">Task Name</label>
-                      <Input
-                        value={editedName}
-                        onChange={(e) => setEditedName(e.target.value)}
-                        className="w-full"
-                      />
+                  <Button type="primary" onClick={handleCreateTask}>
+                    + New Task
+                  </Button>
+                </Empty>
+              ) : selectedTask ? (
+                <div className="space-y-6">
+                  <SettingsGroup
+                    title="Task"
+                    description="Basic info and execution command for this task."
+                  >
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block font-medium mb-1">Task Name</label>
+                        <Input
+                          value={editedName}
+                          onChange={(e) => setEditedName(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-medium mb-1">Command</label>
+                        <Input
+                          value={editedCommand}
+                          onChange={(e) => setEditedCommand(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <Button icon={<SaveOutlined />} type="primary" onClick={handleSaveTask}>
+                          Save Task
+                        </Button>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block font-medium mb-1">Command</label>
-                      <Input
-                        value={editedCommand}
-                        onChange={(e) => setEditedCommand(e.target.value)}
-                        className="w-full"
-                      />
-                    </div>
-                    <div className="flex justify-end">
-                      <Button icon={<SaveOutlined />} type="primary" onClick={handleSaveTask}>
-                        Save Task
-                      </Button>
-                    </div>
-                  </div>
-                </SettingsGroup>
-
-                {selectedTask.subsections?.length > 0 && (
-                  <SettingsGroup title="Assessment" description="Breakdown of marks by subsection.">
-                    <Collapse accordion bordered>
-                      {selectedTask.subsections?.map((sub, index) => (
-                        <Panel header={sub.name} key={index}>
-                          <div className="space-y-4 px-3 pt-1 pb-2">
-                            <div>
-                              <label className="block font-medium mb-1">Mark</label>
-                              <Space.Compact className="flex items-center w-full">
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  step={1}
-                                  value={sub.value ?? 0}
-                                  onChange={(e) => {
-                                    const val = parseInt(e.target.value, 10) || 0;
-                                    setSelectedTask((prev) => {
-                                      if (!prev) return prev;
-                                      const updatedSubs = prev.subsections?.map((s) =>
-                                        s.name === sub.name ? { ...s, value: val } : s,
-                                      );
-                                      const updated = { ...prev, subsections: updatedSubs };
-                                      setTaskDetails((m) =>
-                                        prev ? { ...m, [prev.id]: updated } : m,
-                                      );
-                                      return updated;
-                                    });
-                                  }}
-                                />
-                                <Button type="primary" onClick={saveAllocatorAllTasks}>
-                                  Save Mark
-                                </Button>
-                              </Space.Compact>
-                            </div>
-
-                            <div className="mt-2">
-                              <CodeEditor
-                                title="Memo Output"
-                                value={sub.memo_output ?? ''}
-                                language="plaintext"
-                                height={200}
-                                readOnly
-                              />
-                            </div>
-                          </div>
-                        </Panel>
-                      ))}
-                    </Collapse>
                   </SettingsGroup>
-                )}
-              </div>
-            ) : (
-              <div className="text-gray-400">Loading selected task…</div>
-            )}
+
+                  {selectedTask.subsections?.length > 0 && (
+                    <SettingsGroup
+                      title="Assessment"
+                      description="Breakdown of marks by subsection."
+                    >
+                      <Collapse accordion bordered>
+                        {selectedTask.subsections?.map((sub, index) => (
+                          <Panel header={sub.name} key={index}>
+                            <div className="space-y-4 px-3 pt-1 pb-2">
+                              <div>
+                                <label className="block font-medium mb-1">Mark</label>
+                                <Space.Compact className="flex items-center w-full">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    step={1}
+                                    value={sub.value ?? 0}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value, 10) || 0;
+                                      setSelectedTask((prev) => {
+                                        if (!prev) return prev;
+                                        const updatedSubs = prev.subsections?.map((s) =>
+                                          s.name === sub.name ? { ...s, value: val } : s,
+                                        );
+                                        const updated = { ...prev, subsections: updatedSubs };
+                                        setTaskDetails((m) =>
+                                          prev ? { ...m, [prev.id]: updated } : m,
+                                        );
+                                        return updated;
+                                      });
+                                    }}
+                                  />
+                                  <Button type="primary" onClick={saveAllocatorAllTasks}>
+                                    Save Mark
+                                  </Button>
+                                </Space.Compact>
+                              </div>
+
+                              <div className="mt-2">
+                                <CodeEditor
+                                  title="Memo Output"
+                                  value={sub.memo_output ?? ''}
+                                  language="plaintext"
+                                  height={200}
+                                  readOnly
+                                />
+                              </div>
+                            </div>
+                          </Panel>
+                        ))}
+                      </Collapse>
+                    </SettingsGroup>
+                  )}
+                </div>
+              ) : (
+                <div className="text-gray-400">Loading selected task…</div>
+              )}
+            </div>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
 

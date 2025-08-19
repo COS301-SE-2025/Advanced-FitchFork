@@ -18,10 +18,10 @@ type MyAssignmentItem = {
   }
 } & Assignment;
 
-type MyAssignmentsResponse = ApiResponse<{ assignments: MyAssignmentItem[] } & PaginationResponse>;
+type MyAssignmentsResponse = { assignments: MyAssignmentItem[] } & PaginationResponse;
 
 export const getMyAssignments = async (
   options: MyAssignmentsOptions
-): Promise<MyAssignmentsResponse> => {
-  return api.get("/me/assignments", options);
+) => {
+  return api.get<MyAssignmentsResponse>("/me/assignments", options);
 }

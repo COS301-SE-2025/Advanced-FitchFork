@@ -41,7 +41,7 @@ const StudentDashboard: React.FC = () => {
             </div>
             <div className="lg:flex-[0.8] min-h-0">
               <div className="lg:h-full h-auto min-h-0">
-                <TicketsPanel />
+                <TicketsPanel role="student" />
               </div>
             </div>
           </div>
