@@ -7,25 +7,26 @@
 //!
 //! All responses follow the standard `ApiResponse` format.
 
+use crate::routes::common::UserResponse;
+use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     Extension, Json,
-    extract::{State, Path, Query},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde::{Deserialize, Serialize};
-use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait,
-    QueryFilter, QueryOrder, QuerySelect,
-};
-use util::state::AppState;
-use crate::{auth::AuthUser, response::ApiResponse};
-use crate::routes::common::UserResponse;
+use db::models::user_module_role;
 use db::models::{
     module::{Column as ModuleCol, Entity as ModuleEntity, Model as Module},
     user::{Column as UserCol, Entity as UserEntity, Model as UserModel},
     user_module_role::{Column as RoleCol, Entity as RoleEntity, Role},
 };
+use sea_orm::{
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
+    QueryOrder, QuerySelect,
+};
+use serde::{Deserialize, Serialize};
+use util::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModuleResponse {
@@ -142,14 +143,14 @@ impl From<db::models::module::Model> for ModuleResponse {
 ///   "message": "Database error retrieving module"
 /// }
 /// ```
-pub async fn get_module(
-    State(state): State<AppState>,
-    Path(module_id): Path<i64>
-) -> Response {
+pub async fn get_module(State(state): State<AppState>, Path(module_id): Path<i64>) -> Response {
     let db = state.db();
 
     let module = ModuleEntity::find_by_id(module_id)
-        .one(db).await.unwrap().unwrap();
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap();
 
     let (lecturers, tutors, students) = tokio::join!(
         get_users_by_role(db, module_id, Role::Lecturer),
@@ -343,106 +344,112 @@ impl From<(Vec<Module>, i32, i32, i32)> for FilterResponse {
 /// ```
 pub async fn get_modules(
     State(state): State<AppState>,
-    Query(params): Query<FilterReq>
-) -> impl IntoResponse {    
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    Query(params): Query<FilterReq>,
+) -> impl IntoResponse {
     let db = state.db();
-
+    let user_id = claims.sub;
     let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).min(100).max(1);
+    let per_page = params.per_page.unwrap_or(20).min(100);
 
+    let build_query = |query: sea_orm::Select<ModuleEntity>| -> sea_orm::Select<ModuleEntity> {
+        let mut query = query;
 
-    if let Some(sort) = &params.sort {
-        let valid_fields = ["code", "created_at", "year", "credits", "description"];
-        for field in sort.split(',') {
-            let field = field.trim_start_matches('-');
-            if !valid_fields.contains(&field) {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<FilterResponse>::error(
-                        "Invalid field used for sorting",
-                    )),
-                );
+        if let Some(ref q) = params.query {
+            let q = q.to_lowercase();
+            query = query.filter(
+                ModuleCol::Code
+                    .contains(&q)
+                    .or(ModuleCol::Description.contains(&q)),
+            );
+        }
+        if let Some(ref code) = params.code {
+            query = query.filter(ModuleCol::Code.contains(&code.to_lowercase()));
+        }
+        if let Some(year) = params.year {
+            query = query.filter(ModuleCol::Year.eq(year));
+        }
+        if let Some(sort_str) = &params.sort {
+            for field in sort_str.split(',') {
+                let trimmed = field.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let (column, descending) = if trimmed.starts_with('-') {
+                    (&trimmed[1..], true)
+                } else {
+                    (trimmed, false)
+                };
+                query = match column {
+                    "code" => {
+                        if descending {
+                            query.order_by_desc(ModuleCol::Code)
+                        } else {
+                            query.order_by_asc(ModuleCol::Code)
+                        }
+                    }
+                    "created_at" => {
+                        if descending {
+                            query.order_by_desc(ModuleCol::CreatedAt)
+                        } else {
+                            query.order_by_asc(ModuleCol::CreatedAt)
+                        }
+                    }
+                    "year" => {
+                        if descending {
+                            query.order_by_desc(ModuleCol::Year)
+                        } else {
+                            query.order_by_asc(ModuleCol::Year)
+                        }
+                    }
+                    "credits" => {
+                        if descending {
+                            query.order_by_desc(ModuleCol::Credits)
+                        } else {
+                            query.order_by_asc(ModuleCol::Credits)
+                        }
+                    }
+                    "description" => {
+                        if descending {
+                            query.order_by_desc(ModuleCol::Description)
+                        } else {
+                            query.order_by_asc(ModuleCol::Description)
+                        }
+                    }
+                    _ => query,
+                };
             }
         }
-    }
 
-    let mut condition = Condition::all();
+        query
+    };
 
-    // Query filters
-    if let Some(ref q) = params.query {
-        let q = q.to_lowercase();
-        condition = condition.add(
-            ModuleCol::Code
-                .contains(&q)
-                .or(ModuleCol::Description.contains(&q)),
-        );
-    }
+    // If admin, fetch all modules
+    let query = if claims.admin {
+        build_query(ModuleEntity::find())
+    } else {
+        // Otherwise, filter by membership
+        let memberships = user_module_role::Entity::find()
+            .filter(user_module_role::Column::UserId.eq(user_id))
+            .all(db)
+            .await
+            .unwrap_or_default();
 
-    if let Some(ref code) = params.code {
-        condition = condition.add(ModuleCol::Code.contains(&code.to_lowercase()));
-    }
-
-    if let Some(year) = params.year {
-        condition = condition.add(ModuleCol::Year.eq(year));
-    }
-    
-    let mut query = ModuleEntity::find().filter(condition);
-    
-    if let Some(sort_str) = &params.sort {
-        for field in sort_str.split(',') {
-            let trimmed = field.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            let (column, descending) = if trimmed.starts_with('-') {
-                (&trimmed[1..], true)
-            } else {
-                (trimmed, false)
-            };
-
-            match column {
-                "code" => {
-                    query = if descending {
-                        query.order_by_desc(ModuleCol::Code)
-                    } else {
-                        query.order_by_asc(ModuleCol::Code)
-                    };
-                }
-                "created_at" => {
-                    query = if descending {
-                        query.order_by_desc(ModuleCol::CreatedAt)
-                    } else {
-                        query.order_by_asc(ModuleCol::CreatedAt)
-                    };
-                }
-                "year" => {
-                    query = if descending {
-                        query.order_by_desc(ModuleCol::Year)
-                    } else {
-                        query.order_by_asc(ModuleCol::Year)
-                    };
-                }
-                "credits" => {
-                    query = if descending {
-                        query.order_by_desc(ModuleCol::Credits)
-                    } else {
-                        query.order_by_asc(ModuleCol::Credits)
-                    };
-                }
-                "description" => {
-                    query = if descending {
-                        query.order_by_desc(ModuleCol::Description)
-                    } else {
-                        query.order_by_asc(ModuleCol::Description)
-                    };
-                }
-                _ => {}
-            }
+        if memberships.is_empty() {
+            let response = FilterResponse::from((Vec::<Module>::new(), page, per_page, 0));
+            return (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    response,
+                    "Modules retrieved successfully",
+                )),
+            );
         }
-    }
 
-    // Pagination
+        let module_ids: Vec<i64> = memberships.iter().map(|m| m.module_id).collect();
+        build_query(ModuleEntity::find().filter(ModuleCol::Id.is_in(module_ids)))
+    };
+
     let paginator = query.paginate(db, per_page as u64);
     let total = paginator.num_items().await.unwrap_or(0) as i32;
     let modules: Vec<Module> = paginator
@@ -459,7 +466,6 @@ pub async fn get_modules(
         )),
     )
 }
-
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct MyDetailsResponse {
@@ -549,7 +555,7 @@ impl From<(Vec<Module>, Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsRes
 pub async fn get_my_details(
     State(state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
-) -> impl IntoResponse {    
+) -> impl IntoResponse {
     let db = state.db();
 
     let user_id = claims.sub;
@@ -593,13 +599,13 @@ async fn get_modules_by_user_and_role(
                 .add(RoleCol::UserId.eq(user_id))
                 .add(RoleCol::Role.eq(role)),
         )
-        .find_also_related(ModuleEntity) // this returns tuples (role, Option<module>)
+        .find_also_related(ModuleEntity)
         .all(db)
         .await
         .map(|results| {
             results
                 .into_iter()
-                .filter_map(|(_, module)| module) // extract just the Some(module)
+                .filter_map(|(_, module)| module)
                 .collect()
         })
 }
