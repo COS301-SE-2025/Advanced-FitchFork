@@ -202,7 +202,7 @@ This will generate and open the documentation in your default web browser. It in
 ## Demo Video Links
 
 - **[Demo 2](https://drive.google.com/file/d/1HH14M2B5bdTDQUfJQkwJvmMiMGzrWq66/view?usp=sharing)**
-- **[Demo 3]()
+- **[Demo 3]()**
 
 ---
 
