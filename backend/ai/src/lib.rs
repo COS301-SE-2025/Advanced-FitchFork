@@ -164,8 +164,7 @@ where
             // Run interpreter: executes code for this chromosome, writes artifacts
             //    to DB, and returns per-task outputs for *this* submission.
             //    The interpreter is the source of truth for stdout/stderr/exit codes.
-            let task_outputs: Vec<(i64, String)> =
-                run_interpreter(db, submission_id, &generated_string).await?;
+            let task_outputs: Vec<(i64, String)> = run_interpreter(db, submission_id, &generated_string).await?;
 
             // Derive counts the Components need:
             //    - `n_ltl_props`: total number of violated properties across tasks

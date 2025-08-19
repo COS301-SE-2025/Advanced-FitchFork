@@ -602,21 +602,21 @@ pub async fn create_main_from_interpreter(
         // Adjust templates per language as needed.
         let synthesized = match config.project.language {
             Language::Cpp => format!(
-                r#"#include <bits/stdc++.h>
-int main() {{
-    std::cout << "{}" << std::endl;
-    return 0;
-}}
-"#,
+            r#"#include <bits/stdc++.h>
+                int main() {{
+                    std::cout << "{}" << std::endl;
+                    return 0;
+                }}
+                "#,
                 generated_string.replace('"', "\\\"")
             ),
             Language::Java => format!(
-                r#"public class Main {{
-    public static void main(String[] args) {{
-        System.out.println("{}");
-    }}
-}}
-"#,
+            r#"public class Main {{
+                public static void main(String[] args) {{
+                    System.out.println("{}");
+                }}
+            }}
+            "#,
                 generated_string.replace('"', "\\\"")
             ),
             Language::Python => format!(r#"print("{}")"#, generated_string.replace('"', "\\\"")),
