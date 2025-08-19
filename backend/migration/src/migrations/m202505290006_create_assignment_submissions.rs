@@ -37,6 +37,12 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Alias::new("earned")).integer().not_null())
                     .col(ColumnDef::new(Alias::new("total")).integer().not_null())
                     .col(
+                        ColumnDef::new(Alias::new("status"))
+                            .string()
+                            .not_null()
+                            .default(Expr::value("received")),
+                    )
+                    .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()
                             .not_null()

@@ -8,6 +8,33 @@ use std::fs;
 use std::path::PathBuf;
 use crate::models::user;
 
+/// Application-level enum for submission statuses.
+/// Stored as TEXT in SQLite (rs_type = "String", db_type = "String").
+#[derive(Clone, Debug, PartialEq, DeriveActiveEnum)]
+#[sea_orm(rs_type = "String", db_type = "String", enum_name = "submission_status_enum")]
+pub enum SubmissionStatus {
+    #[sea_orm(string_value = "received")]
+    Received,
+    #[sea_orm(string_value = "queued")]
+    Queued,
+    #[sea_orm(string_value = "running")]
+    Running,
+    #[sea_orm(string_value = "grading")]
+    Grading,
+    #[sea_orm(string_value = "graded")]
+    Graded,
+    #[sea_orm(string_value = "failed_upload")]
+    FailedUpload,
+    #[sea_orm(string_value = "failed_compile")]
+    FailedCompile,
+    #[sea_orm(string_value = "failed_execution")]
+    FailedExecution,
+    #[sea_orm(string_value = "failed_grading")]
+    FailedGrading,
+    #[sea_orm(string_value = "failed_internal")]
+    FailedInternal,
+}
+
 /// Represents a user's submission for a specific assignment.
 ///
 /// Each submission is linked to one assignment and one user.
@@ -36,6 +63,8 @@ pub struct Model {
     pub path: String,
     /// Is this submission a practice submission?
     pub is_practice: bool,
+    /// Status of the submission (enforced by FK to `submission_statuses` lookup table).
+    pub status: SubmissionStatus,
     /// Timestamp when the submission was created.
     pub created_at: DateTime<Utc>,
     /// Timestamp when the submission was last updated.
@@ -60,6 +89,15 @@ pub enum Relation {
         to = "super::user::Column::Id"
     )]
     User,
+
+    /// Optional: link to the status lookup table `submission_statuses`.
+    /// Requires that you have an entity `crate::models::submission_statuses::Entity`.
+    #[sea_orm(
+        belongs_to = "super::submission_statuses::Entity",
+        from = "Column::Status",
+        to = "super::submission_statuses::Column::Name"
+    )]
+    SubmissionStatusLookup,
 }
 
 /// Custom behavior for the active model (currently using default behavior).
@@ -68,6 +106,12 @@ impl ActiveModelBehavior for ActiveModel {}
 impl Related<user::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::User.def()
+    }
+}
+
+impl Related<submission_statuses::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::SubmissionStatusLookup.def()
     }
 }
 
@@ -153,7 +197,7 @@ impl Model {
 
         let now = Utc::now();
 
-        // Step 1: Insert placeholder model
+        // Step 1: Insert placeholder model with a default status of `received`
         let partial = ActiveModel {
             assignment_id: Set(assignment_id),
             user_id: Set(user_id),
@@ -164,6 +208,7 @@ impl Model {
             filename: Set(filename.to_string()),
             file_hash: Set(file_hash.to_string()),
             path: Set("".to_string()),
+            status: Set(SubmissionStatus::Received),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
@@ -204,7 +249,7 @@ impl Model {
         fs::write(&file_path, bytes)
             .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
 
-        // Step 5: Update DB with path
+        // Step 5: Update DB with path (and updated_at)
         let mut model: ActiveModel = inserted.into();
         model.path = Set(relative_path);
         model.updated_at = Set(Utc::now());
@@ -236,7 +281,7 @@ impl Model {
         db: &DatabaseConnection,
     ) -> Result<Vec<i64>, DbErr> {
         let submissions = Entity::find()
-            .filter(Column::AssignmentId.eq(assignment_id as i32))
+            .filter(Column::AssignmentId.eq(assignment_id))
             .all(db)
             .await?;
 
@@ -275,6 +320,8 @@ mod tests {
     use sea_orm::{ActiveModelTrait, Set};
     use std::env;
     use tempfile::TempDir;
+
+    use crate::models::assignment_submission::SubmissionStatus;
 
     fn fake_bytes() -> Vec<u8> {
         vec![0x50, 0x4B, 0x03, 0x04] // ZIP header (PK...)
@@ -329,8 +376,7 @@ mod tests {
         .await
         .expect("Failed to insert assignment");
 
-        // Create dummy assignment_submission
-        let submission = crate::models::assignment_submission::ActiveModel {
+        let _submission = crate::models::assignment_submission::ActiveModel {
             assignment_id: Set(assignment.id),
             user_id: Set(user.id),
             attempt: Set(1),
@@ -340,6 +386,7 @@ mod tests {
             file_hash: Set("hash123#".to_string()),
             path: Set("".to_string()),
             is_practice: Set(false),
+            status: Set(SubmissionStatus::Received),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()
@@ -350,7 +397,7 @@ mod tests {
 
         // Save file via submission
         let content = fake_bytes();
-        let file = Model::save_file(&db, submission.id, user.id, 6, 10, 10, false, "solution.zip", "hash123#", &content)
+        let file = Model::save_file(&db, assignment.id, user.id, 6, 10, 10, false, "solution.zip", "hash123#", &content)
             .await
             .expect("Failed to save file");
 
