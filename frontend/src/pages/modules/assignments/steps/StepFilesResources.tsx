@@ -7,6 +7,12 @@ import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
 import { uploadAssignmentFile, downloadAssignmentFile } from '@/services/modules/assignments';
 import type { AssignmentFile } from '@/types/modules/assignments';
 
+// NEW: makefile task utils
+import {
+  parseTargetsFromMakefileZip,
+  createTasksFromMakefileTargets,
+} from '@/utils/makefile_tasks';
+
 const { Step } = Steps;
 const { Title, Paragraph, Text } = Typography;
 
@@ -36,7 +42,7 @@ const fileConfigs: {
   },
   {
     title: 'Makefile',
-    hint: 'Required for compiled languages like C/C++ (.zip)',
+    hint: 'Upload a zip containing a Makefile — tasks will be auto-detected.',
     accept: '.zip',
     fileType: 'makefile',
     maxCount: 1,
@@ -55,8 +61,10 @@ const StepFilesResources = () => {
 
   const [selectedType, setSelectedType] = useState<RequiredFileType>('main');
   const [files, setFiles] = useState<AssignmentFile[]>(assignment?.files ?? []);
-
   const [uploadError, setUploadError] = useState<RequiredFileType | null>(null);
+
+  // NEW: block UI while we parse + create tasks from makefile zip
+  const [creatingFromMakefile, setCreatingFromMakefile] = useState(false);
 
   useEffect(() => {
     setFiles(assignment?.files ?? []);
@@ -88,6 +96,28 @@ const StepFilesResources = () => {
       if (res.success) {
         message.success(`${file.name} uploaded as ${fileTypeLabels[selectedType]}`);
         await refreshAssignment?.();
+
+        // If it's a Makefile zip, best-effort parse & create tasks
+        if (selectedType === 'makefile') {
+          setCreatingFromMakefile(true);
+          try {
+            const targets = await parseTargetsFromMakefileZip(file);
+            if (targets.length > 0) {
+              await createTasksFromMakefileTargets(
+                module.id,
+                assignmentId,
+                targets,
+                async () => await refreshAssignment?.(),
+              );
+              message.success(`Added ${targets.length} task(s) from Makefile`);
+            }
+            // If no targets or parse fails, do nothing (silent skip as requested)
+          } catch {
+            // silent per requirement
+          } finally {
+            setCreatingFromMakefile(false);
+          }
+        }
       } else {
         setUploadError(selectedType);
         message.error(`Upload failed: ${res.message}`);
@@ -96,7 +126,7 @@ const StepFilesResources = () => {
       setUploadError(selectedType);
       message.error('Unexpected error during upload.');
     }
-    return false;
+    return false; // prevent default upload
   };
 
   const handleDownload = async (fileId: number) => {
@@ -151,6 +181,7 @@ const StepFilesResources = () => {
           maxCount={currentConfig.maxCount}
           beforeUpload={handleUpload}
           showUploadList={false}
+          disabled={creatingFromMakefile}
         >
           <p className="ant-upload-drag-icon">
             <UploadOutlined />
@@ -181,7 +212,7 @@ const StepFilesResources = () => {
                   ]}
                 >
                   <Tooltip title={file.filename}>
-                    <Text ellipsis style={{ maxWidth: 200 }}>
+                    <Text ellipsis style={{ maxWidth: 240 }}>
                       {file.filename}
                     </Text>
                   </Tooltip>

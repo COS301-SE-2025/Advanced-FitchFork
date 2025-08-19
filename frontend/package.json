@@ -24,14 +24,16 @@
     "dayjs": "^1.11.13",
     "diff": "^8.0.2",
     "diff2html": "^3.4.52",
+    "jszip": "^3.10.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-force-graph": "^1.47.6",
     "react-force-graph-3d": "^1.28.0",
     "react-markdown": "^10.1.0",
     "react-responsive": "^10.0.1",
     "react-router-dom": "^7.6.0",
-    "rehype-highlight": "^7.0.2"
+    "rehype-highlight": "^7.0.2",
+    "three": "^0.179.1",
+    "three-spritetext": "^1.10.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",
@@ -40,6 +42,7 @@
     "@types/jest": "^30.0.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@types/three": "^0.179.0",
     "@typescript-eslint/eslint-plugin": "^8.32.1",
     "@typescript-eslint/parser": "^8.32.1",
     "@vitejs/plugin-react": "^4.4.1",

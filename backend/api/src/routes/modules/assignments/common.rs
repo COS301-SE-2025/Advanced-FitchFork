@@ -1,3 +1,14 @@
+//! Assignment request and response models.
+//!
+//! Provides data structures for creating, reading, and managing assignments, including bulk operations.
+//!
+//! - `AssignmentRequest` – payload for creating/updating a single assignment.
+//! - `AssignmentResponse` – returned assignment details.
+//! - `File` – metadata for assignment-associated files.
+//! - `BulkDeleteRequest` – payload for deleting multiple assignments.
+//! - `BulkUpdateRequest` – payload for updating multiple assignments.
+//! - `BulkUpdateResult` and `FailedUpdate` – results of bulk update operations.
+
 use serde::{Serialize, Deserialize};
 use db::models::assignment::Model as AssignmentModel;
 

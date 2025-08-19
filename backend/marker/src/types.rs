@@ -14,9 +14,9 @@ pub struct TaskResult {
     /// A descriptive name for the task.
     pub name: String,
     /// The number of points awarded for the task.
-    pub awarded: u32,
+    pub awarded: i64,
     /// The maximum number of points possible for the task.
-    pub possible: u32,
+    pub possible: i64,
     /// A list of patterns or items that were successfully matched in the student's output.
     pub matched_patterns: Vec<String>,
     /// A list of patterns or items that were expected but not found in the student's output.
@@ -31,9 +31,9 @@ pub struct JsonTaskResult {
     /// The name of the task.
     pub name: String,
     /// The number of marks awarded for this task.
-    pub awarded: u32,
+    pub awarded: i64,
     /// The maximum possible marks for this task.
-    pub possible: u32,
+    pub possible: i64,
     /// The percentage score for this task, computed as (awarded / possible) * 100 (or 0.0 if possible is zero).
     pub percentage: f32,
 }
@@ -50,7 +50,7 @@ pub struct TaskEntry {
     /// The name of the task.
     pub name: String,
     /// The value (score/points) assigned to the task.
-    pub value: u32,
+    pub value: i64,
     /// The subsections of the task. Every task must have atleast one subsection.
     pub subsections: Vec<Subsection>,
 }
@@ -61,5 +61,5 @@ pub struct Subsection {
     /// The name of the subsection.
     pub name: String,
     /// The value (score/points) assigned to the subsection.
-    pub value: u32,
+    pub value: i64,
 }

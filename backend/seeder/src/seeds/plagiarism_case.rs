@@ -1,17 +1,16 @@
 use crate::seed::Seeder;
-use db::models::{assignment_submission, plagiarism_case};
-use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait};
 use chrono::Utc;
-use rand::seq::SliceRandom;
+use db::models::{assignment_submission, plagiarism_case};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait};
 
 pub struct PlagiarismCaseSeeder;
 
 #[async_trait::async_trait]
 impl Seeder for PlagiarismCaseSeeder {
     async fn seed(&self, db: &DatabaseConnection) {
-        
         // Fetch all assignment submissions
         let submissions = match assignment_submission::Entity::find().all(db).await {
             Ok(s) => s,
@@ -55,26 +54,28 @@ impl Seeder for PlagiarismCaseSeeder {
         let now = Utc::now();
 
         for (assignment_id, pair) in selected_pairs {
-            let description = format!(
-                "Possible plagiarism detected between submission {} and {}",
-                pair[0], pair[1]
-            );
-
-            let case = plagiarism_case::ActiveModel {
-                assignment_id: sea_orm::ActiveValue::Set(assignment_id),
-                submission_id_1: sea_orm::ActiveValue::Set(pair[0]),
-                submission_id_2: sea_orm::ActiveValue::Set(pair[1]),
-                description: sea_orm::ActiveValue::Set(description),
-                created_at: sea_orm::ActiveValue::Set(now),
-                updated_at: sea_orm::ActiveValue::Set(now),
-                ..Default::default()
-            };
-
-            if let Err(e) = case.insert(db).await {
-                eprintln!(
-                    "Failed to insert plagiarism case for submissions {} and {}: {}",
-                    pair[0], pair[1], e
+            if assignment_id != 10003 {
+                let description = format!(
+                    "Possible plagiarism detected between submission {} and {}",
+                    pair[0], pair[1]
                 );
+
+                let case = plagiarism_case::ActiveModel {
+                    assignment_id: sea_orm::ActiveValue::Set(assignment_id),
+                    submission_id_1: sea_orm::ActiveValue::Set(pair[0]),
+                    submission_id_2: sea_orm::ActiveValue::Set(pair[1]),
+                    description: sea_orm::ActiveValue::Set(description),
+                    created_at: sea_orm::ActiveValue::Set(now),
+                    updated_at: sea_orm::ActiveValue::Set(now),
+                    ..Default::default()
+                };
+
+                if let Err(e) = case.insert(db).await {
+                    eprintln!(
+                        "Failed to insert plagiarism case for submissions {} and {}: {}",
+                        pair[0], pair[1], e
+                    );
+                }
             }
         }
     }

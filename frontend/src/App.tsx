@@ -27,8 +27,7 @@ import Account from './pages/settings/Account';
 import Security from './pages/settings/Security';
 import Appearance from './pages/settings/Appearance';
 import AssignmentLayout from './layouts/AssignmentLayout';
-import SubmissionView from './pages/modules/assignments/submissions/show/SubmissionView';
-import Submissions from './pages/modules/assignments/submissions/index/Submissions';
+import SubmissionView from './pages/modules/assignments/submissions/SubmissionView';
 import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
 import MemoOutput from './pages/modules/assignments/MemoOutput';
 import MarkAllocator from './pages/modules/assignments/MarkAllocator';
@@ -39,7 +38,6 @@ import HelpContact from './pages/help/HelpContact';
 import HelpSubmissions from './pages/help/HelpSubmissions';
 import HelpTroubleshooting from './pages/help/HelpTroubleshooting';
 import Landing from './pages/Landing';
-import Config from './pages/modules/assignments/Config';
 import Dashboard from './pages/Dashboard';
 import Tasks from './pages/modules/assignments/Tasks';
 import AuthLayout from './layouts/AuthLayout';
@@ -50,9 +48,30 @@ import AssignmentsList from './pages/modules/assignments/AssignmentsList';
 import ProtectedAuthRoute from './components/routes/ProtectedAuthRoute';
 import ProtectedAdminRoute from './components/routes/ProtectedAdminRoute';
 import ProtectedModuleRoute from './components/routes/ProtectedModuleRoute';
-import Chat from './pages/Chat';
+import Tickets from './pages/modules/assignments/tickets/Tickets';
+import TicketView from './pages/modules/assignments/tickets/TicketView';
+import WithModuleContext from './components/providers/WithModuleContext';
+import WithAssignmentContext from './components/providers/WithAssignmentContext';
+import AssignmentConfigLayout from './layouts/ConfigLayout';
+import ExecutionPage from './pages/modules/assignments/config/ExecutionPage';
+import MarkingPage from './pages/modules/assignments/config/MarkingPage';
+import { useUI } from './context/UIContext';
+import AssignmentMobileMenu from './pages/modules/assignments/AssignmentMobileMenu';
+import ModuleMobileMenu from './pages/modules/ModuleMobileMenu';
+import ConfigMobileMenu from './pages/modules/assignments/config/ConfigMobileMenu';
+import SubmissionsList from './pages/modules/assignments/submissions/SubmissionsList';
+import SettingsMobileMenu from './pages/settings/SettingsMobileMenu';
+import Announcements from './pages/modules/announcements/Announcements';
+import AnnouncementView from './pages/modules/announcements/AnnouncementView';
+import PlagiarismCases from './pages/modules/assignments/PlagiarismCases';
+import AssignmentPage from './pages/modules/assignments/config/AssignmentPage';
+import OutputPage from './pages/modules/assignments/config/OutputPage';
+import GatlamPage from './pages/modules/assignments/config/GatlamPage';
+import InterpreterPage from './pages/modules/assignments/config/InterpreterPage';
+import AssignmentFilePage from './pages/modules/assignments/config/AssignmentFilePage';
 
 export default function App() {
+  const { isMobile } = useUI();
   const { user, loading, isExpired } = useAuth();
 
   if (loading) return null;
@@ -82,10 +101,12 @@ export default function App() {
         <Route element={<ProtectedAuthRoute />}>
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/chat" element={<Chat />} />
 
             <Route path="/settings" element={<SettingsLayout />}>
-              <Route index element={<Navigate to="account" replace />} />
+              <Route
+                index
+                element={isMobile ? <SettingsMobileMenu /> : <Navigate to="account" replace />}
+              />
               <Route path="account" element={<Account />} />
               <Route path="security" element={<Security />} />
               <Route path="appearance" element={<Appearance />} />
@@ -102,36 +123,75 @@ export default function App() {
 
             {/* Modules */}
             <Route path="/modules" element={<ModulesList />} />
-            <Route path="/modules/:id" element={<ModuleLayout />}>
-              <Route index element={<ModuleOverview />} />
+            <Route path="/modules/:id" element={<WithModuleContext />}>
+              <Route path="/modules/:id" element={<ModuleLayout />}>
+                <Route
+                  index
+                  element={isMobile ? <ModuleMobileMenu /> : <Navigate to="overview" replace />}
+                />
+                <Route path="overview" element={<ModuleOverview />} />
 
-              <Route path="assignments" element={<AssignmentsList />} />
-              <Route path="assignments/:assignment_id" element={<AssignmentLayout />}>
-                <Route index element={<Navigate to="submissions" replace />} />
-                <Route path="files" element={<AssignmentFiles />} />
-                <Route path="submissions" element={<Submissions />} />
-                <Route path="submissions/:submission_id" element={<SubmissionView />} />
-                <Route path="tasks" element={<Tasks />}>
-                  <Route index element={<></>} />
-                  <Route path=":task_id" element={<></>} />
+                <Route path="announcements">
+                  <Route index element={<Announcements />} />
+                  <Route path=":announcement_id" element={<AnnouncementView />} />
                 </Route>
-                <Route path="memo-output" element={<MemoOutput />} />
-                <Route path="mark-allocator" element={<MarkAllocator />} />
-                <Route path="stats" element={<UnderConstruction />} />
-                <Route path="config" element={<Config />} />
-              </Route>
+                <Route path="assignments" element={<AssignmentsList />} />
+                <Route path="assignments/:assignment_id" element={<WithAssignmentContext />}>
+                  <Route element={<AssignmentLayout />}>
+                    <Route
+                      index
+                      element={
+                        isMobile ? <AssignmentMobileMenu /> : <Navigate to="submissions" replace />
+                      }
+                    />
+                    <Route path="files" element={<AssignmentFiles />} />
+                    <Route path="submissions" element={<SubmissionsList />} />
+                    <Route path="submissions/:submission_id" element={<SubmissionView />} />
+                    <Route path="tasks" element={<Tasks />}>
+                      <Route index element={<></>} />
+                      <Route path=":task_id" element={<></>} />
+                    </Route>
+                    <Route path="tickets" element={<Tickets />} />
+                    <Route path="memo-output" element={<MemoOutput />} />
+                    <Route path="mark-allocator" element={<MarkAllocator />} />
+                    <Route path="stats" element={<UnderConstruction />} />
 
-              <Route path="bookings" element={<UnderConstruction />} />
-              <Route path="grades" element={<ModuleGrades />} />
-              <Route path="resources" element={<UnderConstruction />} />
-              <Route
-                path="personnel"
-                element={
-                  <ProtectedModuleRoute allowedRoles={['lecturer', 'assistant_lecturer']}>
-                    <ModulePersonnel />
-                  </ProtectedModuleRoute>
-                }
-              />
+                    <Route path="plagiarism">
+                      <Route index element={<PlagiarismCases />} />
+                      <Route path=":plagiarism_id" element={<></>} />
+                    </Route>
+                    <Route path="config" element={<AssignmentConfigLayout />}>
+                      <Route
+                        index
+                        element={
+                          isMobile ? <ConfigMobileMenu /> : <Navigate to="assignment" replace />
+                        }
+                      />
+                      <Route path="assignment" element={<AssignmentPage />} />
+                      <Route path="execution" element={<ExecutionPage />} />
+                      <Route path="marking" element={<MarkingPage />} />
+                      <Route path="output" element={<OutputPage />} />
+                      <Route path="gatlam" element={<GatlamPage />} />
+                      <Route path="interpreter" element={<InterpreterPage />} />
+                      <Route path="files/:fileType" element={<AssignmentFilePage />} />
+                    </Route>
+                  </Route>
+
+                  <Route path="tickets/:ticket_id" element={<TicketView />} />
+                </Route>
+
+                <Route path="bookings" element={<UnderConstruction />} />
+                <Route path="grades" element={<ModuleGrades />} />
+                <Route path="resources" element={<UnderConstruction />} />
+                <Route
+                  path="personnel"
+                  element={
+                    <ProtectedModuleRoute allowedRoles={['lecturer', 'assistant_lecturer']}>
+                      <ModulePersonnel />
+                    </ProtectedModuleRoute>
+                  }
+                />
+              </Route>
             </Route>
 
             {/* Help Routes */}

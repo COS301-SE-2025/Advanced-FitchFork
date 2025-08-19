@@ -78,6 +78,35 @@ impl Model {
         Self::storage_root().join(&self.path)
     }
 
+    pub async fn delete_for_submission(
+        db: &DatabaseConnection,
+        submission_id: i64,
+    ) -> Result<(), DbErr> {
+        use sea_orm::QueryFilter;
+
+        // Find all outputs for the submission
+        let outputs = Entity::find()
+            .filter(Column::SubmissionId.eq(submission_id))
+            .all(db)
+            .await?;
+
+        for output in outputs {
+            // Delete file from disk
+            let path = output.full_path();
+            if path.exists() {
+                if let Err(e) = fs::remove_file(&path) {
+                    eprintln!("Failed to delete file {:?}: {}", path, e);
+                }
+            }
+
+            // Delete database entry
+            let am: ActiveModel = output.into();
+            am.delete(db).await?;
+        }
+
+        Ok(())
+    }
+
     pub async fn save_file(
         db: &DatabaseConnection,
         task_id: i64,
@@ -154,7 +183,9 @@ impl Model {
         assignment_id: i64,
         submission_id: i64,
     ) -> io::Result<Vec<(i64, String)>> {
-        let submission = assignment_submission::Entity::find_by_id(submission_id).one(db).await
+        let submission = assignment_submission::Entity::find_by_id(submission_id)
+            .one(db)
+            .await
             .map_err(|e| io::Error::new(ErrorKind::Other, format!("DB error: {}", e)))?
             .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "Submission not found"))?;
 
@@ -169,7 +200,10 @@ impl Model {
         if !base_dir_path.exists() {
             return Err(io::Error::new(
                 ErrorKind::NotFound,
-                format!("Submission output directory {:?} does not exist", base_dir_path),
+                format!(
+                    "Submission output directory {:?} does not exist",
+                    base_dir_path
+                ),
             ));
         }
 
@@ -184,9 +218,13 @@ impl Model {
                         let output = Entity::find_by_id(output_id)
                             .one(db)
                             .await
-                            .map_err(|e| io::Error::new(ErrorKind::Other, format!("DB error: {}", e)))?
-                            .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "Output not found"))?;
-                        
+                            .map_err(|e| {
+                                io::Error::new(ErrorKind::Other, format!("DB error: {}", e))
+                            })?
+                            .ok_or_else(|| {
+                                io::Error::new(ErrorKind::NotFound, "Output not found")
+                            })?;
+
                         let content = fs::read_to_string(&file_path)?;
                         results.push((output.task_id, content));
                     }

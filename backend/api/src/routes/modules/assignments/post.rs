@@ -1,3 +1,16 @@
+//! Assignment creation route.
+//!
+//! Provides an endpoint for creating a new assignment in a module:
+//! - `POST /api/modules/{module_id}/assignments`
+//!
+//! Key points:
+//! - Assignments are created in the `setup` state by default.
+//! - Only lecturers or admins assigned to the module can create assignments.
+//! - Dates must be in ISO 8601 format (RFC 3339).
+//! - `assignment_type` must be either `"assignment"` or `"practical"`.
+//!
+//! Responses include standard `200 OK`, `400 Bad Request` for validation errors, and `500 Internal Server Error` for database issues.
+
 use axum::{
     extract::{State, Path},
     http::StatusCode,

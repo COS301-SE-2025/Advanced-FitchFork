@@ -1,63 +1,40 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate, useLocation, Outlet } from 'react-router-dom';
-import { Layout, Menu, Typography, Spin, Tabs } from 'antd';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
+import { Layout, Menu, Typography } from 'antd';
 import {
   HomeOutlined,
   FileTextOutlined,
   BarChartOutlined,
   BookOutlined,
   UserOutlined,
-  CalendarOutlined,
+  NotificationOutlined,
 } from '@ant-design/icons';
 import { useMediaQuery } from 'react-responsive';
 import { useAuth } from '@/context/AuthContext';
-import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
-import { ModuleProvider } from '@/context/ModuleContext';
-import { getModuleDetails } from '@/services/modules';
-import type { Module } from '@/types/modules';
-import type { User } from '@/types/users';
+import { useModule } from '@/context/ModuleContext';
+import MobilePageHeader from '@/components/common/MobilePageHeader';
+import { formatModuleCode } from '@/utils/modules';
 
 const { Sider, Content } = Layout;
 const { Title } = Typography;
 
-interface ModuleDetails extends Module {
-  lecturers: User[];
-  tutors: User[];
-  students: User[];
-}
-
 const ModuleLayout = () => {
-  const { id } = useParams();
+  const module = useModule();
+  const { id: moduleId, code, year } = module;
   const navigate = useNavigate();
   const location = useLocation();
-  const moduleId = Number(id);
-  const { setBreadcrumbLabel } = useBreadcrumbContext();
-
-  const auth = useAuth();
-  const showPersonnel = auth.isAdmin || auth.isLecturer(moduleId);
-
-  const [loading, setLoading] = useState(true);
-  const [module, setModule] = useState<ModuleDetails | null>(null);
-
   const isMobile = useMediaQuery({ maxWidth: 768 });
 
-  useEffect(() => {
-    const load = async () => {
-      const res = await getModuleDetails(moduleId);
-      if (res.success && res.data) {
-        setModule(res.data);
-        setBreadcrumbLabel(`modules/${res.data.id}`, res.data.code);
-      }
-      setLoading(false);
-    };
-
-    if (!isNaN(moduleId)) load();
-  }, [moduleId]);
+  const auth = useAuth();
+  const showPersonnel = auth.isAdmin || auth.isLecturer(Number(moduleId));
 
   const moduleMenu = [
     { key: `/modules/${moduleId}`, icon: <HomeOutlined />, label: 'Overview' },
+    {
+      key: `/modules/${moduleId}/announcements`,
+      icon: <NotificationOutlined />,
+      label: 'Announcements',
+    },
     { key: `/modules/${moduleId}/assignments`, icon: <FileTextOutlined />, label: 'Assignments' },
-    { key: `/modules/${moduleId}/bookings`, icon: <CalendarOutlined />, label: 'Bookings' },
     { key: `/modules/${moduleId}/grades`, icon: <BarChartOutlined />, label: 'Grades' },
     { key: `/modules/${moduleId}/resources`, icon: <BookOutlined />, label: 'Resources' },
     ...(showPersonnel
@@ -65,49 +42,27 @@ const ModuleLayout = () => {
       : []),
   ];
 
+  const currentKey =
+    moduleMenu
+      .map((item) => item.key)
+      .filter((key) => location.pathname === key || location.pathname.startsWith(`${key}/`))
+      .sort((a, b) => b.length - a.length)[0] ?? '';
+
   const handleNav = ({ key }: { key: string }) => {
     if (location.pathname !== key) navigate(key);
   };
 
-  if (loading || !module) {
-    return (
-      <div className="p-8">
-        <Spin tip="Loading module..." />
-      </div>
-    );
-  }
-
-  const currentKey =
-    moduleMenu
-      .map((item) => item.key)
-      .filter((key) => location.pathname === key || location.pathname.startsWith(key + '/'))
-      .sort((a, b) => b.length - a.length)[0] ?? '';
-
   return (
-    <Layout className="h-full !bg-transparent">
-      {isMobile ? (
-        <div className="w-full px-4 pt-4 bg-white dark:bg-gray-950">
-          <Tabs
-            activeKey={location.pathname}
-            onChange={(key) => navigate(key)}
-            items={moduleMenu.map((item) => ({
-              key: item.key,
-              label: item.label,
-              icon: item.icon,
-            }))}
-            tabBarGutter={16}
-            animated={false}
-            className="!mb-0"
-          />
-        </div>
-      ) : (
+    <Layout className="flex h-full !bg-transparent">
+      {!isMobile && (
         <Sider
           width={240}
-          className="!bg-white dark:!bg-gray-950 border-r border-gray-200 dark:border-gray-800"
+          className="!bg-white dark:!bg-gray-900 border-r border-gray-200 dark:border-gray-800"
         >
-          <div className="flex flex-row justify-start items-center gap-2 px-4 py-5 border-b border-gray-200 dark:border-gray-800">
+          <div className="flex items-center gap-2 px-4 py-5 border-b border-gray-200 dark:border-gray-800">
             <Title level={5} className="!mb-0">
-              {module.code} <span className="text-gray-400 dark:text-gray-500">{module.year}</span>
+              {formatModuleCode(code) + ' '}
+              <span className="text-gray-400 dark:text-gray-500">{year}</span>
             </Title>
           </div>
           <Menu
@@ -120,13 +75,13 @@ const ModuleLayout = () => {
         </Sider>
       )}
 
-      <ModuleProvider value={{ module }}>
-        <Layout className="!bg-transparent">
-          <Content className="!bg-transparent overflow-y-auto min-h-full">
-            <Outlet />
-          </Content>
-        </Layout>
-      </ModuleProvider>
+      <Layout className="flex-1 flex flex-col min-h-0 !bg-transparent">
+        {isMobile && <MobilePageHeader />}
+
+        <Content className="flex-1 min-h-0 flex flex-col !bg-transparent">
+          <Outlet />
+        </Content>
+      </Layout>
     </Layout>
   );
 };

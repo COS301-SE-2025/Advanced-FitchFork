@@ -10,6 +10,6 @@ export interface Task extends Timestamp {
 
 export interface SubsectionDetail {
   name: string;
-  mark_value: number;
+  value: number;
   memo_output: string;
 }

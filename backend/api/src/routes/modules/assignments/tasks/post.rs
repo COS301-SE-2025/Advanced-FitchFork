@@ -15,6 +15,7 @@ use crate::routes::modules::assignments::tasks::common::TaskResponse;
 #[derive(Debug, Deserialize)]
 pub struct CreateTaskRequest {
     task_number: i64,
+    name: String,    
     command: String,
 }
 
@@ -23,8 +24,9 @@ pub struct CreateTaskRequest {
 /// Create a new task for a given assignment. Accessible to users with Lecturer or Admin roles
 /// assigned to the module.
 ///
-/// Each task must have a unique `task_number` within the assignment. The `command` field defines
-/// how the task will be executed during evaluation (e.g., test commands, build commands).
+/// Each task must have a unique `task_number` within the assignment. The `name` field defines a short,
+/// human-readable title for the task, while the `command` field defines how the task will be executed
+/// during evaluation (e.g., test commands, build commands).
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): The ID of the module containing the assignment
@@ -34,12 +36,14 @@ pub struct CreateTaskRequest {
 /// ```json
 /// {
 ///   "task_number": 1,
+///   "name": "Unit Tests",
 ///   "command": "cargo test --lib"
 /// }
 /// ```
 ///
 /// ### Request Body Fields
 /// - `task_number` (i64, required): Unique sequential number for the task within the assignment
+/// - `name` (string, required): Short descriptive name for the task (e.g., "Compile", "Unit Tests")
 /// - `command` (string, required): Command to execute for this task (e.g., test commands, build scripts)
 ///
 /// ### Example Request
@@ -49,6 +53,7 @@ pub struct CreateTaskRequest {
 ///   -H "Content-Type: application/json" \
 ///   -d '{
 ///     "task_number": 1,
+///     "name": "Unit Tests",
 ///     "command": "cargo test --lib"
 ///   }'
 /// ```
@@ -61,6 +66,7 @@ pub struct CreateTaskRequest {
 ///   "data": {
 ///     "id": 123,
 ///     "task_number": 1,
+///     "name": "Unit Tests",
 ///     "command": "cargo test --lib",
 ///     "created_at": "2024-01-01T00:00:00Z",
 ///     "updated_at": "2024-01-01T00:00:00Z"
@@ -98,7 +104,7 @@ pub struct CreateTaskRequest {
 /// ```json
 /// {
 ///   "success": false,
-///   "message": "Invalid task_number or command"
+///   "message": "Invalid task_number, name, or command"
 /// }
 /// ```
 /// or
@@ -119,6 +125,7 @@ pub struct CreateTaskRequest {
 ///
 /// ### Validation Rules
 /// - `task_number` must be greater than 0
+/// - `name` must not be empty or whitespace-only
 /// - `command` must not be empty or whitespace-only
 /// - `task_number` must be unique within the assignment
 /// - Assignment must exist and belong to the specified module
@@ -134,14 +141,19 @@ pub async fn create_task(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    if payload.task_number <= 0 || payload.command.trim().is_empty() {
+    // Validation: task_number > 0, name non-empty, command non-empty
+    if payload.task_number <= 0
+        || payload.name.trim().is_empty()
+        || payload.command.trim().is_empty()
+    {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<()>::error("Invalid task_number or command")),
+            Json(ApiResponse::<()>::error("Invalid task_number, name, or command")),
         )
             .into_response();
     }
 
+    // Ensure task_number uniqueness
     let exists = Entity::find()
         .filter(Column::AssignmentId.eq(assignment_id))
         .filter(Column::TaskNumber.eq(payload.task_number))
@@ -160,6 +172,7 @@ pub async fn create_task(
     let new_task = ActiveModel {
         assignment_id: sea_orm::ActiveValue::Set(assignment_id),
         task_number: sea_orm::ActiveValue::Set(payload.task_number),
+        name: sea_orm::ActiveValue::Set(payload.name.clone()),
         command: sea_orm::ActiveValue::Set(payload.command.clone()),
         created_at: sea_orm::ActiveValue::Set(now.clone()),
         updated_at: sea_orm::ActiveValue::Set(now.clone()),

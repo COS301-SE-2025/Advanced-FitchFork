@@ -1,5 +1,3 @@
-// src/components/modules/ModuleCreditsTag.tsx
-
 import { Tag } from 'antd';
 
 interface Props {

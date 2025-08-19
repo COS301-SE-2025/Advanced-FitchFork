@@ -90,6 +90,8 @@ mod common {
             assignment.id,
             student_user.id,
             1,
+            10,
+            10,
             false,
             "sub1.txt",
             "hash123#",
@@ -103,6 +105,8 @@ mod common {
             assignment.id,
             student_user.id,
             1,
+            10,
+            10,
             false,
             "sub2.txt",
             "hash456#",
@@ -118,6 +122,7 @@ mod common {
             submission1.id,
             submission2.id,
             "Initial description",
+            0.0
         )
         .await
         .unwrap();
@@ -335,6 +340,8 @@ mod bulk_delete_plagiarism_tests {
             data.assignment.id,
             data.student_user.id,
             1,
+            10,
+            10,
             false,
             "sub3.txt",
             "hash789#",
@@ -347,6 +354,8 @@ mod bulk_delete_plagiarism_tests {
             data.assignment.id,
             data.student_user.id,
             1,
+            10,
+            10,
             false,
             "sub4.txt",
             "hash101#",
@@ -356,7 +365,7 @@ mod bulk_delete_plagiarism_tests {
         .unwrap();
 
         let case2 =
-            PlagiarismCaseModel::create_case(db, data.assignment.id, submission3.id, submission4.id, "Case 2")
+            PlagiarismCaseModel::create_case(db, data.assignment.id, submission3.id, submission4.id, "Case 2", 0.0)
                 .await
                 .unwrap();
         let case3 = PlagiarismCaseModel::create_case(
@@ -365,6 +374,7 @@ mod bulk_delete_plagiarism_tests {
             data.submission1.id,
             submission3.id,
             "Case 3",
+            0.0
         )
         .await
         .unwrap();

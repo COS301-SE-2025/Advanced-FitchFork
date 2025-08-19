@@ -1,58 +1,153 @@
-import StatCard from '@/components/StatCard';
-import { Row, Col } from 'antd';
-import SubmissionsPanel from '@/components/dashboard/SubmissionsPanel';
-import UserManagementPanel from '@/components/dashboard/UserManagementPanel';
-import QuickActionsPanel from '@/components/dashboard/QuickActionsPanel';
-import SystemOverviewPanel from '@/components/dashboard/SystemOverviewPanel';
-import ModuleAssignmentsPanel from '@/components/dashboard/ModuleAssignmentsPanel';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Card, Typography, Segmented } from 'antd';
+import { useAuth } from '@/context/AuthContext';
+import { useUI } from '@/context/UIContext';
 import {
-  UserOutlined,
-  AppstoreOutlined,
-  FileTextOutlined,
-  UploadOutlined,
-} from '@ant-design/icons';
+  AdminDashboard,
+  AssistantDashboard,
+  LecturerDashboard,
+  StudentDashboard,
+  TutorDashboard,
+} from '@/components/dashboard';
 
-const Dashboard = () => {
+const { Title, Text } = Typography;
+
+// ---- scopes ----
+type ScopeKey = 'student' | 'tutor' | 'lecturer' | 'assistant' | 'admin';
+const SCOPE_STORAGE_KEY = 'dashboard:lastScope';
+
+const RoleSummary: React.FC<{
+  scope: ScopeKey;
+  availableScopes: ScopeKey[];
+  onScopeChange: (s: ScopeKey) => void;
+}> = ({ scope, availableScopes, onScopeChange }) => {
+  const { user } = useAuth();
+  const { isMobile } = useUI();
+
+  const options = availableScopes.map((s) => ({
+    label:
+      s === 'student'
+        ? 'Student'
+        : s === 'tutor'
+          ? 'Tutor'
+          : s === 'lecturer'
+            ? 'Lecturer'
+            : s === 'assistant'
+              ? 'Assistant'
+              : 'Admin',
+    value: s,
+  }));
+
   return (
-    <div className="p-4">
-      {/* Stat Cards */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} md={12} lg={6}>
-          <StatCard title="Total Users" value={1432} prefix={<UserOutlined />} />
-        </Col>
-        <Col xs={24} sm={12} md={12} lg={6}>
-          <StatCard title="Total Modules" value={40} prefix={<AppstoreOutlined />} />
-        </Col>
-        <Col xs={24} sm={12} md={12} lg={6}>
-          <StatCard title="Active Assignments" value={10} prefix={<FileTextOutlined />} />
-        </Col>
-        <Col xs={24} sm={12} md={12} lg={6}>
-          <StatCard title="Submissions Today" value={100} prefix={<UploadOutlined />} />
-        </Col>
-      </Row>
+    <Card
+      className="rounded-2xl !border-gray-200 dark:!border-gray-800"
+      styles={{ body: { padding: 16 } }}
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0">
+          <Title level={4} className="!mb-0 truncate">
+            Welcome{user?.username ? `, ${user.username}` : ''}
+          </Title>
+          <Text type="secondary">This dashboard adapts to your roles across modules.</Text>
+        </div>
 
-      {/* Submissions + User Management + Quick Actions */}
-      <Row gutter={[16, 16]} className="mt-4">
-        <Col xs={24} md={12} lg={8}>
-          <SubmissionsPanel />
-        </Col>
-        <Col xs={24} md={12} lg={8}>
-          <UserManagementPanel />
-        </Col>
-        <Col xs={24} md={24} lg={8}>
-          <QuickActionsPanel />
-        </Col>
-      </Row>
+        {availableScopes.length > 1 && (
+          <div className={isMobile ? 'w-full' : ''}>
+            <Segmented
+              value={scope}
+              onChange={(v) => onScopeChange(v as ScopeKey)}
+              options={options}
+              size="middle"
+              block={isMobile}
+              className={isMobile ? 'role-seg w-full' : 'role-seg'}
+              aria-label="Role selection"
+            />
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+};
 
-      {/* Module & System Insights */}
-      <Row gutter={[16, 16]} className="mt-4">
-        <Col xs={24} md={12}>
-          <ModuleAssignmentsPanel />
-        </Col>
-        <Col xs={24} md={12}>
-          <SystemOverviewPanel />
-        </Col>
-      </Row>
+// ==================== DASHBOARD ====================
+const Dashboard: React.FC = () => {
+  const {
+    isAdmin,
+    hasLecturerRole,
+    hasAssistantLecturerRole,
+    hasTutorRole,
+    hasStudentRole,
+    modulesByRole,
+  } = useAuth() as any;
+  const { isLg } = useUI();
+
+  // role flags -> available scopes
+  const roleFlags = useMemo(
+    () => ({
+      student: hasStudentRole(),
+      tutor: hasTutorRole(),
+      lecturer: hasLecturerRole(),
+      assistant: hasAssistantLecturerRole(),
+      admin: isAdmin,
+    }),
+    [modulesByRole, isAdmin],
+  );
+
+  const availableScopes = useMemo<ScopeKey[]>(() => {
+    const s: ScopeKey[] = [];
+    if (roleFlags.student) s.push('student');
+    if (roleFlags.tutor) s.push('tutor');
+    if (roleFlags.lecturer) s.push('lecturer');
+    if (roleFlags.assistant) s.push('assistant');
+    if (roleFlags.admin) s.push('admin');
+    return s;
+  }, [roleFlags]);
+
+  const [scope, setScope] = useState<ScopeKey>(() => {
+    if (typeof window === 'undefined') return 'student';
+    const saved = localStorage.getItem(SCOPE_STORAGE_KEY) as ScopeKey | null;
+    return saved ?? 'student';
+  });
+
+  useEffect(() => {
+    if (availableScopes.length && !availableScopes.includes(scope)) setScope(availableScopes[0]);
+  }, [availableScopes, scope]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') localStorage.setItem(SCOPE_STORAGE_KEY, scope);
+  }, [scope]);
+
+  const hasAnyRole =
+    isAdmin ||
+    hasLecturerRole() ||
+    hasAssistantLecturerRole() ||
+    hasTutorRole() ||
+    hasStudentRole();
+
+  return (
+    <div className="h-full flex flex-col overflow-x-hidden">
+      <div
+        className={`flex-1 p-4 flex flex-col gap-4 ${isLg ? 'overflow-hidden' : 'overflow-y-auto'}`}
+      >
+        <RoleSummary scope={scope} availableScopes={availableScopes} onScopeChange={setScope} />
+
+        {!hasAnyRole && (
+          <Card className="shadow-sm rounded-2xl">
+            <Text type="secondary">
+              No roles assigned yet. Once you&apos;re added to a module, the dashboard will populate
+              dynamically.
+            </Text>
+          </Card>
+        )}
+
+        <div className="flex-1 min-h-0">
+          {scope === 'student' && <StudentDashboard />}
+          {scope === 'tutor' && <TutorDashboard />}
+          {scope === 'assistant' && <AssistantDashboard />}
+          {scope === 'lecturer' && <LecturerDashboard />}
+          {scope === 'admin' && <AdminDashboard />}
+        </div>
+      </div>
     </div>
   );
 };

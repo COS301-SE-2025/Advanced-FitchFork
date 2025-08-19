@@ -50,22 +50,44 @@ mod tests {
     async fn test_put_mark_allocator_success_as_lecturer() {
         let (app, app_state) = make_test_app().await;
         let data = setup_test_data(app_state.db()).await;
-        
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/mark_allocator",
+            data.module.id, data.assignment.id
+        );
+
+        // NOTE: all values are integers; tasks use the "task1" string-key format
+        let body = r#"{
+            "tasks": [
+                {
+                    "task1": {
+                        "name": "Task 1",
+                        "task_number": 1,
+                        "value": 1,
+                        "subsections": [
+                            { "name": "Correctness", "value": 1 }
+                        ]
+                    }
+                }
+            ],
+            "total_value": 1
+        }"#;
+
         let req = Request::builder()
             .uri(&uri)
             .method("PUT")
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(Body::from(r#"{"tasks":[{"task_number":1,"weight":1.0,"criteria":[{"name":"Correctness","weight":1.0}]}],"total_weight":1.0}"#))
+            .body(Body::from(body))
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let _ = fs::remove_dir_all("./tmp");
     }
+
 
     #[tokio::test]
     #[serial]
@@ -211,18 +233,33 @@ mod tests {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
-    #[tokio::test]
+  #[tokio::test]
     #[serial]
     async fn test_put_then_get_mark_allocator() {
         let (app, app_state) = make_test_app().await;
         let data = setup_test_data(app_state.db()).await;
-        
+
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
-        
-        let allocator_data = json!({
-            "tasks": [{"task_number": 1, "weight": 1.0, "criteria": [{"name": "Correctness", "weight": 1.0}]}],
-            "total_weight": 1.0
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/mark_allocator",
+            data.module.id, data.assignment.id
+        );
+
+        // String-keyed "task1" shape; integers everywhere; uses "subsections" + "value"
+        let allocator_data = serde_json::json!({
+            "tasks": [
+                {
+                    "task1": {
+                        "name": "Task 1",
+                        "task_number": 1,
+                        "value": 1,
+                        "subsections": [
+                            { "name": "Correctness", "value": 1 }
+                        ]
+                    }
+                }
+            ],
+            "total_value": 1
         });
 
         let put_req = Request::builder()
@@ -248,9 +285,10 @@ mod tests {
 
         let body_bytes = to_bytes(get_response.into_body(), usize::MAX).await.unwrap();
         let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-        
+
         assert_eq!(body_json["data"], allocator_data);
 
         let _ = fs::remove_dir_all("./tmp");
     }
+
 }

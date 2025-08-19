@@ -1,3 +1,4 @@
+pub mod announcement;
 pub mod assignment;
 pub mod assignment_file;
 pub mod assignment_interpreter;
@@ -10,3 +11,4 @@ pub mod module;
 pub mod plagiarism_case;
 pub mod user;
 pub mod user_role;
+pub mod tickets;

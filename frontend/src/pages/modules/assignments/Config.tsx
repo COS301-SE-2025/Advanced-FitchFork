@@ -13,7 +13,7 @@ import {
 import { DownOutlined } from '@ant-design/icons';
 
 import SettingsGroup from '@/components/SettingsGroup';
-import CodeEditor from '@/components/CodeEditor';
+import CodeEditor from '@/components/common/CodeEditor';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
 import { getAssignmentConfig, setAssignmentConfig } from '@/services/modules/assignments/config';
@@ -137,10 +137,10 @@ const Config = () => {
   ];
 
   return (
-    <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md flex overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 flex overflow-hidden">
       {/* Sidebar */}
       {!rawView && (
-        <div className="w-[240px] bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 px-2 py-2">
+        <div className="w-[240px] bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2">
           <Menu
             mode="inline"
             theme="light"

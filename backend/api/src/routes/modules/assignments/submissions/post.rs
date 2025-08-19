@@ -1,5 +1,5 @@
 use super::common::{CodeComplexity, CodeComplexitySummary, MarkSummary, SubmissionDetailResponse};
-use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late};
+use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late};   
 use axum::{
     Json,
     extract::{Extension, Multipart, Path, State},
@@ -14,11 +14,226 @@ use db::models::{
 use marker::MarkingJob;
 use md5;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
-use util::{mark_allocator::mark_allocator::load_allocator, state::AppState};
-use util::execution_config::ExecutionConfig;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use tokio_util::bytes;
+use util::{
+    execution_config::{ExecutionConfig, execution_config::SubmissionMode},
+    mark_allocator::mark_allocator::generate_allocator,
+    mark_allocator::mark_allocator::load_allocator,
+    state::AppState,
+};
+use chrono::Utc;
 
-// Common grading function that can be used for both initial submissions and regrading
+#[derive(Debug, Deserialize)]
+pub struct RemarkRequest {
+    #[serde(default)]
+    submission_ids: Option<Vec<i64>>,
+    #[serde(default)]
+    all: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ResubmitRequest {
+    #[serde(default)]
+    submission_ids: Option<Vec<i64>>,
+    #[serde(default)]
+    all: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BulkOperationResponse {
+    processed: usize,
+    failed: Vec<FailedOperation>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RemarkResponse {
+    regraded: usize,
+    failed: Vec<FailedOperation>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ResubmitResponse {
+    resubmitted: usize,
+    failed: Vec<FailedOperation>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FailedOperation {
+    id: Option<i64>,
+    error: String,
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Validates bulk operation request ensuring exactly one of submission_ids or all is provided
+fn validate_bulk_request(
+    submission_ids: &Option<Vec<i64>>,
+    all: &Option<bool>,
+) -> Result<(), &'static str> {
+    match (submission_ids, all) {
+        (Some(ids), None) if !ids.is_empty() => Ok(()),
+        (None, Some(true)) => Ok(()),
+        (Some(_), None) => Err("submission_ids cannot be empty"),
+        _ => Err("Must provide exactly one of submission_ids or all=true"),
+    }
+}
+
+/// Resolves target submission IDs based on request parameters
+async fn resolve_submission_ids(
+    submission_ids: Option<Vec<i64>>,
+    all: Option<bool>,
+    assignment_id: i64,
+    db: &sea_orm::DatabaseConnection,
+) -> Result<Vec<i64>, String> {
+    match (submission_ids, all) {
+        (Some(ids), _) if !ids.is_empty() => Ok(ids),
+        (_, Some(true)) => {
+            AssignmentSubmissionModel::find_by_assignment(assignment_id, db)
+                .await
+                .map_err(|e| format!("Failed to fetch submissions: {}", e))
+        }
+        _ => Err("Must provide either submission_ids or all=true".to_string()),
+    }
+}
+
+/// Loads assignment and validates it exists for the given module
+async fn load_assignment(
+    module_id: i64,
+    assignment_id: i64,
+    db: &sea_orm::DatabaseConnection,
+) -> Result<db::models::assignment::Model, String> {
+    AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id))
+        .filter(AssignmentColumn::ModuleId.eq(module_id))
+        .one(db)
+        .await
+        .map_err(|e| format!("Database error: {}", e))?
+        .ok_or_else(|| "Assignment not found".to_string())
+}
+
+/// Loads the mark allocator for an assignment
+async fn load_assignment_allocator(module_id: i64, assignment_id: i64) -> Result<(), String> {
+    load_allocator(module_id, assignment_id)
+        .await
+        .map(|_| ())
+        .map_err(|_| "Failed to load mark allocator".to_string())
+}
+
+/// Gets assignment file paths and configurations
+fn get_assignment_paths(
+    module_id: i64,
+    assignment_id: i64,
+) -> Result<(std::path::PathBuf, std::path::PathBuf, Vec<std::path::PathBuf>), String> {
+    let assignment_storage_root = std::env::var("ASSIGNMENT_STORAGE_ROOT")
+        .unwrap_or_else(|_| "data/assignment_files".to_string());
+
+    let base_path = std::path::PathBuf::from(&assignment_storage_root)
+        .join(format!("module_{}", module_id))
+        .join(format!("assignment_{}", assignment_id));
+
+    let mark_allocator_path = base_path.join("mark_allocator/allocator.json");
+    let memo_output_dir = base_path.join("memo_output");
+
+    let mut memo_outputs: Vec<_> = match std::fs::read_dir(&memo_output_dir) {
+        Ok(rd) => rd
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.is_file())
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    memo_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+    Ok((base_path, mark_allocator_path, memo_outputs))
+}
+
+/// Loads execution configuration for an assignment
+fn get_execution_config(module_id: i64, assignment_id: i64) -> Result<ExecutionConfig, String> {
+    ExecutionConfig::get_execution_config(module_id, assignment_id)
+        .map_err(|_| "Failed to load execution config".to_string())
+}
+
+/// Validates file upload requirements
+fn validate_file_upload(
+    file_name: &Option<String>,
+    file_bytes: &Option<bytes::Bytes>,
+) -> Result<(String, bytes::Bytes), (StatusCode, Json<ApiResponse<SubmissionDetailResponse>>)> {
+    let file_name = match file_name {
+        Some(name) => name.clone(),
+        None => {
+            return Err((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "No file provided",
+                )),
+            ));
+        }
+    };
+
+    let file_bytes = match file_bytes {
+        Some(bytes) => bytes.clone(),
+        None => {
+            return Err((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "No file provided",
+                )),
+            ));
+        }
+    };
+
+    let allowed_extensions = [".tgz", ".gz", ".tar", ".zip"];
+    let file_extension = std::path::Path::new(&file_name)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| format!(".{}", ext.to_lowercase()));
+
+    if !file_extension
+        .as_ref()
+        .map_or(false, |ext| allowed_extensions.contains(&ext.as_str()))
+    {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ApiResponse::<SubmissionDetailResponse>::error(
+                "Only .tgz, .gz, .tar, and .zip files are allowed",
+            )),
+        ));
+    }
+
+    if file_bytes.is_empty() {
+        return Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ApiResponse::<SubmissionDetailResponse>::error(
+                "Empty file provided",
+            )),
+        ));
+    }
+
+    Ok((file_name, file_bytes))
+}
+
+/// Gets the next attempt number for a user's assignment
+async fn get_next_attempt(
+    assignment_id: i64,
+    user_id: i64,
+    db: &sea_orm::DatabaseConnection,
+) -> Result<i64, String> {
+    let prev_attempt = assignment_submission::Entity::find()
+        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
+        .filter(assignment_submission::Column::UserId.eq(user_id))
+        .order_by_desc(assignment_submission::Column::Attempt)
+        .one(db)
+        .await
+        .map_err(|e| format!("Database error: {}", e))?
+        .map(|s| s.attempt)
+        .unwrap_or(0);
+
+    Ok(prev_attempt + 1)
+}
+
+/// Core grading function that can be used for initial submissions, regrading, and resubmission
 async fn grade_submission(
     submission: AssignmentSubmissionModel,
     assignment: &db::models::assignment::Model,
@@ -26,6 +241,7 @@ async fn grade_submission(
     memo_outputs: &[std::path::PathBuf],
     mark_allocator_path: &std::path::Path,
     config: &util::execution_config::ExecutionConfig,
+    db: &sea_orm::DatabaseConnection,
 ) -> Result<SubmissionDetailResponse, String> {
     let student_output_dir = base_path
         .join("assignment_submissions")
@@ -54,11 +270,15 @@ async fn grade_submission(
         mark_allocator_path.to_path_buf(),
         config.clone(),
     );
-    let mark_report = marking_job.mark().await.map_err(|e| format!("{:?}", e))?;
+
+    let mark_report = marking_job.mark().await.map_err(|e| {
+        eprintln!("MARKING ERROR: {:#?}", e);
+        format!("{:?}", e)
+    })?;
 
     let mark = MarkSummary {
-        earned: mark_report.data.mark.earned as i64,
-        total: mark_report.data.mark.total as i64,
+        earned: mark_report.data.mark.earned,
+        total: mark_report.data.mark.total,
     };
     let tasks = serde_json::to_value(&mark_report.data.tasks)
         .unwrap_or_default()
@@ -84,8 +304,8 @@ async fn grade_submission(
                 .cloned()
                 .unwrap_or_default();
             let summary = CodeComplexitySummary {
-                earned: c.summary.as_ref().map(|s| s.earned as i64).unwrap_or(0),
-                total: c.summary.as_ref().map(|s| s.total as i64).unwrap_or(0),
+                earned: c.summary.as_ref().map(|s| s.earned).unwrap_or(0),
+                total: c.summary.as_ref().map(|s| s.total).unwrap_or(0),
             };
             if !metrics.is_empty() || summary.earned != 0 || summary.total != 0 {
                 Some(CodeComplexity { summary, metrics })
@@ -96,13 +316,22 @@ async fn grade_submission(
         None => None,
     };
 
+    let mut active_model: assignment_submission::ActiveModel = submission.clone().into();
+    active_model.earned = sea_orm::ActiveValue::Set(mark.earned);
+    active_model.total = sea_orm::ActiveValue::Set(mark.total);
+    assignment_submission::Entity::update(active_model)
+        .exec(db)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let now = Utc::now();
     let resp = SubmissionDetailResponse {
-        id: submission.id as i64,
+        id: submission.id,
         attempt: submission.attempt,
         filename: submission.filename.clone(),
         hash: submission.file_hash.clone(),
-        created_at: submission.created_at.to_rfc3339(),
-        updated_at: submission.updated_at.to_rfc3339(),
+        created_at: now.to_rfc3339(),
+        updated_at: now.to_rfc3339(),
         mark,
         is_practice: submission.is_practice,
         is_late: is_late(submission.created_at, assignment.due_date),
@@ -124,6 +353,142 @@ async fn grade_submission(
 
     Ok(resp)
 }
+
+/// Processes code execution for a submission
+async fn process_submission_code(
+    db: &sea_orm::DatabaseConnection,
+    submission_id: i64,
+    config: ExecutionConfig,
+) -> Result<(), String> {
+    if config.project.submission_mode == SubmissionMode::Manual.clone() {
+        code_runner::create_submission_outputs_for_all_tasks(db, submission_id)
+            .await
+            .map_err(|e| format!("Code runner failed: {}", e))
+    } else {
+        ai::run_ga_job(db, submission_id, config)
+            .await
+            .map_err(|e| format!("GATLAM failed: {}", e))
+    }
+}
+
+/// Clears the submission output directory
+fn clear_submission_output(
+    submission: &AssignmentSubmissionModel,
+    base_path: &std::path::Path,
+) -> Result<(), String> {
+    let attempt_dir = base_path
+        .join("assignment_submissions")
+        .join(format!("user_{}", submission.user_id))
+        .join(format!("attempt_{}", submission.attempt));
+
+    let output_dir = attempt_dir.join("submission_output");
+
+    if output_dir.exists() {
+        std::fs::remove_dir_all(&output_dir)
+            .map_err(|e| format!("Failed to clear output directory: {}", e))?;
+    }
+
+    let report_path = attempt_dir.join("submission_report.json");
+    if report_path.exists() {
+        std::fs::remove_file(&report_path)
+            .map_err(|e| format!("Failed to remove existing report: {}", e))?;
+    }
+
+    Ok(())
+}
+
+/// Read JSON into `SubmissionDetailResponse`, mutate, and write atomically.
+async fn update_submission_report_marks(
+    base_path: &std::path::Path,
+    submission: &AssignmentSubmissionModel,
+    new_mark: &MarkSummary,
+) -> Result<(), String> {
+    let attempt_dir = base_path
+        .join("assignment_submissions")
+        .join(format!("user_{}", submission.user_id))
+        .join(format!("attempt_{}", submission.attempt));
+    let report_path = attempt_dir.join("submission_report.json");
+
+    let content = std::fs::read_to_string(&report_path)
+        .map_err(|e| format!("Failed to read existing report: {}", e))?;
+
+    let mut resp: SubmissionDetailResponse = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to deserialize report into SubmissionDetailResponse: {}", e))?;
+
+    resp.mark = MarkSummary {
+        earned: new_mark.earned,
+        total: new_mark.total,
+    };
+
+    resp.updated_at = Utc::now().to_rfc3339();
+
+    let output = serde_json::to_string_pretty(&resp)
+        .map_err(|e| format!("Failed to serialize updated report: {}", e))?;
+    std::fs::write(&report_path, output)
+        .map_err(|e| format!("Failed to write temp report: {}", e))?;
+
+    Ok(())
+}
+
+/// Executes bulk operation on submissions (remark or resubmit)
+async fn execute_bulk_operation<F, Fut>(
+    submission_ids: Vec<i64>,
+    assignment_id: i64,
+    db: &sea_orm::DatabaseConnection,
+    operation: F,
+) -> (usize, Vec<FailedOperation>)
+where
+    F: Fn(AssignmentSubmissionModel) -> Fut,
+    Fut: std::future::Future<Output = Result<(), String>>,
+{
+    let mut processed = 0;
+    let mut failed = Vec::new();
+
+    for submission_id in submission_ids {
+        let submission = match assignment_submission::Entity::find_by_id(submission_id)
+            .one(db)
+            .await
+        {
+            Ok(Some(sub)) => sub,
+            Ok(None) => {
+                failed.push(FailedOperation {
+                    id: Some(submission_id),
+                    error: "Submission not found".to_string(),
+                });
+                continue;
+            }
+            Err(e) => {
+                failed.push(FailedOperation {
+                    id: Some(submission_id),
+                    error: format!("Database error: {}", e),
+                });
+                continue;
+            }
+        };
+
+        if submission.assignment_id != assignment_id {
+            failed.push(FailedOperation {
+                id: Some(submission_id),
+                error: "Submission does not belong to this assignment".to_string(),
+            });
+            continue;
+        }
+
+        match operation(submission).await {
+            Ok(_) => processed += 1,
+            Err(e) => failed.push(FailedOperation {
+                id: Some(submission_id),
+                error: e,
+            }),
+        }
+    }
+
+    (processed, failed)
+}
+
+// ============================================================================
+// Route Handlers
+// ============================================================================
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions
 ///
@@ -235,17 +600,21 @@ pub async fn submit_assignment(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    let assignment = AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(db)
-        .await
-        .unwrap()
-        .unwrap();
+    let assignment = match load_assignment(module_id, assignment_id, db).await {
+        Ok(assignment) => assignment,
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Assignment not found",
+                )),
+            );
+        }
+    };
 
     let mut is_practice: bool = false;
     let mut file_name: Option<String> = None;
-    let mut file_bytes: Option<_> = None;
+    let mut file_bytes: Option<bytes::Bytes> = None;
 
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         match field.name() {
@@ -261,73 +630,33 @@ pub async fn submit_assignment(
         }
     }
 
-    let file_name = match file_name {
-        Some(name) => name,
-        None => {
-            return (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(ApiResponse::<SubmissionDetailResponse>::error(
-                    "No file provided",
-                )),
-            );
-        }
+    let (file_name, file_bytes) = match validate_file_upload(&file_name, &file_bytes) {
+        Ok((name, bytes)) => (name, bytes),
+        Err(response) => return response,
     };
-    let file_bytes = match file_bytes {
-        Some(bytes) => bytes,
-        None => {
-            return (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(ApiResponse::<SubmissionDetailResponse>::error(
-                    "No file provided",
-                )),
-            );
-        }
-    };
-    let allowed_extensions = [".tgz", ".gz", ".tar", ".zip"];
-    let file_extension = std::path::Path::new(&file_name)
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| format!(".{}", ext.to_lowercase()));
-    if !file_extension
-        .as_ref()
-        .map_or(false, |ext| allowed_extensions.contains(&ext.as_str()))
-    {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<SubmissionDetailResponse>::error(
-                "Only .tgz, .gz, .tar, and .zip files are allowed",
-            )),
-        );
-    }
-    if file_bytes.is_empty() {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<SubmissionDetailResponse>::error(
-                "Empty file provided",
-            )),
-        );
-    }
 
     let file_hash = format!("{:x}", md5::compute(&file_bytes));
 
-    // TODO: prevent race conditions here with a lock or something from COS226
-    let prev_attempt = assignment_submission::Entity::find()
-        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
-        .filter(assignment_submission::Column::UserId.eq(claims.sub))
-        .order_by_desc(assignment_submission::Column::Attempt)
-        .one(db)
-        .await
-        .ok()
-        .flatten()
-        .map(|s| s.attempt)
-        .unwrap_or(0);
-    let attempt = prev_attempt + 1;
+    let attempt = match get_next_attempt(assignment_id, claims.sub, db).await {
+        Ok(attempt) => attempt,
+        Err(e) => {
+            eprintln!("Error getting next attempt: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Failed to determine attempt number",
+                )),
+            );
+        }
+    };
 
     let submission = match AssignmentSubmissionModel::save_file(
         db,
         assignment_id,
         claims.sub,
         attempt,
+        0,
+        0,
         is_practice,
         &file_name,
         &file_hash,
@@ -347,8 +676,18 @@ pub async fn submit_assignment(
         }
     };
 
-    if let Err(e) = code_runner::create_submission_outputs_for_all_tasks(&db, submission.id).await {
-        eprintln!("Code runner failed: {}", e);
+    let config = match get_execution_config(module_id, assignment_id) {
+        Ok(config) => config,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(&e)),
+            );
+        }
+    };
+
+    if let Err(e) = process_submission_code(db, submission.id, config.clone()).await {
+        eprintln!("Code execution failed: {}", e);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<SubmissionDetailResponse>::error(
@@ -357,37 +696,33 @@ pub async fn submit_assignment(
         );
     }
 
-    match load_allocator(assignment.module_id, assignment.id).await {
-        Ok(_) => {}
-        Err(_) => {
+    if config.project.submission_mode != SubmissionMode::Manual {
+        if let Err(_) = generate_allocator(module_id, assignment_id).await {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<SubmissionDetailResponse>::error(
-                    "Failed to load mark allocator",
+                    "Failed to generate allocator",
                 )),
             );
         }
+    }
+
+    if let Err(e) = load_assignment_allocator(assignment.module_id, assignment.id).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<SubmissionDetailResponse>::error(&e)),
+        );
+    }
+
+    let (base_path, mark_allocator_path, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
+        Ok(paths) => paths,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(&e)),
+            );
+        }
     };
-
-    let assignment_storage_root = std::env::var("ASSIGNMENT_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/assignment_files".to_string());
-    let base_path = std::path::PathBuf::from(&assignment_storage_root)
-        .join(format!("module_{}", assignment.module_id))
-        .join(format!("assignment_{}", assignment.id));
-    let mark_allocator_path = base_path.join("mark_allocator/allocator.json");
-    let memo_output_dir = base_path.join("memo_output");
-
-    let mut memo_outputs: Vec<_> = match std::fs::read_dir(&memo_output_dir) {
-        Ok(rd) => rd
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| p.is_file())
-            .collect(),
-        Err(_) => Vec::new(),
-    };
-    memo_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
-
-    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
-        .expect("Failed to load execution config");
 
     match grade_submission(
         submission,
@@ -396,6 +731,7 @@ pub async fn submit_assignment(
         &memo_outputs,
         &mark_allocator_path,
         &config,
+        db,
     )
     .await
     {
@@ -413,27 +749,6 @@ pub async fn submit_assignment(
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct RemarkRequest {
-    #[serde(default)]
-    submission_ids: Option<Vec<i64>>,
-    #[serde(default)]
-    all: Option<bool>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct RemarkResponse {
-    regraded: usize,
-    failed: Vec<FailedRemark>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FailedRemark {
-    id: Option<i64>,
-    error: String,
-}
-
-// TODO: Allow ALs to use this endpoint. At the time of implementing this, ALs were not implemented.
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions/remark
 ///
 /// Regrade (remark) assignment submissions. Accessible to lecturers, assistant lecturers, and admins.
@@ -498,125 +813,312 @@ pub async fn remark_submissions(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    let submission_ids = match (req.submission_ids, req.all) {
-        (Some(ids), _) if !ids.is_empty() => ids,
-        (_, Some(true)) => {
-            match AssignmentSubmissionModel::find_by_assignment(assignment_id, db).await {
-                Ok(ids) => ids,
-                Err(e) => {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<RemarkResponse>::error(format!(
-                            "Failed to fetch submissions: {}",
-                            e
-                        ))),
-                    )
-                }
-            }
-        }
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<RemarkResponse>::error(
-                    "Must provide either submission_ids or all=true",
-                )),
-            )
-        }
-    };
+    if let Err(e) = validate_bulk_request(&req.submission_ids, &req.all) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<RemarkResponse>::error(e)),
+        );
+    }
 
-    let assignment = AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(db)
-        .await
-        .unwrap()
-        .unwrap();
-
-    match load_allocator(assignment.module_id, assignment.id).await {
-        Ok(_) => {}
+    let assignment = match load_assignment(module_id, assignment_id, db).await {
+        Ok(assignment) => assignment,
         Err(_) => {
             return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<RemarkResponse>::error(
-                    "Failed to load mark allocator",
-                )),
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<RemarkResponse>::error("Assignment not found")),
             );
         }
     };
 
-    let assignment_storage_root = std::env::var("ASSIGNMENT_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/assignment_files".to_string());
-    let base_path = std::path::PathBuf::from(&assignment_storage_root)
-        .join(format!("module_{}", assignment.module_id))
-        .join(format!("assignment_{}", assignment.id));
-    let mark_allocator_path = base_path.join("mark_allocator/allocator.json");
-    let memo_output_dir = base_path.join("memo_output");
-
-    let mut memo_outputs: Vec<_> = match std::fs::read_dir(&memo_output_dir) {
-        Ok(rd) => rd
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| p.is_file())
-            .collect(),
-        Err(_) => Vec::new(),
+    let submission_ids = match resolve_submission_ids(req.submission_ids, req.all, assignment_id, db).await {
+        Ok(ids) => ids,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<RemarkResponse>::error(e)),
+            );
+        }
     };
-    memo_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
-    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
-        .expect("Failed to load execution config");
-
-    let mut regraded = 0;
-    let mut failed = Vec::new();
-
-    for submission_id in submission_ids.clone() {
-        let submission = match assignment_submission::Entity::find_by_id(submission_id as i32)
-            .one(db)
-            .await
-        {
-            Ok(Some(sub)) => sub,
-            Ok(None) => {
-                failed.push(FailedRemark {
-                    id: Some(submission_id),
-                    error: "Submission not found".to_string(),
-                });
-                continue;
-            }
-            Err(e) => {
-                failed.push(FailedRemark {
-                    id: Some(submission_id),
-                    error: format!("Database error: {}", e),
-                });
-                continue;
-            }
-        };
-
-        if submission.assignment_id != assignment_id {
-            failed.push(FailedRemark {
-                id: Some(submission_id),
-                error: "Submission does not belong to this assignment".to_string(),
-            });
-            continue;
-        }
-
-        match grade_submission(
-            submission,
-            &assignment,
-            &base_path,
-            &memo_outputs,
-            &mark_allocator_path,
-            &config,
-        )
-        .await
-        {
-            Ok(_) => regraded += 1,
-            Err(e) => failed.push(FailedRemark {
-                id: Some(submission_id),
-                error: e,
-            }),
-        }
+    if let Err(e) = load_assignment_allocator(assignment.module_id, assignment.id).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<RemarkResponse>::error(e)),
+        );
     }
+
+    let (base_path, mark_allocator_path, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
+        Ok(paths) => paths,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<RemarkResponse>::error(e)),
+            );
+        }
+    };
+
+    let config = match get_execution_config(module_id, assignment_id) {
+        Ok(config) => config,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<RemarkResponse>::error(e)),
+            );
+        }
+    };
+
+    let (regraded, failed) = execute_bulk_operation(
+        submission_ids.clone(),
+        assignment_id,
+        db,
+        |submission| {
+            let assignment = assignment.clone();
+            let base_path = base_path.clone();
+            let memo_outputs = memo_outputs.clone();
+            let mark_allocator_path = mark_allocator_path.clone();
+            let config = config.clone();
+            async move {
+                let student_output_dir = base_path
+                    .join("assignment_submissions")
+                    .join(format!("user_{}", submission.user_id))
+                    .join(format!("attempt_{}", submission.attempt))
+                    .join("submission_output");
+
+                let mut student_outputs = Vec::new();
+                if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
+                    for entry in entries.flatten() {
+                        let file_path = entry.path();
+                        if file_path.is_file() {
+                            if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+                                if ext.eq_ignore_ascii_case("txt") {
+                                    student_outputs.push(file_path);
+                                }
+                            }
+                        }
+                    }
+                }
+                student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+                let marking_job = MarkingJob::new(
+                    memo_outputs.to_vec(),
+                    student_outputs,
+                    mark_allocator_path.to_path_buf(),
+                    config.clone(),
+                );
+
+                let mark_report = marking_job
+                    .mark()
+                    .await
+                    .map_err(|e| format!("Marking error: {:?}", e))?;
+
+                let mark = MarkSummary {
+                    earned: mark_report.data.mark.earned,
+                    total: mark_report.data.mark.total,
+                };
+
+                match update_submission_report_marks(&base_path, &submission, &mark).await {
+                    Ok(_) => Ok(()),
+                    Err(_err) => {
+                        grade_submission(
+                            submission,
+                            &assignment,
+                            &base_path,
+                            &memo_outputs,
+                            &mark_allocator_path,
+                            &config,
+                            db,
+                        )
+                        .await
+                        .map(|_| ())
+                    }
+                }
+            }
+        },
+    ).await;
 
     let response = RemarkResponse { regraded, failed };
     let message = format!("Regraded {}/{} submissions", regraded, submission_ids.len());
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(response, &message)),
+    )
+}
+
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions/resubmit
+///
+/// Reprocess assignment submissions using the latest marking pipeline. Accessible to admins, module lecturers, and assistant lecturers.
+///
+/// This endpoint allows authorized users to rerun the entire submission pipeline (code execution + marking) on either:
+/// - Specific submissions (via `submission_ids`)
+/// - All submissions in an assignment (via `all: true`)
+///
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment containing the submissions
+///
+/// ### Request Body
+/// Either:
+/// ```json
+/// { "submission_ids": [123, 124, 125] }
+/// ```
+/// or
+/// ```json
+/// { "all": true }
+/// ```
+///
+/// ### Success Response (200 OK)
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Resubmitted 3/4 submissions",
+///   "data": {
+///     "resubmitted": 3,
+///     "failed": [
+///       { "id": 125, "error": "Submission not found" }
+///     ]
+///   }
+/// }
+/// ```
+///
+/// ### Error Responses
+///
+/// **400 Bad Request** - Invalid request parameters
+/// ```json
+/// { "success": false, "message": "Must provide exactly one of submission_ids or all=true" }
+/// ```
+/// or
+/// ```json
+/// { "success": false, "message": "submission_ids cannot be empty" }
+/// ```
+///
+/// **403 Forbidden** - User not authorized for operation
+/// ```json
+/// { "success": false, "message": "Not authorized to resubmit submissions" }
+/// ```
+///
+/// **404 Not Found** - Assignment not found
+/// ```json
+/// { "success": false, "message": "Assignment not found" }
+/// ```
+///
+/// **500 Internal Server Error** - Resubmission failure
+/// ```json
+/// { "success": false, "message": "Failed to load mark allocator" }
+/// ```
+/// or
+/// ```json
+/// { "success": false, "message": "Failed to run code for submission" }
+/// ```
+///
+/// ### Side Effects
+/// - Re-executes code for all target submissions
+/// - Regenerates marking reports and saves updated `submission_report.json` files
+/// - Updates submission status transitions as applicable
+///
+/// ### Notes
+/// - Resubmission reruns the entire pipeline: code execution → marking → report generation
+/// - This differs from remark which only reruns the marking phase
+/// - The endpoint is restricted to admin, module lecturer, and assistant lecturer roles
+/// - All errors are returned in a consistent JSON format with per-submission failure details
+pub async fn resubmit_submissions(
+    State(app_state): State<AppState>,
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    Extension(AuthUser(_claims)): Extension<AuthUser>,
+    Json(req): Json<ResubmitRequest>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
+    if let Err(e) = validate_bulk_request(&req.submission_ids, &req.all) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<ResubmitResponse>::error(e)),
+        );
+    }
+
+    let assignment = match load_assignment(module_id, assignment_id, db).await {
+        Ok(assignment) => assignment,
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<ResubmitResponse>::error("Assignment not found")),
+            );
+        }
+    };
+
+    let submission_ids = match resolve_submission_ids(req.submission_ids, req.all, assignment_id, db).await {
+        Ok(ids) => ids,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ResubmitResponse>::error(e)),
+            );
+        }
+    };
+
+    if let Err(e) = load_assignment_allocator(assignment.module_id, assignment.id).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<ResubmitResponse>::error(e)),
+        );
+    }
+
+    let (base_path, mark_allocator_path, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
+        Ok(paths) => paths,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ResubmitResponse>::error(e)),
+            );
+        }
+    };
+
+    let config = match get_execution_config(module_id, assignment_id) {
+        Ok(config) => config,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ResubmitResponse>::error(e)),
+            );
+        }
+    };
+
+    let (resubmitted, failed) = execute_bulk_operation(
+        submission_ids.clone(),
+        assignment_id,
+        db,
+        |submission| {
+            let db = db.clone();
+            let assignment = assignment.clone();
+            let base_path = base_path.clone();
+            let memo_outputs = memo_outputs.clone();
+            let mark_allocator_path = mark_allocator_path.clone();
+            let config = config.clone();
+            async move {
+                if let Err(e) = clear_submission_output(&submission, &base_path) {
+                    return Err(e);
+                }
+                if let Err(e) = process_submission_code(&db, submission.id, config.clone()).await {
+                    return Err(format!("Failed to run code for submission: {}", e));
+                }
+
+                grade_submission(
+                    submission,
+                    &assignment,
+                    &base_path,
+                    &memo_outputs,
+                    &mark_allocator_path,
+                    &config,
+                    &db,
+                )
+                .await
+                .map(|_| ())
+            }
+        },
+    ).await;
+
+    let response = ResubmitResponse { resubmitted, failed };
+    let message = format!("Resubmitted {}/{} submissions", resubmitted, submission_ids.len());
 
     (
         StatusCode::OK,

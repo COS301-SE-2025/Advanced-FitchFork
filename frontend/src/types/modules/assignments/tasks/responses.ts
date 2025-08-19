@@ -10,7 +10,7 @@ export type GetListTasksResponse = ApiResponse<Task[]>;
 export type GetTaskResponse = ApiResponse<
   {
     name?: string;
-    mark_value?: number;
+    value?: number;
     memo_output?: string;
     subsections: SubsectionDetail[];
   } & Task

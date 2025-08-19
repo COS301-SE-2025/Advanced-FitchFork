@@ -8,17 +8,22 @@ import StatCard from '@/components/StatCard';
 import ModuleCard from '@/components/modules/ModuleCard';
 import ModuleCreditsTag from '@/components/modules/ModuleCreditsTag';
 import { EntityList, type EntityListHandle, type EntityListProps } from '@/components/EntityList';
-import CreateModal from '@/components/CreateModal';
-import EditModal from '@/components/EditModal';
+import CreateModal from '@/components/common/CreateModal';
+import EditModal from '@/components/common/EditModal';
 import { message } from '@/utils/message';
 import dayjs from 'dayjs';
 import { useAuth } from '@/context/AuthContext';
+import { useUI } from '@/context/UIContext';
+import ModuleListItem from '@/components/modules/ModuleListItem';
+import { formatModuleCode } from '@/utils/modules';
+import { ModulesEmptyState, ModuleYearTag } from '@/components/modules';
 
 const currentYear = new Date().getFullYear();
 
 const ModulesList = () => {
   const auth = useAuth();
   const navigate = useNavigate();
+  const { isSm } = useUI();
   const listRef = useRef<EntityListHandle>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -173,134 +178,151 @@ const ModulesList = () => {
     : undefined;
 
   return (
-    <div className="p-4 sm:p-6 h-full">
-      <PageHeader title="Modules" description="All the modules in the COS department" />
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex h-full flex-col gap-4">
+          <PageHeader title="Modules" description="All the modules in the COS department" />
 
-      <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard title="Total Modules" value={42} />
-        <StatCard title="Modules This Year" value={12} />
-        <StatCard title="Unique Years" value={6} />
-        <StatCard title="Avg Credits" value={18} />
-      </div>
+          {isSm && auth.isAdmin && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard title="Total Modules" value={42} />
+              <StatCard title="Modules This Year" value={12} />
+              <StatCard title="Unique Years" value={6} />
+              <StatCard title="Avg Credits" value={18} />
+            </div>
+          )}
 
-      <EntityList<Module>
-        ref={listRef}
-        name="Modules"
-        defaultViewMode={auth.isUser ? 'grid' : 'table'}
-        fetchItems={fetchModules}
-        getRowKey={(mod) => mod.id}
-        onRowClick={(mod) => navigate(`/modules/${mod.id}`)}
-        renderGridItem={(mod, actions) => (
-          <ModuleCard
-            key={mod.id}
-            module={mod}
-            isFavorite={false}
-            onToggleFavorite={() => {}}
-            showFavorite={false}
+          <EntityList<Module>
+            ref={listRef}
+            name="Modules"
+            defaultViewMode={auth.isUser ? 'grid' : 'table'}
+            fetchItems={fetchModules}
+            getRowKey={(mod) => mod.id}
+            onRowClick={(mod) => navigate(`/modules/${mod.id}`)}
+            renderGridItem={(mod, actions) => (
+              <ModuleCard
+                key={mod.id}
+                module={mod}
+                isFavorite={false}
+                onToggleFavorite={() => {}}
+                showFavorite={false}
+                actions={actions}
+              />
+            )}
+            listMode={!auth.isAdmin && !auth.hasLecturerRole()}
+            renderListItem={(m) => (
+              <ModuleListItem
+                module={m}
+                isFavorite={false}
+                onToggleFavorite={() => {}}
+                onClick={(mod) => navigate(`/modules/${mod.id}`)}
+                showFavorite
+              />
+            )}
+            columnToggleEnabled
             actions={actions}
+            columns={[
+              {
+                title: 'ID',
+                dataIndex: 'id',
+                key: 'id',
+                defaultHidden: true,
+              },
+              {
+                title: 'Code',
+                dataIndex: 'code',
+                key: 'code',
+                sorter: { multiple: 1 },
+                render: (_, m) => formatModuleCode(m.code),
+              },
+              {
+                title: 'Year',
+                dataIndex: 'year',
+                key: 'year',
+                sorter: { multiple: 2 },
+                filters: Array.from({ length: 10 }, (_, i) => {
+                  const year = String(currentYear - i);
+                  return { text: year, value: year };
+                }),
+                render: (_, m) => <ModuleYearTag year={m.year} />,
+              },
+              {
+                title: 'Description',
+                dataIndex: 'description',
+                key: 'description',
+                sorter: { multiple: 3 },
+                defaultHidden: true,
+              },
+              {
+                title: 'Credits',
+                dataIndex: 'credits',
+                key: 'credits',
+                sorter: { multiple: 4 },
+                render: (_, m) => <ModuleCreditsTag credits={m.credits} />,
+              },
+              {
+                title: 'Created At',
+                dataIndex: 'created_at',
+                key: 'created_at',
+                sorter: { multiple: 5 },
+                defaultHidden: true,
+                render: (_, m) => dayjs(m.created_at).format('YYYY-MM-DD HH:mm'),
+              },
+              {
+                title: 'Updated At',
+                dataIndex: 'updated_at',
+                key: 'updated_at',
+                defaultHidden: true,
+                render: (_, m) => dayjs(m.updated_at).format('YYYY-MM-DD HH:mm'),
+              },
+            ]}
+            emptyNoEntities={
+              <ModulesEmptyState isAdmin={auth.isAdmin} onCreate={() => setCreateOpen(true)} />
+            }
           />
-        )}
-        columnToggleEnabled
-        actions={actions}
-        columns={[
-          {
-            title: 'ID',
-            dataIndex: 'id',
-            key: 'id',
-            sorter: { multiple: 0 },
-            defaultHidden: true,
-          },
-          {
-            title: 'Code',
-            dataIndex: 'code',
-            key: 'code',
-            sorter: { multiple: 1 },
-            render: (_: unknown, record: Module) =>
-              record.code.replace(/([A-Za-z]+)(\d+)/, '$1 $2'),
-          },
-          {
-            title: 'Year',
-            dataIndex: 'year',
-            key: 'year',
-            sorter: { multiple: 2 },
-            filters: Array.from({ length: 10 }, (_, i) => {
-              const year = String(currentYear - i);
-              return { text: year, value: year };
-            }),
-          },
-          {
-            title: 'Description',
-            dataIndex: 'description',
-            key: 'description',
-            sorter: { multiple: 3 },
-            defaultHidden: true,
-          },
-          {
-            title: 'Credits',
-            dataIndex: 'credits',
-            key: 'credits',
-            sorter: { multiple: 4 },
-            render: (_, record) => <ModuleCreditsTag credits={record.credits} />,
-          },
-          {
-            title: 'Created At',
-            dataIndex: 'created_at',
-            key: 'created_at',
-            sorter: { multiple: 5 },
-            defaultHidden: true,
-            render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
-          },
-          {
-            title: 'Updated At',
-            dataIndex: 'updated_at',
-            key: 'updated_at',
-            sorter: { multiple: 6 },
-            defaultHidden: true,
-            render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
-          },
-        ]}
-      />
+        </div>
 
-      <CreateModal
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onCreate={handleCreate}
-        initialValues={{
-          code: '',
-          year: currentYear,
-          description: '',
-          credits: 16,
-        }}
-        fields={[
-          { name: 'code', label: 'Module Code', type: 'text', required: true },
-          { name: 'year', label: 'Year', type: 'number', required: true },
-          { name: 'description', label: 'Description', type: 'text', required: true },
-          { name: 'credits', label: 'Credits', type: 'number', required: true },
-        ]}
-        title="Add Module"
-      />
+        <CreateModal
+          open={createOpen}
+          onCancel={() => setCreateOpen(false)}
+          onCreate={handleCreate}
+          initialValues={{
+            code: '',
+            year: currentYear,
+            description: '',
+            credits: 16,
+          }}
+          fields={[
+            { name: 'code', label: 'Module Code', type: 'text', required: true },
+            { name: 'year', label: 'Year', type: 'number', required: true },
+            { name: 'description', label: 'Description', type: 'text', required: true },
+            { name: 'credits', label: 'Credits', type: 'number', required: true },
+          ]}
+          title="Add Module"
+        />
 
-      <EditModal
-        open={editOpen}
-        onCancel={() => {
-          setEditOpen(false);
-          setEditingItem(null);
-        }}
-        onEdit={handleEdit}
-        initialValues={{
-          code: editingItem?.code ?? '',
-          year: editingItem?.year ?? currentYear,
-          description: editingItem?.description ?? '',
-          credits: editingItem?.credits ?? 16,
-        }}
-        fields={[
-          { name: 'code', label: 'Module Code', type: 'text', required: true },
-          { name: 'year', label: 'Year', type: 'number', required: true },
-          { name: 'description', label: 'Description', type: 'text', required: true },
-          { name: 'credits', label: 'Credits', type: 'number', required: true },
-        ]}
-        title="Edit Module"
-      />
+        <EditModal
+          open={editOpen}
+          onCancel={() => {
+            setEditOpen(false);
+            setEditingItem(null);
+          }}
+          onEdit={handleEdit}
+          initialValues={{
+            code: editingItem?.code ?? '',
+            year: editingItem?.year ?? currentYear,
+            description: editingItem?.description ?? '',
+            credits: editingItem?.credits ?? 16,
+          }}
+          fields={[
+            { name: 'code', label: 'Module Code', type: 'text', required: true },
+            { name: 'year', label: 'Year', type: 'number', required: true },
+            { name: 'description', label: 'Description', type: 'text', required: true },
+            { name: 'credits', label: 'Credits', type: 'number', required: true },
+          ]}
+          title="Edit Module"
+        />
+      </div>
     </div>
   );
 };

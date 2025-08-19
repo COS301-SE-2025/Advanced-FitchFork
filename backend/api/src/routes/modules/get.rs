@@ -1,3 +1,12 @@
+//! Module query routes.
+//!
+//! Provides endpoints to retrieve modules:
+//! - `GET /api/modules/{id}` → Get details of a single module with assigned users.
+//! - `GET /api/modules` → Paginated and optionally filtered list of modules.
+//! - `GET /api/modules/me` → Retrieve modules for the authenticated user, grouped by role.
+//!
+//! All responses follow the standard `ApiResponse` format.
+
 use axum::{
     Extension, Json,
     extract::{State, Path, Query},

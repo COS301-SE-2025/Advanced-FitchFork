@@ -1,11 +1,12 @@
 // ai/src/utils/evaluator.rs
 
+use util::execution_config::ExecutionConfig;
 
 // IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
 #[derive(Debug, Clone, Copy)]
 pub enum Language {
     Cpp,
-    Java, 
+    Java,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -16,10 +17,9 @@ pub enum Property {
     Exceptions,        // G(¬exception)
     ExecutionTime,     // G(ter => (r ≤ e))
     IllegalOutput,     // G(ter => ∀o∈Out ∀x∈X (x ≠ o))
-    // ExpectedExact,   // handled elsewhere
-    // ExpectedContains,// handled elsewhere
-    // for these last two LTL properties we might need to handle them in this actual code, especially contains, but for now it should be fine :)
-
+                       // ExpectedExact,   // handled elsewhere
+                       // ExpectedContains,// handled elsewhere
+                       // for these last two LTL properties we might need to handle them in this actual code, especially contains, but for now it should be fine :)
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +40,21 @@ impl Default for TaskSpec {
             valid_return_codes: Some(vec![0]),
             max_runtime_ms: None,
             forbidden_outputs: vec![],
+        }
+    }
+}
+use util::execution_config::execution_config::Language as ExecLanguage;
+
+impl TaskSpec {
+    pub fn from_execution_config(config: &ExecutionConfig) -> Self {
+        Self {
+            language: match config.project.language {
+                ExecLanguage::Cpp => Language::Cpp,
+                ExecLanguage::Java => Language::Java,
+            },
+            valid_return_codes: Some(config.gatlam.task_spec.valid_return_codes.clone()),
+            max_runtime_ms: config.gatlam.task_spec.max_runtime_ms,
+            forbidden_outputs: config.gatlam.task_spec.forbidden_outputs.clone(),
         }
     }
 }
@@ -64,7 +79,9 @@ pub struct TaskEvaluation {
 pub struct Evaluator;
 
 impl Evaluator {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     /// Parse raw blob into a structured view.
     /// Expected markers (case-insensitive):
@@ -75,7 +92,14 @@ impl Evaluator {
         let (exit_code, stdout, stderr) = split_exit_stdout_stderr(blob);
         let runtime_ms = extract_marker_int(blob, "runtime_ms").map(|v| v.max(0) as u64);
         let terminated = exit_code.is_some();
-        TaskView { task_id, exit_code, runtime_ms, stdout, stderr, terminated }
+        TaskView {
+            task_id,
+            exit_code,
+            runtime_ms,
+            stdout,
+            stderr,
+            terminated,
+        }
     }
 
     /// Evaluate a single task against the selected property set (excluding expected-output checks).
@@ -119,13 +143,20 @@ impl Evaluator {
         // Illegal Output: G(ter => ∀o∈Out ∀x∈X (x ≠ o))
         if view.terminated && !spec.forbidden_outputs.is_empty() {
             let outs = normalized_lines(&view.stdout);
-            let forb = spec.forbidden_outputs.iter().map(|s| s.trim().to_string()).collect::<Vec<_>>();
+            let forb = spec
+                .forbidden_outputs
+                .iter()
+                .map(|s| s.trim().to_string())
+                .collect::<Vec<_>>();
             if outs.iter().any(|o| forb.iter().any(|x| x == o)) {
                 violated.push(Property::IllegalOutput);
             }
         }
 
-        TaskEvaluation { task_id: view.task_id, violated }
+        TaskEvaluation {
+            task_id: view.task_id,
+            violated,
+        }
     }
 
     /// Helper for GA.
@@ -136,12 +167,14 @@ impl Evaluator {
     pub fn derive_props(&self, specs: &[TaskSpec], outs: &[(i64, String)]) -> (usize, usize) {
         let total_tasks = outs.len().max(1);
 
-        let mut ltl_checks      = 0usize;
-        let mut ltl_violations  = 0usize;
-        let mut failed_tasks    = 0usize;
+        let mut ltl_checks = 0usize;
+        let mut ltl_violations = 0usize;
+        let mut failed_tasks = 0usize;
 
         for (i, (task_id, blob)) in outs.iter().enumerate() {
-            let spec = specs.get(i).unwrap_or_else(|| specs.first().expect("non-empty specs"));
+            let spec = specs
+                .get(i)
+                .unwrap_or_else(|| specs.first().expect("non-empty specs"));
             let view = self.parse(*task_id, blob);
             let eval = self.evaluate_task(spec, &view);
 
@@ -149,37 +182,49 @@ impl Evaluator {
             // Here we’re using: Safety, ProperTermination, SegmentationFault, Exceptions, ExecutionTime, IllegalOutput
             // Note: ExecutionTime and IllegalOutput are only applicable if terminated and configured accordingly.
             let mut checks = 0usize;
-            let mut viols  = 0usize;
+            let mut viols = 0usize;
 
             // Safety
             checks += 1;
-            if eval.violated.contains(&Property::Safety) { viols += 1; }
+            if eval.violated.contains(&Property::Safety) {
+                viols += 1;
+            }
 
             // ProperTermination
             checks += 1;
-            if eval.violated.contains(&Property::ProperTermination) { viols += 1; }
+            if eval.violated.contains(&Property::ProperTermination) {
+                viols += 1;
+            }
 
             // Segfault
             checks += 1;
-            if eval.violated.contains(&Property::SegmentationFault) { viols += 1; }
+            if eval.violated.contains(&Property::SegmentationFault) {
+                viols += 1;
+            }
 
             // Exceptions
             checks += 1;
-            if eval.violated.contains(&Property::Exceptions) { viols += 1; }
+            if eval.violated.contains(&Property::Exceptions) {
+                viols += 1;
+            }
 
             // ExecutionTime (only counted if there was a bound and task terminated with measured runtime) TODO: we have to time how long the task took and parse it back to here
             if spec.max_runtime_ms.is_some() && view.terminated && view.runtime_ms.is_some() {
                 checks += 1;
-                if eval.violated.contains(&Property::ExecutionTime) { viols += 1; }
+                if eval.violated.contains(&Property::ExecutionTime) {
+                    viols += 1;
+                }
             }
 
             // IllegalOutput (only if there are forbidden outputs configured and task terminated)
             if !spec.forbidden_outputs.is_empty() && view.terminated {
                 checks += 1;
-                if eval.violated.contains(&Property::IllegalOutput) { viols += 1; }
+                if eval.violated.contains(&Property::IllegalOutput) {
+                    viols += 1;
+                }
             }
 
-            ltl_checks     += checks;
+            ltl_checks += checks;
             ltl_violations += viols;
 
             let ret_ok = is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref());
@@ -188,21 +233,30 @@ impl Evaluator {
                 || view.terminated && has_exception(spec.language, &view.stderr)
                 || self.contains_forbidden_output(&view.stdout, &spec.forbidden_outputs);
 
-            if failed { failed_tasks += 1; }
+            if failed {
+                failed_tasks += 1;
+            }
         }
 
-        let ltl_milli  = if ltl_checks == 0 { 0 } else { ((ltl_violations * 1000) / ltl_checks).min(1000) };
-        let fail_milli = ((failed_tasks   * 1000) / total_tasks).min(1000);
+        let ltl_milli = if ltl_checks == 0 {
+            0
+        } else {
+            ((ltl_violations * 1000) / ltl_checks).min(1000)
+        };
+        let fail_milli = ((failed_tasks * 1000) / total_tasks).min(1000);
 
         (ltl_milli, fail_milli)
     }
 
     fn contains_forbidden_output(&self, stdout: &str, forbidden: &[String]) -> bool {
-        if forbidden.is_empty() { return false; }
+        if forbidden.is_empty() {
+            return false;
+        }
         let hay = stdout.to_ascii_lowercase();
-        forbidden.iter().any(|needle| hay.contains(&needle.to_ascii_lowercase()))
+        forbidden
+            .iter()
+            .any(|needle| hay.contains(&needle.to_ascii_lowercase()))
     }
-
 }
 
 fn split_exit_stdout_stderr(blob: &str) -> (Option<i32>, String, String) {
@@ -225,20 +279,38 @@ fn split_exit_stdout_stderr(blob: &str) -> (Option<i32>, String, String) {
         let rest = tail[label_len..].trim_start_matches(':').trim_start();
         stderr.push_str(rest);
     } else {
-       // Heuristic for errors if no STDERR section is found
+        // Heuristic for errors if no STDERR section is found
         // This is a fallback for cases where the output does not follow the expected format.
         // We assume that if the blob contains error-like messages, they should go to stderr.
         let lower = blob.to_ascii_lowercase();
         let looks_error = [
-            "error:", "exception", "segmentation fault", "sigsegv",
-            "addresssanitizer", "asan", "double free", "invalid pointer",
-            "use-after-free", "heap-use-after-free", "free(): invalid pointer",
+            "error:",
+            "exception",
+            "segmentation fault",
+            "sigsegv",
+            "addresssanitizer",
+            "asan",
+            "double free",
+            "invalid pointer",
+            "use-after-free",
+            "heap-use-after-free",
+            "free(): invalid pointer",
             "munmap_chunk(): invalid pointer",
-        ].iter().any(|needle| lower.contains(needle));
-        if looks_error { stderr.push_str(blob); } else { stdout.push_str(blob); }
+        ]
+        .iter()
+        .any(|needle| lower.contains(needle));
+        if looks_error {
+            stderr.push_str(blob);
+        } else {
+            stdout.push_str(blob);
+        }
     }
 
-    (exit_code, stdout.trim().to_string(), stderr.trim().to_string())
+    (
+        exit_code,
+        stdout.trim().to_string(),
+        stderr.trim().to_string(),
+    )
 }
 
 fn extract_marker_int(blob: &str, key: &str) -> Option<i32> {
@@ -249,11 +321,16 @@ fn extract_marker_int(blob: &str, key: &str) -> Option<i32> {
         if let Some(idx) = ll.find(&key_lower) {
             let after = &ll[idx + key_lower.len()..];
             // strip separators
-            let after = after.trim_start_matches(|c: char| c == ':' || c == '=' || c.is_whitespace());
+            let after =
+                after.trim_start_matches(|c: char| c == ':' || c == '=' || c.is_whitespace());
             // take signed int prefix
             let mut end = 0;
             for ch in after.chars() {
-                if ch.is_ascii_digit() || ch == '-' || ch == '+' { end += ch.len_utf8(); } else { break; }
+                if ch.is_ascii_digit() || ch == '-' || ch == '+' {
+                    end += ch.len_utf8();
+                } else {
+                    break;
+                }
             }
             if end > 0 {
                 if let Ok(v) = after[..end].parse::<i32>() {
@@ -268,16 +345,20 @@ fn extract_marker_int(blob: &str, key: &str) -> Option<i32> {
 fn find_case_insensitive(haystack: &str, needle: &str) -> Option<usize> {
     let h = haystack.as_bytes();
     let n = needle.as_bytes();
-    if n.is_empty() { return Some(0); }
+    if n.is_empty() {
+        return Some(0);
+    }
     for i in 0..=h.len().saturating_sub(n.len()) {
-        if h[i..i+n.len()].iter().zip(n.iter())
-            .all(|(a,b)| a.to_ascii_lowercase() == b.to_ascii_lowercase()) {
+        if h[i..i + n.len()]
+            .iter()
+            .zip(n.iter())
+            .all(|(a, b)| a.to_ascii_lowercase() == b.to_ascii_lowercase())
+        {
             return Some(i);
         }
     }
     None
 }
-
 
 fn normalized_lines(s: &str) -> Vec<String> {
     s.lines()
@@ -287,21 +368,21 @@ fn normalized_lines(s: &str) -> Vec<String> {
         .collect()
 }
 
- // IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
+// IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
 fn violates_safety(lang: Language, stderr: &str) -> bool {
     let s = stderr.to_ascii_lowercase();
-   
+
     match lang {
         Language::Cpp => {
-            s.contains("double free") ||
-            s.contains("double-free") ||
-            s.contains("invalid pointer") ||
-            s.contains("use-after-free") ||
-            s.contains("heap-use-after-free") ||
-            s.contains("segmentation fault") ||
-            s.contains("sigsegv") ||
-            s.contains("addresssanitizer") ||
-            s.contains("asan:")
+            s.contains("double free")
+                || s.contains("double-free")
+                || s.contains("invalid pointer")
+                || s.contains("use-after-free")
+                || s.contains("heap-use-after-free")
+                || s.contains("segmentation fault")
+                || s.contains("sigsegv")
+                || s.contains("addresssanitizer")
+                || s.contains("asan:")
         }
         Language::Java => {
             s.contains("hs_err_pid")                      // JVM fatal log header
@@ -310,11 +391,10 @@ fn violates_safety(lang: Language, stderr: &str) -> bool {
                 || s.contains("exception_access_violation")
                 || s.contains("problematic frame:")
                 || s.contains("outofmemoryerror: direct buffer memory") // catastrophic OOM kind
-                || s.contains("internal error (")         // hotspot internal error
+                || s.contains("internal error (") // hotspot internal error
         }
     }
 }
-
 
 fn has_segfault(lang: Language, stderr: &str) -> bool {
     let s = stderr.to_ascii_lowercase();
@@ -325,7 +405,6 @@ fn has_segfault(lang: Language, stderr: &str) -> bool {
                 || s.contains("exception_access_violation")
                 || s.contains("hs_err_pid")
                 || s.contains("problematic frame:")
-
         }
     }
 }
@@ -358,12 +437,11 @@ fn has_exception(lang: Language, stderr: &str) -> bool {
 fn is_valid_return_code(exit: Option<i32>, valid: Option<&[i32]>) -> bool {
     match (exit, valid) {
         (Some(code), Some(list)) => list.contains(&code),
-        (Some(0), None)          => true,
-        (Some(_), None)          => false,
-        (None, _)                => false, 
+        (Some(0), None) => true,
+        (Some(_), None) => false,
+        (None, _) => false,
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -379,7 +457,10 @@ mod tests {
     }
 
     fn spec_cpp_with_time(bound: u64) -> TaskSpec {
-        TaskSpec { max_runtime_ms: Some(bound), ..spec_cpp() }
+        TaskSpec {
+            max_runtime_ms: Some(bound),
+            ..spec_cpp()
+        }
     }
 
     fn spec_cpp_with_forbidden(forb: &[&str]) -> TaskSpec {
@@ -472,7 +553,10 @@ mod tests {
     fn exception_detected() {
         let ev = Evaluator::new();
         let spec = spec_cpp();
-        let view = ev.parse(1, "STDERR: terminate called after throwing an instance of 'std::exception'\n");
+        let view = ev.parse(
+            1,
+            "STDERR: terminate called after throwing an instance of 'std::exception'\n",
+        );
         let eval = ev.evaluate_task(&spec, &view);
         assert!(eval.violated.contains(&Property::Exceptions));
     }
@@ -536,7 +620,7 @@ mod tests {
         let specs = vec![spec_cpp()];
         let outs = vec![(
             99,
-            "EXIT_CODE=139\nSTDERR: Segmentation fault\n".to_string()
+            "EXIT_CODE=139\nSTDERR: Segmentation fault\n".to_string(),
         )];
         let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs);
         assert!(ltl_milli > 0);
@@ -548,16 +632,12 @@ mod tests {
         let ev = Evaluator::new();
         let specs = vec![spec_cpp_with_time(50)];
         // RUNTIME_MS present and exceeds bound -> counts as a check + violation.
-        let outs = vec![(
-            1,
-            "EXIT_CODE: 0\nRUNTIME_MS: 100\n".to_string(),
-        )];
+        let outs = vec![(1, "EXIT_CODE: 0\nRUNTIME_MS: 100\n".to_string())];
         let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs);
         assert!(ltl_milli > 0);
         // Task not “failed” by our definition (return code OK, no segfault/exception/forbidden)
         assert_eq!(fail_milli, 0);
     }
-
 
     #[test]
     fn contains_forbidden_output_is_case_insensitive_substring() {
@@ -566,7 +646,6 @@ mod tests {
         assert!(!ev.contains_forbidden_output("clean\n", &[String::from("bad")]));
     }
 
-    
     fn spec_java() -> TaskSpec {
         TaskSpec {
             language: Language::Java,
@@ -597,7 +676,7 @@ mod tests {
             "EXIT_CODE=134\nSTDERR: A fatal error has been detected by the Java Runtime Environment:\nSIGSEGV (0xb) at pc 0x00007f..., pid=123, tid=456\n#  Problematic frame:\n#  C  [libsomething.so+0x1a2b]\n#  An hs_err_pid123.log file is generated\n"
         );
         let eval = ev.evaluate_task(&spec, &view);
-        assert!(eval.violated.contains(&Property::Safety));            // VM fatal
+        assert!(eval.violated.contains(&Property::Safety)); // VM fatal
         assert!(eval.violated.contains(&Property::SegmentationFault)); // SIGSEGV marker
         assert!(eval.violated.contains(&Property::ProperTermination)); // exit!=0
     }
@@ -625,6 +704,4 @@ mod tests {
         assert!(ltl_milli > 0, "should record some LTL violations");
         assert_eq!(fail_milli, 500, "1/2 tasks failed ⇒ 500");
     }
-
 }
-

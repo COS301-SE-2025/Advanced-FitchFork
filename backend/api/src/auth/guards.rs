@@ -593,3 +593,58 @@ pub async fn validate_known_ids(
 
     Ok(next.run(req).await)
 }
+
+// TODO Write tests for this gaurd
+pub async fn require_ticket_ws_access(
+    State(app_state): State<AppState>,
+    Path(params): Path<HashMap<String, String>>,
+    req: axum::http::Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    let db = app_state.db();
+
+    // Must be logged in (also inserts AuthUser into extensions)
+    let (req, user) = extract_and_insert_authuser(req).await?;
+
+    // ticket_id from path
+    let ticket_id = params.get("ticket_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Missing or invalid ticket_id")),
+        ))?;
+
+    // Load ticket -> get assignment_id and author
+    let ticket = db::models::tickets::Entity::find_by_id(ticket_id)
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking ticket"))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ApiResponse::error("Ticket not found"))))?;
+
+    // Author can access
+    if ticket.user_id == user.0.sub {
+        return Ok(next.run(req).await);
+    }
+
+    // Admin can access
+    if user.0.admin {
+        return Ok(next.run(req).await);
+    }
+
+    // Resolve module via assignment -> module_id
+    let assignment = db::models::assignment::Entity::find_by_id(ticket.assignment_id)
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking assignment"))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ApiResponse::error("Assignment not found for ticket"))))?;
+
+    let module_id = assignment.module_id;
+
+    // Allow module staff (Lecturer, AssistantLecturer, Tutor)
+    if user_has_any_role(db, user.0.sub, module_id, &["Lecturer", "AssistantLecturer", "Tutor"]).await {
+        return Ok(next.run(req).await);
+    }
+
+    // Otherwise, deny
+    Err((StatusCode::FORBIDDEN, Json(ApiResponse::error("Not allowed to access this ticket websocket"))))
+}

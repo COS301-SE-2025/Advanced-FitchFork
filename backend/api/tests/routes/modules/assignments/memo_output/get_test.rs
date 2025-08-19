@@ -13,6 +13,7 @@ mod tests {
             module::Model as ModuleModel,
             user::Model as UserModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
+            assignment_task, assignment_memo_output
         }
     };
     use serde_json::Value;
@@ -85,14 +86,41 @@ mod tests {
         }
     }
 
-    fn setup_memo_output_file(module_id: i64, assignment_id: i64, task_number: i32) {
+    async fn setup_memo_output_file(
+        db: &sea_orm::DatabaseConnection,
+        module_id: i64,
+        assignment_id: i64,
+        task_number: i64,
+    ) -> assignment_memo_output::Model {
+        // 1. Ensure directory exists
         let memo_output_path = PathBuf::from("./tmp")
             .join(format!("module_{}", module_id))
             .join(format!("assignment_{}", assignment_id))
-            .join("memo_output")
-            .join(format!("{}.txt", task_number));
-        fs::create_dir_all(memo_output_path.parent().unwrap()).unwrap();
-        fs::write(&memo_output_path, "This is a test memo output.").unwrap();
+            .join("memo_output");
+        fs::create_dir_all(&memo_output_path).unwrap();
+
+        // 2. Create a task in DB
+        let task = assignment_task::Model::create(
+            db,
+            assignment_id,
+            task_number as i64,
+            &format!("Task {}", task_number),
+            "echo Hello", // dummy command
+        )
+        .await
+        .unwrap();
+
+        // 3. Create a memo output record in DB + write file using `save_file`
+        let contents = b"This is a test memo output.";
+        assignment_memo_output::Model::save_file(
+            db,
+            assignment_id,
+            task.id,
+            &format!("{}.txt", task_number),
+            contents,
+        )
+        .await
+        .unwrap()
     }
 
     fn cleanup_tmp() {
@@ -105,7 +133,7 @@ mod tests {
         set_test_assignment_root();
         let (app, app_state) = make_test_app().await;
         let data = setup_test_data(app_state.db()).await;
-        setup_memo_output_file(data.module.id, data.assignment.id, 1);
+        setup_memo_output_file(app_state.db(), data.module.id, data.assignment.id, 1).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -143,7 +171,7 @@ mod tests {
         set_test_assignment_root();
         let (app, app_state) = make_test_app().await;
         let data = setup_test_data(app_state.db()).await;
-        setup_memo_output_file(data.module.id, data.assignment.id, 1);
+        setup_memo_output_file(app_state.db(), data.module.id, data.assignment.id, 1).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
@@ -167,7 +195,7 @@ mod tests {
     async fn test_get_memo_output_forbidden_for_student() {
         let (app, app_state) = make_test_app().await;
         let data = setup_test_data(app_state.db()).await;
-        setup_memo_output_file(data.module.id, data.assignment.id, 1);
+        setup_memo_output_file(app_state.db(), data.module.id, data.assignment.id, 1).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
@@ -191,7 +219,7 @@ mod tests {
     async fn test_get_memo_output_forbidden_for_unassigned_user() {
         let (app, app_state) = make_test_app().await;
         let data = setup_test_data(app_state.db()).await;
-        setup_memo_output_file(data.module.id, data.assignment.id, 1);
+        setup_memo_output_file(app_state.db(), data.module.id, data.assignment.id, 1).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!(

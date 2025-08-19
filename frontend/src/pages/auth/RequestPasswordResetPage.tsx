@@ -1,7 +1,8 @@
 import { Form, Input, Button, Typography, Card, Alert } from 'antd';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import Logo from '@/components/Logo';
+import { MailOutlined } from '@ant-design/icons';
+import Logo from '@/components/common/Logo';
 import { requestPasswordReset } from '@/services/auth';
 
 const { Title, Text } = Typography;
@@ -36,17 +37,21 @@ export default function RequestPasswordResetPage() {
   };
 
   return (
-    <Card className="w-full max-w-md sm:max-w-xl md:max-w-2xl rounded-2xl shadow-xl max-h-[90vh] overflow-auto">
-      <div className="flex justify-start mb-6">
-        <Logo size="md" showText={false} shadow />
-      </div>
-
-      <div className="text-center mb-8">
-        <Title level={2} className="!mb-2 text-2xl sm:text-3xl md:text-4xl">
-          Forgot your password?
-        </Title>
-        <Text className="text-gray-600 block text-sm sm:text-base md:text-lg">
-          Enter your email and we’ll send you a reset link.
+    <Card
+      title={
+        <div className="flex my-2 items-center gap-2">
+          <Logo size="md" showText={false} />
+          <Title level={4} className="!m-0">
+            Forgot your password?
+          </Title>
+        </div>
+      }
+      className="w-full max-w-md sm:max-w-lg !rounded-xl shadow-md hover:shadow-lg transition-shadow dark:bg-gray-900 dark:border-gray-800"
+    >
+      <div className="mb-6">
+        <Text className="text-gray-600 block text-sm sm:text-base">
+          Enter your email and we&apos;ll send you a password reset link. If your account exists,
+          you should receive an email within a few minutes.
         </Text>
       </div>
 
@@ -55,7 +60,6 @@ export default function RequestPasswordResetPage() {
         layout="vertical"
         onFinish={handleFinish}
         onValuesChange={() => setError(null)}
-        className="mt-4"
         size="large"
       >
         {error && (
@@ -77,7 +81,7 @@ export default function RequestPasswordResetPage() {
             { type: 'email', message: 'Enter a valid email address' },
           ]}
         >
-          <Input placeholder="student@up.ac.za" />
+          <Input prefix={<MailOutlined />} placeholder="student@up.ac.za" allowClear />
         </Form.Item>
 
         <Form.Item className="mt-6">
@@ -88,9 +92,7 @@ export default function RequestPasswordResetPage() {
 
         {submitted && (
           <div className="text-center mt-4">
-            <Text className="text-blue-600">
-              If the account exists, a reset link has been sent.
-            </Text>
+            <Text type="success">If the account exists, a reset link has been sent.</Text>
           </div>
         )}
       </Form>

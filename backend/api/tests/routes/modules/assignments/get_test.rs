@@ -431,7 +431,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_assignment_readiness_forbidden_for_student() {
+    async fn test_get_assignment_readiness_success_as_student() {
         let (app, app_state) = make_test_app().await;
         let data = setup_test_data(app_state.db()).await;
 
@@ -444,7 +444,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
