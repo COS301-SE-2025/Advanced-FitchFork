@@ -167,19 +167,17 @@ cargo test
 
 ## Additional Resources
 
-| Resource                                                                          | Demo 1                                             | Demo 2                                             |
-| --------------------------------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
-| **[Project Board (GitHub)](https://github.com/orgs/COS301-SE-2025/projects/199)** | —                                                  | —                                                  |
-| **Domain Model Diagram**                                                          | [View](./docs/demo1/domain_model.png)              | [View](./docs/demo2/domain_model.png)              |
-| **User Stories**                                                                  | [View](./docs/demo1/user_stories.pdf)              | [View](./docs/demo2/user_stories.pdf)              |
-| **Use Cases**                                                                     | [View](./docs/demo1/use_cases.pdf)                 | [View](./docs/demo2/use_cases.pdf)                 |
-| **Software Requirements Specification (SRS)**                                     | [View](./docs/demo1/srs.pdf)                       | [View](./docs/demo2/srs.pdf)                       |
-| **Functional and Non-Functional Requirements Summary**                            | [View](./docs/demo1/requirement_specification.pdf) | [View](./docs/demo2/requirement_specification.pdf) |
-| **User Manual**                                                                   | —                                                  | [View](./docs/demo2/user_manual.pdf)               |
-| **Code Standards**                                                                | —                                                  | [View](./docs/demo2/code_standards.pdf)            |
-| **API Specification**                                                             | —                                                  |                                                    | [View](./docs/demo3/service_contract/api/index.html)
----
-
+| Resource                                                                          | Demo 1                                             | Demo 2                                             | Demo 3                                             |
+| --------------------------------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
+| **[Project Board (GitHub)](https://github.com/orgs/COS301-SE-2025/projects/199)** | —                                                  | —                                                  | —                                                  |
+| **Domain Model Diagram**                                                          | [View](./docs/demo1/domain_model.png)              | [View](./docs/demo2/domain_model.png)              | —                                                  |
+| **User Stories**                                                                  | [View](./docs/demo1/user_stories.pdf)              | [View](./docs/demo2/user_stories.pdf)              | —                                                  |
+| **Use Cases**                                                                     | [View](./docs/demo1/use_cases.pdf)                 | [View](./docs/demo2/use_cases.pdf)                 | —                                                  |
+| **Software Requirements Specification (SRS)**                                     | [View](./docs/demo1/srs.pdf)                       | [View](./docs/demo2/srs.pdf)                       | —                                                  |
+| **Functional and Non-Functional Requirements Summary**                            | [View](./docs/demo1/requirement_specification.pdf) | [View](./docs/demo2/requirement_specification.pdf) | —                                                  |
+| **User Manual**                                                                   | —                                                  | [View](./docs/demo2/user_manual.pdf)               | —                                                  |
+| **Code Standards**                                                                | —                                                  | [View](./docs/demo2/code_standards.pdf)            | —                                                  |
+| **API Specification**                                                             | —                                                  | —                                                  | [View](./docs/demo3/service_contract/api/index.html)              |
 ## Viewing Internal Rust Documentation
 
 To browse the backend's internal API documentation (generated with `rustdoc`), follow these steps:
