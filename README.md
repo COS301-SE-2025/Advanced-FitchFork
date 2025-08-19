@@ -177,7 +177,7 @@ cargo test
 | **Functional and Non-Functional Requirements Summary**                            | [View](./docs/demo1/requirement_specification.pdf) | [View](./docs/demo2/requirement_specification.pdf) |
 | **User Manual**                                                                   | —                                                  | [View](./docs/demo2/user_manual.pdf)               |
 | **Code Standards**                                                                | —                                                  | [View](./docs/demo2/code_standards.pdf)            |
-
+| **API Specification**                                                             | —                                                  |                                                    | [View](./docs/demo3/service_contract/api/index.html)
 ---
 
 ## Viewing Internal Rust Documentation
