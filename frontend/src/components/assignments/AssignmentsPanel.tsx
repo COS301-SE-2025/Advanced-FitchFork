@@ -1,125 +1,104 @@
-import { useMemo, useState } from 'react';
-import { List, Typography, Segmented, Empty, Tooltip, Progress } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { List, Typography, Segmented, Empty, Tooltip, Progress, message } from 'antd';
 import { BookOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import type { Assignment, AssignmentStatus, AssignmentType } from '@/types/modules/assignments';
-import type { Module } from '@/types/modules';
+
+import type { ModuleRole } from '@/types/modules';
+import type { AssignmentStatus, AssignmentType } from '@/types/modules/assignments';
 import AssignmentTypeTag from './AssignmentTypeTag';
 import AssignmentStatusTag from './AssignmentStatusTag';
+import { getMyAssignments } from '@/services/me/assignments/get';
+import { useNavigate } from 'react-router-dom';
 
 dayjs.extend(relativeTime);
 
 const { Text, Title } = Typography;
 const now = () => dayjs();
 
-// ---- Mock data ----
-const MOCK_MODULES: Record<number, Module> = {
-  101: {
-    id: 101,
-    code: 'COS101',
-    year: 2025,
-    description: 'Intro to CS',
-    credits: 16,
-    created_at: '',
-    updated_at: '',
-  },
-  344: {
-    id: 344,
-    code: 'COS344',
-    year: 2025,
-    description: 'Systems',
-    credits: 24,
-    created_at: '',
-    updated_at: '',
-  },
-  222: {
-    id: 222,
-    code: 'COS222',
-    year: 2025,
-    description: 'Algorithms',
-    credits: 24,
-    created_at: '',
-    updated_at: '',
-  },
+type Props = { role?: ModuleRole };
+
+type DisplayAssignment = {
+  id: number;
+  name: string;
+  status: AssignmentStatus | string;
+  available_from: string;
+  due_date: string;
+  created_at: string;
+  updated_at: string;
+  module: { id: number; code: string };
+  assignment_type?: AssignmentType;
 };
 
-const mk = (
-  id: number,
-  module_id: number,
-  name: string,
-  type: AssignmentType,
-  openInHours: number,
-  dueInHours: number,
-  status: AssignmentStatus,
-): Assignment =>
-  ({
-    id,
-    module_id,
-    name,
-    description: '',
-    assignment_type: type,
-    available_from: now().add(openInHours, 'hour').toISOString(),
-    due_date: now().add(dueInHours, 'hour').toISOString(),
-    status,
-    created_at: '',
-    updated_at: '',
-  }) as any;
-
-const MOCK_ASSIGNMENTS: Assignment[] = [
-  mk(501, 101, 'A1: Basics', 'assignment', -48, 72, 'open'),
-  mk(502, 344, 'Prac 2: Sockets', 'practical', 6, 54, 'ready'),
-  mk(503, 101, 'A2: Data Structures', 'assignment', 24, 192, 'setup'),
-  mk(504, 344, 'Prac 3: Threads', 'practical', -12, 12, 'open'),
-  mk(505, 101, 'A0: Warm-up', 'assignment', -240, -12, 'closed'),
-  mk(506, 222, 'A3: Graphs', 'assignment', 36, 240, 'setup'),
-  mk(507, 222, 'Prac 1: Tooling', 'practical', -3, 48, 'open'),
-  mk(508, 101, 'A4: Sorting', 'assignment', 12, 120, 'ready'),
-  mk(509, 344, 'Prac 4: Concurrency', 'practical', -23, 1, 'open'),
-];
-
-// ---- Helpers ----
-function progressPercent(a: Assignment): number | null {
+function progressPercent(a: DisplayAssignment): number | null {
   if (a.status !== 'open') return null;
   const start = dayjs(a.available_from);
   const end = dayjs(a.due_date);
   const n = now();
   if (start.isAfter(n) || !end.isAfter(n)) return null;
-
   const total = end.diff(start);
   const spent = n.diff(start);
-
-  // normal pct: spent / total → now invert it
   const remainingPct = Math.min(100, Math.max(0, 100 - (spent / total) * 100));
-
   return Number.isFinite(remainingPct) ? Math.round(remainingPct) : null;
 }
 
 function progressColor(pct: number): string {
-  // pct now represents "time remaining", so redder as it gets lower
-  if (pct > 50) return '#1677ff'; // blue for lots of time left
-  if (pct > 20) return '#fa8c16'; // orange when mid
-  return '#ff4d4f'; // red when nearly out of time
+  if (pct > 50) return '#1677ff';
+  if (pct > 20) return '#fa8c16';
+  return '#ff4d4f';
 }
 
-// ---- Component ----
-const AssignmentsPanel: React.FC = () => {
+const AssignmentsPanel: React.FC<Props> = ({ role }) => {
   const [view, setView] = useState<'due' | 'upcoming'>('due');
-  const [items] = useState<Assignment[]>(MOCK_ASSIGNMENTS);
+  const [items, setItems] = useState<DisplayAssignment[]>([]);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await getMyAssignments({ role, page: 1, per_page: 50 });
+        if (!res?.data) throw new Error('Empty response');
+        if (!res.success) throw new Error(res.message || 'Request failed');
+
+        const mapped: DisplayAssignment[] = res.data.assignments.map((a) => ({
+          id: a.id,
+          name: a.name,
+          status: a.status,
+          available_from: a.available_from,
+          due_date: a.due_date,
+          created_at: a.created_at,
+          updated_at: a.updated_at,
+          module: a.module,
+          assignment_type: 'assignment', // fallback so tag renders
+        }));
+
+        if (!cancelled) setItems(mapped);
+      } catch (err: any) {
+        if (!cancelled) {
+          message.error(err?.message ?? 'Failed to load assignments');
+          setItems([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [role]);
 
   const filtered = useMemo(() => {
     const n = now();
-
     if (view === 'due') {
-      // started and not yet due
       return items
         .filter((a) => a.status !== 'archived')
         .filter((a) => !dayjs(a.available_from).isAfter(n))
         .filter((a) => dayjs(a.due_date).isAfter(n))
         .sort((a, b) => dayjs(a.due_date).valueOf() - dayjs(b.due_date).valueOf());
     }
-
-    // upcoming (opens in future)
     return items
       .filter((a) => a.status !== 'archived')
       .filter((a) => dayjs(a.available_from).isAfter(n))
@@ -153,6 +132,7 @@ const AssignmentsPanel: React.FC = () => {
       {/* List */}
       <List
         className="flex-1 overflow-y-auto"
+        loading={loading}
         locale={{
           emptyText: (
             <Empty
@@ -165,7 +145,6 @@ const AssignmentsPanel: React.FC = () => {
         }}
         dataSource={filtered}
         renderItem={(a) => {
-          const moduleCode = MOCK_MODULES[a.module_id]?.code ?? `M-${a.module_id}`;
           const due = dayjs(a.due_date);
           const opens = dayjs(a.available_from);
           const pct = progressPercent(a);
@@ -173,7 +152,7 @@ const AssignmentsPanel: React.FC = () => {
           const timing =
             view === 'upcoming' ? (
               <div className="flex items-center gap-2">
-                <Text type="secondary">{moduleCode}</Text>
+                <Text type="secondary">{a.module.code}</Text>
                 <Text type="secondary" className="!text-[12px]">
                   •
                 </Text>
@@ -187,7 +166,7 @@ const AssignmentsPanel: React.FC = () => {
             ) : (
               <div className="flex items-center gap-2">
                 <Text type="secondary" className="!text-[12px]">
-                  {moduleCode}
+                  {a.module.code}
                 </Text>
                 <Text type="secondary" className="!text-[12px]">
                   •
@@ -204,7 +183,7 @@ const AssignmentsPanel: React.FC = () => {
           return (
             <List.Item
               className="!px-3 cursor-pointer"
-              onClick={() => console.log('Open assignment', { id: a.id, name: a.name })}
+              onClick={() => navigate(`/modules/${a.module.id}/assignments/${a.id}`)}
             >
               <div className="flex flex-col gap-1.5 w-full">
                 {/* Row 1: name + tags */}
@@ -214,16 +193,12 @@ const AssignmentsPanel: React.FC = () => {
                   </Text>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="hidden sm:block">
-                      <AssignmentTypeTag type={a.assignment_type} />
+                      <AssignmentTypeTag type={a.assignment_type ?? 'assignment'} />
                     </div>
-                    <AssignmentStatusTag status={a.status} />
+                    <AssignmentStatusTag status={a.status as AssignmentStatus} />
                   </div>
                 </div>
-
-                {/* Row 2: timing */}
                 {timing}
-
-                {/* Row 3: progress (only when open) */}
                 {typeof pct === 'number' && (
                   <div className="pt-1">
                     <Progress

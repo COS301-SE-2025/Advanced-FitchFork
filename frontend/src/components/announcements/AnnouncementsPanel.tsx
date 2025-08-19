@@ -1,129 +1,93 @@
-import { useMemo, useState } from 'react';
-import { List, Typography, Segmented, Empty, Tooltip } from 'antd';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { List, Typography, Segmented, Empty, Tooltip, Spin, Alert } from 'antd';
 import { NotificationOutlined, PushpinFilled, ClockCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import type { Announcement } from '@/types/modules/announcements/shared';
-import type { User } from '@/types/users';
-import type { Module } from '@/types/modules';
+import type { ModuleRole } from '@/types/modules';
+import type { SortOption } from '@/types/common';
 import PinnedTag from './PinnedTag';
+import { getMyAnnouncements } from '@/services/me/announcements/get';
+import { useNavigate } from 'react-router-dom';
 
 dayjs.extend(relativeTime);
 
 const { Text, Title } = Typography;
 
-const MOCK_USERS: Record<number, User> = {
-  1: { id: 1, username: 'dr_smith', email: '', admin: false, created_at: '', updated_at: '' },
-  2: { id: 2, username: 'tutor_jane', email: '', admin: false, created_at: '', updated_at: '' },
+/** Shape returned by service for each row (augment with optional module code if backend adds it later) */
+type MyAnnouncementItem = Announcement & {
+  user: { id: number; username: string };
+  module?: { id: number; code?: string }; // optional defensive field
 };
 
-const MOCK_MODULES: Record<number, Module> = {
-  101: {
-    id: 101,
-    code: 'COS101',
-    year: 2025,
-    description: '',
-    credits: 16,
-    created_at: '',
-    updated_at: '',
-  },
-  344: {
-    id: 344,
-    code: 'COS344',
-    year: 2025,
-    description: '',
-    credits: 24,
-    created_at: '',
-    updated_at: '',
-  },
-};
+const DEFAULT_SORT: SortOption[] = [{ field: 'created_at', order: 'descend' }];
 
-const nowISO = (offsetMs = 0) => new Date(Date.now() - offsetMs).toISOString();
-
-const MOCK_ANNOUNCEMENTS: Announcement[] = [
-  {
-    id: 9003,
-    module_id: 344,
-    user_id: 1,
-    title: 'Assignment 2 Released',
-    body: 'A2 is now available.',
-    pinned: true,
-    created_at: nowISO(60 * 60 * 1000),
-    updated_at: nowISO(60 * 60 * 1000),
-  },
-  {
-    id: 9002,
-    module_id: 101,
-    user_id: 2,
-    title: 'Tutorial Venue Change',
-    body: 'This week’s tutorial moves to Lab 3.',
-    pinned: false,
-    created_at: nowISO(26 * 60 * 60 * 1000),
-    updated_at: nowISO(20 * 60 * 60 * 1000),
-  },
-  {
-    id: 9004,
-    module_id: 101,
-    user_id: 1,
-    title: 'Exam Preparation Material Uploaded',
-    body: 'Find the revision pack under Resources.',
-    pinned: true,
-    created_at: nowISO(3 * 24 * 60 * 60 * 1000),
-    updated_at: nowISO(3 * 24 * 60 * 60 * 1000),
-  },
-  {
-    id: 9005,
-    module_id: 344,
-    user_id: 2,
-    title: 'Lab Schedule Updated',
-    body: 'Lab times have shifted to accommodate public holidays.',
-    pinned: false,
-    created_at: nowISO(5 * 24 * 60 * 60 * 1000),
-    updated_at: nowISO(4.5 * 24 * 60 * 60 * 1000),
-  },
-  {
-    id: 9006,
-    module_id: 101,
-    user_id: 2,
-    title: 'Group Project Guidelines',
-    body: 'Please review the updated group work rules.',
-    pinned: false,
-    created_at: nowISO(7 * 24 * 60 * 60 * 1000),
-    updated_at: nowISO(7 * 24 * 60 * 60 * 1000),
-  },
-  {
-    id: 9007,
-    module_id: 344,
-    user_id: 1,
-    title: 'Midterm Grades Published',
-    body: 'Check the Grades tab for your results.',
-    pinned: true,
-    created_at: nowISO(10 * 24 * 60 * 60 * 1000),
-    updated_at: nowISO(10 * 24 * 60 * 60 * 1000),
-  },
-  {
-    id: 9008,
-    module_id: 101,
-    user_id: 1,
-    title: 'Weekly Quiz Reminder',
-    body: 'Quiz closes this Friday at 5pm.',
-    pinned: false,
-    created_at: nowISO(12 * 24 * 60 * 60 * 1000),
-    updated_at: nowISO(12 * 24 * 60 * 60 * 1000),
-  },
-];
-
-const AnnouncementsPanel: React.FC = () => {
-  const [announcements] = useState<Announcement[]>(MOCK_ANNOUNCEMENTS);
+const AnnouncementsPanel: React.FC<{
+  /** Optional server-side filters you may want to pass down (role/year) */
+  role?: ModuleRole;
+  year?: number;
+  perPage?: number;
+}> = ({ role, year, perPage = 20 }) => {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<'all' | 'pinned'>('all');
+  const [items, setItems] = useState<MyAnnouncementItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    const sorted = [...announcements].sort((a, b) => {
+  // basic pagination state (not shown in UI yet; ready if you add <List pagination> later)
+  const [page, setPage] = useState(1);
+  const [, setTotal] = useState(0);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getMyAnnouncements({
+        page,
+        per_page: perPage,
+        sort: DEFAULT_SORT,
+        role,
+        year,
+        pinned: filter === 'pinned' ? true : undefined, // let server filter pinned when needed
+      });
+
+      if (!res.success) {
+        throw new Error(res.message || 'Failed to load announcements');
+      }
+
+      // Defensive: some backends accidentally return a single object instead of an array
+      const arr = Array.isArray(res.data.announcements)
+        ? res.data.announcements
+        : [res.data.announcements];
+
+      setItems(arr as MyAnnouncementItem[]);
+      setTotal(res.data.total ?? arr.length);
+    } catch (e: any) {
+      setError(e?.message ?? 'Unknown error');
+      setItems([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, perPage, role, year, filter]);
+
+  useEffect(() => {
+    // reset to page 1 when filter changes
+    setPage(1);
+  }, [filter]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Keep pinned-first & recent-first ordering on the client as a UX guarantee
+  const ordered = useMemo(() => {
+    const sorted = [...items].sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       return dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf();
     });
-    return sorted.filter((a) => (filter === 'all' ? true : a.pinned));
-  }, [announcements, filter]);
+    return sorted;
+  }, [items]);
 
   const filterOptions = [
     { label: 'All', value: 'all' },
@@ -152,9 +116,17 @@ const AnnouncementsPanel: React.FC = () => {
         </div>
       </div>
 
+      {/* Error state */}
+      {error && (
+        <div className="px-3 py-2">
+          <Alert type="error" showIcon message="Failed to load announcements" description={error} />
+        </div>
+      )}
+
       {/* List */}
       <List
         className="flex-1 overflow-y-auto"
+        loading={loading}
         locale={{
           emptyText: (
             <Empty
@@ -163,16 +135,16 @@ const AnnouncementsPanel: React.FC = () => {
             />
           ),
         }}
-        dataSource={filtered}
+        dataSource={ordered}
         renderItem={(a) => {
-          const author = MOCK_USERS[a.user_id]?.username ?? `User ${a.user_id}`;
-          const moduleCode = MOCK_MODULES[a.module_id]?.code ?? `M-${a.module_id}`;
+          const author = a.user?.username ?? `User ${a.user?.id ?? a.user_id}`;
+          const moduleCode = a.module?.code ?? `M-${a.module_id}`;
           const created = dayjs(a.created_at);
 
           return (
             <List.Item
               className="!px-3 cursor-pointer"
-              onClick={() => console.log('Open announcement', { id: a.id })}
+              onClick={() => navigate(`/modules/${a.module?.id}/announcements/${a.id}`)}
             >
               <div className="flex flex-col gap-1.5 w-full">
                 {/* Title + pin */}
@@ -209,6 +181,13 @@ const AnnouncementsPanel: React.FC = () => {
           );
         }}
       />
+
+      {/* Optional: simple footer spinner for future infinite scroll / pagination */}
+      {loading && items.length > 0 && (
+        <div className="py-2 flex justify-center">
+          <Spin />
+        </div>
+      )}
     </div>
   );
 };
