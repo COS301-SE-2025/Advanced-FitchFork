@@ -24,6 +24,10 @@ pub struct Model {
     pub user_id: i64,
     /// Attempt number
     pub attempt: i64,
+    /// The score earned by the user.
+    pub earned: i64,
+    /// The total possible score.
+    pub total: i64,
     /// The original filename uploaded by the user.
     pub filename: String,
     /// The hash of the submitted files.
@@ -136,11 +140,17 @@ impl Model {
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
-        is_pratice: bool,
+        earned: i64,
+        total: i64,
+        is_practice: bool,
         filename: &str,
         file_hash: &str,
         bytes: &[u8],
     ) -> Result<Self, DbErr> {
+        if earned > total {
+            return Err(DbErr::Custom("Earned score cannot be greater than total score".into()));
+        }
+
         let now = Utc::now();
 
         // Step 1: Insert placeholder model
@@ -148,7 +158,9 @@ impl Model {
             assignment_id: Set(assignment_id),
             user_id: Set(user_id),
             attempt: Set(attempt),
-            is_practice: Set(is_pratice),
+            is_practice: Set(is_practice),
+            earned: Set(earned),
+            total: Set(total),
             filename: Set(filename.to_string()),
             file_hash: Set(file_hash.to_string()),
             path: Set("".to_string()),
@@ -322,6 +334,8 @@ mod tests {
             assignment_id: Set(assignment.id),
             user_id: Set(user.id),
             attempt: Set(1),
+            earned: Set(10),
+            total: Set(10),
             filename: Set("solution.zip".to_string()),
             file_hash: Set("hash123#".to_string()),
             path: Set("".to_string()),
@@ -336,7 +350,7 @@ mod tests {
 
         // Save file via submission
         let content = fake_bytes();
-        let file = Model::save_file(&db, submission.id, user.id, 6, false, "solution.zip", "hash123#", &content)
+        let file = Model::save_file(&db, submission.id, user.id, 6, 10, 10, false, "solution.zip", "hash123#", &content)
             .await
             .expect("Failed to save file");
 

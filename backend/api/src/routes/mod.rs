@@ -9,6 +9,7 @@
 //! - `/auth` → Authentication endpoints (login, token handling, public)
 //! - `/users` → User management endpoints (admin-only)
 //! - `/modules` → Module management, personnel, and assignments (authenticated users)
+//! - `/me` → User-specific endpoints (announcements, tickets, assignments)
 
 use crate::auth::guards::{require_admin, require_authenticated};
 use crate::routes::auth::get::get_avatar;
@@ -21,7 +22,7 @@ use crate::routes::{
 };
 use axum::{middleware::from_fn, routing::get, Router};
 use util::{config::AppConfig, state::AppState};
-use crate::routes::me::my_routes;
+use crate::routes::me::me_routes;
 
 pub mod auth;
 pub mod common;
@@ -42,6 +43,7 @@ pub mod me;
 /// - `/users` → User management (restricted to admins via `require_admin` middleware).
 /// - `/users/{user_id}/avatar` → Publicly accessible avatar retrieval.
 /// - `/modules` → Module CRUD, personnel management, and assignments (requires authentication).
+/// - `/me` → User-specific endpoints (announcements, tickets, assignments, etc.)
 /// - `/test` → Development/test-only routes (mounted only if `env != production`).
 ///
 /// The `/test` route group is mounted **here** instead of in `main` to:
@@ -55,7 +57,7 @@ pub fn routes(app_state: AppState) -> Router<AppState> {
         .nest("/users", users_routes().route_layer(from_fn(require_admin)))
         .route("/users/{user_id}/avatar", get(get_avatar))
         .nest("/modules",modules_routes(app_state.clone()).route_layer(from_fn(require_authenticated)),)
-        .nest("/me", my_routes(app_state.clone()).route_layer(from_fn(require_authenticated)))
+        .nest("/me", me_routes().route_layer(from_fn(require_authenticated)))
         .with_state(app_state.clone());
 
     // Conditionally mount the `/test` route group if *not* in production.

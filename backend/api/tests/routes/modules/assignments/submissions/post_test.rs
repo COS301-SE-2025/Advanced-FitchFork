@@ -1212,6 +1212,8 @@ mod tests {
             assignment_id: Set(assignment_id),
             user_id: Set(user_id),
             attempt: Set(attempt),
+            earned: Set(10),
+            total: Set(10),
             filename: Set("test_submission.zip".to_string()),
             file_hash: Set("d41d8cd98f00b204e9800998ecf8427e".to_string()),
             path: Set(format!(
@@ -1876,6 +1878,8 @@ mod tests {
             assignment_id: Set(assignment_id),
             user_id: Set(user_id),
             attempt: Set(attempt),
+            earned: Set(10),
+            total: Set(10),
             filename: Set("test_submission.zip".to_string()),
             file_hash: Set("d41d8cd98f00b204e9800998ecf8427e".to_string()),
             path: Set(format!(
