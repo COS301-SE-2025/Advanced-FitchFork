@@ -19,7 +19,7 @@ pub enum Property {
     ExecutionTime,     // G(ter => (r ≤ e))
     IllegalOutput,     // G(ter => ∀o∈Out ∀x∈X (x ≠ o))
     ExpectedExact,     // ExpectedExact,  
-    ExpectedContains,  // ExpectedContains,/
+    ExpectedContains,  // ExpectedContains,
 }
 
 #[derive(Debug, Clone)]
