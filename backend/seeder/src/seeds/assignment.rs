@@ -85,5 +85,21 @@ impl Seeder for AssignmentSeeder {
         };
 
         let _ = plagiarism_assignment.insert(db).await;
+
+        let gatlam_assignment = assignment::ActiveModel {
+            id: Set(10004),
+            module_id: Set(10003),
+            name: Set("GATLAM Assignment".to_string()),
+            description: Set(Some("Assignment used to show GATLAM".to_string())),
+            assignment_type: Set(AssignmentType::Practical),
+            status: Set(Status::Setup),
+            available_from: Set(Utc::now()),
+            due_date: Set(Utc::now() + chrono::Duration::days(7)),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+
+        let _ = gatlam_assignment.insert(db).await;
     }
 }
