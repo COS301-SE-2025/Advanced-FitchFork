@@ -3,8 +3,6 @@ import { Layout, Menu, Typography } from 'antd';
 import {
   HomeOutlined,
   FileTextOutlined,
-  BarChartOutlined,
-  BookOutlined,
   UserOutlined,
   NotificationOutlined,
 } from '@ant-design/icons';
@@ -35,8 +33,8 @@ const ModuleLayout = () => {
       label: 'Announcements',
     },
     { key: `/modules/${moduleId}/assignments`, icon: <FileTextOutlined />, label: 'Assignments' },
-    { key: `/modules/${moduleId}/grades`, icon: <BarChartOutlined />, label: 'Grades' },
-    { key: `/modules/${moduleId}/resources`, icon: <BookOutlined />, label: 'Resources' },
+    // { key: `/modules/${moduleId}/grades`, icon: <BarChartOutlined />, label: 'Grades' },
+    // { key: `/modules/${moduleId}/resources`, icon: <BookOutlined />, label: 'Resources' },
     ...(showPersonnel
       ? [{ key: `/modules/${moduleId}/personnel`, icon: <UserOutlined />, label: 'Personnel' }]
       : []),

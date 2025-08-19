@@ -43,7 +43,7 @@ const SubmissionTasks: React.FC<Props> = ({ tasks, memoOutput, submisisonOutput 
     setVisible(true);
   };
 
-  const collapseItems: CollapseProps['items'] = tasks.map((task) => {
+  const collapseItems: CollapseProps['items'] = tasks.map((task, task_num) => {
     const { task_number, name, score, subsections } = task;
 
     const children = (
@@ -64,12 +64,13 @@ const SubmissionTasks: React.FC<Props> = ({ tasks, memoOutput, submisisonOutput 
       </ul>
     );
 
+    // TODO Remember to actually make it display the tasks actual name
     const label = (
       <div className="flex items-center gap-2">
         <Tag color={getScoreTagColor(score.earned, score.total)}>
           {score.earned} / {score.total}
         </Tag>
-        <Text className="font-medium">{name}</Text>
+        <Text className="font-medium">Task {task_num + 1}</Text>
       </div>
     );
 

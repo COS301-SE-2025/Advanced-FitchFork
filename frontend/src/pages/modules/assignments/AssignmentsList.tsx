@@ -473,13 +473,15 @@ const AssignmentsList = () => {
           onCancel={handleBulkDeleteCancel}
         />
 
-        <AssignmentSetup
-          open={setupAssignmentId !== null}
-          onClose={() => setSetupAssignmentId(null)}
-          assignmentId={setupAssignmentId ?? undefined}
-          module={module}
-          onStepComplete={() => listRef.current?.refresh()}
-        />
+        {setupAssignmentId !== null && (
+          <AssignmentSetup
+            open={true}
+            onClose={() => setSetupAssignmentId(null)}
+            assignmentId={setupAssignmentId}
+            module={module}
+            onDone={() => listRef.current?.refresh()}
+          />
+        )}
       </div>
     </div>
   );

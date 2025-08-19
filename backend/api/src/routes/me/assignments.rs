@@ -51,7 +51,7 @@ pub struct ModuleResponse {
 #[derive(Serialize)]
 pub struct AssignmentResponse {
     pub id: i64,
-    pub title: String,
+    pub name: String,
     pub status: String,
     pub available_from: String,
     pub due_date: String,
@@ -198,7 +198,7 @@ pub async fn get_my_assignments(
 
                 assignments_vec.push(AssignmentResponse {
                     id: a.id,
-                    title: a.name,
+                    name: a.name,
                     status: a.status.to_string(),
                     available_from: a.available_from.to_string(),
                     due_date: a.due_date.to_string(),

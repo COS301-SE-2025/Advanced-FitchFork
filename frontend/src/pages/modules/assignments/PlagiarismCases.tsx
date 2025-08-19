@@ -1,4 +1,3 @@
-// pages/modules/assignments/plagiarism/PlagiarismCases.tsx
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type {
@@ -248,6 +247,7 @@ const PlagiarismCases = () => {
       submission_id_1: Number(values.submission_id_1),
       submission_id_2: Number(values.submission_id_2),
       description: String(values.description ?? ''),
+      similarity: Number(values.similarity ?? 0),
     });
     if (res.success) {
       message.success(res.message || 'Plagiarism case created');
@@ -264,6 +264,7 @@ const PlagiarismCases = () => {
     const res = await updatePlagiarismCase(moduleId, assignmentId, editingItem.id, {
       description: values.description ?? undefined,
       status: values.status as PlagiarismCaseStatus | undefined,
+      similarity: Number(values.similarity) ?? undefined,
     });
     if (res.success) {
       message.success(res.message || 'Plagiarism case updated');
@@ -620,6 +621,7 @@ const PlagiarismCases = () => {
           submission_id_1: undefined,
           submission_id_2: undefined,
           description: '',
+          similarity: 0,
         }}
         fields={[
           {
@@ -655,6 +657,7 @@ const PlagiarismCases = () => {
             } as TreeSelectProps,
           },
           { name: 'description', label: 'Description', type: 'textarea', required: true },
+          { name: 'similarity', label: 'Similarity', type: 'number' },
         ]}
       />
 
@@ -670,9 +673,11 @@ const PlagiarismCases = () => {
         initialValues={{
           description: editingItem?.description ?? '',
           status: editingItem?.status ?? 'review',
+          similarity: editingItem?.similarity ?? 0,
         }}
         fields={[
           { name: 'description', label: 'Description', type: 'textarea' },
+          { name: 'similarity', label: 'Similarity', type: 'number' },
           {
             name: 'status',
             label: 'Status',

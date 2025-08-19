@@ -9,6 +9,7 @@ export const createPlagiarismCase = async (
     submission_id_1: number;
     submission_id_2: number;
     description: string;
+    similarity: number;
   }
 ): Promise<ApiResponse<PlagiarismCase>> => {
   return api.post(

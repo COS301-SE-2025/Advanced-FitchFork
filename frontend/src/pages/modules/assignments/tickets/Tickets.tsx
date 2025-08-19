@@ -114,7 +114,6 @@ const Tickets = () => {
         name="Tickets"
         defaultViewMode="table"
         listMode={isStudent}
-        showControlBar={!isStudent}
         fetchItems={fetchTickets}
         getRowKey={(t) => t.id}
         onRowClick={(t) =>

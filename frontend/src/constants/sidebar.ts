@@ -4,7 +4,6 @@ import {
   LogoutOutlined,
   UserOutlined,
   AppstoreOutlined,
-  BarChartOutlined,
   CalendarOutlined,
   QuestionCircleOutlined,
 } from '@ant-design/icons';
@@ -56,12 +55,12 @@ export const useTopMenuItems = (): MenuItem[] => {
         label: 'Modules',
         adminOnly: true,
       },
-      {
-        key: '/reports',
-        icon: React.createElement(BarChartOutlined),
-        label: 'Reports',
-        adminOnly: true,
-      }
+      // {
+      //   key: '/reports',
+      //   icon: React.createElement(BarChartOutlined),
+      //   label: 'Reports',
+      //   adminOnly: true,
+      // }
     );
   }
 

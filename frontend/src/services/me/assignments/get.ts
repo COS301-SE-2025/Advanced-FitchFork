@@ -1,4 +1,4 @@
-import type { ApiResponse, PaginationRequest, PaginationResponse } from "@/types/common";
+import type {  PaginationRequest, PaginationResponse } from "@/types/common";
 import type { ModuleRole } from "@/types/modules";
 import type { Assignment, AssignmentStatus } from "@/types/modules/assignments";
 import { api } from "@/utils/api";
@@ -18,10 +18,10 @@ type MyAssignmentItem = {
   }
 } & Assignment;
 
-type MyAssignmentsResponse = ApiResponse<{ assignments: MyAssignmentItem[] } & PaginationResponse>;
+type MyAssignmentsResponse = { assignments: MyAssignmentItem[] } & PaginationResponse;
 
 export const getMyAssignments = async (
   options: MyAssignmentsOptions
-): Promise<MyAssignmentsResponse> => {
-  return api.get("/me/assignments", options);
+) => {
+  return api.get<MyAssignmentsResponse>("/me/assignments", options);
 }
