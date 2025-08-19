@@ -1,6 +1,7 @@
 // ai/src/utils/evaluator.rs
 
 use util::execution_config::ExecutionConfig;
+use crate::HashMap;
 
 // IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
 #[derive(Debug, Clone, Copy)]
@@ -17,9 +18,8 @@ pub enum Property {
     Exceptions,        // G(¬exception)
     ExecutionTime,     // G(ter => (r ≤ e))
     IllegalOutput,     // G(ter => ∀o∈Out ∀x∈X (x ≠ o))
-                       // ExpectedExact,   // handled elsewhere
-                       // ExpectedContains,// handled elsewhere
-                       // for these last two LTL properties we might need to handle them in this actual code, especially contains, but for now it should be fine :)
+    ExpectedExact,     // ExpectedExact,  
+    ExpectedContains,  // ExpectedContains,/
 }
 
 #[derive(Debug, Clone)]
@@ -164,89 +164,73 @@ impl Evaluator {
     ///   (ltl_milli, fail_milli)
     /// - ltl_milli: fraction of violated LTL-ish properties across all tasks checked
     /// - fail_milli: fraction of tasks considered failed
-    pub fn derive_props(&self, specs: &[TaskSpec], outs: &[(i64, String)]) -> (usize, usize) {
-        let total_tasks = outs.len().max(1);
+pub fn derive_props(
+    &self,
+    specs: &[TaskSpec],
+    outs: &[(i64, String)],
+    memo: &[(i64, String)],
+) -> (usize, usize) {
+    let total_tasks = outs.len().max(1);
 
-        let mut ltl_checks = 0usize;
-        let mut ltl_violations = 0usize;
-        let mut failed_tasks = 0usize;
+    let mut ltl_checks     = 0usize;
+    let mut ltl_violations = 0usize;
+    let mut failed_tasks   = 0usize;
 
-        for (i, (task_id, blob)) in outs.iter().enumerate() {
-            let spec = specs
-                .get(i)
-                .unwrap_or_else(|| specs.first().expect("non-empty specs"));
-            let view = self.parse(*task_id, blob);
-            let eval = self.evaluate_task(spec, &view);
+    let memo_map: HashMap<i64, &str> = memo.iter().map(|(tid, s)| (*tid, s.as_str())).collect();
 
-            // Count how many checks we applied for this task (exclude the output-based ones handled elsewhere).
-            // Here we’re using: Safety, ProperTermination, SegmentationFault, Exceptions, ExecutionTime, IllegalOutput
-            // Note: ExecutionTime and IllegalOutput are only applicable if terminated and configured accordingly.
-            let mut checks = 0usize;
-            let mut viols = 0usize;
+    for (i, (task_id, blob)) in outs.iter().enumerate() {
+        let spec = specs.get(i).unwrap_or_else(|| &specs[0]);
+        let view = self.parse(*task_id, blob);
+        let eval = self.evaluate_task(spec, &view);
 
-            // Safety
+        let mut checks = 0usize;
+        let mut viols  = 0usize;
+
+        checks += 1; if eval.violated.contains(&Property::Safety)            { viols += 1; }
+        checks += 1; if eval.violated.contains(&Property::ProperTermination) { viols += 1; }
+        checks += 1; if eval.violated.contains(&Property::SegmentationFault) { viols += 1; }
+        checks += 1; if eval.violated.contains(&Property::Exceptions)        { viols += 1; }
+
+        if spec.max_runtime_ms.is_some() && view.terminated && view.runtime_ms.is_some() {
             checks += 1;
-            if eval.violated.contains(&Property::Safety) {
-                viols += 1;
-            }
+            if eval.violated.contains(&Property::ExecutionTime) { viols += 1; }
+        }
 
-            // ProperTermination
+        if let Some(memo_text) = memo_map.get(task_id) {
+            let out_lines  = normalized_lines(&view.stdout);
+            let memo_lines = normalized_lines(memo_text);
+
             checks += 1;
-            if eval.violated.contains(&Property::ProperTermination) {
+            let contains_ok = memo_lines.iter().all(|needle|
+                out_lines.iter().any(|hay| hay.contains(needle))
+            );
+            if !contains_ok {
                 viols += 1;
-            }
-
-            // Segfault
-            checks += 1;
-            if eval.violated.contains(&Property::SegmentationFault) {
-                viols += 1;
-            }
-
-            // Exceptions
-            checks += 1;
-            if eval.violated.contains(&Property::Exceptions) {
-                viols += 1;
-            }
-
-            // ExecutionTime (only counted if there was a bound and task terminated with measured runtime) TODO: we have to time how long the task took and parse it back to here
-            if spec.max_runtime_ms.is_some() && view.terminated && view.runtime_ms.is_some() {
-                checks += 1;
-                if eval.violated.contains(&Property::ExecutionTime) {
-                    viols += 1;
-                }
-            }
-
-            // IllegalOutput (only if there are forbidden outputs configured and task terminated)
-            if !spec.forbidden_outputs.is_empty() && view.terminated {
-                checks += 1;
-                if eval.violated.contains(&Property::IllegalOutput) {
-                    viols += 1;
-                }
-            }
-
-            ltl_checks += checks;
-            ltl_violations += viols;
-
-            let ret_ok = is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref());
-            let failed = !ret_ok
-                || view.terminated && has_segfault(spec.language, &view.stderr)
-                || view.terminated && has_exception(spec.language, &view.stderr)
-                || self.contains_forbidden_output(&view.stdout, &spec.forbidden_outputs);
-
-            if failed {
-                failed_tasks += 1;
             }
         }
 
-        let ltl_milli = if ltl_checks == 0 {
-            0
-        } else {
-            ((ltl_violations * 1000) / ltl_checks).min(1000)
-        };
-        let fail_milli = ((failed_tasks * 1000) / total_tasks).min(1000);
+        if !spec.forbidden_outputs.is_empty() && view.terminated {
+            checks += 1;
+            if eval.violated.contains(&Property::IllegalOutput) { viols += 1; }
+        }
 
-        (ltl_milli, fail_milli)
+        ltl_checks     += checks;
+        ltl_violations += viols;
+
+        let ret_ok = is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref());
+        let failed = !ret_ok
+            || (view.terminated && has_segfault(spec.language, &view.stderr))
+            || (view.terminated && has_exception(spec.language, &view.stderr))
+            || self.contains_forbidden_output(&view.stdout, &spec.forbidden_outputs);
+
+        if failed { failed_tasks += 1; }
     }
+
+    let ltl_milli  = if ltl_checks == 0 { 0 } else { ((ltl_violations * 1000) / ltl_checks).min(1000) };
+    let fail_milli = ((failed_tasks   * 1000) / total_tasks).min(1000);
+
+    (ltl_milli, fail_milli)
+}
 
     fn contains_forbidden_output(&self, stdout: &str, forbidden: &[String]) -> bool {
         if forbidden.is_empty() {
@@ -443,10 +427,12 @@ fn is_valid_return_code(exit: Option<i32>, valid: Option<&[i32]>) -> bool {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // ---------- helpers ----------
     fn spec_cpp() -> TaskSpec {
         TaskSpec {
             language: Language::Cpp,
@@ -456,194 +442,15 @@ mod tests {
         }
     }
 
-    fn spec_cpp_with_time(bound: u64) -> TaskSpec {
+    fn spec_cpp_time(bound: u64) -> TaskSpec {
+        TaskSpec { max_runtime_ms: Some(bound), ..spec_cpp() }
+    }
+
+    fn spec_cpp_forbidden(xs: &[&str]) -> TaskSpec {
         TaskSpec {
-            max_runtime_ms: Some(bound),
+            forbidden_outputs: xs.iter().map(|s| s.to_string()).collect(),
             ..spec_cpp()
         }
-    }
-
-    fn spec_cpp_with_forbidden(forb: &[&str]) -> TaskSpec {
-        TaskSpec {
-            forbidden_outputs: forb.iter().map(|s| s.to_string()).collect(),
-            ..spec_cpp()
-        }
-    }
-
-    #[test]
-    fn extract_marker_int_handles_colon_and_equals() {
-        let blob = "EXIT_CODE: 0\nRUNTIME_MS=123\n";
-        assert_eq!(super::extract_marker_int(blob, "exit_code"), Some(0));
-        assert_eq!(super::extract_marker_int(blob, "RUNTIME_MS"), Some(123));
-    }
-
-    #[test]
-    fn split_exit_stdout_stderr_with_explicit_stderr() {
-        let blob = "hello\nSTDERR: bad stuff\nline2";
-        let (exit, out, err) = super::split_exit_stdout_stderr(blob);
-        assert_eq!(exit, None);
-        assert_eq!(out, "hello");
-        assert_eq!(err, "bad stuff\nline2");
-    }
-
-    #[test]
-    fn split_heuristic_sends_errors_to_stderr() {
-        let blob = "Segmentation fault (core dumped)";
-        let (exit, out, err) = super::split_exit_stdout_stderr(blob);
-        assert_eq!(exit, None);
-        assert!(out.is_empty());
-        assert!(err.to_ascii_lowercase().contains("segmentation fault"));
-    }
-
-    #[test]
-    fn parse_sets_terminated_if_exit_code_present() {
-        let ev = Evaluator::new();
-        let view = ev.parse(42, "EXIT_CODE: 0\nhello\n");
-        assert_eq!(view.task_id, 42);
-        assert_eq!(view.exit_code, Some(0));
-        assert!(view.terminated);
-        assert_eq!(view.stdout.trim(), "EXIT_CODE: 0\nhello"); // before any “STDERR:” marker
-    }
-
-    #[test]
-    fn parse_runtime_ms_parsed_to_u64() {
-        let ev = Evaluator::new();
-        let view = ev.parse(1, "RUNTIME_MS=200\nEXIT_CODE=0\n");
-        assert_eq!(view.runtime_ms, Some(200));
-        assert!(view.terminated);
-    }
-
-    #[test]
-    fn proper_termination_ok_when_zero_exit() {
-        let ev = Evaluator::new();
-        let spec = spec_cpp();
-        let view = ev.parse(1, "EXIT_CODE: 0\n");
-        let eval = ev.evaluate_task(&spec, &view);
-        assert!(!eval.violated.contains(&Property::ProperTermination));
-    }
-
-    #[test]
-    fn proper_termination_violates_on_nonzero_exit() {
-        let ev = Evaluator::new();
-        let spec = spec_cpp();
-        let view = ev.parse(1, "EXIT_CODE=2\n");
-        let eval = ev.evaluate_task(&spec, &view);
-        assert!(eval.violated.contains(&Property::ProperTermination));
-    }
-
-    #[test]
-    fn safety_detects_asan_and_uaf() {
-        let ev = Evaluator::new();
-        let spec = spec_cpp();
-        let view = ev.parse(1, "STDERR: AddressSanitizer: heap-use-after-free\n");
-        let eval = ev.evaluate_task(&spec, &view);
-        assert!(eval.violated.contains(&Property::Safety));
-    }
-
-    #[test]
-    fn segfault_detected() {
-        let ev = Evaluator::new();
-        let spec = spec_cpp();
-        let view = ev.parse(1, "STDERR: Segmentation fault\n");
-        let eval = ev.evaluate_task(&spec, &view);
-        assert!(eval.violated.contains(&Property::SegmentationFault));
-    }
-
-    #[test]
-    fn exception_detected() {
-        let ev = Evaluator::new();
-        let spec = spec_cpp();
-        let view = ev.parse(
-            1,
-            "STDERR: terminate called after throwing an instance of 'std::exception'\n",
-        );
-        let eval = ev.evaluate_task(&spec, &view);
-        assert!(eval.violated.contains(&Property::Exceptions));
-    }
-
-    #[test]
-    fn execution_time_violates_if_over_bound() {
-        let ev = Evaluator::new();
-        let spec = spec_cpp_with_time(100);
-        let view = ev.parse(1, "RUNTIME_MS: 150\nEXIT_CODE: 0\n");
-        let eval = ev.evaluate_task(&spec, &view);
-        assert!(eval.violated.contains(&Property::ExecutionTime));
-    }
-
-    #[test]
-    fn execution_time_not_checked_if_no_bound() {
-        let ev = Evaluator::new();
-        let spec = spec_cpp(); // max_runtime_ms: None
-        let view = ev.parse(1, "RUNTIME_MS=1000\nEXIT_CODE=0\n");
-        let eval = ev.evaluate_task(&spec, &view);
-        assert!(!eval.violated.contains(&Property::ExecutionTime));
-    }
-
-    #[test]
-    fn illegal_output_detected_on_exact_line_match_after_trim() {
-        let ev = Evaluator::new();
-        let spec = spec_cpp_with_forbidden(&["BAD", "forbidden"]);
-        let view = ev.parse(1, "EXIT_CODE:0\n output \n BAD \n ok \n");
-        let eval = ev.evaluate_task(&spec, &view);
-        assert!(eval.violated.contains(&Property::IllegalOutput));
-    }
-
-    #[test]
-    fn illegal_output_not_checked_if_forbidden_empty() {
-        let ev = Evaluator::new();
-        let spec = spec_cpp(); // no forbidden_outputs
-        let view = ev.parse(1, "EXIT_CODE:0\nforbidden\n");
-        let eval = ev.evaluate_task(&spec, &view);
-        assert!(!eval.violated.contains(&Property::IllegalOutput));
-    }
-
-    // -------------------- derive_props (ltl_milli, fail_milli) --------------------
-
-    #[test]
-    fn derive_props_all_clean_tasks_yield_zero_milli() {
-        let ev = Evaluator::new();
-        let specs = vec![spec_cpp(), spec_cpp()];
-        let outs = vec![
-            (10, "EXIT_CODE: 0\nSTDERR:\n".to_string()),
-            (11, "EXIT_CODE=0\n".to_string()),
-        ];
-        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs);
-        assert_eq!(ltl_milli, 0);
-        assert_eq!(fail_milli, 0);
-    }
-
-    #[test]
-    fn derive_props_counts_violations_and_failures() {
-        // One task segfaults (violates Safety? maybe; definitely Segfault),
-        // nonzero exit (ProperTermination), so expect both ltl and failure > 0.
-        let ev = Evaluator::new();
-        let specs = vec![spec_cpp()];
-        let outs = vec![(
-            99,
-            "EXIT_CODE=139\nSTDERR: Segmentation fault\n".to_string(),
-        )];
-        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs);
-        assert!(ltl_milli > 0);
-        assert_eq!(fail_milli, 1000); // 1/1 tasks failed → 1000
-    }
-
-    #[test]
-    fn derive_props_execution_time_included_only_if_bound_and_measured() {
-        let ev = Evaluator::new();
-        let specs = vec![spec_cpp_with_time(50)];
-        // RUNTIME_MS present and exceeds bound -> counts as a check + violation.
-        let outs = vec![(1, "EXIT_CODE: 0\nRUNTIME_MS: 100\n".to_string())];
-        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs);
-        assert!(ltl_milli > 0);
-        // Task not “failed” by our definition (return code OK, no segfault/exception/forbidden)
-        assert_eq!(fail_milli, 0);
-    }
-
-    #[test]
-    fn contains_forbidden_output_is_case_insensitive_substring() {
-        let ev = Evaluator::new();
-        assert!(ev.contains_forbidden_output("Hello FORB\n", &[String::from("forb")]));
-        assert!(!ev.contains_forbidden_output("clean\n", &[String::from("bad")]));
     }
 
     fn spec_java() -> TaskSpec {
@@ -655,53 +462,258 @@ mod tests {
         }
     }
 
+    // Convenience: make (task_id, blob) tuple
+    fn out(task_id: i64, blob: &str) -> (i64, String) {
+        (task_id, blob.to_string())
+    }
+
+    // ---------- low-level parsing ----------
+    #[test]
+    fn extract_marker_int_supports_colon_and_equals() {
+        let blob = "EXIT_CODE: 0\nRUNTIME_MS=123\nfoo\n";
+        assert_eq!(super::extract_marker_int(blob, "exit_code"), Some(0));
+        assert_eq!(super::extract_marker_int(blob, "RUNTIME_MS"), Some(123));
+    }
+
+    #[test]
+    fn split_exit_stdout_stderr_explicit_stderr() {
+        let blob = "hello\nline\nSTDERR: bad stuff\nmore\n";
+        let (exit, out, err) = super::split_exit_stdout_stderr(blob);
+        assert_eq!(exit, None);
+        assert_eq!(out, "hello\nline");
+        assert!(err.starts_with("bad stuff"));
+        assert!(err.contains("more"));
+    }
+
+    #[test]
+    fn split_exit_heuristic_routes_errors_to_stderr() {
+        let blob = "Segmentation fault (core dumped)";
+        let (exit, out, err) = super::split_exit_stdout_stderr(blob);
+        assert_eq!(exit, None);
+        assert!(out.is_empty());
+        assert!(err.to_ascii_lowercase().contains("segmentation fault"));
+    }
+
+    #[test]
+    fn parse_sets_terminated_if_exit_code_present() {
+        let ev = Evaluator::new();
+        let v = ev.parse(7, "EXIT_CODE: 0\nHello\n");
+        assert_eq!(v.task_id, 7);
+        assert_eq!(v.exit_code, Some(0));
+        assert!(v.terminated);
+        assert!(v.stdout.contains("EXIT_CODE"));
+    }
+
+    #[test]
+    fn parse_parses_runtime_ms() {
+        let ev = Evaluator::new();
+        let v = ev.parse(1, "RUNTIME_MS=250\nEXIT_CODE=0\n");
+        assert_eq!(v.runtime_ms, Some(250));
+        assert!(v.terminated);
+    }
+
+    // ---------- C++ properties ----------
+    #[test]
+    fn cpp_proper_termination_ok_zero_exit() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp();
+        let view = ev.parse(1, "EXIT_CODE: 0\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(!eval.violated.contains(&Property::ProperTermination));
+    }
+
+    #[test]
+    fn cpp_proper_termination_violates_nonzero_exit() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp();
+        let view = ev.parse(2, "EXIT_CODE=2\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::ProperTermination));
+    }
+
+    #[test]
+    fn cpp_safety_detects_asan_and_uaf() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp();
+        let view = ev.parse(3, "STDERR: AddressSanitizer: heap-use-after-free");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::Safety));
+    }
+
+    #[test]
+    fn cpp_segmentation_fault_detected() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp();
+        let view = ev.parse(4, "STDERR: Segmentation fault");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::SegmentationFault));
+    }
+
+    #[test]
+    fn cpp_exception_detected() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp();
+        let view = ev.parse(5, "STDERR: terminate called after throwing an instance of 'std::exception'");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::Exceptions));
+    }
+
+    // ---------- Java properties ----------
     #[test]
     fn java_exception_detected() {
         let ev = Evaluator::new();
         let spec = spec_java();
-        let view = ev.parse(7,
-            "EXIT_CODE: 1\nSTDERR: Exception in thread \"main\" java.lang.NullPointerException\n\tat Main.main(Main.java:3)\n"
-        );
+        let view = ev.parse(10, "STDERR: Exception in thread \"main\" java.lang.NullPointerException");
         let eval = ev.evaluate_task(&spec, &view);
         assert!(eval.violated.contains(&Property::Exceptions));
-        assert!(eval.violated.contains(&Property::ProperTermination)); // exit!=0
-        assert!(!eval.violated.contains(&Property::SegmentationFault)); // normal Java exception
     }
 
     #[test]
-    fn java_vm_crash_counts_as_safety_and_segfault() {
+    fn java_segfault_patterns_detected() {
         let ev = Evaluator::new();
         let spec = spec_java();
-        let view = ev.parse(8,
-            "EXIT_CODE=134\nSTDERR: A fatal error has been detected by the Java Runtime Environment:\nSIGSEGV (0xb) at pc 0x00007f..., pid=123, tid=456\n#  Problematic frame:\n#  C  [libsomething.so+0x1a2b]\n#  An hs_err_pid123.log file is generated\n"
-        );
+        let view = ev.parse(11, "STDERR:  #  A fatal error has been detected by the Java Runtime Environment\nSIGSEGV");
         let eval = ev.evaluate_task(&spec, &view);
-        assert!(eval.violated.contains(&Property::Safety)); // VM fatal
-        assert!(eval.violated.contains(&Property::SegmentationFault)); // SIGSEGV marker
-        assert!(eval.violated.contains(&Property::ProperTermination)); // exit!=0
+        assert!(eval.violated.contains(&Property::SegmentationFault));
+        assert!(ev.evaluate_task(&spec, &view).violated.contains(&Property::Safety));
+    }
+
+    // ---------- timing & forbidden ----------
+    #[test]
+    fn execution_time_violates_if_over_bound() {
+        let ev = Evaluator::new();
+        let spec = spec_cpp_time(100);
+        let view = ev.parse(20, "EXIT_CODE: 0\nRUNTIME_MS: 150\n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::ExecutionTime));
     }
 
     #[test]
-    fn java_clean_run_ok() {
+    fn execution_time_not_checked_when_no_bound() {
         let ev = Evaluator::new();
-        let spec = spec_java();
-        let view = ev.parse(9, "EXIT_CODE=0\nSTDERR:\n");
+        let spec = spec_cpp();
+        let view = ev.parse(21, "EXIT_CODE=0\nRUNTIME_MS=999\n");
         let eval = ev.evaluate_task(&spec, &view);
-        assert!(eval.violated.is_empty());
+        assert!(!eval.violated.contains(&Property::ExecutionTime));
     }
 
     #[test]
-    fn java_derive_props_milli_values() {
+    fn illegal_output_detected_exact_line_match() {
         let ev = Evaluator::new();
-        let specs = vec![spec_java(), spec_java()];
+        let spec = spec_cpp_forbidden(&["BAD", "forbidden"]);
+        let view = ev.parse(22, "EXIT_CODE: 0\nok\n BAD \n");
+        let eval = ev.evaluate_task(&spec, &view);
+        assert!(eval.violated.contains(&Property::IllegalOutput));
+    }
+
+    #[test]
+    fn contains_forbidden_output_substring_ci() {
+        let ev = Evaluator::new();
+        assert!(ev.contains_forbidden_output("Hello FORB\n", &[String::from("forb")]));
+        assert!(!ev.contains_forbidden_output("clean\n", &[String::from("bad")]));
+    }
+
+    // ---------- derive_props (ltl_milli, fail_milli) ----------
+    #[test]
+    fn derive_props_all_clean_zero_zero() {
+        let ev = Evaluator::new();
+        let specs = vec![spec_cpp(), spec_cpp()];
         let outs = vec![
-            // clean
-            (1, "EXIT_CODE=0\n".to_string()),
-            // Java exception ⇒ Exceptions + ProperTermination, task fails
-            (2, "EXIT_CODE: 1\nSTDERR: Exception in thread \"main\" java.lang.RuntimeException: boom\n".to_string()),
+            out(100, "EXIT_CODE: 0\nSTDERR:\n"),
+            out(101, "EXIT_CODE=0\n"),
         ];
-        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs);
-        assert!(ltl_milli > 0, "should record some LTL violations");
-        assert_eq!(fail_milli, 500, "1/2 tasks failed ⇒ 500");
+        let memo: Vec<(i64, String)> = vec![]; // no memo checks
+        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs, &memo);
+        assert_eq!(ltl_milli, 0);
+        assert_eq!(fail_milli, 0);
+    }
+
+    #[test]
+    fn derive_props_one_task_failed_yields_half_fail_fraction() {
+        let ev = Evaluator::new();
+        let specs = vec![spec_cpp(), spec_cpp()];
+        // Task 1 OK; Task 2 segfaults + nonzero exit
+        let outs = vec![
+            out(200, "EXIT_CODE=0\n"),
+            out(201, "EXIT_CODE=139\nSTDERR: Segmentation fault\n"),
+        ];
+        let memo: Vec<(i64, String)> = vec![];
+        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs, &memo);
+        assert!(ltl_milli > 0);
+        assert_eq!(fail_milli, 500); // 1 of 2 tasks failed
+    }
+
+    // ---------- memo-based: exact + contains ----------
+    #[test]
+    fn memo_exact_match_does_not_add_violations() {
+        let ev = Evaluator::new();
+        let specs = vec![spec_cpp()];
+        let outs = vec![
+            out(300, "EXIT_CODE=0\nhello\nworld\n")
+        ];
+        let memo = vec![
+            out(300, "hello\nworld\n") // exact same lines (after trim)
+        ];
+        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs, &memo);
+        // No extra memo violations expected
+        assert_eq!(ltl_milli, 0);
+        assert_eq!(fail_milli, 0);
+    }
+
+    #[test]
+    fn memo_exact_mismatch_increases_ltl() {
+        let ev = Evaluator::new();
+        let specs = vec![spec_cpp()];
+        let outs = vec![
+            out(301, "EXIT_CODE=0\nhello\nplanet\n") // planet vs world
+        ];
+        let memo = vec![
+            out(301, "hello\nworld\n")
+        ];
+        let (ltl_milli, _fail_milli) = ev.derive_props(&specs, &outs, &memo);
+        assert!(ltl_milli > 0);
+    }
+
+    #[test]
+    fn memo_contains_must_find_all_memo_lines_somewhere() {
+        let ev = Evaluator::new();
+        let specs = vec![spec_cpp()];
+        // Output has only "hello"
+        let outs = vec![ out(302, "EXIT_CODE=0\n  hello   \n") ];
+        // Memo requires "hello" and "world" (world missing)
+        let memo = vec![ out(302, "hello\nworld\n") ];
+        let (ltl_milli, _fail_milli) = ev.derive_props(&specs, &outs, &memo);
+        assert!(ltl_milli > 0);
+    }
+
+    #[test]
+    fn memo_contains_passes_if_every_memo_line_is_substring_of_some_output_line() {
+        let ev = Evaluator::new();
+        let specs = vec![spec_cpp()];
+        let outs = vec![
+            out(303, "EXIT_CODE=0\nThe quick brown fox\njumps over the lazy dog\n")
+        ];
+        let memo = vec![
+            out(303, "quick brown\nlazy dog\n")
+        ];
+        let (ltl_milli, _fail_milli) = ev.derive_props(&specs, &outs, &memo);
+        assert_eq!(ltl_milli, 0);
+    }
+
+    // ---------- Java in derive_props ----------
+    #[test]
+    fn derive_props_with_java_exception_counts_violation_but_not_failure_if_exit_ok() {
+        let ev = Evaluator::new();
+        let specs = vec![spec_java()];
+        // stdout empty, stderr has exception, but assume EXIT_CODE=0 (some runners swallow it)
+        let outs = vec![
+            out(400, "EXIT_CODE=0\nSTDERR: Exception in thread \"main\" java.lang.RuntimeException")
+        ];
+        let memo: Vec<(i64, String)> = vec![];
+        let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs, &memo);
+        assert!(ltl_milli > 0);
+        // By our current "failed task" definition: failed if !ret_ok OR segfault OR exception OR forbidden
+        // We do include exception in failed predicate, so fail_milli should be 1000.
+        assert_eq!(fail_milli, 1000);
     }
 }

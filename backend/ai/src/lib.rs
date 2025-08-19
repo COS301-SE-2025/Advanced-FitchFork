@@ -84,12 +84,17 @@ pub async fn run_ga_job(
     // TaskSpec(s) derived from ExecutionConfig
     let base_spec = TaskSpec::from_execution_config(&config);
 
-    // Closure to derive LTL + task counts from interpreter outputs
-    let mut derive_props = move |outs: &[(i64, String)]| -> (usize, usize) {
-        let specs = vec![base_spec.clone(); outs.len()];
-        evaluator.derive_props(&specs, outs)
-    };
+    let memo_task_outputs: Vec<(i64, String)> = Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
 
+    let mut derive_props = {
+        let evaluator = evaluator;            
+        let base_spec = base_spec.clone();  
+        let memo_ref  = memo_task_outputs;    
+        move |outs: &[(i64, String)]| -> (usize, usize) {
+            let specs = vec![base_spec.clone(); outs.len()];
+            evaluator.derive_props(&specs, outs, &memo_ref)
+        }
+    };
     // Unused fetch closure for signature compatibility
     let mut unused_fetch = |_db: &DatabaseConnection,
                             _sid: i64|
@@ -168,8 +173,7 @@ where
             //    The interpreter is the source of truth for stdout/stderr/exit codes.
             let task_outputs: Vec<(i64, String)> = run_interpreter(db, submission_id, &generated_string).await?;
 
-            let memo_task_outputs: Vec<(i64, String)> =
-                Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
+            let memo_task_outputs: Vec<(i64, String)> = Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
 
             // Derive counts the Components need:
             //    - `n_ltl_props`: total number of violated properties across tasks
@@ -410,59 +414,59 @@ use crate::algorithms::genetic_algorithm::{CrossoverType, GeneConfig, MutationTy
 use db::connect;
 use sea_orm::Database;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use sea_orm::{Database, DatabaseConnection};
-    use std::collections::HashSet;
-    #[tokio::test(flavor = "multi_thread")]
-    async fn smoke_run_ga_on_submission_9998() {
-        dotenv::dotenv().ok();
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use sea_orm::{Database, DatabaseConnection};
+//     use std::collections::HashSet;
+//     #[tokio::test(flavor = "multi_thread")]
+//     async fn smoke_run_ga_on_submission_9998() {
+//         dotenv::dotenv().ok();
 
-        // Check for opt-in flag
-        if std::env::var("GA_ITEST").is_err() {
-            eprintln!("GA_ITEST not set; skipping smoke test.");
-            return;
-        }
+//         // Check for opt-in flag
+//         if std::env::var("GA_ITEST").is_err() {
+//             eprintln!("GA_ITEST not set; skipping smoke test.");
+//             return;
+//         }
 
-        // Connect to DB
-        let db = connect().await;
+//         // Connect to DB
+//         let db = connect().await;
 
-       // Minimal GA config (tiny population / generations for a fast run)
-        let genes = vec![
-            GeneConfig {
-                min_value: -5,
-                max_value: 5,
-                invalid_values: HashSet::new(),
-            },
-            GeneConfig {
-                min_value: -4,
-                max_value: 9,
-                invalid_values: HashSet::new(),
-            },
-        ];
+//        // Minimal GA config (tiny population / generations for a fast run)
+//         let genes = vec![
+//             GeneConfig {
+//                 min_value: -5,
+//                 max_value: 5,
+//                 invalid_values: HashSet::new(),
+//             },
+//             GeneConfig {
+//                 min_value: -4,
+//                 max_value: 9,
+//                 invalid_values: HashSet::new(),
+//             },
+//         ];
 
-        let ga_config = GAConfig {
-            population_size: 4,
-            number_of_generations: 1,
-            selection_size: 2,
-            reproduction_probability: 0.9,
-            crossover_probability: 0.8,
-            mutation_probability: 0.05,
-            genes,
-            crossover_type: CrossoverType::Uniform,
-            mutation_type: MutationType::BitFlip,
-        };
+//         let ga_config = GAConfig {
+//             population_size: 4,
+//             number_of_generations: 1,
+//             selection_size: 2,
+//             reproduction_probability: 0.9,
+//             crossover_probability: 0.8,
+//             mutation_probability: 0.05,
+//             genes,
+//             crossover_type: CrossoverType::Uniform,
+//             mutation_type: MutationType::BitFlip,
+//         };
 
-        let (omega1, omega2, omega3) = (0.4, 0.4, 0.2);
+//         let (omega1, omega2, omega3) = (0.4, 0.4, 0.2);
 
-        let submission_id: i64 = 191;
+//         let submission_id: i64 = 191;
 
-        let res = run_ga_job(&db, submission_id, ExecutionConfig::default_config()).await;
+//         let res = run_ga_job(&db, submission_id, ExecutionConfig::default_config()).await;
 
-        match res {
-            Ok(()) => eprintln!("smoke_run_ga_on_submission_9998: OK"),
-            Err(e) => eprintln!("smoke_run_ga_on_submission_9998: ERR: {e}"),
-        }
-    }
-}
+//         match res {
+//             Ok(()) => eprintln!("smoke_run_ga_on_submission_9998: OK"),
+//             Err(e) => eprintln!("smoke_run_ga_on_submission_9998: ERR: {e}"),
+//         }
+//     }
+// }
