@@ -178,6 +178,7 @@ cargo test
 | **User Manual**                                                                   | —                                                  | [View](./docs/demo2/user_manual.pdf)               | [View](./docs/demo3/user_manual.pdf)
 | **Code Standards**                                                                | —                                                  | [View](./docs/demo2/code_standards.pdf)            | [View](./docs/demo3/code_standards.pdf)
 | **Technical Installation Manual**                                                 | —                                                  | —                                                  | [View](./docs/demo3/installtion_manual.pdf)
+| **Architectural Document**                                                        | —                                                  | —                                                  | [View](./docs/demo3/architectural_document.pdf)
 | **Service Contracts**                                                             | —                                                  | —                                                  | [View](https://fitchfork.co.za/docs/api/routes/)
 
 ---
