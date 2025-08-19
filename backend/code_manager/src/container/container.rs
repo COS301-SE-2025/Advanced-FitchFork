@@ -97,7 +97,7 @@ pub async fn run_container(
             if !combined_output.is_empty() {
                 combined_output.push('\n');
             }
-            combined_output.push_str(&format!("[ERROR] Command exited with code {}", retcode));
+            combined_output.push_str(&format!("[ERROR]\n{}", &stderr));
         }
 
         outputs.push(combined_output);

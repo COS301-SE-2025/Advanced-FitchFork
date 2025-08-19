@@ -221,8 +221,8 @@ async fn test_run_interpreter_9998_cpp() {
 
     let assignment_id = 9998;
     let module_id = 9998;
-    let assignment_submission_id = 602;
-    let interpreter_id = 21;
+    let assignment_submission_id = 182;
+    let interpreter_id = 19;
 
     let gene_string = "01234";
 

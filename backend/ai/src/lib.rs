@@ -29,6 +29,7 @@ pub mod utils {
 
 use crate::algorithms::genetic_algorithm::{Chromosome, GeneticAlgorithm};
 use crate::utils::evaluator::{Evaluator, TaskSpec};
+use crate::utils::output::Output;
 use code_runner::run_interpreter;
 use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
@@ -62,6 +63,8 @@ pub async fn run_ga_job(
     db: &DatabaseConnection,
     submission_id: i64,
     config: ExecutionConfig,
+    module_id: i64,
+    assignment_id: i64,
 ) -> Result<(), String> {
     // Build GA from ExecutionConfig
     let mut ga = GeneticAlgorithm::from_execution_config(&config.clone());
@@ -100,6 +103,8 @@ pub async fn run_ga_job(
         &mut comps,
         &mut derive_props,
         &mut unused_fetch,
+        module_id,
+        assignment_id,
     )
     .await
 }
@@ -130,6 +135,8 @@ pub async fn run_ga_end_to_end<D, F>(
     comps: &mut Components,
     mut derive_props: D,
     mut fetch_outputs: F, // kept for compatibility; unused
+    module_id: i64,
+    assignment_id: i64,
 ) -> Result<(), String>
 where
     // Given raw outputs for this chromosome, return counts the Components expect
@@ -160,6 +167,9 @@ where
             //    to DB, and returns per-task outputs for *this* submission.
             //    The interpreter is the source of truth for stdout/stderr/exit codes.
             let task_outputs: Vec<(i64, String)> = run_interpreter(db, submission_id, &generated_string).await?;
+
+            let memo_task_outputs: Vec<(i64, String)> =
+                Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
 
             // Derive counts the Components need:
             //    - `n_ltl_props`: total number of violated properties across tasks
