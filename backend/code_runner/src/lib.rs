@@ -726,7 +726,7 @@ pub async fn create_main_from_interpreter(
     if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
         eprintln!(
             "[DEBUG] generator output preview = {}",
-            &combined_output.chars().take(200).collect::<String>()
+            &combined_output.chars().take(20000).collect::<String>()
         );
     }
 

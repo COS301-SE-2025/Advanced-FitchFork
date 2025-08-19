@@ -84,17 +84,18 @@ pub async fn run_ga_job(
     // TaskSpec(s) derived from ExecutionConfig
     let base_spec = TaskSpec::from_execution_config(&config);
 
-    let memo_task_outputs: Vec<(i64, String)> = Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
+    let delimiter = config.marking.deliminator.clone();
 
     let mut derive_props = {
-        let evaluator = evaluator;            
-        let base_spec = base_spec.clone();  
-        let memo_ref  = memo_task_outputs;    
-        move |outs: &[(i64, String)]| -> (usize, usize) {
+        let evaluator = evaluator;
+        let base_spec = base_spec.clone();
+        let delim     = delimiter.clone();
+        move |outs: &[(i64, String)], memo: &[(i64, String)]| -> (usize, usize) {
             let specs = vec![base_spec.clone(); outs.len()];
-            evaluator.derive_props(&specs, outs, &memo_ref)
+            evaluator.derive_props(&specs, outs, memo, &delim)
         }
     };
+
     // Unused fetch closure for signature compatibility
     let mut unused_fetch = |_db: &DatabaseConnection,
                             _sid: i64|
@@ -145,7 +146,7 @@ pub async fn run_ga_end_to_end<D, F>(
 ) -> Result<(), String>
 where
     // Given raw outputs for this chromosome, return counts the Components expect
-    D: FnMut(&[(i64, String)]) -> (usize, usize),
+    D: FnMut(&[(i64, String)], &[(i64, String)]) -> (usize, usize),
     // Same as mentioned earlier, not used
     F: FnMut(&DatabaseConnection, i64) -> Result<Vec<(i64, String)>, String>,
 {
@@ -172,18 +173,26 @@ where
             //    to DB, and returns per-task outputs for *this* submission.
             //    The interpreter is the source of truth for stdout/stderr/exit codes.
             let task_outputs: Vec<(i64, String)> = run_interpreter(db, submission_id, &generated_string).await?;
-
+        
             let memo_task_outputs: Vec<(i64, String)> = Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
 
             // Derive counts the Components need:
             //    - `n_ltl_props`: total number of violated properties across tasks
             //    - `num_tasks`  : number of tasks we evaluated
             //    Components will internally normalize (e.g., divide by counts).
-            let (ltl_milli, fail_milli) = derive_props(&task_outputs);
+            let (ltl_milli, fail_milli) = derive_props(&task_outputs, &memo_task_outputs);
 
             // Compute fitness for this chromosome in this generation.
             //    `Components` combines sub-scores via omega weights and returns a scalar.
             let score = comps.evaluate(chrom, generation, ltl_milli, fail_milli);
+
+            println!("ltl_milli = {}, fail_milli = {}", ltl_milli, fail_milli);
+            println!(
+                "[DEBUG] generation {} fitness = {}",
+                generation,
+                score
+            );
+
             fitness_scores.push(score);
         }
 
@@ -193,7 +202,6 @@ where
 
     Ok(())
 }
-
 // Fitness Components
 pub struct Components {
     omega1: f64,
@@ -410,9 +418,6 @@ mod component_unit_tests {
     }
 }
 
-use crate::algorithms::genetic_algorithm::{CrossoverType, GeneConfig, MutationType, GAConfig};
-use db::connect;
-use sea_orm::Database;
 
 // #[cfg(test)]
 // mod tests {
