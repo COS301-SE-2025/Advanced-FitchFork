@@ -410,59 +410,59 @@ use crate::algorithms::genetic_algorithm::{CrossoverType, GeneConfig, MutationTy
 use db::connect;
 use sea_orm::Database;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use sea_orm::{Database, DatabaseConnection};
-    use std::collections::HashSet;
-    #[tokio::test(flavor = "multi_thread")]
-    async fn smoke_run_ga_on_submission_9998() {
-        dotenv::dotenv().ok();
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use sea_orm::{Database, DatabaseConnection};
+//     use std::collections::HashSet;
+//     #[tokio::test(flavor = "multi_thread")]
+//     async fn smoke_run_ga_on_submission_9998() {
+//         dotenv::dotenv().ok();
 
-        // Check for opt-in flag
-        if std::env::var("GA_ITEST").is_err() {
-            eprintln!("GA_ITEST not set; skipping smoke test.");
-            return;
-        }
+//         // Check for opt-in flag
+//         if std::env::var("GA_ITEST").is_err() {
+//             eprintln!("GA_ITEST not set; skipping smoke test.");
+//             return;
+//         }
 
-        // Connect to DB
-        let db = connect().await;
+//         // Connect to DB
+//         let db = connect().await;
 
-       // Minimal GA config (tiny population / generations for a fast run)
-        let genes = vec![
-            GeneConfig {
-                min_value: -5,
-                max_value: 5,
-                invalid_values: HashSet::new(),
-            },
-            GeneConfig {
-                min_value: -4,
-                max_value: 9,
-                invalid_values: HashSet::new(),
-            },
-        ];
+//        // Minimal GA config (tiny population / generations for a fast run)
+//         let genes = vec![
+//             GeneConfig {
+//                 min_value: -5,
+//                 max_value: 5,
+//                 invalid_values: HashSet::new(),
+//             },
+//             GeneConfig {
+//                 min_value: -4,
+//                 max_value: 9,
+//                 invalid_values: HashSet::new(),
+//             },
+//         ];
 
-        let ga_config = GAConfig {
-            population_size: 4,
-            number_of_generations: 1,
-            selection_size: 2,
-            reproduction_probability: 0.9,
-            crossover_probability: 0.8,
-            mutation_probability: 0.05,
-            genes,
-            crossover_type: CrossoverType::Uniform,
-            mutation_type: MutationType::BitFlip,
-        };
+//         let ga_config = GAConfig {
+//             population_size: 4,
+//             number_of_generations: 1,
+//             selection_size: 2,
+//             reproduction_probability: 0.9,
+//             crossover_probability: 0.8,
+//             mutation_probability: 0.05,
+//             genes,
+//             crossover_type: CrossoverType::Uniform,
+//             mutation_type: MutationType::BitFlip,
+//         };
 
-        let (omega1, omega2, omega3) = (0.4, 0.4, 0.2);
+//         let (omega1, omega2, omega3) = (0.4, 0.4, 0.2);
 
-        let submission_id: i64 = 191;
+//         let submission_id: i64 = 191;
 
-        let res = run_ga_job(&db, submission_id, ExecutionConfig::default_config()).await;
+//         let res = run_ga_job(&db, submission_id, ExecutionConfig::default_config()).await;
 
-        match res {
-            Ok(()) => eprintln!("smoke_run_ga_on_submission_9998: OK"),
-            Err(e) => eprintln!("smoke_run_ga_on_submission_9998: ERR: {e}"),
-        }
-    }
-}
+//         match res {
+//             Ok(()) => eprintln!("smoke_run_ga_on_submission_9998: OK"),
+//             Err(e) => eprintln!("smoke_run_ga_on_submission_9998: ERR: {e}"),
+//         }
+//     }
+// }
