@@ -35,6 +35,7 @@ use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
 use util::execution_config::ExecutionConfig;
 
+
 // -----------------------------------------------------------------------------
 // Public entrypoint: build GA + Evaluator + Components, then run the loop
 // -----------------------------------------------------------------------------
@@ -83,10 +84,16 @@ pub async fn run_ga_job(
     // TaskSpec(s) derived from ExecutionConfig
     let base_spec = TaskSpec::from_execution_config(&config);
 
-    // Closure to derive LTL + task counts from interpreter outputs
-    let mut derive_props = move |outs: &[(i64, String)]| -> (usize, usize) {
-        let specs = vec![base_spec.clone(); outs.len()];
-        evaluator.derive_props(&specs, outs)
+    let delimiter = config.marking.deliminator.clone();
+
+    let mut derive_props = {
+        let evaluator = evaluator;
+        let base_spec = base_spec.clone();
+        let delim     = delimiter.clone();
+        move |outs: &[(i64, String)], memo: &[(i64, String)]| -> (usize, usize) {
+            let specs = vec![base_spec.clone(); outs.len()];
+            evaluator.derive_props(&specs, outs, memo, &delim)
+        }
     };
 
     // Unused fetch closure for signature compatibility
@@ -139,7 +146,7 @@ pub async fn run_ga_end_to_end<D, F>(
 ) -> Result<(), String>
 where
     // Given raw outputs for this chromosome, return counts the Components expect
-    D: FnMut(&[(i64, String)]) -> (usize, usize),
+    D: FnMut(&[(i64, String)], &[(i64, String)]) -> (usize, usize),
     // Same as mentioned earlier, not used
     F: FnMut(&DatabaseConnection, i64) -> Result<Vec<(i64, String)>, String>,
 {
@@ -165,21 +172,27 @@ where
             // Run interpreter: executes code for this chromosome, writes artifacts
             //    to DB, and returns per-task outputs for *this* submission.
             //    The interpreter is the source of truth for stdout/stderr/exit codes.
-            let task_outputs: Vec<(i64, String)> =
-                run_interpreter(db, submission_id, &generated_string).await?;
-
-            let memo_task_outputs: Vec<(i64, String)> =
-                Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
+            let task_outputs: Vec<(i64, String)> = run_interpreter(db, submission_id, &generated_string).await?;
+        
+            let memo_task_outputs: Vec<(i64, String)> = Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
 
             // Derive counts the Components need:
             //    - `n_ltl_props`: total number of violated properties across tasks
             //    - `num_tasks`  : number of tasks we evaluated
             //    Components will internally normalize (e.g., divide by counts).
-            let (ltl_milli, fail_milli) = derive_props(&task_outputs);
+            let (ltl_milli, fail_milli) = derive_props(&task_outputs, &memo_task_outputs);
 
             // Compute fitness for this chromosome in this generation.
             //    `Components` combines sub-scores via omega weights and returns a scalar.
             let score = comps.evaluate(chrom, generation, ltl_milli, fail_milli);
+
+            println!("ltl_milli = {}, fail_milli = {}", ltl_milli, fail_milli);
+            println!(
+                "[DEBUG] generation {} fitness = {}",
+                generation,
+                score
+            );
+
             fitness_scores.push(score);
         }
 
@@ -189,7 +202,6 @@ where
 
     Ok(())
 }
-
 // Fitness Components
 pub struct Components {
     omega1: f64,
@@ -406,9 +418,6 @@ mod component_unit_tests {
     }
 }
 
-// use crate::algorithms::genetic_algorithm::{CrossoverType, GeneConfig, MutationType};
-// use db::connect;
-// use sea_orm::Database;
 
 // #[cfg(test)]
 // mod tests {
@@ -420,43 +429,43 @@ mod component_unit_tests {
 //         dotenv::dotenv().ok();
 
 //         // Check for opt-in flag
-//         // if std::env::var("GA_ITEST").is_err() {
-//         //     eprintln!("GA_ITEST not set; skipping smoke test.");
-//         //     return;
-//         // }
+//         if std::env::var("GA_ITEST").is_err() {
+//             eprintln!("GA_ITEST not set; skipping smoke test.");
+//             return;
+//         }
 
 //         // Connect to DB
 //         let db = connect().await;
 
-//         // Minimal GA config (tiny population / generations for a fast run)
-//         // let genes = vec![
-//         //     GeneConfig {
-//         //         min_value: -5,
-//         //         max_value: 5,
-//         //         invalid_values: HashSet::new(),
-//         //     },
-//         //     GeneConfig {
-//         //         min_value: -4,
-//         //         max_value: 9,
-//         //         invalid_values: HashSet::new(),
-//         //     },
-//         // ];
+//        // Minimal GA config (tiny population / generations for a fast run)
+//         let genes = vec![
+//             GeneConfig {
+//                 min_value: -5,
+//                 max_value: 5,
+//                 invalid_values: HashSet::new(),
+//             },
+//             GeneConfig {
+//                 min_value: -4,
+//                 max_value: 9,
+//                 invalid_values: HashSet::new(),
+//             },
+//         ];
 
-//         // let ga_config = GAConfig {
-//         //     population_size: 4,
-//         //     number_of_generations: 1,
-//         //     selection_size: 2,
-//         //     reproduction_probability: 0.9,
-//         //     crossover_probability: 0.8,
-//         //     mutation_probability: 0.05,
-//         //     genes,
-//         //     crossover_type: CrossoverType::Uniform,
-//         //     mutation_type: MutationType::BitFlip,
-//         // };
+//         let ga_config = GAConfig {
+//             population_size: 4,
+//             number_of_generations: 1,
+//             selection_size: 2,
+//             reproduction_probability: 0.9,
+//             crossover_probability: 0.8,
+//             mutation_probability: 0.05,
+//             genes,
+//             crossover_type: CrossoverType::Uniform,
+//             mutation_type: MutationType::BitFlip,
+//         };
 
-//         // let (omega1, omega2, omega3) = (0.4, 0.4, 0.2);
+//         let (omega1, omega2, omega3) = (0.4, 0.4, 0.2);
 
-//         let submission_id: i64 = 602;
+//         let submission_id: i64 = 191;
 
 //         let res = run_ga_job(&db, submission_id, ExecutionConfig::default_config()).await;
 

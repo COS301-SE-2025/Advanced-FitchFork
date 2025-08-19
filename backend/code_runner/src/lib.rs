@@ -607,21 +607,21 @@ pub async fn create_main_from_interpreter(
         // Adjust templates per language as needed.
         let synthesized = match config.project.language {
             Language::Cpp => format!(
-                r#"#include <bits/stdc++.h>
-int main() {{
-    std::cout << "{}" << std::endl;
-    return 0;
-}}
-"#,
+            r#"#include <bits/stdc++.h>
+                int main() {{
+                    std::cout << "{}" << std::endl;
+                    return 0;
+                }}
+                "#,
                 generated_string.replace('"', "\\\"")
             ),
             Language::Java => format!(
-                r#"public class Main {{
-    public static void main(String[] args) {{
-        System.out.println("{}");
-    }}
-}}
-"#,
+            r#"public class Main {{
+                public static void main(String[] args) {{
+                    System.out.println("{}");
+                }}
+            }}
+            "#,
                 generated_string.replace('"', "\\\"")
             ),
             // Language::Python => format!(r#"print("{}")"#, generated_string.replace('"', "\\\"")),
@@ -726,7 +726,7 @@ int main() {{
     if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
         eprintln!(
             "[DEBUG] generator output preview = {}",
-            &combined_output.chars().take(200).collect::<String>()
+            &combined_output.chars().take(20000).collect::<String>()
         );
     }
 
@@ -740,6 +740,10 @@ int main() {{
     };
 
     if !looks_like_source {
+        println!(
+            "[DEBUG] generator output does not look like source code: {}",
+            combined_output
+        );
         return Err("Interpreter did not return plausible source code".to_string());
     }
 
