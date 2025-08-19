@@ -740,6 +740,10 @@ pub async fn create_main_from_interpreter(
     };
 
     if !looks_like_source {
+        println!(
+            "[DEBUG] generator output does not look like source code: {}",
+            combined_output
+        );
         return Err("Interpreter did not return plausible source code".to_string());
     }
 
