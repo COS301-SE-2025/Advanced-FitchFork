@@ -74,11 +74,29 @@ mod create_plagiarism_tests {
         ).await.unwrap();
         
         let submission1 = SubmissionModel::save_file(
-            db, assignment.id, student_user1.id, 1, false, "sub1.txt", "hash123#", b"ontime"
+            db, 
+            assignment.id, 
+            student_user1.id, 
+            1, 
+            10,
+            10,
+            false, 
+            "sub1.txt", 
+            "hash123#", 
+            b"ontime"
         ).await.unwrap();
         
         let submission2 = SubmissionModel::save_file(
-            db, assignment.id, student_user2.id, 1, false, "sub2.txt", "hash123#", b"ontime"
+            db, 
+            assignment.id, 
+            student_user2.id, 
+            1, 
+            10,
+            10,
+            false, 
+            "sub2.txt", 
+            "hash123#", 
+            b"ontime"
         ).await.unwrap();
 
         TestData {
@@ -299,6 +317,8 @@ mod create_plagiarism_tests {
             other_assignment.id,
             data.student_user1.id,
             1,
+            10,
+            10,
             false,
             "other.txt",
             "hash456#",

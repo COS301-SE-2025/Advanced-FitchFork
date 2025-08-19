@@ -246,6 +246,7 @@ async fn grade_submission(
     memo_outputs: &[std::path::PathBuf],
     mark_allocator_path: &std::path::Path,
     config: &util::execution_config::ExecutionConfig,
+    db: &sea_orm::DatabaseConnection,
 ) -> Result<SubmissionDetailResponse, String> {
     let student_output_dir = base_path
         .join("assignment_submissions")
@@ -319,6 +320,14 @@ async fn grade_submission(
         }
         None => None,
     };
+
+    let mut active_model: assignment_submission::ActiveModel = submission.clone().into();
+    active_model.earned = sea_orm::ActiveValue::Set(mark.earned);
+    active_model.total = sea_orm::ActiveValue::Set(mark.total);
+    assignment_submission::Entity::update(active_model)
+        .exec(db)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let now = Utc::now();
     let resp = SubmissionDetailResponse {
@@ -657,6 +666,8 @@ pub async fn submit_assignment(
         assignment_id,
         claims.sub,
         attempt,
+        0,
+        0,
         is_practice,
         &file_name,
         &file_hash,
@@ -734,6 +745,7 @@ pub async fn submit_assignment(
         &memo_outputs,
         &mark_allocator_path,
         &config,
+        db,
     )
     .await
     {
@@ -923,6 +935,7 @@ pub async fn remark_submissions(
                         &memo_outputs,
                         &mark_allocator_path,
                         &config,
+                        db,
                     )
                     .await
                     .map(|_| ()),
@@ -1113,6 +1126,7 @@ pub async fn resubmit_submissions(
                     &memo_outputs,
                     &mark_allocator_path,
                     &config,
+                    &db,
                 )
                 .await
                 .map(|_| ())
