@@ -3,7 +3,6 @@ import { Layout, Menu, Typography } from 'antd';
 import {
   HomeOutlined,
   FileTextOutlined,
-  BarChartOutlined,
   UserOutlined,
   NotificationOutlined,
 } from '@ant-design/icons';
