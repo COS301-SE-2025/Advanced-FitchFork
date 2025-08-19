@@ -44,7 +44,6 @@ pub async fn run_code(Json(payload): Json<RunRequest>) -> impl IntoResponse {
         .run(&execution_config, payload.commands, payload.files)
         .await
     {
-    
         Ok(output) => (StatusCode::OK, axum::Json(RunResponse { output })).into_response(),
         Err(e) => {
             let msg = format!("Error running container: {}", e);

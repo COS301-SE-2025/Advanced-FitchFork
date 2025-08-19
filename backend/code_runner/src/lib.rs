@@ -570,12 +570,12 @@ pub async fn create_main_from_interpreter(
 
     let module_id = assignment.module_id;
 
-    // Debug: show the interpreter command & payload
-    eprintln!("Using interpreter: {}", interpreter.command);
-    eprintln!("Assignment name: {}", assignment.name);
-    if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
-        eprintln!("[DEBUG] generated_string = {}", generated_string);
-    }
+    // // Debug: show the interpreter command & payload
+    // eprintln!("Using interpreter: {}", interpreter.command);
+    // eprintln!("Assignment name: {}", assignment.name);
+    // if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
+    //     eprintln!("[DEBUG] generated_string = {}", generated_string);
+    // }
 
     // Load full execution config (includes language)
     let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
@@ -591,14 +591,14 @@ pub async fn create_main_from_interpreter(
     // Heuristic: if the "interpreter" is actually a compile/run line (e.g., g++ Main.cpp),
     // then there's no source to compile yet. Synthesize a Main.cpp (or Main.*)
     // from the generated_string and save it as the main archive locally.
-    let looks_like_compile = {
+    let looks_like_compile: bool = {
         let cmd = interpreter.command.to_lowercase();
         // very basic detection; expand as needed
         (cmd.contains("g++")
             || cmd.contains("clang++")
             || cmd.contains("javac")
             || cmd.contains("python "))
-            && cmd.contains("main.")
+            && cmd.contains("Main.")
     };
 
     if looks_like_compile {
@@ -676,7 +676,7 @@ pub async fn create_main_from_interpreter(
 
     // Combine the interpreter command with the GA-produced string.
     // e.g., "python3 interpreter.py <args>"
-    let command = format!("{} {}", interpreter.command, generated_string);
+    let command = format!("{} \"{}\"", interpreter.command, generated_string);
 
     let host =
         env::var("CODE_MANAGER_HOST").map_err(|_| "CODE_MANAGER_HOST not set".to_string())?;
@@ -721,7 +721,7 @@ pub async fn create_main_from_interpreter(
         .await
         .map_err(|e| format!("Failed to parse code_manager response: {}", e))?;
 
-    let combined_output = run_resp.output.join("\n");
+    let mut combined_output = run_resp.output.join("\n");
 
     if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
         eprintln!(
@@ -741,6 +741,14 @@ pub async fn create_main_from_interpreter(
 
     if !looks_like_source {
         return Err("Interpreter did not return plausible source code".to_string());
+    }
+
+    if config.output.retcode == true {
+        combined_output = combined_output
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("Retcode:"))
+            .collect::<Vec<_>>()
+            .join("\n");
     }
 
     // Zip the generated source as Main.*

@@ -24,6 +24,7 @@ pub mod algorithms {
 
 pub mod utils {
     pub mod evaluator;
+    pub mod output;
 }
 
 use crate::algorithms::genetic_algorithm::{Chromosome, GeneticAlgorithm};
