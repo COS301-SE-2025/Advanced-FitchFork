@@ -43,3 +43,12 @@ export interface PaginationResponse {
   per_page: number;
   total: number;
 }
+
+export type FilterType = 'select' | 'text' | 'number' | 'multi-select';
+
+export interface FilterGroup {
+  key: string;
+  label: string;
+  type: FilterType;
+  options?: { label: string; value: string }[];
+}

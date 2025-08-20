@@ -15,7 +15,9 @@ impl Seeder for AssignmentTaskSeeder {
             .expect("Failed to fetch assignments");
 
         if assignments.is_empty() {
-            panic!("No assignments found — at least one assignment must exist to seed assignment_tasks");
+            panic!(
+                "No assignments found — at least one assignment must exist to seed assignment_tasks"
+            );
         }
 
         let dummy_commands = vec![
@@ -27,7 +29,11 @@ impl Seeder for AssignmentTaskSeeder {
         ];
 
         for assignment in &assignments {
-            if assignment.id == 9999 || assignment.id == 9998 {
+            if assignment.id == 9999
+                || assignment.id == 9998
+                || assignment.id == 10003
+                || assignment.id == 10004
+            {
                 continue;
             }
             let task_count = 2; // Number of tasks per assignment
@@ -39,7 +45,15 @@ impl Seeder for AssignmentTaskSeeder {
                     .unwrap_or(&"echo 'Hello World'")
                     .to_string();
 
-                match AssignmentTaskModel::create(db, assignment.id, task_number, "Untitled Task", &command).await {
+                match AssignmentTaskModel::create(
+                    db,
+                    assignment.id,
+                    task_number,
+                    "Untitled Task",
+                    &command,
+                )
+                .await
+                {
                     Ok(_task) => {
                         // Optionally log or handle success
                     }
@@ -93,6 +107,48 @@ impl Seeder for AssignmentTaskSeeder {
                     "Failed to create special assignment task {}: {}",
                     task_number, e
                 ),
+            }
+        }
+
+        let plag_assignment_id: i64 = 10003;
+
+        let special_tasks2 = vec![(1, "make task1")];
+
+        for (task_number, command) in special_tasks2 {
+            match db::models::assignment_task::Model::create(
+                db,
+                plag_assignment_id,
+                task_number,
+                "Task to run code",
+                command,
+            )
+            .await
+            {
+                Ok(_) => {}
+                Err(e) => eprintln!(
+                    "Failed to create special assignment task {}: {}",
+                    task_number, e
+                ),
+            }
+
+            let special_tasks3 = vec![(1, "make task1")];
+
+            for (task_number, command) in special_tasks3 {
+                match db::models::assignment_task::Model::create(
+                    db,
+                    10004,
+                    task_number,
+                    "Task to run code",
+                    command,
+                )
+                .await
+                {
+                    Ok(_) => {}
+                    Err(e) => eprintln!(
+                        "Failed to create special assignment task {}: {}",
+                        task_number, e
+                    ),
+                }
             }
         }
     }

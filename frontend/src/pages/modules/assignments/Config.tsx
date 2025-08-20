@@ -1,201 +1,272 @@
 import { useEffect, useState } from 'react';
-import { InputNumber, Select, Typography, Button, Form } from 'antd';
-import PageHeader from '@/components/PageHeader';
+import {
+  InputNumber,
+  Select,
+  Typography,
+  Button,
+  Form,
+  Dropdown,
+  Segmented,
+  Input,
+  Menu,
+} from 'antd';
+import { DownOutlined } from '@ant-design/icons';
+
 import SettingsGroup from '@/components/SettingsGroup';
-import { useNotifier } from '@/components/Notifier';
+import CodeEditor from '@/components/common/CodeEditor';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
-import type { AssignmentConfig } from '@/types/modules/assignments/config';
-import { uploadAssignmentFile, downloadAssignmentFile } from '@/services/modules/assignments';
+import { getAssignmentConfig, setAssignmentConfig } from '@/services/modules/assignments/config';
+import { DEFAULT_ASSIGNMENT_CONFIG } from '@/constants/assignments';
+import { message } from '@/utils/message';
+import {
+  FEEDBACK_SCHEME_OPTIONS,
+  MARKING_SCHEME_OPTIONS,
+  type AssignmentConfig,
+} from '@/types/modules/assignments/config';
 
-const { Paragraph } = Typography;
-
-const defaultConfig: AssignmentConfig = {
-  timeout_secs: 10,
-  max_memory: '1024m',
-  max_cpus: '2',
-  max_uncompressed_size: 1000000,
-  max_processes: 256,
-  marking_scheme: 'exact',
-  feedback_scheme: 'auto',
-};
+const toMB = (bytes: number) => Math.round(bytes / (1024 * 1024));
+const toBytes = (mb: number) => Math.round(mb * 1024 * 1024);
 
 const Config = () => {
   const module = useModule();
   const { assignment } = useAssignment();
-  const { notifyError, notifySuccess } = useNotifier();
   const [form] = Form.useForm();
-  const [loading, setLoading] = useState(true);
 
-  const configFile = assignment.files.find((f) => f.file_type === 'config');
-  const configFileId = configFile?.id;
+  const [rawView, setRawView] = useState(false);
+  const [rawText, setRawText] = useState(JSON.stringify(DEFAULT_ASSIGNMENT_CONFIG, null, 2));
+  const [config, setConfig] = useState<AssignmentConfig>(DEFAULT_ASSIGNMENT_CONFIG);
+  const [selectedSection, setSelectedSection] = useState('execution');
 
   useEffect(() => {
-    form.setFieldsValue(defaultConfig);
-    setLoading(false);
-  }, []);
-
-  const handleUploadFromDisk = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const res = await uploadAssignmentFile(module.id, assignment.id, 'config', file);
-      if (res.success) {
-        notifySuccess('Uploaded', 'Config file uploaded successfully.');
-      } else {
-        notifyError('Upload failed', res.message);
+    const load = async () => {
+      try {
+        const res = await getAssignmentConfig(module.id, assignment.id);
+        if (res.success && res.data) {
+          const cfg = res.data;
+          setConfig(cfg);
+          form.setFieldsValue(cfg);
+        } else {
+          throw new Error('No config found');
+        }
+      } catch {
+        message.warning('Could not load config. Using defaults.');
+        setConfig(DEFAULT_ASSIGNMENT_CONFIG);
+        form.setFieldsValue(DEFAULT_ASSIGNMENT_CONFIG);
       }
-    } catch (err) {
-      console.error(err);
-      notifyError('Upload failed', 'Could not upload config file.');
-    } finally {
-      e.target.value = '';
-    }
+    };
+
+    load();
+  }, [module.id, assignment.id]);
+
+  const syncFormToRaw = () => {
+    const updated = form.getFieldsValue(true) as AssignmentConfig;
+
+    setConfig(updated);
+    setRawText(JSON.stringify(updated, null, 2));
   };
 
-  const handleDownloadFromServer = async () => {
-    if (!configFileId) {
-      notifyError('No config file', 'No config file was found on the server.');
-      return;
-    }
-
+  const syncRawToForm = () => {
     try {
-      await downloadAssignmentFile(module.id, assignment.id, configFileId);
-      notifySuccess('Downloaded', 'Config file downloaded from server.');
-    } catch (err) {
-      console.error(err);
-      notifyError('Download failed', 'Could not download config file from server.');
+      const parsed = JSON.parse(rawText) as AssignmentConfig;
+      form.setFieldsValue(parsed);
+      setConfig(parsed);
+    } catch {
+      message.error('Invalid JSON');
     }
-  };
-
-  const handleDownloadLocal = () => {
-    const values = form.getFieldsValue() as AssignmentConfig;
-    const blob = new Blob([JSON.stringify(values, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `assignment_${assignment.id}_config.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleRevert = () => {
-    form.setFieldsValue(defaultConfig);
-    notifySuccess('Reverted', 'Default configuration restored.');
   };
 
   const handleSaveAndUpload = async () => {
-    const values = form.getFieldsValue() as AssignmentConfig;
-    const blob = new Blob([JSON.stringify(values, null, 2)], { type: 'application/json' });
-    const file = new File([blob], 'config.json', { type: 'application/json' });
+    let values: AssignmentConfig;
+
+    if (rawView) {
+      try {
+        values = JSON.parse(rawText);
+        form.setFieldsValue(values);
+      } catch {
+        message.error('Invalid JSON format');
+        return;
+      }
+    } else {
+      values = form.getFieldsValue(true);
+    }
 
     try {
-      const res = await uploadAssignmentFile(module.id, assignment.id, 'config', file);
-      if (res.success) {
-        notifySuccess('Saved & Uploaded', 'Configuration saved and uploaded.');
-      } else {
-        notifyError('Upload failed', res.message);
-      }
-    } catch (err) {
-      console.error(err);
-      notifyError('Upload failed', 'Could not upload config.');
+      const res = await setAssignmentConfig(module.id, assignment.id, values);
+      if (res.success) message.success('Config saved');
+      else message.error(res.message);
+    } catch {
+      message.error('Failed to save config.');
     }
   };
 
+  const handleRevert = () => {
+    form.setFieldsValue(DEFAULT_ASSIGNMENT_CONFIG);
+    setRawText(JSON.stringify(DEFAULT_ASSIGNMENT_CONFIG, null, 2));
+    setConfig(DEFAULT_ASSIGNMENT_CONFIG);
+    message.success('Default config restored.');
+  };
+
+  const handleDownloadLocal = () => {
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'config.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const menuItems = [
+    {
+      key: 'execution',
+      label: (
+        <div className="flex justify-between items-center">
+          <span>Execution</span>
+        </div>
+      ),
+    },
+    {
+      key: 'marking',
+      label: (
+        <div className="flex justify-between items-center">
+          <span>Marking & Feedback</span>
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <div className="max-w-4xl">
-      <PageHeader
-        title="Assignment Configuration"
-        description="Manage technical constraints and upload the config JSON to the server."
-      />
+    <div className="bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 flex overflow-hidden">
+      {/* Sidebar */}
+      {!rawView && (
+        <div className="w-[240px] bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2">
+          <Menu
+            mode="inline"
+            theme="light"
+            selectedKeys={[selectedSection]}
+            onClick={({ key }) => setSelectedSection(key)}
+            items={menuItems}
+            className="!bg-transparent !p-0"
+            style={{ border: 'none' }}
+          />
+        </div>
+      )}
 
-      {loading ? (
-        <Paragraph type="secondary">Loading...</Paragraph>
-      ) : (
-        <Form layout="vertical" form={form} className="space-y-6">
-          <SettingsGroup title="Timeout" description="Max execution time in seconds.">
-            <Form.Item name="timeout_secs" noStyle>
-              <InputNumber min={1} className="w-40" />
-            </Form.Item>
-          </SettingsGroup>
-
-          <SettingsGroup title="Max Memory" description='Maximum memory, e.g. "256m".'>
-            <Form.Item name="max_memory" noStyle>
-              <InputNumber className="w-40" min={1} addonAfter="MB" />
-            </Form.Item>
-          </SettingsGroup>
-
-          <SettingsGroup title="Max CPUs" description='Maximum CPUs, e.g. "1.5".'>
-            <Form.Item name="max_cpus" noStyle>
-              <InputNumber min={0.1} step={0.1} className="w-40" />
-            </Form.Item>
-          </SettingsGroup>
-
-          <SettingsGroup
-            title="Max Uncompressed Size"
-            description="Limit for extracted archive contents (in bytes)."
-          >
-            <Form.Item name="max_uncompressed_size" noStyle>
-              <InputNumber min={1} className="w-60" addonAfter="bytes" />
-            </Form.Item>
-          </SettingsGroup>
-
-          <SettingsGroup title="Max Processes" description="Maximum number of processes allowed.">
-            <Form.Item name="max_processes" noStyle>
-              <InputNumber min={1} className="w-40" />
-            </Form.Item>
-          </SettingsGroup>
-
-          <SettingsGroup title="Marking Scheme" description="How student output is compared.">
-            <Form.Item name="marking_scheme" noStyle>
-              <Select
-                className="w-60"
-                options={[
-                  { value: 'exact', label: 'Exact Match' },
-                  { value: 'percentage', label: 'Percentage Match' },
-                  { value: 'regex', label: 'Regex Match' },
-                ]}
-              />
-            </Form.Item>
-          </SettingsGroup>
-
-          <SettingsGroup title="Feedback Scheme" description="How feedback is given.">
-            <Form.Item name="feedback_scheme" noStyle>
-              <Select
-                className="w-60"
-                options={[
-                  { value: 'auto', label: 'Auto' },
-                  { value: 'manual', label: 'Manual' },
-                  { value: 'ai', label: 'AI-Assisted' },
-                ]}
-              />
-            </Form.Item>
-          </SettingsGroup>
-
-          <div className="pt-4 flex flex-wrap justify-end gap-2">
-            <Button onClick={handleRevert}>Revert to Default</Button>
-            <Button onClick={handleDownloadLocal}>Download as File</Button>
-            <Button onClick={handleDownloadFromServer} disabled={!configFileId}>
-              Download from Server
-            </Button>
-            <Button type="primary" onClick={handleSaveAndUpload}>
-              Save & Upload
-            </Button>
-            <Button onClick={() => document.getElementById('config-upload')?.click()}>
-              Upload File
-            </Button>
-            <input
-              type="file"
-              id="config-upload"
-              hidden
-              accept=".json"
-              onChange={handleUploadFromDisk}
+      {/* Main Content */}
+      <div className="flex-1 p-6 space-y-6 max-w-5xl">
+        <div className="flex justify-between items-center flex-wrap gap-2">
+          <div className="flex items-center gap-4">
+            <Typography.Title level={4} className="!mb-0">
+              Assignment Configuration
+            </Typography.Title>
+            <Segmented
+              options={[
+                { label: 'Editor', value: 'form' },
+                { label: 'JSON', value: 'raw' },
+              ]}
+              value={rawView ? 'raw' : 'form'}
+              onChange={(val) => {
+                if (val === 'raw') {
+                  syncFormToRaw();
+                  setRawView(true);
+                } else {
+                  syncRawToForm();
+                  setRawView(false);
+                }
+              }}
+              size="small"
             />
           </div>
-        </Form>
-      )}
+        </div>
+
+        <Typography.Paragraph type="secondary" className="!mt-0">
+          Configure how this assignment will be evaluated, including resource limits and marking
+          rules. You can use the interactive editor or edit the raw JSON directly.
+        </Typography.Paragraph>
+
+        {rawView ? (
+          <CodeEditor
+            title="Config"
+            value={rawText}
+            onChange={(val) => setRawText(val ?? '')}
+            language="json"
+            minimal={true}
+          />
+        ) : (
+          <Form layout="vertical" form={form} className="space-y-6">
+            {selectedSection === 'execution' && (
+              <SettingsGroup
+                title="Execution Limits"
+                description="Control how student code is run and isolated."
+              >
+                <Form.Item name={['execution', 'timeout_secs']} label="Timeout">
+                  <InputNumber min={1} className="w-40" addonAfter="sec" />
+                </Form.Item>
+
+                <Form.Item
+                  name={['execution', 'max_memory']}
+                  label="Max Memory"
+                  getValueProps={(value) => ({ value: toMB(value) })}
+                  normalize={(value) => toBytes(value)}
+                >
+                  <InputNumber min={1} className="w-40" addonAfter="MB" />
+                </Form.Item>
+
+                <Form.Item name={['execution', 'max_cpus']} label="Max CPUs">
+                  <InputNumber min={1} step={1} precision={0} className="w-40" addonAfter="cores" />
+                </Form.Item>
+
+                <Form.Item
+                  name={['execution', 'max_uncompressed_size']}
+                  label="Max Uncompressed Size"
+                  getValueProps={(value) => ({ value: toMB(value) })}
+                  normalize={(value) => toBytes(value)}
+                >
+                  <InputNumber min={1} className="w-40" addonAfter="MB" />
+                </Form.Item>
+
+                <Form.Item name={['execution', 'max_processes']} label="Max Processes">
+                  <InputNumber min={1} className="!w-40" />
+                </Form.Item>
+              </SettingsGroup>
+            )}
+
+            {selectedSection === 'marking' && (
+              <SettingsGroup
+                title="Marking & Feedback"
+                description="Determine how submissions are evaluated and feedback is generated."
+              >
+                <Form.Item name={['marking', 'marking_scheme']} label="Marking Scheme">
+                  <Select className="!w-60" options={MARKING_SCHEME_OPTIONS} />
+                </Form.Item>
+
+                <Form.Item name={['marking', 'feedback_scheme']} label="Feedback Scheme">
+                  <Select className="!w-60" options={FEEDBACK_SCHEME_OPTIONS} />
+                </Form.Item>
+
+                <Form.Item name={['marking', 'deliminator']} label="Delimiter String">
+                  <Input className="!w-60" addonBefore="Delimiter" />
+                </Form.Item>
+              </SettingsGroup>
+            )}
+          </Form>
+        )}
+
+        <div className="flex justify-end gap-2 pt-4">
+          <Button onClick={handleRevert}>Revert to Default</Button>
+          <Dropdown.Button
+            type="primary"
+            onClick={handleSaveAndUpload}
+            menu={{
+              items: [{ key: 'download', label: 'Download as File', onClick: handleDownloadLocal }],
+            }}
+            icon={<DownOutlined />}
+          >
+            Save Configuration
+          </Dropdown.Button>
+        </div>
+      </div>
     </div>
   );
 };

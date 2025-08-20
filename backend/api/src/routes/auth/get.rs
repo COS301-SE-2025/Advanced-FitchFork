@@ -1,25 +1,21 @@
 use std::path::PathBuf;
 use axum::{
-    http::StatusCode,
+    extract::{State, Query, Path},
+    http::{StatusCode, header, HeaderMap, HeaderValue},
     response::IntoResponse,
     Json,
 };
-use axum::extract::{Query, Path};
-use axum::http::{header, HeaderMap, HeaderValue};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use tokio::fs::File as FsFile;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
+use util::state::AppState;
 use crate::{
     auth::claims::AuthUser,
     response::ApiResponse,
 };
-
-use db::{
-    connect,
-    models::{user, module, user_module_role},
-};
-use db::models::user_module_role::Role;
+use db::models::{user, module, user_module_role, user_module_role::Role};
+use crate::routes::common::UserModule;
 
 #[derive(Debug, Serialize)]
 pub struct MeResponse {
@@ -29,19 +25,7 @@ pub struct MeResponse {
     pub admin: bool,
     pub created_at: String,
     pub updated_at: String,
-    pub modules: Vec<UserModuleRoleResponse>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct UserModuleRoleResponse {
-    pub module_id: i64,
-    pub module_code: String,
-    pub module_year: i32,
-    pub module_description: Option<String>,
-    pub module_credits: i32,
-    pub module_created_at: String,
-    pub module_updated_at: String,
-    pub role: String,
+    pub modules: Vec<UserModule>,
 }
 
 #[derive(Deserialize)]
@@ -54,7 +38,6 @@ pub struct HasRoleQuery {
 pub struct HasRoleResponse {
     pub has_role: bool,
 }
-
 
 /// GET /api/auth/me
 ///
@@ -103,14 +86,16 @@ pub struct HasRoleResponse {
 /// - `403 Forbidden` – Missing or invalid token
 /// - `404 Not Found` – User not found
 /// - `500 Internal Server Error` – Database failure
-pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
-    let db = connect().await;
+pub async fn get_me(
+    State(app_state): State<AppState>,
+    AuthUser(claims): AuthUser
+) -> impl IntoResponse {
+    let db = app_state.db();
     let user_id = claims.sub;
 
-    // Find the user directly
     let user = match user::Entity::find()
         .filter(user::Column::Id.eq(user_id))
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(Some(u)) => u,
@@ -127,12 +112,11 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
             );
         }
     };
-
-    // Join user_module_roles with modules
+    
     let roles = match user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user.id))
         .find_also_related(module::Entity)
-        .all(&db)
+        .all(db)
         .await
     {
         Ok(results) => results,
@@ -144,17 +128,17 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
         }
     };
 
-    let modules: Vec<UserModuleRoleResponse> = roles
+    let modules: Vec<UserModule> = roles
         .into_iter()
         .filter_map(|(role, maybe_module)| {
-            maybe_module.map(|m| UserModuleRoleResponse {
-                module_id: m.id,
-                module_code: m.code,
-                module_year: m.year,
-                module_description: m.description,
-                module_credits: m.credits,
-                module_created_at: m.created_at.to_rfc3339(),
-                module_updated_at: m.updated_at.to_rfc3339(),
+            maybe_module.map(|m| UserModule {
+                id: m.id,
+                code: m.code,
+                year: m.year,
+                description: m.description.unwrap_or_default(),
+                credits: m.credits,
+                created_at: m.created_at.to_rfc3339(),
+                updated_at: m.updated_at.to_rfc3339(),
                 role: role.role.to_string(),
             })
         })
@@ -176,7 +160,7 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
     )
 }
 
-/// GET /auth/avatar/:user_id
+/// GET /api/auth/avatar/{user_id}
 ///
 /// Returns the avatar image for a specific user ID.
 ///
@@ -189,7 +173,7 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
 ///
 /// ### Example Request
 /// ```http
-/// GET /auth/avatar/42
+/// GET /api/auth/avatar/42
 /// ```
 ///
 /// ### Example Response Headers
@@ -220,19 +204,13 @@ pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
 ///   "data": null
 /// }
 /// ```
-pub async fn get_avatar(Path(user_id): Path<i64>) -> impl IntoResponse {
-    // Find user by ID
-    let db = connect().await;
-    let user = match user::Entity::find_by_id(user_id).one(&db).await {
-        Ok(Some(u)) => u,
-        _ => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("User not found")),
-            )
-                .into_response();
-        }
-    };
+pub async fn get_avatar(
+    State(app_state): State<AppState>,
+    Path(user_id): Path<i64>
+) -> impl IntoResponse {
+    let db = app_state.db();
+
+    let user = user::Entity::find_by_id(user_id).one(db).await.unwrap().unwrap();
 
     let Some(path) = user.profile_picture_path else {
         return (
@@ -287,12 +265,41 @@ pub async fn get_avatar(Path(user_id): Path<i64>) -> impl IntoResponse {
     (StatusCode::OK, headers, buffer).into_response()
 }
 
-
-pub async fn has_role_in_module(AuthUser(claims): AuthUser, Query(params): Query<HasRoleQuery>, ) -> impl IntoResponse {
-    let db = connect().await;
+/// GET /api/auth/has-role
+///
+/// Checks if the authenticated user has a specific role in a module.
+///
+/// ### Authorization
+/// This endpoint requires a valid bearer token in the `Authorization` header.
+///
+/// ### Request Parameters
+/// - `module_id`: The ID of the module to check role for
+/// - `role`: The role to check for (case-insensitive: "lecturer", "tutor", "student")
+///
+/// ### Response: 200 OK
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Role check completed",
+///   "data": {
+///     "has_role": true
+/// }
+/// ```
+///
+/// ### Error Responses
+/// - `400 Bad Request` – Invalid role specified
+/// - `403 Forbidden` – Missing or invalid token
+/// - `500 Internal Server Error` – Database failure
+pub async fn has_role_in_module(
+    State(app_state): State<AppState>,
+    AuthUser(claims): AuthUser,
+    Query(params): Query<HasRoleQuery>
+) -> impl IntoResponse {
+    let db = app_state.db();
 
     let role = match params.role.to_lowercase().as_str() {
         "lecturer" => Role::Lecturer,
+        "assistant_lecturer" => Role::AssistantLecturer,
         "tutor" => Role::Tutor,
         "student" => Role::Student,
         _ => {
@@ -307,7 +314,7 @@ pub async fn has_role_in_module(AuthUser(claims): AuthUser, Query(params): Query
         .filter(user_module_role::Column::UserId.eq(claims.sub))
         .filter(user_module_role::Column::ModuleId.eq(params.module_id))
         .filter(user_module_role::Column::Role.eq(role))
-        .one(&db)
+        .one(db)
         .await
     {
         Ok(Some(_)) => true,
@@ -325,5 +332,68 @@ pub async fn has_role_in_module(AuthUser(claims): AuthUser, Query(params): Query
     (
         StatusCode::OK,
         Json(ApiResponse::success(response, "Role check completed")),
+    )
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModuleRoleQuery {
+    pub module_id: i32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModuleRoleResponse {
+    pub role: Option<String>,
+}
+
+/// GET /api/auth/module-role
+///
+/// Returns the role of the authenticated user in the given module, if any.
+///
+/// ### Authorization
+/// Requires a valid bearer token.
+///
+/// ### Query Parameters
+/// - `module_id`: The module ID to check
+///
+/// ### Response
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Role fetched successfully",
+///   "data": {
+///     "role": "lecturer" // or "tutor", "student", null
+///   }
+/// }
+/// ```
+/// #[derive(Debug, Deserialize)]
+pub async fn get_module_role(
+    State(app_state): State<AppState>,
+    AuthUser(claims): AuthUser,
+    Query(params): Query<ModuleRoleQuery>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
+    let role = match user_module_role::Entity::find()
+        .filter(user_module_role::Column::UserId.eq(claims.sub))
+        .filter(user_module_role::Column::ModuleId.eq(params.module_id))
+        .one(db)
+        .await
+    {
+        Ok(Some(model)) => Some(model.role.to_string().to_lowercase()),
+        Ok(None) => None,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ModuleRoleResponse>::error("Database error")),
+            );
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            ModuleRoleResponse { role },
+            "Role fetched successfully",
+        )),
     )
 }

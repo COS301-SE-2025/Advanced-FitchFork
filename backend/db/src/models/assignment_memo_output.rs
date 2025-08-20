@@ -41,7 +41,7 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::assignment_task::Entity",
         from = "Column::TaskId",
-        to = "super::assignment_task::Column::TaskNumber"
+        to = "super::assignment_task::Column::Id"
     )]
     AssignmentTask,
 }
@@ -59,18 +59,10 @@ impl Model {
     pub fn storage_root() -> PathBuf {
         let relative_root = env::var("ASSIGNMENT_STORAGE_ROOT")
             .unwrap_or_else(|_| "data/assignment_files".to_string());
-
-        let mut dir = std::env::current_dir().expect("Failed to get current dir");
-
-        while let Some(parent) = dir.parent() {
-            if dir.ends_with("backend") {
-                return dir.join(relative_root);
-            }
-            dir = parent.to_path_buf();
-        }
-
-        // Fallback: just use relative path from current dir
-        PathBuf::from(relative_root)
+        
+        let project_root = env::current_dir().expect("Failed to get current dir");
+        
+        project_root.join(relative_root)
     }
 
     /// Constructs the full directory path for a memo output based on
@@ -145,5 +137,24 @@ impl Model {
         model.updated_at = Set(Utc::now());
 
         model.update(db).await
+    }
+
+    /// Reads the contents of a memo output file from disk,
+    /// given the module_id, assignment_id, and the file id (filename).
+    pub fn read_memo_output_file(
+        module_id: i64,
+        assignment_id: i64,
+        file_id: i64,
+    ) -> Result<Vec<u8>, std::io::Error> {
+        let storage_root = Self::storage_root();
+
+        let dir_path = storage_root
+            .join(format!("module_{module_id}"))
+            .join(format!("assignment_{assignment_id}"))
+            .join("memo_output");
+
+        let file_path = dir_path.join(file_id.to_string());
+
+        std::fs::read(file_path)
     }
 }

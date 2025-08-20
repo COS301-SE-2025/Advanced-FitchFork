@@ -1,24 +1,13 @@
 import type { Timestamp } from "@/types/common";
 
-export type AssignmentType = 'Assignment' | 'Practical';
-export const ASSIGNMENT_TYPES: AssignmentType[] = ['Assignment', 'Practical'];
+export const ASSIGNMENT_TYPES = ['assignment', 'practical'] as const;
+export type AssignmentType = (typeof ASSIGNMENT_TYPES)[number];
 
-export type FileType =
-  | 'spec'
-  | 'main'
-  | 'memo'
-  | 'makefile'
-  | 'mark_allocator'
-  | 'config';
+export const ASSIGNMENT_STATUSES = ['setup', 'ready', 'open', 'closed', 'archived'] as const;
+export type AssignmentStatus = (typeof ASSIGNMENT_STATUSES)[number];
 
-export const FILE_TYPES: FileType[] = [
-  'spec',
-  'main',
-  'memo',
-  'makefile',
-  'mark_allocator',
-  'config',
-];
+export const ASSIGNMENT_FILE_TYPES = ['spec', 'main', 'memo', 'makefile', 'mark_allocator', 'config'] as const;
+export type AssignmentFileType =(typeof ASSIGNMENT_FILE_TYPES)[number];
 
 export interface Assignment extends Timestamp {
   id: number;
@@ -28,7 +17,7 @@ export interface Assignment extends Timestamp {
   assignment_type: AssignmentType;
   available_from: string; // ISO
   due_date: string;
-  status?: string,
+  status: AssignmentStatus,
 }
 
 
@@ -37,7 +26,7 @@ export interface AssignmentFile extends Timestamp {
   assignment_id: number;
   filename: string;
   path: string;
-  file_type: FileType;
+  file_type: AssignmentFileType;
 }
 
 export interface AssignmentReadiness {

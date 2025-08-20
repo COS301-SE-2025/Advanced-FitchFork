@@ -1,45 +1,184 @@
-name: CI - Rust
+name: CI
 
 on:
-  push:
-    branches: [main, dev]
   pull_request:
     branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  backend-tests:
-    name: Rust Unit + Integration Tests
+  # e2e:
+  #   name: E2E (Playwright)
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 45
+
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     # --- Toolchains ---
+  #     - name: Set up Rust
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         toolchain: stable
+  #         override: true
+
+  #     - name: Set up Node 20
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "20"
+  #         cache: "npm"
+  #         cache-dependency-path: |
+  #           frontend/package-lock.json
+  #           tests/package-lock.json
+
+  #     # --- Cache Rust build ---
+  #     - name: Cache Cargo registry + git + target
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           ~/.cargo/registry
+  #           ~/.cargo/git
+  #           backend/target
+  #         key: ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-cargo-
+
+  #     # --- Copy envs ---
+  #     - name: Copy backend .env
+  #       run: cp .env.example .env
+  #       working-directory: backend
+  #     - name: Copy frontend .env
+  #       run: cp .env.example .env
+  #       working-directory: frontend
+
+  #     - name: Install frontend deps
+  #       run: npm ci
+  #       working-directory: frontend
+
+  #     - name: Install test deps
+  #       run: npm ci
+  #       working-directory: tests
+
+  #     # cache Playwright browsers
+  #     - name: Cache Playwright browsers
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: ~/.cache/ms-playwright
+  #         key: ${{ runner.os }}-ms-playwright-${{ hashFiles('tests/package-lock.json') }}
+
+  #     - name: Install Playwright browsers & deps
+  #       run: npx playwright install --with-deps
+  #       working-directory: tests
+
+  #     # --- Build, migrate, seed & start servers ---
+  #     - name: Build, migrate, seed & start servers
+  #       uses: ./.github/actions/start-servers
+  #       with:
+  #         start-api: "true"
+  #         start-code: "true"
+  #         start-frontend: "true"
+  #         build-api: "true"
+  #         build-code: "true"
+  #         build-migration: "true"
+  #         build-seeder: "true"
+  #         run-migration: "true"
+  #         run-seeder: "true"
+  #         api-url: "http://localhost:3000/api/health"
+  #         code-url: "http://localhost:5000/health"
+  #         frontend-url: "http://localhost:5173"
+
+  #     - name: Run Playwright
+  #       env:
+  #         CI: "1"
+  #       # If your config lives at tests/e2e/playwright.config.ts, add:  -c e2e/playwright.config.ts
+  #       run: npx playwright test
+  #       working-directory: tests
+
+  #     - name: Upload Playwright artifacts on failure
+  #       if: failure()
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: playwright-artifacts
+  #         path: |
+  #           tests/playwright-report
+  #           tests/.playwright
+  #           tests/test-results
+  #           tests/blob-report
+  #         if-no-files-found: ignore
+
+  #     - name: Stop servers
+  #       if: always()
+  #       run: bash /tmp/stop_servers.sh
+
+  integration:
+    name: Integration Tests (Rust)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
+    timeout-minutes: 30
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Cache Cargo registry
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache Cargo build output
-        uses: actions/cache@v3
-        with:
-          path: |
-            target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
-
+      # --- Toolchains ---
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          override: true
 
-      - name: Copy .env file
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # --- Cache Rust build ---
+      - name: Cache Cargo registry + git + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # --- Copy env ---
+      - name: Copy backend .env
         run: cp .env.example .env
+        working-directory: backend
 
-      - name: Run backend tests
-        run: cargo test --workspace --all-features
+      # --- Build, migrate, seed & start servers ---
+      - name: Build, migrate, seed & start Code Manager
+        uses: ./.github/actions/start-servers
+        with:
+          start-api: "false"
+          start-code: "true"
+          start-frontend: "false"
+          build-api: "true"
+          build-code: "true"
+          build-migration: "true"
+          build-seeder: "true"
+          run-migration: "true"
+          run-seeder: "true"
+          code-url: "http://localhost:5000/health"
+
+      - name: Run integration tests
+        working-directory: backend
+        run: cargo test --all -- --nocapture
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs
+          path: |
+            code.log
+          if-no-files-found: ignore
+
+      - name: Stop servers
+        if: always()
+        run: bash /tmp/stop_servers.sh

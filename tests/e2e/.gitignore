@@ -1,0 +1,14 @@
+# Node
+node_modules/
+
+# Environment files
+.env
+.env.local
+
+# Playwright artifacts
+tests/.playwright/auth/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+.playwright

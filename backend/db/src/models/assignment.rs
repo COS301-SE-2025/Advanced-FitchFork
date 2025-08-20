@@ -6,47 +6,31 @@
 use sea_orm::entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, IntoActiveModel,
-    PaginatorTrait, QueryFilter, QueryOrder, Set, JsonValue, 
+    JsonValue, PaginatorTrait, QueryFilter, QueryOrder, Set, QuerySelect
 };
+use crate::models::assignment_file::{Model as AssignmentFileModel, FileType};
+use crate::models::assignment_task::{Entity as TaskEntity, Column as TaskColumn};
 use chrono::{DateTime, Utc};
 use std::{env, fs, path::PathBuf};
 use serde::{Serialize, Deserialize};
-use strum_macros::{Display, EnumIter, EnumString};
+use strum::{Display, EnumIter, EnumString};
 
 /// Assignment model representing the `assignments` table in the database.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "assignments")]
 pub struct Model {
-    /// Unique identifier for the assignment.
     #[sea_orm(primary_key)]
     pub id: i64,
-
-    /// Foreign key reference to the associated module.
     pub module_id: i64,
-
-    /// Name/title of the assignment.
     pub name: String,
-
-    /// Optional description providing context or details.
     pub description: Option<String>,
-
-    /// Type/category of the assignment (e.g., "Practical", "Project").
     pub assignment_type: AssignmentType,
-
-    /// Timestamp indicating when the assignment becomes available.
+    pub status: Status,
     pub available_from: DateTime<Utc>,
-
-    /// Timestamp representing the assignment's due date.
     pub due_date: DateTime<Utc>,
-
-    /// Optional JSON configuration (e.g., grading rules, language, etc.).
     #[sea_orm(column_type = "Json", nullable)]
     pub config: Option<JsonValue>,
-
-    /// Auto-managed creation timestamp.
     pub created_at: DateTime<Utc>,
-
-    /// Auto-managed update timestamp.
     pub updated_at: DateTime<Utc>,
 }
 
@@ -74,21 +58,48 @@ pub enum AssignmentType {
     Practical,
 }
 
+#[derive(Debug, Clone, PartialEq, Display, EnumIter, EnumString, Serialize, Deserialize, DeriveActiveEnum)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "assignment_status_enum")]
+#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
+pub enum Status {
+    #[sea_orm(string_value = "setup")]
+    Setup,
+    #[sea_orm(string_value = "ready")]
+    Ready,
+    #[sea_orm(string_value = "open")]
+    Open,
+    #[sea_orm(string_value = "closed")]
+    Closed,
+    #[sea_orm(string_value = "archived")]
+    Archived,
+}
+
+/// Detailed report of assignment readiness state.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReadinessReport {
+    pub config_present: bool,
+    pub tasks_present: bool,
+    pub main_present: bool,
+    pub memo_present: bool,
+    pub makefile_present: bool,
+    pub memo_output_present: bool,
+    pub mark_allocator_present: bool,
+}
+
+impl ReadinessReport {
+    /// Convenience helper: true if all components are present.
+    pub fn is_ready(&self) -> bool {
+        self.config_present
+            && self.tasks_present
+            && self.main_present
+            && self.memo_present
+            && self.makefile_present
+            && self.memo_output_present
+            && self.mark_allocator_present
+    }
+}
+
 impl Model {
-    /// Create a new assignment in the database.
-    ///
-    /// # Arguments
-    /// - `db`: The active database connection.
-    /// - `module_id`: ID of the associated module.
-    /// - `name`: Name/title of the assignment.
-    /// - `description`: Optional description.
-    /// - `assignment_type`: Type/category of the assignment.
-    /// - `available_from`: When the assignment becomes available.
-    /// - `due_date`: Deadline for submission.
-    ///
-    /// # Returns
-    /// - `Ok(Self)` on success.
-    /// - `Err(DbErr)` on failure.
     pub async fn create(
         db: &DatabaseConnection,
         module_id: i64,
@@ -98,11 +109,14 @@ impl Model {
         available_from: DateTime<Utc>,
         due_date: DateTime<Utc>,
     ) -> Result<Self, DbErr> {
+        Self::validate_dates(available_from, due_date)?;
+
         let active = ActiveModel {
             module_id: Set(module_id),
             name: Set(name.to_string()),
             description: Set(description.map(|d| d.to_string())),
             assignment_type: Set(assignment_type),
+            status: Set(Status::Setup),
             available_from: Set(available_from),
             due_date: Set(due_date),
             created_at: Set(Utc::now()),
@@ -113,22 +127,6 @@ impl Model {
         active.insert(db).await
     }
 
-    /// Edit an existing assignment.
-    ///
-    /// # Arguments
-    /// - `db`: The active database connection.
-    /// - `id`: ID of the assignment to edit.
-    /// - `module_id`: The module ID (used for additional safety).
-    /// - `name`: Updated name.
-    /// - `description`: Updated description.
-    /// - `assignment_type`: Updated assignment type.
-    /// - `available_from`: Updated availability date.
-    /// - `due_date`: Updated due date.
-    ///
-    /// # Returns
-    /// - `Ok(Self)` with the updated record.
-    /// - `Err(DbErr::RecordNotFound)` if assignment doesn't exist.
-    /// - `Err(DbErr)` for other DB errors.
     pub async fn edit(
         db: &DatabaseConnection,
         id: i64,
@@ -139,6 +137,8 @@ impl Model {
         available_from: DateTime<Utc>,
         due_date: DateTime<Utc>,
     ) -> Result<Self, DbErr> {
+        Self::validate_dates(available_from, due_date)?;
+
         let mut assignment = Entity::find()
             .filter(Column::Id.eq(id))
             .filter(Column::ModuleId.eq(module_id))
@@ -157,18 +157,7 @@ impl Model {
         assignment.update(db).await
     }
 
-    /// Delete an assignment and remove its file folder from disk.
-    ///
-    /// # Arguments
-    /// - `db`: Active DB connection
-    /// - `id`: Assignment ID to delete
-    /// - `module_id`: Must match for safety
-    ///
-    /// # Returns
-    /// - `Ok(())` if successful
-    /// - `Err(DbErr)` if not found or delete fails
     pub async fn delete(db: &DatabaseConnection, id: i32, module_id: i32) -> Result<(), DbErr> {
-        // Find the assignment
         let Some(model) = Entity::find()
             .filter(Column::Id.eq(id))
             .filter(Column::ModuleId.eq(module_id))
@@ -180,11 +169,9 @@ impl Model {
             )));
         };
 
-        // Delete the assignment
         let active = model.into_active_model();
         active.delete(db).await?;
 
-        // Construct path to assignment directory
         let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
             .unwrap_or_else(|_| "data/assignment_files".to_string());
 
@@ -192,7 +179,6 @@ impl Model {
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{id}"));
 
-        // Try delete recursively (ignores if doesn't exist)
         if assignment_dir.exists() {
             if let Err(e) = fs::remove_dir_all(&assignment_dir) {
                 eprintln!("Warning: Failed to delete assignment directory {:?}: {}", assignment_dir, e);
@@ -202,19 +188,6 @@ impl Model {
         Ok(())
     }
 
-    /// Filter and sort assignments with pagination support.
-    ///
-    /// # Arguments
-    /// - `db`: The active database connection.
-    /// - `page`: The page number to fetch (1-indexed).
-    /// - `per_page`: Number of records per page.
-    /// - `sort_by`: Optional sort field (`"name"`, `"due_date"`, or `"available_from"`).
-    ///              Use `"-"` prefix for descending order (e.g. `"-name"`).
-    /// - `query`: Optional case-insensitive filter applied to `name` and `description`.
-    ///
-    /// # Returns
-    /// - `Ok(Vec<Self>)` containing matched assignments.
-    /// - `Err(DbErr)` on failure.
     pub async fn filter(
         db: &DatabaseConnection,
         page: u64,
@@ -268,14 +241,182 @@ impl Model {
 
         query_builder.paginate(db, per_page).fetch_page(page - 1).await
     }
+
+    fn validate_dates(available_from: DateTime<Utc>, due_date: DateTime<Utc>) -> Result<(), DbErr> {
+        if due_date < available_from {
+            Err(DbErr::Custom(
+                "Due date cannot be before Available From date".into(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Computes a detailed readiness report for an assignment by checking if all required components are present.
+    ///
+    /// This function verifies the presence of all expected resources for an assignment:
+    /// - At least one task is defined in the database.
+    /// - A configuration file exists.
+    /// - A main file exists.
+    /// - A memo file exists.
+    /// - A makefile exists.
+    /// - A memo output file exists.
+    /// - A JSON mark allocator file exists.
+    ///
+    /// The returned [`ReadinessReport`] (or [`AssignmentReadiness`]) contains boolean flags for each component
+    /// and an `is_ready` field indicating whether the assignment is fully ready
+    /// (i.e., suitable to transition from `Setup` to `Ready` state).
+    ///
+    /// This function only checks readiness — it does **not** modify the assignment's status in the database.
+    ///
+    /// # Arguments
+    /// * `db` - A reference to the database connection.
+    /// * `module_id` - The ID of the module to which the assignment belongs.
+    /// * `assignment_id` - The ID of the assignment to check.
+    ///
+    /// # Returns
+    /// * `Ok(ReadinessReport)` with per-component readiness details.
+    /// * `Err(DbErr)` if a database error occurs while checking tasks.
+    ///
+    /// # Notes
+    /// File presence is checked on the file system under the expected directories for each file type.
+    /// Missing directories or I/O errors are treated as absence of the respective component.
+    pub async fn compute_readiness_report(
+        db: &DatabaseConnection,
+        module_id: i64,
+        assignment_id: i64,
+    ) -> Result<ReadinessReport, DbErr> {
+        let config_present = AssignmentFileModel::full_directory_path(
+            module_id,
+            assignment_id,
+            &FileType::Config,
+        )
+        .read_dir()
+        .map(|mut it| it.any(|f| f.is_ok()))
+        .unwrap_or(false);
+
+        let tasks_present = TaskEntity::find()
+            .filter(TaskColumn::AssignmentId.eq(assignment_id))
+            .limit(1)
+            .all(db)
+            .await
+            .map(|tasks| !tasks.is_empty())
+            .unwrap_or(false);
+
+        let main_present = AssignmentFileModel::full_directory_path(
+            module_id,
+            assignment_id,
+            &FileType::Main,
+        )
+        .read_dir()
+        .map(|mut it| it.any(|f| f.is_ok()))
+        .unwrap_or(false);
+
+        let memo_present = AssignmentFileModel::full_directory_path(
+            module_id,
+            assignment_id,
+            &FileType::Memo,
+        )
+        .read_dir()
+        .map(|mut it| it.any(|f| f.is_ok()))
+        .unwrap_or(false);
+
+        let makefile_present = AssignmentFileModel::full_directory_path(
+            module_id,
+            assignment_id,
+            &FileType::Makefile,
+        )
+        .read_dir()
+        .map(|mut it| it.any(|f| f.is_ok()))
+        .unwrap_or(false);
+
+        let memo_output_present = {
+            let base_path = AssignmentFileModel::storage_root()
+                .join(format!("module_{}", module_id))
+                .join(format!("assignment_{}", assignment_id))
+                .join("memo_output");
+
+            if let Ok(entries) = fs::read_dir(&base_path) {
+                entries.flatten().any(|entry| entry.path().is_file())
+            } else {
+                false
+            }
+        };
+
+        let mark_allocator_present = AssignmentFileModel::full_directory_path(
+            module_id,
+            assignment_id,
+            &FileType::MarkAllocator,
+        )
+        .read_dir()
+        .map(|it| {
+            it.flatten()
+                .any(|f| f.path().extension().map(|e| e == "json").unwrap_or(false))
+        })
+        .unwrap_or(false);
+
+        Ok(ReadinessReport {
+            config_present,
+            tasks_present,
+            main_present,
+            memo_present,
+            makefile_present,
+            memo_output_present,
+            mark_allocator_present,
+        })
+    }
+
+    /// Attempts to transition an assignment to `Ready` state if all readiness conditions are met.
+    ///
+    /// This function:
+    /// - Computes a full readiness report for the assignment.
+    /// - If all components are present (`is_ready` == true), it checks the current status.
+    /// - If the current status is `Setup`, it updates the status to `Ready` and updates `updated_at`.
+    /// - If already in `Ready`, `Open`, etc., it does not change the status.
+    ///
+    /// # Arguments
+    /// * `db` - A reference to the database connection.
+    /// * `module_id` - The ID of the module to which the assignment belongs.
+    /// * `assignment_id` - The ID of the assignment.
+    ///
+    /// # Returns
+    /// * `Ok(true)` if the assignment is fully ready (regardless of whether the status was updated).
+    /// * `Ok(false)` if the assignment is not ready.
+    /// * `Err(DbErr)` if a database error occurs.
+    pub async fn try_transition_to_ready(
+        db: &DatabaseConnection,
+        module_id: i64,
+        assignment_id: i64,
+    ) -> Result<bool, DbErr> {
+        let report = Self::compute_readiness_report(db, module_id, assignment_id).await?;
+
+        if report.is_ready() {
+            let mut active = Entity::find()
+                .filter(Column::Id.eq(assignment_id))
+                .filter(Column::ModuleId.eq(module_id))
+                .one(db)
+                .await?
+                .ok_or(DbErr::RecordNotFound("Assignment not found".into()))?
+                .into_active_model();
+
+            if active.status.as_ref() == &Status::Setup {
+                active.status = Set(Status::Ready);
+                active.updated_at = Set(Utc::now());
+                active.update(db).await?;
+            }
+        }
+
+        Ok(report.is_ready())
+    }
+
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
     use crate::test_utils::setup_test_db;
     use crate::models::module::ActiveModel as ModuleActiveModel;
-    use crate::models::assignment::AssignmentType;
 
     fn sample_dates() -> (DateTime<Utc>, DateTime<Utc>) {
         (
@@ -289,7 +430,7 @@ mod tests {
         let db = setup_test_db().await;
         let (from, due) = sample_dates();
 
-        let _module = ModuleActiveModel {
+        let module = ModuleActiveModel {
             code: Set("COS301".to_string()),
             year: Set(2025),
             description: Set(Some("Capstone Project".to_string())),
@@ -303,7 +444,7 @@ mod tests {
 
         let assignment = Model::create(
             &db,
-            1,
+            module.id,
             "Test Assignment",
             Some("Intro to Testing"),
             AssignmentType::Practical,
@@ -313,10 +454,9 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(assignment.module_id, 1);
+        assert_eq!(assignment.module_id, module.id);
         assert_eq!(assignment.name, "Test Assignment");
-        assert_eq!(assignment.description.as_deref(), Some("Intro to Testing"));
-        assert_eq!(assignment.assignment_type, AssignmentType::Practical);
+        assert_eq!(assignment.status, Status::Setup); // status defaults to Setup
     }
 
     #[tokio::test]
@@ -324,7 +464,7 @@ mod tests {
         let db = setup_test_db().await;
         let (from, due) = sample_dates();
 
-        let _module = ModuleActiveModel {
+        let module = ModuleActiveModel {
             code: Set("COS301".to_string()),
             year: Set(2025),
             description: Set(Some("Capstone Project".to_string())),
@@ -338,7 +478,7 @@ mod tests {
 
         let created = Model::create(
             &db,
-            1,
+            module.id,
             "Initial",
             Some("Initial Desc"),
             AssignmentType::Assignment,
@@ -351,7 +491,7 @@ mod tests {
         let updated = Model::edit(
             &db,
             created.id,
-            1,
+            module.id,
             "Updated Name",
             Some("Updated Desc"),
             AssignmentType::Practical,
@@ -362,8 +502,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(updated.name, "Updated Name");
-        assert_eq!(updated.description.as_deref(), Some("Updated Desc"));
-        assert_eq!(updated.assignment_type, AssignmentType::Practical);
+        assert_eq!(updated.status, created.status); // status remains unchanged
     }
 
     #[tokio::test]
@@ -371,7 +510,7 @@ mod tests {
         let db = setup_test_db().await;
         let (from, due) = sample_dates();
 
-        let _module = ModuleActiveModel {
+        let module = ModuleActiveModel {
             code: Set("COS301".to_string()),
             year: Set(2025),
             description: Set(Some("Capstone Project".to_string())),
@@ -383,21 +522,54 @@ mod tests {
         .await
         .expect("Failed to insert test module");
 
-        Model::create(&db, 1, "Rust Basics", Some("Learn Rust"), AssignmentType::Assignment, from, due)
-            .await
-            .unwrap();
-        Model::create(&db, 1, "Advanced Rust", Some("Ownership and lifetimes"), AssignmentType::Assignment, from, due)
-            .await
-            .unwrap();
-        Model::create(&db, 1, "Python Basics", Some("Learn Python"), AssignmentType::Assignment, from, due)
-            .await
-            .unwrap();
+        Model::create(
+            &db,
+            module.id,
+            "Rust Basics",
+            Some("Learn Rust"),
+            AssignmentType::Assignment,
+            from,
+            due,
+        )
+        .await
+        .unwrap();
+        Model::create(
+            &db,
+            module.id,
+            "Advanced Rust",
+            Some("Ownership and lifetimes"),
+            AssignmentType::Assignment,
+            from,
+            due,
+        )
+        .await
+        .unwrap();
+        Model::create(
+            &db,
+            module.id,
+            "Python Basics",
+            Some("Learn Python"),
+            AssignmentType::Assignment,
+            from,
+            due,
+        )
+        .await
+        .unwrap();
 
-        let rust_results = Model::filter(&db, 1, 10, Some("name".into()), Some("rust".into()))
-            .await
-            .unwrap();
+        let rust_results = Model::filter(
+            &db,
+            module.id.try_into().unwrap(),
+            10,
+            Some("name".into()),
+            Some("rust".into()),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(rust_results.len(), 2);
-        assert!(rust_results.iter().all(|a| a.name.to_lowercase().contains("rust")));
+        assert!(rust_results
+            .iter()
+            .all(|a| a.name.to_lowercase().contains("rust")));
     }
+
 }

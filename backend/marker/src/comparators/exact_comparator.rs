@@ -1,19 +1,17 @@
-//! A comparator that performs an exact match comparison between memo and student output.
+//! A comparator that performs an exact match comparison between memo and student output, where **line order matters**.
 //!
 //! The `ExactComparator` is designed to award marks on an all-or-nothing basis. It checks if a
-//! specific pattern appears in the student's output at least as many times as it appears in the
-//! memo (solution) output.
+//! specific pattern appears in the student's output at the same position as in the memo (solution) output. **Lines are compared in order; only lines at the same position are considered a match.**
 
 use crate::traits::comparator::OutputComparator;
 use crate::types::{TaskResult, Subsection};
 
-/// A comparator that awards full marks if the student's output contains a pattern at least as
-/// many times as the memo's output.
+/// A comparator that awards full marks if the student's output matches the memo output exactly, line by line and in order.
 ///
-/// This comparator is useful for tasks where the presence and frequency of a specific output line
-/// or pattern is a critical success factor. If the expected pattern appears one or more times in
-/// the memo, the student's output must contain it at least that many times to receive any marks.
-/// **Extra lines in the student output are penalized: full marks are only awarded if the number of lines matches exactly.**
+/// This comparator is useful for tasks where the presence, frequency, and order of a specific output line
+/// or pattern is a critical success factor. If the expected pattern appears at the same position in the memo and student output, full marks are awarded. **Extra lines in the student output are penalized: full marks are only awarded if the number of lines matches exactly.**
+///
+/// **Note:** Line order matters. Only lines at the same index in both memo and student outputs are considered for matching.
 pub struct ExactComparator;
 
 impl OutputComparator for ExactComparator {
@@ -37,23 +35,29 @@ impl OutputComparator for ExactComparator {
     ) -> TaskResult {
         let mut matched_patterns = Vec::new();
         let mut missed_patterns = Vec::new();
-
-        let all_match = memo_lines.iter().all(|memo_line| {
-            let found = student_lines.contains(memo_line);
-            if found {
+        if memo_lines.len() != student_lines.len() {
+            for i in student_lines.len()..memo_lines.len() {
+                missed_patterns.push(memo_lines[i].clone());
+            }
+            
+            return TaskResult {
+                name: section.name.clone(),
+                awarded: 0,
+                possible: section.value,
+                matched_patterns,
+                missed_patterns,
+            };
+        }
+        let mut all_match = true;
+        for (i, memo_line) in memo_lines.iter().enumerate() {
+            if student_lines[i] == *memo_line {
                 matched_patterns.push(memo_line.clone());
             } else {
                 missed_patterns.push(memo_line.clone());
+                all_match = false;
             }
-            found
-        });
-
-        let awarded = if all_match && memo_lines.len() == student_lines.len() {
-            section.value
-        } else {
-            0
-        };
-
+        }
+        let awarded = if all_match { section.value } else { 0 };
         TaskResult {
             name: section.name.clone(),
             awarded,
@@ -74,7 +78,7 @@ mod tests {
         lines.iter().map(|s| s.to_string()).collect()
     }
 
-    fn mock_subsection(value: u32) -> Subsection {
+    fn mock_subsection(value: i64) -> Subsection {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,

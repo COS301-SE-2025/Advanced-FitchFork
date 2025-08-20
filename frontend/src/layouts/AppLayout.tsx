@@ -1,47 +1,35 @@
 import { useEffect, useState } from 'react';
-import {
-  Avatar,
-  Breadcrumb,
-  Button,
-  Dropdown,
-  Drawer,
-  Layout,
-  Menu,
-  Typography,
-  type MenuProps,
-} from 'antd';
+import { Drawer, Layout, type MenuProps } from 'antd';
+import { UserOutlined, LogoutOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
-import {
-  UserOutlined,
-  LogoutOutlined,
-  DoubleLeftOutlined,
-  DoubleRightOutlined,
-  MenuOutlined,
-  MoonOutlined,
-  SunOutlined,
-} from '@ant-design/icons';
+import { useMediaQuery } from 'react-responsive';
 
-import Logo from '@/components/Logo';
 import { useTopMenuItems, BOTTOM_MENU_ITEMS, type MenuItem } from '@/constants/sidebar';
 import { useAuth } from '@/context/AuthContext';
-import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
-import { useMediaQuery } from 'react-responsive';
 import { useTheme } from '@/context/ThemeContext';
 
-const { Header, Sider, Content } = Layout;
-const { Text } = Typography;
+import SidebarContent from '@/components/layout/SidebarContent';
+import HeaderBar from '@/components/layout/HeaderBar';
 
-export default function AppLayout() {
+const { Header, Sider, Content } = Layout;
+
+const notifications = [
+  { id: 1, title: 'New submission in COS344', time: '2m ago' },
+  { id: 2, title: 'Assignment marked in COS332', time: '5m ago' },
+  { id: 3, title: 'System updated successfully', time: '10m ago' },
+];
+
+const AppLayout = () => {
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem('sidebarCollapsed') === 'true',
   );
   const [mobileSidebarVisible, setMobileSidebarVisible] = useState(false);
   const isMobile = useMediaQuery({ maxWidth: 768 });
-  const breadcrumbs = useBreadcrumbs();
+  const forceCollapsed = useMediaQuery({ maxWidth: 1024 });
+
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, isAdmin, isUser, user, profilePictureUrl } = useAuth();
-  const forceCollapsed = useMediaQuery({ maxWidth: 1024 });
+  const { logout, isAdmin, isUser } = useAuth();
   const { mode, setMode } = useTheme();
   const isDark = mode === 'dark';
 
@@ -50,9 +38,7 @@ export default function AppLayout() {
   }, [collapsed]);
 
   useEffect(() => {
-    if (forceCollapsed) {
-      setCollapsed(true);
-    }
+    if (forceCollapsed) setCollapsed(true);
   }, [forceCollapsed]);
 
   const topMenuItems = useTopMenuItems();
@@ -91,107 +77,23 @@ export default function AppLayout() {
     },
   ];
 
-  const renderSidebarContent = () => (
-    <div className="bg-white dark:bg-gray-950 h-full flex flex-col justify-between">
-      <div>
-        <div
-          className="py-4 mb-4 flex items-center justify-center cursor-pointer"
-          onClick={() => isMobile && setMobileSidebarVisible(false)}
-        >
-          <Logo collapsed={collapsed && !isMobile} />
-        </div>
-
-        <div className="px-2">
-          <Menu
-            mode="inline"
-            theme="light"
-            selectedKeys={[
-              visibleMenuItems
-                .map((item) => item.key)
-                .filter(
-                  (key) => location.pathname === key || location.pathname.startsWith(key + '/'),
-                )
-                .sort((a, b) => b.length - a.length)[0] ?? '',
-            ]}
-            items={visibleMenuItems}
-            onClick={({ key }) => {
-              if (key === 'logout') return;
-              navigate(key);
-              if (isMobile) setMobileSidebarVisible(false);
-            }}
-            inlineCollapsed={!isMobile && collapsed}
-            className="!bg-transparent !p-0 mt-2"
-            style={{ border: 'none' }}
-          />
-        </div>
-      </div>
-      <div className="px-2 pb-4">
-        <Menu
-          mode="inline"
-          theme="light"
-          selectedKeys={[
-            visibleMenuItems
-              .map((item) => item.key)
-              .filter((key) => location.pathname === key || location.pathname.startsWith(key + '/'))
-              .sort((a, b) => b.length - a.length)[0] ?? '',
-          ]}
-          onClick={({ key }) => {
-            if (key === 'logout') {
-              logout();
-              navigate('/login');
-            } else if (key === 'theme-toggle') {
-              // Do nothing: Theme toggle handled inside its own onClick
-              return;
-            } else {
-              navigate(key);
-            }
-            if (isMobile) setMobileSidebarVisible(false);
-          }}
-          inlineCollapsed={!isMobile && collapsed}
-          className="!bg-transparent"
-          style={{ border: 'none' }}
-        >
-          <Menu.Item
-            key="theme-toggle"
-            icon={isDark ? <MoonOutlined /> : <SunOutlined />}
-            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            onClick={(e) => {
-              e.domEvent.stopPropagation(); // Prevent sidebar collapse if inside collapsible menu
-              setMode(isDark ? 'light' : 'dark');
-            }}
-          >
-            {!collapsed && (isDark ? 'Dark Mode' : 'Light Mode')}
-          </Menu.Item>
-
-          {/* Then render all bottom items */}
-          {visibleBottomItems.map((item) => {
-            if (!item) return null;
-            return (
-              <Menu.Item key={item.key} icon={item.icon}>
-                {item.label}
-              </Menu.Item>
-            );
-          })}
-        </Menu>
-
-        {!isMobile && !forceCollapsed && (
-          <div className="px-1 mt-3">
-            <Button
-              block
-              type="default"
-              onClick={() => setCollapsed((prev) => !prev)}
-              icon={collapsed ? <DoubleRightOutlined /> : <DoubleLeftOutlined />}
-            >
-              {collapsed ? '' : 'Collapse'}
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const sidebarProps = {
+    collapsed,
+    setCollapsed,
+    isMobile,
+    location,
+    navigate,
+    visibleMenuItems,
+    visibleBottomItems,
+    forceCollapsed,
+    setMode,
+    isDark,
+    setMobileSidebarVisible,
+    logout,
+  };
 
   return (
-    <Layout className="min-h-screen bg-gray-100 dark:bg-gray-950  !overflow-hidden">
+    <Layout className="h-screen overflow-hidden !bg-gray-50 dark:!bg-gray-950">
       {isMobile ? (
         <Drawer
           placement="right"
@@ -200,12 +102,13 @@ export default function AppLayout() {
           width={240}
           closable={false}
           className="!p-0"
-          styles={{
-            body: { padding: 0, margin: 0 },
-            header: { display: 'none' },
-          }}
+          styles={{ body: { padding: 0 }, header: { display: 'none' } }}
         >
-          {renderSidebarContent()}
+          <SidebarContent
+            {...sidebarProps}
+            collapsed={false}
+            onMobileNavigate={() => setMobileSidebarVisible(false)}
+          />
         </Drawer>
       ) : (
         <Sider
@@ -217,87 +120,25 @@ export default function AppLayout() {
           trigger={null}
           className="!bg-transparent border-r border-gray-200 dark:border-gray-800"
         >
-          {renderSidebarContent()}
+          <SidebarContent {...sidebarProps} />
         </Sider>
       )}
 
-      <Layout className="flex flex-col w-full h-screen !bg-white dark:!bg-gray-950">
-        <Header className="!bg-transparent border-b border-gray-200 dark:border-gray-800 !px-4 sm:px-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 w-full h-full">
-            {/* Mobile: profile + hamburger in row */}
-            {isMobile && (
-              <div className="flex items-center justify-between w-full h-full">
-                <Dropdown
-                  menu={{ items: profileMenuItems }}
-                  trigger={['click']}
-                  placement="bottomRight"
-                >
-                  <div className="cursor-pointer flex items-center gap-2">
-                    <Avatar
-                      size="large"
-                      icon={<UserOutlined />}
-                      src={profilePictureUrl || undefined}
-                    />
-
-                    <Text className="text-gray-700 dark:text-gray-200 font-medium">
-                      {user?.username ?? 'User'}
-                    </Text>
-                  </div>
-                </Dropdown>
-
-                <Button
-                  type="text"
-                  icon={<MenuOutlined />}
-                  onClick={() => setMobileSidebarVisible(true)}
-                  className="text-gray-700 dark:text-gray-200"
-                />
-              </div>
-            )}
-
-            {/* Breadcrumbs (desktop only) */}
-            <Breadcrumb
-              separator=">"
-              className="hidden sm:flex flex-1"
-              items={breadcrumbs.map(({ path, label, isLast }) => ({
-                title: isLast ? (
-                  label
-                ) : (
-                  <a onClick={() => navigate(path)} className="text-blue-600 hover:underline">
-                    {label}
-                  </a>
-                ),
-              }))}
-            />
-
-            {/* Right (desktop only): profile */}
-            {!isMobile && (
-              <Dropdown
-                menu={{ items: profileMenuItems }}
-                trigger={['click']}
-                placement="bottomRight"
-              >
-                <div className="cursor-pointer flex items-center gap-2 flex-row-reverse">
-                  <Avatar
-                    size="large"
-                    icon={<UserOutlined />}
-                    src={profilePictureUrl || undefined}
-                  />
-
-                  <Text className="hidden sm:inline text-gray-700 dark:text-gray-200 font-medium">
-                    {user?.username ?? 'User'}
-                  </Text>
-                </div>
-              </Dropdown>
-            )}
-          </div>
+      <Layout className="!bg-transparent flex flex-col flex-1 min-h-0">
+        <Header className="border-b !bg-white dark:!bg-gray-900 dark:!bg-gray border-gray-200 dark:border-gray-800 !px-4 sm:px-6">
+          <HeaderBar
+            notifications={notifications}
+            profileMenuItems={profileMenuItems}
+            onMenuClick={() => setMobileSidebarVisible(true)}
+          />
         </Header>
 
-        <Content className="flex-1 min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-950">
-          <div className="h-full">
-            <Outlet />
-          </div>
+        <Content className="flex-1 min-h-0 overflow-hidden !bg-transparent">
+          <Outlet />
         </Content>
       </Layout>
     </Layout>
   );
-}
+};
+
+export default AppLayout;

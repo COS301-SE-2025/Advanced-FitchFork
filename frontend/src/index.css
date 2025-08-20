@@ -1,7 +1,12 @@
 @import 'tailwindcss';
 
+/* Enable `dark:` variant */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/**
+ * Theme color variables
+ * These define a consistent grayscale palette used throughout the app.
+ */
 @theme {
   --color-gray-50: #fafafa;
   --color-gray-100: #f5f5f5;
@@ -12,10 +17,14 @@
   --color-gray-600: #525252;
   --color-gray-700: #404040;
   --color-gray-800: #262626;
-  --color-gray-900: #171717;
-  --color-gray-950: #0f0f0f;
+  --color-gray-900: #141414;
+  --color-gray-950: #101010;
 }
 
+/**
+ * Reset base html, body, and root element
+ * Ensures full height layout and no overflow
+ */
 html,
 body,
 #root {
@@ -23,4 +32,113 @@ body,
   width: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
+}
+
+/**
+ * Table header background customization
+ * 
+ * We override Ant Design table header background to match our theme.
+ * 
+ * Light mode:
+ *   Use a neutral gray (`--color-gray-100`) for subtle contrast.
+ * 
+ * Dark mode:
+ *   Use a deep gray (`--color-gray-900`) for a dark-friendly header.
+ */
+
+/* Light mode table header */
+:root .ant-table-thead > tr > th {
+  background-color: var(--color-gray-100) !important;
+}
+
+/* Dark mode table header */
+.dark .ant-table-thead > tr > th {
+  background-color: var(--color-gray-900) !important;
+}
+
+.dark .ant-table-row {
+  background-color: var(--color-gray-900);
+}
+
+/**
+ * Custom Prose Fixes for Markdown Rendering
+ * Tailwind Preflight resets styles on `ul`, `ol`, `blockquote`, etc.
+ * These rules restore bullet points, numbering, and blockquote visuals manually.
+ * 
+ * You can remove these if the Tailwind Typography Plugin is fixed and loaded properly:
+ * https://v1.tailwindcss.com/docs/typography-plugin
+ */
+
+.prose ul {
+  list-style-type: disc;
+  margin-left: 1.5rem;
+}
+
+.prose ol {
+  list-style-type: decimal;
+  margin-left: 1.5rem;
+}
+
+.prose blockquote {
+  border-left: 4px solid #ddd;
+  padding-left: 1rem;
+  color: #666;
+  font-style: italic;
+}
+
+/* override light theme in dark mode manually */
+.dark .hljs {
+  background: transparent !important;
+  color: #e0e0e0 !important;
+}
+
+/* optional: override syntax tokens */
+.dark .hljs-comment {
+  color: #7c7c7c;
+}
+.dark .hljs-keyword {
+  color: #d4bfff;
+}
+.dark .hljs-string {
+  color: #b5f4a5;
+}
+.dark .hljs-number {
+  color: #f78c6c;
+}
+
+/* Light/Dark variables for scrollbar colors (using your theme grays) */
+:root {
+  --sb-track: var(--color-);
+  --sb-thumb: var(--color-gray-300);
+  --sb-thumb-hover: var(--color-gray-400);
+}
+.dark {
+  --sb-track: var(--color-gray-900);
+  --sb-thumb: var(--color-gray-700);
+  --sb-thumb-hover: var(--color-gray-600);
+}
+
+/* Apply globally without a class — Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb-thumb) var(--sb-track);
+}
+
+/* Apply globally without a class — Chrome/Edge/Safari */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: var(--sb-track);
+  border-radius: 9999px; /* keeps your current shape */
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb);
+  border-radius: 9999px;
+  border: 2px solid var(--sb-track);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--sb-thumb-hover);
 }

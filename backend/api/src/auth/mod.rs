@@ -1,16 +1,13 @@
+//! Authentication utilities and JWT helpers.
+//!
+//! Provides claims, guards, extractors, middleware, and a function to generate JWTs.
+
 pub mod middleware;
 pub mod claims;
 pub mod extractors;
 pub mod guards;
 
 pub use claims::{Claims, AuthUser};
-pub use guards::{
-    require_authenticated,
-    require_admin,
-    require_lecturer,
-    require_tutor,
-    require_student,
-};
 
 use jsonwebtoken::{encode, Header, EncodingKey};
 use chrono::{Utc, Duration};

@@ -1,7 +1,7 @@
-//! A comparator that awards marks based on the percentage of matching patterns.
+//! A comparator that awards marks based on the percentage of matching patterns, where **line order matters**.
 //!
 //! The `PercentageComparator` calculates the ratio of the occurrence of a pattern in the student's
-//! output compared to the memo's output and awards marks proportionally.
+//! output compared to the memo's output and awards marks proportionally. **Lines are compared in order; only lines at the same position are considered a match.**
 
 use crate::traits::comparator::OutputComparator;
 use crate::types::{TaskResult, Subsection};
@@ -11,7 +11,11 @@ use crate::types::{TaskResult, Subsection};
 /// This comparator is useful for tasks where partial credit is desirable. The final marks are
 /// calculated as a percentage of `max_marks`, based on how many of the required pattern occurrences
 /// are present in the student's output. **Extra lines in the student output are penalized: the score is multiplied by the ratio of memo lines to student lines if student_lines > memo_lines.**
+///
+/// **Note:** Line order matters. Only lines at the same index in both memo and student outputs are considered for matching.
 pub struct PercentageComparator;
+
+/// TODO: Add the ability to toggle between line order matters and line order doesn't matter.
 
 impl OutputComparator for PercentageComparator {
     /// Compares student and memo outputs based on the percentage of matching lines.
@@ -45,29 +49,32 @@ impl OutputComparator for PercentageComparator {
         let mut matched_count = 0;
         let mut matched_patterns = Vec::new();
         let mut missed_patterns = Vec::new();
-        let mut student_lines_mut = student_lines.to_vec();
+        let min_len = memo_lines.len().min(student_lines.len());
 
-        for memo_line in memo_lines {
-            if let Some(pos) = student_lines_mut.iter().position(|s| s == memo_line) {
+        for i in 0..min_len {
+            if memo_lines[i] == student_lines[i] {
                 matched_count += 1;
-                matched_patterns.push(memo_line.clone());
-                student_lines_mut.remove(pos);
+                matched_patterns.push(memo_lines[i].clone());
             } else {
-                missed_patterns.push(memo_line.clone());
+                missed_patterns.push(memo_lines[i].clone());
             }
+        }
+  
+        for i in min_len..memo_lines.len() {
+            missed_patterns.push(memo_lines[i].clone());
         }
 
         let percentage = matched_count as f32 / memo_lines.len() as f32;
-        let mut awarded = (section.value as f32 * percentage).round() as u32;
+        let mut awarded = (section.value as f32 * percentage).round() as i64;
 
         if student_lines.len() > memo_lines.len() && student_lines.len() > 0 {
             let penalty = memo_lines.len() as f32 / student_lines.len() as f32;
-            awarded = (awarded as f32 * penalty).round() as u32;
+            awarded = (awarded as f32 * penalty).round() as i64;
         }
 
         TaskResult {
             name: section.name.clone(),
-            awarded,
+            awarded: awarded as i64,
             possible: section.value,
             matched_patterns,
             missed_patterns,
@@ -85,7 +92,7 @@ mod tests {
         lines.iter().map(|s| s.to_string()).collect()
     }
 
-    fn mock_subsection(value: u32) -> Subsection {
+    fn mock_subsection(value: i64) -> Subsection {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,
@@ -96,7 +103,7 @@ mod tests {
     fn test_perfect_match_percentage() {
         let comparator = PercentageComparator;
         let memo_lines = to_string_vec(&["line 1", "line 2"]);
-        let student_lines = to_string_vec(&["line 2", "line 1"]);
+        let student_lines = to_string_vec(&["line 1", "line 2"]);
         let section = mock_subsection(10);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 10);
@@ -108,7 +115,7 @@ mod tests {
     fn test_partial_match_percentage() {
         let comparator = PercentageComparator;
         let memo_lines = to_string_vec(&["line 1", "line 2", "line 3", "line 4"]);
-        let student_lines = to_string_vec(&["line 1", "line 3"]);
+        let student_lines = to_string_vec(&["line 1", "line 2"]);
         let section = mock_subsection(20);
         // 2 out of 4 lines match (50%), so 10 marks should be awarded.
         let result = comparator.compare(&section, &memo_lines, &student_lines);
@@ -165,7 +172,7 @@ mod tests {
     #[test]
     fn test_duplicate_lines_in_memo() {
         let comparator = PercentageComparator;
-        let memo_lines = to_string_vec(&["a", "a", "b"]);
+        let memo_lines = to_string_vec(&["a", "b", "a"]);
         let student_lines = to_string_vec(&["a", "b"]);
         let section = mock_subsection(12);
         // 2 out of 3 lines match (66.6%), so 8 marks.
@@ -177,7 +184,7 @@ mod tests {
     fn test_duplicate_lines_in_student() {
         let comparator = PercentageComparator;
         let memo_lines = to_string_vec(&["a", "b"]);
-        let student_lines = to_string_vec(&["a", "a", "b", "b"]);
+        let student_lines = to_string_vec(&["a", "b", "a", "b"]);
         let section = mock_subsection(10);
         // All memo lines are found, but extra lines are penalised, so 50% match.
         let result = comparator.compare(&section, &memo_lines, &student_lines);

@@ -26,7 +26,7 @@ impl Seeder for AssignmentMemoOutputSeeder {
         }
 
         for assignment in &assignments {
-            if assignment.id == 9999 || assignment.id == 9998 {
+            if assignment.id == 9999 || assignment.id == 9998 || assignment.id == 10003 {
                 continue;
             }
             let relevant_tasks: Vec<_> = tasks

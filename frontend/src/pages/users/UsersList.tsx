@@ -1,506 +1,294 @@
-import {
-  Table,
-  Space,
-  Button,
-  Input,
-  Popconfirm,
-  Select,
-  Empty,
-  Tooltip,
-  Tag,
-  Dropdown,
-} from 'antd';
-import {
-  EditOutlined,
-  DeleteOutlined,
-  CheckOutlined,
-  CloseOutlined,
-  ReloadOutlined,
-  EyeOutlined,
-  MoreOutlined,
-} from '@ant-design/icons';
-import { useEffect, useState } from 'react';
-import type { ColumnsType } from 'antd/es/table';
-import type { User } from '@/types/users';
-import type { SortOption } from '@/types/common';
-import { useTableQuery } from '@/hooks/useTableQuery';
-import TableControlBar from '@/components/TableControlBar';
-import TableTagSummary from '@/components/TableTagSummary';
-import TableCreateModal from '@/components/TableCreateModal';
-import { useNotifier } from '@/components/Notifier';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/PageHeader';
+import { message } from '@/utils/message';
+import { EntityList, type EntityListHandle, type EntityListProps } from '@/components/EntityList';
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import CreateModal from '@/components/common/CreateModal';
+import EditModal from '@/components/common/EditModal';
+import UserCard from '@/components/users/UserCard';
+import UserAdminTag from '@/components/users/UserAdminTag';
+
 import { listUsers, editUser, deleteUser } from '@/services/users';
-import { register } from '@/services/auth';
+import type { User } from '@/types/users';
+import dayjs from 'dayjs';
+import { createUser } from '@/services/users/post';
+import UserListItem from '@/components/users/UserListItem';
+import { UsersEmptyState } from '@/components/users';
 
 const UsersList = () => {
-  // ======================================================================
-  // =========================== State & Hooks ============================
-  // ======================================================================
   const navigate = useNavigate();
+  const listRef = useRef<EntityListHandle>(null);
 
-  const { notifySuccess, notifyError } = useNotifier();
-  const {
-    searchTerm,
-    setSearchTerm,
-    sorterState,
-    setSorterState,
-    filterState,
-    setFilterState,
-    pagination,
-    setPagination,
-    clearSearch,
-    clearSorters,
-    clearFilters,
-    clearAll,
-  } = useTableQuery();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<User | null>(null);
 
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
-  const [editingRowId, setEditingRowId] = useState<number | null>(null);
-  const [editCache, setEditCache] = useState<Partial<User>>({});
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newUser, setNewUser] = useState({
-    username: '',
-    email: '',
-    admin: false,
-  });
-
-  // ======================================================================
-  // ============================ Fetch Users =============================
-  // ======================================================================
-
-  const fetchUsers = async () => {
-    setLoading(true);
-
-    const sort: SortOption[] = sorterState.map(({ field, order }) => ({ field, order }));
-
+  const fetchUsers = async ({
+    page,
+    per_page,
+    query,
+    sort,
+    filters,
+  }: {
+    page: number;
+    per_page: number;
+    query?: string;
+    sort: { field: string; order: 'ascend' | 'descend' }[];
+    filters: Record<string, string[]>;
+  }) => {
     const res = await listUsers({
-      page: pagination.current,
-      per_page: pagination.pageSize,
-      query: searchTerm || undefined,
-      email: filterState.email?.[0],
-      username: filterState.username?.[0],
-      admin:
-        filterState.admin?.[0] === 'true'
-          ? true
-          : filterState.admin?.[0] === 'false'
-            ? false
-            : undefined,
-
+      page,
+      per_page,
+      query,
       sort,
+      username: filters.username?.[0],
+      email: filters.email?.[0],
+      admin:
+        filters.admin?.[0] === 'true' ? true : filters.admin?.[0] === 'false' ? false : undefined,
     });
 
     if (res.success) {
-      setUsers(res.data.users);
-      setPagination({ total: res.data.total });
+      return {
+        items: res.data.users,
+        total: res.data.total,
+      };
+    }
+
+    message.error(`Failed to fetch users: ${res.message}`);
+    return { items: [], total: 0 };
+  };
+
+  const handleAddUser = async (formValues: Record<string, any>) => {
+    const { username, email, password } = formValues;
+
+    const res = await createUser({
+      username,
+      email,
+      password,
+    });
+
+    if (res.success) {
+      message.success(res.message || 'User created successfully');
+      setCreateOpen(false);
+      listRef.current?.refresh();
     } else {
-      notifyError('Failed to fetch users');
-    }
-
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchUsers();
-  }, [searchTerm, filterState, sorterState, pagination.current, pagination.pageSize]);
-
-  // ======================================================================
-  // ============================= Add User ===============================
-  // ======================================================================
-
-  const handleAddUser = () => {
-    setNewUser({ username: '', email: '', admin: false });
-    setIsAddModalOpen(true);
-  };
-
-  const handleSubmitNewUser = async (formValues: Record<string, any>) => {
-    const { username, email } = formValues;
-
-    try {
-      const res = await register(username, email, 'changeme123');
-
-      if (res.success) {
-        notifySuccess('User registered successfully', res.message);
-        setIsAddModalOpen(false);
-        fetchUsers();
-      } else {
-        notifyError(res.message || 'Failed to register user', res.message);
-      }
-    } catch (err) {
-      notifyError('Registration failed', 'Registration failed due to network/server error');
+      message.error(`Failed to create user: ${res.message}`);
     }
   };
 
-  // ======================================================================
-  // ======================== Edit & Delete User ==========================
-  // ======================================================================
-
-  const handleEditSave = async () => {
-    const user = users.find((u) => u.id === editingRowId);
-    if (!user || !editCache.email || !editCache.username) {
-      notifyError('Incomplete user info');
-      return;
-    }
+  const handleEditUser = async (values: Record<string, any>) => {
+    if (!editingItem) return;
 
     const updated: User = {
-      ...user,
-      ...editCache,
+      ...editingItem,
+      ...values,
       updated_at: new Date().toISOString(),
     };
 
-    const res = await editUser(updated.id, updated);
+    const res = await editUser(editingItem.id, updated);
     if (res.success) {
-      notifySuccess('User updated successfully', res.message);
-      setUsers((prev) => prev.map((u) => (u.id === updated.id ? res.data : u)));
-      setEditingRowId(null);
-      setEditCache({});
+      message.success(res.message || 'User updated successfully');
+      setEditOpen(false);
+      setEditingItem(null);
+      listRef.current?.refresh();
     } else {
-      notifyError('Failed to update user', res.message);
+      message.error(`Failed to update user: ${res.message}`);
     }
   };
 
-  const handleDelete = async (id: number) => {
-    const res = await deleteUser(id);
+  const handleDeleteUser = async (user: User, refresh: () => void) => {
+    const res = await deleteUser(user.id);
     if (res.success) {
-      setUsers((prev) => prev.filter((u) => u.id !== id));
-      setSelectedRowKeys((prev) => prev.filter((k) => k !== id));
-      notifySuccess('User deleted successfully', res.message);
+      message.success(res.message || 'User deleted successfully');
+      refresh();
     } else {
-      notifyError('Failed to delete user', res.message);
+      message.error(`Failed to delete user: ${res.message}`);
     }
   };
 
-  const handleBulkDelete = async () => {
-    for (const id of selectedRowKeys) {
-      await handleDelete(Number(id));
-    }
-    setSelectedRowKeys([]);
-    if (selectedRowKeys.length > 0) {
-      notifySuccess(
-        'Selected users deleted',
-        `${selectedRowKeys.length} user(s) have been deleted.`,
-      );
-    }
-  };
-
-  // ======================================================================
-  // =========================== Table Columns ============================
-  // ======================================================================
-
-  const columns: ColumnsType<User> = [
-    {
-      title: 'Username',
-      dataIndex: 'username',
-      key: 'username',
-      render: (_, record) =>
-        editingRowId === record.id ? (
-          <Input
-            value={editCache.username}
-            onChange={(e) => setEditCache((prev) => ({ ...prev, username: e.target.value }))}
-          />
-        ) : (
-          record.username
-        ),
-      sorter: { multiple: 1 },
-      sortOrder: sorterState.find((s) => s.field === 'username')?.order ?? null,
-      filteredValue: filterState.username || null,
-      onFilter: () => true,
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
-        <div className="flex flex-col gap-2 p-2 w-56">
-          <Input
-            placeholder="Search username"
-            value={selectedKeys[0]}
-            onChange={(e) => setSelectedKeys([e.target.value])}
-            onPressEnter={() => confirm()}
-          />
-          <div className="flex justify-between gap-2">
-            <Button type="primary" size="small" onClick={() => confirm()}>
-              Filter
-            </Button>
-            <Button
-              size="small"
-              onClick={() => {
-                clearFilters?.();
-                confirm({ closeDropdown: true });
-              }}
-            >
-              Reset
-            </Button>
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: 'Email',
-      dataIndex: 'email',
-      key: 'email',
-      render: (_, record) =>
-        editingRowId === record.id ? (
-          <Input
-            value={editCache.email}
-            onChange={(e) => setEditCache((prev) => ({ ...prev, email: e.target.value }))}
-          />
-        ) : (
-          <a href={`mailto:${record.email}`}>{record.email}</a>
-        ),
-      sorter: { multiple: 2 },
-      sortOrder: sorterState.find((s) => s.field === 'email')?.order ?? null,
-      filteredValue: filterState.email || null,
-      onFilter: () => true,
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
-        <div className="flex flex-col gap-2 p-2 w-56">
-          <Input
-            placeholder="Search email"
-            value={selectedKeys[0]}
-            onChange={(e) => setSelectedKeys([e.target.value])}
-            onPressEnter={() => confirm()}
-          />
-          <div className="flex justify-between gap-2">
-            <Button type="primary" size="small" onClick={() => confirm()}>
-              Filter
-            </Button>
-            <Button
-              size="small"
-              onClick={() => {
-                clearFilters?.();
-                confirm({ closeDropdown: true });
-              }}
-            >
-              Reset
-            </Button>
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: 'Admin',
-      dataIndex: 'admin',
-      key: 'admin',
-      filters: [
-        { text: 'Admin', value: 'true' },
-        { text: 'Regular', value: 'false' },
-      ],
-      filteredValue: filterState.admin || null,
-      sorter: { multiple: 3 },
-      sortOrder: sorterState.find((s) => s.field === 'admin')?.order ?? null,
-      onFilter: () => true,
-      render: (_, record) =>
-        editingRowId === record.id ? (
-          <Select
-            value={editCache.admin ? 'admin' : 'regular'}
-            onChange={(val) => setEditCache((prev) => ({ ...prev, admin: val === 'admin' }))}
-            style={{ width: 120 }}
-          >
-            <Select.Option value="admin">Admin</Select.Option>
-            <Select.Option value="regular">Regular</Select.Option>
-          </Select>
-        ) : (
-          <Tag color={record.admin ? 'green' : undefined}>{record.admin ? 'Admin' : 'Regular'}</Tag>
-        ),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      align: 'right',
-      width: 100,
-      render: (_, record) => {
-        if (editingRowId === record.id) {
-          return (
-            <Space>
-              <Tooltip title="Save">
-                <Button
-                  type="primary"
-                  shape="default"
-                  icon={<CheckOutlined />}
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleEditSave();
-                  }}
-                />
-              </Tooltip>
-              <Tooltip title="Cancel">
-                <Button
-                  shape="default"
-                  icon={<CloseOutlined />}
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingRowId(null);
-                  }}
-                />
-              </Tooltip>
-            </Space>
-          );
-        }
-
-        return (
-          <div
-            onClick={(e) => {
-              e.stopPropagation(); // Prevent row navigation when interacting with the dropdown
-            }}
-          >
-            <Dropdown
-              trigger={['click']}
-              menu={{
-                items: [
-                  {
-                    key: 'view',
-                    icon: <EyeOutlined />,
-                    label: 'View',
-                  },
-                  {
-                    key: 'edit',
-                    icon: <EditOutlined />,
-                    label: 'Edit',
-                  },
-                  {
-                    key: 'delete',
-                    icon: <DeleteOutlined />,
-                    danger: true,
-                    label: (
-                      <Popconfirm
-                        title="Delete this user?"
-                        onConfirm={(e) => {
-                          e?.stopPropagation();
-                          handleDelete(record.id);
-                        }}
-                        onCancel={(e) => e?.stopPropagation()}
-                        okText="Yes"
-                        cancelText="No"
-                      >
-                        <span onClick={(e) => e.stopPropagation()}>Delete</span>
-                      </Popconfirm>
-                    ),
-                  },
-                ],
-                onClick: ({ key, domEvent }) => {
-                  domEvent.preventDefault();
-                  domEvent.stopPropagation();
-
-                  if (key === 'view') navigate(`/users/${record.id}`);
-                  else if (key === 'edit') {
-                    setEditingRowId(record.id);
-                    setEditCache(record);
-                  }
-                },
-              }}
-            >
-              <Button
-                icon={<MoreOutlined />}
-                style={{ borderRadius: 6 }}
-                onClick={(e) => e.stopPropagation()}
-              />
-            </Dropdown>
-          </div>
-        );
+  const actions: EntityListProps<User>['actions'] = {
+    control: [
+      {
+        key: 'create',
+        label: 'Add User',
+        icon: <PlusOutlined />,
+        isPrimary: true,
+        handler: ({ refresh }: { refresh: () => void }) => {
+          setCreateOpen(true);
+          refresh();
+        },
       },
-    },
-  ];
-
-  // ======================================================================
-  // ============================== Render ================================
-  // ======================================================================
+    ],
+    entity: (user: User) => [
+      {
+        key: 'edit',
+        label: 'Edit',
+        icon: <EditOutlined />,
+        handler: ({ refresh }) => {
+          setEditingItem(user);
+          setEditOpen(true);
+          refresh();
+        },
+      },
+      {
+        key: 'delete',
+        label: 'Delete',
+        icon: <DeleteOutlined />,
+        confirm: true,
+        handler: ({ refresh }) => handleDeleteUser(user, refresh),
+      },
+    ],
+    bulk: [
+      {
+        key: 'bulk-delete',
+        label: 'Bulk Delete',
+        icon: <DeleteOutlined />,
+        isPrimary: true,
+        handler: ({ selected, refresh }) => {
+          if (!selected || selected.length === 0) {
+            message.warning('No users selected');
+            return;
+          }
+          message.info(`Bulk delete not implemented yet. ${selected.length} users selected.`);
+          refresh();
+        },
+      },
+      {
+        key: 'bulk-edit',
+        label: 'Bulk Edit',
+        icon: <EditOutlined />,
+        handler: ({ selected, refresh }) => {
+          if (!selected || selected.length === 0) {
+            message.warning('No users selected');
+            return;
+          }
+          message.info(`Bulk edit not implemented yet. ${selected.length} users selected.`);
+          refresh();
+        },
+      },
+    ],
+  };
 
   return (
-    <div className="bg-white dark:bg-gray-950 p-4 sm:p-6 h-full">
-      <PageHeader title="Users" description="Manage all registered users in the system." />
-      <TableControlBar
-        handleSearch={setSearchTerm}
-        searchTerm={searchTerm}
-        handleAdd={handleAddUser}
-        addButtonText="Add User"
-        handleBulkDelete={handleBulkDelete}
-        selectedRowKeys={selectedRowKeys}
-        clearMenuItems={[
-          { key: 'clear-search', label: 'Clear Search', onClick: clearSearch },
-          { key: 'clear-sort', label: 'Clear Sort', onClick: clearSorters },
-          { key: 'clear-filters', label: 'Clear Filters', onClick: clearFilters },
-          { key: 'clear-all', label: 'Clear All', onClick: clearAll },
-        ]}
-        searchPlaceholder="Search email or username"
-        bulkDeleteConfirmMessage="Delete selected users?"
-      />
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex h-full flex-col gap-4">
+          <PageHeader title="Users" description="Manage all registered users in the system." />
 
-      <TableTagSummary
-        searchTerm={searchTerm}
-        onClearSearch={clearSearch}
-        filters={filterState}
-        onClearFilter={(key) => {
-          const updated = { ...filterState };
-          delete updated[key];
-          setFilterState(updated);
-        }}
-        sorters={sorterState.map((s) => ({ columnKey: s.field, order: s.order }))}
-        onClearSorter={(key) => setSorterState(sorterState.filter((s) => s.field !== key))}
-      />
-
-      <Table<User>
-        rowKey="id"
-        columns={columns}
-        dataSource={users}
-        rowSelection={{
-          selectedRowKeys,
-          onChange: setSelectedRowKeys,
-        }}
-        onRow={(record) => ({
-          onClick: () => {
-            if (editingRowId === null) {
-              navigate(`/users/${record.id}`);
+          <EntityList<User>
+            ref={listRef}
+            name="Users"
+            fetchItems={fetchUsers}
+            renderGridItem={(user, actions) => <UserCard user={user} actions={actions} />}
+            renderListItem={(u) => (
+              <UserListItem user={u} onClick={(user) => navigate(`/users/${user.id}`)} />
+            )}
+            getRowKey={(item) => item.id}
+            onRowClick={(item) => navigate(`/users/${item.id}`)}
+            columnToggleEnabled
+            columns={[
+              {
+                title: 'ID',
+                dataIndex: 'id',
+                key: 'id',
+                sorter: { multiple: 0 },
+                defaultHidden: true,
+              },
+              {
+                title: 'Username',
+                dataIndex: 'username',
+                key: 'username',
+                sorter: { multiple: 1 },
+              },
+              {
+                title: 'Email',
+                dataIndex: 'email',
+                key: 'email',
+                sorter: { multiple: 2 },
+                render: (_, record) => <a href={`mailto:${record.email}`}>{record.email}</a>,
+              },
+              {
+                title: 'Admin',
+                dataIndex: 'admin',
+                key: 'admin',
+                sorter: { multiple: 3 },
+                filters: [
+                  { text: 'Admin', value: 'true' },
+                  { text: 'Regular', value: 'false' },
+                ],
+                render: (_, record) => <UserAdminTag admin={record.admin} />,
+              },
+              {
+                title: 'Created At',
+                dataIndex: 'created_at',
+                key: 'created_at',
+                sorter: { multiple: 4 },
+                defaultHidden: true,
+                render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+              },
+              {
+                title: 'Updated At',
+                dataIndex: 'updated_at',
+                key: 'updated_at',
+                sorter: { multiple: 5 },
+                defaultHidden: true,
+                render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm'),
+              },
+            ]}
+            actions={actions}
+            emptyNoEntities={
+              <UsersEmptyState
+                onCreate={() => setCreateOpen(true)}
+                onRefresh={() => listRef.current?.refresh()}
+              />
             }
-          },
-        })}
-        loading={loading}
-        pagination={{
-          ...pagination,
-          showSizeChanger: true,
-          showQuickJumper: true,
-          onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
-        }}
-        onChange={(pagination, filters, sorter) => {
-          const sorterArray = (Array.isArray(sorter) ? sorter : [sorter])
-            .filter(
-              (s): s is { columnKey: string; order: 'ascend' | 'descend' } =>
-                !!s.columnKey && !!s.order,
-            )
-            .map((s) => ({
-              field: String(s.columnKey),
-              order: s.order,
-            }));
+          />
 
-          setSorterState(sorterArray);
-          setFilterState({ ...filters } as Record<string, string[]>);
+          <CreateModal
+            open={createOpen}
+            onCancel={() => setCreateOpen(false)}
+            onCreate={handleAddUser}
+            initialValues={{
+              username: '',
+              email: '',
+              admin: false,
+            }}
+            fields={[
+              { name: 'username', label: 'Username', type: 'text', required: true },
+              { name: 'email', label: 'Email', type: 'email', required: true },
+              {
+                name: 'password',
+                label: 'Password',
+                type: 'password',
+                required: true,
+                defaultValue: 'changeme123',
+              },
+            ]}
+            title="Add User"
+          />
 
-          setPagination({
-            current: pagination.current ?? 1,
-            pageSize: pagination.pageSize ?? 10,
-          });
-        }}
-        locale={{
-          emptyText: (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No users found.">
-              <Button icon={<ReloadOutlined />} onClick={clearAll}>
-                Clear All Filters
-              </Button>
-            </Empty>
-          ),
-        }}
-        className="border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
-      />
-
-      <TableCreateModal
-        open={isAddModalOpen}
-        onCancel={() => setIsAddModalOpen(false)}
-        onCreate={handleSubmitNewUser} // now gets the modal form values
-        title="Add User"
-        fields={[
-          { name: 'username', label: 'Username', type: 'text', required: true },
-          { name: 'email', label: 'Email', type: 'email', required: true },
-        ]}
-        initialValues={newUser}
-      />
+          <EditModal
+            open={editOpen}
+            onCancel={() => {
+              setEditOpen(false);
+              setEditingItem(null);
+            }}
+            onEdit={handleEditUser}
+            initialValues={{
+              username: editingItem?.username ?? '',
+              email: editingItem?.email ?? '',
+              admin: editingItem?.admin ?? false,
+            }}
+            fields={[
+              { name: 'username', label: 'Username', type: 'text', required: true },
+              { name: 'email', label: 'Email', type: 'email', required: true },
+              { name: 'admin', label: 'Admin', type: 'boolean' },
+            ]}
+            title="Edit User"
+          />
+        </div>
+      </div>
     </div>
   );
 };

@@ -1,7 +1,10 @@
 [workspace]
 resolver = "3"
 members = [
-    "api",
+    "ai",
+    "api", 
+    "moss_parser",
+    "code_manager",
     "code_runner",
     "common",
     "db",

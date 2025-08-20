@@ -50,7 +50,7 @@ async fn seed_submission(db: &DatabaseConnection, assignment_id: i64) -> Submiss
 
     let submission_dir =
         SubmissionModel::full_directory_path(module_id, assignment_id, user_id, attempt);
-    let file_path = submission_dir.join("481.zip"); // Adjust if needed
+    let file_path = submission_dir.join("481.zip");
 
     let relative_path = file_path
         .strip_prefix(SubmissionModel::storage_root())
@@ -65,7 +65,9 @@ async fn seed_submission(db: &DatabaseConnection, assignment_id: i64) -> Submiss
         user_id: Set(user_id),
         attempt: Set(attempt),
         filename: Set(filename.to_string()),
+        file_hash: Set("0".to_string()),
         path: Set(relative_path),
+        is_practice: Set(false),
         created_at: Set(now),
         updated_at: Set(now),
         ..Default::default()
@@ -136,7 +138,7 @@ async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
     }
 
     for (task_number, command) in tasks {
-        AssignmentTaskModel::create(db, assignment_id, task_number,"Untitled Task", command)
+        AssignmentTaskModel::create(db, assignment_id, task_number, "Untitled Task", command)
             .await
             .expect("Failed to create assignment task");
     }
@@ -157,7 +159,7 @@ async fn setup_test_db_with_seeded_tasks(assignment_id: i64, module_id: i64) -> 
 #[tokio::test]
 #[ignore]
 async fn test_create_submission_outputs_for_all_tasks_9999_java() {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     let db = setup_test_db_with_seeded_tasks(9999, 9999).await;
 
@@ -185,7 +187,7 @@ async fn test_create_submission_outputs_for_all_tasks_9999_java() {
 #[tokio::test]
 #[ignore]
 async fn test_create_submission_outputs_for_all_tasks_9998_cpp() {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     let db = setup_test_db_with_seeded_tasks(9998, 9998).await;
 

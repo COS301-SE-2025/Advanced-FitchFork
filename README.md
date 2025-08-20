@@ -107,12 +107,20 @@ npm install
 npm run dev
 ```
 
-#### Backend
+#### Backend Code Manager
+
+```bash
+cd backend/code_manager/images
+docker build -t universal-runner .
+cd ../../
+cargo make code
+```
+
+#### Backend API
 
 ```bash
 cd backend
 cp .env.example .env
-docker build -t universal-runner .
 cargo make fresh
 cargo make api
 ```
@@ -159,16 +167,20 @@ cargo test
 
 ## Additional Resources
 
-| Resource                                                                          | Demo 1                                             | Demo 2                                             |
-| --------------------------------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
-| **[Project Board (GitHub)](https://github.com/orgs/COS301-SE-2025/projects/199)** | —                                                  | —                                                  |
-| **Domain Model Diagram**                                                          | [View](./docs/demo1/domain_model.png)              | [View](./docs/demo2/domain_model.png)              |
-| **User Stories**                                                                  | [View](./docs/demo1/user_stories.pdf)              | [View](./docs/demo2/user_stories.pdf)              |
-| **Use Cases**                                                                     | [View](./docs/demo1/use_cases.pdf)                 | [View](./docs/demo2/use_cases.pdf)                 |
-| **Software Requirements Specification (SRS)**                                     | [View](./docs/demo1/srs.pdf)                       | [View](./docs/demo2/srs.pdf)                       |
-| **Functional and Non-Functional Requirements Summary**                            | [View](./docs/demo1/requirement_specification.pdf) | [View](./docs/demo2/requirement_specification.pdf) |
-| **User Manual**                                                                   | —                                                  | [View](./docs/demo2/user_manual.pdf)               |
-| **Code Standards**                                                                | —                                                  | [View](./docs/demo2/code_standards.pdf)            |
+| Resource                                                                          | Demo 1                                             | Demo 2                                             | Demo 3                                             |
+| --------------------------------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
+| **[Project Board (GitHub)](https://github.com/orgs/COS301-SE-2025/projects/199)** | —                                                  | —                                                  | —
+| **Domain Model Diagram**                                                          | [View](./docs/demo1/domain_model.png)              | [View](./docs/demo2/domain_model.png)              | [View](./docs/demo3/domain_model.png)
+| **User Stories**                                                                  | [View](./docs/demo1/user_stories.pdf)              | [View](./docs/demo2/user_stories.pdf)              | [View](./docs/demo3/user_stories.pdf)
+| **Use Cases**                                                                     | [View](./docs/demo1/use_cases.pdf)                 | [View](./docs/demo2/use_cases.pdf)                 | [View](./docs/demo3/use_cases.pdf)
+| **Software Requirements Specification (SRS)**                                     | [View](./docs/demo1/srs.pdf)                       | [View](./docs/demo2/srs.pdf)                       | [View](./docs/demo3/srs.pdf)
+| **Functional and Non-Functional Requirements Summary**                            | [View](./docs/demo1/requirement_specification.pdf) | [View](./docs/demo2/requirement_specification.pdf) | [View](./docs/demo3/requirement_specification.pdf)
+| **User Manual**                                                                   | —                                                  | [View](./docs/demo2/user_manual.pdf)               | [View](./docs/demo3/user_manual.pdf)
+| **Code Standards**                                                                | —                                                  | [View](./docs/demo2/code_standards.pdf)            | [View](./docs/demo3/code_standards.pdf)
+| **Technical Installation Manual**                                                 | —                                                  | —                                                  | [View](./docs/demo3/installation_manual.pdf)
+| **Architectural Document**                                                        | —                                                  | —                                                  | [View](./docs/demo3/architectural_document.pdf)
+| **Deployment Model**                                                              | —                                                  | —                                                  | [View](./docs/demo3/deployment_model.pdf)
+| **Service Contracts**                                                             | —                                                  | —                                                  | [View](https://fitchfork.co.za/docs/api/routes/)
 
 ---
 
@@ -190,6 +202,7 @@ This will generate and open the documentation in your default web browser. It in
 ## Demo Video Links
 
 - **[Demo 2](https://drive.google.com/file/d/1HH14M2B5bdTDQUfJQkwJvmMiMGzrWq66/view?usp=sharing)**
+- **[Demo 3](https://drive.google.com/file/d/1j7oxu4XpOR8Q9nqiiUbywtR6yl6wFSOL/view?usp=sharing)**
 
 ---
 

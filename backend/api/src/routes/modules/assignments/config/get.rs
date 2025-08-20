@@ -1,55 +1,87 @@
+use crate::response::ApiResponse;
 use axum::{
-    extract::Path,
-    Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
+    Json,
 };
-use serde_json::{Value, Map};
+use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
+use db::models::assignment_file::{Entity as AssignmentFile, Column as AssignmentFileColumn, FileType, Model as AssignmentFileModel};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+use serde_json::to_value;
+use util::{execution_config::ExecutionConfig, state::AppState};
 
-use crate::{
-    response::ApiResponse,
-};
-
-use db::{
-    connect,
-    models::{
-        assignment::{
-            Column as AssignmentColumn, Entity as AssignmentEntity,
-        },
-    },
-};
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
-
-/// GET /assignments/:assignment_id/config
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
-/// Retrieve the JSON configuration object associated with a specific assignment.
+/// Retrieve the JSON configuration object associated with a specific assignment. Accessible to users
+/// assigned to the module with appropriate permissions.
 ///
-/// The configuration is returned only if it exists and is a valid JSON object. If no configuration
-/// has been set, an empty object is returned with an appropriate message.
+/// The configuration object is loaded from disk using the [`ExecutionConfig`] schema. If no configuration
+/// file is present on disk, an empty config is returned instead.
 ///
-/// ### Example curl
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment to retrieve configuration for
+///
+/// ### Example Request
 /// ```bash
-/// curl -X GET http://localhost:3000/assignments/1/config \
+/// curl -X GET http://localhost:3000/api/modules/1/assignments/2/config \
 ///   -H "Authorization: Bearer <token>"
 /// ```
 ///
-/// ### Responses
-/// - `200 OK` with the JSON configuration object (empty object if not set)
-/// - `400 Bad Request` if the stored config is not a valid JSON object
-/// - `404 Not Found` if the assignment or module does not exist
-/// - `500 Internal Server Error` on database failure
-pub async fn get_assignment_config( Path((module_id, assignment_id)): Path<(i64, i64)>,) -> impl IntoResponse {
+/// ### Success Response (200 OK) - With Configuration
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Assignment configuration retrieved successfully",
+///   "data": {
+///     "execution": {
+///       "timeout_secs": 10,
+///       "max_memory": 8589934592,
+///       "max_cpus": 2,
+///       "max_uncompressed_size": 100000000,
+///       "max_processes": 256
+///     },
+///     "marking": {
+///       "marking_scheme": "exact",
+///       "feedback_scheme": "auto",
+///       "deliminator": "&-=-&"
+///     }
+///   }
+/// }
+/// ```
+///
+/// ### Success Response (200 OK) - No Configuration File
+/// ```json
+/// {
+///   "success": true,
+///   "message": "No configuration set for this assignment",
+///   "data": {}
+/// }
+/// ```
+///
+/// ### Error Responses
+/// - **404** – Assignment not found
+/// - **500** – Failed to load configuration from disk
+///
+/// ### Notes
+/// - Configurations are stored on disk under `ASSIGNMENT_STORAGE_ROOT/module_{id}/assignment_{id}/config/config.json`
+/// - Config format uses [`ExecutionConfig`] as the schema
+/// - This is an example schema and will evolve over time
+pub async fn get_assignment_config(
+    State(app_state): State<AppState>,
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    let db = app_state.db();
 
-    let db = connect().await;
-
-    let result = AssignmentEntity::find()
+    // Verify the assignment exists
+    match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await;
-
-    let assignment = match result {
-        Ok(Some(a)) => a,
+        .one(db)
+        .await
+    {
+        Ok(Some(_)) => {}
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
@@ -57,7 +89,27 @@ pub async fn get_assignment_config( Path((module_id, assignment_id)): Path<(i64,
             )
                 .into_response();
         }
-        Err(_) => {
+        Err(e) => {
+            eprintln!("DB error: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response();
+        }
+    }
+
+    // Look up the latest config assignment file
+    let config_file: Option<AssignmentFileModel> = match AssignmentFile::find()
+        .filter(AssignmentFileColumn::AssignmentId.eq(assignment_id))
+        .filter(AssignmentFileColumn::FileType.eq(FileType::Config))
+        .order_by_desc(AssignmentFileColumn::UpdatedAt)
+        .one(db)
+        .await
+    {
+        Ok(opt) => opt,
+        Err(e) => {
+            eprintln!("DB error while fetching config file: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Database error")),
@@ -66,27 +118,77 @@ pub async fn get_assignment_config( Path((module_id, assignment_id)): Path<(i64,
         }
     };
 
-    let config = match assignment.config {
-        Some(Value::Object(obj)) => Value::Object(obj),
-        Some(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error("Invalid configuration format")),
-            )
-                .into_response();
-        }
-        None => Value::Object(Map::new()),
-    };
+    // Load the config from the file model
+    match config_file {
+        Some(file_model) => match file_model.load_execution_config(module_id) {
+            Ok(cfg) => {
+                let json = to_value(cfg).unwrap_or_else(|_| serde_json::json!({}));
+                (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(json, "Assignment configuration retrieved successfully")),
+                )
+                    .into_response()
+            }
+            Err(err) => {
+                eprintln!("Failed to load config from disk: {}", err);
+                (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(
+                        serde_json::json!({}),
+                        "No configuration set for this assignment",
+                    )),
+                )
+                    .into_response()
+            }
+        },
+        None => (
+            StatusCode::OK,
+            Json(ApiResponse::success(
+                serde_json::json!({}),
+                "No configuration set for this assignment",
+            )),
+        )
+            .into_response(),
+    }
+}
 
-    let message = if config.as_object().unwrap().is_empty() {
-        "No configuration set for this assignment"
-    } else {
-        "Assignment configuration retrieved successfully"
-    };
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/config/default
+///
+/// Returns the default execution configuration used when no custom config file is present.
+/// This helps clients pre-fill configuration forms or understand system defaults.
+///
+/// ### Success Response (200 OK)
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Default execution config retrieved successfully",
+///   "data":
+/// {
+//   "execution": {
+//     "timeout_secs": 10,
+//     "max_memory": 1000000,
+//     "max_cpus": 2,
+//     "max_uncompressed_size": 1000000,
+//     "max_processes": 256
+//   },
+//   "marking": {
+//     "marking_scheme": "exact",
+//     "feedback_scheme": "auto",
+//     "deliminator": "&-=-&"
+//   }
+// }
 
+/// }
+/// ```
+pub async fn get_default_assignment_config(
+    Path((_module_id, _assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    let default_config = ExecutionConfig::default_config();
     (
         StatusCode::OK,
-        Json(ApiResponse::success(config, message)),
+        Json(ApiResponse::success(
+            default_config,
+            "Default execution config retrieved successfully",
+        )),
     )
-        .into_response()
 }

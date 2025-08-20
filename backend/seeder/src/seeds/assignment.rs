@@ -1,6 +1,10 @@
 use crate::seed::Seeder;
 use chrono::Utc;
-use db::models::{assignment, assignment::AssignmentType, module};
+use db::models::{
+    assignment,
+    assignment::{AssignmentType, Status},
+    module,
+};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 pub struct AssignmentSeeder;
@@ -14,7 +18,7 @@ impl Seeder for AssignmentSeeder {
             .expect("Failed to fetch modules");
 
         for m in &modules {
-            if m.id == 9999 || m.id == 9998 {
+            if m.id == 9999 || m.id == 9998 || m.id == 10003 {
                 continue;
             }
             for i in 0..2 {
@@ -23,6 +27,7 @@ impl Seeder for AssignmentSeeder {
                     name: Set(format!("Assignment {i}")),
                     description: Set(Some("Auto seeded".to_string())),
                     assignment_type: Set(AssignmentType::Practical),
+                    status: Set(Status::Setup),
                     available_from: Set(Utc::now()),
                     due_date: Set(Utc::now()),
                     created_at: Set(Utc::now()),
@@ -39,6 +44,7 @@ impl Seeder for AssignmentSeeder {
             name: Set("Special Assignment".to_string()),
             description: Set(Some("Used for test zip execution".to_string())),
             assignment_type: Set(AssignmentType::Practical),
+            status: Set(Status::Setup),
             available_from: Set(Utc::now()),
             due_date: Set(Utc::now() + chrono::Duration::days(7)),
             created_at: Set(Utc::now()),
@@ -54,6 +60,7 @@ impl Seeder for AssignmentSeeder {
             name: Set("Special Assignment".to_string()),
             description: Set(Some("Used for test zip execution".to_string())),
             assignment_type: Set(AssignmentType::Practical),
+            status: Set(Status::Setup),
             available_from: Set(Utc::now()),
             due_date: Set(Utc::now() + chrono::Duration::days(7)),
             created_at: Set(Utc::now()),
@@ -62,5 +69,37 @@ impl Seeder for AssignmentSeeder {
         };
 
         let _ = special_assignment2.insert(db).await;
+
+        let plagiarism_assignment = assignment::ActiveModel {
+            id: Set(10003),
+            module_id: Set(10003),
+            name: Set("Plagiarism Assignment".to_string()),
+            description: Set(Some("Assignment used to show plagiarism cases".to_string())),
+            assignment_type: Set(AssignmentType::Practical),
+            status: Set(Status::Setup),
+            available_from: Set(Utc::now()),
+            due_date: Set(Utc::now() + chrono::Duration::days(7)),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+
+        let _ = plagiarism_assignment.insert(db).await;
+
+        let gatlam_assignment = assignment::ActiveModel {
+            id: Set(10004),
+            module_id: Set(10003),
+            name: Set("GATLAM Assignment".to_string()),
+            description: Set(Some("Assignment used to show GATLAM".to_string())),
+            assignment_type: Set(AssignmentType::Practical),
+            status: Set(Status::Setup),
+            available_from: Set(Utc::now()),
+            due_date: Set(Utc::now() + chrono::Duration::days(7)),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+
+        let _ = gatlam_assignment.insert(db).await;
     }
 }

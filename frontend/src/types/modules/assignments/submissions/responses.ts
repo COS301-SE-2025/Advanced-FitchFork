@@ -7,13 +7,9 @@ import type { Submission } from "./shared";
 
 export type GetSubmissionDetailResponse = ApiResponse<Submission>;
 
-export type GetSubmissionListResponse = ApiResponse<
-  ({
-    submissions: Submission[];
-  } & PaginationResponse)
-  |
-  Submission[]
->;
+export type GetSubmissionListResponse = ApiResponse<{
+  submissions: Submission[];
+} & PaginationResponse>;
 
 
 // ─────────────────────────────────────────────────────────────
@@ -21,3 +17,13 @@ export type GetSubmissionListResponse = ApiResponse<
 // ─────────────────────────────────────────────────────────────
 
 export type PostSubmitAssignmentResponse = ApiResponse<Submission>;
+
+export interface FailedRemark {
+  id?: number;
+  error: string;
+}
+
+export interface RemarkResponse {
+  regraded: number;
+  failed: FailedRemark[];
+}

@@ -3,7 +3,7 @@ use sea_orm::entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, IntoActiveModel, QueryFilter, Set,
 };
-use strum_macros::EnumIter;
+use strum::EnumIter;
 
 /// Assignment task model representing the `assignment_tasks` table.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]

@@ -1,4 +1,4 @@
-import Logo from '@/components/Logo';
+import Logo from '@/components/common/Logo';
 import { Result, Button, Typography } from 'antd';
 import { Link } from 'react-router-dom';
 
@@ -24,9 +24,9 @@ export default function NotFound() {
           </Text>
         }
         extra={
-          <Link to="/home">
+          <Link to="/dashboard">
             <Button type="primary" size="large">
-              Back to Home
+              Back to Dashboard
             </Button>
           </Link>
         }

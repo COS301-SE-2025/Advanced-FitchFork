@@ -1,21 +1,21 @@
-use sea_orm::entity::prelude::*;
+use argon2::{
+    Argon2,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+};
 use chrono::{DateTime, Utc};
+use rand::rngs::OsRng;
+use sea_orm::entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, Set,
 };
-use argon2::{
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Argon2,
-};
-use rand::rngs::OsRng;
 
+use crate::models::user_module_role::Role;
 use crate::models::{
     module::Entity as ModuleEntity,
     user::{self, ActiveModel as UserActiveModel, Entity as UserEntity},
     user_module_role::{Column as RoleColumn, Entity as RoleEntity},
 };
 use std::str::FromStr;
-use crate::models::user_module_role::Role;
 
 /// Represents a user in the `users` table.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize)]
@@ -93,6 +93,34 @@ impl Model {
         active.insert(db).await
     }
 
+    /// Creates a new user with no hashed password and returns the inserted model.
+    /// NOTE: FOR SEEDING PURPOSES ONLY
+    /// DO NOT USE
+    ///
+    /// # Arguments
+    /// * `db` - Database connection reference.
+    /// * `username` - Unique student number.
+    /// * `email` - Email address.
+    /// * `password` - Plaintext password to hash.
+    /// * `admin` - Whether the user is an admin.
+    pub async fn create_fake_user_with_no_hashed_password_do_not_use(
+        db: &DatabaseConnection,
+        username: &str,
+        email: &str,
+        password: &str,
+        admin: bool,
+    ) -> Result<Model, DbErr> {
+        let hash = password;
+        let active = UserActiveModel {
+            username: Set(username.to_owned()),
+            email: Set(email.to_owned()),
+            password_hash: Set(hash.to_string()),
+            admin: Set(admin),
+            ..Default::default()
+        };
+        active.insert(db).await
+    }
+
     /// Fetches a user by student number.
     ///
     /// # Arguments
@@ -125,9 +153,12 @@ impl Model {
         username: &str,
         password: &str,
     ) -> Result<Option<Model>, DbErr> {
+        let username = username.trim();
+
         if let Some(user) = Self::get_by_username(db, username).await? {
             let parsed = PasswordHash::new(&user.password_hash)
                 .map_err(|e| DbErr::Custom(format!("Invalid hash: {}", e)))?;
+
             if Argon2::default()
                 .verify_password(password.as_bytes(), &parsed)
                 .is_ok()
@@ -135,6 +166,7 @@ impl Model {
                 return Ok(Some(user));
             }
         }
+
         Ok(None)
     }
 
@@ -189,9 +221,8 @@ impl Model {
         module_id: i64,
         role: &str,
     ) -> Result<bool, DbErr> {
-        let parsed_role = Role::from_str(role).map_err(|_| {
-            DbErr::Custom(format!("Invalid role string: '{}'", role))
-        })?;
+        let parsed_role = Role::from_str(role)
+            .map_err(|_| DbErr::Custom(format!("Invalid role string: '{}'", role)))?;
 
         let exists = RoleEntity::find()
             .filter(RoleColumn::UserId.eq(user_id))
@@ -217,13 +248,25 @@ impl Model {
             .expect("Failed to hash password")
             .to_string()
     }
+
+    /// Verifies a plaintext password against the stored hash
+    pub fn verify_password(&self, password: &str) -> bool {
+        let parsed = match PasswordHash::new(&self.password_hash) {
+            Ok(parsed) => parsed,
+            Err(_) => return false,
+        };
+
+        Argon2::default()
+            .verify_password(password.as_bytes(), &parsed)
+            .is_ok()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::setup_test_db;
     use crate::models::user_module_role::Role as UserRole;
+    use crate::test_utils::setup_test_db;
 
     #[tokio::test]
     async fn test_create_and_get_user() {
@@ -272,7 +315,7 @@ mod tests {
     #[tokio::test]
     async fn test_is_in_role_and_get_module_roles() {
         use crate::models::{
-            module::{ActiveModel as ModuleActiveModel},
+            module::ActiveModel as ModuleActiveModel,
             user_module_role::ActiveModel as RoleActiveModel,
         };
 

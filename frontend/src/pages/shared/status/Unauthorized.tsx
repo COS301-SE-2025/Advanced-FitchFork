@@ -1,4 +1,4 @@
-import Logo from '@/components/Logo';
+import Logo from '@/components/common/Logo';
 import { Result, Button, Typography } from 'antd';
 import { Link } from 'react-router-dom';
 

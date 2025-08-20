@@ -1,55 +1,51 @@
-use api::auth::middleware::log_request;
+use api::{auth::middleware::log_request, ws::ws_routes};
+use api::auth::guards::validate_known_ids;
 use api::routes::routes;
-use axum::middleware::from_fn;
-use axum::Router;
-use dotenvy::dotenv;
-use std::env;
+use axum::{
+    http::header::{CONTENT_DISPOSITION, CONTENT_TYPE},
+    middleware::{from_fn, from_fn_with_state},
+    Router,
+};
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
-use tracing::info;
 use tracing_appender::rolling;
-use axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
+use util::{config::AppConfig, state::AppState, ws::WebSocketManager};
+use db::connect;
 
 #[tokio::main]
 async fn main() {
-    dotenv().ok();
+    // Load configuration and initialize logging
+    let config = AppConfig::from_env();
+    let _log_guard = init_logging(&config.log_file, &config.log_level);
 
-    // Read env vars
-    let project_name = env::var("PROJECT_NAME").unwrap_or_else(|_| "unknown-project".to_string());
-    let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
-    let port = env::var("PORT")
-        .unwrap_or_else(|_| "3000".to_string())
-        .parse::<u16>()
-        .expect("PORT must be a valid number");
-    let log_level = env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
-    let log_file = env::var("LOG_FILE").unwrap_or_else(|_| "api.log".to_string());
+    // Set up dependencies
+    let db = connect().await;
+    let ws = WebSocketManager::new();
+    let app_state = AppState::new(db, ws);
 
-    // Important: hold the guard to flush logs
-    let _log_guard = init_logging(&log_file, &log_level);
+    // Configure middleware
+    let cors = CorsLayer::very_permissive().expose_headers([CONTENT_DISPOSITION, CONTENT_TYPE]);
 
-    info!("Starting {} on http://{}:{}", project_name, host, port);
-    println!("Server running at http://{}:{} ({})", host, port, project_name);
-
-    // Setup CORS
-    let cors = CorsLayer::very_permissive()
-      .expose_headers([CONTENT_DISPOSITION, CONTENT_TYPE]);
-
-    // Setup Axum app
+    // Build app router
     let app = Router::new()
-        .nest("/api", routes())
+        .nest("/api", routes(app_state.clone()).layer(from_fn_with_state(app_state.clone(), validate_known_ids)))
+        .nest("/ws", ws_routes(app_state.clone()))
+        .layer(from_fn(log_request))
         .layer(cors)
-        .layer(from_fn(log_request));
+        .with_state(app_state);
 
-    let addr: SocketAddr = format!("{}:{}", host, port)
+    // Start server
+    let addr: SocketAddr = format!("{}:{}", config.host, config.port)
         .parse()
         .expect("Invalid address");
 
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .expect("Failed to bind");
+    println!(
+        "Starting {} on http://{}:{}",
+        config.project_name, config.host, config.port
+    );
 
     axum::serve(
-        listener,
+        tokio::net::TcpListener::bind(&addr).await.expect("Failed to bind"),
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await

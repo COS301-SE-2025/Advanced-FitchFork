@@ -48,6 +48,7 @@ export default tseslint.config(
         version: 'detect',
       },
     },
+    
   },
   prettier, // disables conflicting rules
 );

@@ -1,172 +1,454 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useLocation, Outlet, useParams } from 'react-router-dom';
-import { Tabs, Alert, message, Button } from 'antd';
+import { useState } from 'react';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
+import { Spin, Dropdown, Button, Alert, Tag, Typography, Segmented } from 'antd';
+import type { MenuProps } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined } from '@ant-design/icons';
+
 import { useModule } from '@/context/ModuleContext';
 import { useAuth } from '@/context/AuthContext';
-import { AssignmentProvider } from '@/context/AssignmentContext';
-import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
-import PageHeader from '@/components/PageHeader';
-import { getAssignmentDetails, getAssignmentReadiness } from '@/services/modules/assignments';
-import { generateMemoOutput } from '@/services/modules/assignments/memo-output';
-import { generateMarkAllocator } from '@/services/modules/assignments/mark-allocator/post';
-import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
+import { useAssignment } from '@/context/AssignmentContext';
 
-interface AssignmentDetails extends Assignment {
-  files: AssignmentFile[];
-}
+import { message } from '@/utils/message';
+
+import {
+  closeAssignment,
+  downloadAssignmentFile,
+  openAssignment,
+} from '@/services/modules/assignments';
+import { generateMemoOutput } from '@/services/modules/assignments/memo-output';
+import { generateMarkAllocator } from '@/services/modules/assignments/mark-allocator';
+import { submitAssignment } from '@/services/modules/assignments/submissions/post';
+
+import type { AssignmentReadiness } from '@/types/modules/assignments';
+import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
+import AssignmentStatusTag from '@/components/assignments/AssignmentStatusTag';
+import EventBus from '@/utils/EventBus';
+import { useUI } from '@/context/UIContext';
+import SubmitAssignmentModal from '@/components/submissions/SubmitAssignmentModal';
+
+const { Title, Paragraph } = Typography;
 
 const AssignmentLayout = () => {
   const module = useModule();
-  const { isStudent, isLecturer, isAdmin } = useAuth();
-  const { assignment_id } = useParams();
+  const { assignment, readiness, config, refreshAssignment } = useAssignment();
+  const auth = useAuth();
+  const { isMobile } = useUI();
   const navigate = useNavigate();
   const location = useLocation();
-  const { setBreadcrumbLabel } = useBreadcrumbContext();
 
-  const [assignment, setAssignment] = useState<AssignmentDetails | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [readiness, setReadiness] = useState<AssignmentReadiness | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [downloadingSpec, setDownloadingSpec] = useState(false);
 
-  const assignmentIdNum = Number(assignment_id);
-  const basePath = `/modules/${module.id}/assignments/${assignment_id}`;
-  const showTabs = !isStudent(module.id) || isAdmin;
+  const basePath = `/modules/${module.id}/assignments/${assignment.id}`;
+  const isLecturerOrAdmin = auth.isLecturer(module.id) || auth.isAdmin;
+  const isStudentOrTutor = auth.isStudent(module.id) || auth.isTutor(module.id);
+  const showTabs = readiness?.is_ready;
 
-  const tabs = [
-    { key: `${basePath}/submissions`, label: 'Submissions', disabled: false },
-    ...(isLecturer(module.id) || isAdmin
+  const isOnSubmissions =
+    location.pathname.startsWith(`${basePath}/submissions`) || location.pathname === `${basePath}`;
+
+  const showHeaderCard = !isMobile || (isMobile && isOnSubmissions);
+
+  const segments = [
+    {
+      value: `${basePath}/submissions`,
+      label: 'Submissions',
+    },
+    {
+      value: `${basePath}/tickets`,
+      label: 'Tickets',
+      disabled: !readiness?.is_ready,
+    },
+    ...(auth.isLecturer(module.id) || auth.isAdmin
       ? [
-          { key: `${basePath}/files`, label: 'Files', disabled: !readiness?.config_present },
-          { key: `${basePath}/tasks`, label: 'Tasks', disabled: !readiness?.config_present },
           {
-            key: `${basePath}/memo-output`,
-            label: 'Memo Output',
-            disabled: !readiness?.config_present || !readiness?.tasks_present,
+            value: `${basePath}/tasks`,
+            label: 'Tasks',
+            disabled: !readiness?.config_present,
           },
           {
-            key: `${basePath}/mark-allocator`,
-            label: 'Mark Allocator',
-            disabled: !readiness?.memo_output_present,
+            value: `${basePath}/plagiarism`,
+            label: 'Plagiarism',
+            disabled: !readiness?.config_present,
           },
-          { key: `${basePath}/config`, label: 'Config', disabled: false },
-          {
-            key: `${basePath}/stats`,
-            label: 'Statistics',
-            disabled: !readiness?.is_ready,
-          },
+          // {
+          //   value: `${basePath}/stats`,
+          //   label: 'Statistics',
+          //   disabled: !readiness?.is_ready,
+          // },
+          { value: `${basePath}/config`, label: 'Files & Config' },
         ]
       : []),
   ];
 
   const activeKey =
-    tabs.find((tab) => location.pathname === tab.key || location.pathname.startsWith(tab.key + '/'))
-      ?.key || `${basePath}/submissions`;
+    segments.find(
+      (seg) => location.pathname === seg.value || location.pathname.startsWith(seg.value + '/'),
+    )?.value || `${basePath}/submissions`;
 
-  useEffect(() => {
-    const loadAssignment = async () => {
-      setLoading(true);
-      const res = await getAssignmentDetails(module.id, assignmentIdNum);
-      if (res.success && res.data) {
-        setAssignment(res.data);
-        setError(null);
-        setBreadcrumbLabel(`modules/${module.id}/assignments/${res.data.id}`, res.data.name);
-      } else {
-        setError(res.message || 'Failed to load assignment.');
-      }
-      setLoading(false);
-    };
-
-    const loadReadiness = async () => {
-      const res = await getAssignmentReadiness(module.id, assignmentIdNum);
+  const handleOpenAssignment = async () => {
+    setLoading(true);
+    const hide = message.loading('Opening assignment...');
+    try {
+      const res = await openAssignment(module.id, assignment.id);
+      hide();
       if (res.success) {
-        setReadiness(res.data);
+        await refreshAssignment();
+        message.success('Assignment opened successfully');
+      } else {
+        message.error(res.message || 'Failed to open assignment');
       }
-    };
-
-    if (!isNaN(assignmentIdNum)) {
-      loadAssignment();
-      loadReadiness();
-    } else {
-      setError('Invalid assignment ID');
+    } catch {
+      hide();
+      message.error('Unexpected error while opening assignment');
+    } finally {
       setLoading(false);
-    }
-  }, [module.id, assignmentIdNum]);
-
-  const refreshReadiness = async () => {
-    const res = await getAssignmentReadiness(module.id, assignmentIdNum);
-    if (res.success) {
-      setReadiness(res.data);
     }
   };
 
-  useEffect(() => {
-    if (!loading && readiness && !readiness.is_ready) {
-      const isInSteps = location.pathname.includes('/steps/');
-      if (!isInSteps) {
-        navigate(`${basePath}/steps/config`, { replace: true });
+  const handleCloseAssignment = async () => {
+    setLoading(true);
+    const hide = message.loading('Closing assignment...');
+    try {
+      const res = await closeAssignment(module.id, assignment.id);
+      hide();
+      if (res.success) {
+        await refreshAssignment();
+        message.success('Assignment closed successfully');
+      } else {
+        message.error(res.message || 'Failed to close assignment');
       }
+    } catch {
+      hide();
+      message.error('Unexpected error while closing assignment');
+    } finally {
+      setLoading(false);
     }
-  }, [loading, readiness, location.pathname]);
+  };
 
-  if (error || !assignment) {
-    return (
-      <div className="p-6">
-        <Alert type="error" message="Error" description={error} showIcon />
-      </div>
-    );
+  const handleGenerateMemoOutput = async () => {
+    setLoading(true);
+    const hide = message.loading('Generating memo ouptut...');
+    try {
+      const res = await generateMemoOutput(module.id, assignment.id);
+      hide();
+      if (res.success) {
+        await refreshAssignment();
+        message.success('Memo output generated');
+      } else {
+        message.error(res.message || 'Failed to generate memo output');
+      }
+    } catch {
+      hide();
+      message.error('An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateMarkAllocator = async () => {
+    setLoading(true);
+    const hide = message.loading('Generating mark allocator...');
+    try {
+      const res = await generateMarkAllocator(module.id, assignment.id);
+      hide(); // close the loading message
+      if (res.success) {
+        await refreshAssignment();
+        message.success('Mark allocator generated');
+      } else {
+        message.error(res.message || 'Failed to generate mark allocator');
+      }
+    } catch {
+      hide();
+      message.error('Failed to generate mark allocator');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmitAssignment = async (file: File, isPractice: boolean) => {
+    setModalOpen(false);
+    setLoading(true);
+    const hide = message.loading('Submitting assignment...');
+    try {
+      await submitAssignment(module.id, assignment.id, file, isPractice);
+      await refreshAssignment();
+      message.success('Submission successful');
+      EventBus.emit('submission:updated');
+    } catch {
+      message.error('Submission failed');
+    } finally {
+      hide();
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadSpec = async () => {
+    const specFile = assignment.files?.find((f) => f.file_type === 'spec');
+
+    if (!specFile) {
+      message.error('No specification file found for this assignment.');
+      return;
+    }
+
+    setDownloadingSpec(true);
+    const hide = message.loading('Starting specification download...');
+
+    try {
+      await downloadAssignmentFile(module.id, assignment.id, specFile.id);
+      // apiDownload should trigger the browser download; nothing else to do here
+      message.success('Download started');
+    } catch (e) {
+      message.error('Failed to download specification');
+    } finally {
+      hide();
+      setDownloadingSpec(false);
+    }
+  };
+
+  const menuItems: MenuProps['items'] = [
+    ...(config?.project?.submission_mode === 'manual'
+      ? [
+          {
+            key: 'memo',
+            label: 'Generate Memo Output',
+            onClick: handleGenerateMemoOutput,
+            disabled: loading,
+          },
+          {
+            key: 'mark',
+            label: 'Generate Mark Allocator',
+            onClick: handleGenerateMarkAllocator,
+            disabled: loading,
+          },
+          { type: 'divider' as const },
+        ]
+      : []),
+    {
+      key: 'open',
+      label: 'Open Assignment',
+      onClick: handleOpenAssignment,
+      disabled: loading || !['ready', 'closed', 'archived'].includes(assignment?.status ?? ''),
+    },
+    {
+      key: 'close',
+      label: 'Close Assignment',
+      onClick: handleCloseAssignment,
+      disabled: loading || assignment?.status !== 'open',
+    },
+    {
+      type: 'divider',
+    },
+    {
+      key: 'archive',
+      label: 'Archive Assignment',
+      disabled: loading,
+    },
+    {
+      key: 'delete',
+      label: 'Delete Assignment',
+      danger: true,
+      disabled: loading,
+    },
+  ];
+
+  if (!assignment) {
+    return <Spin className="p-6" tip="Loading assignment..." />;
   }
 
+  const isSetupIncomplete = !readiness?.is_ready;
+
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      <PageHeader
-        title={assignment.name}
-        description={`Manage assignment #${assignment.id} in ${module.code}`}
-        extra={
-          <div className="flex gap-2 flex-wrap">
-            <Button type="default" onClick={() => navigate(`${basePath}/steps/config`)}>
-              Setup Assignment
-            </Button>
-            <Button
-              onClick={async () => {
-                const res = await generateMemoOutput(module.id, assignment.id);
-                if (res.success) {
-                  message.success('Memo output generated successfully.');
-                  await refreshReadiness();
-                } else {
-                  message.error(`Failed to generate memo: ${res.message}`);
-                }
-              }}
-            >
-              Generate Memo Output
-            </Button>
-            <Button
-              onClick={async () => {
-                const res = await generateMarkAllocator(module.id, assignment.id);
-                if (res.success) {
-                  message.success('Mark allocator generated successfully.');
-                  await refreshReadiness();
-                } else {
-                  message.error(`Failed to generate mark allocator: ${res.message}`);
-                }
-              }}
-            >
-              Generate Mark Allocator
-            </Button>
-          </div>
-        }
-      />
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex h-full flex-col gap-4">
+          {showHeaderCard && (
+            <div className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 mb-0 p-4 rounded-md border ">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
+                {/* Left section: Info */}
+                <div className="flex-1 space-y-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Title
+                      level={3}
+                      className="!mb-0 !text-gray-900 dark:!text-gray-100 !leading-none !text-2xl"
+                    >
+                      {assignment.name}
+                    </Title>
 
-      <Tabs
-        activeKey={activeKey}
-        onChange={(key) => navigate(key)}
-        items={showTabs ? tabs : []}
-        tabBarGutter={16}
-        className="!mb-4"
-      />
+                    <div className="flex items-center">
+                      <AssignmentStatusTag status={assignment.status} />
+                    </div>
 
-      <AssignmentProvider value={{ assignment, refreshReadiness, readiness }}>
-        <Outlet />
-      </AssignmentProvider>
+                    {auth.isStudent(module.id) && (
+                      <Tag
+                        color="green"
+                        className="!text-xs !font-medium !h-6 !px-2 !flex items-center"
+                      >
+                        Best Mark: 85%
+                      </Tag>
+                    )}
+                  </div>
+
+                  {assignment.description?.length > 0 && (
+                    <Paragraph className="!text-sm !text-gray-600 dark:!text-gray-400">
+                      {assignment.description}
+                    </Paragraph>
+                  )}
+
+                  {assignment.files?.some((f) => f.file_type === 'spec') && (
+                    <Button
+                      type="link"
+                      onClick={handleDownloadSpec}
+                      icon={<DownloadOutlined />}
+                      size="small"
+                      className="!p-0"
+                      loading={downloadingSpec}
+                      disabled={downloadingSpec}
+                    >
+                      Download Specification
+                    </Button>
+                  )}
+                </div>
+
+                {/* Right section: Actions */}
+
+                <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
+                  {(!isSetupIncomplete || isStudentOrTutor) &&
+                    (isStudentOrTutor ? (
+                      <Button
+                        type="primary"
+                        onClick={() => setModalOpen(true)}
+                        loading={loading}
+                        className="w-full sm:w-auto"
+                      >
+                        Submit Assignment
+                      </Button>
+                    ) : (
+                      <Dropdown.Button
+                        menu={{ items: menuItems }}
+                        type="primary"
+                        disabled={loading}
+                        onClick={() => setModalOpen(true)}
+                        loading={loading}
+                        className="w-full sm:w-auto"
+                        rootClassName="!w-full [&>button:first-child]:w-full"
+                      >
+                        Submit Assignment
+                      </Dropdown.Button>
+                    ))}
+                </div>
+              </div>
+              {showTabs && (
+                <div className=" hidden md:block mt-4">
+                  <Segmented
+                    options={segments}
+                    value={activeKey}
+                    onChange={(key) => navigate(key as string)}
+                    size="middle"
+                    block
+                    className="dark:!bg-gray-950"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {assignment.due_date && new Date() > new Date(assignment.due_date) && (
+            <Alert
+              message="Past Due Date - Practice submissions only"
+              description="Practice submissions won't be considered for your final mark."
+              type="warning"
+              showIcon
+              className="!mb-4"
+            />
+          )}
+
+          {isStudentOrTutor ? (
+            <Outlet />
+          ) : isSetupIncomplete && isLecturerOrAdmin ? (
+            <div className="flex flex-col h-full items-center justify-center text-center bg-white dark:bg-gray-950 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-12 space-y-6">
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                Assignment setup incomplete
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400 max-w-xl">
+                This assignment is not yet ready for use. Please complete the setup process to
+                configure the necessary files, tasks, and settings before students can submit or
+                view it.
+              </p>
+              <div className="space-y-2 w-full max-w-2xl text-left">
+                {[
+                  { key: 'config_present', label: 'Configuration file' },
+                  { key: 'main_present', label: 'Main file' },
+                  { key: 'makefile_present', label: 'Makefile' },
+                  { key: 'memo_present', label: 'Memo file' },
+                  { key: 'tasks_present', label: 'Tasks' },
+                  { key: 'memo_output_present', label: 'Memo Output' },
+                  { key: 'mark_allocator_present', label: 'Mark Allocator' },
+                ].map((item) => {
+                  const complete = readiness?.[item.key as keyof AssignmentReadiness];
+                  return (
+                    <div
+                      key={item.key}
+                      className="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
+                    >
+                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                        {item.label}
+                      </span>
+
+                      <span
+                        className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
+                          complete
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                            : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                        }`}
+                      >
+                        {complete ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+                        {complete ? 'Complete' : 'Incomplete'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <Button
+                type="primary"
+                size="large"
+                onClick={() => setSetupOpen(true)}
+                loading={loading}
+              >
+                Complete Setup
+              </Button>
+            </div>
+          ) : (
+            <Outlet />
+          )}
+        </div>
+
+        <AssignmentSetup
+          open={setupOpen}
+          onClose={() => setSetupOpen(false)} // for manual close / click-outside
+          assignmentId={assignment.id}
+          module={module}
+          onDone={async () => {
+            // only called when user clicks "Finish"
+            await refreshAssignment(); // parent refresh happens once here
+            setSetupOpen(false); // close after refresh
+          }}
+        />
+
+        <SubmitAssignmentModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleSubmitAssignment}
+          loading={loading}
+          title="Submit Assignment"
+          accept=".zip,.tar,.gz,.tgz"
+          maxSizeMB={50}
+          defaultIsPractice={false}
+        />
+      </div>
     </div>
   );
 };

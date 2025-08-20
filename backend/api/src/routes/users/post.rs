@@ -1,113 +1,141 @@
-use axum::http::StatusCode;
-use axum::Json;
-use axum::response::IntoResponse;
-use sea_orm::EntityTrait;
-use serde::{Deserialize, Serialize};
-use db::connect;
-use db::models::user;
-use crate::auth::AuthUser;
+//! # User Creation Routes
+//!
+//! - `POST /api/users`: Create a single non-admin user
+//! - `POST /api/users/bulk`: Create multiple non-admin users
+//!
+//! All routes require admin privileges.
+
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
+use util::state::AppState;
 use crate::response::ApiResponse;
-use crate::services::email::EmailService;
+use db::models::user::Model as UserModel;
+use crate::routes::users::common::{CreateUserRequest, BulkCreateUsersRequest, UserResponse};
+use validator::Validate;
 
-#[derive(Deserialize)]
-pub struct CreateUserRequest {
-    pub username: String,
-    pub email: String,
-    pub admin: bool,
-}
-
-#[derive(Serialize)]
-pub struct MinimalUserResponse {
-    pub id: i64,
-    pub username: String,
-    pub email: String,
-    pub admin: bool,
-}
-
+/// POST /api/users
+///
+/// Creates a single **non-admin** user. Admin-only access.
+///
+/// ### Request Body
+/// ```json
+/// {
+///   "username": "u12345678",
+///   "email": "test@example.com",
+///   "password": "securepassword"
+/// }
+/// ```
+///
+/// ### Response: 201 Created
+/// - JSON body with full user object (excluding password)
+///
+/// ### Errors:
+/// - 400 Bad Request — Validation failure
+/// - 409 Conflict — Duplicate username/email
 pub async fn create_user(
-    AuthUser(claims): AuthUser,
+    State(app_state): State<AppState>,
     Json(req): Json<CreateUserRequest>,
 ) -> impl IntoResponse {
-    if !claims.admin {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("Only admins may create users")),
-        );
-    }
+    let db = app_state.db();
 
-    if let Err(validation_errors) = req.validate() {
-        let msg = common::format_validation_errors(&validation_errors);
+    if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<MinimalUserResponse>::error(msg)),
-        );
+            Json(ApiResponse::<()>::error(format!("Validation failed: {e}"))),
+        )
+            .into_response();
     }
 
-    let db = connect().await;
-
-    // Email check
-    if user::Entity::find()
-        .filter(user::Column::Email.eq(req.email.clone()))
-        .one(&db)
-        .await
-        .unwrap()
-        .is_some()
-    {
-        return (
-            StatusCode::CONFLICT,
-            Json(ApiResponse::<MinimalUserResponse>::error("A user with this email already exists")),
-        );
-    }
-
-    // Student number check
-    if user::Entity::find()
-        .filter(user::Column::Username.eq(req.username.clone()))
-        .one(&db)
-        .await
-        .unwrap()
-        .is_some()
-    {
-        return (
-            StatusCode::CONFLICT,
-            Json(ApiResponse::<MinimalUserResponse>::error("A user with this student number already exists")),
-        );
-    }
-
-    let inserted = match UserModel::create(
-        &db,
-        &req.username,
-        &req.email,
-        "changeme",
-        req.admin,
-    )
-    .await
-    {
-        Ok(u) => u,
+    match UserModel::create(db, &req.username, &req.email, &req.password, false).await {
+        Ok(user) => (
+            StatusCode::CREATED,
+            Json(ApiResponse::<UserResponse>::success(
+                user.into(),
+                "User created successfully",
+            )),
+        )
+            .into_response(),
         Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<MinimalUserResponse>::error(format!("Database error: {}", e))),
-            );
+            let msg = if e.to_string().contains("UNIQUE constraint failed") {
+                "A user with this username or email already exists".to_string()
+            } else {
+                format!("Database error: {e}")
+            };
+            (
+                StatusCode::CONFLICT,
+                Json(ApiResponse::<()>::error(msg)),
+            )
+                .into_response()
         }
-    };
+    }
+}
 
-    // Fire off email (can fail silently)
-    let _ = EmailService::send_email(
-        &req.email,
-        "Welcome! Change your password",
-        "Please change your password at https://example.com/change-password",
-    )
-    .await;
 
-    let response = MinimalUserResponse {
-        id: inserted.id,
-        username: inserted.username,
-        email: inserted.email,
-        admin: inserted.admin,
-    };
+/// POST /api/users/bulk
+///
+/// Creates multiple **non-admin** users. Admin-only access.
+///
+/// ### Request Body
+/// ```json
+/// {
+///   "users": [
+///     { "username": "u001", "email": "a@x.com", "password": "pw1" },
+///     { "username": "u002", "email": "b@x.com", "password": "pw2" }
+///   ]
+/// }
+/// ```
+///
+/// ### Response: 201 Created
+/// - JSON array of created user objects
+///
+/// ### Errors:
+/// - 400 Bad Request — If validation fails
+/// - 409 Conflict — If one user fails to insert (first error returned)
+pub async fn bulk_create_users(
+    State(app_state): State<AppState>,
+    Json(req): Json<BulkCreateUsersRequest>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
+    if let Err(e) = req.validate() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::error(format!("Validation failed: {e}"))),
+        )
+        .into_response();
+    }
+
+    let mut results = Vec::new();
+
+    for user_req in req.users {
+        match UserModel::create(db, &user_req.username, &user_req.email, &user_req.password, false).await {
+            Ok(u) => results.push(UserResponse::from(u)),
+            Err(e) => {
+                let msg = if e.to_string().contains("UNIQUE constraint failed") {
+                    format!("A user with this username or email already exists: {}", user_req.username)
+                } else {
+                    format!("Database error while creating {}: {}", user_req.username, e)
+                };
+
+                return (
+                    StatusCode::CONFLICT,
+                    Json(ApiResponse::<()>::error(msg)),
+                )
+                .into_response();
+            }
+        }
+    }
 
     (
-        StatusCode::OK,
-        Json(ApiResponse::success(response, "User created and change password email sent")),
+        StatusCode::CREATED,
+        Json(ApiResponse::<Vec<UserResponse>>::success(
+            results,
+            "Users created successfully",
+        )),
     )
+    .into_response()
 }

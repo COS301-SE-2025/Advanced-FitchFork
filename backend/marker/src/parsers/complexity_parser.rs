@@ -53,9 +53,10 @@ pub struct ComplexityReport {
 /// Implements [`ReportParser<ComplexityReport>`] for parsing and validating the schema.
 pub struct JsonComplexityParser;
 
-use serde_json::Value;
 use crate::error::MarkerError;
 use crate::traits::parser::Parser;
+use serde_json::Value;
+use util::execution_config::ExecutionConfig;
 
 impl<'a> Parser<&'a Value, ComplexityReport> for JsonComplexityParser {
     /// Parses a JSON value into a [`ComplexityReport`].
@@ -63,46 +64,76 @@ impl<'a> Parser<&'a Value, ComplexityReport> for JsonComplexityParser {
     /// # Errors
     ///
     /// Returns [`MarkerError::ParseComplexityError`] if the JSON does not conform to the expected schema.
-    fn parse(&self, raw: &'a Value) -> Result<ComplexityReport, MarkerError> {
+    fn parse(
+        &self,
+        raw: &'a Value,
+        _config: ExecutionConfig,
+    ) -> Result<ComplexityReport, MarkerError> {
         let obj = raw.as_object().ok_or_else(|| {
             MarkerError::ParseComplexityError("Top-level JSON must be an object".to_string())
         })?;
 
-        let metrics = obj.get("resource_metrics").and_then(|v| v.as_object()).ok_or_else(|| {
-            MarkerError::ParseComplexityError("Missing or invalid 'resource_metrics' object".to_string())
-        })?;
+        let metrics = obj
+            .get("resource_metrics")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| {
+                MarkerError::ParseComplexityError(
+                    "Missing or invalid 'resource_metrics' object".to_string(),
+                )
+            })?;
 
         let user_time_s = match metrics.get("user_time_s") {
             Some(Value::Number(n)) if n.is_f64() => n.as_f64().unwrap(),
             Some(Value::Number(n)) if n.is_u64() => n.as_u64().unwrap() as f64,
             Some(Value::Number(n)) if n.is_i64() => n.as_i64().unwrap() as f64,
-            _ => return Err(MarkerError::ParseComplexityError("'user_time_s' missing or not a number".to_string())),
+            _ => {
+                return Err(MarkerError::ParseComplexityError(
+                    "'user_time_s' missing or not a number".to_string(),
+                ));
+            }
         };
 
         let system_time_s = match metrics.get("system_time_s") {
             Some(Value::Number(n)) if n.is_f64() => n.as_f64().unwrap(),
             Some(Value::Number(n)) if n.is_u64() => n.as_u64().unwrap() as f64,
             Some(Value::Number(n)) if n.is_i64() => n.as_i64().unwrap() as f64,
-            _ => return Err(MarkerError::ParseComplexityError("'system_time_s' missing or not a number".to_string())),
+            _ => {
+                return Err(MarkerError::ParseComplexityError(
+                    "'system_time_s' missing or not a number".to_string(),
+                ));
+            }
         };
 
         let wall_time_s = match metrics.get("wall_time_s") {
             Some(Value::Number(n)) if n.is_f64() => n.as_f64().unwrap(),
             Some(Value::Number(n)) if n.is_u64() => n.as_u64().unwrap() as f64,
             Some(Value::Number(n)) if n.is_i64() => n.as_i64().unwrap() as f64,
-            _ => return Err(MarkerError::ParseComplexityError("'wall_time_s' missing or not a number".to_string())),
+            _ => {
+                return Err(MarkerError::ParseComplexityError(
+                    "'wall_time_s' missing or not a number".to_string(),
+                ));
+            }
         };
 
         let max_rss_kb = match metrics.get("max_rss_kb") {
             Some(Value::Number(n)) if n.is_u64() => n.as_u64().unwrap(),
-            _ => return Err(MarkerError::ParseComplexityError("'max_rss_kb' missing or not u64".to_string())),
+            _ => {
+                return Err(MarkerError::ParseComplexityError(
+                    "'max_rss_kb' missing or not u64".to_string(),
+                ));
+            }
         };
 
-        let generated_at = obj.get("generated_at")
+        let generated_at = obj
+            .get("generated_at")
             .and_then(Value::as_str)
-            .ok_or_else(|| MarkerError::ParseComplexityError("'generated_at' missing or not a string".to_string()))?
+            .ok_or_else(|| {
+                MarkerError::ParseComplexityError(
+                    "'generated_at' missing or not a string".to_string(),
+                )
+            })?
             .to_string();
-        
+
         Ok(ComplexityReport {
             user_time_s,
             system_time_s,
@@ -123,7 +154,9 @@ mod tests {
     use std::path::Path;
 
     /// Helper for approximate float equality.
-    fn approx_eq(a: f64, b: f64) -> bool { (a - b).abs() < 1e-8 }
+    fn approx_eq(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-8
+    }
 
     /// Test parsing a valid report with fast and light resource usage.
     #[test]
@@ -135,7 +168,9 @@ mod tests {
 
         // Parse using the parser
         let parser = JsonComplexityParser;
-        let report = parser.parse(&value).expect("Should parse valid report");
+        let report = parser
+            .parse(&value, ExecutionConfig::default_config())
+            .expect("Should parse valid report");
 
         // Assert all fields
         assert!(approx_eq(report.user_time_s, 0.12), "user_time_s");
@@ -149,13 +184,16 @@ mod tests {
     #[test]
     fn test_parse_valid_integer_times_report() {
         // Load the JSON file
-        let path = std::path::Path::new("src/test_files/complexity_parser/complexity_report_2.json");
+        let path =
+            std::path::Path::new("src/test_files/complexity_parser/complexity_report_2.json");
         let data = std::fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: serde_json::Value = serde_json::from_str(&data).expect("Failed to parse JSON");
 
         // Parse using the parser
         let parser = JsonComplexityParser;
-        let report = parser.parse(&value).expect("Should parse valid report");
+        let report = parser
+            .parse(&value, ExecutionConfig::default_config())
+            .expect("Should parse valid report");
 
         // Assert all fields
         assert!(approx_eq(report.user_time_s, 1.0), "user_time_s");
@@ -169,20 +207,28 @@ mod tests {
     #[test]
     fn test_parse_missing_fields_report() {
         // Load the JSON file
-        let path = std::path::Path::new("src/test_files/complexity_parser/complexity_report_3.json");
+        let path =
+            std::path::Path::new("src/test_files/complexity_parser/complexity_report_3.json");
         let data = std::fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: serde_json::Value = serde_json::from_str(&data).expect("Failed to parse JSON");
 
         // Parse using the parser
         let parser = JsonComplexityParser;
-        let result = parser.parse(&value);
+        let result = parser.parse(&value, ExecutionConfig::default_config());
 
         // Should error due to missing user_time_s
         match result {
             Err(crate::error::MarkerError::ParseComplexityError(msg)) => {
-                assert!(msg.contains("user_time_s"), "Error message should mention missing user_time_s, got: {}", msg);
-            },
-            other => panic!("Expected ParseComplexityError for missing user_time_s, got: {:?}", other),
+                assert!(
+                    msg.contains("user_time_s"),
+                    "Error message should mention missing user_time_s, got: {}",
+                    msg
+                );
+            }
+            other => panic!(
+                "Expected ParseComplexityError for missing user_time_s, got: {:?}",
+                other
+            ),
         }
     }
 
@@ -190,20 +236,28 @@ mod tests {
     #[test]
     fn test_parse_wrong_type_report() {
         // Load the JSON file
-        let path = std::path::Path::new("src/test_files/complexity_parser/complexity_report_4.json");
+        let path =
+            std::path::Path::new("src/test_files/complexity_parser/complexity_report_4.json");
         let data = std::fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: serde_json::Value = serde_json::from_str(&data).expect("Failed to parse JSON");
 
         // Parse using the parser
         let parser = JsonComplexityParser;
-        let result = parser.parse(&value);
+        let result = parser.parse(&value, ExecutionConfig::default_config());
 
         // Should error due to max_rss_kb being a string instead of u64
         match result {
             Err(crate::error::MarkerError::ParseComplexityError(msg)) => {
-                assert!(msg.contains("max_rss_kb"), "Error message should mention max_rss_kb, got: {}", msg);
-            },
-            other => panic!("Expected ParseComplexityError for wrong type max_rss_kb, got: {:?}", other),
+                assert!(
+                    msg.contains("max_rss_kb"),
+                    "Error message should mention max_rss_kb, got: {}",
+                    msg
+                );
+            }
+            other => panic!(
+                "Expected ParseComplexityError for wrong type max_rss_kb, got: {:?}",
+                other
+            ),
         }
     }
 
@@ -211,13 +265,16 @@ mod tests {
     #[test]
     fn test_parse_extended_metrics_report() {
         // Load the JSON file
-        let path = std::path::Path::new("src/test_files/complexity_parser/complexity_report_5.json");
+        let path =
+            std::path::Path::new("src/test_files/complexity_parser/complexity_report_5.json");
         let data = std::fs::read_to_string(path).expect("Failed to read test JSON file");
         let value: serde_json::Value = serde_json::from_str(&data).expect("Failed to parse JSON");
 
         // Parse using the parser
         let parser = JsonComplexityParser;
-        let report = parser.parse(&value).expect("Should parse valid report with extra fields");
+        let report = parser
+            .parse(&value, ExecutionConfig::default_config())
+            .expect("Should parse valid report with extra fields");
 
         // Assert all required fields
         assert!(approx_eq(report.user_time_s, 0.30), "user_time_s");

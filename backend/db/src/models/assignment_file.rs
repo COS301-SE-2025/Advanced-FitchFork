@@ -1,13 +1,14 @@
 // models/assignment_file.rs
 
 use chrono::{DateTime, Utc};
-// use code_runner::{run_zip_files, ExecutionConfig};
+// use code_runner::ExecutionConfig;
+use sea_orm::{ActiveValue::Set, DbErr, DatabaseConnection};
 use sea_orm::entity::prelude::*;
-use sea_orm::ActiveValue::Set;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use strum_macros::{Display, EnumIter, EnumString};
+use strum::{Display, EnumIter, EnumString};
+use util::execution_config::ExecutionConfig;
 
 /// Represents a file associated with an assignment, such as a spec, main file, memo, or submission.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -74,6 +75,16 @@ pub enum Relation {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
+    /// Loads and returns the `ExecutionConfig` if the file type is `Config`.
+    /// Requires `module_id` because it's not stored in the DB.
+    pub fn load_execution_config(&self, module_id: i64) -> Result<ExecutionConfig, String> {
+        if self.file_type != FileType::Config {
+            return Err("File is not of type 'config'".to_string());
+        }
+
+        ExecutionConfig::get_execution_config(module_id, self.assignment_id)
+    }
+
     /// Returns the base directory for assignment file storage from the environment.
     pub fn storage_root() -> PathBuf {
         env::var("ASSIGNMENT_STORAGE_ROOT")
@@ -93,6 +104,10 @@ impl Model {
             .join(file_type.to_string())
     }
 
+    pub fn full_path(&self) -> PathBuf {
+        Self::storage_root().join(&self.path)
+    }
+
     pub async fn save_file(
         db: &DatabaseConnection,
         assignment_id: i64,
@@ -103,12 +118,11 @@ impl Model {
     ) -> Result<Self, DbErr> {
         let now = Utc::now();
 
-        // Step 1: Delete existing file record of the same type (if any)
+        use sea_orm::ColumnTrait;
         use sea_orm::EntityTrait;
         use sea_orm::QueryFilter;
-        use sea_orm::ColumnTrait;
 
-        use crate::models::assignment_file::{Entity as AssignmentFile, Column};
+        use crate::models::assignment_file::{Column, Entity as AssignmentFile};
 
         if let Some(existing) = AssignmentFile::find()
             .filter(Column::AssignmentId.eq(assignment_id))
@@ -122,7 +136,6 @@ impl Model {
             existing.delete(db).await?;
         }
 
-        // Step 2: Insert placeholder record with dummy path
         let partial = ActiveModel {
             assignment_id: Set(assignment_id),
             filename: Set(filename.to_string()),
@@ -135,7 +148,6 @@ impl Model {
 
         let inserted: Model = partial.insert(db).await?;
 
-        // Step 3: Build deterministic file path (e.g., 42.json)
         let ext = PathBuf::from(filename)
             .extension()
             .map(|e| e.to_string_lossy().to_string());
@@ -159,14 +171,12 @@ impl Model {
         fs::write(&file_path, bytes)
             .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
 
-        // Step 4: Update DB row with the actual file path
         let mut model: ActiveModel = inserted.into();
         model.path = Set(relative_path);
         model.updated_at = Set(Utc::now());
 
         model.update(db).await
     }
-
 
     /// Loads the file contents from disk based on the path stored in the model.
     pub fn load_file(&self) -> Result<Vec<u8>, std::io::Error> {
@@ -178,6 +188,18 @@ impl Model {
     pub fn delete_file_only(&self) -> Result<(), std::io::Error> {
         let full_path = Self::storage_root().join(&self.path);
         fs::remove_file(full_path)
+    }
+    
+    // TODO: Change this to get the skeleton files instead of the memo files
+    pub async fn get_base_files(
+        db: &DatabaseConnection,
+        assignment_id: i64,
+    ) -> Result<Vec<Self>, DbErr> {
+        Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .filter(Column::FileType.eq(FileType::Main))
+            .all(db)
+            .await
     }
 }
 
@@ -196,29 +218,11 @@ mod tests {
     }
 
     fn override_storage_dir(temp: &TempDir) {
-        env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
+        unsafe {
+            env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
+        }
     }
 
-    //TODO - this test failed on github and I don't know why
-    //ERROR:
-    /*
-        failures:
-
-    ---- models::assignment_file::tests::test_save_and_load_file stdout ----
-
-    thread 'models::assignment_file::tests::test_save_and_load_file' panicked at db/src/models/assignment_file.rs:434:9:
-    assertion failed: full_path.exists()
-    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-
-
-    failures:
-        models::assignment_file::tests::test_save_and_load_file
-
-    test result: FAILED. 11 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.85s
-
-    error: test failed, to rerun pass `-p db --lib`
-    Error: Process completed with exit code 101.
-    */
     #[tokio::test]
     #[ignore]
     async fn test_save_and_load_file() {

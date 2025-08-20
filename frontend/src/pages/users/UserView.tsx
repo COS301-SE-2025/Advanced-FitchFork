@@ -2,21 +2,14 @@ import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Typography, Table, Spin, Descriptions, Select, Button, Popconfirm, Space } from 'antd';
 import { EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
-import ModuleRoleTag from '@/components/ModuleRoleTag';
 import AdminTag from '@/components/AdminTag';
-import { useNotifier } from '@/components/Notifier';
 import type { User } from '@/types/users';
 import { type ModuleRole, type Module, MODULE_ROLES } from '@/types/modules';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
-import {
-  removeLecturers,
-  removeTutors,
-  removeStudents,
-  assignLecturers,
-  assignTutors,
-  enrollStudents,
-} from '@/services/modules';
 import { getUser, getUserModules } from '@/services/users';
+import { removePersonnel, assignPersonnel } from '@/services/modules/personnel';
+import ModuleRoleTag from '@/components/modules/ModuleRoleTag';
+import { useNotifier } from '@/components/common';
 
 const { Title } = Typography;
 
@@ -43,8 +36,6 @@ const UserView = () => {
 
     if (userRes.success) {
       setUser(userRes.data);
-
-      // Set custom breadcrumb label using the username
       setBreadcrumbLabel(`users/${userId}`, userRes.data.username);
     } else {
       notifyError('Failed to load user', userRes.message);
@@ -79,13 +70,8 @@ const UserView = () => {
     if (oldRole === newRole) return;
 
     try {
-      if (oldRole === 'Lecturer') await removeLecturers(moduleId, { user_ids: [userId] });
-      if (oldRole === 'Tutor') await removeTutors(moduleId, { user_ids: [userId] });
-      if (oldRole === 'Student') await removeStudents(moduleId, { user_ids: [userId] });
-
-      if (newRole === 'Lecturer') await assignLecturers(moduleId, { user_ids: [userId] });
-      if (newRole === 'Tutor') await assignTutors(moduleId, { user_ids: [userId] });
-      if (newRole === 'Student') await enrollStudents(moduleId, { user_ids: [userId] });
+      await removePersonnel(moduleId, { user_ids: [userId], role: oldRole });
+      await assignPersonnel(moduleId, { user_ids: [userId], role: newRole });
 
       notifySuccess('Role updated', 'The user’s role was successfully updated.');
       setEditingModuleId(null);
@@ -98,9 +84,7 @@ const UserView = () => {
 
   const handleRemove = async (moduleId: number, role: ModuleRole) => {
     try {
-      if (role === 'Lecturer') await removeLecturers(moduleId, { user_ids: [userId] });
-      if (role === 'Tutor') await removeTutors(moduleId, { user_ids: [userId] });
-      if (role === 'Student') await removeStudents(moduleId, { user_ids: [userId] });
+      await removePersonnel(moduleId, { user_ids: [userId], role });
 
       notifySuccess('User removed', 'The user was removed from this module.');
       fetchUserData();
@@ -155,9 +139,9 @@ const UserView = () => {
                 <Select
                   value={editedRole ?? role}
                   onChange={(value) => setEditedRole(value)}
-                  options={MODULE_ROLES.map((r) => ({
+                  options={[...MODULE_ROLES].map((r) => ({
                     value: r,
-                    label: r.charAt(0).toUpperCase() + r.slice(1),
+                    label: r.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()),
                   }))}
                   style={{ width: '100%' }}
                 />

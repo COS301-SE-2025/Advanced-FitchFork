@@ -3,7 +3,7 @@ use db::models::assignment;
 use db::models::assignment_file::{FileType, Model};
 use sea_orm::{DatabaseConnection, EntityTrait};
 use std::io::{Cursor, Write};
-use zip::write::FileOptions;
+use zip::write::SimpleFileOptions;
 
 pub struct AssignmentFileSeeder;
 
@@ -27,7 +27,7 @@ impl Seeder for AssignmentFileSeeder {
         ];
 
         for a in &assignments {
-            if a.module_id == 9999 || a.module_id == 9998 {
+            if a.module_id == 9999 || a.module_id == 9998 || a.module_id == 10003 {
                 continue;
             }
             for &(ref file_type, filename_fn) in &file_types {
@@ -53,7 +53,7 @@ impl Seeder for AssignmentFileSeeder {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let main_java = r#"
 public class Main {
@@ -95,7 +95,7 @@ public class Main {
 
     static void runTask3() {
         System.out.println("&-=-&Task3Subtask1");
-        System.out.println(HelperThree.subtaskAlpha());
+        System.out.println(HelperThree.subtaskAlpha())
         System.out.println("&-=-&Task3Subtask2");
         System.out.println(HelperOne.subtaskBeta());
         System.out.println("&-=-&Task3Subtask3");
@@ -115,7 +115,7 @@ public class Main {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let helper_one = r#"
 public class HelperOne {
@@ -177,7 +177,7 @@ public class HelperThree {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let makefile_content = r#"
 task1:
@@ -200,13 +200,26 @@ task3:
         // New config file content
         let config_json = r#"
 {
-  "timeout_secs": 15,
-  "max_memory": "768m",
-  "max_cpus": "2",
-  "max_processes": 256,
-  "max_uncompressed_size": 50000000,
-  "marking_scheme": "exact",
-  "feedback_scheme": "auto"
+  "execution": {
+    "timeout_secs": 10,
+    "max_memory": 8589934592,
+    "max_cpus": 2,
+    "max_uncompressed_size": 100000000,
+    "max_processes": 256
+  },
+  "marking": {
+    "marking_scheme": "exact",
+    "feedback_scheme": "auto",
+    "deliminator": "&-=-&"
+  },
+  "project": {
+    "language": "cpp"
+  },
+  "output": {
+    "stdout": true,
+    "stderr": true,
+    "retcode": true
+  }
 }
 "#;
 
@@ -236,11 +249,12 @@ task3:
         let cpp_module_id = 9998;
         let cpp_assignment_id = 9998;
 
-        fn create_main_zip_cpp() -> Vec<u8> {
+        //Original main file that was created
+        fn _create_main_zip_cpp() -> Vec<u8> {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let main_cpp = r#"
 #include <iostream>
@@ -279,53 +293,8 @@ int main(int argc, char* argv[]) {
 }
 "#;
 
-                let helper_one_h = r#"
-#ifndef HELPERONE_H
-#define HELPERONE_H
-#include <string>
-struct HelperOne {
-    static std::string subtaskA();
-    static std::string subtaskZ();
-    static std::string subtaskBeta();
-};
-#endif
-"#;
-
-                let helper_two_h = r#"
-#ifndef HELPERTWO_H
-#define HELPERTWO_H
-#include <string>
-struct HelperTwo {
-    static std::string subtaskB();
-    static std::string subtaskX();
-    static std::string subtaskGamma();
-};
-#endif
-"#;
-
-                let helper_three_h = r#"
-#ifndef HELPERTHREE_H
-#define HELPERTHREE_H
-#include <string>
-struct HelperThree {
-    static std::string subtaskC();
-    static std::string subtaskY();
-    static std::string subtaskAlpha();
-};
-#endif
-"#;
-
                 zip.start_file("Main.cpp", options).unwrap();
                 zip.write_all(main_cpp.as_bytes()).unwrap();
-
-                zip.start_file("HelperOne.h", options).unwrap();
-                zip.write_all(helper_one_h.as_bytes()).unwrap();
-
-                zip.start_file("HelperTwo.h", options).unwrap();
-                zip.write_all(helper_two_h.as_bytes()).unwrap();
-
-                zip.start_file("HelperThree.h", options).unwrap();
-                zip.write_all(helper_three_h.as_bytes()).unwrap();
 
                 zip.finish().unwrap();
             }
@@ -336,7 +305,7 @@ struct HelperThree {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let helper_one_cpp = r#"
 #include "HelperOne.h"
@@ -377,6 +346,42 @@ std::string HelperThree::subtaskAlpha() {
 }
 "#;
 
+                let helper_one_h = r#"
+#ifndef HELPERONE_H
+#define HELPERONE_H
+#include <string>
+struct HelperOne {
+    static std::string subtaskA();
+    static std::string subtaskZ();
+    static std::string subtaskBeta();
+};
+#endif
+"#;
+
+                let helper_two_h = r#"
+#ifndef HELPERTWO_H
+#define HELPERTWO_H
+#include <string>
+struct HelperTwo {
+    static std::string subtaskB();
+    static std::string subtaskX();
+    static std::string subtaskGamma();
+};
+#endif
+"#;
+
+                let helper_three_h = r#"
+#ifndef HELPERTHREE_H
+#define HELPERTHREE_H
+#include <string>
+struct HelperThree {
+    static std::string subtaskC();
+    static std::string subtaskY();
+    static std::string subtaskAlpha();
+};
+#endif
+"#;
+
                 zip.start_file("HelperOne.cpp", options).unwrap();
                 zip.write_all(helper_one_cpp.as_bytes()).unwrap();
 
@@ -385,6 +390,15 @@ std::string HelperThree::subtaskAlpha() {
 
                 zip.start_file("HelperThree.cpp", options).unwrap();
                 zip.write_all(helper_three_cpp.as_bytes()).unwrap();
+
+                zip.start_file("HelperOne.h", options).unwrap();
+                zip.write_all(helper_one_h.as_bytes()).unwrap();
+
+                zip.start_file("HelperTwo.h", options).unwrap();
+                zip.write_all(helper_two_h.as_bytes()).unwrap();
+
+                zip.start_file("HelperThree.h", options).unwrap();
+                zip.write_all(helper_three_h.as_bytes()).unwrap();
 
                 zip.finish().unwrap();
             }
@@ -395,7 +409,7 @@ std::string HelperThree::subtaskAlpha() {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
-                let options = FileOptions::default().unix_permissions(0o644);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let makefile_content = r#"
 CXX = g++
@@ -438,18 +452,31 @@ task4: main
 
         let config_json_cpp = r#"
 {
-  "timeout_secs": 15,
-  "max_memory": "768m",
-  "max_cpus": "2",
-  "max_processes": 256,
-  "max_uncompressed_size": 50000000,
-  "marking_scheme": "exact",
-  "feedback_scheme": "auto"
+  "execution": {
+    "timeout_secs": 10,
+    "max_memory": 8589934592,
+    "max_cpus": 2,
+    "max_uncompressed_size": 100000000,
+    "max_processes": 256
+  },
+  "marking": {
+    "marking_scheme": "exact",
+    "feedback_scheme": "auto",
+    "deliminator": "&-=-&"
+  },
+  "project": {
+    "language": "cpp"
+  },
+  "output": {
+    "stdout": true,
+    "stderr": true,
+    "retcode": true
+  }
 }
 "#;
 
         let zipped_files_cpp = vec![
-            (FileType::Main, "main.zip", create_main_zip_cpp()),
+            // (FileType::Main, "main.zip", create_main_zip_cpp()),
             (FileType::Memo, "memo.zip", create_memo_zip_cpp()),
             (
                 FileType::Makefile,
@@ -468,6 +495,352 @@ task4: main
                 db,
                 cpp_assignment_id,
                 cpp_module_id,
+                file_type,
+                filename,
+                &content,
+            )
+            .await;
+        }
+
+        //Plagerism Assignment
+        let plag_module: i64 = 10003;
+        let plag_assignment: i64 = 10003;
+
+        fn create_plag_main_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let main_java = r#"
+public class Main {
+    public static void main(String[] args) {
+        String task = args.length > 0 ? args[0] : "task1";
+
+        switch (task) {
+            case "task1":
+                System.out.println("Hello World!");
+                break;
+            default:
+                System.out.println("" + task + " is not a valid task");
+        }
+    }
+}
+"#;
+
+                zip.start_file("Main.java", options).unwrap();
+                zip.write_all(main_java.as_bytes()).unwrap();
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        fn create_plag_memo_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let helper_one = r#"
+public class StudentSolution {
+private int helperMultiply1(int a,int b){return a*b + 9;}
+
+public int fibonacci_U1(int n) {
+int a=0,b=1;
+// U1 tweak
+for(int i=2;i<=n;i++){int tmp=b;b=a+b;a=tmp;}
+return b;
+}
+
+public int factorial_U1(int n) {
+int f = 1;
+for(int i=1;i<=n;i++) f*=i;
+return f;
+}
+
+private String helperComment1(){return "Extra comment TXgZpkUF";}
+
+public int sumArray_U1(int[] arr) {
+int sum = 0;
+for(int n: arr) sum += n;
+// U1 tweak
+return sum;
+}
+
+
+public String gradeStudent(int score){
+    switch(score/10){
+        case 10: case 9: return "A";
+        case 8: return "B";
+        case 7: return "C";
+        default: return "F";
+    }
+}
+
+public int reverseString_U1(String s) {
+String rev="";
+for(int i=s.length()-1;i>=0;i--)
+rev+=s.charAt(i);
+return rev;
+}
+}
+"#;
+                zip.start_file("StudentSolution.java", options).unwrap();
+                zip.write_all(helper_one.as_bytes()).unwrap();
+
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        fn create_plag_makefile_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let makefile_content = r#"
+task1:
+	javac -d /output Main.java StudentSolution.java && java -cp /output Main task1
+"#;
+
+                zip.start_file("Makefile", options).unwrap();
+                zip.write_all(makefile_content.as_bytes()).unwrap();
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        // New config file content
+        let config_json = r#"
+{
+  "execution": {
+    "timeout_secs": 10,
+    "max_memory": 8589934592,
+    "max_cpus": 2,
+    "max_uncompressed_size": 100000000,
+    "max_processes": 256
+  },
+  "marking": {
+    "marking_scheme": "exact",
+    "feedback_scheme": "auto",
+    "deliminator": "&-=-&"
+  },
+  "project": {
+    "language": "java"
+  },
+  "output": {
+    "stdout": true,
+    "stderr": false,
+    "retcode": false
+  }
+}
+"#;
+
+        let zipped_files = vec![
+            (FileType::Main, "main.zip", create_plag_main_zip()),
+            (FileType::Memo, "memo.zip", create_plag_memo_zip()),
+            (
+                FileType::Makefile,
+                "makefile.zip",
+                create_plag_makefile_zip(),
+            ),
+            (
+                FileType::Config,
+                "config.json",
+                config_json.as_bytes().to_vec(),
+            ),
+        ];
+
+        for (file_type, filename, content) in zipped_files {
+            let _ = Model::save_file(
+                db,
+                plag_assignment,
+                plag_module,
+                file_type,
+                filename,
+                &content,
+            )
+            .await;
+        }
+
+        //GATLAM
+        //Plagerism Assignment
+        let plag_module: i64 = 10003;
+        let plag_assignment: i64 = 10004;
+
+        fn create_interpreter_main_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let helper_one = r#"
+//Nothing
+"#;
+                zip.start_file("Main.java", options).unwrap();
+                zip.write_all(helper_one.as_bytes()).unwrap();
+
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        fn create_interpreter_memo_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let helper_one = r#"
+public class StudentSolution {
+private int helperMultiply1(int a,int b){return a*b + 9;}
+
+public int fibonacci_U1(int n) {
+int a=0,b=1;
+// U1 tweak
+for(int i=2;i<=n;i++){int tmp=b;b=a+b;a=tmp;}
+return b;
+}
+
+public int factorial_U1(int n) {
+int f = 1;
+for(int i=1;i<=n;i++) f*=i;
+return f;
+}
+
+private String helperComment1(){return "Extra comment TXgZpkUF";}
+
+public int sumArray_U1(int[] arr) {
+int sum = 0;
+for(int n: arr) sum += n;
+// U1 tweak
+return sum;
+}
+
+
+public String gradeStudent(int score){
+    switch(score/10){
+        case 10: case 9: return "A";
+        case 8: return "B";
+        case 7: return "C";
+        default: return "F";
+    }
+}
+
+public String reverseString_U1(String s) {
+    String rev="";
+    for(int i=s.length()-1;i>=0;i--)
+        rev+=s.charAt(i);
+    return rev;
+}
+}
+"#;
+                zip.start_file("StudentSolution.java", options).unwrap();
+                zip.write_all(helper_one.as_bytes()).unwrap();
+
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        fn create_interpreter_makefile_zip() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
+
+                let makefile_content = r#"
+task1:
+	javac -d /output Main.java StudentSolution.java && java -cp /output Main task1
+"#;
+
+                zip.start_file("Makefile", options).unwrap();
+                zip.write_all(makefile_content.as_bytes()).unwrap();
+                zip.finish().unwrap();
+            }
+            buf.into_inner()
+        }
+
+        // New config file content
+        let config_json = r#"
+{
+  "execution": {
+    "max_cpus": 2,
+    "max_memory": 8589934592,
+    "max_processes": 256,
+    "max_uncompressed_size": 100000000,
+    "timeout_secs": 10
+  },
+  "gatlam": {
+    "crossover_probability": 0.9,
+    "crossover_type": "onepoint",
+    "genes": [
+      {
+        "max_value": 5,
+        "min_value": -5
+      },
+      {
+        "max_value": 9,
+        "min_value": -4
+      }
+    ],
+    "max_parallel_chromosomes": 4,
+    "mutation_probability": 0.01,
+    "mutation_type": "bitflip",
+    "number_of_generations": 5,
+    "omega1": 0.5,
+    "omega2": 0.3,
+    "omega3": 0.2,
+    "population_size": 1,
+    "reproduction_probability": 0.8,
+    "selection_size": 20,
+    "task_spec": {
+      "forbidden_outputs": [],
+      "max_runtime_ms": null,
+      "valid_return_codes": [
+        0
+      ]
+    },
+    "verbose": false
+  },
+  "marking": {
+    "deliminator": "&-=-&",
+    "feedback_scheme": "auto",
+    "marking_scheme": "exact"
+  },
+  "output": {
+    "retcode": true,
+    "stderr": true,
+    "stdout": true
+  },
+  "project": {
+    "language": "java",
+    "submission_mode": "gatlam"
+  }
+}
+"#;
+
+        let zipped_files = vec![
+            (FileType::Main, "main.zip", create_interpreter_main_zip()),
+            (FileType::Memo, "memo.zip", create_interpreter_memo_zip()),
+            (
+                FileType::Makefile,
+                "makefile.zip",
+                create_interpreter_makefile_zip(),
+            ),
+            (
+                FileType::Config,
+                "config.json",
+                config_json.as_bytes().to_vec(),
+            ),
+        ];
+
+        for (file_type, filename, content) in zipped_files {
+            let _ = Model::save_file(
+                db,
+                plag_assignment,
+                plag_module,
                 file_type,
                 filename,
                 &content,

@@ -1,29 +1,22 @@
 [package]
 name = "db"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-sea-orm = { version = "0.12", features = [
-    "macros",
-    "runtime-tokio-rustls",
-    "sqlx-sqlite",
-    "chrono",
-] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 chrono = { version = "0.4", features = ["serde"] }
 argon2 = "0.5"
-rand_core = "0.6"
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
+sea-orm-migration = "1.1"
 migration = { path = "../migration" }
-sea-orm-migration = "0.12"
-rand = { version = "0.8", features = ["std"] }
-strum = { version = "0.25", features = ["derive"] }
-strum_macros = "0.25"
+rand = "0.8" # Using older version of rand because sqlx and other packages are behind
+strum = { version = "0.26", features = ["derive"] }  # Using older version of strum because sea-orm is behind
 log = "0.4"
 uuid = { version = "1.7", features = ["v4", "serde"] }
-common = { path = "../common" }
+util = { path = "../util" }
 
 [dev-dependencies]
-tempfile = "3"
-zip = "0.6"
+tempfile = "3.0"
+zip = "4.3"

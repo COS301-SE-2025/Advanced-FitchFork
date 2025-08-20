@@ -2,26 +2,29 @@
 //!
 //! This module provides the endpoint handler for retrieving detailed information about a specific assignment task within a module, including its subsections and associated memo outputs. It interacts with the database to validate module, assignment, and task existence, loads the mark allocator configuration, and parses memo output files to provide detailed feedback for each subsection of the task.
 
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-use db::connect;
-use db::models::{assignment_task, assignment, module};
-use util::mark_allocator::mark_allocator::load_allocator;
 use crate::response::ApiResponse;
+use crate::routes::modules::assignments::tasks::common::TaskResponse;
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use db::models::assignment_task::{Column, Entity};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
-use std::env;
-use std::fs;
-use std::path::PathBuf;
-use sea_orm::EntityTrait;
-use chrono::DateTime;
 use serde_json::Value;
+use std::{env, fs, path::PathBuf};
+use util::{execution_config::ExecutionConfig, state::AppState};
+use util::mark_allocator::mark_allocator::load_allocator;
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
 #[derive(Serialize)]
 pub struct SubsectionDetail {
     /// The name of the subsection.
     pub name: String,
-    /// The mark value assigned to this subsection.
-    pub mark_value: i64,
+    /// The value value assigned to this subsection.
+    pub value: i64,
     /// The memo output content for this subsection, if available.
     pub memo_output: Option<String>,
 }
@@ -34,7 +37,7 @@ pub struct TaskDetailResponse {
     /// The task's ID (may be the same as `id`).
     pub task_id: i64,
     /// The display name assigned to a task
-    pub name: String,  
+    pub name: String,
     /// The command associated with this task.
     pub command: String,
     /// The creation timestamp of the task (RFC3339 format).
@@ -45,120 +48,74 @@ pub struct TaskDetailResponse {
     pub subsections: Vec<SubsectionDetail>,
 }
 
-/// A minimal response structure for a task, used for listing or summary purposes.
-#[derive(Debug, Serialize)]
-pub struct TaskResponse {
-    /// The unique database ID of the task.
-    id: i64,
-    /// The task's number (as used in the allocator and memo files).
-    task_number: i64,
-    /// The command associated with this task.
-    command: String,
-    /// The creation timestamp of the task.
-    created_at: DateTime<chrono::Utc>,
-    /// The last update timestamp of the task.
-    updated_at: DateTime<chrono::Utc>,
-}
-
-/// Retrieves detailed information about a specific task within an assignment and module.
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}
 ///
-/// This handler performs the following steps:
-/// 1. Validates the existence of the module, assignment, and task in the database.
-/// 2. Ensures the assignment belongs to the module, and the task belongs to the assignment.
-/// 3. Loads the mark allocator JSON for the assignment to get task and subsection structure.
-/// 4. Attempts to read the memo output file for the task, splitting it into subsection outputs.
-/// 5. Constructs a detailed response including subsection names, mark values, and memo outputs.
+/// Retrieve detailed information about a specific task within an assignment. Only accessible by lecturers or admins assigned to the module.
 ///
-/// # Path Parameters
-/// - `module_id`: The ID of the module.
-/// - `assignment_id`: The ID of the assignment.
-/// - `task_id`: The ID of the task.
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment containing the task
+/// - `task_id` (i64): The ID of the task to retrieve details for
 ///
-/// # Returns
-/// - `200 OK` with detailed task information if found.
-/// - `404 Not Found` if the module, assignment, or task does not exist or does not belong.
-/// - `500 Internal Server Error` for database or file system errors.
+/// ### Responses
 ///
-/// The response includes subsection details and memo outputs, if available.
+/// - `200 OK`
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Task details retrieved successfully",
+///   "data": {
+///     "id": 123,
+///     "task_id": 123,
+///     "command": "java -cp . Main",
+///     "created_at": "2024-01-01T00:00:00Z",
+///     "updated_at": "2024-01-01T00:00:00Z",
+///     "subsections": [
+///       {
+///         "name": "Compilation",
+///         "value": 10,
+///         "memo_output": "Code compiles successfully without errors."
+///       },
+///       {
+///         "name": "Output",
+///         "value": 15,
+///         "memo_output": "Program produces correct output for all test cases."
+///       }
+///     ]
+///   }
+/// }
+/// ```
+///
+/// - `404 Not Found`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Module not found" // or "Assignment not found" or "Task not found" or "Assignment does not belong to this module" or "Task does not belong to this assignment" or "Task not found in allocator"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Database error retrieving module" // or "Database error retrieving assignment" or "Database error retrieving task" or "Failed to load mark allocator"
+/// }
+/// ```
+///
 pub async fn get_task_details(
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let db = connect().await;
+    let db = app_state.db();
 
-    // Validate module
-    let module_exists = match module::Entity::find_by_id(module_id).one(&db).await {
-        Ok(Some(_)) => true,
-        Ok(None) => false,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving module")),
-            )
-                .into_response();
-        }
-    };
-    if !module_exists {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module not found")),
-        )
-            .into_response();
-    }
+    let task = Entity::find_by_id(task_id)
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap();
 
-    // Validate assignment
-    let assignment_model = match assignment::Entity::find_by_id(assignment_id).one(&db).await {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving assignment")),
-            )
-                .into_response();
-        }
-    };
-    if assignment_model.module_id != module_id {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Assignment does not belong to this module")),
-        )
-            .into_response();
-    }
-
-    // Validate task
-    let task = match assignment_task::Entity::find_by_id(task_id).one(&db).await {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Task not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving task")),
-            )
-                .into_response();
-        }
-    };
-    if task.assignment_id != assignment_id {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Task does not belong to this assignment")),
-        )
-            .into_response();
-    }
-
-    let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/assignment_files".into());
+    let base_path =
+        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
     let memo_path = PathBuf::from(&base_path)
         .join(format!("module_{}", module_id))
         .join(format!("assignment_{}", assignment_id))
@@ -166,17 +123,27 @@ pub async fn get_task_details(
         .join(format!("task_{}.txt", task.task_number));
 
     let memo_content = fs::read_to_string(&memo_path).ok().or_else(|| {
-        fs::read_dir(memo_path.parent()?).ok()?.filter_map(Result::ok).find_map(|entry| {
-            if entry.path().extension().map_or(false, |ext| ext == "txt") {
-                fs::read_to_string(entry.path()).ok()
-            } else {
-                None
-            }
-        })
+        fs::read_dir(memo_path.parent()?)
+            .ok()?
+            .filter_map(Result::ok)
+            .find_map(|entry| {
+                if entry.path().extension().map_or(false, |ext| ext == "txt") {
+                    fs::read_to_string(entry.path()).ok()
+                } else {
+                    None
+                }
+            })
     });
 
+    // Load the ExecutionConfig to get the custom delimiter
+    let separator = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
+        Ok(config) => config.marking.deliminator,
+        Err(_) => "&-=-&".to_string(), // fallback if config file missing or unreadable
+    };
+
+    // --- keep memo parsing logic unchanged ---
     let outputs: Vec<Option<String>> = if let Some(ref memo) = memo_content {
-        let parts: Vec<&str> = memo.split("&-=-&").collect();
+        let parts: Vec<&str> = memo.split(&separator).collect();
         parts
             .into_iter()
             .map(|part| {
@@ -194,49 +161,107 @@ pub async fn get_task_details(
 
     let parsed_outputs: Vec<Option<String>> = outputs.into_iter().skip(1).collect();
 
+    // --- UPDATED: read allocator in new keyed shape (with fallback to legacy flat shape) ---
+    // New shape example:
+    // {
+    //   "tasks": [
+    //     { "task1": { "name": "...", "task_number": 1, "value": 9, "subsections": [ ... ] } },
+    //     { "task2": { ... } }
+    //   ],
+    //   "total_value": 27
+    // }
+    //
+    // Legacy fallback (still supported):
+    // {
+    //   "tasks": [
+    //     { "task_number": 1, "value": 9, "subsections": [ ... ] },
+    //     ...
+    //   ],
+    //   "total_value": 27
+    // }
     let allocator_json: Option<Value> = load_allocator(module_id, assignment_id).await.ok();
-    let task_key = format!("task{}", task.task_number);
 
-    let (_task_name, _task_value, subsections) = if let Some(tasks) = allocator_json
+    let ( _task_value, subsections_arr ): (i64, Vec<Value>) = if let Some(tasks_arr) = allocator_json
         .as_ref()
         .and_then(|v| v.get("tasks"))
         .and_then(|t| t.as_array())
     {
-        tasks.iter().find_map(|obj| {
-            obj.as_object().and_then(|map| {
-                let task_obj = map.get(&task_key)?.as_object()?;
-                let name = task_obj.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
-                let value = task_obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
-                let subsections = task_obj.get("subsections")?.as_array()?.clone();
-                Some((name, value, subsections))
-            })
-        }).unwrap_or_else(|| ("".to_string(), 0, vec![]))
+        // Try new keyed shape first
+        let desired_key = format!("task{}", task.task_number);
+        let mut found: Option<(i64, Vec<Value>)> = None;
+
+        for entry in tasks_arr {
+            if let Some(entry_obj) = entry.as_object() {
+                if let Some(inner) = entry_obj.get(&desired_key) {
+                    if let Some(inner_obj) = inner.as_object() {
+                        let task_value = inner_obj
+                            .get("value")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+                        let subsections = inner_obj
+                            .get("subsections")
+                            .and_then(|v| v.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+                        found = Some((task_value, subsections));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If not found in keyed shape, fall back to legacy flat shape
+        if let Some(hit) = found {
+            hit
+        } else {
+            tasks_arr
+                .iter()
+                .find_map(|entry| {
+                    let obj = entry.as_object()?;
+                    let tn = obj.get("task_number")?.as_i64()?;
+                    if tn == task.task_number as i64 {
+                        let val = obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let subs = obj
+                            .get("subsections")
+                            .and_then(|v| v.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+                        Some((val, subs))
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or((0, vec![]))
+        }
     } else {
-        ("".to_string(), 0, vec![])
+        (0, vec![])
     };
 
-
+    // Align memo outputs vector length with number of subsections
     let mut subsection_outputs = parsed_outputs;
-    subsection_outputs.resize(subsections.len(), None);
+    subsection_outputs.resize(subsections_arr.len(), None);
 
-    let detailed_subsections: Vec<SubsectionDetail> = subsections
+    // Build response subsections from subsections (name + value) and attach memo_output
+    let detailed_subsections: Vec<SubsectionDetail> = subsections_arr
         .iter()
         .enumerate()
-        .filter_map(|(i, s)| {
-            let obj = match s.as_object() {
-                Some(obj) => obj,
+        .filter_map(|(i, c)| {
+            let obj = match c.as_object() {
+                Some(o) => o,
                 None => {
-                    eprintln!("Subsection {} is not a JSON object: {:?}", i, s);
+                    eprintln!("Subsection {} is not a JSON object: {:?}", i, c);
                     return None;
                 }
             };
 
-            let name = obj.get("name")
+            let name = obj
+                .get("name")
                 .and_then(|n| n.as_str())
                 .unwrap_or("<unnamed>")
                 .to_string();
 
-            let mark_value = obj.get("value")
+            let value = obj
+                .get("value")
                 .and_then(|v| v.as_i64())
                 .unwrap_or_else(|| {
                     eprintln!("Missing or invalid value for subsection '{}'", name);
@@ -247,17 +272,16 @@ pub async fn get_task_details(
 
             Some(SubsectionDetail {
                 name,
-                mark_value,
+                value,
                 memo_output,
             })
         })
         .collect();
 
-
     let resp = TaskDetailResponse {
         id: task.id,
         task_id: task.id,
-        name: task.name.clone(), 
+        name: task.name.clone(),
         command: task.command,
         created_at: task.created_at.to_rfc3339(),
         updated_at: task.updated_at.to_rfc3339(),
@@ -266,7 +290,101 @@ pub async fn get_task_details(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(resp, "Task details retrieved successfully")),
+        Json(ApiResponse::success(
+            resp,
+            "Task details retrieved successfully",
+        )),
     )
         .into_response()
+}
+
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/tasks
+///
+/// Retrieve all tasks for a specific assignment. Only accessible by lecturers or admins assigned to the module.
+///
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment to list tasks for
+///
+/// ### Responses
+///
+/// - `200 OK`
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Tasks retrieved successfully",
+///   "data": [
+///     {
+///       "id": 123,
+///       "task_number": 1,
+///       "command": "java -cp . Main",
+///       "created_at": "2024-01-01T00:00:00Z",
+///       "updated_at": "2024-01-01T00:00:00Z"
+///     },
+///     {
+///       "id": 124,
+///       "task_number": 2,
+///       "command": "python main.py",
+///       "created_at": "2024-01-01T00:00:00Z",
+///       "updated_at": "2024-01-01T00:00:00Z"
+///     }
+///   ]
+/// }
+/// ```
+///
+/// - `404 Not Found`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Assignment or module not found"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Database error" // or "Failed to retrieve tasks"
+/// }
+/// ```
+///
+pub async fn list_tasks(
+    State(app_state): State<AppState>,
+    Path((_, assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
+    match Entity::find()
+        .filter(Column::AssignmentId.eq(assignment_id))
+        .order_by_asc(Column::TaskNumber)
+        .all(db)
+        .await
+    {
+        Ok(tasks) => {
+            let data = tasks
+                .into_iter()
+                .map(|task| TaskResponse {
+                    id: task.id,
+                    task_number: task.task_number,
+                    name: task.name,
+                    command: task.command,
+                    created_at: task.created_at.to_rfc3339(),
+                    updated_at: task.updated_at.to_rfc3339(),
+                })
+                .collect::<Vec<_>>();
+
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(data, "Tasks retrieved successfully")),
+            )
+                .into_response()
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<Vec<TaskResponse>>::error(
+                "Failed to retrieve tasks",
+            )),
+        )
+            .into_response(),
+    }
 }

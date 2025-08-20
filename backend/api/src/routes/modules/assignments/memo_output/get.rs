@@ -1,13 +1,10 @@
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
-use std::{env, fs, path::PathBuf};
-use tokio::fs as tokio_fs;
 use crate::response::ApiResponse;
+use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
+use tokio::fs as tokio_fs;
+use util::{execution_config::ExecutionConfig, state::AppState};
+use db::models::{assignment_memo_output, assignment_task};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 
 #[derive(Serialize)]
 struct MemoSubsection {
@@ -17,100 +14,135 @@ struct MemoSubsection {
 
 #[derive(Serialize)]
 struct MemoTaskOutput {
-    task_number: i32,
+    task_number: i64,
     name: String,
     subsections: Vec<MemoSubsection>,
-    raw: String, // NEW: full unformatted text from the file
+    raw: String,
 }
 
-/// Retrieves all memo output files for a given assignment and parses them into structured format.
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/memo_output
 ///
-/// This endpoint scans the `memo_output` directory for the assignment and parses all files into
-/// structured tasks, where each task contains labeled subsections and a raw file representation.
+/// Retrieve all memo output files for a given assignment, parsed into structured format.
 ///
-/// Directory structure:  
-/// `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/memo_output`
+/// Scans the `memo_output` directory for the specified assignment and parses each file into a
+/// `MemoTaskOutput` object, which contains labeled subsections and the raw file content.
 ///
-/// ### Returns:
-/// - `200 OK` with a JSON array of `MemoTaskOutput`
-/// - `404 Not Found` if:
-///     - The memo output directory doesn't exist
-///     - No valid files are found in the directory
+/// **Path Parameters**
+/// - `module_id` (i64): The ID of the module
+/// - `assignment_id` (i64): The ID of the assignment
+///
+/// **Success Response (200 OK)**
+/// ```json
+/// [
+///   {
+///     "task_number": 1,
+///     "name": "Task 1",
+///     "subsections": [
+///       { "label": "Section A", "output": "..." }
+///     ],
+///     "raw": "..."
+///   }
+/// ]
+/// ```
+///
+/// **Error Responses**
+/// - `404 Not Found` if the memo output directory does not exist or contains no valid files
 /// - `500 Internal Server Error` if reading the directory fails
 ///
-/// ### Example `curl` request:
+/// **Example Request**
 /// ```bash
-/// curl http://localhost:3000/api/modules/1/assignments/2/memo-output
+/// curl http://localhost:3000/api/modules/1/assignments/2/memo_output
 /// ```
 pub async fn get_all_memo_outputs(
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let base_path = env::var("ASSIGNMENT_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/assignment_files".into());
+    let db = app_state.db();
 
-    let output_dir = PathBuf::from(base_path)
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id))
-        .join("memo_output");
-
-    if !output_dir.is_dir() {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<Vec<MemoTaskOutput>>::error("Memo output directory does not exist")),
-        );
-    }
-
-    let entries = match fs::read_dir(&output_dir) {
-        Ok(entries) => entries.filter_map(Result::ok).collect::<Vec<_>>(),
+    // Fetch all memo output models for the given assignment
+    let memo_outputs = match assignment_memo_output::Entity::find()
+        .filter(assignment_memo_output::Column::AssignmentId.eq(assignment_id))
+        .all(db)
+        .await
+    {
+        Ok(models) if !models.is_empty() => models,
+        Ok(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<Vec<MemoTaskOutput>>::error("No memo output records found")),
+            );
+        }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<MemoTaskOutput>>::error("Failed to read memo output directory")),
+                Json(ApiResponse::<Vec<MemoTaskOutput>>::error("Failed to query memo outputs")),
             );
         }
     };
 
-    let mut tasks: Vec<MemoTaskOutput> = Vec::new();
+    // Load separator from execution config (once)
+    let separator = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
+        Ok(config) => config.marking.deliminator,
+        Err(_) => "&-=-&".to_string(),
+    };
 
-    for (i, entry) in entries.iter().enumerate() {
-        let path = entry.path();
-        if path.is_file() {
-            let raw_content = match tokio_fs::read_to_string(&path).await {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
+    let mut results = Vec::new();
 
-            let sections = raw_content.split("&-=-&").filter(|s| !s.trim().is_empty());
-
-            let subsections = sections
-                .map(|s| {
-                    let mut lines = s.lines();
-                    let label = lines.next().unwrap_or("").trim().to_string();
-                    let output = lines.collect::<Vec<_>>().join("\n");
-                    MemoSubsection { label, output }
-                })
-                .collect::<Vec<_>>();
-
-            if !subsections.is_empty() {
-                tasks.push(MemoTaskOutput {
-                    task_number: (i + 1) as i32,
-                    name: format!("Task {}", i + 1),
-                    subsections,
-                    raw: raw_content,
-                });
-            }
+    for memo in memo_outputs {
+        let full_path = memo.full_path();
+        if !full_path.is_file() {
+            continue;
         }
+
+        let raw_content = match tokio_fs::read_to_string(&full_path).await {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        // Parse output
+        let sections = raw_content
+            .split(&separator)
+            .filter(|s| !s.trim().is_empty());
+
+        let subsections = sections
+            .map(|s| {
+                let mut lines = s.lines();
+                let label = lines.next().unwrap_or("").trim().to_string();
+                let output = lines.collect::<Vec<_>>().join("\n");
+                MemoSubsection { label, output }
+            })
+            .collect::<Vec<_>>();
+
+        // Lookup the task number and name
+        let Some(task) = assignment_task::Entity::find_by_id(memo.task_id)
+            .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
+            .one(db)
+            .await
+            .ok()
+            .flatten()
+        else {
+            continue;
+        };
+
+        results.push(MemoTaskOutput {
+            task_number: task.task_number,
+            name: task.name,
+            subsections,
+            raw: raw_content,
+        });
     }
 
-    if tasks.is_empty() {
+    if results.is_empty() {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<Vec<MemoTaskOutput>>::error("No memo output found")),
+            Json(ApiResponse::<Vec<MemoTaskOutput>>::error(
+                "No valid memo output files found",
+            )),
         );
     }
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(tasks, "Fetched memo output successfully")),
+        Json(ApiResponse::success(results, "Fetched memo output successfully")),
     )
 }

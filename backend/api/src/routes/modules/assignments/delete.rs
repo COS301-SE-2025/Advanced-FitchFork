@@ -1,55 +1,76 @@
+//! Assignment deletion routes.
+//!
+//! Provides endpoints for deleting single or multiple assignments within a module.
+//!
+//! - `DELETE /api/modules/{module_id}/assignments/{assignment_id}`  
+//!   Deletes a single assignment along with its associated files and folder.
+//!
+//! - `DELETE /api/modules/{module_id}/assignments/bulk`  
+//!   Deletes multiple assignments in a module using a JSON array of assignment IDs.
+//!
+//! **Access Control:** Only lecturers or admins assigned to the module can perform deletions.
+//!
+//! **Responses:** JSON-wrapped `ApiResponse` indicating success, number of deletions, or detailed errors.
+
 use axum::{
-    extract::Path,
+    extract::{State, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
-use sea_orm::{
-    ActiveModelTrait,
-    ColumnTrait,
-    DbErr,
-    EntityTrait,
-    QueryFilter,
-};
-
+use sqlx::types::JsonValue;
 use serde_json::json;
-
-use db::{
-    connect,
-    models::{assignment::{self}, assignment_file, assignment_task},
-};
-
+use db::models::assignment;
+use util::state::AppState;
 use crate::response::ApiResponse;
+use super::common::BulkDeleteRequest;
 
-/// Deletes a specific assignment and its associated files and folder.
+/// DELETE /api/modules/:module_id/assignments/:assignment_id
 ///
-/// # Path parameters
-/// - `module_id`: ID of the module
-/// - `assignment_id`: ID of the assignment to delete
+/// Delete a specific assignment and its associated files and folder.
+/// Only accessible by lecturers or admins assigned to the module.
 ///
-/// # Returns
-/// - `200 OK` if deletion succeeded
-/// - `404 NOT FOUND` if assignment not found
-/// - `500 INTERNAL SERVER ERROR` on DB or FS error
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignment
+/// - `assignment_id` (i64): The ID of the assignment to delete
+///
+/// ### Responses
+///
+/// - `200 OK`  
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Assignment 123 deleted successfully"
+/// }
+/// ```
+///
+/// - `404 Not Found`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "No assignment found with ID 123 in module 456"
+/// }
+/// ```
+///
+/// - `500 Internal Server Error`  
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Database error details"
+/// }
+/// ```
 pub async fn delete_assignment(
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = connect().await;
+    let db = app_state.db();
 
-    match assignment::Model::delete(&db, assignment_id as i32, module_id as i32).await {
+    match assignment::Model::delete(db, assignment_id as i32, module_id as i32).await {
         Ok(()) => (
             StatusCode::OK,
             Json(json!({
                 "success": true,
                 "message": format!("Assignment {} deleted successfully", assignment_id),
-            })),
-        ),
-        Err(DbErr::RecordNotFound(_)) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({
-                "success": false,
-                "message": format!("No assignment found with ID {} in module {}", assignment_id, module_id),
             })),
         ),
         Err(e) => (
@@ -62,143 +83,78 @@ pub async fn delete_assignment(
     }
 }
 
-/// Deletes a list of files associated with a specific assignment.
-async fn delete_all_files(
-    db: &sea_orm::DatabaseConnection,
-    file_ids: Vec<i64>,
-    assignment_id: i64,
-) {
-    for file_id in file_ids {
-        if let Ok(Some(file)) = assignment_file::Entity::find()
-            .filter(assignment_file::Column::Id.eq(file_id as i32))
-            .filter(assignment_file::Column::AssignmentId.eq(assignment_id as i32))
-            .one(db)
-            .await
-        {
-            let _ = file.delete_file_only();
-            let model: assignment_file::ActiveModel = file.into();
-            let _ = model.delete(db).await;
-        }
-    }
-}
-
-/// Deletes selected files from an assignment.
-pub async fn delete_files(
-    Path((module_id, assignment_id)): Path<(i64, i64)>,
-    Json(req): Json<serde_json::Value>,
+/// DELETE /api/modules/:module_id/assignments/bulk
+///
+/// Bulk delete multiple assignments by ID within a module.
+/// Only accessible by lecturers or admins assigned to the module.
+///
+/// ### Path Parameters
+/// - `module_id` (i64): The ID of the module containing the assignments
+///
+/// ### Request Body (JSON)
+/// ```json
+/// {
+///   "assignment_ids": [123, 124, 125]
+/// }
+/// ```
+///
+/// ### Success Response (200 OK)
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///     "deleted": 2,
+///     "failed": [
+///       { "id": 125, "error": "Assignment 125 in module 1 not found" }
+///     ]
+///   },
+///   "message": "Deleted 2/3 assignments"
+/// }
+/// ```
+pub async fn bulk_delete_assignments(
+    State(app_state): State<AppState>,
+    Path(module_id): Path<i64>,
+    Json(req): Json<BulkDeleteRequest>,
 ) -> impl IntoResponse {
-    let db = connect().await;
+    let db = app_state.db();
 
-    match assignment::Entity::find()
-        .filter(assignment::Column::Id.eq(assignment_id as i32))
-        .filter(assignment::Column::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await
-    {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({
-                    "success": false,
-                    "message": format!("No assignment found with ID {} in module {}", assignment_id, module_id)
-                })),
-            );
-        }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "success": false,
-                    "message": e.to_string()
-                })),
-            );
-        }
-    }
-
-    let file_ids: Vec<i64> = req
-        .get("file_ids")
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_i64()).collect())
-        .unwrap_or_default();
-
-    if file_ids.is_empty() {
+    if req.assignment_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "success": false,
-                "message": "Request must include a non-empty list of file_ids"
-            })),
+            Json(ApiResponse::<JsonValue>::error("No assignment IDs provided")),
         );
     }
 
-    delete_all_files(&db, file_ids, assignment_id).await;
+    let mut deleted_count = 0;
+    let mut failed: Vec<JsonValue> = Vec::new();
+
+    for &id in &req.assignment_ids {
+        match assignment::Model::delete(db, id as i32, module_id as i32).await {
+            Ok(_) => deleted_count += 1,
+            Err(e) => {
+                failed.push(json!({
+                    "id": id,
+                    "error": e.to_string()
+                }));
+            }
+        }
+    }
+
+    let message = format!(
+        "Deleted {}/{} assignments",
+        deleted_count,
+        req.assignment_ids.len()
+    );
+
+    let data = json!({
+        "deleted": deleted_count,
+        "failed": failed
+    });
+
+    let response = ApiResponse::success(data, message);
 
     (
         StatusCode::OK,
-        Json(json!({
-            "success": true,
-            "message": "Files removed successfully"
-        })),
+        Json(response),
     )
-}
-
-/// Deletes a specific task from an assignment.
-///
-/// # Path parameters
-/// - `module_id`: ID of the module to which the assignment belongs
-/// - `assignment_id`: ID of the assignment containing the task
-/// - `task_id`: ID of the task to delete
-///
-/// # Returns
-/// - `200 OK` if the task was deleted successfully
-/// - `404 NOT FOUND` if the assignment/module or task was not found
-/// - `500 INTERNAL SERVER ERROR` on database error 
- 
-pub async fn delete_task(
-    Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
-) -> impl IntoResponse {
-    let db = connect().await;
-
-    let assignment = assignment::Entity::find()
-        .filter(assignment::Column::Id.eq(assignment_id as i32))
-        .filter(assignment::Column::ModuleId.eq(module_id as i32))
-        .one(&db)
-        .await;
-
-    match assignment {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment or module not found")),
-            )
-                .into_response();
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error")),
-            )
-                .into_response();
-        }
-    }
-
-    match assignment_task::Model::delete(&db, task_id).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(ApiResponse::success((), "Task deleted successfully")),
-        )
-            .into_response(),
-        Err(DbErr::RecordNotFound(_)) => (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Task not found")),
-        )
-            .into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error("Failed to delete task")),
-        )
-            .into_response(),
-    }
 }

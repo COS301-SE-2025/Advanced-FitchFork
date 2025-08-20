@@ -1,10 +1,12 @@
 use crate::models::assignment;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait};
+use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use crate::models::user;
 
 /// Represents a user's submission for a specific assignment.
 ///
@@ -22,10 +24,18 @@ pub struct Model {
     pub user_id: i64,
     /// Attempt number
     pub attempt: i64,
+    /// The score earned by the user.
+    pub earned: i64,
+    /// The total possible score.
+    pub total: i64,
     /// The original filename uploaded by the user.
     pub filename: String,
+    /// The hash of the submitted files.
+    pub file_hash: String,
     /// Relative file path from the storage root.
     pub path: String,
+    /// Is this submission a practice submission?
+    pub is_practice: bool,
     /// Timestamp when the submission was created.
     pub created_at: DateTime<Utc>,
     /// Timestamp when the submission was last updated.
@@ -54,6 +64,12 @@ pub enum Relation {
 
 /// Custom behavior for the active model (currently using default behavior).
 impl ActiveModelBehavior for ActiveModel {}
+
+impl Related<user::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::User.def()
+    }
+}
 
 impl Model {
     /// Returns the root directory used for storing assignment submissions on disk.
@@ -124,9 +140,17 @@ impl Model {
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
+        earned: i64,
+        total: i64,
+        is_practice: bool,
         filename: &str,
+        file_hash: &str,
         bytes: &[u8],
     ) -> Result<Self, DbErr> {
+        if earned > total {
+            return Err(DbErr::Custom("Earned score cannot be greater than total score".into()));
+        }
+
         let now = Utc::now();
 
         // Step 1: Insert placeholder model
@@ -134,7 +158,11 @@ impl Model {
             assignment_id: Set(assignment_id),
             user_id: Set(user_id),
             attempt: Set(attempt),
+            is_practice: Set(is_practice),
+            earned: Set(earned),
+            total: Set(total),
             filename: Set(filename.to_string()),
+            file_hash: Set(file_hash.to_string()),
             path: Set("".to_string()),
             created_at: Set(now),
             updated_at: Set(now),
@@ -201,6 +229,41 @@ impl Model {
     pub fn delete_file_only(&self) -> Result<(), std::io::Error> {
         fs::remove_file(self.full_path())
     }
+
+    /// Find all submission IDs for a given assignment
+    pub async fn find_by_assignment(
+        assignment_id: i64,
+        db: &DatabaseConnection,
+    ) -> Result<Vec<i64>, DbErr> {
+        let submissions = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id as i32))
+            .all(db)
+            .await?;
+
+        Ok(submissions.into_iter().map(|s| s.id as i64).collect())
+    }
+    
+    pub async fn get_latest_submissions_for_assignment(
+        db: &DatabaseConnection,
+        assignment_id: i64,
+    ) -> Result<Vec<Self>, DbErr> {
+        let all = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .order_by_asc(Column::UserId)
+            .order_by_desc(Column::Attempt)
+            .all(db)
+            .await?;
+
+        let mut seen = HashSet::new();
+        let mut latest = Vec::new();
+
+        for s in all {
+            if seen.insert(s.user_id) {
+                latest.push(s);
+            }
+        }
+        Ok(latest)
+    }
 }
 
 #[cfg(test)]
@@ -218,7 +281,9 @@ mod tests {
     }
 
     fn override_storage_dir(temp: &TempDir) {
-        env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
+        unsafe {
+            env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
+        }
     }
 
     #[tokio::test]
@@ -269,8 +334,12 @@ mod tests {
             assignment_id: Set(assignment.id),
             user_id: Set(user.id),
             attempt: Set(1),
+            earned: Set(10),
+            total: Set(10),
             filename: Set("solution.zip".to_string()),
+            file_hash: Set("hash123#".to_string()),
             path: Set("".to_string()),
+            is_practice: Set(false),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()
@@ -281,7 +350,7 @@ mod tests {
 
         // Save file via submission
         let content = fake_bytes();
-        let file = Model::save_file(&db, submission.id, user.id, 6, "solution.zip", &content)
+        let file = Model::save_file(&db, submission.id, user.id, 6, 10, 10, false, "solution.zip", "hash123#", &content)
             .await
             .expect("Failed to save file");
 

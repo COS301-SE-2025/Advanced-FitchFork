@@ -1,14 +1,28 @@
 import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
+import type { MarkAllocatorFile } from '@/types/modules/assignments/mark-allocator';
+import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
+import type { AssignmentConfig } from '@/types/modules/assignments/config';
 import { createContext, useContext } from 'react';
 
 interface AssignmentDetails extends Assignment {
   files: AssignmentFile[];
 }
 
-interface AssignmentContextValue {
+export interface AssignmentContextValue {
   assignment: AssignmentDetails;
+  memoOutput: MemoTaskOutput[];
+  markAllocator: MarkAllocatorFile | null;
   readiness: AssignmentReadiness | null;
-  refreshReadiness: () => Promise<void>;
+  config: AssignmentConfig | null;
+
+  loading: boolean;
+  refreshAssignment: () => Promise<void>;
+
+  // Save partial (provider merges & POSTs full)
+  updateConfig: (patch: Partial<AssignmentConfig>) => Promise<void>;
+
+  // NEW: overwrite with system defaults (POST /config/reset)
+  resetConfig: () => Promise<void>;
 }
 
 const AssignmentContext = createContext<AssignmentContextValue | null>(null);
