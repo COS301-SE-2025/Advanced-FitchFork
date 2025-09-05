@@ -405,7 +405,7 @@ impl AssignmentSubmissionOutputFilter {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct AssignmentOverwriteFilter {
+pub struct AssignmentOverwriteFileFilter {
     pub id: Option<i64>,
     pub assignment_id: Option<i64>,
     pub task_id: Option<i64>,
@@ -413,7 +413,7 @@ pub struct AssignmentOverwriteFilter {
     pub query: Option<String>,
 }
 
-impl AssignmentOverwriteFilter {
+impl AssignmentOverwriteFileFilter {
     pub fn new() -> Self {
         Self::default()
     }

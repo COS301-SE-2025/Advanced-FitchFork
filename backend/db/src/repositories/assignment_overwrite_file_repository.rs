@@ -1,25 +1,14 @@
 use crate::models::assignment_overwrite_file;
 use crate::repositories::repository::Repository;
-use crate::filters::AssignmentOverwriteFilter;
-use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select, Condition};
+use crate::filters::AssignmentOverwriteFileFilter;
+use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, Select, Condition};
 
-#[derive(Clone)]
-pub struct AssignmentOverwriteRepository {
-    db: DatabaseConnection,
-}
+pub struct AssignmentOverwriteFileRepository;
 
-impl AssignmentOverwriteRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl AssignmentOverwriteFileRepository {}
 
-impl Repository<assignment_overwrite_file::Entity, AssignmentOverwriteFilter> for AssignmentOverwriteRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
-    fn apply_filter(query: Select<assignment_overwrite_file::Entity>, filter: &AssignmentOverwriteFilter) -> Select<assignment_overwrite_file::Entity> {
+impl Repository<assignment_overwrite_file::Entity, AssignmentOverwriteFileFilter> for AssignmentOverwriteFileRepository {
+    fn apply_filter(query: Select<assignment_overwrite_file::Entity>, filter: &AssignmentOverwriteFileFilter) -> Select<assignment_overwrite_file::Entity> {
         let mut condition = Condition::all();
 
         if let Some(id) = filter.id {

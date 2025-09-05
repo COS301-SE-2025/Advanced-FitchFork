@@ -1,24 +1,13 @@
 use crate::models::module;
 use crate::repositories::repository::Repository;
 use crate::filters::ModuleFilter;
-use sea_orm::{QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select};
+use sea_orm::{QueryFilter, QueryOrder, ColumnTrait, Select};
 
-#[derive(Clone)]
-pub struct ModuleRepository {
-    db: DatabaseConnection,
-}
+pub struct ModuleRepository;
 
-impl ModuleRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl ModuleRepository {}
 
 impl Repository<module::Entity, ModuleFilter> for ModuleRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
     fn apply_filter(query: Select<module::Entity>, filter: &ModuleFilter) -> Select<module::Entity> {
         let mut condition = sea_orm::Condition::all();
         if let Some(id) = filter.id {

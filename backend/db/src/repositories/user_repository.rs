@@ -1,24 +1,13 @@
 use crate::models::user;
 use crate::repositories::repository::Repository;
 use crate::filters::UserFilter;
-use sea_orm::{QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select};
+use sea_orm::{QueryFilter, QueryOrder, ColumnTrait, Select};
 
-#[derive(Clone)]
-pub struct UserRepository {
-    db: DatabaseConnection,
-}
+pub struct UserRepository;
 
-impl UserRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl UserRepository {}
 
 impl Repository<user::Entity, UserFilter> for UserRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
     fn apply_filter(query: Select<user::Entity>, filter: &UserFilter) -> Select<user::Entity> {
         let mut condition = sea_orm::Condition::all();
         if let Some(id) = filter.id {

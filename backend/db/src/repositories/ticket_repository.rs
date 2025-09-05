@@ -1,24 +1,13 @@
 use crate::models::tickets;
 use crate::repositories::repository::Repository;
 use crate::filters::TicketFilter;
-use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select, Condition};
+use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, Select, Condition};
 
-#[derive(Clone)]
-pub struct TicketRepository {
-    db: DatabaseConnection,
-}
+pub struct TicketRepository;
 
-impl TicketRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl TicketRepository {}
 
 impl Repository<tickets::Entity, TicketFilter> for TicketRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
     fn apply_filter(query: Select<tickets::Entity>, filter: &TicketFilter) -> Select<tickets::Entity> {
         let mut condition = Condition::all();
 

@@ -1,8 +1,6 @@
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, IntoActiveModel, QueryFilter, Set,
-};
+use sea_orm::EntityTrait;
 use strum::EnumIter;
 
 /// Assignment task model representing the `assignment_tasks` table.
@@ -30,68 +28,4 @@ pub enum Relation {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-
-impl Model {
-    /// Create a new task in the database.
-    pub async fn create(
-        db: &DatabaseConnection,
-        assignment_id: i64,
-        task_number: i64,
-        name: &str,
-        command: &str,
-    ) -> Result<Self, DbErr> {
-        let active = ActiveModel {
-            assignment_id: Set(assignment_id),
-            task_number: Set(task_number),
-            name: Set(name.to_string()),
-            command: Set(command.to_string()),
-            created_at: Set(Utc::now()),
-            updated_at: Set(Utc::now()),
-            ..Default::default()
-        };
-        active.insert(db).await
-    }
-
-    /// Get a task by its ID.
-    pub async fn get_by_id(db: &DatabaseConnection, id: i64) -> Result<Option<Self>, DbErr> {
-        Entity::find_by_id(id).one(db).await
-    }
-
-    /// Get all tasks for a specific assignment.
-    pub async fn get_by_assignment_id(
-        db: &DatabaseConnection,
-        assignment_id: i64,
-    ) -> Result<Vec<Self>, DbErr> {
-        Entity::find()
-            .filter(Column::AssignmentId.eq(assignment_id))
-            .all(db)
-            .await
-    }
-
-    /// Edit a task's command and name.
-    pub async fn edit_command_and_name(
-        db: &DatabaseConnection,
-        id: i64,
-        new_name: &str,
-        new_command: &str,
-    ) -> Result<Self, DbErr> {
-        if let Some(task) = Self::get_by_id(db, id).await? {
-            let mut active = task.into_active_model();
-            active.name = Set(new_name.to_string());
-            active.command = Set(new_command.to_string());
-            active.updated_at = Set(Utc::now());
-            active.update(db).await
-        } else {
-            Err(DbErr::RecordNotFound("Task not found".into()))
-        }
-    }
-
-    /// Delete a task by ID.
-    pub async fn delete(db: &DatabaseConnection, id: i64) -> Result<(), DbErr> {
-        if let Some(task) = Self::get_by_id(db, id).await? {
-            task.delete(db).await.map(|_| ())
-        } else {
-            Err(DbErr::RecordNotFound("Task not found".into()))
-        }
-    }
-}
+impl Model {}

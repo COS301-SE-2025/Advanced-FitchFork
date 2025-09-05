@@ -1,60 +1,112 @@
-// use crate::service::Service;
-// use db::{
-//     models::module,
-//     repositories::{repository::Repository, module_repository::ModuleRepository},
-//     filters::ModuleFilter,
-// };
-// use sea_orm::DbErr;
-// use std::{env, fs, path::PathBuf};
-// use log::{info, warn};
-// use std::future::Future;
-// use std::pin::Pin;
+use crate::service::{Service, ToActiveModel};
+use db::{
+    models::module::{Entity, ActiveModel},
+    repositories::{repository::Repository, module_repository::ModuleRepository},
+    filters::ModuleFilter,
+};
+use sea_orm::{DbErr, Set};
+use std::{env, fs, path::PathBuf};
+use log::{info, warn};
+use std::future::Future;
+use std::pin::Pin;
+use chrono::Utc;
 
-// pub struct ModuleService {
-//     repo: ModuleRepository,
-// }
+#[derive(Debug, Clone)]
+pub struct CreateModule {
+    pub code: String,
+    pub year: i32,
+    pub description: Option<String>,
+    pub credits: i32,
+}
 
-// impl<'a> Service<'a, module::Entity, ModuleFilter, ModuleRepository> for ModuleService {
-//     fn repository(&self) -> &ModuleRepository {
-//         &self.repo
-//     }
+#[derive(Debug, Clone)]
+pub struct UpdateModule {
+    pub id: i64,
+    pub code: Option<String>,
+    pub year:  Option<i32>,
+    pub description: Option<String>,
+    pub credits:  Option<i32>,
+}
 
-//     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
+impl ToActiveModel<Entity> for CreateModule {
+    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+        let now = Utc::now();
+        Ok(ActiveModel {
+            code: Set(self.code),
+            year: Set(self.year),
+            description: Set(self.description.map(|d| d)),
+            credits: Set(self.credits),
+            created_at: Set(now),
+            updated_at: Set(now),
+            ..Default::default()
+        })
+    }
+}
 
-//     fn delete(
-//         &self,
-//         id: i64
-//     ) -> Pin<Box<dyn Future<Output = Result<(), DbErr>> + Send>> {
-//         let repo = self.repo.clone();
-//         Box::pin(async move {
-//             repo.delete(id).await.map_err(DbErr::from)?;
+impl ToActiveModel<Entity> for UpdateModule {
+    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+        let module = match ModuleRepository::find_by_id(self.id).await {
+            Ok(Some(module)) => module,
+            Ok(None) => {
+                return Err(DbErr::RecordNotFound(format!("Module ID {} not found", self.id)));
+            }
+            Err(err) => return Err(err),
+        };
+        let mut active: ActiveModel = module.into();
 
-//             let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-//                 .unwrap_or_else(|_| "data/assignment_files".to_string());
+        if let Some(code) = self.code {
+            active.code = Set(code);
+        }
 
-//             let module_dir = PathBuf::from(storage_root).join(format!("module_{}", id));
+        if let Some(year) = self.year {
+            active.year = Set(year);
+        }
 
-//             if module_dir.exists() {
-//                 match fs::remove_dir_all(&module_dir) {
-//                     Ok(_) => info!("Deleted module directory {}", module_dir.display()),
-//                     Err(e) => warn!("Failed to delete module directory {}: {}", module_dir.display(), e),
-//                 }
-//             } else {
-//                 warn!("Expected module directory {} does not exist", module_dir.display());
-//             }
+        if let Some(description) = self.description {
+            active.description = Set(Some(description));
+        }
 
-//             Ok(())
-//         })
-//     }
-// }
+        if let Some(credits) = self.credits {
+            active.credits = Set(credits);
+        }
 
-// impl ModuleService {
-//     pub fn new(repo: ModuleRepository) -> Self {
-//         Self { repo }
-//     }
+        active.updated_at = Set(Utc::now());
 
-//     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
-// }
+        Ok(active)
+    }
+}
+
+pub struct ModuleService;
+
+impl<'a> Service<'a, Entity, CreateModule, UpdateModule, ModuleFilter, ModuleRepository> for ModuleService {
+    // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
+
+    fn delete(
+        id: i64,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DbErr>> + Send>> {
+        Box::pin(async move {
+            let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
+                .unwrap_or_else(|_| "data/assignment_files".to_string());
+
+            let module_dir = PathBuf::from(storage_root).join(format!("module_{}", id));
+
+            if module_dir.exists() {
+                match fs::remove_dir_all(&module_dir) {
+                    Ok(_) => info!("Deleted module directory {}", module_dir.display()),
+                    Err(e) => warn!("Failed to delete module directory {}: {}", module_dir.display(), e),
+                }
+            } else {
+                warn!("Expected module directory {} does not exist", module_dir.display());
+            }
+
+            ModuleRepository::delete(id).await.map_err(DbErr::from)
+        })
+    }
+}
+
+impl ModuleService {
+    // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
+}
 
 // #[cfg(test)]
 // mod tests {

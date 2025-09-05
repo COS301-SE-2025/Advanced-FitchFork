@@ -1,24 +1,13 @@
 use crate::models::assignment;
 use crate::repositories::repository::Repository;
 use crate::filters::AssignmentFilter;
-use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select, Condition};
+use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, Select, Condition};
 
-#[derive(Clone)]
-pub struct AssignmentRepository {
-    db: DatabaseConnection,
-}
+pub struct AssignmentRepository;
 
-impl AssignmentRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl AssignmentRepository {}
 
 impl Repository<assignment::Entity, AssignmentFilter> for AssignmentRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
     fn apply_filter(query: Select<assignment::Entity>, filter: &AssignmentFilter) -> Select<assignment::Entity> {
         let mut condition = Condition::all();
 

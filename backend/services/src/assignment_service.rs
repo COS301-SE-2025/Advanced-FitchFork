@@ -1,324 +1,260 @@
-// use crate::service::Service;
-// use crate::assignment_file_service::AssignmentFileService;
-// use db::{
-//     models::{assignment::{self, Model, /*Entity, AssignmentType,*/ Status, ReadinessReport}, assignment_file::FileType},
-//     repositories::{repository::Repository, assignment_repository::AssignmentRepository},
-//     filters::AssignmentFilter,
-// };
-// use sea_orm::{DbErr, Set, IntoActiveModel};
-// use chrono::{DateTime, Utc};
-// use std::{/*env,*/ fs, /*path::PathBuf*/};
-// use serde::Deserialize;
+use crate::service::{Service, ToActiveModel};
+use crate::assignment_task_service::AssignmentTaskService;
+use crate::assignment_file_service::AssignmentFileService;
+use db::{
+    models::{assignment::{Entity, ActiveModel, AssignmentType, Status, ReadinessReport}, assignment_file::FileType},
+    repositories::{repository::Repository, assignment_repository::AssignmentRepository},
+    filters::AssignmentFilter,
+};
+use sea_orm::{DbErr, Set, IntoActiveModel};
+use chrono::{DateTime, Utc};
+use std::{env, fs, path::PathBuf};
+use std::future::Future;
+use std::pin::Pin;
 
-// #[derive(Debug, Deserialize)]
-// pub struct FilterReq {
-//     pub page: Option<i32>,
-//     pub per_page: Option<i32>,
-//     pub sort: Option<String>,
-//     pub query: Option<String>,
-//     pub name: Option<String>,
-//     pub assignment_type: Option<String>,
-//     pub available_before: Option<String>,
-//     pub available_after: Option<String>,
-//     pub due_before: Option<String>,
-//     pub due_after: Option<String>,
-// }
+#[derive(Debug, Clone)]
+pub struct CreateAssignment {
+    pub module_id: i64,
+    pub name: String,
+    pub description: Option<String>,
+    pub assignment_type: String,
+    pub available_from: DateTime<Utc>,
+    pub due_date: DateTime<Utc>,
+}
 
-// #[derive(Debug)]
-// pub struct FilterResult {
-//     pub assignments: Vec<Model>,
-//     pub total: u64,
-// }
+#[derive(Debug, Clone)]
+pub struct UpdateAssignment {
+    id: i64,
+    name: Option<String>,
+    description: Option<String>,
+    assignment_type: Option<String>,
+    available_from: Option<DateTime<Utc>>,
+    due_date: Option<DateTime<Utc>>,
+}
 
-// impl FilterResult {
-//     pub fn new(assignments: Vec<Model>, total: u64) -> Self {
-//         Self { assignments, total }
-//     }
-// }
+impl ToActiveModel<Entity> for CreateAssignment {
+    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+        validate_dates(self.available_from, self.due_date)?;
+        let now = Utc::now();
+        Ok(ActiveModel {
+            module_id: Set(self.module_id),
+            name: Set(self.name),
+            description: Set(self.description.map(|d| d)),
+            assignment_type: Set(self.assignment_type.parse::<AssignmentType>().map_err(|_| DbErr::Custom("Invalid assignment_type".into()))?),
+            status: Set(Status::Setup),
+            available_from: Set(self.available_from),
+            due_date: Set(self.due_date),
+            created_at: Set(now),
+            updated_at: Set(now),
+            ..Default::default()
+        })
+    }
+}
 
-// pub struct AssignmentService {
-//     repo: AssignmentRepository,
-// }
+impl ToActiveModel<Entity> for UpdateAssignment {
+    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+        let assignment = match AssignmentRepository::find_by_id(self.id).await {
+            Ok(Some(assignment)) => assignment,
+            Ok(None) => {
+                return Err(DbErr::RecordNotFound(format!("Assignment ID {} not found", self.id)));
+            }
+            Err(err) => return Err(err),
+        };
 
-// impl<'a> Service<'a, assignment::Entity, AssignmentFilter, AssignmentRepository> for AssignmentService {
-//     fn repository(&'a self) -> &'a AssignmentRepository {
-//         &self.repo
-//     }
+        validate_dates(
+            self.available_from.unwrap_or(assignment.available_from),
+            self.due_date.unwrap_or(assignment.due_date),
+        )?;
 
-//     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
+        let mut active: ActiveModel = assignment.into();
 
-//     fn create(
-//         &self,
-//         module_id: i64,
-//         name: &str,
-//         description: Option<&str>,
-//         assignment_type: AssignmentType,
-//         available_from: DateTime<Utc>,
-//         due_date: DateTime<Utc>,
-//     ) -> Result<Model, DbErr> {
-//         Self::validate_dates(available_from, due_date)?;
+        if let Some(name) = self.name {
+            active.name = Set(name);
+        }
 
-//         let active_model = assignment::ActiveModel {
-//             module_id: Set(module_id),
-//             name: Set(name.to_string()),
-//             description: Set(description.map(|d| d.to_string())),
-//             assignment_type: Set(assignment_type),
-//             status: Set(Status::Setup),
-//             available_from: Set(available_from),
-//             due_date: Set(due_date),
-//             created_at: Set(Utc::now()),
-//             updated_at: Set(Utc::now()),
-//             ..Default::default()
-//         };
+        if let Some(description) = self.description {
+            active.description = Set(Some(description));
+        }
 
-//         self.repo.create(active_model).await
-//     }
+        if let Some(assignment_type) = self.assignment_type {
+            active.assignment_type = Set(assignment_type.parse::<AssignmentType>().map_err(|_| DbErr::Custom("Invalid assignment_type".into()))?);
+        }
 
-//     fn update(
-//         &self,
-//         id: i64,
-//         name: &str,
-//         description: Option<&str>,
-//         assignment_type: AssignmentType,
-//         available_from: DateTime<Utc>,
-//         due_date: DateTime<Utc>,
-//     ) -> Result<Model, DbErr> {
-//         Self::validate_dates(available_from, due_date)?;
+        if let Some(available_from) = self.available_from {
+            active.available_from = Set(available_from);
+        }
 
-//         let assignment = self
-//             .repo
-//             .find_by_id(id)
-//             .await?
-//             .ok_or(DbErr::RecordNotFound("Assignment not found".to_string()))?;
+        if let Some(due_date) = self.due_date {
+            active.due_date = Set(due_date);
+        }
 
-//         let mut active: assignment::ActiveModel = assignment.into();
-//         active.name = Set(name.to_string());
-//         active.description = Set(description.map(|d| d.to_string()));
-//         active.assignment_type = Set(assignment_type);
-//         active.available_from = Set(available_from);
-//         active.due_date = Set(due_date);
-//         active.updated_at = Set(Utc::now());
+        active.updated_at = Set(Utc::now());
 
-//         self.repo.update(active).await
-//     }
+        Ok(active)
+    }
+}
 
-//     fn delete(
-//         &self,
-//         id: i64,
-//         module_id: i64
-//     ) -> Result<(), DbErr> {
-//         self.repo.delete(id).await?;
+pub struct AssignmentService;
 
-//         let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-//             .unwrap_or_else(|_| "data/assignment_files".to_string());
+impl<'a> Service<'a, Entity, CreateAssignment, UpdateAssignment, AssignmentFilter, AssignmentRepository> for AssignmentService {
+    // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
-//         let assignment_dir = PathBuf::from(storage_root)
-//             .join(format!("module_{}", module_id))
-//             .join(format!("assignment_{}", id));
+    fn create(
+            params: CreateAssignment,
+        ) -> Pin<Box<dyn Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
+        Box::pin(async move {
+            AssignmentRepository::create(params.into_active_model().await?).await.map_err(DbErr::from)
+        })
+    }
 
-//         if assignment_dir.exists() {
-//             if let Err(e) = fs::remove_dir_all(&assignment_dir) {
-//                 eprintln!("Warning: Failed to delete assignment directory {:?}: {}", assignment_dir, e);
-//             }
-//         }
+    fn update(
+            params: UpdateAssignment,
+        ) -> Pin<Box<dyn Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
+        Box::pin(async move {
+            AssignmentRepository::update(params.into_active_model().await?).await.map_err(DbErr::from)
+        })
+    }
 
-//         Ok(())
-//     }
+    fn delete(
+        id: i64,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DbErr>> + Send>> {
+         Box::pin(async move {
+            let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
+                .unwrap_or_else(|_| "data/assignment_files".to_string());
 
-//     fn filter(
-//         &self,
-//         params: FilterReq,
-//         module_id: i64,
-//         page: u64,
-//         per_page: u64,
-//         sort_by: Option<String>,
-//     ) -> Result<FilterResult, DbErr> {
-//         use chrono::{DateTime, Utc};
+            // TODO: Find a better way @reece
+            let module_id = match AssignmentRepository::find_by_id(id).await? {
+                Some(assignment) => assignment.module_id,
+                None => return Err(DbErr::RecordNotFound(format!("Assignment ID {} not found", id)).into()),
+            };
 
-//         let mut filter = AssignmentFilter::new().with_module_id(module_id);
+            let assignment_dir = PathBuf::from(storage_root)
+                .join(format!("module_{module_id}"))
+                .join(format!("assignment_{id}"));
 
-//         if let Some(name) = params.name {
-//             filter = filter.with_name(name);
-//         }
+            if assignment_dir.exists() {
+                if let Err(e) = fs::remove_dir_all(&assignment_dir) {
+                    eprintln!("Warning: Failed to delete assignment directory {:?}: {}", assignment_dir, e);
+                }
+            }
 
-//         if let Some(query) = params.query {
-//             filter = filter.with_query(query);
-//         }
+            AssignmentRepository::delete(id).await.map_err(DbErr::from)
+        })
+    }
+}
 
-//         if let Some(assignment_type_str) = params.assignment_type {
-//             let assignment_type = assignment_type_str
-//                 .parse::<AssignmentType>()
-//                 .map_err(|_| DbErr::Custom("Invalid assignment_type".into()))?;
-//             filter = filter.with_assignment_type(assignment_type);
-//         }
+impl AssignmentService {
+    // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-//         let parse_datetime = |s: &str| -> Result<DateTime<Utc>, DbErr> {
-//             DateTime::parse_from_rfc3339(s)
-//                 .map(|dt| dt.with_timezone(&Utc))
-//                 .map_err(|_| DbErr::Custom(format!("Invalid datetime format: {}", s)))
-//         };
+    pub async fn compute_readiness_report(
+        module_id: i64,
+        assignment_id: i64,
+    ) -> Result<ReadinessReport, DbErr> {
+        let config_present = AssignmentFileService::full_directory_path(
+            module_id,
+            assignment_id,
+            &FileType::Config,
+        )
+        .read_dir()
+        .map(|mut it| it.any(|f| f.is_ok()))
+        .unwrap_or(false);
 
-//         if let Some(before) = params.available_before {
-//             let dt = parse_datetime(&before)?;
-//             filter = filter.with_available_before(dt);
-//         }
+        let tasks_present = AssignmentTaskService::tasks_present(assignment_id).await;
 
-//         if let Some(after) = params.available_after {
-//             let dt = parse_datetime(&after)?;
-//             filter = filter.with_available_after(dt);
-//         }
+        let main_present = AssignmentFileService::full_directory_path(
+            module_id,
+            assignment_id,
+            &FileType::Main,
+        )
+        .read_dir()
+        .map(|mut it| it.any(|f| f.is_ok()))
+        .unwrap_or(false);
 
-//         if let Some(before) = params.due_before {
-//             let dt = parse_datetime(&before)?;
-//             filter = filter.with_due_before(dt);
-//         }
+        let memo_present = AssignmentFileService::full_directory_path(
+            module_id,
+            assignment_id,
+            &FileType::Memo,
+        )
+        .read_dir()
+        .map(|mut it| it.any(|f| f.is_ok()))
+        .unwrap_or(false);
 
-//         if let Some(after) = params.due_after {
-//             let dt = parse_datetime(&after)?;
-//             filter = filter.with_due_after(dt);
-//         }
+        let makefile_present = AssignmentFileService::full_directory_path(
+            module_id,
+            assignment_id,
+            &FileType::Makefile,
+        )
+        .read_dir()
+        .map(|mut it| it.any(|f| f.is_ok()))
+        .unwrap_or(false);
 
-//         let total = <Self as Service<
-//             '_,
-//             Entity,
-//             AssignmentFilter,
-//             AssignmentRepository,
-//         >>::count(self, filter.clone()).await?;
+        let memo_output_present = {
+            let base_path = AssignmentFileService::storage_root()
+                .join(format!("module_{}", module_id))
+                .join(format!("assignment_{}", assignment_id))
+                .join("memo_output");
 
-//         let assignments = <Self as Service<
-//             '_,
-//             Entity,
-//             AssignmentFilter,
-//             AssignmentRepository,
-//         >>::filter(self, filter, page, per_page, sort_by).await?;
+            if let Ok(entries) = fs::read_dir(&base_path) {
+                entries.flatten().any(|entry| entry.path().is_file())
+            } else {
+                false
+            }
+        };
 
-//         Ok(FilterResult::new(assignments, total))
-//     }
-// }
+        let mark_allocator_present = AssignmentFileService::full_directory_path(
+            module_id,
+            assignment_id,
+            &FileType::MarkAllocator,
+        )
+        .read_dir()
+        .map(|it| {
+            it.flatten()
+                .any(|f| f.path().extension().map(|e| e == "json").unwrap_or(false))
+        })
+        .unwrap_or(false);
 
-// impl AssignmentService {
-//     pub fn new(repo: AssignmentRepository) -> Self {
-//         Self { repo }
-//     }
+        Ok(ReadinessReport {
+            config_present,
+            tasks_present,
+            main_present,
+            memo_present,
+            makefile_present,
+            memo_output_present,
+            mark_allocator_present,
+        })
+    }
 
-//     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
+    pub async fn try_transition_to_ready(
+        module_id: i64,
+        assignment_id: i64,
+    ) -> Result<bool, DbErr> {
+        let report = Self::compute_readiness_report(module_id, assignment_id).await?;
 
-//     fn validate_dates(available_from: DateTime<Utc>, due_date: DateTime<Utc>) -> Result<(), DbErr> {
-//         if due_date < available_from {
-//             Err(DbErr::Custom(
-//                 "Due date cannot be before Available From date".into(),
-//             ))
-//         } else {
-//             Ok(())
-//         }
-//     }
+        if report.is_ready() {
+            let mut active = AssignmentRepository::find_by_id(assignment_id).await?
+                .ok_or(DbErr::RecordNotFound("Assignment not found".into()))?
+                .into_active_model();
 
-//     pub async fn compute_readiness_report<'a>(
-//         &self,
-//         module_id: i64,
-//         assignment_id: i64,
-//     ) -> Result<ReadinessReport, DbErr> {
-//         let config_present = AssignmentFileService::full_directory_path(
-//             module_id,
-//             assignment_id,
-//             &FileType::Config,
-//         )
-//         .read_dir()
-//         .map(|mut it| it.any(|f| f.is_ok()))
-//         .unwrap_or(false);
+            if active.status.as_ref() == &Status::Setup {
+                active.status = Set(Status::Ready);
+                active.updated_at = Set(Utc::now());
+                AssignmentRepository::update(active).await?;
+            }
+        }
 
-//         // TODO: Fix
-//         // This will be passed as a parameter or fetched by a task-specific repository
-//         let tasks_present = true; // Placeholder for now
+        Ok(report.is_ready())
+    }
+}
 
-//         let main_present = AssignmentFileService::full_directory_path(
-//             module_id,
-//             assignment_id,
-//             &FileType::Main,
-//         )
-//         .read_dir()
-//         .map(|mut it| it.any(|f| f.is_ok()))
-//         .unwrap_or(false);
-
-//         let memo_present = AssignmentFileService::full_directory_path(
-//             module_id,
-//             assignment_id,
-//             &FileType::Memo,
-//         )
-//         .read_dir()
-//         .map(|mut it| it.any(|f| f.is_ok()))
-//         .unwrap_or(false);
-
-//         let makefile_present = AssignmentFileService::full_directory_path(
-//             module_id,
-//             assignment_id,
-//             &FileType::Makefile,
-//         )
-//         .read_dir()
-//         .map(|mut it| it.any(|f| f.is_ok()))
-//         .unwrap_or(false);
-
-//         let memo_output_present = {
-//             let base_path = AssignmentFileService::storage_root()
-//                 .join(format!("module_{}", module_id))
-//                 .join(format!("assignment_{}", assignment_id))
-//                 .join("memo_output");
-
-//             if let Ok(entries) = fs::read_dir(&base_path) {
-//                 entries.flatten().any(|entry| entry.path().is_file())
-//             } else {
-//                 false
-//             }
-//         };
-
-//         let mark_allocator_present = AssignmentFileService::full_directory_path(
-//             module_id,
-//             assignment_id,
-//             &FileType::MarkAllocator,
-//         )
-//         .read_dir()
-//         .map(|it| {
-//             it.flatten()
-//                 .any(|f| f.path().extension().map(|e| e == "json").unwrap_or(false))
-//         })
-//         .unwrap_or(false);
-
-//         Ok(ReadinessReport {
-//             config_present,
-//             tasks_present,
-//             main_present,
-//             memo_present,
-//             makefile_present,
-//             memo_output_present,
-//             mark_allocator_present,
-//         })
-//     }
-
-//     pub async fn try_transition_to_ready<'a>(
-//         &self,
-//         module_id: i64,
-//         assignment_id: i64,
-//     ) -> Result<bool, DbErr> {
-//         let report = self.compute_readiness_report(module_id, assignment_id).await?;
-
-//         if report.is_ready() {
-//             let mut active = self
-//                 .repo
-//                 .find_by_id(assignment_id)
-//                 .await?
-//                 .ok_or(DbErr::RecordNotFound("Assignment not found".into()))?
-//                 .into_active_model();
-
-//             if active.status.as_ref() == &Status::Setup {
-//                 active.status = Set(Status::Ready);
-//                 active.updated_at = Set(Utc::now());
-//                 self.repo.update(active).await?;
-//             }
-//         }
-
-//         Ok(report.is_ready())
-//     }
-// }
+fn validate_dates(available_from: DateTime<Utc>, due_date: DateTime<Utc>) -> Result<(), DbErr> {
+    if due_date < available_from {
+        Err(DbErr::Custom(
+            "Due date cannot be before Available From date".into(),
+        ))
+    } else {
+        Ok(())
+    }
+}
 
 // #[cfg(test)]
 // mod tests {

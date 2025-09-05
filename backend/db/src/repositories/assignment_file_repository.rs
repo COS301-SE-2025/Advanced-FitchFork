@@ -1,24 +1,13 @@
 use crate::models::assignment_file;
 use crate::repositories::repository::Repository;
 use crate::filters::AssignmentFileFilter;
-use sea_orm::{QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select,};
+use sea_orm::{QueryFilter, QueryOrder, ColumnTrait, Select,};
 
-#[derive(Clone)]
-pub struct AssignmentFileRepository {
-    db: DatabaseConnection,
-}
+pub struct AssignmentFileRepository;
 
-impl AssignmentFileRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl AssignmentFileRepository {}
 
 impl Repository<assignment_file::Entity, AssignmentFileFilter> for AssignmentFileRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
     fn apply_filter(query: Select<assignment_file::Entity>, filter: &AssignmentFileFilter) -> Select<assignment_file::Entity> {
         let mut condition = sea_orm::Condition::all();
         if let Some(id) = filter.id {

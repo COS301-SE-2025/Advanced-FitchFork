@@ -1,24 +1,13 @@
 use crate::models::plagiarism_case;
 use crate::repositories::repository::Repository;
 use crate::filters::PlagiarismCaseFilter;
-use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select, Condition};
+use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, Select, Condition};
 
-#[derive(Clone)]
-pub struct PlagiarismCaseRepository {
-    db: DatabaseConnection,
-}
+pub struct PlagiarismCaseRepository;
 
-impl PlagiarismCaseRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl PlagiarismCaseRepository {}
 
 impl Repository<plagiarism_case::Entity, PlagiarismCaseFilter> for PlagiarismCaseRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
     fn apply_filter(query: Select<plagiarism_case::Entity>, filter: &PlagiarismCaseFilter) -> Select<plagiarism_case::Entity> {
         let mut condition = Condition::all();
 

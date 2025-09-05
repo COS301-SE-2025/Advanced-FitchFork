@@ -47,9 +47,7 @@ use super::common::BulkDeleteRequest;
 pub async fn delete_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
-    match assignment::Model::delete(db, assignment_id as i32, module_id as i32).await {
+    match AssignmentService::delete(module_id, assignment_id).await {
         Ok(()) => (
             StatusCode::OK,
             Json(json!({

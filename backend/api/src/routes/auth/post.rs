@@ -22,7 +22,6 @@ use db::models::{
 };
 use crate::auth::AuthUser;
 
-use db::repositories::user_repository::UserRepository;
 use services::{
     service::Service,
     user_service::{UserService, CreateUser},
@@ -144,8 +143,7 @@ pub async fn register(
         );
     }
 
-    let service = UserService::new(UserRepository::new(db.clone()));
-    let inserted_user = match service.create(CreateUser {
+    let inserted_user = match UserService::create(CreateUser {
         username: req.username,
         email: req.email,
         password: req.password,
@@ -231,8 +229,6 @@ pub struct LoginRequest {
 pub async fn login(
     Json(req): Json<LoginRequest>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -241,8 +237,7 @@ pub async fn login(
         );
     }
 
-    let service = UserService::new(UserRepository::new(db.clone()));
-    let user = match service.verify_credentials(&req.username, &req.password).await {
+    let user = match UserService::verify_credentials(&req.username, &req.password).await {
         Ok(Some(u)) => u,
         Ok(None) => {
             return (

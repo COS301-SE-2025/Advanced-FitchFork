@@ -13,8 +13,6 @@ use axum::{
 use crate::response::ApiResponse;
 use crate::routes::users::common::{CreateUserRequest, BulkCreateUsersRequest, UserResponse};
 use validator::Validate;
-
-use db::repositories::user_repository::UserRepository;
 use services::{
     service::Service,
     user_service::{UserService, CreateUser},
@@ -42,8 +40,6 @@ use services::{
 pub async fn create_user(
     Json(req): Json<CreateUserRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -52,8 +48,7 @@ pub async fn create_user(
             .into_response();
     }
 
-    let service = UserService::new(UserRepository::new(db.clone()));
-    match service.create(CreateUser {
+    match UserService::create(CreateUser {
         username: req.username,
         email: req.email,
         password: req.password,
@@ -106,8 +101,6 @@ pub async fn create_user(
 pub async fn bulk_create_users(
     Json(req): Json<BulkCreateUsersRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -118,9 +111,8 @@ pub async fn bulk_create_users(
 
     let mut results = Vec::new();
 
-    let service = UserService::new(UserRepository::new(db.clone()));
     for user_req in req.users {
-        match service.create(CreateUser {
+        match UserService::create(CreateUser {
             username: user_req.username.clone(),
             email: user_req.email,
             password: user_req.password,

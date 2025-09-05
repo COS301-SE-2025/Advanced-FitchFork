@@ -1,50 +1,99 @@
 use crate::service::{Service, ToActiveModel};
 use db::{
-    models::user::{self, Model},
-    repositories::user_repository::UserRepository,
+    models::user::{Model, Entity, ActiveModel},
+    repositories::{repository::Repository, user_repository::UserRepository},
     filters::UserFilter,
 };
-use sea_orm::{DbErr, Set, NotSet};
+use sea_orm::{DbErr, Set};
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
 use rand::rngs::OsRng;
+use validator::{Validate, ValidationError};
+use chrono::Utc;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct CreateUser {
+    #[validate(length(min = 1, message = "Username cannot be empty"))]
     pub username: String,
+
+    #[validate(email(message = "Invalid email address"))]
     pub email: String,
+
+    #[validate(custom(function = "validate_password"))]
     pub password: String,
+
     pub admin: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Validate)]
 pub struct UpdateUser {
     pub id: i64,
+
+    #[validate(length(min = 1, message = "Username cannot be empty"))]
     pub username: Option<String>,
+
+    #[validate(email(message = "Invalid email address"))]
     pub email: Option<String>,
+
+    #[validate(custom(function = "validate_password"))]
     pub password: Option<String>,
+
     pub admin: Option<bool>,
     pub profile_picture_path: Option<Option<String>>,
 }
 
-impl ToActiveModel<user::Entity> for CreateUser {
-    fn into_active_model(self) -> Result<user::ActiveModel, DbErr> {
-        if self.username.trim().is_empty() {
-            return Err(DbErr::Custom("username cannot be empty".into()));
+fn validate_password(password: &str) -> Result<(), ValidationError> {
+    let mut has_upper = false;
+    let mut has_lower = false;
+    let mut has_digit = false;
+    let mut has_special = false;
+    
+    if password.len() < 8 {
+        return Err(ValidationError::new("Password must be at least 8 characters long"));
+    }
+    
+    for c in password.chars() {
+        if c.is_ascii_uppercase() {
+            has_upper = true;
+        } else if c.is_ascii_lowercase() {
+            has_lower = true;
+        } else if c.is_ascii_digit() {
+            has_digit = true;
+        } else if c.is_ascii_punctuation() {
+            has_special = true;
         }
-        if self.email.trim().is_empty() {
-            return Err(DbErr::Custom("email cannot be empty".into()));
-        }
+    }
+    
+    if !has_upper {
+        return Err(ValidationError::new("Password must contain at least one uppercase letter"));
+    }
+    if !has_lower {
+        return Err(ValidationError::new("Password must contain at least one lowercase letter"));
+    }
+    if !has_digit {
+        return Err(ValidationError::new("Password must contain at least one number"));
+    }
+    if !has_special {
+        return Err(ValidationError::new("Password must contain at least one special character"));
+    }
+    
+    Ok(())
+}
 
-        let salt = SaltString::generate(&mut OsRng);
+impl ToActiveModel<Entity> for CreateUser {
+    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+        self.validate()
+            .map_err(|e| DbErr::Custom(e.to_string()))?;
+
+        let salt: SaltString = SaltString::generate(&mut OsRng);
         let hash = Argon2::default()
             .hash_password(self.password.as_bytes(), &salt)
             .map_err(|e| DbErr::Custom(format!("password hashing failed: {}", e)))?
             .to_string();
 
-        Ok(user::ActiveModel {
+        Ok(ActiveModel {
             username: Set(self.username),
             email: Set(self.email),
             password_hash: Set(hash),
@@ -54,30 +103,26 @@ impl ToActiveModel<user::Entity> for CreateUser {
     }
 }
 
-impl ToActiveModel<user::Entity> for UpdateUser {
-    fn into_active_model(self) -> Result<user::ActiveModel, DbErr> {
-        let mut am = user::ActiveModel {
-            id: Set(self.id),
-            username: NotSet,
-            email: NotSet,
-            password_hash: NotSet,
-            admin: NotSet,
-            profile_picture_path: NotSet,
-            ..Default::default()
+impl ToActiveModel<Entity> for UpdateUser {
+    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+        self.validate()
+            .map_err(|e| DbErr::Custom(e.to_string()))?;
+
+        let user = match UserRepository::find_by_id(self.id).await {
+            Ok(Some(user)) => user,
+            Ok(None) => {
+                return Err(DbErr::RecordNotFound(format!("User ID {} not found", self.id)));
+            }
+            Err(err) => return Err(err),
         };
+        let mut active: ActiveModel = user.into();
 
         if let Some(username) = self.username {
-            if username.trim().is_empty() {
-                return Err(DbErr::Custom("username cannot be empty".into()));
-            }
-            am.username = Set(username);
+            active.username = Set(username);
         }
 
         if let Some(email) = self.email {
-            if email.trim().is_empty() {
-                return Err(DbErr::Custom("email cannot be empty".into()));
-            }
-            am.email = Set(email);
+            active.email = Set(email);
         }
 
         if let Some(password) = self.password {
@@ -86,48 +131,39 @@ impl ToActiveModel<user::Entity> for UpdateUser {
                 .hash_password(password.as_bytes(), &salt)
                 .map_err(|e| DbErr::Custom(format!("password hashing failed: {}", e)))?
                 .to_string();
-            am.password_hash = Set(hash);
+            active.password_hash = Set(hash);
         }
 
         if let Some(admin) = self.admin {
-            am.admin = Set(admin);
+            active.admin = Set(admin);
         }
 
         if let Some(profile_path_opt) = self.profile_picture_path {
-            am.profile_picture_path = Set(profile_path_opt);
+            active.profile_picture_path = Set(profile_path_opt);
         }
 
-        Ok(am)
+        active.updated_at = Set(Utc::now());
+
+        Ok(active)
     }
 }
 
-pub struct UserService {
-    repo: UserRepository,
-}
+pub struct UserService;
 
-impl<'a> Service<'a, user::Entity, CreateUser, UpdateUser, UserFilter, UserRepository> for UserService {
-    fn repository(&self) -> &UserRepository {
-        &self.repo
-    }
-
+impl<'a> Service<'a, Entity, CreateUser, UpdateUser, UserFilter, UserRepository> for UserService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
 impl UserService {
-    pub fn new(repo: UserRepository) -> Self {
-        Self { repo }
-    }
-
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
     pub async fn verify_credentials(
-        &self,
         username: &str,
         password: &str,
     ) -> Result<Option<Model>, DbErr> {
         let username = username.trim();
 
-        if let Some(user) = self.find_one(UserFilter { username: Some(username.to_string()), ..Default::default() }).await? {
+        if let Some(user) = UserRepository::find_one(UserFilter { username: Some(username.to_string()), ..Default::default() }).await? {
             if Self::verify_password(&user, password) {
                 return Ok(Some(user));
             }

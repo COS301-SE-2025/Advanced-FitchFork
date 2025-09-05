@@ -36,4 +36,3 @@ pub async fn get_connection() -> &'static DatabaseConnection {
         })
         .await
 }
-pub use sea_orm::DbErr;

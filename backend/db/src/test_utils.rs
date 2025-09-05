@@ -1,4 +1,20 @@
-use sea_orm::{ConnectionTrait, DbErr, Statement};
+use sea_orm::{ConnectionTrait, DbErr, Statement, Database, DatabaseConnection};
+use migration::Migrator;
+use sea_orm_migration::MigratorTrait;
+
+
+pub async fn setup_test_db() -> DatabaseConnection {
+    let db = Database::connect("sqlite::memory:")
+        .await
+        .expect("Failed to connect to in-memory db");
+
+    Migrator::up(&db, None)
+        .await
+        .expect("Failed to run migrations");
+
+    db
+}
+
 
 pub async fn clean_db() -> Result<(), DbErr> {
     let db = crate::get_connection().await;
@@ -51,13 +67,7 @@ pub async fn clean_db() -> Result<(), DbErr> {
     match exec_res {
         Ok(_) => return Ok(()),
         Err(e) => {
-            // Fast-path failed (some drivers disallow multiple statements). Fall back to a minimal set of operations.
-            // We'll:
-            //  - ensure foreign keys are OFF on this connection,
-            //  - begin, delete per-table (N execs) but still reset sqlite_sequence with a single statement,
-            //  - commit and re-enable foreign keys.
-            // This is more roundtrips but still safe.
-            tracing::debug!("clean_db fast path failed, falling back to safe path: {:?}", e);
+            eprintln!("clean_db fast path failed, falling back to safe path: {:?}", e);
         }
     }
 

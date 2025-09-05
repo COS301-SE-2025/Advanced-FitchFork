@@ -3115,6 +3115,7 @@ dependencies = [
  "sea-orm",
  "serde",
  "tokio",
+ "validator",
 ]
 
 [[package]]

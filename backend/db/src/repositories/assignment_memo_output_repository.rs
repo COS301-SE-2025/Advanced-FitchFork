@@ -1,24 +1,13 @@
 use crate::models::assignment_memo_output;
 use crate::repositories::repository::Repository;
 use crate::filters::AssignmentMemoOutputFilter;
-use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select, Condition};
+use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, Select, Condition};
 
-#[derive(Clone)]
-pub struct AssignmentMemoOutputRepository {
-    db: DatabaseConnection,
-}
+pub struct AssignmentMemoOutputRepository;
 
-impl AssignmentMemoOutputRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl AssignmentMemoOutputRepository {}
 
 impl Repository<assignment_memo_output::Entity, AssignmentMemoOutputFilter> for AssignmentMemoOutputRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
     fn apply_filter(query: Select<assignment_memo_output::Entity>, filter: &AssignmentMemoOutputFilter) -> Select<assignment_memo_output::Entity> {
         let mut condition = Condition::all();
 

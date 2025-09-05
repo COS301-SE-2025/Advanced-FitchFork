@@ -1,24 +1,13 @@
 use crate::models::assignment_task;
 use crate::repositories::repository::Repository;
 use crate::filters::AssignmentTaskFilter;
-use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select, Condition};
+use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, Select, Condition};
 
-#[derive(Clone)]
-pub struct AssignmentTaskRepository {
-    db: DatabaseConnection,
-}
+pub struct AssignmentTaskRepository;
 
-impl AssignmentTaskRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl AssignmentTaskRepository {}
 
 impl Repository<assignment_task::Entity, AssignmentTaskFilter> for AssignmentTaskRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
     fn apply_filter(query: Select<assignment_task::Entity>, filter: &AssignmentTaskFilter) -> Select<assignment_task::Entity> {
         let mut condition = Condition::all();
 

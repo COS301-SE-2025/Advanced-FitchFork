@@ -1,24 +1,13 @@
 use crate::models::password_reset_token;
 use crate::repositories::repository::Repository;
 use crate::filters::PasswordResetTokenFilter;
-use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select, Condition};
+use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, Select, Condition};
 
-#[derive(Clone)]
-pub struct PasswordResetTokenRepository {
-    db: DatabaseConnection,
-}
+pub struct PasswordResetTokenRepository;
 
-impl PasswordResetTokenRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl PasswordResetTokenRepository {}
 
 impl Repository<password_reset_token::Entity, PasswordResetTokenFilter> for PasswordResetTokenRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
     fn apply_filter(query: Select<password_reset_token::Entity>, filter: &PasswordResetTokenFilter) -> Select<password_reset_token::Entity> {
         let mut condition = Condition::all();
 

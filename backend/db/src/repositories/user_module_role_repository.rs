@@ -1,24 +1,13 @@
 use crate::models::user_module_role;
 use crate::repositories::repository::Repository;
 use crate::filters::UserModuleRoleFilter;
-use sea_orm::{QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select};
+use sea_orm::{QueryFilter, QueryOrder, ColumnTrait, Select};
 
-#[derive(Clone)]
-pub struct UserModuleRoleRepository {
-    db: DatabaseConnection,
-}
+pub struct UserModuleRoleRepository;
 
-impl UserModuleRoleRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl UserModuleRoleRepository {}
 
 impl Repository<user_module_role::Entity, UserModuleRoleFilter> for UserModuleRoleRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
     fn apply_filter(query: Select<user_module_role::Entity>, filter: &UserModuleRoleFilter) -> Select<user_module_role::Entity> {
         let mut condition = sea_orm::Condition::all();
         if let Some(user_id) = filter.user_id {

@@ -1,24 +1,13 @@
 use crate::models::assignment_submission;
 use crate::repositories::repository::Repository;
 use crate::filters::AssignmentSubmissionFilter;
-use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, DatabaseConnection, Select, Condition};
+use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, Select, Condition};
 
-#[derive(Clone)]
-pub struct AssignmentSubmissionRepository {
-    db: DatabaseConnection,
-}
+pub struct AssignmentSubmissionRepository;
 
-impl AssignmentSubmissionRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
+impl AssignmentSubmissionRepository {}
 
 impl Repository<assignment_submission::Entity, AssignmentSubmissionFilter> for AssignmentSubmissionRepository {
-    fn db(&self) -> &DatabaseConnection {
-        &self.db
-    }
-
     fn apply_filter(query: Select<assignment_submission::Entity>, filter: &AssignmentSubmissionFilter) -> Select<assignment_submission::Entity> {
         let mut condition = Condition::all();
 
