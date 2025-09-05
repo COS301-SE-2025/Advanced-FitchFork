@@ -14,12 +14,14 @@ use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     Extension, Json,
     extract::{Path, Query, State},
-    http::StatusCode,
-    response::IntoResponse,
+    http::{header, HeaderMap, HeaderValue, StatusCode},
+    response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
 use db::models::{
-    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, assignment_submission::{self, Entity as SubmissionEntity}, assignment_submission_output::Model as SubmissionOutput, assignment_task, user, user_module_role::{self, Role}
+    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, 
+    assignment_submission::{self, Entity as SubmissionEntity}, assignment_submission_output::Model as SubmissionOutput, assignment_task, user, user_module_role::{self, Role},
+    assignment_submission::{Column as SubmissionColumn, Model as SubmissionModel},
 };
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
@@ -29,6 +31,7 @@ use serde::Serialize;
 use serde_json::Value;
 use util::state::AppState;
 use std::{fs, path::PathBuf};
+use tokio::{fs::File as FsFile, io::AsyncReadExt};
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
@@ -878,4 +881,126 @@ pub async fn get_submission_output(
         )),
     )
     .into_response()
+}
+
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}/download
+///
+/// Returns the original uploaded archive for a submission.
+/// Authorization: owner OR module staff (Lecturer/AssistantLecturer/Tutor) OR admin.
+pub async fn download_submission_file(
+    State(app_state): State<AppState>,
+    Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+) -> Response {
+    let db = app_state.db();
+
+    // Still load records we need for auth + filename/path.
+    let assignment = match AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id))
+        .filter(AssignmentColumn::ModuleId.eq(module_id))
+        .one(db)
+        .await
+    {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment not found")),
+            )
+                .into_response()
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response()
+        }
+    };
+
+    let submission: SubmissionModel = match SubmissionEntity::find()
+        .filter(SubmissionColumn::Id.eq(submission_id))
+        .filter(SubmissionColumn::AssignmentId.eq(assignment.id))
+        .one(db)
+        .await
+    {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Submission not found")),
+            )
+                .into_response()
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response()
+        }
+    };
+
+    // Authorization: allow owner or module staff or admin
+    let is_owner = claims.sub == submission.user_id;
+    let is_admin = claims.admin;
+    let is_staff = if is_admin {
+        true
+    } else {
+        let uid = claims.sub;
+        let mid = assignment.module_id;
+        let lect = user::Model::is_in_role(db, uid, mid, "Lecturer").await.unwrap_or(false);
+        let al   = user::Model::is_in_role(db, uid, mid, "AssistantLecturer").await.unwrap_or(false);
+        let tut  = user::Model::is_in_role(db, uid, mid, "Tutor").await.unwrap_or(false);
+        lect || al || tut
+    };
+
+    if !(is_owner || is_staff || is_admin) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("Not authorized to download this submission")),
+        )
+            .into_response();
+    }
+
+    // Resolve file path and read bytes
+    let full_path: PathBuf = submission.full_path();
+    if tokio::fs::metadata(&full_path).await.is_err() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("File missing on disk")),
+        )
+            .into_response();
+    }
+
+    let mut fh = match FsFile::open(&full_path).await {
+        Ok(f) => f,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Could not open file")),
+            )
+                .into_response()
+        }
+    };
+
+    let mut buffer = Vec::new();
+    if let Err(_) = fh.read_to_end(&mut buffer).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error("Failed to read file")),
+        )
+            .into_response();
+    }
+
+    // Build response with sensible headers
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", submission.filename))
+            .unwrap_or_else(|_| HeaderValue::from_static("attachment")),
+    );
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+
+    (StatusCode::OK, headers, buffer).into_response()
 }

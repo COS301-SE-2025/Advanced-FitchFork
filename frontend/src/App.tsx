@@ -69,6 +69,7 @@ import OutputPage from './pages/modules/assignments/config/OutputPage';
 import GatlamPage from './pages/modules/assignments/config/GatlamPage';
 import InterpreterPage from './pages/modules/assignments/config/InterpreterPage';
 import AssignmentFilePage from './pages/modules/assignments/config/AssignmentFilePage';
+import SubmissionIde from './pages/modules/assignments/submissions/SubmissionIde';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -179,6 +180,11 @@ export default function App() {
 
                   <Route path="tickets/:ticket_id" element={<TicketView />} />
                 </Route>
+
+                <Route
+                  path="assignments/:assignment_id/submissions/:submission_id/code"
+                  element={<SubmissionIde />}
+                />
 
                 <Route path="bookings" element={<UnderConstruction />} />
                 <Route path="grades" element={<ModuleGrades />} />

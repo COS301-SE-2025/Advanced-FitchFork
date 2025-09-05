@@ -38,7 +38,7 @@ const AssignmentMobileMenu = () => {
     navigate(`/modules/${module.id}/assignments/${assignment.id}/${path}`);
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-950 space-y-6">
+    <div className="bg-gray-50 dark:bg-gray-950 space-y-6 !pb-4">
       {/* Submissions Section */}
       <div>
         <Typography.Text className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 block">

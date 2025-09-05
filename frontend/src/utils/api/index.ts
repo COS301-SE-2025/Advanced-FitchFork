@@ -42,14 +42,15 @@ export const buildQuery = (params: Record<string, any>): string => {
  * @param endpoint - API path or full URL.
  * @param options - `fetch` options like method, headers, body.
  */
+// api.ts (or wherever this code lives)
+
 export async function apiFetch<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
-  // Construct full URL if only path is provided
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
 
-  // Load token and expiry from localStorage
+  // Load token
   const stored = localStorage.getItem('auth');
   let token: string | null = null;
   let expires_at: string | null = null;
@@ -64,27 +65,29 @@ export async function apiFetch<T>(
     }
   }
 
-  // If token is expired, clear it and return early
   if (expires_at && new Date(expires_at) < new Date()) {
     localStorage.removeItem('auth');
   }
 
-  // Prepare headers including optional Authorization
+  // ---- HEADERS -------------------------------------------------------------
+  // NOTE: If you sometimes send FormData through this function,
+  // you may want to set Content-Type conditionally (not shown here).
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    // 👇🏼 This header skips ngrok’s free-tier browser warning
+    'ngrok-skip-browser-warning': 'true',
     ...(options.headers as Record<string, string>),
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const finalOptions: RequestInit = {
     ...options,
     headers,
+    // 👇🏼 Optional: include cookies (needed for cookie-based auth/CORS)
+    credentials: options.credentials ?? 'include',
   };
 
-  // Log outgoing request
   console.log('[apiFetch] →', {
     url,
     method: finalOptions.method || 'GET',
@@ -92,40 +95,79 @@ export async function apiFetch<T>(
     body: finalOptions.body,
   });
 
-  // Perform fetch request
   const res = await fetch(url, finalOptions);
-  const contentType = res.headers.get('content-type');
-  let data: ApiResponse<T>;
+  const contentType = res.headers.get('content-type') || '';
 
+  // ---- Handle ngrok interstitial / non-JSON --------------------------------
+  // If ngrok injects its HTML page (ERR_NGROK_6024), content-type will be text/html
+  // or missing. We'll parse text and convert to a clean ApiResponse error.
+  if (!contentType.includes('application/json')) {
+    const text = await res.text();
+
+    // Heuristic: detect the ngrok warning page and make it explicit
+    const looksLikeNgrokInterstitial =
+      text.includes('cdn.ngrok.com/static/js/error.js') ||
+      text.includes('ERR_NGROK_6024') ||
+      text.includes('You are about to visit') ||
+      text.includes('data-payload');
+
+    const message = looksLikeNgrokInterstitial
+      ? 'Request blocked by ngrok interstitial. Ensure header "ngrok-skip-browser-warning" is sent (added automatically).'
+      : (text || 'Unknown non-JSON response');
+
+    const data: ApiResponse<T> = {
+      success: false,
+      data: {} as T,
+      message,
+    };
+
+    console.log('[apiFetch] ← (non-JSON)', { status: res.status, ok: res.ok, message });
+    return data;
+  }
+
+  // ---- Normal JSON path ----------------------------------------------------
   try {
-    if (contentType && contentType.includes('application/json')) {
-      data = await res.json();
-    } else {
-      const text = await res.text();
-      data = {
-        success: false,
-        data: {} as T,
-        message: text || 'Unknown error',
-      };
-    }
+    const data = (await res.json()) as ApiResponse<T>;
+    console.log('[apiFetch] ←', { status: res.status, ok: res.ok, data });
+    return data;
   } catch (err) {
-    console.error('[apiFetch] Failed to parse response', err);
-    data = {
+    console.error('[apiFetch] Failed to parse JSON', err);
+    return {
       success: false,
       data: {} as T,
       message: 'Failed to parse response from server.',
     };
   }
-
-  // Log incoming response
-  console.log('[apiFetch] ←', {
-    status: res.status,
-    ok: res.ok,
-    data,
-  });
-
-  return data;
 }
+
+// Returns the raw Blob without forcing a browser download.
+// Keeps auth behavior consistent with apiFetch/apiDownload.
+export async function apiFetchBlob(endpoint: string): Promise<Blob> {
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+
+  const stored = localStorage.getItem('auth');
+  let token: string | null = null;
+  if (stored) {
+    try { token = JSON.parse(stored)?.token || null; } catch { token = null; }
+  }
+
+  const headers: HeadersInit = { 'ngrok-skip-browser-warning': 'true' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(url, { method: 'GET', headers, credentials: 'include' });
+  if (!res.ok) {
+    // Try to extract API error details
+    try {
+      const j = await res.json();
+      throw new Error(j?.message || res.statusText);
+    } catch {
+      const t = await res.text().catch(() => '');
+      throw new Error(t || res.statusText || 'Download failed');
+    }
+  }
+  return res.blob();
+}
+
 
 /**
  * Upload files using a FormData payload.

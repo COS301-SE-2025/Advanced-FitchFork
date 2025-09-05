@@ -389,7 +389,13 @@ export default function SubmissionsList() {
         columnToggleEnabled
         actions={actions}
         renderGridItem={(item, itemActions) => (
-          <SubmissionCard submission={item} actions={itemActions} />
+          <SubmissionCard
+            submission={item}
+            actions={itemActions}
+            onClick={(s) =>
+              navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}`)
+            }
+          />
         )}
         renderListItem={(submission) => (
           <SubmissionListItem

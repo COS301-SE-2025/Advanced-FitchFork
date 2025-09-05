@@ -12,6 +12,7 @@ type Props = {
     percentageMark?: number;
   };
   actions?: ReactNode[];
+  onClick?: (submission: Submission) => void;
 };
 
 const getMarkColor = (mark: number): string => {
@@ -20,7 +21,7 @@ const getMarkColor = (mark: number): string => {
   return 'red';
 };
 
-const SubmissionCard = ({ submission, actions = [] }: Props) => {
+const SubmissionCard = ({ submission, actions = [], onClick }: Props) => {
   const { user, attempt, status, is_late, percentageMark, created_at, is_practice } = submission;
 
   return (
@@ -28,6 +29,7 @@ const SubmissionCard = ({ submission, actions = [] }: Props) => {
       hoverable
       actions={actions}
       className="rounded-lg border border-gray-200 dark:border-gray-700"
+      onClick={() => onClick?.(submission)}
     >
       <Card.Meta
         avatar={user ? <UserAvatar user={user} /> : <Avatar icon={<FileTextOutlined />} />}

@@ -1,6 +1,6 @@
-// components/common/PercentageTag.tsx
 import React from 'react';
 import { Tag } from 'antd';
+import { useTheme } from '@/context/ThemeContext';
 
 type PaletteName = 'traffic' | 'greenRed' | 'blueCyan' | 'purplePink' | 'gray';
 
@@ -27,13 +27,11 @@ const PRESET_PALETTES: Record<PaletteName, string[]> = {
   gray: ['#e5e7eb', '#9ca3af', '#4b5563'],
 };
 
-function clamp(v: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, v));
-}
-function normalize(v: number, lo: number, hi: number) {
-  if (hi === lo) return 0;
-  return clamp((v - lo) / (hi - lo), 0, 1);
-}
+// ---------- tiny color helpers ----------
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+const norm = (v: number, lo: number, hi: number) =>
+  hi === lo ? 0 : clamp((v - lo) / (hi - lo), 0, 1);
+
 function hexToRgb(hex: string) {
   let h = hex.replace('#', '').trim();
   if (h.length === 3)
@@ -44,42 +42,33 @@ function hexToRgb(hex: string) {
   const n = parseInt(h, 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
-function rgbToHex(r: number, g: number, b: number) {
-  const to = (n: number) => n.toString(16).padStart(2, '0');
-  return `#${to(r)}${to(g)}${to(b)}`;
-}
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
-}
-function interpColor(aHex: string, bHex: string, t: number) {
+const rgbToHex = (r: number, g: number, b: number) =>
+  `#${[r, g, b].map((n) => Math.round(n).toString(16).padStart(2, '0')).join('')}`;
+
+const mix = (aHex: string, bHex: string, t: number) => {
   const a = hexToRgb(aHex);
   const b = hexToRgb(bHex);
-  return rgbToHex(
-    Math.round(lerp(a.r, b.r, t)),
-    Math.round(lerp(a.g, b.g, t)),
-    Math.round(lerp(a.b, b.b, t)),
-  );
-}
-function pickColor(stops: string[], t01: number) {
+  return rgbToHex(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t);
+};
+const darken = (hex: string, amount: number) => {
+  const { r, g, b } = hexToRgb(hex);
+  return rgbToHex(r * (1 - amount), g * (1 - amount), b * (1 - amount));
+};
+const lighten = (hex: string, amount: number) => {
+  const { r, g, b } = hexToRgb(hex);
+  return rgbToHex(r + (255 - r) * amount, g + (255 - g) * amount, b + (255 - b) * amount);
+};
+
+const pickColor = (stops: string[], t01: number) => {
   if (stops.length === 0) return '#999999';
   if (stops.length === 1) return stops[0];
   const pos = t01 * (stops.length - 1);
   const i = Math.floor(pos);
   const f = pos - i;
-  const a = stops[i];
-  const b = stops[Math.min(i + 1, stops.length - 1)];
-  return interpColor(a, b, f);
-}
-function contrastText(hex: string) {
-  const { r, g, b } = hexToRgb(hex);
-  const [R, G, B] = [r, g, b].map((v) => {
-    const x = v / 255;
-    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
-  });
-  const L = 0.2126 * R + 0.7152 * G + 0.0722 * B;
-  return L > 0.5 ? '#000000' : '#ffffff';
-}
+  return mix(stops[i], stops[Math.min(i + 1, stops.length - 1)], f);
+};
 
+// ---------- component ----------
 const PercentageTag: React.FC<PercentageTagProps> = ({
   value,
   min = 0,
@@ -94,19 +83,28 @@ const PercentageTag: React.FC<PercentageTagProps> = ({
   style,
   'data-testid': dataTestId,
 }) => {
+  const { isDarkMode } = useTheme();
+
   const stops = colors && colors.length >= 2 ? colors : PRESET_PALETTES[palette];
-  const t = normalize(value, min, max);
-  const bg = pickColor(stops, t);
-  const fg = contrastText(bg);
+  const t = norm(value, min, max);
+  const main = pickColor(stops, t); // brand color for border
+
+  // Light mode: very light tint background toward white; text slightly darker than main
+  // Dark mode: dark tint background toward black; text slightly lighter than main
+  const bg = isDarkMode ? mix(main, '#000000', 0.82) : mix(main, '#ffffff', 0.86);
+  const text = isDarkMode ? lighten(main, 0.35) : darken(main, 0.25);
 
   return (
     <Tag
       data-testid={dataTestId ?? 'percentage-tag'}
-      color={bg}
-      className={['font-semibold', className].filter(Boolean).join(' ')} // ← Tailwind bold
+      bordered
+      className={['font-medium', className].filter(Boolean).join(' ')}
       style={{
-        color: fg, // dynamic contrast color
-        borderColor: bg, // match border to bg
+        color: text,
+        backgroundColor: bg,
+        borderColor: main,
+        // subtle polish to feel closer to AntD tokens
+        boxShadow: 'inset 0 0 0 1px var(--tag-border, currentColor, 0)',
         ...style,
       }}
       title={`${value.toFixed(Math.max(0, decimals))}${suffix}`}

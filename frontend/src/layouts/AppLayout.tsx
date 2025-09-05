@@ -93,7 +93,7 @@ const AppLayout = () => {
   };
 
   return (
-    <Layout className="h-screen overflow-hidden !bg-gray-50 dark:!bg-gray-950">
+    <Layout className="!h-dvh overflow-hidden !bg-gray-50 dark:!bg-gray-950">
       {isMobile ? (
         <Drawer
           placement="right"

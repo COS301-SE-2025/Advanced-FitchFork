@@ -24,4 +24,12 @@ export default defineConfig({
     outDir: '/var/www/fitchfork.co.za',
     emptyOutDir: true,
   },
+  server: {
+    host: true, // important so it binds to 0.0.0.0
+    allowedHosts: [
+      'localhost',
+      '127.0.0.1',
+      'cc5f904ade01.ngrok-free.app', // your ngrok URL
+    ],
+  },
 });

@@ -9,27 +9,15 @@ interface CodeDiffEditorProps {
   original: string;
   modified: string;
   language?: string;
-  height?: number;
+  /** px number or CSS string like '100%'. Default: '100%' */
+  height?: number | string;
   className?: string;
 
-  /** Compact header (toggle only) when true; full header when false. Default: true */
-  minimal?: boolean;
-
-  /** Main title shown only when minimal === false */
-  title?: React.ReactNode;
-
-  /** Pane labels (with defaults) */
   leftTitle?: React.ReactNode;
   rightTitle?: React.ReactNode;
 
-  /** Show language badge when minimal === false and language is provided */
-  showLangBadge?: boolean;
-
-  /** Controlled mode (optional). If omitted, component manages its own mode state. */
   viewMode?: ViewMode;
   defaultViewMode?: ViewMode;
-
-  /** Callback when view mode changes */
   onViewModeChange?: (mode: ViewMode) => void;
 }
 
@@ -37,24 +25,15 @@ const CodeDiffEditor: React.FC<CodeDiffEditorProps> = ({
   original,
   modified,
   language,
-  height = 400,
+  height = '100%',
   className = '',
-  minimal = true,
-  title,
-  leftTitle = 'Original',
-  rightTitle = 'Modified',
-  showLangBadge = true,
+  leftTitle = 'Student Output',
+  rightTitle = 'Memo Output',
   viewMode,
   defaultViewMode = 'side-by-side',
   onViewModeChange,
 }) => {
   const { isDarkMode } = useTheme();
-  const langLabel = language ? language.toUpperCase() : '';
-
-  const shellBorder = isDarkMode ? 'border-gray-700' : 'border-gray-300';
-  const stripBg = isDarkMode
-    ? 'bg-gray-900 text-gray-300 border-gray-800'
-    : 'bg-gray-50 text-gray-600 border-gray-200';
 
   const isControlled = viewMode !== undefined;
   const [internalMode, setInternalMode] = useState<ViewMode>(viewMode ?? defaultViewMode);
@@ -83,74 +62,77 @@ const CodeDiffEditor: React.FC<CodeDiffEditorProps> = ({
     [sideBySide],
   );
 
-  return (
-    <div className={`rounded-md overflow-hidden border ${shellBorder} ${className}`}>
-      {/* Header */}
-      <div
-        className={`flex items-center justify-between px-3 py-1.5 text-sm font-medium border-b ${stripBg}`}
-      >
-        {/* Left: title + optional language badge */}
-        {!minimal ? (
-          <div className="flex items-center gap-2 min-w-0">
-            {title || <span className="truncate">Code Diff</span>}
-            {showLangBadge && langLabel && (
-              <span
-                className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                  isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                }`}
-              >
-                {langLabel}
-              </span>
-            )}
-          </div>
-        ) : (
-          <span className="text-transparent select-none">.</span>
-        )}
+  const borderCls = isDarkMode ? 'border-gray-700' : 'border-gray-300';
+  const stripBg = isDarkMode
+    ? 'bg-gray-900 text-gray-300 border-gray-800'
+    : 'bg-gray-50 text-gray-600 border-gray-200';
 
-        {/* Right: view mode toggle */}
-        <Segmented
-          size="small"
-          value={mode}
-          onChange={(v) => setMode(v as ViewMode)}
-          options={[
-            { label: 'Side-by-side', value: 'side-by-side' },
-            { label: 'Inline', value: 'inline' },
-          ]}
-        />
+  return (
+    <div
+      className={`rounded-md overflow-hidden border ${borderCls} ${className}`}
+      style={{ display: 'flex', flexDirection: 'column', height }}
+    >
+      {/* Header row */}
+      <div className={`flex items-center justify-between px-3 py-1.5 text-xs border-b ${stripBg}`}>
+        {sideBySide ? (
+          <>
+            {/* left label */}
+            <div className="flex items-center min-w-0 gap-2">
+              <span
+                className={`h-2 w-2 rounded-full ${isDarkMode ? 'bg-red-400/80' : 'bg-red-600/70'}`}
+              />
+              <span
+                className="truncate"
+                title={typeof leftTitle === 'string' ? leftTitle : undefined}
+              >
+                {leftTitle}
+              </span>
+            </div>
+
+            {/* right label + toggle */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`h-2 w-2 rounded-full ${isDarkMode ? 'bg-green-400/80' : 'bg-green-600/70'}`}
+                />
+                <span
+                  className="truncate text-right"
+                  title={typeof rightTitle === 'string' ? rightTitle : undefined}
+                >
+                  {rightTitle}
+                </span>
+              </div>
+
+              <Segmented
+                size="small"
+                value={mode}
+                onChange={(v) => setMode(v as ViewMode)}
+                options={[
+                  { label: 'Side-by-side', value: 'side-by-side' },
+                  { label: 'Inline', value: 'inline' },
+                ]}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="ml-auto">
+            <Segmented
+              size="small"
+              value={mode}
+              onChange={(v) => setMode(v as ViewMode)}
+              options={[
+                { label: 'Side-by-side', value: 'side-by-side' },
+                { label: 'Inline', value: 'inline' },
+              ]}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Pane titles row (only for side-by-side) */}
-      {sideBySide && (
-        <div className={`grid grid-cols-2 items-center px-3 py-1.5 text-xs border-b ${stripBg}`}>
-          <div className="flex items-center min-w-0 gap-2">
-            <span
-              className={`h-2 w-2 rounded-full ${isDarkMode ? 'bg-red-400/80' : 'bg-red-600/70'}`}
-            />
-            <span
-              className="truncate"
-              title={typeof leftTitle === 'string' ? leftTitle : undefined}
-            >
-              {leftTitle}
-            </span>
-          </div>
-          <div className="flex items-center min-w-0 gap-2 justify-end">
-            <span
-              className={`h-2 w-2 rounded-full ${isDarkMode ? 'bg-green-400/80' : 'bg-green-600/70'}`}
-            />
-            <span
-              className="truncate text-right"
-              title={typeof rightTitle === 'string' ? rightTitle : undefined}
-            >
-              {rightTitle}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Diff Editor */}
-      <div style={{ height }}>
+      {/* Diff Editor fills remaining space */}
+      <div style={{ flex: 1, minHeight: 0 }}>
         <DiffEditor
-          height={height}
+          height="100%"
           language={language}
           original={original}
           modified={modified}

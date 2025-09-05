@@ -28,13 +28,13 @@ export interface SubsectionBreakdown {
   status: string;
   earned: number;
   total: number;
+  feedback?: string; 
 }
 
 export interface TaskBreakdown {
   task_number: number;
   name: string;
   score: SubmissionMark;
-  feedback: string;
   subsections: SubsectionBreakdown[];
 }
 
