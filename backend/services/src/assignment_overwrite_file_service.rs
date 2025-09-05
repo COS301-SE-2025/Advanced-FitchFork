@@ -43,7 +43,7 @@ impl ToActiveModel<Entity> for UpdateAssignmentOverwriteFile {
         let file = match AssignmentOverwriteFileRepository::find_by_id(self.id).await {
             Ok(Some(file)) => file,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("File not found for ID {}", self.id)));
+                return Err(DbErr::RecordNotFound(format!("Overwrite File not found for ID {}", self.id)));
             }
             Err(err) => return Err(err),
         };

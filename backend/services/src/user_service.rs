@@ -163,7 +163,13 @@ impl UserService {
     ) -> Result<Option<Model>, DbErr> {
         let username = username.trim();
 
-        if let Some(user) = UserRepository::find_one(UserFilter { username: Some(username.to_string()), ..Default::default() }).await? {
+        if let Some(user) = UserRepository::find_one(
+            UserFilter {
+                username: Some(username.to_string()),
+                ..Default::default()
+            },
+            None,
+        ).await? {
             if Self::verify_password(&user, password) {
                 return Ok(Some(user));
             }

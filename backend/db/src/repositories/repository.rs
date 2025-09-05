@@ -67,10 +67,12 @@ where
 
     fn find_one(
         filter_params: F,
+        sort_by: Option<String>,
     ) -> Pin<Box<dyn Future<Output = Result<Option<E::Model>, DbErr>> + Send>> {
         Box::pin(async move {
-            Self::apply_filter(E::find(), &filter_params)
-                .one(get_connection().await)
+            let query =  Self::apply_filter(E::find(), &filter_params);
+            let query = Self::apply_sorting(query, sort_by);
+            query.one(get_connection().await)
                 .await
                 .map_err(DbErr::from)
         })
@@ -78,10 +80,12 @@ where
 
     fn find_all(
         filter_params: F,
+        sort_by: Option<String>,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<E::Model>, DbErr>> + Send>> {
         Box::pin(async move {
-            Self::apply_filter(E::find(), &filter_params)
-                .all(get_connection().await)
+            let query = Self::apply_filter(E::find(), &filter_params);
+            let query = Self::apply_sorting(query, sort_by);
+            query.all(get_connection().await)
                 .await
                 .map_err(DbErr::from)
         })

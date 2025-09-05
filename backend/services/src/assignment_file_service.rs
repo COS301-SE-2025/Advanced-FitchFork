@@ -74,7 +74,9 @@ impl<'a> Service<'a, Entity, CreateAssignmentFile, UpdateAssignmentFile, Assignm
                     assignment_id: Some(params.assignment_id),
                     file_type: Some(params.file_type.parse::<FileType>().map_err(|e| DbErr::Custom(format!("Invalid file type: {e}")))?.clone()),
                     ..Default::default()
-                })
+                },
+                None,
+            )
                 .await?
             {
                 let existing_path = AssignmentFileService::storage_root().join(&existing.path);
@@ -150,7 +152,8 @@ impl AssignmentFileService {
         AssignmentFileRepository::find_all(AssignmentFileFilter {
                 assignment_id: Some(assignment_id),
                 ..Default::default()
-            })
-            .await
+            },
+            None,
+        ).await
     }
 }

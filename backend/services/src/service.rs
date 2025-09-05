@@ -71,22 +71,22 @@ where
 
     fn find_one(
         filter_params: F,
+        sort_by: Option<String>,
     ) -> Pin<Box<dyn Future<Output = Result<Option<E::Model>, DbErr>> + Send + 'a>> {
         Box::pin(async move {
-            R::find_one(filter_params).await.map_err(DbErr::from)
+            R::find_one(filter_params, sort_by).await.map_err(DbErr::from)
         })
     }
 
-    /// Find all entities matching the filter
     fn find_all(
         filter_params: F,
+        sort_by: Option<String>,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<E::Model>, DbErr>> + Send + 'a>> {
         Box::pin(async move {
-            R::find_all(filter_params).await.map_err(DbErr::from)
+            R::find_all(filter_params, sort_by).await.map_err(DbErr::from)
         })
     }
 
-    /// Find entities with pagination and sorting
     fn filter(
         filter_params: F,
         page: u64,
@@ -100,7 +100,6 @@ where
         })
     }
 
-    /// Count entities matching the filter
     fn count(
         filter_params: F,
     ) -> Pin<Box<dyn Future<Output = Result<u64, DbErr>> + Send + 'a>> {
@@ -109,7 +108,6 @@ where
         })
     }
 
-    /// Check if any entities exist matching the filter
     fn exists(
         filter_params: F,
     ) -> Pin<Box<dyn Future<Output = Result<bool, DbErr>> + Send + 'a>> {

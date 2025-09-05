@@ -449,6 +449,7 @@ pub struct PasswordResetTokenFilter {
     pub id: Option<i64>,
     pub user_id: Option<i64>,
     pub token: Option<String>,
+    pub expires_at: Option<DateTime<Utc>>,
     pub used: Option<bool>,
     pub query: Option<String>,
 }
@@ -470,6 +471,11 @@ impl PasswordResetTokenFilter {
 
     pub fn with_token(mut self, token: String) -> Self {
         self.token = Some(token);
+        self
+    }
+
+    pub fn with_expires_at(mut self, expires_at: DateTime<Utc>) -> Self {
+        self.expires_at = Some(expires_at);
         self
     }
 

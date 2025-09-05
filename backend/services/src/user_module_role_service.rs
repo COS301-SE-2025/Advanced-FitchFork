@@ -108,10 +108,13 @@ impl UserModuleRoleService {
     pub async fn get_module_roles(
         user_id: i64
     ) -> Result<Vec<UserModuleRoleInfo>, DbErr> {
-        let roles = UserModuleRoleRepository::find_all(UserModuleRoleFilter {
-            user_id: Some(user_id),
-            ..Default::default()
-        })
+        let roles = UserModuleRoleRepository::find_all(
+            UserModuleRoleFilter {
+                user_id: Some(user_id),
+                ..Default::default()
+            },
+            None,
+        )
         .await?;
 
         let module_ids: Vec<i64> = roles.iter().map(|role| role.module_id).collect();

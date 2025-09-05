@@ -24,6 +24,10 @@ impl Repository<password_reset_token::Entity, PasswordResetTokenFilter> for Pass
             condition = condition.add(Expr::cust("LOWER(token)").like(&pattern));
         }
 
+        if let Some(expires_at) = filter.expires_at {
+            condition = condition.add(password_reset_token::Column::ExpiresAt.eq(expires_at));
+        }
+
         if let Some(used) = filter.used {
             condition = condition.add(password_reset_token::Column::Used.eq(used));
         }
