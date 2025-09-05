@@ -70,6 +70,7 @@ import GatlamPage from './pages/modules/assignments/config/GatlamPage';
 import InterpreterPage from './pages/modules/assignments/config/InterpreterPage';
 import AssignmentFilePage from './pages/modules/assignments/config/AssignmentFilePage';
 import SubmissionIde from './pages/modules/assignments/submissions/SubmissionIde';
+import AssignmentGrades from './pages/modules/assignments/AssignmentGrades';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -156,6 +157,7 @@ export default function App() {
                     <Route path="memo-output" element={<MemoOutput />} />
                     <Route path="mark-allocator" element={<MarkAllocator />} />
                     <Route path="stats" element={<UnderConstruction />} />
+                    <Route path="grades" element={<AssignmentGrades />} />
 
                     <Route path="plagiarism">
                       <Route index element={<PlagiarismCases />} />

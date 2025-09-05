@@ -6,7 +6,7 @@
 //! - Create, read, update, delete assignments (single and bulk)
 //! - Open/close assignments
 //! - Assignment stats and readiness checks
-//! - Nested routes for tasks, config, memo output, mark allocation, submissions, files, interpreter, tickets, and plagiarism
+//! - Nested routes for tasks, config, memo output, mark allocation, submissions, files, interpreter, tickets, plagiarism, and grades
 //!
 //! Access control is enforced via middleware guards for lecturers, assistants, and assigned users.
 
@@ -31,6 +31,7 @@ use put::{bulk_update_assignments, close_assignment, edit_assignment, open_assig
 use submissions::submission_routes;
 use tasks::tasks_routes;
 use tickets::ticket_routes;
+use grades::grade_routes;
 use util::state::AppState;
 
 pub mod common;
@@ -47,6 +48,7 @@ pub mod put;
 pub mod submissions;
 pub mod tasks;
 pub mod tickets;
+pub mod grades;
 
 /// Expects a module ID.
 /// If an assignment ID is included it will be modified or deleted.
@@ -75,6 +77,7 @@ pub mod tickets;
 /// - Files routes                  → `files_routes`
 /// - Tickets routes                → `ticket_routes`
 /// - Plagiarism routes             → `plagiarism_routes`
+/// - Grades routes                 → `grade_routes`
 pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", post(create_assignment).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
@@ -94,7 +97,8 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .nest("/{assignment_id}/mark_allocator", mark_allocator_routes().route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
         .nest("/{assignment_id}/submissions", submission_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
         .nest("/{assignment_id}/files", files_routes(app_state.clone()))
-        .nest("/{assignment_id}/interpreter",interpreter_routes(app_state.clone()))
-        .nest("/{assignment_id}/tickets",ticket_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(),require_assigned_to_module)))
-        .nest("/{assignment_id}/plagiarism",plagiarism_routes().route_layer(from_fn_with_state(app_state.clone(),require_assigned_to_module,)).route_layer(from_fn_with_state(app_state.clone(),require_lecturer_or_assistant_lecturer)))
+        .nest("/{assignment_id}/interpreter", interpreter_routes(app_state.clone()))
+        .nest("/{assignment_id}/tickets", ticket_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
+        .nest("/{assignment_id}/plagiarism", plagiarism_routes().route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
+        .nest("/{assignment_id}/grades", grade_routes(app_state.clone()))
 }

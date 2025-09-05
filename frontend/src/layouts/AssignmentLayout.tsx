@@ -72,6 +72,11 @@ const AssignmentLayout = () => {
             label: 'Plagiarism',
             disabled: !readiness?.config_present,
           },
+          {
+            value: `${basePath}/grades`,
+            label: 'Grades',
+            disabled: !readiness?.is_ready,
+          },
           // {
           //   value: `${basePath}/stats`,
           //   label: 'Statistics',
@@ -285,12 +290,16 @@ const AssignmentLayout = () => {
                       <AssignmentStatusTag status={assignment.status} />
                     </div>
 
-                    {auth.isStudent(module.id) && (
+                    {auth.isStudent(module.id) && assignment.best_mark && (
                       <Tag
                         color="green"
                         className="!text-xs !font-medium !h-6 !px-2 !flex items-center"
                       >
-                        Best Mark: 85%
+                        Best Mark:{' '}
+                        {Math.round(
+                          (assignment.best_mark.earned / assignment.best_mark.total) * 100,
+                        )}
+                        %
                       </Tag>
                     )}
                   </div>

@@ -202,7 +202,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isTutor = (moduleId: number): boolean => getModuleRole(moduleId) === 'tutor';
   const isStudent = (moduleId: number): boolean => getModuleRole(moduleId) === 'student';
   const isStaff = (moduleId: number): boolean =>
-    isTutor(moduleId) || isAssistantLecturer(moduleId) || isLecturer(moduleId);
+    isTutor(moduleId) || isAssistantLecturer(moduleId) || isLecturer(moduleId) || isAdmin;
 
   const hasModuleRole = (role: ModuleRole): boolean => modules.some((m) => m.role === role);
 

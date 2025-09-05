@@ -33,6 +33,14 @@ pub enum SubmissionMode {
     CodeCoverage,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum GradingPolicy {
+    Best,   // highest score across submissions
+    Last,   // the most recent submission
+}
+
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionLimits {
     #[serde(default = "default_timeout_secs")]
@@ -73,6 +81,9 @@ pub struct MarkingOptions {
 
     #[serde(default = "default_deliminator")]
     pub deliminator: String,
+
+    #[serde(default = "default_grading_policy")]
+    pub grading_policy: GradingPolicy,
 }
 
 impl Default for MarkingOptions {
@@ -81,6 +92,7 @@ impl Default for MarkingOptions {
             marking_scheme: default_marking_scheme(),
             feedback_scheme: default_feedback_scheme(),
             deliminator: default_deliminator(),
+            grading_policy: default_grading_policy(),
         }
     }
 }
@@ -377,6 +389,10 @@ fn default_feedback_scheme() -> FeedbackScheme {
 
 fn default_deliminator() -> String {
     "&-=-&".to_string()
+}
+
+fn default_grading_policy() -> GradingPolicy {
+    GradingPolicy::Last
 }
 
 fn default_language() -> Language {

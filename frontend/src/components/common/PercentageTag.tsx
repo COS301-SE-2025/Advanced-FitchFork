@@ -2,7 +2,7 @@ import React from 'react';
 import { Tag } from 'antd';
 import { useTheme } from '@/context/ThemeContext';
 
-type PaletteName = 'traffic' | 'greenRed' | 'blueCyan' | 'purplePink' | 'gray';
+type PaletteName = 'traffic' | 'greenRed' | 'redGreen' | 'blueCyan' | 'purplePink' | 'gray';
 
 export interface PercentageTagProps {
   value: number;
@@ -22,6 +22,7 @@ export interface PercentageTagProps {
 const PRESET_PALETTES: Record<PaletteName, string[]> = {
   traffic: ['#ef4444', '#f59e0b', '#22c55e'],
   greenRed: ['#22c55e', '#eab308', '#ef4444'],
+  redGreen: ['#ef4444', '#eab308', '#22c55e'],
   blueCyan: ['#60a5fa', '#22d3ee'],
   purplePink: ['#8b5cf6', '#ec4899'],
   gray: ['#e5e7eb', '#9ca3af', '#4b5563'],

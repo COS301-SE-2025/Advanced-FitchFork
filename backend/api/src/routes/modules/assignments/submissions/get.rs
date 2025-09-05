@@ -25,7 +25,7 @@ use db::models::{
 };
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, RelationTrait,
+    QueryOrder, QuerySelect, RelationTrait, sea_query::{Expr, Func}, QueryTrait,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -93,9 +93,13 @@ async fn get_user_submissions(
         .add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
         .add(assignment_submission::Column::UserId.eq(user_id));
 
+    // filename: fuzzy, case-insensitive
     if let Some(query) = &params.query {
         let pattern = format!("%{}%", query.to_lowercase());
-        condition = condition.add(assignment_submission::Column::Filename.contains(&pattern));
+        condition = condition.add(
+            Expr::expr(Func::lower(Expr::col(assignment_submission::Column::Filename)))
+                .like(&pattern),
+        );
     }
 
     if let Some(late_status) = params.late {
@@ -104,6 +108,10 @@ async fn get_user_submissions(
         } else {
             condition.add(assignment_submission::Column::CreatedAt.lte(assignment.due_date))
         };
+    }
+
+    if let Some(ignored) = params.ignored {
+        condition = condition.add(assignment_submission::Column::Ignored.eq(ignored));
     }
 
     let mut query = assignment_submission::Entity::find().filter(condition);
@@ -202,6 +210,7 @@ async fn get_user_submissions(
                 is_practice,
                 is_late: is_late(s.created_at, assignment.due_date),
                 mark,
+                ignored: s.ignored,
             }
         })
         .collect();
@@ -325,59 +334,38 @@ async fn get_list_submissions(
     let mut condition =
         Condition::all().add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32));
 
+    // fuzzy, case-insensitive filter across filename + username
     if let Some(query) = &params.query {
         let pattern = format!("%{}%", query.to_lowercase());
 
-        // Build OR condition across multiple fields
-        let mut or_condition =
-            Condition::any().add(assignment_submission::Column::Filename.contains(&pattern));
+        // Subquery for user ids whose LOWER(username) LIKE %pattern%
+        let user_ids_subq = user::Entity::find()
+            .select_only()
+            .column(user::Column::Id)
+            .filter(Expr::expr(Func::lower(Expr::col(user::Column::Username))).like(&pattern))
+            .into_query();
 
-        if let Ok(Some(user)) = user::Entity::find()
-            .filter(user::Column::Username.contains(&pattern))
-            .one(db)
-            .await
-        {
-            or_condition = or_condition.add(assignment_submission::Column::UserId.eq(user.id));
-        }
+        // LOWER(filename) LIKE %pattern% OR user_id IN (subquery)
+        let or_condition = Condition::any()
+            .add(
+                Expr::expr(Func::lower(Expr::col(assignment_submission::Column::Filename)))
+                    .like(&pattern),
+            )
+            .add(assignment_submission::Column::UserId.in_subquery(user_ids_subq));
 
         condition = condition.add(or_condition);
     }
 
+    // fuzzy username= filter too (case-insensitive)
     if let Some(ref username) = params.username {
-        match user::Entity::find()
-            .filter(user::Column::Username.eq(username.clone()))
-            .one(db)
-            .await
-        {
-            Ok(Some(user)) => {
-                condition = condition.add(assignment_submission::Column::UserId.eq(user.id));
-            }
-            Ok(None) => {
-                // No such user => return empty list
-                return (
-                    StatusCode::OK,
-                    Json(ApiResponse::success(
-                        SubmissionsListResponse {
-                            submissions: vec![],
-                            page: 1,
-                            per_page,
-                            total: 0,
-                        },
-                        "No submissions found for the specified username",
-                    )),
-                )
-                    .into_response();
-            }
-            Err(_) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<SubmissionsListResponse>::error(
-                        "Database error",
-                    )),
-                )
-                    .into_response();
-            }
-        }
+        let pattern = format!("%{}%", username.to_lowercase());
+        let user_ids_subq = user::Entity::find()
+            .select_only()
+            .column(user::Column::Id)
+            .filter(Expr::expr(Func::lower(Expr::col(user::Column::Username))).like(&pattern))
+            .into_query();
+
+        condition = condition.add(assignment_submission::Column::UserId.in_subquery(user_ids_subq));
     }
 
     if let Some(late_status) = params.late {
@@ -386,6 +374,10 @@ async fn get_list_submissions(
         } else {
             condition.add(assignment_submission::Column::CreatedAt.lte(assignment.due_date))
         };
+    }
+
+    if let Some(ignored) = params.ignored {
+        condition = condition.add(assignment_submission::Column::Ignored.eq(ignored));
     }
 
     let mut query = assignment_submission::Entity::find()
@@ -406,7 +398,7 @@ async fn get_list_submissions(
                 }
                 "filename" => query = query.order_by(assignment_submission::Column::Filename, dir),
                 "attempt" => query = query.order_by(assignment_submission::Column::Attempt, dir),
-                _ => {} // mark/status handled in-memory
+                _ => {} // username/mark sorted in-memory
             }
         }
     } else {
@@ -479,6 +471,7 @@ async fn get_list_submissions(
                 is_practice,
                 is_late: is_late(s.created_at, assignment.due_date),
                 mark,
+                ignored: s.ignored,
             }
         })
         .collect();
