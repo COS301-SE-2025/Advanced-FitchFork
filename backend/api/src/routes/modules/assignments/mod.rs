@@ -25,6 +25,7 @@ use get::{get_assignment, get_assignment_readiness, get_assignment_stats, get_as
 use interpreter::interpreter_routes;
 use mark_allocator::mark_allocator_routes;
 use memo_output::memo_output_routes;
+use overwrite_files::overwrite_file_routes;
 use plagiarism::plagiarism_routes;
 use post::create_assignment;
 use put::{bulk_update_assignments, close_assignment, edit_assignment, open_assignment};
@@ -41,6 +42,7 @@ pub mod get;
 pub mod interpreter;
 pub mod mark_allocator;
 pub mod memo_output;
+pub mod overwrite_files;
 pub mod plagiarism;
 pub mod post;
 pub mod put;
@@ -77,24 +79,157 @@ pub mod tickets;
 /// - Plagiarism routes             → `plagiarism_routes`
 pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
-        .route("/", post(create_assignment).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .route("/", get(get_assignments).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
-        .route("/{assignment_id}", get(get_assignment).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
-        .route("/{assignment_id}", put(edit_assignment).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .route("/{assignment_id}", delete(delete_assignment).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .route("/{assignment_id}/open", put(open_assignment).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)).route_layer(from_fn_with_state(app_state.clone(), require_ready_assignment)))
-        .route("/{assignment_id}/close", put(close_assignment).layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)).route_layer(from_fn_with_state(app_state.clone(), require_ready_assignment)))
-        .route("/bulk", delete(bulk_delete_assignments).layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .route("/bulk", put(bulk_update_assignments).layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .route("/{assignment_id}/stats", get(get_assignment_stats).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .route("/{assignment_id}/readiness", get(get_assignment_readiness).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
-        .nest("/{assignment_id}/tasks", tasks_routes().route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .nest("/{assignment_id}/config", config_routes().layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .nest("/{assignment_id}/memo_output", memo_output_routes().layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .nest("/{assignment_id}/mark_allocator", mark_allocator_routes().route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .nest("/{assignment_id}/submissions", submission_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
+        .route(
+            "/",
+            post(create_assignment).route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
+        .route(
+            "/",
+            get(get_assignments).route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_assigned_to_module,
+            )),
+        )
+        .route(
+            "/{assignment_id}",
+            get(get_assignment).route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_assigned_to_module,
+            )),
+        )
+        .route(
+            "/{assignment_id}",
+            put(edit_assignment).route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
+        .route(
+            "/{assignment_id}",
+            delete(delete_assignment).route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
+        .route(
+            "/{assignment_id}/open",
+            put(open_assignment)
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_lecturer_or_assistant_lecturer,
+                ))
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_ready_assignment,
+                )),
+        )
+        .route(
+            "/{assignment_id}/close",
+            put(close_assignment)
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_lecturer_or_assistant_lecturer,
+                ))
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_ready_assignment,
+                )),
+        )
+        .route(
+            "/bulk",
+            delete(bulk_delete_assignments).layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
+        .route(
+            "/bulk",
+            put(bulk_update_assignments).layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
+        .route(
+            "/{assignment_id}/stats",
+            get(get_assignment_stats).route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
+        .route(
+            "/{assignment_id}/readiness",
+            get(get_assignment_readiness).route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_assigned_to_module,
+            )),
+        )
+        .nest(
+            "/{assignment_id}/tasks",
+            tasks_routes().route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
+        .nest(
+            "/{assignment_id}/config",
+            config_routes().layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
+        .nest(
+            "/{assignment_id}/memo_output",
+            memo_output_routes().layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
+        .nest(
+            "/{assignment_id}/mark_allocator",
+            mark_allocator_routes().route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
+        .nest(
+            "/{assignment_id}/submissions",
+            submission_routes(app_state.clone()).route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_assigned_to_module,
+            )),
+        )
         .nest("/{assignment_id}/files", files_routes(app_state.clone()))
-        .nest("/{assignment_id}/interpreter",interpreter_routes(app_state.clone()))
-        .nest("/{assignment_id}/tickets",ticket_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(),require_assigned_to_module)))
-        .nest("/{assignment_id}/plagiarism",plagiarism_routes().route_layer(from_fn_with_state(app_state.clone(),require_assigned_to_module,)).route_layer(from_fn_with_state(app_state.clone(),require_lecturer_or_assistant_lecturer)))
+        .nest(
+            "/{assignment_id}/interpreter",
+            interpreter_routes(app_state.clone()),
+        )
+        .nest(
+            "/{assignment_id}/tickets",
+            ticket_routes(app_state.clone()).route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_assigned_to_module,
+            )),
+        )
+        .nest(
+            "/{assignment_id}/plagiarism",
+            plagiarism_routes()
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_assigned_to_module,
+                ))
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_lecturer_or_assistant_lecturer,
+                )),
+        )
+        .nest(
+            "/{assignment_id}/overwrite_files",
+            overwrite_file_routes(app_state.clone()).layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
 }
