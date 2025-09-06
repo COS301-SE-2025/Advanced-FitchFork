@@ -1,12 +1,8 @@
-import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
+import type { AssignmentDetails, AssignmentReadiness } from '@/types/modules/assignments';
 import type { MarkAllocatorFile } from '@/types/modules/assignments/mark-allocator';
 import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
 import type { AssignmentConfig } from '@/types/modules/assignments/config';
 import { createContext, useContext } from 'react';
-
-interface AssignmentDetails extends Assignment {
-  files: AssignmentFile[];
-}
 
 export interface AssignmentContextValue {
   assignment: AssignmentDetails;

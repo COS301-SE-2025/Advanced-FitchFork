@@ -19,6 +19,9 @@ export const getPlagiarismGraph = async (
   assignmentId: number,
   params?: {
     status?: PlagiarismCaseStatus;
+    min_similarity?: number;
+    max_similarity?: number;
+    user?: string;
   }
 ): Promise<GetPlagiarismGraphResponse> => {
   return api.get(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/graph`, params);

@@ -3,14 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import type {
   PlagiarismCaseStatus,
   PlagiarismCaseItem,
-  PlagiarismGraphLink,
 } from '@/types/modules/assignments/plagiarism';
 import {
   listPlagiarismCases,
   deletePlagiarismCase,
   createPlagiarismCase,
   updatePlagiarismCase,
-  getPlagiarismGraph,
   runMossCheck,
   getMossReport,
   bulkDeletePlagiarismCases,
@@ -33,7 +31,7 @@ import CreateModal from '@/components/common/CreateModal';
 import EditModal from '@/components/common/EditModal';
 import { message } from '@/utils/message';
 import dayjs from 'dayjs';
-import { Space, Typography, Modal, Alert } from 'antd'; // <-- add Modal, Select
+import { Space, Typography, Modal, Alert } from 'antd';
 import type { TreeSelectProps } from 'antd';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
@@ -120,31 +118,12 @@ const PlagiarismCases = () => {
   const [editingItem, setEditingItem] = useState<PlagiarismCaseItem | null>(null);
 
   const [graphOpen, setGraphOpen] = useState(false);
-  const [, setGraphLoading] = useState(false);
-  const [graphLinks, setGraphLinks] = useState<PlagiarismGraphLink[]>([]);
 
   // MOSS modal/state
   const [mossOpen, setMossOpen] = useState(false);
   const [mossRunning, setMossRunning] = useState(false);
   const [mossReportUrl, setMossReportUrl] = useState<string | null>(null);
   const [mossGeneratedAt, setMossGeneratedAt] = useState<string | null>(null);
-
-  const openGraph = async () => {
-    try {
-      setGraphLoading(true);
-      const res = await getPlagiarismGraph(moduleId, assignmentId);
-      if (res.success) {
-        setGraphLinks(res.data.links || []);
-        setGraphOpen(true);
-      } else {
-        message.error(res.message || 'Failed to load graph');
-      }
-    } catch (e) {
-      message.error('Failed to load graph');
-    } finally {
-      setGraphLoading(false);
-    }
-  };
 
   const loadMossReport = async () => {
     try {
@@ -388,9 +367,7 @@ const PlagiarismCases = () => {
         label: 'View Graph',
         isPrimary: true,
         icon: <DeploymentUnitOutlined />,
-        handler: async () => {
-          await openGraph();
-        },
+        handler: () => setGraphOpen(true),
       },
     ],
 
@@ -702,7 +679,8 @@ const PlagiarismCases = () => {
       <PlagiarismGraph
         open={graphOpen}
         onClose={() => setGraphOpen(false)}
-        links={graphLinks}
+        moduleId={moduleId}
+        assignmentId={assignmentId}
         title={`Plagiarism Graph (${formatModuleCode(moduleDetails.code)} • ${assignment.name})`}
       />
 

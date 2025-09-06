@@ -22,7 +22,6 @@ import { submitAssignment } from '@/services/modules/assignments/submissions/pos
 import type { AssignmentReadiness } from '@/types/modules/assignments';
 import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
 import AssignmentStatusTag from '@/components/assignments/AssignmentStatusTag';
-import EventBus from '@/utils/EventBus';
 import { useUI } from '@/context/UIContext';
 import SubmitAssignmentModal from '@/components/submissions/SubmitAssignmentModal';
 
@@ -72,6 +71,11 @@ const AssignmentLayout = () => {
             value: `${basePath}/plagiarism`,
             label: 'Plagiarism',
             disabled: !readiness?.config_present,
+          },
+          {
+            value: `${basePath}/grades`,
+            label: 'Grades',
+            disabled: !readiness?.is_ready,
           },
           // {
           //   value: `${basePath}/stats`,
@@ -173,10 +177,15 @@ const AssignmentLayout = () => {
     setLoading(true);
     const hide = message.loading('Submitting assignment...');
     try {
-      await submitAssignment(module.id, assignment.id, file, isPractice);
-      await refreshAssignment();
-      message.success('Submission successful');
-      EventBus.emit('submission:updated');
+      const res = await submitAssignment(module.id, assignment.id, file, isPractice);
+
+      if (res.success && res.data) {
+        message.success('Submission successful');
+        const submission = res.data;
+        navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${submission.id}`);
+        // EventBus.emit('submission:updated');
+        // await refreshAssignment();
+      }
     } catch {
       message.error('Submission failed');
     } finally {
@@ -281,12 +290,16 @@ const AssignmentLayout = () => {
                       <AssignmentStatusTag status={assignment.status} />
                     </div>
 
-                    {auth.isStudent(module.id) && (
+                    {auth.isStudent(module.id) && assignment.best_mark && (
                       <Tag
                         color="green"
                         className="!text-xs !font-medium !h-6 !px-2 !flex items-center"
                       >
-                        Best Mark: 85%
+                        Best Mark:{' '}
+                        {Math.round(
+                          (assignment.best_mark.earned / assignment.best_mark.total) * 100,
+                        )}
+                        %
                       </Tag>
                     )}
                   </div>
@@ -361,7 +374,6 @@ const AssignmentLayout = () => {
               description="Practice submissions won't be considered for your final mark."
               type="warning"
               showIcon
-              className="!mb-4"
             />
           )}
 

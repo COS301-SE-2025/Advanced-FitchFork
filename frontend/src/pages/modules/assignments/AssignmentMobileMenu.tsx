@@ -5,20 +5,23 @@ import { Button, Space, Typography } from 'antd';
 import {
   FileDoneOutlined,
   ProfileOutlined,
-  FileOutlined,
   MessageOutlined,
   SettingOutlined,
+  ExperimentOutlined,
+  BarChartOutlined,
   RightOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import { useModule } from '@/context/ModuleContext';
+import { useAuth } from '@/context/AuthContext';
 
 const AssignmentMobileMenu = () => {
   const { isMobile } = useUI();
   const { setValue } = useViewSlot();
   const module = useModule();
-  const { assignment } = useAssignment();
+  const { assignment, readiness } = useAssignment();
+  const auth = useAuth();
   const navigate = useNavigate();
 
   if (!isMobile) return null;
@@ -38,7 +41,7 @@ const AssignmentMobileMenu = () => {
     navigate(`/modules/${module.id}/assignments/${assignment.id}/${path}`);
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-950 space-y-6">
+    <div className="bg-gray-50 dark:bg-gray-950 space-y-6 !pb-4">
       {/* Submissions Section */}
       <div>
         <Typography.Text className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 block">
@@ -48,6 +51,7 @@ const AssignmentMobileMenu = () => {
           <Button
             type="default"
             block
+            disabled={!readiness?.is_ready}
             className="!h-14 px-4 flex items-center !justify-between text-base"
             onClick={() => navigateTo('submissions')}
           >
@@ -60,7 +64,7 @@ const AssignmentMobileMenu = () => {
         </Space.Compact>
       </div>
 
-      {/* Tickets Section */}
+      {/* Communication Section */}
       <div>
         <Typography.Text className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 block">
           Communication
@@ -69,6 +73,7 @@ const AssignmentMobileMenu = () => {
           <Button
             type="default"
             block
+            disabled={!readiness?.is_ready}
             className="!h-14 px-4 flex items-center !justify-between text-base"
             onClick={() => navigateTo('tickets')}
           >
@@ -81,34 +86,57 @@ const AssignmentMobileMenu = () => {
         </Space.Compact>
       </div>
 
-      {/* Tasks & Resources Section */}
-      <div>
-        <Typography.Text className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 block">
-          Tasks & Resources
-        </Typography.Text>
-        <Space.Compact direction="vertical" className="w-full">
-          {[
-            { label: 'Tasks', path: 'tasks', icon: <ProfileOutlined className="text-lg" /> },
-            { label: 'Files', path: 'files', icon: <FileOutlined className="text-lg" /> },
-          ].map(({ label, path, icon }) => (
+      {/* Lecturer/Admin Extras */}
+      {(auth.isLecturer(module.id) || auth.isAdmin) && (
+        <div>
+          <Typography.Text className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 block">
+            Lecturer Tools
+          </Typography.Text>
+          <Space.Compact direction="vertical" className="w-full">
             <Button
-              key={path}
               type="default"
               block
+              disabled={!readiness?.config_present}
               className="!h-14 px-4 flex items-center !justify-between text-base"
-              onClick={() => navigateTo(path)}
+              onClick={() => navigateTo('tasks')}
             >
               <Typography.Text className="flex items-center gap-2 text-left">
-                {icon}
-                {label}
+                <ProfileOutlined className="text-lg" />
+                Tasks
               </Typography.Text>
               <RightOutlined />
             </Button>
-          ))}
-        </Space.Compact>
-      </div>
+            <Button
+              type="default"
+              block
+              disabled={!readiness?.config_present}
+              className="!h-14 px-4 flex items-center !justify-between text-base"
+              onClick={() => navigateTo('plagiarism')}
+            >
+              <Typography.Text className="flex items-center gap-2 text-left">
+                <ExperimentOutlined className="text-lg" />
+                Plagiarism
+              </Typography.Text>
+              <RightOutlined />
+            </Button>
+            <Button
+              type="default"
+              block
+              disabled={!readiness?.is_ready}
+              className="!h-14 px-4 flex items-center !justify-between text-base"
+              onClick={() => navigateTo('grades')}
+            >
+              <Typography.Text className="flex items-center gap-2 text-left">
+                <BarChartOutlined className="text-lg" />
+                Grades
+              </Typography.Text>
+              <RightOutlined />
+            </Button>
+          </Space.Compact>
+        </div>
+      )}
 
-      {/* Configuration Section */}
+      {/* Config Section */}
       <div>
         <Typography.Text className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 block">
           Configuration
@@ -122,7 +150,7 @@ const AssignmentMobileMenu = () => {
           >
             <Typography.Text className="flex items-center gap-2 text-left">
               <SettingOutlined className="text-lg" />
-              Config
+              Files & Config
             </Typography.Text>
             <RightOutlined />
           </Button>

@@ -494,7 +494,7 @@ const Tasks = () => {
 
           {/* Right pane – the important part: min-h-0 + overflow-y-auto */}
           <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-6">
-            <div className="mx-auto w-full max-w-6xl">
+            <div className=" w-full max-w-6xl">
               {loading ? (
                 <div className="text-gray-400">Loading tasks...</div>
               ) : tasks.length === 0 ? (

@@ -1,6 +1,6 @@
 import type { ApiResponse, PaginationRequest } from "@/types/common";
 import type { GetSubmissionListResponse, GetSubmissionDetailResponse, SubmissionTaskOutput } from "@/types/modules/assignments/submissions";
-import { apiFetch, buildQuery } from "@/utils/api";
+import { apiDownload, apiFetch, apiFetchBlob, buildQuery } from "@/utils/api";
 
 export const getSubmissions = async (
   moduleId: number,
@@ -31,3 +31,21 @@ export async function getSubmissionOutput(
     `/modules/${moduleId}/assignments/${assignmentId}/submissions/${submissionId}/output`
   );
 }
+
+// For opening in IDE (needs Blob)
+export const downloadSubmissionFile = async (
+  moduleId: number,
+  assignmentId: number,
+  submissionId: number
+): Promise<Blob> => {
+  return apiFetchBlob(`/modules/${moduleId}/assignments/${assignmentId}/submissions/${submissionId}/download`);
+};
+
+// (Optional) If you also need a click-to-save button elsewhere, keep using:
+export const downloadSubmissionFileToDisk = async (
+  moduleId: number,
+  assignmentId: number,
+  submissionId: number
+): Promise<void> => {
+  return apiDownload(`/modules/${moduleId}/assignments/${assignmentId}/submissions/${submissionId}/download`);
+};

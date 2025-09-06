@@ -405,26 +405,34 @@ pub async fn list_plagiarism_cases(
     )
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct PlagiarismQuery {
     pub status: Option<String>,
+    pub min_similarity: Option<f32>,
+    pub max_similarity: Option<f32>,
+    pub user: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct Link {
-    pub source: String,
-    pub target: String,
+#[derive(Serialize)]
+struct GraphLink {
+    source: String,
+    target: String,
+    case_id: i64,
+    similarity: f32,
+    status: String, // serialize as string for simplicity
 }
 
-#[derive(Debug, Serialize)]
-pub struct LinksResponse {
-    pub links: Vec<Link>,
+
+
+#[derive(Serialize)]
+struct LinksResponse {
+    links: Vec<GraphLink>,
 }
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/graph
 ///
-/// Builds a **user-to-user plagiarism graph** for the given assignment. Each edge indicates
-/// that there is at least one plagiarism case linking submissions from the two users.
+/// Builds a **user-to-user plagiarism graph** for the given assignment. Each edge corresponds
+/// to a plagiarism case linking submissions from two users.
 ///
 /// Accessible only to lecturers and assistant lecturers assigned to the module.
 ///
@@ -439,14 +447,22 @@ pub struct LinksResponse {
 ///   - `"review"`
 ///   - `"flagged"`
 ///   - `"reviewed"`
+/// - `min_similarity` (optional): Minimum similarity threshold (inclusive).
+/// - `max_similarity` (optional): Maximum similarity threshold (inclusive).
+/// - `user` (optional): Case-insensitive substring match against usernames.  
+///   Keeps only edges where at least one endpoint matches the query.
 ///
 /// # Semantics
 ///
 /// - Nodes are **usernames** derived from the submissions involved in cases.
-/// - Each returned `Link { source, target }` represents a directed edge from `source` user
-///   to `target` user for at least one case. (If multiple cases exist between the same pair,
-///   multiple identical edges **may** appear; if you prefer deduplication, apply it in your client
-///   or adjust the endpoint to de-duplicate.)
+/// - Each returned `Link { source, target, case_id, similarity, status }` represents a plagiarism
+///   case between the two users:
+///   - `source` / `target`: Usernames of the authors of the submissions involved
+///   - `case_id`: The plagiarism case’s unique ID
+///   - `similarity`: Similarity score (0–100) reported for the case
+///   - `status`: Current review status of the case (`"review"`, `"flagged"`, `"reviewed"`)
+/// - Multiple cases between the same user pair will result in multiple edges.  
+///   (If you prefer one edge per pair, aggregate or deduplicate in your client.)
 /// - Only cases where **both** submissions belong to the specified assignment are considered.
 ///
 /// # Returns
@@ -458,7 +474,7 @@ pub struct LinksResponse {
 /// # Example Request
 ///
 /// ```http
-/// GET /api/modules/12/assignments/34/plagiarism/graph?status=flagged
+/// GET /api/modules/12/assignments/34/plagiarism/graph?status=flagged&min_similarity=60&user=u123
 /// ```
 ///
 /// # Example Response (200 OK)
@@ -469,8 +485,13 @@ pub struct LinksResponse {
 ///   "message": "Plagiarism graph retrieved successfully",
 ///   "data": {
 ///     "links": [
-///       { "source": "u12345678", "target": "u87654321" },
-///       { "source": "u13579246", "target": "u24681357" }
+///       {
+///         "source": "u12345678",
+///         "target": "u87654321",
+///         "case_id": 42,
+///         "similarity": 83.5,
+///         "status": "flagged"
+///       }
 ///     ]
 ///   }
 /// }
@@ -496,8 +517,8 @@ pub struct LinksResponse {
 /// ```
 ///
 /// # Notes
-/// - This endpoint is optimized for **visualization**. If you need case details, use the list
-///   endpoint (`GET /plagiarism`) instead.
+/// - This endpoint is optimized for **visualization**. If you need full case details,
+///   use the list endpoint (`GET /plagiarism`) instead.
 /// - Edges are derived from the **current** cases in the database after any filtering.
 /// - Usernames are taken from the submissions’ authors at query time.
 // TODO: Testing @Aidan
@@ -506,33 +527,15 @@ pub async fn get_graph(
     Path((_module_id, assignment_id)): Path<(i64, i64)>,
     Query(query): Query<PlagiarismQuery>,
 ) -> impl IntoResponse {
-    // 1) Gather all submission IDs for this assignment
-    let submission_models = match SubmissionEntity::find()
-        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
-        .all(app_state.db())
-        .await
-    {
-        Ok(list) => list,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<LinksResponse>::error("Failed to fetch submissions")),
-            );
-        }
-    };
+    use sea_orm::{ColumnTrait, QueryFilter};
 
-    let assignment_submission_ids: Vec<i64> = submission_models.iter().map(|s| s.id).collect();
+    // 1) Base: assignment filter
+    let mut q = PlagiarismEntity::find()
+        .filter(plagiarism_case::Column::AssignmentId.eq(assignment_id));
 
-    // 2) Base query: plagiarism cases where either side belongs to this assignment
-    let mut q = PlagiarismEntity::find().filter(
-        Condition::any()
-            .add(plagiarism_case::Column::SubmissionId1.is_in(assignment_submission_ids.clone()))
-            .add(plagiarism_case::Column::SubmissionId2.is_in(assignment_submission_ids.clone())),
-    );
-
-    // 3) Optional status filter
-    if let Some(status_str) = query.status {
-        match Status::try_from(status_str.as_str()) {
+    // 2) Optional status (validated)
+    if let Some(status_str) = query.status.as_deref() {
+        match Status::try_from(status_str) {
             Ok(status) => {
                 q = q.filter(plagiarism_case::Column::Status.eq(status));
             }
@@ -543,6 +546,14 @@ pub async fn get_graph(
                 );
             }
         }
+    }
+
+    // 3) Optional similarity (pushed down to SQL)
+    if let Some(min) = query.min_similarity {
+        q = q.filter(plagiarism_case::Column::Similarity.gte(min));
+    }
+    if let Some(max) = query.max_similarity {
+        q = q.filter(plagiarism_case::Column::Similarity.lte(max));
     }
 
     // 4) Fetch cases
@@ -566,14 +577,15 @@ pub async fn get_graph(
         );
     }
 
-    // 5) Fetch the submissions & users referenced by these cases
+    // 5) Load submissions
+    use std::collections::HashMap;
     let all_sub_ids: Vec<i64> = cases
         .iter()
         .flat_map(|c| [c.submission_id_1, c.submission_id_2])
         .collect();
 
     let submissions = match SubmissionEntity::find()
-        .filter(assignment_submission::Column::Id.is_in(all_sub_ids))
+        .filter(assignment_submission::Column::Id.is_in(all_sub_ids.clone()))
         .all(app_state.db())
         .await
     {
@@ -585,8 +597,10 @@ pub async fn get_graph(
             );
         }
     };
+    let sub_by_id: HashMap<i64, _> = submissions.into_iter().map(|s| (s.id, s)).collect();
 
-    let user_ids: Vec<i64> = submissions.iter().map(|s| s.user_id).collect();
+    // 6) Load users
+    let user_ids: Vec<i64> = sub_by_id.values().map(|s| s.user_id).collect();
     let users = match UserEntity::find()
         .filter(user::Column::Id.is_in(user_ids))
         .all(app_state.db())
@@ -600,24 +614,35 @@ pub async fn get_graph(
             );
         }
     };
-
-    let sub_by_id: HashMap<i64, _> = submissions.into_iter().map(|s| (s.id, s)).collect();
     let user_by_id: HashMap<i64, _> = users.into_iter().map(|u| (u.id, u)).collect();
 
-    // 6) Build username links
+    // 7) Build links, applying optional USERNAME filter (case-insensitive partial)
+    let user_q = query.user.as_ref().map(|s| s.to_lowercase());
     let mut links = Vec::with_capacity(cases.len());
+
     for case in cases {
-        if let (Some(sub1), Some(sub2)) = (
-            sub_by_id.get(&case.submission_id_1),
-            sub_by_id.get(&case.submission_id_2),
-        ) {
-            if let (Some(u1), Some(u2)) = (user_by_id.get(&sub1.user_id), user_by_id.get(&sub2.user_id)) {
-                links.push(Link {
-                    source: u1.username.clone(),
-                    target: u2.username.clone(),
-                });
+        let (s1, s2) = (case.submission_id_1, case.submission_id_2);
+        let (Some(sub1), Some(sub2)) = (sub_by_id.get(&s1), sub_by_id.get(&s2)) else { continue };
+        let (Some(u1), Some(u2)) = (user_by_id.get(&sub1.user_id), user_by_id.get(&sub2.user_id)) else { continue };
+
+        let u1_name = u1.username.as_str();
+        let u2_name = u2.username.as_str();
+
+        if let Some(ref ql) = user_q {
+            let u1_match = u1_name.to_lowercase().contains(ql);
+            let u2_match = u2_name.to_lowercase().contains(ql);
+            if !(u1_match || u2_match) {
+                continue; // username filter not satisfied
             }
         }
+
+        links.push(GraphLink {
+            source: u1_name.to_string(),
+            target: u2_name.to_string(),
+            case_id: case.id,
+            similarity: case.similarity,
+            status: case.status.to_string().to_lowercase(),
+        });
     }
 
     (

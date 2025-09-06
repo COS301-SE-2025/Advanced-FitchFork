@@ -1,12 +1,14 @@
 import { Typography, Tag, Descriptions, Spin, Button } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
+import { CodeOutlined, DownloadOutlined } from '@ant-design/icons';
 
 import SubmissionTasks from '@/components/submissions/SubmissionTasks';
 import { useAssignment } from '@/context/AssignmentContext';
 import { useModule } from '@/context/ModuleContext';
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
+  downloadSubmissionFile,
+  downloadSubmissionFileToDisk,
   getSubmissionDetails,
   getSubmissionOutput,
 } from '@/services/modules/assignments/submissions';
@@ -15,11 +17,13 @@ import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { message } from '@/utils/message';
 import { useAuth } from '@/context/AuthContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
+import { zipToVFiles } from '@/utils/zipToVFiles';
 
 const { Text, Title } = Typography;
 
 const SubmissionView = () => {
   const auth = useAuth();
+  const navigate = useNavigate();
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [submissionOutput, setSubmissionOutput] = useState<SubmissionTaskOutput[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,6 +74,32 @@ const SubmissionView = () => {
     }
   };
 
+  const handleViewInIDE = async () => {
+    if (!module.id || !assignment.id || !submissionId) return;
+    try {
+      const blob = await downloadSubmissionFile(module.id, assignment.id, submissionId);
+      const arrayBuffer = await blob.arrayBuffer();
+      const files = await zipToVFiles(arrayBuffer);
+
+      navigate(
+        `/modules/${module.id}/assignments/${assignment.id}/submissions/${submissionId}/code`,
+        { state: { files } },
+      );
+    } catch (err) {
+      console.error('Failed to open submission in IDE', err);
+      message.error('Could not open submission in IDE');
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!module.id || !assignment.id || !submissionId) return;
+    try {
+      await downloadSubmissionFileToDisk(module.id, assignment.id, submissionId);
+    } catch {
+      message.error('Download failed');
+    }
+  };
+
   useEffect(() => {
     fetchSubmission();
     if (!auth.isStudent(module.id)) fetchSubmisisonOutput();
@@ -112,7 +142,7 @@ const SubmissionView = () => {
 
       {/* Right: Description */}
       <div className="order-1 lg:order-2 lg:w-1/3 space-y-6">
-        <Descriptions bordered column={1} size="middle">
+        <Descriptions bordered column={1} size="middle" className="bg-white dark:bg-gray-900">
           {submission.user && (
             <>
               <Descriptions.Item label="Username">{submission.user.username}</Descriptions.Item>
@@ -136,18 +166,19 @@ const SubmissionView = () => {
           <Descriptions.Item label="Attempt">
             <Tag>#{attempt}</Tag>
           </Descriptions.Item>
-
           <Descriptions.Item label="Uploaded At">
             {created_at ? new Date(created_at).toLocaleString() : '—'}
           </Descriptions.Item>
-
           <Descriptions.Item label="File Hash (MD5)">
             <Text code>{hash || '—'}</Text>
           </Descriptions.Item>
 
           <Descriptions.Item label="File">
-            <Button icon={<DownloadOutlined />} type="link" size="small">
+            <Button icon={<DownloadOutlined />} type="link" size="small" onClick={handleDownload}>
               Download File
+            </Button>
+            <Button icon={<CodeOutlined />} type="link" size="small" onClick={handleViewInIDE}>
+              View in IDE
             </Button>
           </Descriptions.Item>
         </Descriptions>

@@ -4,6 +4,7 @@ import SettingsGroup from '@/components/SettingsGroup';
 import {
   FEEDBACK_SCHEME_OPTIONS,
   MARKING_SCHEME_OPTIONS,
+  GRADING_POLICY_OPTIONS,
   type AssignmentMarkingConfig,
 } from '@/types/modules/assignments/config';
 import { useViewSlot } from '@/context/ViewSlotContext';
@@ -67,6 +68,16 @@ export default function MarkingPage() {
           rules={[{ required: true, message: 'Select a feedback scheme' }]}
         >
           <Select className="w-full" options={FEEDBACK_SCHEME_OPTIONS} />
+        </Form.Item>
+
+        {/* 👇 New grading policy field */}
+        <Form.Item
+          name="grading_policy"
+          label="Grading Policy"
+          className={fieldWidth}
+          rules={[{ required: true, message: 'Select a grading policy' }]}
+        >
+          <Select className="w-full" options={GRADING_POLICY_OPTIONS} />
         </Form.Item>
 
         <Form.Item

@@ -10,7 +10,10 @@
 //! - `BulkUpdateResult` and `FailedUpdate` – results of bulk update operations.
 
 use serde::{Serialize, Deserialize};
-use db::models::assignment::Model as AssignmentModel;
+use db::models::{
+    assignment::Model as AssignmentModel,
+    assignment_file, // 👈 for conversion to File
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct File {
@@ -20,6 +23,19 @@ pub struct File {
     pub file_type: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+impl From<assignment_file::Model> for File {
+    fn from(f: assignment_file::Model) -> Self {
+        File {
+            id: f.id.to_string(),
+            filename: f.filename,
+            path: f.path,
+            file_type: f.file_type.to_string(),
+            created_at: f.created_at.to_rfc3339(),
+            updated_at: f.updated_at.to_rfc3339(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
