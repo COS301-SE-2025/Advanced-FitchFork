@@ -10,6 +10,7 @@ use crate::validate_files::validate_memo_files;
 // Models
 use db::models::assignment::Entity as Assignment;
 use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as MemoOutputEntity};
+use db::models::assignment_overwrite_file::Model as OverwriteFile;
 use db::models::assignment_task::Model as AssignmentTask;
 use reqwest::Client;
 use serde_json::json;
@@ -128,36 +129,54 @@ pub async fn create_memo_outputs_for_all_tasks(
     for task in tasks {
         let filename = format!("task_{}_output.txt", task.task_number);
 
-        // Prepare files to send: read archive contents into Vec<(String, Vec<u8>)>
         let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+
         for archive_path in &archive_paths {
             let content = std::fs::read(archive_path)
-                .map_err(|e| format!("Failed to read archive {:?}: {}", archive_path, e))?;
+                .map_err(|e| format!("Failed to read archive file {:?}: {}", archive_path, e))?;
             let file_name = archive_path
                 .file_name()
                 .and_then(|s| s.to_str())
-                .ok_or_else(|| "Invalid archive filename".to_string())?;
-            files.push((file_name.to_string(), content));
+                .ok_or_else(|| format!("Invalid archive filename: {:?}", archive_path))?
+                .to_string();
+            files.push((file_name, content));
         }
 
-        // Wrap command in a vector (assuming task.command is a String)
+        let overwrite_dir =
+            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
+        if overwrite_dir.exists() {
+            let entries = std::fs::read_dir(&overwrite_dir)
+                .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
+
+            for entry in entries {
+                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                let path = entry.path();
+                if path.is_file() {
+                    let content = std::fs::read(&path)
+                        .map_err(|e| format!("Failed to read overwrite file {:?}: {}", path, e))?;
+                    let file_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| format!("Invalid overwrite filename: {:?}", path))?
+                        .to_string();
+
+                    files.retain(|(name, _)| name != &file_name);
+                    files.push((file_name, content));
+                }
+            }
+        }
+
         let commands = vec![task.command.clone()];
 
-        // Serialize ExecutionConfig into a serde_json::Value
         let config_value = serde_json::to_value(&config)
             .map_err(|e| format!("Failed to serialize ExecutionConfig: {}", e))?;
 
-        // Compose request JSON payload
         let request_body = serde_json::json!({
             "config": config_value,
             "commands": commands,
-            "files": files, // Vec<(String, Vec<u8>)> will serialize correctly
+            "files": files,
         });
 
-        // Note: You must adjust your API to accept files as Vec<(String, base64-string)> or send multipart form data.
-        // Here I assume base64 encoding and API adjusted accordingly.
-
-        // Send POST request to /run
         let response = client
             .post(format!("{}/run", code_manager_url))
             .json(&request_body)
@@ -174,13 +193,11 @@ pub async fn create_memo_outputs_for_all_tasks(
             ));
         }
 
-        // Parse response JSON: expects { output: Vec<String> }
         let resp_json: serde_json::Value = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response JSON: {}", e))?;
 
-        // Extract output vec from response
         let output_vec = resp_json
             .get("output")
             .and_then(|v| v.as_array())
@@ -189,7 +206,6 @@ pub async fn create_memo_outputs_for_all_tasks(
             .map(|val| val.as_str().unwrap_or("").to_string())
             .collect::<Vec<String>>();
 
-        // Join outputs or handle as needed
         let output_combined = output_vec.join("\n");
 
         if let Err(e) = db::models::assignment_memo_output::Model::save_file(
@@ -320,10 +336,37 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
             task.task_number, user_id, attempt_number
         );
 
+        let mut task_files = files.clone();
+
+        let overwrite_dir =
+            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
+        if overwrite_dir.exists() {
+            let entries = std::fs::read_dir(&overwrite_dir)
+                .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
+
+            for entry in entries {
+                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                let path = entry.path();
+                if path.is_file() {
+                    let content = std::fs::read(&path)
+                        .map_err(|e| format!("Failed to read overwrite file {:?}: {}", path, e))?;
+                    let file_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| format!("Invalid overwrite filename: {:?}", path))?
+                        .to_string();
+
+                    task_files.retain(|(name, _)| name != &file_name);
+                    task_files.push((file_name, content));
+                }
+            }
+        }
+
+        // Compose request
         let request_body = json!({
             "config": config_value,
             "commands": [task.command],
-            "files": files,
+            "files": task_files,
         });
 
         let response = client
@@ -476,10 +519,37 @@ pub async fn create_submission_outputs_for_all_tasks(
             task.task_number, user_id, attempt_number
         );
 
+        let mut task_files = files.clone();
+
+        let overwrite_dir =
+            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
+        if overwrite_dir.exists() {
+            let entries = std::fs::read_dir(&overwrite_dir)
+                .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
+
+            for entry in entries {
+                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                let path = entry.path();
+                if path.is_file() {
+                    let content = std::fs::read(&path)
+                        .map_err(|e| format!("Failed to read overwrite file {:?}: {}", path, e))?;
+                    let file_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| format!("Invalid overwrite filename: {:?}", path))?
+                        .to_string();
+
+                    task_files.retain(|(name, _)| name != &file_name);
+                    task_files.push((file_name, content));
+                }
+            }
+        }
+
+        // Compose request
         let request_body = json!({
             "config": config_value,
             "commands": [task.command],
-            "files": files,
+            "files": task_files,
         });
 
         let response = client
@@ -607,7 +677,7 @@ pub async fn create_main_from_interpreter(
         // Adjust templates per language as needed.
         let synthesized = match config.project.language {
             Language::Cpp => format!(
-            r#"#include <bits/stdc++.h>
+                r#"#include <bits/stdc++.h>
                 int main() {{
                     std::cout << "{}" << std::endl;
                     return 0;
@@ -616,7 +686,7 @@ pub async fn create_main_from_interpreter(
                 generated_string.replace('"', "\\\"")
             ),
             Language::Java => format!(
-            r#"public class Main {{
+                r#"public class Main {{
                 public static void main(String[] args) {{
                     System.out.println("{}");
                 }}
