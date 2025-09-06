@@ -16,10 +16,17 @@ use post::post_task_overwrite_files;
 
 /// Routes under `/assignments/{assignment_id}/overwrite_files`:
 ///
-/// - `POST /task/{task_number}` → Upload one or more overwrite files for a specific task.  
+/// Provides endpoints to manage overwrite files for assignment tasks.  
+/// All routes require lecturer permissions.
 ///
-
-//NOTE - WHY DOES THIS NEED TO BE task_id AND CANT BE task_number???
+/// ### Routes:
+/// - `GET /task/{task_id}` → Retrieve all overwrite files for a specific task.  
+///   Returns the actual file content(s) or metadata.
+///
+/// - `POST /task/{task_id}` → Upload one or more overwrite files for a specific task.  
+///   Accepts multipart/form-data or JSON (depending on implementation).
+///
+/// - `DELETE /task/{task_id}` → Delete all overwrite files for the specific task.
 pub fn overwrite_file_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route(

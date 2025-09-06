@@ -9,18 +9,18 @@ use db::models::assignment_overwrite_file::{
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use util::state::AppState;
 
-/// GET /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_number}
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_id}
 ///
 /// Returns the first overwrite file for the task as a downloadable file
 pub async fn get_task_overwrite_files(
     State(app_state): State<AppState>,
-    Path((_module_id, assignment_id, task_number)): Path<(i64, i64, i64)>,
+    Path((_module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
     let file: Option<OverwriteFileModel> = match OverwriteFileEntity::find()
         .filter(db::models::assignment_overwrite_file::Column::AssignmentId.eq(assignment_id))
-        .filter(db::models::assignment_overwrite_file::Column::TaskId.eq(task_number))
+        .filter(db::models::assignment_overwrite_file::Column::TaskId.eq(task_id))
         .order_by_desc(db::models::assignment_overwrite_file::Column::CreatedAt)
         .one(db)
         .await

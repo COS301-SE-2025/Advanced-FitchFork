@@ -131,7 +131,6 @@ pub async fn create_memo_outputs_for_all_tasks(
 
         let mut files: Vec<(String, Vec<u8>)> = Vec::new();
 
-        // 1. Load archive files
         for archive_path in &archive_paths {
             let content = std::fs::read(archive_path)
                 .map_err(|e| format!("Failed to read archive file {:?}: {}", archive_path, e))?;
@@ -143,7 +142,6 @@ pub async fn create_memo_outputs_for_all_tasks(
             files.push((file_name, content));
         }
 
-        // 2. Load overwrite files for this task
         let overwrite_dir =
             OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
         if overwrite_dir.exists() {
@@ -168,21 +166,17 @@ pub async fn create_memo_outputs_for_all_tasks(
             }
         }
 
-        // Wrap command in a vector (assuming task.command is a String)
         let commands = vec![task.command.clone()];
 
-        // Serialize ExecutionConfig into a serde_json::Value
         let config_value = serde_json::to_value(&config)
             .map_err(|e| format!("Failed to serialize ExecutionConfig: {}", e))?;
 
-        // Compose request JSON payload
         let request_body = serde_json::json!({
             "config": config_value,
             "commands": commands,
-            "files": files, // Vec<(String, Vec<u8>)> will serialize correctly
+            "files": files,
         });
 
-        // Send POST request to /run
         let response = client
             .post(format!("{}/run", code_manager_url))
             .json(&request_body)
@@ -199,13 +193,11 @@ pub async fn create_memo_outputs_for_all_tasks(
             ));
         }
 
-        // Parse response JSON: expects { output: Vec<String> }
         let resp_json: serde_json::Value = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response JSON: {}", e))?;
 
-        // Extract output vec from response
         let output_vec = resp_json
             .get("output")
             .and_then(|v| v.as_array())
@@ -214,7 +206,6 @@ pub async fn create_memo_outputs_for_all_tasks(
             .map(|val| val.as_str().unwrap_or("").to_string())
             .collect::<Vec<String>>();
 
-        // Join outputs or handle as needed
         let output_combined = output_vec.join("\n");
 
         if let Err(e) = db::models::assignment_memo_output::Model::save_file(
@@ -345,10 +336,37 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
             task.task_number, user_id, attempt_number
         );
 
+        let mut task_files = files.clone();
+
+        let overwrite_dir =
+            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
+        if overwrite_dir.exists() {
+            let entries = std::fs::read_dir(&overwrite_dir)
+                .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
+
+            for entry in entries {
+                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                let path = entry.path();
+                if path.is_file() {
+                    let content = std::fs::read(&path)
+                        .map_err(|e| format!("Failed to read overwrite file {:?}: {}", path, e))?;
+                    let file_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| format!("Invalid overwrite filename: {:?}", path))?
+                        .to_string();
+
+                    task_files.retain(|(name, _)| name != &file_name);
+                    task_files.push((file_name, content));
+                }
+            }
+        }
+
+        // Compose request
         let request_body = json!({
             "config": config_value,
             "commands": [task.command],
-            "files": files,
+            "files": task_files,
         });
 
         let response = client
@@ -501,10 +519,37 @@ pub async fn create_submission_outputs_for_all_tasks(
             task.task_number, user_id, attempt_number
         );
 
+        let mut task_files = files.clone();
+
+        let overwrite_dir =
+            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
+        if overwrite_dir.exists() {
+            let entries = std::fs::read_dir(&overwrite_dir)
+                .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
+
+            for entry in entries {
+                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                let path = entry.path();
+                if path.is_file() {
+                    let content = std::fs::read(&path)
+                        .map_err(|e| format!("Failed to read overwrite file {:?}: {}", path, e))?;
+                    let file_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| format!("Invalid overwrite filename: {:?}", path))?
+                        .to_string();
+
+                    task_files.retain(|(name, _)| name != &file_name);
+                    task_files.push((file_name, content));
+                }
+            }
+        }
+
+        // Compose request
         let request_body = json!({
             "config": config_value,
             "commands": [task.command],
-            "files": files,
+            "files": task_files,
         });
 
         let response = client

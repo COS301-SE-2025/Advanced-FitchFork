@@ -12,23 +12,23 @@ use db::models::assignment_overwrite_file::{
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
 use util::state::AppState;
 
-/// DELETE /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_number}
+/// DELETE /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_id}
 ///
 /// Delete all overwrite files associated with a specific task in an assignment.
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): Module ID
 /// - `assignment_id` (i64): Assignment ID
-/// - `task_number` (i64): Task number within the assignment
+/// - `task_id` (i64): Task id within the assignment
 pub async fn delete_task_overwrite_files(
     State(app_state): State<AppState>,
-    Path((_module_id, assignment_id, task_number)): Path<(i64, i64, i64)>,
+    Path((_module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
     let files: Vec<OverwriteFileModel> = match OverwriteFileEntity::find()
         .filter(OverwriteFileColumn::AssignmentId.eq(assignment_id))
-        .filter(OverwriteFileColumn::TaskId.eq(task_number))
+        .filter(OverwriteFileColumn::TaskId.eq(task_id))
         .all(db)
         .await
     {

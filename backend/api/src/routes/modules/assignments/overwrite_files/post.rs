@@ -10,17 +10,17 @@ use axum::{
 use db::models::assignment_overwrite_file::Model as OverwriteFileModel;
 use util::state::AppState;
 
-/// POST /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_number}
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_id}
 ///
 /// Upload one or more overwrite files for a specific task in an assignment.
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): Module ID
 /// - `assignment_id` (i64): Assignment ID
-/// - `task_number` (i64): Task number within the assignment
+/// - `task_id` (i64): Task id within the assignment
 pub async fn post_task_overwrite_files(
     State(app_state): State<AppState>,
-    Path((_module_id, assignment_id, task_number)): Path<(i64, i64, i64)>,
+    Path((_module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
     let db = app_state.db();
@@ -34,9 +34,7 @@ pub async fn post_task_overwrite_files(
             .unwrap_or_else(|| "file".into());
         let bytes = field.bytes().await.unwrap_or_else(|_| Bytes::new());
 
-        match OverwriteFileModel::save_file(db, assignment_id, task_number, &file_name, &bytes)
-            .await
-        {
+        match OverwriteFileModel::save_file(db, assignment_id, task_id, &file_name, &bytes).await {
             Ok(file_model) => saved_files.push(file_model.filename),
             Err(e) => {
                 eprintln!("Failed to save overwrite file: {:?}", e);
