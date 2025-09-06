@@ -47,6 +47,9 @@ export type GetListPlagiarismCasesResponse = ApiResponse<PlagiarismCaseListData>
 export interface PlagiarismGraphLink {
   source: string;
   target: string;
+  case_id: number;
+  similarity: number;
+  status: PlagiarismCaseStatus;
 }
 
 export type GetPlagiarismGraphResponse = ApiResponse<{

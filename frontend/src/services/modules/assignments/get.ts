@@ -6,7 +6,8 @@ import type {
   AssignmentFile, 
   GetListAssignmentFilesResponse, 
   AssignmentType,
-  GetAssignmentReadinessResponse} from "@/types/modules/assignments";
+  GetAssignmentReadinessResponse,
+  BestMark} from "@/types/modules/assignments";
 import { apiDownload, apiFetch, buildQuery } from "@/utils/api";
 
 export const listAssignments = async (
@@ -30,11 +31,13 @@ export const getAssignmentDetails = async (
   const res = await apiFetch<{
     assignment: Assignment;
     files: AssignmentFile[];
+    best_mark?: BestMark;
   }>(`/modules/${moduleId}/assignments/${assignmentId}`);
 
   const merged = {
     ...res.data.assignment,
     files: res.data.files,
+    best_mark: res.data.best_mark,
   };
 
   return {

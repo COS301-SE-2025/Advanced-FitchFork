@@ -25,6 +25,7 @@ pub struct ListSubmissionsQuery {
     pub query: Option<String>,
     pub username: Option<String>,
     pub late: Option<bool>,
+    pub ignored: Option<bool>,
 }
 
 /// Represents a user associated with a submission.
@@ -54,6 +55,7 @@ pub struct SubmissionListItem {
     pub is_practice: bool,
     pub is_late: bool,
     pub mark: Option<Mark>,
+    pub ignored: bool,   
 }
 
 /// Paginated response of submissions list.
@@ -76,6 +78,7 @@ pub struct SubmissionResponse {
     pub is_late: bool,
     pub is_practice: bool,
     pub mark: Option<Mark>,
+    pub ignored: bool,   
 }
 
 /// Represents a summary of earned vs total marks.

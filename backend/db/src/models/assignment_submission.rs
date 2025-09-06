@@ -2,11 +2,14 @@ use crate::models::assignment;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
+use util::execution_config::execution_config::GradingPolicy;
+use util::execution_config::ExecutionConfig;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use crate::models::user;
+use crate::models::assignment::Model as AssignmentModel;
 
 /// Represents a user's submission for a specific assignment.
 ///
@@ -36,6 +39,8 @@ pub struct Model {
     pub path: String,
     /// Is this submission a practice submission?
     pub is_practice: bool,
+    /// Whether this submission should be ignored for grading/analytics.
+    pub ignored: bool,
     /// Timestamp when the submission was created.
     pub created_at: DateTime<Utc>,
     /// Timestamp when the submission was last updated.
@@ -159,6 +164,7 @@ impl Model {
             user_id: Set(user_id),
             attempt: Set(attempt),
             is_practice: Set(is_practice),
+            ignored: Set(false),
             earned: Set(earned),
             total: Set(total),
             filename: Set(filename.to_string()),
@@ -264,6 +270,61 @@ impl Model {
         }
         Ok(latest)
     }
+
+    /// Set the `ignored` flag for a submission by id and return the updated model.
+    pub async fn set_ignored(
+        db: &DatabaseConnection,
+        submission_id: i64,
+        ignored: bool,
+    ) -> Result<Self, DbErr> {
+        // Load existing
+        let existing = Entity::find_by_id(submission_id)
+            .one(db)
+            .await?
+            .ok_or_else(|| DbErr::Custom(format!("Submission {} not found", submission_id)))?;
+
+        let mut am: ActiveModel = existing.into();
+        am.ignored = Set(ignored);
+        am.updated_at = Set(Utc::now());
+        am.update(db).await
+    }
+
+    pub async fn get_best_for_user(
+        db: &DatabaseConnection,
+        assignment: &AssignmentModel,
+        user_id: i64,
+    ) -> Result<Option<Self>, DbErr> {
+        // fetch all non-ignored, non-practice submissions for this user
+        let mut subs = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment.id))
+            .filter(Column::UserId.eq(user_id))
+            .filter(Column::Ignored.eq(false))
+            .filter(Column::IsPractice.eq(false))
+            .all(db)
+            .await?;
+
+        if subs.is_empty() {
+            return Ok(None);
+        }
+
+        // get grading policy from config
+        let cfg = assignment
+            .config
+            .as_ref()
+            .and_then(|j| serde_json::from_value::<ExecutionConfig>(j.clone()).ok())
+            .unwrap_or_else(ExecutionConfig::default_config);
+
+        match cfg.marking.grading_policy {
+            GradingPolicy::Best => {
+                subs.sort_by_key(|s| std::cmp::Reverse(s.earned * 1000 / s.total));
+                Ok(subs.into_iter().next())
+            }
+            GradingPolicy::Last => {
+                subs.sort_by_key(|s| std::cmp::Reverse(s.created_at));
+                Ok(subs.into_iter().next())
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -340,6 +401,7 @@ mod tests {
             file_hash: Set("hash123#".to_string()),
             path: Set("".to_string()),
             is_practice: Set(false),
+            ignored: Set(false),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()

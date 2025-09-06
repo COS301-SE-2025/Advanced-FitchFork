@@ -12,6 +12,7 @@ export interface Submission extends Timestamp {
   mark: SubmissionMark;
   is_practice: boolean;
   is_late: boolean;
+  ignored: boolean;
   score?: number;
   tasks?: TaskBreakdown[];
   code_coverage?: CodeCoverageEntry[];
@@ -28,13 +29,13 @@ export interface SubsectionBreakdown {
   status: string;
   earned: number;
   total: number;
+  feedback?: string; 
 }
 
 export interface TaskBreakdown {
   task_number: number;
   name: string;
   score: SubmissionMark;
-  feedback: string;
   subsections: SubsectionBreakdown[];
 }
 

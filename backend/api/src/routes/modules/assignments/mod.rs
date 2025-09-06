@@ -6,7 +6,7 @@
 //! - Create, read, update, delete assignments (single and bulk)
 //! - Open/close assignments
 //! - Assignment stats and readiness checks
-//! - Nested routes for tasks, config, memo output, mark allocation, submissions, files, interpreter, tickets, and plagiarism
+//! - Nested routes for tasks, config, memo output, mark allocation, submissions, files, interpreter, tickets, plagiarism, and grades
 //!
 //! Access control is enforced via middleware guards for lecturers, assistants, and assigned users.
 
@@ -22,6 +22,7 @@ use config::config_routes;
 use delete::{bulk_delete_assignments, delete_assignment};
 use files::files_routes;
 use get::{get_assignment, get_assignment_readiness, get_assignment_stats, get_assignments};
+use grades::grade_routes;
 use interpreter::interpreter_routes;
 use mark_allocator::mark_allocator_routes;
 use memo_output::memo_output_routes;
@@ -39,6 +40,7 @@ pub mod config;
 pub mod delete;
 pub mod files;
 pub mod get;
+pub mod grades;
 pub mod interpreter;
 pub mod mark_allocator;
 pub mod memo_output;
@@ -77,6 +79,7 @@ pub mod tickets;
 /// - Files routes                  → `files_routes`
 /// - Tickets routes                → `ticket_routes`
 /// - Plagiarism routes             → `plagiarism_routes`
+/// - Grades routes                 → `grade_routes`
 pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route(
@@ -225,6 +228,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
                     require_lecturer_or_assistant_lecturer,
                 )),
         )
+        .nest("/{assignment_id}/grades", grade_routes(app_state.clone()))
         .nest(
             "/{assignment_id}/overwrite_files",
             overwrite_file_routes(app_state.clone()).layer(from_fn_with_state(

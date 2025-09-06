@@ -15,14 +15,10 @@ import {
   resetAssignmentConfig, // ← NEW import
 } from '@/services/modules/assignments/config';
 
-import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
+import type { AssignmentDetails, AssignmentReadiness } from '@/types/modules/assignments';
 import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
 import type { MarkAllocatorFile } from '@/types/modules/assignments/mark-allocator';
 import type { AssignmentConfig } from '@/types/modules/assignments/config';
-
-interface AssignmentDetails extends Assignment {
-  files: AssignmentFile[];
-}
 
 const mergeConfig = (
   base: AssignmentConfig,

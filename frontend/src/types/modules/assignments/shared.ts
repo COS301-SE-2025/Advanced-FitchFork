@@ -39,3 +39,15 @@ export interface AssignmentReadiness {
   mark_allocator_present: boolean;
   is_ready: boolean;
 }
+
+export interface BestMark {
+  earned: number;
+  total: number;
+  attempt: number;
+  submission_id: number;
+}
+
+export interface AssignmentDetails extends Assignment {
+  files: AssignmentFile[];
+  best_mark?: BestMark;
+}

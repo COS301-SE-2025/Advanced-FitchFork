@@ -10,6 +10,8 @@ export const FEEDBACK_SCHEMES = ['auto', 'manual', 'ai'] as const;
 export const LANGUAGES = ['cpp', 'java'] as const;
 /** Submission modes */
 export const SUBMISSION_MODES = ['manual', 'gatlam', 'rng', 'codecoverage'] as const;
+/** Grading policies (mirrors Rust enum) */
+export const GRADING_POLICIES = ['best', 'last'] as const;
 
 /** GA: crossover & mutation types */
 export const CROSSOVER_TYPES = ['onepoint', 'twopoint', 'uniform'] as const;
@@ -36,6 +38,11 @@ export const SUBMISSION_MODE_OPTIONS = SUBMISSION_MODES.map((val) => ({
   value: val,
 }));
 
+export const GRADING_POLICY_OPTIONS = GRADING_POLICIES.map((val) => ({
+  label: val.charAt(0).toUpperCase() + val.slice(1),
+  value: val,
+}));
+
 export const CROSSOVER_TYPE_OPTIONS = CROSSOVER_TYPES.map((val) => ({
   label: val.charAt(0).toUpperCase() + val.slice(1),
   value: val,
@@ -53,6 +60,7 @@ export type MarkingScheme = (typeof MARKING_SCHEMES)[number];
 export type FeedbackScheme = (typeof FEEDBACK_SCHEMES)[number];
 export type Language = (typeof LANGUAGES)[number];
 export type SubmissionMode = (typeof SUBMISSION_MODES)[number];
+export type GradingPolicy = (typeof GRADING_POLICIES)[number];
 export type CrossoverType = (typeof CROSSOVER_TYPES)[number];
 export type MutationType = (typeof MUTATION_TYPES)[number];
 
@@ -88,6 +96,8 @@ export interface AssignmentMarkingConfig {
   marking_scheme: MarkingScheme;
   /** Method used to generate feedback for the submission. */
   feedback_scheme: FeedbackScheme;
+  /** Policy for selecting final grade across submissions. */
+  grading_policy: GradingPolicy;
   /**
    * String delimiter used for splitting output sections.
    * NOTE: spelling matches backend field (`deliminator`) for compatibility.

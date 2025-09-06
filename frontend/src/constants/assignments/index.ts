@@ -12,6 +12,7 @@ export const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
     marking_scheme: "exact",
     feedback_scheme: "auto",
     deliminator: "&-=-&",
+    grading_policy: "best",
   },
   project: {
     language: "cpp",
