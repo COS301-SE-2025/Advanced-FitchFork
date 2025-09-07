@@ -14,6 +14,9 @@ type Props = {
   accept?: string; // e.g. ".zip,.tar,.gz,.tgz"
   maxSizeMB?: number; // e.g. 50
   defaultIsPractice?: boolean;
+
+  /** Show/hide practice option */
+  allowPractice?: boolean;
 };
 
 const { Text, Title } = Typography;
@@ -27,33 +30,38 @@ const SubmitAssignmentModal = ({
   accept = '.zip,.tar,.gz,.tgz',
   maxSizeMB = 50,
   defaultIsPractice = false,
+  allowPractice = true,
 }: Props) => {
   const [file, setFile] = useState<File | null>(null);
   const [isPractice, setIsPractice] = useState<boolean>(defaultIsPractice);
 
   useEffect(() => {
     if (!open) {
-      // Reset state when the modal closes
       setFile(null);
       setIsPractice(defaultIsPractice);
     }
   }, [open, defaultIsPractice]);
 
+  useEffect(() => {
+    if (!allowPractice && isPractice) {
+      setIsPractice(false);
+    }
+  }, [allowPractice, isPractice]);
+
   const beforeUpload: NonNullable<React.ComponentProps<typeof Upload>['beforeUpload']> = (f) => {
     if (maxSizeMB && f.size > maxSizeMB * 1024 * 1024) {
-      // Don’t import message here; let the parent decide how to notify globally if needed.
-      // Using native alert is noisy; we just block and rely on UI text. If you prefer, pass a toast callback via props.
       return Upload.LIST_IGNORE;
     }
     setFile(f);
-    return false; // prevent auto upload
+    return false;
   };
 
   const handleClear = () => setFile(null);
 
   const handleSubmit = async () => {
     if (!file || loading) return;
-    await onSubmit(file, isPractice);
+    const effectivePractice = allowPractice ? isPractice : false;
+    await onSubmit(file, effectivePractice);
   };
 
   return (
@@ -71,6 +79,7 @@ const SubmitAssignmentModal = ({
       width={600}
     >
       <div className="space-y-4">
+        {/* File Upload */}
         <div className="!mt-3">
           <Upload.Dragger
             multiple={false}
@@ -87,7 +96,6 @@ const SubmitAssignmentModal = ({
             <p className="ant-upload-hint">or click to browse</p>
           </Upload.Dragger>
 
-          {/* Selected file preview */}
           {file && (
             <div className="mt-3 flex items-center justify-between rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 p-2">
               <Space size="small" direction="vertical">
@@ -110,6 +118,7 @@ const SubmitAssignmentModal = ({
           )}
         </div>
 
+        {/* Info Boxes */}
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-3">
             <div className="text-xs font-medium text-gray-500 dark:text-gray-400">Accepted</div>
@@ -121,12 +130,16 @@ const SubmitAssignmentModal = ({
             <div className="text-sm text-gray-800 dark:text-gray-200">{maxSizeMB} MB</div>
           </div>
 
-          <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-3">
-            <div className="text-xs font-medium text-gray-500 dark:text-gray-400">Is Practice</div>
-            <div className="text-sm">
-              <Tag color={isPractice ? 'green' : 'red'}>{isPractice ? 'Yes' : 'No'}</Tag>
+          {allowPractice && (
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-3">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                Is Practice
+              </div>
+              <div className="text-sm">
+                <Tag color={isPractice ? 'green' : 'red'}>{isPractice ? 'Yes' : 'No'}</Tag>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <Tip
@@ -136,16 +149,21 @@ const SubmitAssignmentModal = ({
           to="/help/submissions"
         />
 
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <Checkbox
-            checked={isPractice}
-            onChange={(e) => setIsPractice(e.target.checked)}
-            disabled={loading}
-          >
-            This is a practice submission
-          </Checkbox>
+        {/* Practice toggle + actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          {allowPractice && (
+            <Checkbox
+              checked={isPractice}
+              onChange={(e) => setIsPractice(e.target.checked)}
+              disabled={loading}
+              className="sm:mr-auto" // pushes actions to the right when checkbox is visible
+            >
+              This is a practice submission
+            </Checkbox>
+          )}
 
-          <Space>
+          {/* Actions always pinned to the right on wide screens */}
+          <Space className="sm:ml-auto">
             <Button onClick={onClose} disabled={loading} data-cy="submit-modal-cancel">
               Cancel
             </Button>

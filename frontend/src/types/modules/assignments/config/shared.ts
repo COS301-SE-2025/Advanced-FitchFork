@@ -94,15 +94,34 @@ export interface AssignmentExecutionConfig {
 export interface AssignmentMarkingConfig {
   /** Strategy used to mark student submissions. */
   marking_scheme: MarkingScheme;
+
   /** Method used to generate feedback for the submission. */
   feedback_scheme: FeedbackScheme;
+
   /** Policy for selecting final grade across submissions. */
   grading_policy: GradingPolicy;
+
   /**
    * String delimiter used for splitting output sections.
    * NOTE: spelling matches backend field (`deliminator`) for compatibility.
    */
   deliminator: string;
+
+  /** Maximum number of attempts (only enforced if `limit_attempts` is true). */
+  max_attempts: number;
+
+  /** If false, attempt limits are not enforced. */
+  limit_attempts: boolean;
+
+  /** Minimum percentage required to pass (0–100). */
+  pass_mark: number;
+
+  /**
+   * If true, **students** may make practice submissions.
+   * If false (default), practice uploads are rejected for students.
+   * Staff (lecturer/assistant/admin) are unaffected (always allowed).
+   */
+  allow_practice_submissions: boolean;
 }
 
 /** Options for execution output capture (ExecutionOutputOptions). */
@@ -118,7 +137,6 @@ export interface AssignmentOutputConfig {
 /**
  * ---- GATLAM-related config (mirrors Rust GATLAM & TaskSpecConfig) ----
  */
-
 export interface GeneConfig {
   min_value: number;
   max_value: number;

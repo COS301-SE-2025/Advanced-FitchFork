@@ -13,15 +13,14 @@ import StepTasks from './StepTasks';
 import StepMemoAndAllocator from './StepMemoAndAllocator';
 
 import type { Module } from '@/types/modules';
-import type { AssignmentReadiness } from '@/types/modules/assignments';
-import type { AssignmentDetails } from '@/context/AssignmentSetupContext';
+import type { AssignmentDetails, AssignmentReadiness } from '@/types/modules/assignments';
 import type { AssignmentConfig } from '@/types/modules/assignments/config';
 
 const { Step } = Steps;
 
 /** All wizard steps INCLUDING Welcome (index 0) */
 const stepsAll = [
-  { title: 'Welcome', content: null as React.ReactNode }, // filled in render to pass setCurrent
+  { title: 'Welcome', content: null as React.ReactNode },
   { title: 'Config', content: <StepConfig /> },
   { title: 'Files & Resources', content: <StepFilesResources /> },
   { title: 'Tasks', content: <StepTasks /> },
@@ -49,7 +48,6 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
   );
 
   const setStepSaveHandler = useCallback((step: number, handler: () => Promise<boolean>) => {
-    // step is logical index matching current (0..4)
     setStepSaveHandlers((prev) => (prev[step] === handler ? prev : { ...prev, [step]: handler }));
   }, []);
 
@@ -60,7 +58,6 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
    * 2 = Files & Resources (if any of main/memo/makefile missing)
    * 3 = Tasks (if tasks missing)
    * 4 = Memo & Allocator (if memo_output or mark_allocator missing)
-   * else 4
    */
   const determineStep = (r: AssignmentReadiness): number => {
     const nothing =
@@ -83,7 +80,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
   /** Local-only refresh for details + readiness + config */
   const refreshLocal = useCallback(
     async (idOverride?: number) => {
-      const idToUse = idOverride ?? assignment?.id ?? assignmentId;
+      const idToUse = idOverride ?? assignment?.assignment.id ?? assignmentId;
       if (!idToUse) return;
 
       const [detailsRes, readinessRes, configRes] = await Promise.all([
@@ -92,29 +89,26 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
         getAssignmentConfig(module.id, idToUse),
       ]);
 
-      if (detailsRes.success) {
-        setAssignment({ ...detailsRes.data, files: detailsRes.data.files ?? [] });
+      if (detailsRes.success && detailsRes.data) {
+        // data already matches AssignmentDetails shape
+        setAssignment(detailsRes.data);
       }
-      if (readinessRes.success) {
-        setReadiness(readinessRes.data);
-      }
-      if (configRes.success) {
-        setConfig(configRes.data);
-      }
+      if (readinessRes.success) setReadiness(readinessRes.data);
+      if (configRes.success) setConfig(configRes.data);
     },
-    [assignment?.id, assignmentId, module.id],
+    [assignment?.assignment.id, assignmentId, module.id],
   );
 
-  // Exposed to context — now supports advancing from Welcome (0 -> 1) too
+  // Exposed to context — supports advancing from Welcome (0 -> 1)
   const next = useCallback(async () => {
     const saveHandler = stepSaveHandlers[current];
     if (saveHandler) {
       const ok = await saveHandler();
       if (!ok) return;
     }
-    await refreshLocal(assignment?.id ?? assignmentId);
+    await refreshLocal(assignment?.assignment.id ?? assignmentId);
     setCurrent((prev) => Math.min(prev + 1, stepsAll.length - 1)); // cap at 4
-  }, [current, stepSaveHandlers, refreshLocal, assignment?.id, assignmentId]);
+  }, [current, stepSaveHandlers, refreshLocal, assignment?.assignment.id, assignmentId]);
 
   // Exposed to context — can go all the way back to Welcome (0)
   const prev = useCallback(() => {
@@ -123,7 +117,6 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Allow keyboard navigation from Welcome as well
       if (e.key === 'ArrowRight') void next();
       if (e.key === 'ArrowLeft') prev();
     };
@@ -140,13 +133,13 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
           getAssignmentConfig(module.id, assignmentId),
         ]);
 
-        if (detailsRes.success) {
-          setAssignment({ ...detailsRes.data, files: detailsRes.data.files ?? [] });
+        if (detailsRes.success && detailsRes.data) {
+          setAssignment(detailsRes.data);
         }
         if (readinessRes.success) {
           const r = readinessRes.data;
           setReadiness(r);
-          setCurrent(determineStep(r)); // 0..4 including Welcome
+          setCurrent(determineStep(r));
         } else {
           setCurrent(0);
         }
@@ -166,26 +159,26 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
     }
   }, [open, assignmentId, module.id]);
 
-  /** Completion gating per step (with config; indices aligned to current) */
+  /** Completion gating per step */
   const isCurrentStepComplete = (): boolean => {
     if (!readiness) return false;
     switch (current) {
-      case 0: // Welcome doesn't block; let Next proceed
+      case 0:
         return true;
-      case 1: // Config
+      case 1:
         return readiness.config_present;
-      case 2: // Files & Resources
+      case 2:
         return readiness.main_present && readiness.memo_present && readiness.makefile_present;
-      case 3: // Tasks
+      case 3:
         return readiness.tasks_present;
-      case 4: // Memo & Allocator
+      case 4:
         return readiness.memo_output_present && readiness.mark_allocator_present;
       default:
         return true;
     }
   };
 
-  /** Progress rings for partial steps (Files & Memo/Allocator) — indices unchanged */
+  /** Progress rings for partial steps (Files & Memo/Allocator) */
   const computeStepPercent = (): number => {
     if (!readiness) return 0;
     if (current === 2) {
@@ -207,7 +200,6 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
   const currentStepPercent = computeStepPercent();
   const isLast = current === stepsAll.length - 1; // 4
 
-  // call onDone on any close AND on finish
   const fireDoneThenClose = () => {
     try {
       onDone?.();
@@ -230,7 +222,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
     >
       <AssignmentSetupProvider
         value={{
-          assignmentId: assignment?.id ?? assignmentId ?? null,
+          assignmentId: assignment?.assignment.id ?? assignmentId ?? null,
           assignment,
           readiness,
           config,
@@ -238,16 +230,16 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
           setConfig,
           setStepSaveHandler,
           refreshAssignment: async () => {
-            await refreshLocal(assignment?.id ?? assignmentId);
+            await refreshLocal(assignment?.assignment.id ?? assignmentId);
           },
-          next, // expose to steps
-          prev, // expose to steps
+          next,
+          prev,
         }}
       >
         <div className="!space-y-10 pt-4">
           {current !== 0 && (
             <Steps
-              current={current} // Welcome is index 0
+              current={current}
               percent={current === 2 || current === 4 ? currentStepPercent : undefined}
             >
               {stepsAll.map((item) => (
@@ -258,7 +250,6 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
 
           <div className="min-h-[250px] bg-transparent border-gray-300 dark:border-gray-700 rounded-lg mb-6">
             {current === 0 ? (
-              // Pass the manual callback to move to step 1 when chosen
               <StepWelcome onManual={() => setCurrent(1)} />
             ) : (
               stepsAll[current].content

@@ -30,7 +30,7 @@ use sea_orm::{
 use serde::Serialize;
 use serde_json::Value;
 use util::state::AppState;
-use std::{fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
@@ -775,6 +775,77 @@ pub async fn get_submission(
         }
     };
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Enrich task names: replace numeric task IDs or task_numbers with real names
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    let (by_id, by_num): (HashMap<i64, String>, HashMap<i64, String>) = match assignment_task::Entity::find()
+        .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
+        .all(db)
+        .await
+    {
+        Ok(rows) => {
+            let mut id_map = HashMap::with_capacity(rows.len());
+            let mut num_map = HashMap::with_capacity(rows.len());
+            for t in rows {
+                id_map.insert(t.id, t.name.clone());
+                num_map.insert(t.task_number, t.name);
+            }
+            (id_map, num_map)
+        }
+        Err(err) => {
+            eprintln!("get_submission: failed to load tasks for enrichment: {:?}", err);
+            (HashMap::new(), HashMap::new())
+        }
+    };
+
+    if let Some(tasks) = parsed.get_mut("tasks").and_then(|v| v.as_array_mut()) {
+        for task_val in tasks.iter_mut() {
+            // Capture current name as owned string (may be string or number)
+            let name_str_owned: Option<String> = task_val
+                .get("name")
+                .and_then(|v| {
+                    if let Some(s) = v.as_str() {
+                        Some(s.to_string())
+                    } else if let Some(n) = v.as_i64() {
+                        Some(n.to_string())
+                    } else {
+                        None
+                    }
+                });
+
+            // Also capture task_number (if present)
+            let task_number_opt: Option<i64> = task_val
+                .get("task_number")
+                .and_then(|v| v.as_i64());
+
+            // Decide on the best replacement
+            let replacement: Option<String> = (|| {
+                // 1) If name is numeric → treat as task_id
+                if let Some(name_s) = &name_str_owned {
+                    if let Ok(task_id) = name_s.trim().parse::<i64>() {
+                        if let Some(real) = by_id.get(&task_id) {
+                            return Some(real.clone());
+                        }
+                    }
+                }
+                // 2) Fallback: use task_number if available
+                if let Some(tn) = task_number_opt {
+                    if let Some(real) = by_num.get(&tn) {
+                        return Some(real.clone());
+                    }
+                }
+                None
+            })();
+
+            // Mutate only if we have a real name
+            if let (Some(obj), Some(real_name)) = (task_val.as_object_mut(), replacement) {
+                obj.insert("name".to_string(), serde_json::Value::String(real_name));
+            }
+        }
+    }
+
+    // If the requester is not a student, append minimal user info
     if !is_student(module_id, claims.sub, db).await {
         if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(db).await {
             let user_value = serde_json::to_value(UserResponse {
@@ -782,8 +853,7 @@ pub async fn get_submission(
                 username: u.username,
                 email: u.email,
             })
-            .unwrap(); // safe since UserResponse is serializable
-
+            .unwrap();
             if let Some(obj) = parsed.as_object_mut() {
                 obj.insert("user".to_string(), user_value);
             }
@@ -797,7 +867,7 @@ pub async fn get_submission(
             "Submission details retrieved successfully",
         )),
     )
-        .into_response()
+    .into_response()
 }
 
 #[derive(Serialize)]

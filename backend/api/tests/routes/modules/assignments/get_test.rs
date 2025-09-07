@@ -12,10 +12,11 @@ mod tests {
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value};
     use tower::ServiceExt;
 
     use api::auth::generate_jwt;
+    use util::execution_config::{execution_config::GradingPolicy, ExecutionConfig};
     use crate::helpers::app::make_test_app;
 
     struct TestData {
@@ -418,14 +419,9 @@ mod tests {
         let db = app_state.db();
 
         // Set grading policy to "best" on assignment 1
-        {
-            use sea_orm::IntoActiveModel;
-            let mut am = data.assignments[0].clone().into_active_model();
-            am.config = Set(Some(json!({
-                "marking": { "grading_policy": "best" }
-            })));
-            am.update(db).await.unwrap();
-        }
+        let mut cfg = ExecutionConfig::default_config();
+        cfg.marking.grading_policy = GradingPolicy::Best;
+        cfg.save(data.module.id, data.assignments[0].id).unwrap();
 
         // Insert 3 non-practice, non-ignored submissions for the student with different marks
         // attempts 1..=3, earned: 10, 15, 12 out of 20
@@ -522,14 +518,9 @@ mod tests {
         let db = app_state.db();
 
         // Set grading policy to "last" on assignment 2
-        {
-            use sea_orm::IntoActiveModel;
-            let mut am = data.assignments[1].clone().into_active_model();
-            am.config = Set(Some(json!({
-                "marking": { "grading_policy": "last" }
-            })));
-            am.update(db).await.unwrap();
-        }
+        let mut cfg = ExecutionConfig::default_config();
+        cfg.marking.grading_policy = GradingPolicy::Last;
+        cfg.save(data.module.id, data.assignments[1].id).unwrap();
 
         let base = Utc::now();
 
@@ -754,108 +745,6 @@ mod tests {
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/readiness",
-            9999, data.assignments[0].id
-        );
-        let req = Request::builder()
-            .uri(&uri)
-            .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
-
-    // --- GET /api/modules/{module_id}/assignments/{assignment_id}/stats ---
-
-    #[tokio::test]
-    async fn test_get_assignment_stats_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
-
-        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!(
-            "/api/modules/{}/assignments/{}/stats",
-            data.module.id, data.assignments[0].id
-        );
-        let req = Request::builder()
-            .uri(&uri)
-            .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(req).await.unwrap();
-        assert!(response.status() == StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_get_assignment_stats_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
-
-        let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!(
-            "/api/modules/{}/assignments/{}/stats",
-            data.module.id, data.assignments[0].id
-        );
-        let req = Request::builder()
-            .uri(&uri)
-            .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_get_assignment_stats_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
-
-        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!(
-            "/api/modules/{}/assignments/{}/stats",
-            data.module.id, data.assignments[0].id
-        );
-        let req = Request::builder()
-            .uri(&uri)
-            .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    }
-
-    #[tokio::test]
-    async fn test_get_assignment_stats_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
-
-        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!(
-            "/api/modules/{}/assignments/9999/stats",
-            data.module.id
-        );
-        let req = Request::builder()
-            .uri(&uri)
-            .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(req).await.unwrap();
-        assert!(response.status() == StatusCode::NOT_FOUND);
-    }
-
-    #[tokio::test]
-    async fn test_get_assignment_stats_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
-
-        let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!(
-            "/api/modules/{}/assignments/{}/stats",
             9999, data.assignments[0].id
         );
         let req = Request::builder()

@@ -29,7 +29,16 @@ const { Title, Paragraph } = Typography;
 
 const AssignmentLayout = () => {
   const module = useModule();
-  const { assignment, readiness, config, refreshAssignment } = useAssignment();
+  const {
+    assignment,
+    assignmentFiles,
+    bestMark,
+    attempts,
+    readiness,
+    policy,
+    refreshAssignment,
+    incrementAttempts,
+  } = useAssignment();
   const auth = useAuth();
   const { isMobile } = useUI();
   const navigate = useNavigate();
@@ -183,6 +192,7 @@ const AssignmentLayout = () => {
         message.success('Submission successful');
         const submission = res.data;
         navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${submission.id}`);
+        if (!isPractice) incrementAttempts();
         // EventBus.emit('submission:updated');
         // await refreshAssignment();
       }
@@ -195,7 +205,7 @@ const AssignmentLayout = () => {
   };
 
   const handleDownloadSpec = async () => {
-    const specFile = assignment.files?.find((f) => f.file_type === 'spec');
+    const specFile = assignmentFiles?.find((f) => f.file_type === 'spec');
 
     if (!specFile) {
       message.error('No specification file found for this assignment.');
@@ -218,7 +228,7 @@ const AssignmentLayout = () => {
   };
 
   const menuItems: MenuProps['items'] = [
-    ...(config?.project?.submission_mode === 'manual'
+    ...(policy?.submission_mode === 'manual'
       ? [
           {
             key: 'memo',
@@ -290,16 +300,22 @@ const AssignmentLayout = () => {
                       <AssignmentStatusTag status={assignment.status} />
                     </div>
 
-                    {auth.isStudent(module.id) && assignment.best_mark && (
+                    {auth.isStudent(module.id) && bestMark && (
                       <Tag
                         color="green"
                         className="!text-xs !font-medium !h-6 !px-2 !flex items-center"
                       >
-                        Best Mark:{' '}
-                        {Math.round(
-                          (assignment.best_mark.earned / assignment.best_mark.total) * 100,
-                        )}
-                        %
+                        Best Mark: {Math.round((bestMark.earned / bestMark.total) * 100)}%
+                      </Tag>
+                    )}
+
+                    {/* ---- Attempts ---- */}
+                    {auth.isStudent(module.id) && attempts && attempts.max !== null && (
+                      <Tag
+                        color={attempts.remaining && attempts.remaining > 0 ? 'blue' : 'red'}
+                        className="!text-xs !font-medium !h-6 !px-2 !flex items-center"
+                      >
+                        Attempts: {attempts.used}/{attempts.max}
                       </Tag>
                     )}
                   </div>
@@ -310,7 +326,7 @@ const AssignmentLayout = () => {
                     </Paragraph>
                   )}
 
-                  {assignment.files?.some((f) => f.file_type === 'spec') && (
+                  {assignmentFiles?.some((f) => f.file_type === 'spec') && (
                     <Button
                       type="link"
                       onClick={handleDownloadSpec}
@@ -459,6 +475,7 @@ const AssignmentLayout = () => {
           accept=".zip,.tar,.gz,.tgz"
           maxSizeMB={50}
           defaultIsPractice={false}
+          allowPractice={policy?.allow_practice_submissions && !auth.isStaff(module.id)}
         />
       </div>
     </div>

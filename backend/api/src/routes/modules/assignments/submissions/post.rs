@@ -646,6 +646,43 @@ pub async fn submit_assignment(
         Err(response) => return response,
     };
 
+    match assignment.can_submit_for(db, claims.sub, is_practice).await {
+        Ok(true) => { /* allowed, continue */ }
+        Ok(false) => {
+            let msg = if is_practice {
+                "Practice submissions are disabled for this assignment.".to_string()
+            } else {
+                match assignment.attempts_summary_for_user(db, claims.sub).await {
+                    Ok(summary) => {
+                        if summary.limit_attempts {
+                            format!(
+                                "Maximum attempts reached: used {} of {} (remaining {}).",
+                                summary.used, summary.max, summary.remaining
+                            )
+                        } else {
+                            "Submission attempts not allowed by policy.".to_string()
+                        }
+                    }
+                    Err(_) => "Submission attempts not allowed by policy.".to_string(),
+                }
+            };
+
+            return (
+                StatusCode::FORBIDDEN,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(&msg)),
+            );
+        }
+        Err(e) => {
+            eprintln!("Attempt policy check failed: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Failed to evaluate submission attempts",
+                )),
+            );
+        }
+    }
+
     let file_hash = format!("{:x}", md5::compute(&file_bytes));
 
     let attempt = match get_next_attempt(assignment_id, claims.sub, db).await {

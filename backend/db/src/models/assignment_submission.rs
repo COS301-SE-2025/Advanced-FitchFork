@@ -307,11 +307,8 @@ impl Model {
             return Ok(None);
         }
 
-        // get grading policy from config
         let cfg = assignment
-            .config
-            .as_ref()
-            .and_then(|j| serde_json::from_value::<ExecutionConfig>(j.clone()).ok())
+            .config()
             .unwrap_or_else(ExecutionConfig::default_config);
 
         match cfg.marking.grading_policy {
@@ -325,6 +322,7 @@ impl Model {
             }
         }
     }
+
 }
 
 #[cfg(test)]

@@ -13,6 +13,10 @@ export const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
     feedback_scheme: "auto",
     deliminator: "&-=-&",
     grading_policy: "best",
+    limit_attempts: true,
+    max_attempts: 10,
+    pass_mark: 50,
+    allow_practice_submissions: false,
   },
   project: {
     language: "cpp",

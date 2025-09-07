@@ -84,6 +84,24 @@ pub struct MarkingOptions {
 
     #[serde(default = "default_grading_policy")]
     pub grading_policy: GradingPolicy,
+
+    /// Maximum number of attempts (only enforced if `limit_attempts = true`).
+    #[serde(default = "default_max_attempts")]
+    pub max_attempts: u32,
+
+    /// If false, attempt limits are not enforced.
+    #[serde(default = "default_limit_attempts")]
+    pub limit_attempts: bool,
+
+    /// Minimum percentage required to pass (0–100).
+    #[serde(default = "default_pass_mark")]
+    pub pass_mark: u32,
+
+    /// If true, students may make **practice** submissions.
+    /// Practice submissions never consume graded-attempt budget.
+    /// Default: false
+    #[serde(default = "default_allow_practice_submissions")]
+    pub allow_practice_submissions: bool,
 }
 
 impl Default for MarkingOptions {
@@ -93,6 +111,10 @@ impl Default for MarkingOptions {
             feedback_scheme: default_feedback_scheme(),
             deliminator: default_deliminator(),
             grading_policy: default_grading_policy(),
+            max_attempts: default_max_attempts(),
+            limit_attempts: default_limit_attempts(),
+            pass_mark: default_pass_mark(),
+            allow_practice_submissions: default_allow_practice_submissions()
         }
     }
 }
@@ -393,6 +415,22 @@ fn default_deliminator() -> String {
 
 fn default_grading_policy() -> GradingPolicy {
     GradingPolicy::Last
+}
+
+fn default_limit_attempts() -> bool {
+    false
+}
+
+fn default_max_attempts() -> u32 {
+    10
+}
+
+fn default_pass_mark() -> u32 {
+    50
+}
+
+fn default_allow_practice_submissions() -> bool { 
+    false 
 }
 
 fn default_language() -> Language {

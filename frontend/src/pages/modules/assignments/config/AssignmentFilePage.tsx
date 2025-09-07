@@ -72,7 +72,7 @@ export default function AssignmentFilePage() {
   const safeType: VisibleFileType = isVisibleType ? (type as VisibleFileType) : 'main';
   const label = LABELS[safeType];
 
-  const { assignment, refreshAssignment } = useAssignment();
+  const { assignment, assignmentFiles, refreshAssignment } = useAssignment();
   const module = useModule();
   const { setValue } = useViewSlot();
 
@@ -85,7 +85,7 @@ export default function AssignmentFilePage() {
   }, [label, setValue]);
 
   // Derive the current file for this type (latest wins)
-  const files = assignment.files ?? [];
+  const files = assignmentFiles ?? [];
   const current = useMemo(() => files.find((f) => f.file_type === safeType), [files, safeType]);
 
   const [uploading, setUploading] = useState(false);

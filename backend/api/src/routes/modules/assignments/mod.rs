@@ -10,9 +10,9 @@
 //!
 //! Access control is enforced via middleware guards for lecturers, assistants, and assigned users.
 
-use crate::auth::guards::{
+use crate::{auth::guards::{
     require_assigned_to_module, require_lecturer_or_assistant_lecturer, require_ready_assignment,
-};
+}, routes::modules::assignments::statistics::statistics_routes};
 use axum::{
     Router,
     middleware::from_fn_with_state,
@@ -21,7 +21,7 @@ use axum::{
 use config::config_routes;
 use delete::{bulk_delete_assignments, delete_assignment};
 use files::files_routes;
-use get::{get_assignment, get_assignment_readiness, get_assignment_stats, get_assignments};
+use get::{get_assignment, get_assignment_readiness, get_assignments};
 use grades::grade_routes;
 use interpreter::interpreter_routes;
 use mark_allocator::mark_allocator_routes;
@@ -51,6 +51,7 @@ pub mod put;
 pub mod submissions;
 pub mod tasks;
 pub mod tickets;
+pub mod statistics;
 
 /// Expects a module ID.
 /// If an assignment ID is included it will be modified or deleted.
@@ -67,7 +68,6 @@ pub mod tickets;
 /// - `PUT    /assignments/:assignment_id/open`           → Open assignment (requires lecturer, only if currently Ready, Closed, or Archived)
 /// - `PUT    /assignments/:assignment_id/close`          → Close assignment (requires lecturer, only if currently Open)
 /// - `DELETE /assignments/:assignment_id`                → Delete assignment (requires lecturer)
-/// - `GET    /assignments/:assignment_id/stats`          → Assignment statistics (lecturer only)
 /// - `GET    /assignments/:assignment_id/readiness`      → Assignment readiness (lecturer or admin only)
 ///
 /// Nested routes:
@@ -156,13 +156,6 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
             )),
         )
         .route(
-            "/{assignment_id}/stats",
-            get(get_assignment_stats).route_layer(from_fn_with_state(
-                app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
-            )),
-        )
-        .route(
             "/{assignment_id}/readiness",
             get(get_assignment_readiness).route_layer(from_fn_with_state(
                 app_state.clone(),
@@ -236,4 +229,5 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
                 require_lecturer_or_assistant_lecturer,
             )),
         )
+        .nest("/{assignment_id}/stats", statistics_routes(app_state.clone()))
 }

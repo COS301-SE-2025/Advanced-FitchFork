@@ -1,10 +1,6 @@
 import { createContext, useContext } from 'react';
-import type { Assignment, AssignmentFile, AssignmentReadiness } from '@/types/modules/assignments';
+import type { AssignmentReadiness, AssignmentDetails } from '@/types/modules/assignments';
 import type { AssignmentConfig } from '@/types/modules/assignments/config';
-
-export interface AssignmentDetails extends Assignment {
-  files: AssignmentFile[];
-}
 
 export interface AssignmentSetupContextValue {
   /** Assignment identity */
@@ -26,8 +22,8 @@ export interface AssignmentSetupContextValue {
   setStepSaveHandler?: (step: number, handler: () => Promise<boolean>) => void;
 
   /** Navigate the wizard programmatically from any step */
-  next: () => Promise<void>; // advances to the next logical step (runs save handler if registered)
-  prev: () => void; // goes back one step (never past the first post-welcome step)
+  next: () => Promise<void>;
+  prev: () => void;
 }
 
 const AssignmentSetupContext = createContext<AssignmentSetupContextValue | null>(null);

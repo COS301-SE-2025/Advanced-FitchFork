@@ -16,7 +16,7 @@ const SubmissionsEmptyState = ({
 }: Props) => {
   const titleText = isAssignmentOpen
     ? `No submission for ${assignmentName}`
-    : `You didn’t submit for ${assignmentName}`;
+    : `You didn't submit for ${assignmentName}`;
 
   const descriptionText = isAssignmentOpen
     ? 'You have not submitted your work yet. Submit now to have it marked.'

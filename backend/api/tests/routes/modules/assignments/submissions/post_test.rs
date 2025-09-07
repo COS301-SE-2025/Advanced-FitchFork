@@ -346,6 +346,69 @@ mod tests {
         (boundary, body)
     }
 
+    fn write_attempt_policy_config(
+        base_path: &std::path::Path,
+        limit_attempts: bool,
+        max_attempts: u32,
+        allow_practice: bool,
+    ) {
+        std::fs::create_dir_all(base_path.join("config")).unwrap();
+        let cfg = format!(r#"{{
+            "execution": {{
+                "timeout_secs": 10,
+                "max_memory": 8589934592,
+                "max_cpus": 2,
+                "max_uncompressed_size": 100000000,
+                "max_processes": 256
+            }},
+            "project": {{
+                "submission_mode": "manual"
+            }},
+            "marking": {{
+                "limit_attempts": {limit_attempts},
+                "max_attempts": {max_attempts},
+                "allow_practice_submissions": {allow_practice},
+                "pass_mark": 50,
+                "grading_policy": "last"
+            }}
+        }}"#);
+        std::fs::write(base_path.join("config").join("config.json"), cfg).unwrap();
+    }
+
+    fn assignment_base(temp_dir: &tempfile::TempDir, module_id: i64, assignment_id: i64) -> std::path::PathBuf {
+        temp_dir
+            .path()
+            .join(format!("module_{module_id}"))
+            .join(format!("assignment_{assignment_id}"))
+    }
+
+    /// Seed a submission row that does *not* count (ignored or practice).
+    async fn seed_submission_row(
+        db: &DatabaseConnection,
+        assignment_id: i64,
+        user_id: i64,
+        attempt: i64,
+        is_practice: bool,
+        ignored: bool,
+    ) {
+        use db::models::assignment_submission as sub;
+        let mut m = sub::ActiveModel {
+            assignment_id: Set(assignment_id),
+            user_id: Set(user_id),
+            attempt: Set(attempt),
+            earned: Set(0),
+            total: Set(0),
+            filename: Set("seed.zip".into()),
+            file_hash: Set("seedhash".into()),
+            path: Set("seed/path.zip".into()),
+            is_practice: Set(is_practice),
+            ..Default::default()
+        };
+        // Only if your schema has it (your queries use Column::Ignored, so it should exist):
+        m.ignored = Set(ignored);
+        m.insert(db).await.unwrap();
+    }
+
     #[tokio::test]
     #[serial]
     async fn test_valid_submission_zip() {
@@ -496,8 +559,20 @@ mod tests {
         let temp_dir = setup_assignment_storage_root();
         let (app, app_state) = make_test_app().await;
         let data = setup_test_data(app_state.db(), &temp_dir).await;
-        let file = create_submission_zip();
 
+        // ensure practice is allowed for this assignment
+        let base = temp_dir
+            .path()
+            .join(format!("module_{}", data.module.id))
+            .join(format!("assignment_{}", data.assignment.id));
+        write_attempt_policy_config(
+            &base,
+            /*limit_attempts*/ false,
+            /*max_attempts*/ 10,
+            /*allow_practice*/ true,
+        );
+
+        let file = create_submission_zip();
         let (boundary, body) = multipart_body("solution.zip", &file, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
@@ -508,23 +583,19 @@ mod tests {
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(
-                CONTENT_TYPE,
-                format!("multipart/form-data; boundary={}", boundary),
-            )
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
             .body(Body::from(body))
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let json: Value = serde_json::from_slice(&body).unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["is_practice"], true);
     }
+
 
     #[tokio::test]
     #[serial]
@@ -581,6 +652,196 @@ mod tests {
         let json2: Value = serde_json::from_slice(&body2).unwrap();
         assert_eq!(json2["success"], true);
         assert_eq!(json2["data"]["attempt"], 2);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submit_blocked_when_max_attempts_reached_for_student() {
+        let temp_dir = setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db, &temp_dir).await;
+
+        // Force strict attempt policy: max 1, practice irrelevant here.
+        let base = assignment_base(&temp_dir, data.module.id, data.assignment.id);
+        write_attempt_policy_config(&base, true, 1, false);
+
+        let file = create_submission_zip();
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+
+        // 1st submission -> OK
+        {
+            let (boundary, body) = multipart_body("solution.zip", &file, None);
+            let req = Request::builder()
+                .method("POST")
+                .uri(&uri)
+                .header(AUTHORIZATION, format!("Bearer {}", token))
+                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .body(Body::from(body))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
+
+        // 2nd submission -> should be FORBIDDEN with max-attempts message
+        {
+            let (boundary, body) = multipart_body("solution.zip", &file, None);
+            let req = Request::builder()
+                .method("POST")
+                .uri(&uri)
+                .header(AUTHORIZATION, format!("Bearer {}", token))
+                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .body(Body::from(body))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+            let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json["success"], false);
+            assert_eq!(json["message"], "Maximum attempts reached: used 1 of 1 (remaining 0).");
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_practice_submission_denied_when_disabled() {
+        let temp_dir = setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db, &temp_dir).await;
+
+        // Practice disabled
+        let base = assignment_base(&temp_dir, data.module.id, data.assignment.id);
+        write_attempt_policy_config(&base, true, 5, false);
+
+        let file = create_submission_zip();
+        let (boundary, body) = multipart_body("solution.zip", &file, Some("true")); // is_practice=true
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["message"], "Practice submissions are disabled for this assignment.");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_allowed_when_previous_attempt_was_ignored() {
+        let temp_dir = setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db, &temp_dir).await;
+
+        // max 1 attempt, but we seed a single *ignored* prior attempt → should NOT count
+        let base = assignment_base(&temp_dir, data.module.id, data.assignment.id);
+        write_attempt_policy_config(&base, true, 1, false);
+
+        seed_submission_row(
+            db,
+            data.assignment.id,
+            data.student_user.id,
+            1,
+            /*is_practice*/ false,
+            /*ignored*/ true,
+        ).await;
+
+        let file = create_submission_zip();
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let (boundary, body) = multipart_body("solution.zip", &file, None);
+
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body))
+            .unwrap();
+
+        // Should be allowed because prior attempt is ignored
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], true);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_staff_bypass_attempt_limit() {
+        let temp_dir = setup_assignment_storage_root();
+        let (app, app_state) = make_test_app().await;
+        let db = app_state.db();
+        let data = setup_test_data(db, &temp_dir).await;
+
+        // Strict limit (1 attempt), but we'll submit as lecturer (staff → bypass)
+        let base = assignment_base(&temp_dir, data.module.id, data.assignment.id);
+        write_attempt_policy_config(&base, true, 1, false);
+
+        let lecturer = UserModel::create(db, "lect1", "lect1@test.com", "pw", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+
+        let file = create_submission_zip();
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+
+        // First submission as staff
+        {
+            let (boundary, body) = multipart_body("solution.zip", &file, None);
+            let req = Request::builder()
+                .method("POST")
+                .uri(&uri)
+                .header(AUTHORIZATION, format!("Bearer {}", token))
+                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .body(Body::from(body))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
+
+        // Second submission as staff (would be blocked for students) → still OK
+        {
+            let (boundary, body) = multipart_body("solution.zip", &file, None);
+            let req = Request::builder()
+                .method("POST")
+                .uri(&uri)
+                .header(AUTHORIZATION, format!("Bearer {}", token))
+                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .body(Body::from(body))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
     }
 
     // TODO: Once coverage and complexity have been implemented, uncomment this test.

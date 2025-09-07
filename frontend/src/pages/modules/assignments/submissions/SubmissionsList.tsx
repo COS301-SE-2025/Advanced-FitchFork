@@ -1,11 +1,5 @@
-import { Tag, Typography } from 'antd';
-import {
-  DeleteOutlined,
-  EyeOutlined,
-  RedoOutlined,
-  ReloadOutlined,
-  StopOutlined,
-} from '@ant-design/icons';
+import { Switch, Tag, Typography } from 'antd';
+import { DeleteOutlined, RedoOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
@@ -32,7 +26,6 @@ import {
 } from '@/services/modules/assignments/submissions/post';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import {
-  IgnoredTag,
   SubmissionListItem,
   SubmissionsEmptyState,
   SubmitAssignmentModal,
@@ -42,6 +35,7 @@ import {
   deleteSubmission,
 } from '@/services/modules/assignments/submissions/delete';
 import useApp from 'antd/es/app/useApp';
+import SubmissionStatistics from './SubmissionStatistics';
 
 const getMarkColor = (mark: number): string => {
   if (mark >= 75) return 'green';
@@ -61,8 +55,11 @@ export default function SubmissionsList() {
   const { setValue } = useViewSlot();
   const { modal, message } = useApp();
 
-  const { assignment, refreshAssignment } = useAssignment();
+  const { assignment, policy, assignmentStats, refreshAssignment, refreshAssignmentStats } =
+    useAssignment();
   const auth = useAuth();
+  const hasStats =
+    auth.isLecturer(module.id) || auth.isAssistantLecturer(module.id) || auth.isAdmin;
 
   const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -179,7 +176,6 @@ export default function SubmissionsList() {
       title: 'Is Practice',
       dataIndex: 'is_practice',
       key: 'is_practice',
-      defaultHidden: true,
       render: (v) => (v ? <Tag color="gold">Yes</Tag> : <Tag>No</Tag>),
     },
     {
@@ -198,7 +194,40 @@ export default function SubmissionsList() {
       dataIndex: 'ignored',
       key: 'ignored',
       defaultHidden: !auth.isStaff(module.id),
-      render: (v: boolean) => <IgnoredTag ignored={!!v} />,
+      render: (_: boolean, record: StudentSubmission) => (
+        <Switch
+          size="small"
+          checked={record.ignored}
+          onClick={(nextChecked, e) => {
+            e?.preventDefault();
+            e?.stopPropagation();
+
+            // optimistic patch
+            const id = record.id;
+            entityListRef.current?.updateRow(id, { ignored: nextChecked });
+
+            (async () => {
+              try {
+                const res = await setSubmissionIgnored(module.id, assignment.id, id, nextChecked);
+                if (!res.success) {
+                  // rollback
+                  entityListRef.current?.updateRow(id, { ignored: !nextChecked });
+                  message.error(res.message || 'Failed to update ignored flag');
+                } else {
+                  // optional: if backend returns the full updated submission, prefer truth from server
+                  // entityListRef.current?.upsertRows([res.data], 'replace');
+                  await refreshAssignmentStats();
+                }
+              } catch (err) {
+                // rollback
+                entityListRef.current?.updateRow(id, { ignored: !nextChecked });
+                console.error(err);
+                message.error('Failed to update ignored flag');
+              }
+            })();
+          }}
+        />
+      ),
     },
     {
       title: 'Is Late',
@@ -230,44 +259,16 @@ export default function SubmissionsList() {
     ? {
         entity: (entity: StudentSubmission): EntityAction<StudentSubmission>[] => [
           {
-            key: entity.ignored ? 'unignore' : 'ignore',
-            label: entity.ignored ? 'Unignore' : 'Ignore',
-            icon: entity.ignored ? <EyeOutlined /> : <StopOutlined />,
-            handler: async ({ refresh }) => {
-              try {
-                const res = await setSubmissionIgnored(
-                  module.id,
-                  assignment.id,
-                  entity.id,
-                  !entity.ignored,
-                );
-                if (res.success) {
-                  message.success(
-                    res.message || (entity.ignored ? 'Submission unignored' : 'Submission ignored'),
-                  );
-                  EventBus.emit('submission:updated');
-                  refresh();
-                } else {
-                  message.error(res.message || 'Failed to update ignored flag');
-                }
-              } catch (err) {
-                console.error(err);
-                message.error('Failed to update ignored flag');
-              }
-            },
-          },
-          {
             key: 'delete',
             label: 'Delete',
             icon: <DeleteOutlined />,
             confirm: true,
-            handler: async ({ refresh }) => {
+            handler: async () => {
               try {
                 const res = await deleteSubmission(module.id, assignment.id, entity.id);
                 if (res.success) {
                   message.success(res.message || `Deleted submission ${entity.id}`);
-                  EventBus.emit('submission:updated');
-                  refresh();
+                  entityListRef.current?.removeRows([entity.id]);
                 } else {
                   message.error(res.message || `Failed to delete submission ${entity.id}`);
                 }
@@ -277,11 +278,12 @@ export default function SubmissionsList() {
               }
             },
           },
+
           {
             key: 'remark',
             label: 'Re-mark',
             icon: <ReloadOutlined />,
-            handler: async ({ refresh }) => {
+            handler: async () => {
               try {
                 const res = await remarkSubmissions(module.id, assignment.id, {
                   submission_ids: [entity.id],
@@ -292,7 +294,6 @@ export default function SubmissionsList() {
                   message.error(res.message);
                 }
                 EventBus.emit('submission:updated');
-                refresh();
               } catch (err) {
                 console.error(err);
                 message.error(`Failed to re-mark submission ${entity.id}`);
@@ -303,7 +304,7 @@ export default function SubmissionsList() {
             key: 'resubmit',
             label: 'Resubmit',
             icon: <RedoOutlined />,
-            handler: async ({ refresh }) => {
+            handler: async () => {
               try {
                 const res = await resubmitSubmissions(module.id, assignment.id, {
                   submission_ids: [entity.id],
@@ -314,7 +315,6 @@ export default function SubmissionsList() {
                   message.error(res.message || `Failed to resubmit submission ${entity.id}`);
                 }
                 EventBus.emit('submission:updated');
-                refresh();
               } catch (err) {
                 console.error(err);
                 message.error(`Failed to resubmit submission ${entity.id}`);
@@ -541,57 +541,70 @@ export default function SubmissionsList() {
     : undefined;
 
   return (
-    <>
-      <EntityList<StudentSubmission>
-        ref={entityListRef}
-        name="Submissions"
-        listMode={auth.isStudent(module.id)}
-        showControlBar={!isStudent}
-        fetchItems={fetchItems}
-        columns={columns}
-        getRowKey={(item) => item.id}
-        onRowClick={(item) =>
-          navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${item.id}`)
-        }
-        columnToggleEnabled
-        actions={actions}
-        renderGridItem={(item, itemActions) => (
-          <SubmissionCard
-            submission={item}
-            actions={itemActions}
-            onClick={(s) =>
-              navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}`)
-            }
-          />
-        )}
-        renderListItem={(submission) => (
-          <SubmissionListItem
-            submission={submission}
-            onClick={(s) =>
-              navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}`)
-            }
-          />
-        )}
-        emptyNoEntities={
-          <SubmissionsEmptyState
-            assignmentName={assignment.name}
-            isAssignmentOpen={isAssignmentOpen}
-            onSubmit={isAssignmentOpen ? handleOpenSubmit : undefined}
-            onRefresh={() => entityListRef.current?.refresh()}
-          />
-        }
-      />
+    <div className="grid gap-6 2xl:grid-cols-5 items-stretch h-full">
+      {/* Stats: only for lecturers, assistants, or admin */}
+      {hasStats && (
+        <div className="order-1 2xl:order-2 2xl:col-span-2 h-full flex flex-col">
+          <SubmissionStatistics stats={assignmentStats} className="flex-1 min-h-0" />
+        </div>
+      )}
 
-      <SubmitAssignmentModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSubmit={handleSubmitAssignment}
-        loading={loading}
-        title="Submit Assignment"
-        accept=".zip,.tar,.gz,.tgz"
-        maxSizeMB={50}
-        defaultIsPractice={false}
-      />
-    </>
+      {/* List: span full width when stats are hidden */}
+      <div
+        className={`order-2 2xl:order-1 ${hasStats ? '2xl:col-span-3' : '2xl:col-span-5'} min-w-0 h-full flex flex-col`}
+      >
+        <EntityList<StudentSubmission>
+          ref={entityListRef}
+          name="Submissions"
+          listMode={auth.isStudent(module.id)}
+          showControlBar={!isStudent}
+          fetchItems={fetchItems}
+          columns={columns}
+          getRowKey={(item) => item.id}
+          onRowClick={(item) =>
+            navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${item.id}`)
+          }
+          columnToggleEnabled
+          actions={actions}
+          renderGridItem={(item, itemActions) => (
+            <SubmissionCard
+              submission={item}
+              actions={itemActions}
+              onClick={(s) =>
+                navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}`)
+              }
+            />
+          )}
+          renderListItem={(submission) => (
+            <SubmissionListItem
+              submission={submission}
+              onClick={(s) =>
+                navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}`)
+              }
+            />
+          )}
+          emptyNoEntities={
+            <SubmissionsEmptyState
+              assignmentName={assignment.name}
+              isAssignmentOpen={isAssignmentOpen}
+              onSubmit={isAssignmentOpen ? handleOpenSubmit : undefined}
+              onRefresh={() => entityListRef.current?.refresh()}
+            />
+          }
+        />
+
+        <SubmitAssignmentModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleSubmitAssignment}
+          loading={loading}
+          title="Submit Assignment"
+          accept=".zip,.tar,.gz,.tgz"
+          maxSizeMB={50}
+          defaultIsPractice={false}
+          allowPractice={policy?.allow_practice_submissions && !auth.isStaff(module.id)}
+        />
+      </div>
+    </div>
   );
 }
