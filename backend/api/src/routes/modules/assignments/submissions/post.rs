@@ -11,6 +11,8 @@ use code_runner;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
     assignment_submission::{self, Model as AssignmentSubmissionModel},
+    assignment_submission_output::Entity as AssignmentSubmissionOutputModel,
+    assignment_task::Entity as AssignmentTaskModel,
 };
 use marker::MarkingJob;
 use md5;
@@ -254,20 +256,64 @@ async fn grade_submission(
         .join(format!("attempt_{}", submission.attempt))
         .join("submission_output");
 
+    //Old system before code-coverage
+
+    // let mut student_outputs = Vec::new();
+    // if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
+    //     for entry in entries.flatten() {
+    //         let file_path = entry.path();
+    //         if file_path.is_file() {
+    //             if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+    //                 if ext.eq_ignore_ascii_case("txt") {
+    //                     student_outputs.push(file_path);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+    // student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
     let mut student_outputs = Vec::new();
+    let mut student_output_code_coverage = Vec::new();
+
+    //family reunion of if statments
     if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
         for entry in entries.flatten() {
             let file_path = entry.path();
             if file_path.is_file() {
                 if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
                     if ext.eq_ignore_ascii_case("txt") {
-                        student_outputs.push(file_path);
+                        if let Some(file_stem) = file_path.file_stem().and_then(|s| s.to_str()) {
+                            if let Ok(output_id) = file_stem.parse::<i64>() {
+                                if let Ok(Some(output)) =
+                                    AssignmentSubmissionOutputModel::find_by_id(output_id)
+                                        .one(db)
+                                        .await
+                                {
+                                    if let Ok(Some(task)) =
+                                        AssignmentTaskModel::find_by_id(output.task_id)
+                                            .one(db)
+                                            .await
+                                    {
+                                        if task.code_coverage {
+                                            student_output_code_coverage.push(file_path.clone());
+                                        } else {
+                                            student_outputs.push(file_path.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
     student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+    //TODO - Reece here is your student_output code_coverage - do with it what you want
+    student_output_code_coverage.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     let marking_job = MarkingJob::new(
         memo_outputs.to_vec(),

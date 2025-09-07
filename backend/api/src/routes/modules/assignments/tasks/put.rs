@@ -2,12 +2,16 @@
 //!
 //! This module provides the endpoint handler for editing the command of a specific assignment task within a module. It validates the existence and relationships of the module, assignment, and task, and updates the task's command in the database. The endpoint returns detailed information about the updated task or appropriate error responses.
 
-use axum::{extract::{State, Path, Json}, http::StatusCode, response::IntoResponse};
-use db::models::{assignment_task};
-use serde::Deserialize;
-use util::state::AppState;
 use crate::response::ApiResponse;
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
+use axum::{
+    extract::{Json, Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use db::models::assignment_task;
+use serde::Deserialize;
+use util::state::AppState;
 
 /// The request payload for editing a task's command.
 #[derive(Deserialize)]
@@ -164,17 +168,28 @@ pub async fn edit_task(
     if payload.command.trim().is_empty() || payload.name.trim().is_empty() {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<()>::error("'name' and 'command' must be non-empty strings")),
-        ).into_response();
+            Json(ApiResponse::<()>::error(
+                "'name' and 'command' must be non-empty strings",
+            )),
+        )
+            .into_response();
     }
 
-    let updated = match assignment_task::Model::edit_command_and_name(db, task_id, &payload.name, &payload.command).await {
+    let updated = match assignment_task::Model::edit_command_and_name(
+        db,
+        task_id,
+        &payload.name,
+        &payload.command,
+    )
+    .await
+    {
         Ok(t) => t,
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Failed to update task")),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
@@ -183,6 +198,7 @@ pub async fn edit_task(
         task_number: updated.task_number,
         name: updated.name,
         command: updated.command,
+        code_coverage: updated.code_coverage,
         created_at: updated.created_at.to_rfc3339(),
         updated_at: updated.updated_at.to_rfc3339(),
     };
@@ -190,5 +206,6 @@ pub async fn edit_task(
     (
         StatusCode::OK,
         Json(ApiResponse::success(resp, "Task updated successfully")),
-    ).into_response()
+    )
+        .into_response()
 }
