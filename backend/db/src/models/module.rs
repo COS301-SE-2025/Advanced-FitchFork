@@ -8,9 +8,9 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
     pub code: String,
-    pub year: i32,
+    pub year: i64,
     pub description: Option<String>,
-    pub credits: i32,
+    pub credits: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

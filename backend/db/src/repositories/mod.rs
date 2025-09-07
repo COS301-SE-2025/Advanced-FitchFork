@@ -13,3 +13,5 @@ pub mod password_reset_token_repository;
 pub mod plagiarism_case_repository;
 pub mod ticket_repository;
 pub mod ticket_message_repository;
+pub mod announcement_repository;
+pub mod assignment_interpreter_repository;

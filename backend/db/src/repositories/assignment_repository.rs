@@ -1,70 +1,51 @@
-use crate::models::assignment;
+use crate::models::assignment::{Entity, Column, AssignmentType, Status};
 use crate::repositories::repository::Repository;
+use crate::comparisons::ApplyComparison;
 use crate::filters::AssignmentFilter;
-use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, Select, Condition};
+use sea_orm::{QueryFilter, QueryOrder, Select, Condition};
+use chrono::{DateTime, Utc};
 
 pub struct AssignmentRepository;
 
 impl AssignmentRepository {}
 
-impl Repository<assignment::Entity, AssignmentFilter> for AssignmentRepository {
-    fn apply_filter(query: Select<assignment::Entity>, filter: &AssignmentFilter) -> Select<assignment::Entity> {
+impl Repository<Entity, AssignmentFilter> for AssignmentRepository {
+    fn apply_filter(query: Select<Entity>, filter: &AssignmentFilter) -> Select<Entity> {
         let mut condition = Condition::all();
-
-        if let Some(id) = filter.id {
-            condition = condition.add(assignment::Column::Id.eq(id));
+        if let Some(id) = &filter.id {
+            condition = i64::apply_comparison(condition, Column::Id, &id);
         }
-
-        if let Some(module_id) = filter.module_id {
-            condition = condition.add(assignment::Column::ModuleId.eq(module_id));
+        if let Some(module_id) = &filter.module_id {
+            condition = i64::apply_comparison(condition, Column::ModuleId, &module_id);
         }
-
-        if let Some(ref name) = filter.name {
-            let pattern = format!("%{}%", name.to_lowercase());
-            condition = condition.add(Expr::cust("LOWER(name)").like(&pattern));
+        if let Some(name) = &filter.name {
+            condition = String::apply_comparison(condition, Column::Name, &name);
         }
-
-        if let Some(ref description) = filter.description {
-            let pattern = format!("%{}%", description.to_lowercase());
-            condition = condition.add(Expr::cust("LOWER(description)").like(&pattern));
+        if let Some(description) = &filter.description {
+            condition = String::apply_comparison(condition, Column::Description, &description);
         }
-
-        if let Some(ref assignment_type) = filter.assignment_type {
-            condition = condition.add(assignment::Column::AssignmentType.eq(assignment_type.clone()));
+        if let Some(assignment_type) = &filter.assignment_type {
+            condition = AssignmentType::apply_comparison(condition, Column::AssignmentType, &assignment_type);
         }
-
-        if let Some(ref status) = filter.status {
-            condition = condition.add(assignment::Column::Status.eq(status.clone()));
+        if let Some(status) = &filter.status {
+            condition = Status::apply_comparison(condition, Column::Status, &status);
         }
-
-        if let Some(available_before) = filter.available_before {
-            condition = condition.add(assignment::Column::AvailableFrom.lt(available_before));
+        if let Some(available_before) = &filter.available_before {
+            condition = DateTime::<Utc>::apply_comparison(condition, Column::AvailableFrom, &available_before);
         }
-
-        if let Some(available_after) = filter.available_after {
-            condition = condition.add(assignment::Column::AvailableFrom.gt(available_after));
+        if let Some(available_after) = &filter.available_after {
+            condition = DateTime::<Utc>::apply_comparison(condition, Column::AvailableFrom, &available_after);
         }
-
-        if let Some(due_before) = filter.due_before {
-            condition = condition.add(assignment::Column::DueDate.lt(due_before));
+        if let Some(due_before) = &filter.due_before {
+            condition = DateTime::<Utc>::apply_comparison(condition, Column::DueDate, &due_before);
         }
-
-        if let Some(due_after) = filter.due_after {
-            condition = condition.add(assignment::Column::DueDate.gt(due_after));
+        if let Some(due_after) = &filter.due_after {
+            condition = DateTime::<Utc>::apply_comparison(condition, Column::DueDate, &due_after);
         }
-
-        if let Some(ref query_text) = filter.query {
-            let pattern = format!("%{}%", query_text.to_lowercase());
-            let search_condition = Condition::any()
-                .add(Expr::cust("LOWER(name)").like(&pattern))
-                .add(Expr::cust("LOWER(description)").like(&pattern));
-            condition = condition.add(search_condition);
-        }
-
         query.filter(condition)
     }
 
-    fn apply_sorting(mut query: Select<assignment::Entity>, sort_by: Option<String>) -> Select<assignment::Entity> {
+    fn apply_sorting(mut query: Select<Entity>, sort_by: Option<String>) -> Select<Entity> {
         if let Some(sort_param) = sort_by {
             for sort in sort_param.split(',') {
                 let (field, asc) = if sort.starts_with('-') {
@@ -76,58 +57,58 @@ impl Repository<assignment::Entity, AssignmentFilter> for AssignmentRepository {
                 query = match field {
                     "name" => {
                         if asc {
-                            query.order_by_asc(assignment::Column::Name)
+                            query.order_by_asc(Column::Name)
                         } else {
-                            query.order_by_desc(assignment::Column::Name)
+                            query.order_by_desc(Column::Name)
                         }
                     }
                     "description" => {
                         if asc {
-                            query.order_by_asc(assignment::Column::Description)
+                            query.order_by_asc(Column::Description)
                         } else {
-                            query.order_by_desc(assignment::Column::Description)
+                            query.order_by_desc(Column::Description)
                         }
                     }
                     "assignment_type" => {
                         if asc {
-                            query.order_by_asc(assignment::Column::AssignmentType)
+                            query.order_by_asc(Column::AssignmentType)
                         } else {
-                            query.order_by_desc(assignment::Column::AssignmentType)
+                            query.order_by_desc(Column::AssignmentType)
                         }
                     }
                     "status" => {
                         if asc {
-                            query.order_by_asc(assignment::Column::Status)
+                            query.order_by_asc(Column::Status)
                         } else {
-                            query.order_by_desc(assignment::Column::Status)
+                            query.order_by_desc(Column::Status)
                         }
                     }
                     "available_from" => {
                         if asc {
-                            query.order_by_asc(assignment::Column::AvailableFrom)
+                            query.order_by_asc(Column::AvailableFrom)
                         } else {
-                            query.order_by_desc(assignment::Column::AvailableFrom)
+                            query.order_by_desc(Column::AvailableFrom)
                         }
                     }
                     "due_date" => {
                         if asc {
-                            query.order_by_asc(assignment::Column::DueDate)
+                            query.order_by_asc(Column::DueDate)
                         } else {
-                            query.order_by_desc(assignment::Column::DueDate)
+                            query.order_by_desc(Column::DueDate)
                         }
                     }
                     "created_at" => {
                         if asc {
-                            query.order_by_asc(assignment::Column::CreatedAt)
+                            query.order_by_asc(Column::CreatedAt)
                         } else {
-                            query.order_by_desc(assignment::Column::CreatedAt)
+                            query.order_by_desc(Column::CreatedAt)
                         }
                     }
                     "updated_at" => {
                         if asc {
-                            query.order_by_asc(assignment::Column::UpdatedAt)
+                            query.order_by_asc(Column::UpdatedAt)
                         } else {
-                            query.order_by_desc(assignment::Column::UpdatedAt)
+                            query.order_by_desc(Column::UpdatedAt)
                         }
                     }
                     _ => query,

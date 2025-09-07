@@ -8,6 +8,7 @@ use db::{
         module_repository::ModuleRepository, repository::Repository,
         user_module_role_repository::UserModuleRoleRepository,
     },
+    comparisons::Comparison,
     filters::UserModuleRoleFilter,
 };
 use sea_orm::{DbErr, Set};
@@ -18,9 +19,9 @@ use serde::Serialize;
 pub struct UserModuleRoleInfo {
     pub module_id: i64,
     pub module_code: String,
-    pub module_year: i32,
+    pub module_year: i64,
     pub module_description: Option<String>,
-    pub module_credits: i32,
+    pub module_credits: i64,
     pub module_created_at: String,
     pub module_updated_at: String,
     pub role: String,
@@ -28,16 +29,16 @@ pub struct UserModuleRoleInfo {
 
 #[derive(Debug, Clone)]
 pub struct CreateUserModuleRole {
-    user_id: i64,
-    module_id: i64,
-    role: String,
+    pub user_id: i64,
+    pub module_id: i64,
+    pub role: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct UpdateUserModuleRole {
-    user_id: i64,
-    module_id: i64,
-    role: Option<String>,
+    pub user_id: i64,
+    pub module_id: i64,
+    pub role: Option<String>,
 }
 
 impl ToActiveModel<Entity> for CreateUserModuleRole {
@@ -110,7 +111,7 @@ impl UserModuleRoleService {
     ) -> Result<Vec<UserModuleRoleInfo>, DbErr> {
         let roles = UserModuleRoleRepository::find_all(
             UserModuleRoleFilter {
-                user_id: Some(user_id),
+                user_id: Some(Comparison::eq(user_id)),
                 ..Default::default()
             },
             None,
@@ -153,9 +154,9 @@ impl UserModuleRoleService {
             .map_err(|_| DbErr::Custom(format!("Invalid role string: '{}'", role)))?;
 
         UserModuleRoleRepository::exists(UserModuleRoleFilter {
-            user_id: Some(user_id),
-            module_id: Some(module_id),
-            role: Some(parsed_role),
+            user_id: Some(Comparison::eq(user_id)),
+            module_id: Some(Comparison::eq(module_id)),
+            role: Some(Comparison::eq(parsed_role)),
         })
         .await
     }

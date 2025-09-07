@@ -14,18 +14,18 @@ use chrono::Utc;
 #[derive(Debug, Clone)]
 pub struct CreateModule {
     pub code: String,
-    pub year: i32,
+    pub year: i64,
     pub description: Option<String>,
-    pub credits: i32,
+    pub credits: i64,
 }
 
 #[derive(Debug, Clone)]
 pub struct UpdateModule {
     pub id: i64,
     pub code: Option<String>,
-    pub year:  Option<i32>,
+    pub year:  Option<i64>,
     pub description: Option<String>,
-    pub credits:  Option<i32>,
+    pub credits:  Option<i64>,
 }
 
 impl ToActiveModel<Entity> for CreateModule {

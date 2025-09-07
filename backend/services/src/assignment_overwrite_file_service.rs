@@ -11,16 +11,16 @@ use std::{fs, env};
 
 #[derive(Debug, Clone)]
 pub struct CreateAssignmentOverwriteFile {
-    assignment_id: i64,
-    task_id: i64,
-    filename: String,
-    bytes: Vec<u8>,
+    pub assignment_id: i64,
+    pub task_id: i64,
+    pub filename: String,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
 pub struct UpdateAssignmentOverwriteFile {
-    id: i64,
-    filename: Option<String>,
+    pub id: i64,
+    pub filename: Option<String>,
 }
 
 impl ToActiveModel<Entity> for CreateAssignmentOverwriteFile {

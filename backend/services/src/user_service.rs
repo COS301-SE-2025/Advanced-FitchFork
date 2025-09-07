@@ -2,6 +2,7 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::user::{Model, Entity, ActiveModel},
     repositories::{repository::Repository, user_repository::UserRepository},
+    comparisons::Comparison,
     filters::UserFilter,
 };
 use sea_orm::{DbErr, Set};
@@ -165,7 +166,7 @@ impl UserService {
 
         if let Some(user) = UserRepository::find_one(
             UserFilter {
-                username: Some(username.to_string()),
+                username: Some(Comparison::eq(username.to_string())),
                 ..Default::default()
             },
             None,

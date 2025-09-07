@@ -11,16 +11,16 @@ use std::{env, fs};
 
 #[derive(Debug, Clone)]
 pub struct CreateAssignmentMemoOutput {
-    assignment_id: i64,
-    task_id: i64,
-    filename: String,
-    bytes: Vec<u8>,
+    pub assignment_id: i64,
+    pub task_id: i64,
+    pub filename: String,
+    pub bytes: Vec<u8>,
 }
 
 // Note: Nothing can currently be edited for memo outputs
 #[derive(Debug, Clone)]
 pub struct UpdateAssignmentMemoOutput {
-    id: i64,
+    pub id: i64,
 }
 
 impl ToActiveModel<Entity> for CreateAssignmentMemoOutput {

@@ -2,6 +2,7 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::password_reset_token::{ActiveModel, Entity, Model},
     repositories::{password_reset_token_repository::PasswordResetTokenRepository, repository::Repository},
+    comparisons::Comparison,
     filters::PasswordResetTokenFilter,
 };
 use sea_orm::{DbErr, Set};
@@ -72,18 +73,11 @@ impl PasswordResetTokenService {
     pub async fn find_valid_token(
         token: String,
     ) -> Result<Option<Model>, DbErr> {
-        Entity::find()
-            .filter(Column::Token.eq(token))
-            .filter(Column::Used.eq(false))
-            .filter(Column::ExpiresAt.gt(Utc::now()))
-            .one(db)
-            .await
-
         PasswordResetTokenRepository::find_one(
             PasswordResetTokenFilter {
-                token: Some(token),
-                used: Some(false),
-                expires_at: Some(Utc::now()),
+                token: Some(Comparison::eq(token)),
+                used: Some(Comparison::eq(false)),
+                expires_at: Some(Comparison::gt(Utc::now())),
                 ..Default::default()
             },
             None,

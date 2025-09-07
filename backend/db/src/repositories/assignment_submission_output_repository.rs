@@ -1,39 +1,29 @@
-use crate::models::assignment_submission_output;
+use crate::models::assignment_submission_output::{Entity, Column};
 use crate::repositories::repository::Repository;
+use crate::comparisons::ApplyComparison;
 use crate::filters::AssignmentSubmissionOutputFilter;
-use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, Select, Condition};
+use sea_orm::{QueryFilter, QueryOrder, Select, Condition};
 
 pub struct AssignmentSubmissionOutputRepository;
 
 impl AssignmentSubmissionOutputRepository {}
 
-impl Repository<assignment_submission_output::Entity, AssignmentSubmissionOutputFilter> for AssignmentSubmissionOutputRepository {
-    fn apply_filter(query: Select<assignment_submission_output::Entity>, filter: &AssignmentSubmissionOutputFilter) -> Select<assignment_submission_output::Entity> {
+impl Repository<Entity, AssignmentSubmissionOutputFilter> for AssignmentSubmissionOutputRepository {
+    fn apply_filter(query: Select<Entity>, filter: &AssignmentSubmissionOutputFilter) -> Select<Entity> {
         let mut condition = Condition::all();
-
-        if let Some(id) = filter.id {
-            condition = condition.add(assignment_submission_output::Column::Id.eq(id));
+        if let Some(id) = &filter.id {
+            condition = i64::apply_comparison(condition, Column::Id, &id);
         }
-
-        if let Some(task_id) = filter.task_id {
-            condition = condition.add(assignment_submission_output::Column::TaskId.eq(task_id));
+        if let Some(task_id) = &filter.task_id {
+            condition = i64::apply_comparison(condition, Column::TaskId, &task_id);
         }
-
-        if let Some(submission_id) = filter.submission_id {
-            condition = condition.add(assignment_submission_output::Column::SubmissionId.eq(submission_id));
+        if let Some(submission_id) = &filter.submission_id {
+            condition = i64::apply_comparison(condition, Column::SubmissionId, &submission_id);
         }
-
-        if let Some(ref query_text) = filter.query {
-            let pattern = format!("%{}%", query_text.to_lowercase());
-            let search_condition = Condition::any()
-                .add(Expr::cust("LOWER(path)").like(&pattern)); // Assuming 'path' is the only string field to search
-            condition = condition.add(search_condition);
-        }
-
         query.filter(condition)
     }
 
-    fn apply_sorting(mut query: Select<assignment_submission_output::Entity>, sort_by: Option<String>) -> Select<assignment_submission_output::Entity> {
+    fn apply_sorting(mut query: Select<Entity>, sort_by: Option<String>) -> Select<Entity> {
         if let Some(sort_param) = sort_by {
             for sort in sort_param.split(',') {
                 let (field, asc) = if sort.starts_with('-') {
@@ -45,37 +35,37 @@ impl Repository<assignment_submission_output::Entity, AssignmentSubmissionOutput
                 query = match field {
                     "id" => {
                         if asc {
-                            query.order_by_asc(assignment_submission_output::Column::Id)
+                            query.order_by_asc(Column::Id)
                         } else {
-                            query.order_by_desc(assignment_submission_output::Column::Id)
+                            query.order_by_desc(Column::Id)
                         }
                     }
                     "task_id" => {
                         if asc {
-                            query.order_by_asc(assignment_submission_output::Column::TaskId)
+                            query.order_by_asc(Column::TaskId)
                         } else {
-                            query.order_by_desc(assignment_submission_output::Column::TaskId)
+                            query.order_by_desc(Column::TaskId)
                         }
                     }
                     "submission_id" => {
                         if asc {
-                            query.order_by_asc(assignment_submission_output::Column::SubmissionId)
+                            query.order_by_asc(Column::SubmissionId)
                         } else {
-                            query.order_by_desc(assignment_submission_output::Column::SubmissionId)
+                            query.order_by_desc(Column::SubmissionId)
                         }
                     }
                     "created_at" => {
                         if asc {
-                            query.order_by_asc(assignment_submission_output::Column::CreatedAt)
+                            query.order_by_asc(Column::CreatedAt)
                         } else {
-                            query.order_by_desc(assignment_submission_output::Column::CreatedAt)
+                            query.order_by_desc(Column::CreatedAt)
                         }
                     }
                     "updated_at" => {
                         if asc {
-                            query.order_by_asc(assignment_submission_output::Column::UpdatedAt)
+                            query.order_by_asc(Column::UpdatedAt)
                         } else {
-                            query.order_by_desc(assignment_submission_output::Column::UpdatedAt)
+                            query.order_by_desc(Column::UpdatedAt)
                         }
                     }
                     _ => query,

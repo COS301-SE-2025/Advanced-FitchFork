@@ -14,3 +14,5 @@ pub mod plagiarism_case_service;
 pub mod ticket_service;
 pub mod ticket_message_service;
 pub mod util_service;
+pub mod announcement_service;
+pub mod assignment_interpreter_service;

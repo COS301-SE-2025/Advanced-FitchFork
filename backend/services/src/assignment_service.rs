@@ -24,12 +24,12 @@ pub struct CreateAssignment {
 
 #[derive(Debug, Clone)]
 pub struct UpdateAssignment {
-    id: i64,
-    name: Option<String>,
-    description: Option<String>,
-    assignment_type: Option<String>,
-    available_from: Option<DateTime<Utc>>,
-    due_date: Option<DateTime<Utc>>,
+    pub id: i64,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub assignment_type: Option<String>,
+    pub available_from: Option<DateTime<Utc>>,
+    pub due_date: Option<DateTime<Utc>>,
 }
 
 impl ToActiveModel<Entity> for CreateAssignment {

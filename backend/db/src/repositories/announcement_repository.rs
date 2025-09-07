@@ -1,33 +1,33 @@
-use crate::models::plagiarism_case::{Entity, Column, Status};
+use crate::models::announcements::{Column, Entity};
 use crate::repositories::repository::Repository;
 use crate::comparisons::ApplyComparison;
-use crate::filters::PlagiarismCaseFilter;
+use crate::filters::AnnouncementFilter;
 use sea_orm::{QueryFilter, QueryOrder, Select, Condition};
 
-pub struct PlagiarismCaseRepository;
+pub struct AnnouncementRepository;
 
-impl PlagiarismCaseRepository {}
+impl AnnouncementRepository {}
 
-impl Repository<Entity, PlagiarismCaseFilter> for PlagiarismCaseRepository {
-    fn apply_filter(query: Select<Entity>, filter: &PlagiarismCaseFilter) -> Select<Entity> {
+impl Repository<Entity, AnnouncementFilter> for AnnouncementRepository {
+    fn apply_filter(query: Select<Entity>, filter: &AnnouncementFilter) -> Select<Entity> {
         let mut condition = Condition::all();
         if let Some(id) = &filter.id {
             condition = i64::apply_comparison(condition, Column::Id, &id);
         }
-        if let Some(assignment_id) = &filter.assignment_id {
-            condition = i64::apply_comparison(condition, Column::AssignmentId, &assignment_id);
+        if let Some(module_id) = &filter.module_id {
+            condition = i64::apply_comparison(condition, Column::ModuleId, &module_id);
         }
-        if let Some(submission_id_1) = &filter.submission_id_1 {
-            condition = i64::apply_comparison(condition, Column::SubmissionId1, &submission_id_1);
+        if let Some(user_id) = &filter.user_id {
+            condition = i64::apply_comparison(condition, Column::UserId, &user_id);
         }
-        if let Some(submission_id_2) = &filter.submission_id_2 {
-            condition = i64::apply_comparison(condition, Column::SubmissionId2, &submission_id_2);
+        if let Some(title) = &filter.title {
+            condition = String::apply_comparison(condition, Column::Title, &title);
         }
-        if let Some(description) = &filter.description {
-            condition = String::apply_comparison(condition, Column::Description, &description);
+        if let Some(body) = &filter.body {
+            condition = String::apply_comparison(condition, Column::Body, &body);
         }
-        if let Some(status) = &filter.status {
-            condition = Status::apply_comparison(condition, Column::Status, &status);
+        if let Some(pinned) = &filter.pinned {
+            condition = bool::apply_comparison(condition, Column::Pinned, &pinned);
         }
         query.filter(condition)
     }
@@ -49,39 +49,39 @@ impl Repository<Entity, PlagiarismCaseFilter> for PlagiarismCaseRepository {
                             query.order_by_desc(Column::Id)
                         }
                     }
-                    "assignment_id" => {
+                    "module_id" => {
                         if asc {
-                            query.order_by_asc(Column::AssignmentId)
+                            query.order_by_asc(Column::ModuleId)
                         } else {
-                            query.order_by_desc(Column::AssignmentId)
+                            query.order_by_desc(Column::ModuleId)
                         }
                     }
-                    "submission_id_1" => {
+                    "user_id" => {
                         if asc {
-                            query.order_by_asc(Column::SubmissionId1)
+                            query.order_by_asc(Column::UserId)
                         } else {
-                            query.order_by_desc(Column::SubmissionId1)
+                            query.order_by_desc(Column::UserId)
                         }
                     }
-                    "submission_id_2" => {
+                    "title" => {
                         if asc {
-                            query.order_by_asc(Column::SubmissionId2)
+                            query.order_by_asc(Column::Title)
                         } else {
-                            query.order_by_desc(Column::SubmissionId2)
+                            query.order_by_desc(Column::Title)
                         }
                     }
-                    "description" => {
+                    "body" => {
                         if asc {
-                            query.order_by_asc(Column::Description)
+                            query.order_by_asc(Column::Body)
                         } else {
-                            query.order_by_desc(Column::Description)
+                            query.order_by_desc(Column::Body)
                         }
                     }
-                    "status" => {
+                    "pinned" => {
                         if asc {
-                            query.order_by_asc(Column::Status)
+                            query.order_by_asc(Column::Pinned)
                         } else {
-                            query.order_by_desc(Column::Status)
+                            query.order_by_desc(Column::Pinned)
                         }
                     }
                     "created_at" => {

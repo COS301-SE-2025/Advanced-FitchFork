@@ -1,50 +1,35 @@
-use crate::models::assignment_task;
+use crate::models::assignment_task::{Entity, Column};
 use crate::repositories::repository::Repository;
+use crate::comparisons::ApplyComparison;
 use crate::filters::AssignmentTaskFilter;
-use sea_orm::{prelude::Expr, QueryFilter, QueryOrder, ColumnTrait, Select, Condition};
+use sea_orm::{QueryFilter, QueryOrder, Select, Condition};
 
 pub struct AssignmentTaskRepository;
 
 impl AssignmentTaskRepository {}
 
-impl Repository<assignment_task::Entity, AssignmentTaskFilter> for AssignmentTaskRepository {
-    fn apply_filter(query: Select<assignment_task::Entity>, filter: &AssignmentTaskFilter) -> Select<assignment_task::Entity> {
+impl Repository<Entity, AssignmentTaskFilter> for AssignmentTaskRepository {
+    fn apply_filter(query: Select<Entity>, filter: &AssignmentTaskFilter) -> Select<Entity> {
         let mut condition = Condition::all();
-
-        if let Some(id) = filter.id {
-            condition = condition.add(assignment_task::Column::Id.eq(id));
+        if let Some(id) = &filter.id {
+            condition = i64::apply_comparison(condition, Column::Id, &id);
         }
-
-        if let Some(assignment_id) = filter.assignment_id {
-            condition = condition.add(assignment_task::Column::AssignmentId.eq(assignment_id));
+        if let Some(assignment_id) = &filter.assignment_id {
+            condition = i64::apply_comparison(condition, Column::AssignmentId, &assignment_id);
         }
-
-        if let Some(task_number) = filter.task_number {
-            condition = condition.add(assignment_task::Column::TaskNumber.eq(task_number));
+        if let Some(task_number) = &filter.task_number {
+            condition = i64::apply_comparison(condition, Column::TaskNumber, &task_number);
         }
-
-        if let Some(ref name) = filter.name {
-            let pattern = format!("%{}%", name.to_lowercase());
-            condition = condition.add(Expr::cust("LOWER(name)").like(&pattern));
+        if let Some(name) = &filter.name {
+            condition = String::apply_comparison(condition, Column::Name, &name);
         }
-
-        if let Some(ref command) = filter.command {
-            let pattern = format!("%{}%", command.to_lowercase());
-            condition = condition.add(Expr::cust("LOWER(command)").like(&pattern));
+        if let Some(command) = &filter.command {
+            condition = String::apply_comparison(condition, Column::Command, &command);
         }
-
-        if let Some(ref query_text) = filter.query {
-            let pattern = format!("%{}%", query_text.to_lowercase());
-            let search_condition = Condition::any()
-                .add(Expr::cust("LOWER(name)").like(&pattern))
-                .add(Expr::cust("LOWER(command)").like(&pattern));
-            condition = condition.add(search_condition);
-        }
-
         query.filter(condition)
     }
 
-    fn apply_sorting(mut query: Select<assignment_task::Entity>, sort_by: Option<String>) -> Select<assignment_task::Entity> {
+    fn apply_sorting(mut query: Select<Entity>, sort_by: Option<String>) -> Select<Entity> {
         if let Some(sort_param) = sort_by {
             for sort in sort_param.split(',') {
                 let (field, asc) = if sort.starts_with('-') {
@@ -56,51 +41,51 @@ impl Repository<assignment_task::Entity, AssignmentTaskFilter> for AssignmentTas
                 query = match field {
                     "id" => {
                         if asc {
-                            query.order_by_asc(assignment_task::Column::Id)
+                            query.order_by_asc(Column::Id)
                         } else {
-                            query.order_by_desc(assignment_task::Column::Id)
+                            query.order_by_desc(Column::Id)
                         }
                     }
                     "assignment_id" => {
                         if asc {
-                            query.order_by_asc(assignment_task::Column::AssignmentId)
+                            query.order_by_asc(Column::AssignmentId)
                         } else {
-                            query.order_by_desc(assignment_task::Column::AssignmentId)
+                            query.order_by_desc(Column::AssignmentId)
                         }
                     }
                     "task_number" => {
                         if asc {
-                            query.order_by_asc(assignment_task::Column::TaskNumber)
+                            query.order_by_asc(Column::TaskNumber)
                         } else {
-                            query.order_by_desc(assignment_task::Column::TaskNumber)
+                            query.order_by_desc(Column::TaskNumber)
                         }
                     }
                     "name" => {
                         if asc {
-                            query.order_by_asc(assignment_task::Column::Name)
+                            query.order_by_asc(Column::Name)
                         } else {
-                            query.order_by_desc(assignment_task::Column::Name)
+                            query.order_by_desc(Column::Name)
                         }
                     }
                     "command" => {
                         if asc {
-                            query.order_by_asc(assignment_task::Column::Command)
+                            query.order_by_asc(Column::Command)
                         } else {
-                            query.order_by_desc(assignment_task::Column::Command)
+                            query.order_by_desc(Column::Command)
                         }
                     }
                     "created_at" => {
                         if asc {
-                            query.order_by_asc(assignment_task::Column::CreatedAt)
+                            query.order_by_asc(Column::CreatedAt)
                         } else {
-                            query.order_by_desc(assignment_task::Column::CreatedAt)
+                            query.order_by_desc(Column::CreatedAt)
                         }
                     }
                     "updated_at" => {
                         if asc {
-                            query.order_by_asc(assignment_task::Column::UpdatedAt)
+                            query.order_by_asc(Column::UpdatedAt)
                         } else {
-                            query.order_by_desc(assignment_task::Column::UpdatedAt)
+                            query.order_by_desc(Column::UpdatedAt)
                         }
                     }
                     _ => query,

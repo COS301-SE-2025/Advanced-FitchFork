@@ -1,15 +1,15 @@
-use crate::models::assignment_memo_output::{Entity, Column};
+use crate::models::assignment_interpreter::{Column, Entity};
 use crate::repositories::repository::Repository;
 use crate::comparisons::ApplyComparison;
-use crate::filters::AssignmentMemoOutputFilter;
+use crate::filters::AssignmentInterpreterFilter;
 use sea_orm::{QueryFilter, QueryOrder, Select, Condition};
 
-pub struct AssignmentMemoOutputRepository;
+pub struct AssignmentInterpreterRepository;
 
-impl AssignmentMemoOutputRepository {}
+impl AssignmentInterpreterRepository {}
 
-impl Repository<Entity, AssignmentMemoOutputFilter> for AssignmentMemoOutputRepository {
-    fn apply_filter(query: Select<Entity>, filter: &AssignmentMemoOutputFilter) -> Select<Entity> {
+impl Repository<Entity, AssignmentInterpreterFilter> for AssignmentInterpreterRepository {
+    fn apply_filter(query: Select<Entity>, filter: &AssignmentInterpreterFilter) -> Select<Entity> {
         let mut condition = Condition::all();
         if let Some(id) = &filter.id {
             condition = i64::apply_comparison(condition, Column::Id, &id);
@@ -17,8 +17,14 @@ impl Repository<Entity, AssignmentMemoOutputFilter> for AssignmentMemoOutputRepo
         if let Some(assignment_id) = &filter.assignment_id {
             condition = i64::apply_comparison(condition, Column::AssignmentId, &assignment_id);
         }
-        if let Some(task_id) = &filter.task_id {
-            condition = i64::apply_comparison(condition, Column::TaskId, &task_id);
+        if let Some(filename) = &filter.filename {
+            condition = String::apply_comparison(condition, Column::Filename, &filename);
+        }
+        if let Some(path) = &filter.path {
+            condition = String::apply_comparison(condition, Column::Path, &path);
+        }
+        if let Some(command) = &filter.command {
+            condition = String::apply_comparison(condition, Column::Command, &command);
         }
         query.filter(condition)
     }
@@ -40,18 +46,32 @@ impl Repository<Entity, AssignmentMemoOutputFilter> for AssignmentMemoOutputRepo
                             query.order_by_desc(Column::Id)
                         }
                     }
-                    "assignment_id" => {
+                    "module_id" => {
                         if asc {
                             query.order_by_asc(Column::AssignmentId)
                         } else {
                             query.order_by_desc(Column::AssignmentId)
                         }
                     }
-                    "task_id" => {
+                    "filename" => {
                         if asc {
-                            query.order_by_asc(Column::TaskId)
+                            query.order_by_asc(Column::Filename)
                         } else {
-                            query.order_by_desc(Column::TaskId)
+                            query.order_by_desc(Column::Filename)
+                        }
+                    }
+                    "path" => {
+                        if asc {
+                            query.order_by_asc(Column::Path)
+                        } else {
+                            query.order_by_desc(Column::Path)
+                        }
+                    }
+                    "command" => {
+                        if asc {
+                            query.order_by_asc(Column::Command)
+                        } else {
+                            query.order_by_desc(Column::Command)
                         }
                     }
                     "created_at" => {

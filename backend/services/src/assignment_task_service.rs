@@ -2,6 +2,7 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::assignment_task::{Entity, ActiveModel},
     repositories::{repository::Repository, assignment_task_repository::AssignmentTaskRepository},
+    comparisons::Comparison,
     filters::AssignmentTaskFilter,
 };
 use sea_orm::{DbErr, Set};
@@ -17,7 +18,7 @@ pub struct CreateAssignmentTask {
 
 #[derive(Debug, Clone)]
 pub struct UpdateAssignmentTask {
-    id: i64,
+    pub id: i64,
     pub name: Option<String>,
     pub command: Option<String>,
 }
@@ -71,7 +72,7 @@ impl AssignmentTaskService {
 
     pub async fn tasks_present(assignment_id: i64) -> bool {
         AssignmentTaskRepository::exists(AssignmentTaskFilter {
-            assignment_id: Some(assignment_id),
+            assignment_id: Some(Comparison::eq(assignment_id)),
             ..Default::default()
         }).await.unwrap_or(false)
     }

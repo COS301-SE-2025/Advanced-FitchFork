@@ -2,6 +2,7 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::assignment_file::{Entity, ActiveModel, FileType, Model},
     repositories::{repository::Repository, assignment_file_repository::AssignmentFileRepository},
+    comparisons::Comparison,
     filters::AssignmentFileFilter,
 };
 use sea_orm::{DbErr, Set};
@@ -19,7 +20,7 @@ pub struct CreateAssignmentFile {
 
 #[derive(Debug, Clone)]
 pub struct UpdateAssignmentFile {
-    id: i64,
+    pub id: i64,
     pub filename: Option<String>,
 }
 
@@ -71,8 +72,8 @@ impl<'a> Service<'a, Entity, CreateAssignmentFile, UpdateAssignmentFile, Assignm
         Box::pin(async move {
             if let Some(existing) = AssignmentFileRepository::find_one(
                 AssignmentFileFilter {
-                    assignment_id: Some(params.assignment_id),
-                    file_type: Some(params.file_type.parse::<FileType>().map_err(|e| DbErr::Custom(format!("Invalid file type: {e}")))?.clone()),
+                    assignment_id: Some(Comparison::eq(params.assignment_id)),
+                    file_type: Some(Comparison::eq(params.file_type.parse::<FileType>().map_err(|e| DbErr::Custom(format!("Invalid file type: {e}")))?)),
                     ..Default::default()
                 },
                 None,
@@ -129,28 +130,50 @@ impl AssignmentFileService {
             .unwrap_or_else(|_| PathBuf::from("data/assignment_files"))
     }
 
-    pub fn full_directory_path(module_id: i64, assignment_id: i64, file_type: &FileType) -> PathBuf {
+    pub fn full_directory_path(
+        module_id: i64,
+        assignment_id: i64,
+        file_type: &FileType
+    ) -> PathBuf {
         Self::storage_root()
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{assignment_id}"))
             .join(file_type.to_string())
     }
 
-    pub fn full_path(path: &str) -> PathBuf {
+    pub fn full_path(
+        path: &str
+    ) -> PathBuf {
         Self::storage_root().join(path)
     }
 
-    pub fn load_file(model: &Model) -> Result<Vec<u8>, std::io::Error> {
-        fs::read(Self::full_path(&model.path))
+    pub async fn load_file(
+        id: i64,
+    ) -> Result<Vec<u8>, std::io::Error> {
+        let file = AssignmentFileRepository::find_by_id(id)
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("File ID {} not found", id)))?;
+        let full_path = Self::storage_root().join(file.path);
+        fs::read(full_path)
     }
 
-    pub fn delete_file_only(model: &Model) -> Result<(), std::io::Error> {
-        fs::remove_file(Self::full_path(&model.path))
+    pub async fn delete_file_only(
+        id: i64,
+    ) -> Result<(), std::io::Error> {
+        let file = AssignmentFileRepository::find_by_id(id)
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("File ID {} not found", id)))?;
+        let full_path = Self::storage_root().join(file.path);
+        fs::remove_file(full_path)
     }
 
-    pub async fn get_base_files(assignment_id: i64) -> Result<Vec<Model>, DbErr> {
+    pub async fn get_base_files(
+        assignment_id: i64
+    ) -> Result<Vec<Model>, DbErr> {
         AssignmentFileRepository::find_all(AssignmentFileFilter {
-                assignment_id: Some(assignment_id),
+                assignment_id: Some(Comparison::eq(assignment_id)),
                 ..Default::default()
             },
             None,

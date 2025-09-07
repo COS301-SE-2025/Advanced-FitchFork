@@ -2,6 +2,7 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::assignment_submission::{ActiveModel, Entity, Model},
     repositories::{assignment_repository::AssignmentRepository, assignment_submission_repository::AssignmentSubmissionRepository, repository::Repository},
+    comparisons::Comparison,
     filters::AssignmentSubmissionFilter,
 };
 use sea_orm::{DbErr, Set};
@@ -155,7 +156,7 @@ impl AssignmentSubmissionService {
     ) -> Result<Vec<i64>, DbErr> {
         let submissions = AssignmentSubmissionRepository::find_all(
             AssignmentSubmissionFilter {
-                assignment_id: Some(assignment_id),
+                assignment_id: Some(Comparison::eq(assignment_id)),
                 ..Default::default()
             },
             None,
@@ -173,8 +174,8 @@ impl AssignmentSubmissionService {
         for user_id in user_ids {
             let latest_submission = AssignmentSubmissionRepository::find_one(
                 AssignmentSubmissionFilter {
-                    assignment_id: Some(assignment_id),
-                    user_id: Some(user_id),
+                    assignment_id: Some(Comparison::eq(assignment_id)),
+                    user_id: Some(Comparison::eq(user_id)),
                     ..Default::default()
                 },
                 Some("-attempt".to_string()),

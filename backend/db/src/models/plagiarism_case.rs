@@ -5,7 +5,7 @@
 
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, DbErr};
+use sea_orm::EntityTrait;
 
 /// Represents a detected plagiarism case between two submissions.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -71,39 +71,4 @@ pub enum Relation {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-
-impl Model {
-    /// Creates a new plagiarism case entry in the database.
-    ///
-    /// # Arguments
-    /// - `db`: The active database connection.
-    /// - `submission_id_1`: ID of the first submission involved.
-    /// - `submission_id_2`: ID of the second submission involved.
-    /// - `description`: Human-readable explanation of the case.
-    ///
-    /// # Returns
-    /// - `Ok(Self)` on success with the inserted model.
-    /// - `Err(DbErr)` if the insert fails.
-    pub async fn create_case(
-        db: &DatabaseConnection,
-        assignment_id: i64,
-        submission_id_1: i64,
-        submission_id_2: i64,
-        description: &str,
-    ) -> Result<Self, DbErr> {
-        let now = Utc::now();
-
-        let active = ActiveModel {
-            assignment_id: Set(assignment_id),
-            submission_id_1: Set(submission_id_1),
-            submission_id_2: Set(submission_id_2),
-            description: Set(description.to_string()),
-            status: Set(Status::Review),
-            created_at: Set(now),
-            updated_at: Set(now),
-            ..Default::default()
-        };
-
-        active.insert(db).await
-    }
-}
+impl Model {}
