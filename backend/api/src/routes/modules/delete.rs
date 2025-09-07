@@ -1,3 +1,11 @@
+//! Module deletion routes.
+//!
+//! Provides endpoints to delete modules:
+//! - `DELETE /api/modules/{id}` → Permanently delete a single module by ID.
+//! - `DELETE /api/modules/bulk` → Bulk delete multiple modules by their IDs.
+//!
+//! All responses follow the standard `ApiResponse` format.
+
 use axum::{
     extract::Path,
     http::StatusCode,

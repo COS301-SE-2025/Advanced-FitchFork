@@ -22,8 +22,24 @@ pub enum FeedbackScheme {
 pub enum Language {
     Cpp,
     Java,
-    Python,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SubmissionMode {
+    Manual,
+    GATLAM,
+    RNG,
+    CodeCoverage,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum GradingPolicy {
+    Best,   // highest score across submissions
+    Last,   // the most recent submission
+}
+
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionLimits {
@@ -65,6 +81,9 @@ pub struct MarkingOptions {
 
     #[serde(default = "default_deliminator")]
     pub deliminator: String,
+
+    #[serde(default = "default_grading_policy")]
+    pub grading_policy: GradingPolicy,
 }
 
 impl Default for MarkingOptions {
@@ -73,6 +92,7 @@ impl Default for MarkingOptions {
             marking_scheme: default_marking_scheme(),
             feedback_scheme: default_feedback_scheme(),
             deliminator: default_deliminator(),
+            grading_policy: default_grading_policy(),
         }
     }
 }
@@ -81,12 +101,144 @@ impl Default for MarkingOptions {
 pub struct ProjectSetup {
     #[serde(default = "default_language")]
     pub language: Language,
+    #[serde(default = "default_submission_mode")]
+    pub submission_mode: SubmissionMode,
 }
 
 impl Default for ProjectSetup {
     fn default() -> Self {
         Self {
             language: default_language(),
+            submission_mode: default_submission_mode(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ExecutionOutputOptions {
+    #[serde(default = "default_stdout")]
+    pub stdout: bool,
+    #[serde(default)]
+    pub stderr: bool,
+    #[serde(default)]
+    pub retcode: bool,
+}
+
+impl Default for ExecutionOutputOptions {
+    fn default() -> Self {
+        Self {
+            stdout: true,
+            stderr: false,
+            retcode: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CrossoverType {
+    OnePoint,
+    TwoPoint,
+    Uniform,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MutationType {
+    BitFlip,
+    Swap,
+    Scramble,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GeneConfig {
+    pub min_value: i32,
+    pub max_value: i32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TaskSpecConfig {
+    #[serde(default = "default_valid_return_codes")]
+    pub valid_return_codes: Vec<i32>,
+    #[serde(default)]
+    pub max_runtime_ms: Option<u64>,
+    #[serde(default)]
+    pub forbidden_outputs: Vec<String>,
+}
+
+fn default_valid_return_codes() -> Vec<i32> {
+    vec![0]
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GATLAM {
+    // ---- GA Config ----
+    #[serde(default = "default_population_size")]
+    pub population_size: usize,
+    #[serde(default = "default_number_of_generations")]
+    pub number_of_generations: usize,
+    #[serde(default = "default_selection_size")]
+    pub selection_size: usize,
+    #[serde(default = "default_reproduction_probability")]
+    pub reproduction_probability: f64,
+    #[serde(default = "default_crossover_probability")]
+    pub crossover_probability: f64,
+    #[serde(default = "default_mutation_probability")]
+    pub mutation_probability: f64,
+    #[serde(default = "default_genes")]
+    pub genes: Vec<GeneConfig>,
+    #[serde(default = "default_crossover_type")]
+    pub crossover_type: CrossoverType,
+    #[serde(default = "default_mutation_type")]
+    pub mutation_type: MutationType,
+
+    // ---- Components ----
+    #[serde(default = "default_omega1")]
+    pub omega1: f64,
+    #[serde(default = "default_omega2")]
+    pub omega2: f64,
+    #[serde(default = "default_omega3")]
+    pub omega3: f64,
+
+    // ---- TaskSpec ----
+    #[serde(default)]
+    pub task_spec: TaskSpecConfig,
+
+    // ---- Optional runtime flags ----
+    #[serde(default = "default_max_parallel_chromosomes")]
+    pub max_parallel_chromosomes: usize,
+    #[serde(default)]
+    pub verbose: bool,
+}
+
+impl Default for GATLAM {
+    fn default() -> Self {
+        Self {
+            population_size: default_population_size(),
+            number_of_generations: default_number_of_generations(),
+            selection_size: default_selection_size(),
+            reproduction_probability: default_reproduction_probability(),
+            crossover_probability: default_crossover_probability(),
+            mutation_probability: default_mutation_probability(),
+            genes: default_genes(),
+            crossover_type: default_crossover_type(),
+            mutation_type: default_mutation_type(),
+            omega1: default_omega1(),
+            omega2: default_omega2(),
+            omega3: default_omega3(),
+            task_spec: TaskSpecConfig::default(),
+            max_parallel_chromosomes: default_max_parallel_chromosomes(),
+            verbose: false,
+        }
+    }
+}
+
+impl Default for TaskSpecConfig {
+    fn default() -> Self {
+        Self {
+            valid_return_codes: default_valid_return_codes(),
+            max_runtime_ms: None,
+            forbidden_outputs: vec![],
         }
     }
 }
@@ -101,6 +253,12 @@ pub struct ExecutionConfig {
 
     #[serde(default)]
     pub project: ProjectSetup,
+
+    #[serde(default)]
+    pub output: ExecutionOutputOptions,
+
+    #[serde(default)]
+    pub gatlam: GATLAM,
 }
 
 impl ExecutionConfig {
@@ -109,6 +267,8 @@ impl ExecutionConfig {
             execution: ExecutionLimits::default(),
             marking: MarkingOptions::default(),
             project: ProjectSetup::default(),
+            output: ExecutionOutputOptions::default(),
+            gatlam: GATLAM::default(),
         }
     }
 
@@ -231,6 +391,79 @@ fn default_deliminator() -> String {
     "&-=-&".to_string()
 }
 
+fn default_grading_policy() -> GradingPolicy {
+    GradingPolicy::Last
+}
+
 fn default_language() -> Language {
     Language::Cpp
+}
+
+fn default_stdout() -> bool {
+    true
+}
+
+fn default_population_size() -> usize {
+    100
+}
+
+fn default_number_of_generations() -> usize {
+    50
+}
+
+fn default_selection_size() -> usize {
+    20
+}
+
+fn default_reproduction_probability() -> f64 {
+    0.8
+}
+
+fn default_crossover_probability() -> f64 {
+    0.9
+}
+
+fn default_mutation_probability() -> f64 {
+    0.01
+}
+
+fn default_crossover_type() -> CrossoverType {
+    CrossoverType::OnePoint
+}
+
+fn default_mutation_type() -> MutationType {
+    MutationType::BitFlip
+}
+
+fn default_omega1() -> f64 {
+    0.5
+}
+
+fn default_omega2() -> f64 {
+    0.3
+}
+
+fn default_omega3() -> f64 {
+    0.2
+}
+
+fn default_max_parallel_chromosomes() -> usize {
+    4
+}
+
+fn default_genes() -> Vec<GeneConfig> {
+    vec![
+        GeneConfig {
+            min_value: -5,
+            max_value: 5,
+        },
+        GeneConfig {
+            min_value: -4,
+            max_value: 9,
+        },
+    ]
+}
+
+fn default_submission_mode() -> SubmissionMode {
+    SubmissionMode::Manual
 }

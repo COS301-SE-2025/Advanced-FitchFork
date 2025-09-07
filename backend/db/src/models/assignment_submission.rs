@@ -1,7 +1,14 @@
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::EntityTrait;
+use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
+use util::execution_config::execution_config::GradingPolicy;
+use util::execution_config::ExecutionConfig;
+use std::collections::HashSet;
+use std::env;
+use std::fs;
+use std::path::PathBuf;
 use crate::models::user;
+use crate::models::assignment::Model as AssignmentModel;
 
 /// Represents a user's submission for a specific assignment.
 ///
@@ -19,8 +26,14 @@ pub struct Model {
     pub user_id: i64,
     /// Attempt number
     pub attempt: i64,
+    /// The score earned by the user.
+    pub earned: i64,
+    /// The total possible score.
+    pub total: i64,
     /// Is this submission a practice submission?
     pub is_practice: bool,
+    /// Whether this submission should be ignored for grading/analytics.
+    pub ignored: bool,
     /// The original filename uploaded by the user.
     pub filename: String,
     /// The hash of the submitted files.

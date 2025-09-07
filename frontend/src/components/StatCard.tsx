@@ -3,7 +3,7 @@ import type { StatisticProps } from 'antd';
 import clsx from 'clsx';
 
 export interface StatCardProps extends StatisticProps {
-  className?: string; // Wrapper card styling
+  className?: string;
 }
 
 export default function StatCard({
@@ -17,18 +17,20 @@ export default function StatCard({
   return (
     <div
       className={clsx(
-        'bg-white dark:bg-gray-950 p-4 rounded-lg border border-gray-200 dark:border-gray-700',
+        'bg-white dark:bg-gray-900 p-4 rounded-lg border border-gray-200 dark:border-gray-800 h-full',
         className,
       )}
     >
-      <div className="flex items-center space-x-3">
-        <div className="flex-1">
+      <div className="flex items-start gap-3 min-w-0">
+        <div className="shrink-0">{prefix}</div>
+        <div className="flex-1 min-w-0">
           <Statistic
-            title={<span className="text-sm text-gray-500">{title}</span>}
-            value={value}
+            title={
+              <span className="text-sm text-gray-500 whitespace-normal break-words">{title}</span>
+            }
+            value={String(value)}
             suffix={suffix}
             {...rest}
-            prefix={prefix}
           />
         </div>
       </div>

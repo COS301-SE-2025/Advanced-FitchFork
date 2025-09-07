@@ -4,8 +4,6 @@ import { Typography, InputNumber, Collapse, Alert, Button } from 'antd';
 import { useAssignment } from '@/context/AssignmentContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 
-import type { MarkAllocatorTask } from '@/types/modules/assignments/mark-allocator';
-
 const { Text } = Typography;
 const { Panel } = Collapse;
 
@@ -20,16 +18,16 @@ const MarkAllocator = () => {
     }
   }, [location.pathname, customLabels, setBreadcrumbLabel]);
 
-  if (markAllocator.length === 0) {
+  if (!markAllocator) {
     return <Alert type="info" message="No mark allocator found for this assignment." />;
   }
 
   return (
     <div>
-      <Collapse accordion className="!bg-white dark:!bg-gray-950 !rounded-lg">
-        {markAllocator.map((item, index) => {
-          const taskKey = Object.keys(item)[0];
-          const task: MarkAllocatorTask = item[taskKey];
+      <Collapse accordion className="!bg-white dark:!bg-gray-950 !rounded-none !border-x-0">
+        {markAllocator.tasks.map((taskWrapper, index) => {
+          const taskKey = Object.keys(taskWrapper)[0];
+          const task = taskWrapper[taskKey];
 
           return (
             <Panel

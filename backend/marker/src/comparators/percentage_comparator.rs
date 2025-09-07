@@ -65,16 +65,16 @@ impl OutputComparator for PercentageComparator {
         }
 
         let percentage = matched_count as f32 / memo_lines.len() as f32;
-        let mut awarded = (section.value as f32 * percentage).round() as u32;
+        let mut awarded = (section.value as f32 * percentage).round() as i64;
 
         if student_lines.len() > memo_lines.len() && student_lines.len() > 0 {
             let penalty = memo_lines.len() as f32 / student_lines.len() as f32;
-            awarded = (awarded as f32 * penalty).round() as u32;
+            awarded = (awarded as f32 * penalty).round() as i64;
         }
 
         TaskResult {
             name: section.name.clone(),
-            awarded,
+            awarded: awarded as i64,
             possible: section.value,
             matched_patterns,
             missed_patterns,
@@ -92,7 +92,7 @@ mod tests {
         lines.iter().map(|s| s.to_string()).collect()
     }
 
-    fn mock_subsection(value: u32) -> Subsection {
+    fn mock_subsection(value: i64) -> Subsection {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,

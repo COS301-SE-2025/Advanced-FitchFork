@@ -34,6 +34,14 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Alias::new("file_hash")).string().not_null())
                     .col(ColumnDef::new(Alias::new("path")).string().not_null())
                     .col(ColumnDef::new(Alias::new("is_practice")).boolean().not_null())
+                    .col(ColumnDef::new(Alias::new("earned")).integer().not_null())
+                    .col(ColumnDef::new(Alias::new("total")).integer().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("ignored"))
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
                     .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()

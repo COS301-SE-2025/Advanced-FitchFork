@@ -36,11 +36,25 @@ fn remove_db_file(path: &str) {
         println!("DB file does not exist: {}", db_path.display());
     }
 
+    // Delete assignment storage
     if let Ok(storage_root) = env::var("ASSIGNMENT_STORAGE_ROOT") {
         let storage_path = Path::new(&storage_root);
         if storage_path.exists() {
             fs::remove_dir_all(storage_path).expect("Failed to delete assignment files");
             println!("Deleted assignment files: {}", storage_path.display());
+        } else {
+            println!("Assignment storage does not exist: {}", storage_path.display());
+        }
+    }
+
+    // Delete user profile storage
+    if let Ok(user_profile_root) = env::var("USER_PROFILE_STORAGE_ROOT") {
+        let profile_path = Path::new(&user_profile_root);
+        if profile_path.exists() {
+            fs::remove_dir_all(profile_path).expect("Failed to delete user profile pictures");
+            println!("Deleted user profile pictures: {}", profile_path.display());
+        } else {
+            println!("User profile storage does not exist: {}", profile_path.display());
         }
     }
 }

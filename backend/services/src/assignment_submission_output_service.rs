@@ -147,6 +147,29 @@ impl AssignmentSubmissionOutputService {
         Ok(Self::storage_root().join(output.path))
     }
 
+    pub async fn delete_for_submission(
+        submission_id: i64,
+    ) -> Result<(), DbErr> {
+        let outputs = Entity::find()
+            .filter(Column::SubmissionId.eq(submission_id))
+            .all(db)
+            .await?;
+
+        for output in outputs {
+            let path = output.full_path();
+            if path.exists() {
+                if let Err(e) = fs::remove_file(&path) {
+                    eprintln!("Failed to delete file {:?}: {}", path, e);
+                }
+            }
+
+            let am: ActiveModel = output.into();
+            am.delete(db).await?;
+        }
+
+        Ok(())
+    }
+
     pub async fn get_output(
         module_id: i64,
         assignment_id: i64,

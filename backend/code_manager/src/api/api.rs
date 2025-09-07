@@ -27,8 +27,6 @@ pub async fn health() -> impl IntoResponse {
 }
 
 pub async fn run_code(Json(payload): Json<RunRequest>) -> impl IntoResponse {
-    tracing::info!("Received run request: {:?}", payload);
-
     let manager = MANAGER.get().expect("Manager not initialized");
 
     let config_json = Value::Object(payload.config.into_iter().collect());

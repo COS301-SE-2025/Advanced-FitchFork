@@ -1,6 +1,6 @@
 import { Typography, Collapse } from 'antd';
 import { useAssignment } from '@/context/AssignmentContext';
-import CodeEditor from '@/components/CodeEditor';
+import CodeEditor from '@/components/common/CodeEditor';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useEffect } from 'react';
 const { Text } = Typography;
@@ -22,7 +22,7 @@ const MemoOutput = () => {
       {memoOutput.length === 0 ? (
         <Text type="secondary">No memo output available for this assignment.</Text>
       ) : (
-        <Collapse accordion className="!bg-white dark:!bg-gray-950 !rounded-lg">
+        <Collapse accordion className="!bg-white dark:!bg-gray-950 !rounded-none !border-x-0">
           {memoOutput.map((task) => {
             const combinedOutput = task.subsections
               .map((sub) => `# ${sub.label}\n${sub.output}`)

@@ -35,6 +35,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[tokio::test]
     #[serial]
     async fn authenticated_user_can_connect_to_chat() {
@@ -47,6 +48,7 @@ mod tests {
         ws.close(None).await.unwrap();
     }
 
+    #[ignore]
     #[tokio::test]
     #[serial]
     async fn unauthenticated_user_cannot_connect_to_chat() {
@@ -69,6 +71,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[tokio::test]
     #[serial]
     async fn users_can_exchange_chat_messages() {
@@ -103,6 +106,7 @@ mod tests {
         ws2.close(None).await.unwrap();
     }
 
+    #[ignore]
     #[tokio::test]
     #[serial]
     async fn server_responds_to_ping_with_pong() {

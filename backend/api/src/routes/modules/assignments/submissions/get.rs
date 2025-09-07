@@ -1,24 +1,36 @@
+//! Assignment Submission Handlers
+//!
+//! Provides endpoints to manage and retrieve assignment submissions.
+//!
+//! Users can retrieve their own submissions or, if authorized (lecturers, tutors, admins), 
+//! retrieve all submissions for a given assignment. The endpoints support filtering, sorting, 
+//! and pagination. Submission details include marks, late status, practice status, tasks, 
+//! code coverage, and code complexity analysis.
+
 use super::common::{
     ListSubmissionsQuery, SubmissionListItem, SubmissionsListResponse, UserResponse,
 };
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     Extension, Json,
-    extract::{Path, Query},
-    http::StatusCode,
-    response::IntoResponse,
+    extract::{Path, Query, State},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
+    response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
 use db::models::{
-    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, assignment_submission::{self, Entity as SubmissionEntity}, assignment_submission_output::Model as SubmissionOutput, assignment_task, user, user_module_role::{self, Role}
+    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, 
+    assignment_submission::{self, Entity as SubmissionEntity}, assignment_submission_output::Model as SubmissionOutput, assignment_task, user, user_module_role::{self, Role},
+    assignment_submission::{Column as SubmissionColumn, Model as SubmissionModel},
 };
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, RelationTrait,
+    QueryOrder, QuerySelect, RelationTrait, sea_query::{Expr, Func}, QueryTrait,
 };
 use serde::Serialize;
 use serde_json::Value;
 use std::{fs, path::PathBuf};
+use tokio::{fs::File as FsFile, io::AsyncReadExt};
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
@@ -80,9 +92,13 @@ async fn get_user_submissions(
         .add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
         .add(assignment_submission::Column::UserId.eq(user_id));
 
+    // filename: fuzzy, case-insensitive
     if let Some(query) = &params.query {
         let pattern = format!("%{}%", query.to_lowercase());
-        condition = condition.add(assignment_submission::Column::Filename.contains(&pattern));
+        condition = condition.add(
+            Expr::expr(Func::lower(Expr::col(assignment_submission::Column::Filename)))
+                .like(&pattern),
+        );
     }
 
     if let Some(late_status) = params.late {
@@ -91,6 +107,10 @@ async fn get_user_submissions(
         } else {
             condition.add(assignment_submission::Column::CreatedAt.lte(assignment.due_date))
         };
+    }
+
+    if let Some(ignored) = params.ignored {
+        condition = condition.add(assignment_submission::Column::Ignored.eq(ignored));
     }
 
     let mut query = assignment_submission::Entity::find().filter(condition);
@@ -189,6 +209,7 @@ async fn get_user_submissions(
                 is_practice,
                 is_late: is_late(s.created_at, assignment.due_date),
                 mark,
+                ignored: s.ignored,
             }
         })
         .collect();
@@ -312,59 +333,38 @@ async fn get_list_submissions(
     let mut condition =
         Condition::all().add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32));
 
+    // fuzzy, case-insensitive filter across filename + username
     if let Some(query) = &params.query {
         let pattern = format!("%{}%", query.to_lowercase());
 
-        // Build OR condition across multiple fields
-        let mut or_condition =
-            Condition::any().add(assignment_submission::Column::Filename.contains(&pattern));
+        // Subquery for user ids whose LOWER(username) LIKE %pattern%
+        let user_ids_subq = user::Entity::find()
+            .select_only()
+            .column(user::Column::Id)
+            .filter(Expr::expr(Func::lower(Expr::col(user::Column::Username))).like(&pattern))
+            .into_query();
 
-        if let Ok(Some(user)) = user::Entity::find()
-            .filter(user::Column::Username.contains(&pattern))
-            .one(db)
-            .await
-        {
-            or_condition = or_condition.add(assignment_submission::Column::UserId.eq(user.id));
-        }
+        // LOWER(filename) LIKE %pattern% OR user_id IN (subquery)
+        let or_condition = Condition::any()
+            .add(
+                Expr::expr(Func::lower(Expr::col(assignment_submission::Column::Filename)))
+                    .like(&pattern),
+            )
+            .add(assignment_submission::Column::UserId.in_subquery(user_ids_subq));
 
         condition = condition.add(or_condition);
     }
 
+    // fuzzy username= filter too (case-insensitive)
     if let Some(ref username) = params.username {
-        match user::Entity::find()
-            .filter(user::Column::Username.eq(username.clone()))
-            .one(db)
-            .await
-        {
-            Ok(Some(user)) => {
-                condition = condition.add(assignment_submission::Column::UserId.eq(user.id));
-            }
-            Ok(None) => {
-                // No such user => return empty list
-                return (
-                    StatusCode::OK,
-                    Json(ApiResponse::success(
-                        SubmissionsListResponse {
-                            submissions: vec![],
-                            page: 1,
-                            per_page,
-                            total: 0,
-                        },
-                        "No submissions found for the specified username",
-                    )),
-                )
-                    .into_response();
-            }
-            Err(_) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<SubmissionsListResponse>::error(
-                        "Database error",
-                    )),
-                )
-                    .into_response();
-            }
-        }
+        let pattern = format!("%{}%", username.to_lowercase());
+        let user_ids_subq = user::Entity::find()
+            .select_only()
+            .column(user::Column::Id)
+            .filter(Expr::expr(Func::lower(Expr::col(user::Column::Username))).like(&pattern))
+            .into_query();
+
+        condition = condition.add(assignment_submission::Column::UserId.in_subquery(user_ids_subq));
     }
 
     if let Some(late_status) = params.late {
@@ -373,6 +373,10 @@ async fn get_list_submissions(
         } else {
             condition.add(assignment_submission::Column::CreatedAt.lte(assignment.due_date))
         };
+    }
+
+    if let Some(ignored) = params.ignored {
+        condition = condition.add(assignment_submission::Column::Ignored.eq(ignored));
     }
 
     let mut query = assignment_submission::Entity::find()
@@ -393,7 +397,7 @@ async fn get_list_submissions(
                 }
                 "filename" => query = query.order_by(assignment_submission::Column::Filename, dir),
                 "attempt" => query = query.order_by(assignment_submission::Column::Attempt, dir),
-                _ => {} // mark/status handled in-memory
+                _ => {} // username/mark sorted in-memory
             }
         }
     } else {
@@ -466,6 +470,7 @@ async fn get_list_submissions(
                 is_practice,
                 is_late: is_late(s.created_at, assignment.due_date),
                 mark,
+                ignored: s.ignored,
             }
         })
         .collect();
@@ -865,4 +870,126 @@ pub async fn get_submission_output(
         )),
     )
     .into_response()
+}
+
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}/download
+///
+/// Returns the original uploaded archive for a submission.
+/// Authorization: owner OR module staff (Lecturer/AssistantLecturer/Tutor) OR admin.
+pub async fn download_submission_file(
+    State(app_state): State<AppState>,
+    Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+) -> Response {
+    let db = app_state.db();
+
+    // Still load records we need for auth + filename/path.
+    let assignment = match AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id))
+        .filter(AssignmentColumn::ModuleId.eq(module_id))
+        .one(db)
+        .await
+    {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment not found")),
+            )
+                .into_response()
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response()
+        }
+    };
+
+    let submission: SubmissionModel = match SubmissionEntity::find()
+        .filter(SubmissionColumn::Id.eq(submission_id))
+        .filter(SubmissionColumn::AssignmentId.eq(assignment.id))
+        .one(db)
+        .await
+    {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Submission not found")),
+            )
+                .into_response()
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response()
+        }
+    };
+
+    // Authorization: allow owner or module staff or admin
+    let is_owner = claims.sub == submission.user_id;
+    let is_admin = claims.admin;
+    let is_staff = if is_admin {
+        true
+    } else {
+        let uid = claims.sub;
+        let mid = assignment.module_id;
+        let lect = user::Model::is_in_role(db, uid, mid, "Lecturer").await.unwrap_or(false);
+        let al   = user::Model::is_in_role(db, uid, mid, "AssistantLecturer").await.unwrap_or(false);
+        let tut  = user::Model::is_in_role(db, uid, mid, "Tutor").await.unwrap_or(false);
+        lect || al || tut
+    };
+
+    if !(is_owner || is_staff || is_admin) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("Not authorized to download this submission")),
+        )
+            .into_response();
+    }
+
+    // Resolve file path and read bytes
+    let full_path: PathBuf = submission.full_path();
+    if tokio::fs::metadata(&full_path).await.is_err() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("File missing on disk")),
+        )
+            .into_response();
+    }
+
+    let mut fh = match FsFile::open(&full_path).await {
+        Ok(f) => f,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Could not open file")),
+            )
+                .into_response()
+        }
+    };
+
+    let mut buffer = Vec::new();
+    if let Err(_) = fh.read_to_end(&mut buffer).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error("Failed to read file")),
+        )
+            .into_response();
+    }
+
+    // Build response with sensible headers
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", submission.filename))
+            .unwrap_or_else(|_| HeaderValue::from_static("attachment")),
+    );
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+
+    (StatusCode::OK, headers, buffer).into_response()
 }

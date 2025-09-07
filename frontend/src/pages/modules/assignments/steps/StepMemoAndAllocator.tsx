@@ -1,5 +1,5 @@
+import { useEffect, useState } from 'react';
 import { Typography, Button, Steps } from 'antd';
-import { useState } from 'react';
 
 import { useModule } from '@/context/ModuleContext';
 import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
@@ -12,12 +12,17 @@ const { Step } = Steps;
 
 const StepMemoAndAllocator = () => {
   const module = useModule();
-  const { assignmentId, readiness, refreshAssignment, onStepComplete } = useAssignmentSetup();
+  const { assignmentId, readiness, refreshAssignment, setStepSaveHandler } = useAssignmentSetup();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
-  // Dynamically compute currentStep from readiness
+  // Register a no-op save handler for step 4 (Memo & Allocator)
+  useEffect(() => {
+    setStepSaveHandler?.(4, async () => true);
+  }, [setStepSaveHandler]);
+
+  // 0 = nothing done, 1 = memo done, 2 = both done
   const currentStep =
     readiness?.memo_output_present && readiness?.mark_allocator_present
       ? 2
@@ -33,27 +38,28 @@ const StepMemoAndAllocator = () => {
     try {
       const resMemo = await generateMemoOutput(module.id, assignmentId);
       if (!resMemo.success) throw new Error(resMemo.message);
-      message.success(resMemo.message);
-      await refreshAssignment?.();
+      message.success(resMemo.message || 'Memo output generated');
+      await refreshAssignment?.(); // reflect memo present
     } catch (err: any) {
+      // eslint-disable-next-line no-console
       console.error(err);
-      message.error(err.message || 'Memo output generation failed');
-      setLoading(false);
+      message.error(err?.message || 'Memo output generation failed');
       setError(true);
+      setLoading(false);
       return;
     }
 
     try {
       const resAllocator = await generateMarkAllocator(module.id, assignmentId);
       if (!resAllocator.success) throw new Error(resAllocator.message);
-      message.success(resAllocator.message);
-      await refreshAssignment?.();
-      onStepComplete?.();
+      message.success(resAllocator.message || 'Mark allocator generated');
+      await refreshAssignment?.(); // reflect allocator present
     } catch (err: any) {
+      // eslint-disable-next-line no-console
       console.error(err);
-      message.error(err.message || 'Mark allocator generation failed');
-      setLoading(false);
+      message.error(err?.message || 'Mark allocator generation failed');
       setError(true);
+      setLoading(false);
       return;
     }
 

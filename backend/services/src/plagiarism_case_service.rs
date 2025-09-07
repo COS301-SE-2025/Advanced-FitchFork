@@ -13,6 +13,7 @@ pub struct CreatePlagiarismCase {
     pub submission_id_1: i64,
     pub submission_id_2: i64,
     pub description: String,
+    pub similarity: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +30,7 @@ impl ToActiveModel<Entity> for CreatePlagiarismCase {
             submission_id_2: Set(self.submission_id_2),
             description: Set(self.description.to_string()),
             status: Set(Status::Review),
+            similarity: Set(self.similarity),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()

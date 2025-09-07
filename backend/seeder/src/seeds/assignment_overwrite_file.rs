@@ -26,14 +26,14 @@ impl Seeder for AssignmentOverwriteFileSeeder {
                 panic!("Assignments or tasks are missing — cannot seed overwrite files");
             }
 
-            for assignment in &assignments {
-                if assignment.id == 9999 || assignment.id == 9998 {
-                    continue;
-                }
-                let relevant_tasks: Vec<_> = tasks
-                    .iter()
-                    .filter(|t| t.assignment_id == assignment.id)
-                    .collect();
+        for assignment in &assignments {
+            if assignment.id == 9999 || assignment.id == 9998 || assignment.id == 10003 {
+                continue;
+            }
+            let relevant_tasks: Vec<_> = tasks
+                .iter()
+                .filter(|t| t.assignment_id == assignment.id)
+                .collect();
 
                 for task in relevant_tasks {
                     let dummy_filename = "overwrite_file.txt";

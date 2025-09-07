@@ -1,3 +1,17 @@
+//! Assignment deletion routes.
+//!
+//! Provides endpoints for deleting single or multiple assignments within a module.
+//!
+//! - `DELETE /api/modules/{module_id}/assignments/{assignment_id}`  
+//!   Deletes a single assignment along with its associated files and folder.
+//!
+//! - `DELETE /api/modules/{module_id}/assignments/bulk`  
+//!   Deletes multiple assignments in a module using a JSON array of assignment IDs.
+//!
+//! **Access Control:** Only lecturers or admins assigned to the module can perform deletions.
+//!
+//! **Responses:** JSON-wrapped `ApiResponse` indicating success, number of deletions, or detailed errors.
+
 use axum::{
     extract::Path,
     http::StatusCode,

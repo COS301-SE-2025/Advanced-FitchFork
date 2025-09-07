@@ -16,6 +16,8 @@ pub struct UpdatePlagiarismCasePayload {
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub similarity: Option<f32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -26,13 +28,14 @@ pub struct PlagiarismCaseResponse {
     submission_id_2: i64,
     description: String,
     status: String,
+    similarity: f32,
     created_at: chrono::DateTime<Utc>,
     updated_at: chrono::DateTime<Utc>,
 }
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/{case_id}
 ///
-/// Updates an existing plagiarism case's description and/or status.
+/// Updates an existing plagiarism case's description, status, and/or similarity percentage.
 /// Accessible only to lecturers and assistant lecturers assigned to the module.
 ///
 /// # Path Parameters
@@ -44,26 +47,25 @@ pub struct PlagiarismCaseResponse {
 /// # Request Body
 ///
 /// Accepts a JSON payload with optional fields (at least one must be provided):
-/// - `description`: New description for the case
-/// - `status`: New status for the case ("review", "flagged", or "reviewed")
+/// - `description` (string): New description for the case
+/// - `status` (string): New status ("review", "flagged", or "reviewed")
+/// - `similarity` (number): New similarity percentage in **[0.0, 100.0]**
 ///
 /// # Returns
 ///
-/// Returns an HTTP response indicating the result:
 /// - `200 OK` with the updated plagiarism case on success
 /// - `400 BAD REQUEST` for invalid parameters or missing update fields
 /// - `403 FORBIDDEN` if user lacks required permissions
-/// - `404 NOT FOUND` if specified plagiarism case doesn't exist
+/// - `404 NOT FOUND` if the specified plagiarism case doesn't exist
 /// - `500 INTERNAL SERVER ERROR` for database errors or update failures
-///
-/// The response body follows a standardized JSON format containing the updated case.
 ///
 /// # Example Request
 ///
 /// ```json
 /// {
 ///   "description": "Lecturer has reviewed the case and added comments.",
-///   "status": "reviewed"
+///   "status": "reviewed",
+///   "similarity": 68.25
 /// }
 /// ```
 ///
@@ -80,6 +82,7 @@ pub struct PlagiarismCaseResponse {
 ///     "submission_id_2": 51,
 ///     "description": "Lecturer has reviewed the case and added comments.",
 ///     "status": "reviewed",
+///     "similarity": 68.25,
 ///     "created_at": "2024-05-20T14:30:00Z",
 ///     "updated_at": "2024-05-20T15:45:00Z"
 ///   }
@@ -88,15 +91,15 @@ pub struct PlagiarismCaseResponse {
 ///
 /// # Example Responses
 ///
-/// - `400 Bad Request` (missing update fields)  
+/// - `400 Bad Request` (missing update fields)
 /// ```json
 /// {
 ///   "success": false,
-///   "message": "At least one field (description or status) must be provided"
+///   "message": "At least one field (description, status, or similarity) must be provided"
 /// }
 /// ```
 ///
-/// - `400 Bad Request` (invalid status)  
+/// - `400 Bad Request` (invalid status)
 /// ```json
 /// {
 ///   "success": false,
@@ -104,7 +107,15 @@ pub struct PlagiarismCaseResponse {
 /// }
 /// ```
 ///
-/// - `404 Not Found`  
+/// - `400 Bad Request` (invalid similarity)
+/// ```json
+/// {
+///   "success": false,
+///   "message": "Invalid similarity: must be between 0 and 100"
+/// }
+/// ```
+///
+/// - `404 Not Found`
 /// ```json
 /// {
 ///   "success": false,
@@ -112,7 +123,7 @@ pub struct PlagiarismCaseResponse {
 /// }
 /// ```
 ///
-/// - `500 Internal Server Error`  
+/// - `500 Internal Server Error`
 /// ```json
 /// {
 ///   "success": false,
@@ -123,15 +134,29 @@ pub async fn update_plagiarism_case(
     Path((_, assignment_id, case_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<UpdatePlagiarismCasePayload>,
 ) -> impl IntoResponse {
-    if payload.description.is_none() && payload.status.is_none() {
+    // Require at least one updatable field
+    if payload.description.is_none() && payload.status.is_none() && payload.similarity.is_none() {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<PlagiarismCaseResponse>::error(
-                "At least one field (description or status) must be provided",
+                "At least one field (description, status, or similarity) must be provided",
             )),
         );
     }
 
+    // Validate similarity, if provided
+    if let Some(sim) = payload.similarity {
+        if !(0.0..=100.0).contains(&sim) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<PlagiarismCaseResponse>::error(
+                    "Invalid similarity: must be between 0 and 100",
+                )),
+            );
+        }
+    }
+
+    // Fetch the case
     let case = match PlagiarismEntity::find_by_id(case_id)
         .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
         .one(db::get_connection().await)
@@ -157,6 +182,7 @@ pub async fn update_plagiarism_case(
         }
     };
 
+    // Apply updates
     let mut case = case.into_active_model();
 
     if let Some(description) = payload.description {
@@ -180,9 +206,14 @@ pub async fn update_plagiarism_case(
         case.status = sea_orm::ActiveValue::Set(status);
     }
 
+    if let Some(sim) = payload.similarity {
+        case.similarity = sea_orm::ActiveValue::Set(sim);
+    }
+
     case.updated_at = sea_orm::ActiveValue::Set(Utc::now());
 
-    let updated_case = match case.update(db::get_connection().await).await {
+    // Persist
+    let updated_case = match case.update(app_state.db()).await {
         Ok(updated) => updated,
         Err(e) => {
             return (
@@ -195,6 +226,7 @@ pub async fn update_plagiarism_case(
         }
     };
 
+    // Respond
     let response = PlagiarismCaseResponse {
         id: updated_case.id,
         assignment_id: updated_case.assignment_id,
@@ -202,6 +234,7 @@ pub async fn update_plagiarism_case(
         submission_id_2: updated_case.submission_id_2,
         description: updated_case.description,
         status: updated_case.status.to_string(),
+        similarity: updated_case.similarity, // <- new
         created_at: updated_case.created_at,
         updated_at: updated_case.updated_at,
     };

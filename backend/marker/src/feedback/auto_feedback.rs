@@ -52,7 +52,7 @@ impl Feedback for AutoFeedback {
 mod tests {
     use super::*;
 
-    fn make_task(name: &str, matched: &[&str], missed: &[&str], awarded: u32, possible: u32) -> TaskResult {
+    fn make_task(name: &str, matched: &[&str], missed: &[&str], awarded: i64, possible: i64) -> TaskResult {
         TaskResult {
             name: name.to_string(),
             awarded,

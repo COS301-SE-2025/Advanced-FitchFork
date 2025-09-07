@@ -25,14 +25,18 @@ impl Seeder for AssignmentSubmissionOutputSeeder {
                 panic!("Tasks or submissions are missing — cannot seed submission outputs");
             }
 
-            for submission in &submissions {
-                if submission.assignment_id == 9999 || submission.assignment_id == 9998 {
-                    continue;
-                }
-                let relevant_tasks: Vec<_> = tasks
-                    .iter()
-                    .filter(|t| t.assignment_id == submission.assignment_id)
-                    .collect();
+        for submission in &submissions {
+            if submission.assignment_id == 9999
+                || submission.assignment_id == 9998
+                || submission.assignment_id == 10003
+                || submission.assignment_id == 10004
+            {
+                continue;
+            }
+            let relevant_tasks: Vec<_> = tasks
+                .iter()
+                .filter(|t| t.assignment_id == submission.assignment_id)
+                .collect();
 
                 for task in relevant_tasks {
                     let dummy_filename = "submission_output.txt";

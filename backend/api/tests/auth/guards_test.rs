@@ -747,9 +747,9 @@ mod tests {
         #[serial]
         async fn succeeds_for_submission_and_file_hierarchy() {
             let ctx = setup().await;
-            let assignment = AssignmentModel::create(db::get_connection().await, ctx.module_id, "A6", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
-            let submission = SubmissionModel::save_file(db::get_connection().await, assignment.id, 1, 1, false, "f.txt", "hash123#", b"test").await.unwrap();
-            let file = FileModel::save_file(db::get_connection().await, assignment.id, ctx.module_id, FileType::Spec, "f.txt", b"test").await.unwrap();
+            let assignment = AssignmentModel::create(ctx.app_state.db(), ctx.module_id, "A6", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
+            let submission = SubmissionModel::save_file(ctx.app_state.db(), assignment.id, 1, 1, 10, 10, false, "f.txt", "hash123#", b"test").await.unwrap();
+            let file = FileModel::save_file(ctx.app_state.db(), assignment.id, ctx.module_id, FileType::Spec, "f.txt", b"test").await.unwrap();
 
             let sub_path = "/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}";
             let sub_app = create_router(sub_path);
@@ -766,8 +766,8 @@ mod tests {
         #[serial]
         async fn fails_for_submission_not_in_assignment() {
             let ctx = setup().await;
-            let other_assignment = AssignmentModel::create(db::get_connection().await, ctx.module_id, "A7", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
-            let submission = SubmissionModel::save_file(db::get_connection().await, other_assignment.id, 1, 1, false, "f.txt", "hash123#", b"test").await.unwrap();
+            let other_assignment = AssignmentModel::create(ctx.app_state.db(), ctx.module_id, "A7", None, AssignmentType::Assignment, Utc::now(), Utc::now()).await.unwrap();
+            let submission = SubmissionModel::save_file(ctx.app_state.db(), other_assignment.id, 1, 1, 10, 10, false, "f.txt", "hash123#", b"test").await.unwrap();
             let path = "/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}";
             let app = create_router(path);
             let uri = format!("/modules/{}/assignments/{}/submissions/{}", ctx.module_id, 0, submission.id);

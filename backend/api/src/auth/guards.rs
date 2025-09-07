@@ -425,6 +425,31 @@ pub async fn check_ticket_hierarchy(
     Ok(())
 }
 
+pub async fn check_message_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    ticket_id: i32,
+    message_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    check_ticket_hierarchy(module_id, assignment_id, ticket_id, db).await?;
+
+    let found = db::models::ticket_messages::Entity::find()
+        .filter(db::models::ticket_messages::Column::Id.eq(message_id))
+        .filter(db::models::ticket_messages::Column::TicketId.eq(ticket_id))
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking message"))))?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!("Message {} in Ticket {} not found.", message_id, ticket_id))),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn check_plagiarism_hierarchy(
     module_id: i32,
     assignment_id: i32,
@@ -482,7 +507,8 @@ pub async fn validate_known_ids(
     let mut file_id: Option<i32>       = None;
     let mut user_id: Option<i32>       = None;
     let mut ticket_id: Option<i32>     = None;
-    let mut case_id: Option<i32> = None;
+    let mut message_id: Option<i32>    = None;
+    let mut case_id: Option<i32>       = None;
     let mut announcement_id: Option<i32> = None;
 
     for (key, raw) in &params {
@@ -499,6 +525,7 @@ pub async fn validate_known_ids(
             "ticket_id"     => ticket_id = Some(id),
             "case_id" => case_id = Some(id),
             "announcement_id" => announcement_id = Some(id),
+            "message_id" => message_id = Some(id),
             _ => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Unexpected parameter: '{}'.", key)))).into_response()),
         }
     }
@@ -530,6 +557,64 @@ pub async fn validate_known_ids(
     if let (Some(mid), Some(ann_id)) = (module_id, announcement_id) {
         check_announcement_hierarchy(mid, ann_id).await.map_err(|e| e.into_response())?;
     }
+    if let (Some(mid), Some(aid), Some(tid), Some(meid)) = (module_id, assignment_id, ticket_id, message_id) {
+        check_message_hierarchy(mid, aid, tid, meid, db).await.map_err(|e| e.into_response())?;
+    }
 
     Ok(next.run(req).await)
+}
+
+// TODO Write tests for this gaurd
+pub async fn require_ticket_ws_access(
+    State(app_state): State<AppState>,
+    Path(params): Path<HashMap<String, String>>,
+    req: axum::http::Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    let db = app_state.db();
+
+    // Must be logged in (also inserts AuthUser into extensions)
+    let (req, user) = extract_and_insert_authuser(req).await?;
+
+    // ticket_id from path
+    let ticket_id = params.get("ticket_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Missing or invalid ticket_id")),
+        ))?;
+
+    // Load ticket -> get assignment_id and author
+    let ticket = db::models::tickets::Entity::find_by_id(ticket_id)
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking ticket"))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ApiResponse::error("Ticket not found"))))?;
+
+    // Author can access
+    if ticket.user_id == user.0.sub {
+        return Ok(next.run(req).await);
+    }
+
+    // Admin can access
+    if user.0.admin {
+        return Ok(next.run(req).await);
+    }
+
+    // Resolve module via assignment -> module_id
+    let assignment = db::models::assignment::Entity::find_by_id(ticket.assignment_id)
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking assignment"))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ApiResponse::error("Assignment not found for ticket"))))?;
+
+    let module_id = assignment.module_id;
+
+    // Allow module staff (Lecturer, AssistantLecturer, Tutor)
+    if user_has_any_role(db, user.0.sub, module_id, &["Lecturer", "AssistantLecturer", "Tutor"]).await {
+        return Ok(next.run(req).await);
+    }
+
+    // Otherwise, deny
+    Err((StatusCode::FORBIDDEN, Json(ApiResponse::error("Not allowed to access this ticket websocket"))))
 }

@@ -1,3 +1,27 @@
+//! Assignment routes and response models.
+//!
+//! Provides endpoints and data structures for managing assignments within modules:
+//!
+//! - `GET /api/modules/{module_id}/assignments/{assignment_id}`  
+//!   Retrieve a specific assignment along with its associated files.
+//!
+//! - `GET /api/modules/{module_id}/assignments`  
+//!   Retrieve a paginated and optionally filtered list of assignments.
+//!
+//! - `GET /api/modules/{module_id}/assignments/{assignment_id}/stats`  
+//!   Retrieve submission statistics for a specific assignment.
+//!
+//! - `GET /api/modules/{module_id}/assignments/{assignment_id}/readiness`  
+//!   Retrieve a readiness report for a specific assignment, checking whether all required components are present.
+//!
+//! **Models:**  
+//! - `AssignmentFileResponse`: Assignment data plus associated files.  
+//! - `FilterReq` / `FilterResponse`: Query and response for paginated assignment lists.  
+//! - `StatResponse` / `PerStudentSubmission`: Assignment submission statistics.  
+//! - `AssignmentReadiness`: Detailed readiness report for an assignment.
+//!
+//! All endpoints use `AppState` for database access and return JSON-wrapped `ApiResponse`.
+
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
@@ -9,7 +33,8 @@ use sea_orm::{
     ColumnTrait, /*Condition,*/ EntityTrait, /*PaginatorTrait,*/ QueryFilter,
     QueryOrder, /*sea_query::Expr,*/
 };
-use crate::response::ApiResponse;
+use util::state::AppState;
+use crate::{auth::AuthUser, response::ApiResponse};
 use crate::routes::modules::assignments::common::{File, AssignmentResponse};
 use db::{
     models::{
@@ -26,6 +51,16 @@ use db::{
 pub struct AssignmentFileResponse {
     pub assignment: AssignmentResponse,
     pub files: Vec<File>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub best_mark: Option<BestMark>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BestMark {
+    pub earned: i64,
+    pub total: i64,
+    pub attempt: i64,
+    pub submission_id: i64,
 }
 
 impl From<AssignmentModel> for AssignmentFileResponse {
@@ -44,13 +79,18 @@ impl From<AssignmentModel> for AssignmentFileResponse {
                 updated_at: assignment.updated_at.to_rfc3339(),
             },
             files: Vec::new(),
+            best_mark: None,
         }
     }
 }
 
+
 /// GET /api/modules/{module_id}/assignments/{assignment_id}
 ///
-/// Retrieve a specific assignment along with its associated files. Accessible to users assigned to the module.
+/// Retrieve a specific assignment along with its associated files.  
+/// Accessible to all users assigned to the module.  
+/// If the authenticated user is a **student**, the response will also include
+/// their current **best mark** for this assignment, based on the grading policy.
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): The ID of the module containing the assignment
@@ -70,25 +110,34 @@ impl From<AssignmentModel> for AssignmentFileResponse {
 ///       "name": "Assignment 1",
 ///       "description": "This is a sample assignment",
 ///       "assignment_type": "Assignment",
+///       "status": "open",
 ///       "available_from": "2024-01-01T00:00:00Z",
 ///       "due_date": "2024-01-31T23:59:59Z",
 ///       "created_at": "2024-01-01T00:00:00Z",
-///       "updated_at": "2024-01-01T00:00:00Z"
+///       "updated_at": "2024-01-15T12:00:00Z"
 ///     },
 ///     "files": [
 ///       {
 ///         "id": "789",
 ///         "filename": "assignment.pdf",
 ///         "path": "module_456/assignment_123/assignment.pdf",
+///         "file_type": "config",
 ///         "created_at": "2024-01-01T00:00:00Z",
 ///         "updated_at": "2024-01-01T00:00:00Z"
 ///       }
-///     ]
+///     ],
+///     "best_mark": {
+///       "earned": 85,
+///       "total": 100,
+///       "attempt": 2,
+///       "submission_id": 4567
+///     }
 ///   }
 /// }
 /// ```
 ///
-/// - `404 Not Found`
+/// - `404 Not Found`  
+/// Assignment does not exist in this module.
 /// ```json
 /// {
 ///   "success": false,
@@ -96,15 +145,17 @@ impl From<AssignmentModel> for AssignmentFileResponse {
 /// }
 /// ```
 ///
-/// - `500 Internal Server Error`
+/// - `500 Internal Server Error`  
+/// Returned if the database or file fetch fails.
 /// ```json
 /// {
 ///   "success": false,
-///   "message": "Failed to retrieve files: <error details>" // or "An error occurred: <error details>"
+///   "message": "Failed to retrieve files: <error details>"
 /// }
 /// ```
 pub async fn get_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
+    AuthUser(user): AuthUser,
 ) -> impl IntoResponse {
     let db = db::get_connection().await;
 
@@ -123,21 +174,34 @@ pub async fn get_assignment(
 
             match files_res {
                 Ok(files) => {
-                    let converted_files: Vec<File> = files
-                        .into_iter()
-                        .map(|f| File {
-                            id: f.id.to_string(),
-                            filename: f.filename,
-                            path: f.path,
-                            file_type: f.file_type.to_string(),
-                            created_at: f.created_at.to_rfc3339(),
-                            updated_at: f.updated_at.to_rfc3339(),
-                        })
-                        .collect();
+                    let converted_files: Vec<File> =
+                        files.into_iter().map(File::from).collect();
+
+                    let mut best_mark = None;
+
+                    let user_id: i64 = user.sub;
+
+                    // only if user is a student in this module
+                    if user::Model::is_in_role(db, user_id, module_id, "student")
+                        .await
+                        .unwrap_or(false)
+                    {
+                        if let Ok(Some(sub)) =
+                            assignment_submission::Model::get_best_for_user(db, &a, user_id).await
+                        {
+                            best_mark = Some(BestMark {
+                                earned: sub.earned,
+                                total: sub.total,
+                                attempt: sub.attempt,
+                                submission_id: sub.id,
+                            });
+                        }
+                    }
 
                     let response = AssignmentFileResponse {
                         assignment: AssignmentResponse::from(a),
                         files: converted_files,
+                        best_mark,
                     };
 
                     (

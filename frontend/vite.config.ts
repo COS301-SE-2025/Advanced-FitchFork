@@ -13,10 +13,23 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
     },
-    dedupe: ['@emotion/react', '@emotion/styled'],
+    // IMPORTANT: prevent multiple "three" instances
+    dedupe: ['@emotion/react', '@emotion/styled', 'three'],
+  },
+  // Help Vite pre-bundle the heavy deps once
+  optimizeDeps: {
+    include: ['three', 'three-spritetext', 'react-force-graph-3d'],
   },
   build: {
     outDir: '/var/www/fitchfork.co.za',
     emptyOutDir: true,
+  },
+  server: {
+    host: true, // important so it binds to 0.0.0.0
+    allowedHosts: [
+      'localhost',
+      '127.0.0.1',
+      'cc5f904ade01.ngrok-free.app', // your ngrok URL
+    ],
   },
 });

@@ -30,7 +30,7 @@ export function setupAssignment(moduleId, adminToken) {
     adminToken
   );
 
-  check(assignmentRes, { 'assignment created': (r) => r.status === 200 });
+  check(assignmentRes, { 'assignment created': (r) => r.status === 201 });
   const assignmentId = assignmentRes.json('data.id');
 
   // 2. Upload config + other files
@@ -78,7 +78,7 @@ function uploadFile(moduleId, assignmentId, type, content, filename, token) {
 function createTask(moduleId, assignmentId, taskNumber, command, token) {
   const res = authorizedPost(
     `${BASE_URL}/modules/${moduleId}/assignments/${assignmentId}/tasks`,
-    { task_number: taskNumber, command },
+    { name: `Task ${taskNumber}`,task_number: taskNumber, command },
     token
   );
   check(res, { [`task ${taskNumber} created`]: (r) => r.status === 201 });

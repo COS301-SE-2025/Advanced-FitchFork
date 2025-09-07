@@ -1,4 +1,4 @@
-import type { Assignment, AssignmentFile, AssignmentReadiness } from ".";
+import type { Assignment, AssignmentDetails, AssignmentFile, AssignmentReadiness } from ".";
 import type { ApiResponse, PaginationResponse } from "@/types/common";
 
 // ─────────────────────────────────────────────────────────────
@@ -9,9 +9,7 @@ export type GetListAssignmentsResponse = ApiResponse<{
   assignments: Assignment[];
 } & PaginationResponse>;
 
-export type GetAssignmentResponse = ApiResponse<{
-  files: AssignmentFile[];
-} & Assignment>
+export type GetAssignmentResponse = ApiResponse<AssignmentDetails>
 
 export type GetListAssignmentFilesResponse = ApiResponse<AssignmentFile[]>;
 

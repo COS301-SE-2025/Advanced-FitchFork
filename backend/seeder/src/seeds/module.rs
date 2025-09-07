@@ -3,7 +3,7 @@ use chrono::Utc;
 use db::models::module;
 use rand::rngs::OsRng;
 use rand::rngs::StdRng;
-use rand::{seq::SliceRandom, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, seq::SliceRandom};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, Set};
 use std::pin::Pin;
 
@@ -85,7 +85,19 @@ impl Seeder for ModuleSeeder {
                 ..Default::default()
             };
 
-            let _ = special_module2.insert(db).await;
-        })
+        let _ = special_module2.insert(db).await;
+
+        let dem_003 = module::ActiveModel {
+            id: Set(10003),
+            code: Set("DEM003".to_string()),
+            year: Set(2025),
+            credits: Set(16),
+            description: Set(Some("Module for Demo 3".to_string())),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+
+        let _ = dem_003.insert(db).await;
     }
 }

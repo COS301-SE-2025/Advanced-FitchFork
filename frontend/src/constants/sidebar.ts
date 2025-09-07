@@ -4,10 +4,8 @@ import {
   LogoutOutlined,
   UserOutlined,
   AppstoreOutlined,
-  BarChartOutlined,
   CalendarOutlined,
   QuestionCircleOutlined,
-  CommentOutlined,
 } from '@ant-design/icons';
 import React from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -41,11 +39,6 @@ export const useTopMenuItems = (): MenuItem[] => {
       icon: React.createElement(CalendarOutlined),
       label: 'Calendar',
     },
-    {
-      key: '/chat',
-      icon: React.createElement(CommentOutlined),
-      label: 'Chat',
-    },
   ];
 
   if (isAdmin) {
@@ -62,12 +55,12 @@ export const useTopMenuItems = (): MenuItem[] => {
         label: 'Modules',
         adminOnly: true,
       },
-      {
-        key: '/reports',
-        icon: React.createElement(BarChartOutlined),
-        label: 'Reports',
-        adminOnly: true,
-      }
+      // {
+      //   key: '/reports',
+      //   icon: React.createElement(BarChartOutlined),
+      //   label: 'Reports',
+      //   adminOnly: true,
+      // }
     );
   }
 

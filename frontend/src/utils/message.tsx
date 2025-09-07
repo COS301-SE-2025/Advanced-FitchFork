@@ -1,3 +1,4 @@
+// frontend: MessageContextHolder.tsx
 import { useEffect } from 'react';
 import { message as antdMessage } from 'antd';
 import type { ArgsProps } from 'antd/es/message';
@@ -12,9 +13,7 @@ interface MessageApi {
   notImplemented: () => MessageType;
 }
 
-const noop = Object.assign(() => {}, {
-  then: () => Promise.resolve(),
-}) as unknown as MessageType;
+const noop = Object.assign(() => {}, { then: () => Promise.resolve() }) as unknown as MessageType;
 
 const fallback: MessageApi = {
   success: () => noop,
@@ -27,22 +26,35 @@ const fallback: MessageApi = {
 
 export let message: MessageApi = fallback;
 
+function withTestId(content: string | ArgsProps, testId: string): ArgsProps {
+  const wrap = (node: React.ReactNode) => <span data-testid={testId}>{node}</span>;
+
+  if (typeof content === 'string') {
+    return { content: wrap(content) };
+  }
+  // ArgsProps
+  const given = content as ArgsProps;
+  const node = 'content' in given ? given.content : undefined;
+  return { ...given, content: wrap(node ?? '') };
+}
+
 export const MessageContextHolder = () => {
   const [api, contextHolder] = antdMessage.useMessage();
 
   useEffect(() => {
     message = {
-      success: (content) =>
-        typeof content === 'string' ? api.success({ content }) : api.success(content),
-      error: (content) =>
-        typeof content === 'string' ? api.error({ content }) : api.error(content),
-      info: (content) => (typeof content === 'string' ? api.info({ content }) : api.info(content)),
-      warning: (content) =>
-        typeof content === 'string' ? api.warning({ content }) : api.warning(content),
-      loading: (content) =>
-        typeof content === 'string' ? api.loading({ content }) : api.loading(content),
+      success: (c) => api.success(withTestId(c, 'toast-success')),
+      error: (c) => api.error(withTestId(c, 'toast-error')),
+      info: (c) => api.info(withTestId(c, 'toast-info')),
+      warning: (c) => api.warning(withTestId(c, 'toast-warning')),
+      loading: (c) => api.loading(withTestId(c, 'toast-loading')),
       notImplemented: () =>
-        api.info({ content: 'This feature is not implemented yet.', duration: 2 }),
+        api.info(
+          withTestId(
+            { content: 'This feature is not implemented yet.', duration: 2 },
+            'toast-info',
+          ),
+        ),
     };
   }, [api]);
 

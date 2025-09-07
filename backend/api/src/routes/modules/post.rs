@@ -1,3 +1,8 @@
+//! Module creation routes.
+//!
+//! Provides the `POST /api/modules` endpoint for creating new university modules.  
+//! Only accessible by admin users. Responses follow the standard `ApiResponse` format.
+
 use axum::{
     http::StatusCode,
     response::IntoResponse,

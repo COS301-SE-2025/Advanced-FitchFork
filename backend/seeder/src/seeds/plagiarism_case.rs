@@ -1,25 +1,23 @@
 use crate::seed::Seeder;
-use db::models::{assignment_submission, plagiarism_case};
-use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait};
 use chrono::Utc;
-use rand::seq::SliceRandom;
+use db::models::{assignment_submission, plagiarism_case};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use std::pin::Pin;
+use rand::seq::SliceRandom;
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait};
 
 pub struct PlagiarismCaseSeeder;
 
 impl Seeder for PlagiarismCaseSeeder {
-    fn seed<'a>(&'a self, db: &'a DatabaseConnection) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
-        Box::pin(async move {
-            // Fetch all assignment submissions
-            let submissions = match assignment_submission::Entity::find().all(db).await {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("Failed to fetch assignment submissions: {}", e);
-                    return;
-                }
-            };
+    async fn seed(&self, db: &DatabaseConnection) {
+        // Fetch all assignment submissions
+        let submissions = match assignment_submission::Entity::find().all(db).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Failed to fetch assignment submissions: {}", e);
+                return;
+            }
+        };
 
             if submissions.len() < 2 {
                 eprintln!("Not enough submissions to create plagiarism cases");
@@ -54,7 +52,8 @@ impl Seeder for PlagiarismCaseSeeder {
 
             let now = Utc::now();
 
-            for (assignment_id, pair) in selected_pairs {
+        for (assignment_id, pair) in selected_pairs {
+            if assignment_id != 10003 && assignment_id != 10004 {
                 let description = format!(
                     "Possible plagiarism detected between submission {} and {}",
                     pair[0], pair[1]
@@ -77,6 +76,6 @@ impl Seeder for PlagiarismCaseSeeder {
                     );
                 }
             }
-        })
+        }
     }
 }

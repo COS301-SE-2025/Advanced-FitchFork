@@ -1,7 +1,22 @@
+//! Submission utilities and response types.
+//!
+//! This module provides types and helpers for submissions-related endpoints.
+//!
+//! It includes:
+//! - `ListSubmissionsQuery` → query parameters for paginated submission listings
+//! - `UserResponse` → represents a user associated with a submission
+//! - `Mark` → represents earned/total marks for a submission
+//! - `SubmissionListItem` → single item in a submissions list
+//! - `SubmissionsListResponse` → paginated submissions list
+//! - `SubmissionResponse` → minimal response for a single submission
+//! - `MarkSummary` → summary of earned vs total marks
+//! - `CodeComplexitySummary` → summary of code complexity metrics
+//! - `CodeComplexity` → detailed code complexity information
+//! - `SubmissionDetailResponse` → detailed response after grading a submission
+
 use serde::{Deserialize, Serialize};
 
 /// Query parameters for submissions listing endpoints.
-/// Supports pagination, search query, sorting, and optional username filter.
 #[derive(Debug, Deserialize)]
 pub struct ListSubmissionsQuery {
     pub page: Option<u32>,
@@ -10,6 +25,7 @@ pub struct ListSubmissionsQuery {
     pub query: Option<String>,
     pub username: Option<String>,
     pub late: Option<bool>,
+    pub ignored: Option<bool>,
 }
 
 /// Represents a user associated with a submission.
@@ -23,8 +39,8 @@ pub struct UserResponse {
 /// Represents the mark of a submission.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Mark {
-    pub earned: i32,
-    pub total: i32,
+    pub earned: i64,
+    pub total: i64,
 }
 
 /// Single item in a submissions list response.
@@ -39,6 +55,7 @@ pub struct SubmissionListItem {
     pub is_practice: bool,
     pub is_late: bool,
     pub mark: Option<Mark>,
+    pub ignored: bool,   
 }
 
 /// Paginated response of submissions list.
@@ -61,32 +78,32 @@ pub struct SubmissionResponse {
     pub is_late: bool,
     pub is_practice: bool,
     pub mark: Option<Mark>,
+    pub ignored: bool,   
 }
 
 /// Represents a summary of earned vs total marks.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MarkSummary {
     pub earned: i64,
     pub total: i64,
 }
 
 /// Represents a summary of code complexity metrics.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CodeComplexitySummary {
     pub earned: i64,
     pub total: i64,
 }
 
 /// Represents code complexity details, including per-metric results.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CodeComplexity {
     pub summary: CodeComplexitySummary,
     pub metrics: Vec<serde_json::Value>,
 }
 
 /// Detailed response returned after grading a submission.
-/// Includes grading marks, flags, and optional coverage/complexity reports.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SubmissionDetailResponse {
     pub id: i64,
     pub attempt: i64,

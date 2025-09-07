@@ -15,6 +15,8 @@ pub struct CreateAssignmentSubmission {
     pub assignment_id: i64,
     pub user_id: i64,
     pub attempt: i64,
+    pub earned: i64,
+    pub total: i64,
     pub is_practice: bool,
     pub filename: String,
     pub file_hash: String,
@@ -34,6 +36,9 @@ impl ToActiveModel<Entity> for CreateAssignmentSubmission {
             user_id: Set(self.user_id),
             attempt: Set(self.attempt),
             is_practice: Set(self.is_practice),
+            ignored: Set(false),
+            earned: Set(self.earned),
+            total: Set(self.total),
             filename: Set(self.filename.to_string()),
             file_hash: Set(self.file_hash.to_string()),
             path: Set("".to_string()),
@@ -70,6 +75,10 @@ impl<'a> Service<'a, Entity, CreateAssignmentSubmission, UpdateAssignmentSubmiss
             params: CreateAssignmentSubmission,
         ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
         Box::pin(async move {
+            if earned > total {
+                return Err(DbErr::Custom("Earned score cannot be greater than total score".into()));
+            }
+            
             let inserted: Model = AssignmentSubmissionRepository::create(params.clone().into_active_model().await?).await?;
 
             let ext = PathBuf::from(params.filename)
@@ -165,27 +174,77 @@ impl AssignmentSubmissionService {
         Ok(submissions.into_iter().map(|s| s.id as i64).collect())
     }
     
-    pub async fn get_latest_submissions_for_users(
+    pub async fn get_latest_submissions_for_assignment(
         assignment_id: i64,
-        user_ids: Vec<i64>,
-    ) -> Result<Vec<Model>, DbErr> {
-        let mut latest_submissions = Vec::new();
+    ) -> Result<Vec<Self>, DbErr> {
+        let all = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .order_by_asc(Column::UserId)
+            .order_by_desc(Column::Attempt)
+            .all(db)
+            .await?;
 
-        for user_id in user_ids {
-            let latest_submission = AssignmentSubmissionRepository::find_one(
-                AssignmentSubmissionFilter {
-                    assignment_id: Some(Comparison::eq(assignment_id)),
-                    user_id: Some(Comparison::eq(user_id)),
-                    ..Default::default()
-                },
-                Some("-attempt".to_string()),
-            ).await?;
+        let mut seen = HashSet::new();
+        let mut latest = Vec::new();
 
-            if let Some(submission) = latest_submission {
-                latest_submissions.push(submission);
+        for s in all {
+            if seen.insert(s.user_id) {
+                latest.push(s);
             }
         }
+        Ok(latest)
+    }
 
-        Ok(latest_submissions)
+    /// Set the `ignored` flag for a submission by id and return the updated model.
+    pub async fn set_ignored(
+        submission_id: i64,
+        ignored: bool,
+    ) -> Result<Self, DbErr> {
+        // Load existing
+        let existing = Entity::find_by_id(submission_id)
+            .one(db)
+            .await?
+            .ok_or_else(|| DbErr::Custom(format!("Submission {} not found", submission_id)))?;
+
+        let mut am: ActiveModel = existing.into();
+        am.ignored = Set(ignored);
+        am.updated_at = Set(Utc::now());
+        am.update(db).await
+    }
+
+    pub async fn get_best_for_user(
+        assignment: &AssignmentModel,
+        user_id: i64,
+    ) -> Result<Option<Self>, DbErr> {
+        // fetch all non-ignored, non-practice submissions for this user
+        let mut subs = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment.id))
+            .filter(Column::UserId.eq(user_id))
+            .filter(Column::Ignored.eq(false))
+            .filter(Column::IsPractice.eq(false))
+            .all(db)
+            .await?;
+
+        if subs.is_empty() {
+            return Ok(None);
+        }
+
+        // get grading policy from config
+        let cfg = assignment
+            .config
+            .as_ref()
+            .and_then(|j| serde_json::from_value::<ExecutionConfig>(j.clone()).ok())
+            .unwrap_or_else(ExecutionConfig::default_config);
+
+        match cfg.marking.grading_policy {
+            GradingPolicy::Best => {
+                subs.sort_by_key(|s| std::cmp::Reverse(s.earned * 1000 / s.total));
+                Ok(subs.into_iter().next())
+            }
+            GradingPolicy::Last => {
+                subs.sort_by_key(|s| std::cmp::Reverse(s.created_at));
+                Ok(subs.into_iter().next())
+            }
+        }
     }
 }

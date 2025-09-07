@@ -60,26 +60,29 @@ mod tests {
             Utc::now() + Duration::days(30)
         ).await.unwrap();
 
-        let sub1 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 1, false, "ontime.txt", "hash123#", b"ontime").await.unwrap();
+        let sub1 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 1, 10, 10, false, "ontime.txt", "hash123#", b"ontime").await.unwrap();
         let sub1_time = assignment.due_date - Duration::days(1);
         update_submission_time(db, sub1.id, sub1_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 1, &sub1, false, false, Some(json!({"earned": 80, "total": 100})), sub1_time);
 
-        let sub2 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 2, false, "late.txt", "hash123#", b"late").await.unwrap();
+        let sub2 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 2, 10, 10, false, "late.txt", "hash123#", b"late").await.unwrap();
         let sub2_time = assignment.due_date + Duration::days(1);
         update_submission_time(db, sub2.id, sub2_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 2, &sub2, false, false, Some(json!({"earned": 50, "total": 100})), sub2_time);
 
-        let sub3 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 3, false, "practice.txt", "hash123#", b"practice").await.unwrap();
+        let sub3 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 3, 10, 10, false, "practice.txt", "hash123#", b"practice").await.unwrap();
         let sub3_time = assignment.due_date - Duration::days(2);
         update_submission_time(db, sub3.id, sub3_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 3, &sub3, true, false, Some(json!({"earned": 100, "total": 100})), sub3_time);
 
-        let sub4 = AssignmentSubmissionModel::save_file(db, assignment.id, forbidden_user.id, 1, false, "forbidden.txt", "hash123#", b"forbidden").await.unwrap();
+        let sub4 = AssignmentSubmissionModel::save_file(db, assignment.id, forbidden_user.id, 1, 10, 10, false, "forbidden.txt", "hash123#", b"forbidden").await.unwrap();
         let sub4_time = assignment.due_date - Duration::days(1);
         update_submission_time(db, sub4.id, sub4_time).await;
         write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, forbidden_user.id, 1, &sub4, false, false, Some(json!({"earned": 0, "total": 100})), sub4_time);
-        
+
+        // mark one submission as ignored so we can assert both states
+        AssignmentSubmissionModel::set_ignored(db, sub2.id, true).await.unwrap();
+
         let submissions = [sub1, sub2, sub3, sub4].to_vec();
 
         (
@@ -152,8 +155,14 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        let submissions = &json["data"]["submissions"];
-        assert_eq!(submissions.as_array().unwrap().len(), 3);
+
+        let submissions = json["data"]["submissions"].as_array().unwrap();
+        assert_eq!(submissions.len(), 3);
+
+        // each item has boolean `ignored`
+        assert!(submissions.iter().all(|s| s["ignored"].is_boolean()));
+        // we set one (sub2) to true
+        assert!(submissions.iter().any(|s| s["ignored"] == true));
     }
 
     #[tokio::test]
@@ -179,7 +188,10 @@ mod tests {
         assert_eq!(json["data"]["per_page"], 2);
         assert_eq!(json["data"]["page"], 1);
         assert_eq!(json["data"]["total"], 4);
-        assert_eq!(json["data"]["submissions"].as_array().unwrap().len(), 2);
+
+        let subs = json["data"]["submissions"].as_array().unwrap();
+        assert_eq!(subs.len(), 2);
+        assert!(subs.iter().all(|s| s["ignored"].is_boolean()));
     }
 
     #[tokio::test]
@@ -202,7 +214,10 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        assert!(json["data"].as_array().unwrap_or(&vec![]).len() == 3 || json["data"]["submissions"].as_array().unwrap_or(&vec![]).len() == 3);
+
+        let subs = json["data"]["submissions"].as_array().unwrap();
+        assert_eq!(subs.len(), 3);
+        assert!(subs.iter().all(|s| s["ignored"].is_boolean()));
     }
 
     #[tokio::test]
@@ -225,13 +240,10 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        let data = &json["data"];
-        let arr = if let Some(subs) = data.get("submissions") {
-            subs.as_array().unwrap()
-        } else {
-            data.as_array().unwrap()
-        };
-        assert_eq!(arr.len(), 1);
+
+        let subs = json["data"]["submissions"].as_array().unwrap();
+        assert_eq!(subs.len(), 1);
+        assert!(subs.iter().all(|s| s["ignored"].is_boolean()));
     }
 
     #[tokio::test]
@@ -251,6 +263,97 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_filter_by_ignored_true_lecturer() {
+        let (app, app_state) = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+
+        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions?ignored=true",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], true);
+
+        let subs = json["data"]["submissions"].as_array().unwrap();
+        // Only sub2 is ignored in the fixture
+        assert_eq!(subs.len(), 1);
+        assert!(subs.iter().all(|s| s["ignored"] == true));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_filter_by_ignored_false_lecturer() {
+        let (app, app_state) = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+
+        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions?ignored=false",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], true);
+
+        let subs = json["data"]["submissions"].as_array().unwrap();
+        // 4 total, 1 ignored (sub2) → 3 non-ignored
+        assert_eq!(subs.len(), 3);
+        assert!(subs.iter().all(|s| s["ignored"] == false));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_filter_by_ignored_true_student_scope() {
+        let (app, app_state) = make_test_app().await;
+        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions?ignored=true",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], true);
+
+        let subs = json["data"]["submissions"].as_array().unwrap();
+        // Student has 3 submissions; only sub2 is ignored → expect 1
+        assert_eq!(subs.len(), 1);
+        assert!(subs.iter().all(|s| s["ignored"] == true));
+    }
+
 
     // --- GET /api/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id} ---
 
@@ -276,6 +379,9 @@ mod tests {
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["id"], sub.id);
+
+        // If your single-item endpoint injects `ignored`, assert it:
+        // assert!(json["data"]["ignored"].is_boolean());
     }
 
     #[tokio::test]
@@ -301,6 +407,9 @@ mod tests {
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["id"], sub.id);
         assert!(json["data"]["user"].is_object());
+
+        // If your single-item endpoint injects `ignored`, assert it:
+        // assert!(json["data"]["ignored"].is_boolean());
     }
 
     #[tokio::test]

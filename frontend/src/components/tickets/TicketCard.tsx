@@ -1,0 +1,48 @@
+import { Card, Avatar, Typography } from 'antd';
+import { MessageOutlined } from '@ant-design/icons';
+import type { Ticket } from '@/types/modules/assignments/tickets';
+import TicketStatusTag from './TicketStatusTag';
+
+const { Meta } = Card;
+const { Paragraph } = Typography;
+
+interface Props {
+  ticket: Ticket;
+  actions?: React.ReactNode[];
+  onClick?: (ticket: Ticket) => void;
+}
+
+const TicketCard = ({ ticket, actions, onClick }: Props) => {
+  const handleClick = () => {
+    onClick?.(ticket);
+  };
+
+  return (
+    <Card
+      hoverable
+      onClick={handleClick}
+      className="w-full cursor-pointer dark:bg-neutral-800 dark:border-neutral-700"
+      actions={actions}
+      data-cy={`entity-${ticket.id}`}
+    >
+      <Meta
+        avatar={<Avatar icon={<MessageOutlined />} style={{ backgroundColor: '#1890ff' }} />}
+        title={
+          <div className="flex justify-between gap-2 items-center">
+            <span className="text-black dark:text-white truncate">{ticket.title}</span>
+            <TicketStatusTag status={ticket.status} />
+          </div>
+        }
+        description={
+          <div className="text-gray-700 dark:text-neutral-300">
+            <Paragraph ellipsis={{ rows: 2 }} className="mb-1">
+              {ticket.description || 'No description available.'}
+            </Paragraph>
+          </div>
+        }
+      />
+    </Card>
+  );
+};
+
+export default TicketCard;

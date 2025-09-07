@@ -130,7 +130,7 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
             };
 
             let value = match task_map.get("value") {
-                Some(Value::Number(n)) if n.is_u64() => n.as_u64().unwrap() as u32,
+                Some(Value::Number(n)) if n.is_u64() => n.as_u64().unwrap() as i64,
                 _ => {
                     return Err(MarkerError::ParseAllocatorError(format!(
                         "Task '{}' missing or invalid 'value' field (must be u32)",
@@ -154,7 +154,7 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
             })?;
 
             let mut subsections = Vec::with_capacity(subsections_arr.len());
-            let mut subsections_sum = 0u32;
+            let mut subsections_sum: i64 = 0;
             for (j, sub_val) in subsections_arr.iter().enumerate() {
                 let sub_obj = sub_val.as_object().ok_or_else(|| {
                     MarkerError::ParseAllocatorError(format!(
@@ -175,7 +175,7 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
 
                 let sub_value = match sub_obj.get("value") {
                     Some(Value::Number(n)) if n.is_u64() => {
-                        let v = n.as_u64().unwrap() as u32;
+                        let v = n.as_u64().unwrap() as i64;
                         subsections_sum = subsections_sum.saturating_add(v);
                         v
                     }
@@ -189,7 +189,7 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
 
                 subsections.push(Subsection {
                     name: sub_name,
-                    value: sub_value,
+                    value: sub_value as i64,
                 });
             }
 
@@ -203,7 +203,7 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
             tasks.push(TaskEntry {
                 id: task_id.clone(),
                 name,
-                value,
+                value: value as i64,
                 subsections,
             });
         }

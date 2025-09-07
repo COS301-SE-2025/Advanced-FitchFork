@@ -1,14 +1,14 @@
 import type { ApiResponse } from "@/types/common";
-import type { MarkAllocatorItem } from "./shared";
+import type { MarkAllocatorFile } from "./shared";
 
 // ─────────────────────────────────────────────────────────────
-// GET Responses Types
+// GET Response Types
 // ─────────────────────────────────────────────────────────────
 
-export type GetMarkAllocatorResponse = ApiResponse<{generated_at: string;tasks:MarkAllocatorItem[]}>;
+export type GetMarkAllocatorResponse = ApiResponse<MarkAllocatorFile>;
 
 // ─────────────────────────────────────────────────────────────
-// POST Responses Types
+// POST Response Types
 // ─────────────────────────────────────────────────────────────
 
-export type PostGenerateMarkAllcatorReponse = ApiResponse<null>;
+export type PostGenerateMarkAllocatorResponse = ApiResponse<MarkAllocatorFile>;

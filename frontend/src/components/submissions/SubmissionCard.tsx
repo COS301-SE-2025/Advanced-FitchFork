@@ -1,8 +1,9 @@
 import { Card, Tag, Space, Avatar } from 'antd';
-import { FileTextOutlined, UserOutlined } from '@ant-design/icons';
+import { FileTextOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { ReactNode } from 'react';
 import type { Submission } from '@/types/modules/assignments/submissions';
+import { UserAvatar } from '@/components/common';
 
 type Props = {
   submission: Submission & {
@@ -11,6 +12,7 @@ type Props = {
     percentageMark?: number;
   };
   actions?: ReactNode[];
+  onClick?: (submission: Submission) => void;
 };
 
 const getMarkColor = (mark: number): string => {
@@ -19,7 +21,7 @@ const getMarkColor = (mark: number): string => {
   return 'red';
 };
 
-const SubmissionCard = ({ submission, actions = [] }: Props) => {
+const SubmissionCard = ({ submission, actions = [], onClick }: Props) => {
   const { user, attempt, status, is_late, percentageMark, created_at, is_practice } = submission;
 
   return (
@@ -27,9 +29,10 @@ const SubmissionCard = ({ submission, actions = [] }: Props) => {
       hoverable
       actions={actions}
       className="rounded-lg border border-gray-200 dark:border-gray-700"
+      onClick={() => onClick?.(submission)}
     >
       <Card.Meta
-        avatar={user ? <Avatar icon={<UserOutlined />} /> : <Avatar icon={<FileTextOutlined />} />}
+        avatar={user ? <UserAvatar user={user} /> : <Avatar icon={<FileTextOutlined />} />}
         title={
           <div className="flex justify-between items-center">
             <span className="font-semibold text-black dark:text-white">

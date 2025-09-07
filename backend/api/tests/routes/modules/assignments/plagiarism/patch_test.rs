@@ -64,6 +64,8 @@ mod patch_plagiarism_tests {
             assignment.id,
             student_user.id,
             1,
+            10,
+            10,
             false,
             "sub1.txt",
             "hash123#",
@@ -74,6 +76,8 @@ mod patch_plagiarism_tests {
             assignment.id,
             student_user.id,
             1,
+            10,
+            10,
             false,
             "sub2.txt",
             "hash456#",
@@ -85,7 +89,10 @@ mod patch_plagiarism_tests {
             submission1.id,
             submission2.id,
             "Initial description",
-        ).await.unwrap();
+            0.0
+        )
+        .await
+        .unwrap();
 
         TestData {
             lecturer_user,
@@ -141,7 +148,7 @@ mod patch_plagiarism_tests {
 
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Plagiarism case flagged");
-        assert_eq!(json["data"]["status"], "Flagged");
+        assert_eq!(json["data"]["status"], "flagged");
 
         let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
             .one(db::get_connection().await)
@@ -313,7 +320,7 @@ mod review_plagiarism_tests {
 
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Plagiarism case marked as reviewed");
-        assert_eq!(json["data"]["status"], "Reviewed");
+        assert_eq!(json["data"]["status"], "reviewed");
 
         let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
             .one(db::get_connection().await)

@@ -1,20 +1,20 @@
 // Core dependencies
 use std::{env, fs, path::PathBuf};
 
+// use db::models::AssignmentSubmissionOutput;
 // External crates
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
-
 // Your own modules
 use crate::validate_files::validate_memo_files;
 
 // Models
 use db::models::assignment::Entity as Assignment;
 use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as MemoOutputEntity};
+use db::models::assignment_overwrite_file::Model as OverwriteFile;
 use db::models::assignment_task::Model as AssignmentTask;
 use reqwest::Client;
 use serde_json::json;
 use util::execution_config::ExecutionConfig;
-
 pub mod validate_files;
 
 /// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
@@ -129,36 +129,54 @@ pub async fn create_memo_outputs_for_all_tasks(
     for task in tasks {
         let filename = format!("task_{}_output.txt", task.task_number);
 
-        // Prepare files to send: read archive contents into Vec<(String, Vec<u8>)>
         let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+
         for archive_path in &archive_paths {
             let content = std::fs::read(archive_path)
-                .map_err(|e| format!("Failed to read archive {:?}: {}", archive_path, e))?;
+                .map_err(|e| format!("Failed to read archive file {:?}: {}", archive_path, e))?;
             let file_name = archive_path
                 .file_name()
                 .and_then(|s| s.to_str())
-                .ok_or_else(|| "Invalid archive filename".to_string())?;
-            files.push((file_name.to_string(), content));
+                .ok_or_else(|| format!("Invalid archive filename: {:?}", archive_path))?
+                .to_string();
+            files.push((file_name, content));
         }
 
-        // Wrap command in a vector (assuming task.command is a String)
+        let overwrite_dir =
+            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
+        if overwrite_dir.exists() {
+            let entries = std::fs::read_dir(&overwrite_dir)
+                .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
+
+            for entry in entries {
+                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                let path = entry.path();
+                if path.is_file() {
+                    let content = std::fs::read(&path)
+                        .map_err(|e| format!("Failed to read overwrite file {:?}: {}", path, e))?;
+                    let file_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| format!("Invalid overwrite filename: {:?}", path))?
+                        .to_string();
+
+                    files.retain(|(name, _)| name != &file_name);
+                    files.push((file_name, content));
+                }
+            }
+        }
+
         let commands = vec![task.command.clone()];
 
-        // Serialize ExecutionConfig into a serde_json::Value
         let config_value = serde_json::to_value(&config)
             .map_err(|e| format!("Failed to serialize ExecutionConfig: {}", e))?;
 
-        // Compose request JSON payload
         let request_body = serde_json::json!({
             "config": config_value,
             "commands": commands,
-            "files": files, // Vec<(String, Vec<u8>)> will serialize correctly
+            "files": files,
         });
 
-        // Note: You must adjust your API to accept files as Vec<(String, base64-string)> or send multipart form data.
-        // Here I assume base64 encoding and API adjusted accordingly.
-
-        // Send POST request to /run
         let response = client
             .post(format!("{}/run", code_manager_url))
             .json(&request_body)
@@ -175,13 +193,11 @@ pub async fn create_memo_outputs_for_all_tasks(
             ));
         }
 
-        // Parse response JSON: expects { output: Vec<String> }
         let resp_json: serde_json::Value = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response JSON: {}", e))?;
 
-        // Extract output vec from response
         let output_vec = resp_json
             .get("output")
             .and_then(|v| v.as_array())
@@ -190,7 +206,6 @@ pub async fn create_memo_outputs_for_all_tasks(
             .map(|val| val.as_str().unwrap_or("").to_string())
             .collect::<Vec<String>>();
 
-        // Join outputs or handle as needed
         let output_combined = output_vec.join("\n");
 
         if let Err(e) = db::models::assignment_memo_output::Model::save_file(
@@ -210,6 +225,195 @@ pub async fn create_memo_outputs_for_all_tasks(
 }
 
 use db::models::assignment_submission_output::Model as SubmissionOutputModel;
+
+/// Runs all configured tasks for a given assignment ID and student attempt by:
+/// 1. Validating submission files
+/// 2. Extracting archive files (submission, makefile, main)
+/// 3. Running the configured commands inside Docker
+/// 4. Saving the output to disk and database as `assignment_submission_output`
+pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
+    db: &DatabaseConnection,
+    submission_id: i64,
+) -> Result<Vec<(i64, String)>, String> {
+    use crate::validate_files::validate_submission_files;
+    use db::models::assignment::Entity as Assignment;
+    use db::models::assignment_submission::Entity as AssignmentSubmission;
+    use reqwest::Client;
+    use sea_orm::EntityTrait;
+    use serde_json::json;
+    use std::env;
+    use tokio::fs::read;
+
+    SubmissionOutputModel::delete_for_submission(db, submission_id)
+        .await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?;
+
+    // Fetch submission
+    let submission = AssignmentSubmission::find_by_id(submission_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?
+        .ok_or_else(|| format!("Submission {} not found", submission_id))?;
+
+    let assignment_id = submission.assignment_id;
+    let user_id = submission.user_id;
+    let attempt_number = submission.attempt;
+
+    // Fetch assignment
+    let assignment = Assignment::find_by_id(assignment_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch assignment: {}", e))?
+        .ok_or_else(|| format!("Assignment {} not found", assignment_id))?;
+
+    let module_id = assignment.module_id;
+
+    // Validate files
+    validate_submission_files(module_id, assignment_id, user_id, attempt_number)?;
+
+    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
+        .map_err(|e| format!("Failed to load execution config: {}", e))?;
+
+    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
+        .map_err(|_| "ASSIGNMENT_STORAGE_ROOT not set".to_string())?;
+
+    let base_path = resolve_storage_root(&storage_root)
+        .join(format!("module_{}", module_id))
+        .join(format!("assignment_{}", assignment_id));
+
+    let submission_path = base_path
+        .join("assignment_submissions")
+        .join(format!("user_{}", user_id))
+        .join(format!("attempt_{}", attempt_number));
+
+    // Load archives
+    let archive_paths = vec![
+        first_archive_in(&submission_path)?,
+        first_archive_in(&base_path.join("makefile"))?,
+        first_archive_in(&base_path.join("main"))?,
+    ];
+
+    let mut files = Vec::new();
+    for path in &archive_paths {
+        let content = read(path)
+            .await
+            .map_err(|e| format!("Failed to read file {:?}: {}", path, e))?;
+        let filename = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| format!("Invalid filename: {:?}", path))?
+            .to_string();
+        files.push((filename, content));
+    }
+
+    // Get tasks
+    let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
+        .await
+        .map_err(|e| format!("DB error loading tasks: {}", e))?;
+
+    if tasks.is_empty() {
+        println!("No tasks found for assignment {}", assignment_id);
+        return Ok(Vec::new());
+    }
+
+    // HTTP client setup
+    let host =
+        env::var("CODE_MANAGER_HOST").map_err(|_| "CODE_MANAGER_HOST not set".to_string())?;
+    let port =
+        env::var("CODE_MANAGER_PORT").map_err(|_| "CODE_MANAGER_PORT not set".to_string())?;
+    let code_manager_url = format!("http://{}:{}/run", host, port);
+    let client = Client::new();
+
+    // Serialize config
+    let config_value = serde_json::to_value(&config)
+        .map_err(|e| format!("Failed to serialize execution config: {}", e))?;
+
+    let mut collected: Vec<(i64, String)> = Vec::new();
+
+    for task in tasks {
+        let filename = format!(
+            "submission_task_{}_user_{}_attempt_{}.txt",
+            task.task_number, user_id, attempt_number
+        );
+
+        let mut task_files = files.clone();
+
+        let overwrite_dir =
+            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
+        if overwrite_dir.exists() {
+            let entries = std::fs::read_dir(&overwrite_dir)
+                .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
+
+            for entry in entries {
+                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                let path = entry.path();
+                if path.is_file() {
+                    let content = std::fs::read(&path)
+                        .map_err(|e| format!("Failed to read overwrite file {:?}: {}", path, e))?;
+                    let file_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| format!("Invalid overwrite filename: {:?}", path))?
+                        .to_string();
+
+                    task_files.retain(|(name, _)| name != &file_name);
+                    task_files.push((file_name, content));
+                }
+            }
+        }
+
+        // Compose request
+        let request_body = json!({
+            "config": config_value,
+            "commands": [task.command],
+            "files": task_files,
+        });
+
+        let response = client
+            .post(&code_manager_url)
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| format!("HTTP request failed for task {}: {}", task.task_number, e))?;
+
+        if !response.status().is_success() {
+            let text = response.text().await.unwrap_or_default();
+            println!("Code manager error for task {}: {}", task.task_number, text);
+            continue;
+        }
+
+        let resp_json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response JSON: {}", e))?;
+
+        let output_vec = resp_json
+            .get("output")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| "Response missing 'output' array".to_string())?
+            .iter()
+            .map(|val| val.as_str().unwrap_or("").to_string())
+            .collect::<Vec<String>>();
+
+        let output_combined = output_vec.join("\n");
+
+        if let Err(e) = SubmissionOutputModel::save_file(
+            db,
+            task.id,
+            submission_id,
+            &filename,
+            output_combined.as_bytes(),
+        )
+        .await
+        {
+            println!("Failed to save submission output: {}", e);
+        }
+
+        collected.push((task.id, output_combined));
+    }
+
+    Ok(collected)
+}
 
 /// Runs all configured tasks for a given assignment ID and student attempt by:
 /// 1. Validating submission files
@@ -315,10 +519,37 @@ pub async fn create_submission_outputs_for_all_tasks(
             task.task_number, user_id, attempt_number
         );
 
+        let mut task_files = files.clone();
+
+        let overwrite_dir =
+            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
+        if overwrite_dir.exists() {
+            let entries = std::fs::read_dir(&overwrite_dir)
+                .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
+
+            for entry in entries {
+                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                let path = entry.path();
+                if path.is_file() {
+                    let content = std::fs::read(&path)
+                        .map_err(|e| format!("Failed to read overwrite file {:?}: {}", path, e))?;
+                    let file_name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| format!("Invalid overwrite filename: {:?}", path))?
+                        .to_string();
+
+                    task_files.retain(|(name, _)| name != &file_name);
+                    task_files.push((file_name, content));
+                }
+            }
+        }
+
+        // Compose request
         let request_body = json!({
             "config": config_value,
             "commands": [task.command],
-            "files": files,
+            "files": task_files,
         });
 
         let response = client
@@ -376,14 +607,16 @@ pub async fn create_main_from_interpreter(
         Column as InterpreterColumn, Entity as AssignmentInterpreterEntity,
     };
     use db::models::assignment_submission::Entity as AssignmentSubmissionEntity;
+
     use reqwest::Client;
     use serde_json::json;
     use std::env;
     use std::io::Write;
+    use util::execution_config::ExecutionConfig;
     use util::execution_config::execution_config::Language;
     use zip::write::{FileOptions, ZipWriter};
 
-    // Fetch submission, assignment, interpreter
+    // --- Fetch submission, assignment, interpreter rows ---
     let submission = AssignmentSubmissionEntity::find_by_id(submission_id)
         .one(db)
         .await
@@ -407,11 +640,113 @@ pub async fn create_main_from_interpreter(
 
     let module_id = assignment.module_id;
 
+    // // Debug: show the interpreter command & payload
+    // eprintln!("Using interpreter: {}", interpreter.command);
+    // eprintln!("Assignment name: {}", assignment.name);
+    // if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
+    //     eprintln!("[DEBUG] generated_string = {}", generated_string);
+    // }
+
+    // Load full execution config (includes language)
+    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
+        .map_err(|e| format!("Failed to load execution config: {}", e))?;
+
+    // Determine main file name from language
+    let main_file_name = match config.project.language {
+        Language::Cpp => "Main.cpp",
+        Language::Java => "Main.java",
+        // Language::Python => "Main.py",
+    };
+
+    // Heuristic: if the "interpreter" is actually a compile/run line (e.g., g++ Main.cpp),
+    // then there's no source to compile yet. Synthesize a Main.cpp (or Main.*)
+    // from the generated_string and save it as the main archive locally.
+    let looks_like_compile: bool = {
+        let cmd = interpreter.command.to_lowercase();
+        // very basic detection; expand as needed
+        (cmd.contains("g++")
+            || cmd.contains("clang++")
+            || cmd.contains("javac")
+            || cmd.contains("python "))
+            && cmd.contains("Main.")
+    };
+
+    if looks_like_compile {
+        // --- STOPGAP BRANCH ---
+        // Build a simple source file from `generated_string`.
+        // Adjust templates per language as needed.
+        let synthesized = match config.project.language {
+            Language::Cpp => format!(
+                r#"#include <bits/stdc++.h>
+                int main() {{
+                    std::cout << "{}" << std::endl;
+                    return 0;
+                }}
+                "#,
+                generated_string.replace('"', "\\\"")
+            ),
+            Language::Java => format!(
+                r#"public class Main {{
+                public static void main(String[] args) {{
+                    System.out.println("{}");
+                }}
+            }}
+            "#,
+                generated_string.replace('"', "\\\"")
+            ),
+            // Language::Python => format!(r#"print("{}")"#, generated_string.replace('"', "\\\"")),
+        };
+
+        // Zip and save as the "main" archive
+        let zip_ext = main_file_name.rsplit('.').next().unwrap_or("txt");
+        let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
+
+        let mut zip_data = Vec::new();
+        {
+            let mut zip_writer = ZipWriter::new(std::io::Cursor::new(&mut zip_data));
+            zip_writer
+                .start_file(main_file_name, FileOptions::<()>::default())
+                .map_err(|e| format!("zip start_file failed: {}", e))?;
+            zip_writer
+                .write_all(synthesized.as_bytes())
+                .map_err(|e| format!("zip write failed: {}", e))?;
+            zip_writer
+                .finish()
+                .map_err(|e| format!("zip finish failed: {}", e))?;
+        }
+
+        AssignmentFileModel::save_file(
+            db,
+            assignment_id,
+            module_id,
+            FileType::Main,
+            &zip_filename,
+            &zip_data,
+        )
+        .await
+        .map_err(|e| format!("Failed to save synthesized main zip: {}", e))?;
+
+        if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
+            eprintln!(
+                "[DEBUG] synthesized {} ({} bytes) into {}",
+                main_file_name,
+                zip_data.len(),
+                zip_filename
+            );
+        }
+
+        return Ok(());
+    }
+
+    // --- GENERATOR BRANCH (original intent) ---
+    // The interpreter is a true generator: run it and expect source code on stdout.
     let interpreter_bytes = interpreter
         .load_file()
         .map_err(|e| format!("Failed to load interpreter file from disk: {}", e))?;
 
-    let command = format!("{} {}", interpreter.command, generated_string);
+    // Combine the interpreter command with the GA-produced string.
+    // e.g., "python3 interpreter.py <args>"
+    let command = format!("{} \"{}\"", interpreter.command, generated_string);
 
     let host =
         env::var("CODE_MANAGER_HOST").map_err(|_| "CODE_MANAGER_HOST not set".to_string())?;
@@ -419,19 +754,10 @@ pub async fn create_main_from_interpreter(
         env::var("CODE_MANAGER_PORT").map_err(|_| "CODE_MANAGER_PORT not set".to_string())?;
     let url = format!("http://{}:{}/run", host, port);
 
-    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
-        .map_err(|e| format!("Failed to load execution config: {}", e))?;
-
-    // Determine main file name based on language
-    let main_file_name = match config.project.language {
-        Language::Cpp => "Main.cpp",
-        Language::Java => "Main.java",
-        Language::Python => "Main.py",
-    };
-
     let config_value = serde_json::to_value(&config)
         .map_err(|e| format!("Failed to serialize execution config: {}", e))?;
 
+    // Send interpreter.zip + command to the code manager
     let client = Client::new();
     let payload = json!({
         "config": config_value,
@@ -447,7 +773,12 @@ pub async fn create_main_from_interpreter(
         .map_err(|e| format!("Failed to send request to code_manager: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("code_manager returned error: {}", resp.status()));
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "code_manager returned error status {}: Response body: {}",
+            status, body
+        ));
     }
 
     #[derive(serde::Deserialize)]
@@ -460,12 +791,43 @@ pub async fn create_main_from_interpreter(
         .await
         .map_err(|e| format!("Failed to parse code_manager response: {}", e))?;
 
-    let combined_output = run_resp.output.join("\n");
+    let mut combined_output = run_resp.output.join("\n");
 
-    let zip_filename = format!(
-        "main_interpreted.{}.zip",
-        main_file_name.rsplit('.').next().unwrap_or("txt")
-    );
+    if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
+        eprintln!(
+            "[DEBUG] generator output preview = {}",
+            &combined_output.chars().take(20000).collect::<String>()
+        );
+    }
+
+    // Sanity-check: generator should produce plausible source
+    let looks_like_source = match config.project.language {
+        Language::Cpp => {
+            combined_output.contains("int main") || combined_output.contains("#include")
+        }
+        Language::Java => combined_output.contains("class Main"),
+        // Language::Python => combined_output.contains("def ") || combined_output.contains("print("),
+    };
+
+    if !looks_like_source {
+        println!(
+            "[DEBUG] generator output does not look like source code: {}",
+            combined_output
+        );
+        return Err("Interpreter did not return plausible source code".to_string());
+    }
+
+    if config.output.retcode == true {
+        combined_output = combined_output
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("Retcode:"))
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+
+    // Zip the generated source as Main.*
+    let zip_ext = main_file_name.rsplit('.').next().unwrap_or("txt");
+    let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
 
     let mut zip_data = Vec::new();
     {
@@ -522,11 +884,12 @@ pub async fn create_main_from_interpreter(
 /// This function coordinates the entire workflow for interpreting and processing
 /// a student's submission according to the assignment tasks.
 pub async fn run_interpreter(
-    db: &DatabaseConnection,
+    db: &sea_orm::DatabaseConnection,
     submission_id: i64,
     generated_string: &str,
-) -> Result<(), String> {
+) -> Result<Vec<(i64, String)>, String> {
     use db::models::assignment_submission::Entity as AssignmentSubmission;
+
     let submission = AssignmentSubmission::find_by_id(submission_id)
         .one(db)
         .await
@@ -535,14 +898,14 @@ pub async fn run_interpreter(
 
     let assignment_id = submission.assignment_id;
 
-    // Step 1: Create main zip from interpreter
+    // Step 1
     create_main_from_interpreter(db, submission_id, generated_string).await?;
 
-    // Step 2: Create memo outputs for all tasks of this assignment
+    // Step 2
     create_memo_outputs_for_all_tasks(db, assignment_id).await?;
 
-    // Step 3: Create submission outputs for all tasks for this submission
-    create_submission_outputs_for_all_tasks(db, submission_id).await?;
-
-    Ok(())
+    // Step 3 — now returns outputs
+    let outputs =
+        create_submission_outputs_for_all_tasks_for_interpreter(db, submission_id).await?;
+    Ok(outputs)
 }

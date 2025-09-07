@@ -88,16 +88,10 @@ impl ToActiveModel<Entity> for CreateUser {
         self.validate()
             .map_err(|e| DbErr::Custom(e.to_string()))?;
 
-        let salt: SaltString = SaltString::generate(&mut OsRng);
-        let hash = Argon2::default()
-            .hash_password(self.password.as_bytes(), &salt)
-            .map_err(|e| DbErr::Custom(format!("password hashing failed: {}", e)))?
-            .to_string();
-
         Ok(ActiveModel {
             username: Set(self.username),
             email: Set(self.email),
-            password_hash: Set(hash),
+            password_hash: Set(User::hash_password(self.password)),
             admin: Set(self.admin),
             ..Default::default()
         })
@@ -157,6 +151,23 @@ impl<'a> Service<'a, Entity, CreateUser, UpdateUser, UserFilter, UserRepository>
 
 impl UserService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
+
+    pub async fn create_fake_user_with_no_hashed_password_do_not_use(
+        db: &DatabaseConnection,
+        username: &str,
+        email: &str,
+        password: &str,
+        admin: bool,
+    ) -> Result<Model, DbErr> {
+        let active = UserActiveModel {
+            username: Set(username.to_owned()),
+            email: Set(email.to_owned()),
+            password_hash: Set(password.to_string()),
+            admin: Set(admin),
+            ..Default::default()
+        };
+        UserRepository::create(active_model).await
+    }
 
     pub async fn verify_credentials(
         username: &str,

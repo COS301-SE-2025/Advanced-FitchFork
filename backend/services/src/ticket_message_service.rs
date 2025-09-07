@@ -18,6 +18,7 @@ pub struct CreateTicketMessage {
 #[derive(Debug, Clone)]
 pub struct UpdateTicketMessage {
     pub id: i64,
+    pub content: String,
 }
 
 impl ToActiveModel<Entity> for CreateTicketMessage {
@@ -45,6 +46,10 @@ impl ToActiveModel<Entity> for UpdateTicketMessage {
         };
         let mut active: ActiveModel = message.into();
 
+        if let Some(content) = self.content {
+            active.content = Set(content);
+        }
+
         active.updated_at = Set(Utc::now());
 
         Ok(active)
@@ -60,17 +65,6 @@ impl<'a> Service<'a, Entity, CreateTicketMessage, UpdateTicketMessage, TicketMes
 impl TicketMessageService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-    pub async fn find_all_for_ticket(
-        ticket_id: i64,
-    ) -> Result<Vec<Model>, DbErr> {
-        TicketMessageRepository::find_all(
-            TicketMessageFilter {
-                ticket_id: Some(Comparison::eq(ticket_id)),
-                ..Default::default()
-            },
-            Some("created_at".to_string()),
-        ).await
-    }
 
     pub async fn is_author(
         message_id: i64,

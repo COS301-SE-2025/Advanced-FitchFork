@@ -17,8 +17,8 @@
   --color-gray-600: #525252;
   --color-gray-700: #404040;
   --color-gray-800: #262626;
-  --color-gray-900: #171717;
-  --color-gray-950: #0f0f0f;
+  --color-gray-900: #141414;
+  --color-gray-950: #101010;
 }
 
 /**
@@ -32,7 +32,7 @@ body,
   width: 100%;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 /**
@@ -54,7 +54,11 @@ body,
 
 /* Dark mode table header */
 .dark .ant-table-thead > tr > th {
-  background-color: var(--color-gray-950) !important;
+  background-color: var(--color-gray-900) !important;
+}
+
+.dark .ant-table-row {
+  background-color: var(--color-gray-900);
 }
 
 /**
@@ -101,4 +105,40 @@ body,
 }
 .dark .hljs-number {
   color: #f78c6c;
+}
+
+/* Light/Dark variables for scrollbar colors (using your theme grays) */
+:root {
+  --sb-track: var(--color-);
+  --sb-thumb: var(--color-gray-300);
+  --sb-thumb-hover: var(--color-gray-400);
+}
+.dark {
+  --sb-track: var(--color-gray-900);
+  --sb-thumb: var(--color-gray-700);
+  --sb-thumb-hover: var(--color-gray-600);
+}
+
+/* Apply globally without a class — Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sb-thumb) var(--sb-track);
+}
+
+/* Apply globally without a class — Chrome/Edge/Safari */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: var(--sb-track);
+  border-radius: 9999px; /* keeps your current shape */
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb);
+  border-radius: 9999px;
+  border: 2px solid var(--sb-track);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--sb-thumb-hover);
 }

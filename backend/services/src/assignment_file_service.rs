@@ -124,6 +124,14 @@ impl<'a> Service<'a, Entity, CreateAssignmentFile, UpdateAssignmentFile, Assignm
 impl AssignmentFileService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
+    // pub fn load_execution_config(&self, module_id: i64) -> Result<ExecutionConfig, String> {
+    //     if self.file_type != FileType::Config {
+    //         return Err("File is not of type 'config'".to_string());
+    //     }
+
+    //     ExecutionConfig::get_execution_config(module_id, self.assignment_id)
+    // }
+
     pub fn storage_root() -> PathBuf {
         env::var("ASSIGNMENT_STORAGE_ROOT")
             .map(PathBuf::from)
@@ -169,6 +177,7 @@ impl AssignmentFileService {
         fs::remove_file(full_path)
     }
 
+    // TODO: Change this to get the skeleton files instead of the memo files
     pub async fn get_base_files(
         assignment_id: i64
     ) -> Result<Vec<Model>, DbErr> {
