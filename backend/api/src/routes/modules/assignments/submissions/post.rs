@@ -312,7 +312,12 @@ async fn grade_submission(
 
     student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
-    //TODO - Reece here is your student_output code_coverage - do with it what you want
+    //TODO - Reece here is your student_output code_coverage
+    //use util/src/code_coverage_report/code_coverage_report.rs to transform it to json
+
+    //If you want to test it run the frontend - module 9998
+    //it has 4 tasks - the 4th one is the code_coverage
+    //for a student submission just submit the memo_files of the assignment
     student_output_code_coverage.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     let marking_job = MarkingJob::new(
