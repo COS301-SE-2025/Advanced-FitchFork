@@ -31,10 +31,12 @@ use crate::algorithms::genetic_algorithm::{Chromosome, GeneticAlgorithm};
 use crate::utils::evaluator::{Evaluator, TaskSpec};
 use crate::utils::output::Output;
 use code_runner::run_interpreter;
+use db::models::assignment_submission::Entity as AssignmentSubmission;
 use sea_orm::DatabaseConnection;
+use sea_orm::EntityTrait;
+// use serde_json::Value;
 use std::collections::HashMap;
 use util::execution_config::ExecutionConfig;
-
 
 // -----------------------------------------------------------------------------
 // Public entrypoint: build GA + Evaluator + Components, then run the loop
@@ -89,7 +91,7 @@ pub async fn run_ga_job(
     let mut derive_props = {
         let evaluator = evaluator;
         let base_spec = base_spec.clone();
-        let delim     = delimiter.clone();
+        let delim = delimiter.clone();
         move |outs: &[(i64, String)], memo: &[(i64, String)]| -> (usize, usize) {
             let specs = vec![base_spec.clone(); outs.len()];
             evaluator.derive_props(&specs, outs, memo, &delim)
@@ -169,12 +171,70 @@ where
                 .collect::<Vec<_>>()
                 .join(",");
 
+            // Load submission to get user_id and attempt_number
+            let submission = AssignmentSubmission::find_by_id(submission_id)
+                .one(db)
+                .await
+                .map_err(|e| format!("Failed to fetch submission: {}", e))?
+                .ok_or_else(|| format!("Submission {} not found", submission_id))?;
+
+            let user_id = submission.user_id;
+            let attempt_number = submission.attempt;
+
             // Run interpreter: executes code for this chromosome, writes artifacts
             //    to DB, and returns per-task outputs for *this* submission.
             //    The interpreter is the source of truth for stdout/stderr/exit codes.
-            let task_outputs: Vec<(i64, String)> = run_interpreter(db, submission_id, &generated_string).await?;
-        
-            let memo_task_outputs: Vec<(i64, String)> = Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
+            run_interpreter(db, submission_id, &generated_string).await?;
+
+            let task_outputs: Vec<(i64, String)> = Output::get_submission_output_no_coverage(
+                db,
+                module_id,
+                assignment_id,
+                user_id,
+                attempt_number,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+
+            //TODO - LUKE THIS IS CODE COVERAGE
+
+            // let task_code_coverage: Vec<(i64, String)> =
+            //     Output::get_submission_output_code_coverage(
+            //         db,
+            //         module_id,
+            //         assignment_id,
+            //         user_id,
+            //         attempt_number,
+            //     )
+            //     .await
+            //     .map_err(|e| e.to_string())?;
+
+            // let task_code_coverage: Vec<(i64, String)> =
+            //     Output::get_submission_output_code_coverage(
+            //         db,
+            //         module_id,
+            //         assignment_id,
+            //         user_id,
+            //         attempt_number,
+            //     )
+            //     .await
+            //     .map_err(|e| e.to_string())?;
+
+            // let total_coverage_percent =
+            //     if let Some((_task_id, coverage_json)) = task_code_coverage.first() {
+            //         let parsed: Value = serde_json::from_str(coverage_json)
+            //             .map_err(|e| format!("Failed to parse coverage JSON: {}", e))?;
+            //         parsed
+            //             .get("summary")
+            //             .and_then(|s| s.get("coverage_percent"))
+            //             .and_then(|v| v.as_f64())
+            //             .unwrap_or(0.0)
+            //     } else {
+            //         0.0
+            //     };
+
+            let memo_task_outputs: Vec<(i64, String)> =
+                Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
 
             // Derive counts the Components need:
             //    - `n_ltl_props`: total number of violated properties across tasks
@@ -187,11 +247,7 @@ where
             let score = comps.evaluate(chrom, generation, ltl_milli, fail_milli);
 
             println!("ltl_milli = {}, fail_milli = {}", ltl_milli, fail_milli);
-            println!(
-                "[DEBUG] generation {} fitness = {}",
-                generation,
-                score
-            );
+            println!("[DEBUG] generation {} fitness = {}", generation, score);
 
             fitness_scores.push(score);
         }
@@ -417,7 +473,6 @@ mod component_unit_tests {
         let _ = Components::new(0.5, 0.5, 0.5, 4);
     }
 }
-
 
 // #[cfg(test)]
 // mod tests {
