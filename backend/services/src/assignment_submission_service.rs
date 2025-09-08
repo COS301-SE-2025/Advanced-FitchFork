@@ -5,10 +5,13 @@ use db::{
     comparisons::Comparison,
     filters::AssignmentSubmissionFilter,
 };
+use util::execution_config::{ExecutionConfig, execution_config::GradingPolicy};
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
 use std::path::PathBuf;
 use std::{fs, env};
+use std::collections::HashSet;
+use serde_json;
 
 #[derive(Debug, Clone)]
 pub struct CreateAssignmentSubmission {
@@ -26,6 +29,7 @@ pub struct CreateAssignmentSubmission {
 #[derive(Debug, Clone)]
 pub struct UpdateAssignmentSubmission {
     pub id: i64,
+    pub ignored: Option<bool>,
 }
 
 impl ToActiveModel<Entity> for CreateAssignmentSubmission {
@@ -60,6 +64,10 @@ impl ToActiveModel<Entity> for UpdateAssignmentSubmission {
         };
         let mut active: ActiveModel = submission.into();
 
+        if let Some(ignored) = self.ignored {
+            active.ignored = Set(ignored);
+        }
+
         active.updated_at = Set(Utc::now());
 
         Ok(active)
@@ -75,7 +83,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentSubmission, UpdateAssignmentSubmiss
             params: CreateAssignmentSubmission,
         ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
         Box::pin(async move {
-            if earned > total {
+            if params.earned > params.total {
                 return Err(DbErr::Custom("Earned score cannot be greater than total score".into()));
             }
             
@@ -176,13 +184,14 @@ impl AssignmentSubmissionService {
     
     pub async fn get_latest_submissions_for_assignment(
         assignment_id: i64,
-    ) -> Result<Vec<Self>, DbErr> {
-        let all = Entity::find()
-            .filter(Column::AssignmentId.eq(assignment_id))
-            .order_by_asc(Column::UserId)
-            .order_by_desc(Column::Attempt)
-            .all(db)
-            .await?;
+    ) -> Result<Vec<Model>, DbErr> {
+        let all = AssignmentSubmissionRepository::find_all(
+            AssignmentSubmissionFilter{
+                assignment_id: Some(Comparison::eq(assignment_id)),
+                ..Default::default()
+            },
+            Some("user_id,-attempt".to_string()),
+        ).await?;
 
         let mut seen = HashSet::new();
         let mut latest = Vec::new();
@@ -192,44 +201,31 @@ impl AssignmentSubmissionService {
                 latest.push(s);
             }
         }
+
         Ok(latest)
     }
 
-    /// Set the `ignored` flag for a submission by id and return the updated model.
-    pub async fn set_ignored(
-        submission_id: i64,
-        ignored: bool,
-    ) -> Result<Self, DbErr> {
-        // Load existing
-        let existing = Entity::find_by_id(submission_id)
-            .one(db)
-            .await?
-            .ok_or_else(|| DbErr::Custom(format!("Submission {} not found", submission_id)))?;
-
-        let mut am: ActiveModel = existing.into();
-        am.ignored = Set(ignored);
-        am.updated_at = Set(Utc::now());
-        am.update(db).await
-    }
-
     pub async fn get_best_for_user(
-        assignment: &AssignmentModel,
+        assignment_id: i64,
         user_id: i64,
-    ) -> Result<Option<Self>, DbErr> {
-        // fetch all non-ignored, non-practice submissions for this user
-        let mut subs = Entity::find()
-            .filter(Column::AssignmentId.eq(assignment.id))
-            .filter(Column::UserId.eq(user_id))
-            .filter(Column::Ignored.eq(false))
-            .filter(Column::IsPractice.eq(false))
-            .all(db)
-            .await?;
+    ) -> Result<Option<Model>, DbErr> {
+        let mut subs = AssignmentSubmissionRepository::find_all(
+            AssignmentSubmissionFilter{
+                assignment_id: Some(Comparison::eq(assignment_id)),
+                user_id: Some(Comparison::eq(user_id)),
+                ignored: Some(Comparison::eq(false)),
+                is_practice: Some(Comparison::eq(false)),
+                ..Default::default()
+            },
+            None,
+        ).await?;
 
         if subs.is_empty() {
             return Ok(None);
         }
 
-        // get grading policy from config
+        let assignment = AssignmentRepository::find_by_id(assignment_id).await?
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Assignment ID {} not found", assignment_id)))?;
         let cfg = assignment
             .config
             .as_ref()

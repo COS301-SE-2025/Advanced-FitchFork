@@ -1,14 +1,7 @@
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
-use util::execution_config::execution_config::GradingPolicy;
-use util::execution_config::ExecutionConfig;
-use std::collections::HashSet;
-use std::env;
-use std::fs;
-use std::path::PathBuf;
+use sea_orm::EntityTrait;
 use crate::models::user;
-use crate::models::assignment::Model as AssignmentModel;
 
 /// Represents a user's submission for a specific assignment.
 ///

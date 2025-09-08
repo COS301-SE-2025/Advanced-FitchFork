@@ -2,16 +2,11 @@
 use std::{env, fs, path::PathBuf};
 
 // use db::models::AssignmentSubmissionOutput;
-// External crates
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 // Your own modules
 use crate::validate_files::validate_memo_files;
+use services::{assignment_task_service::AssignmentTaskService, service::Service};
 
 // Models
-use db::models::assignment::Entity as Assignment;
-use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as MemoOutputEntity};
-use db::models::assignment_overwrite_file::Model as OverwriteFile;
-use db::models::assignment_task::Model as AssignmentTask;
 use reqwest::Client;
 use serde_json::json;
 use util::execution_config::ExecutionConfig;
@@ -109,6 +104,13 @@ pub async fn create_memo_outputs_for_all_tasks(
     let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
         .await
         .map_err(|e| format!("DB error loading tasks: {}", e))?;
+
+    let tasks = AssignmentTaskService::find_all(
+        {
+            ""
+        },
+        None,
+    )
 
     if tasks.is_empty() {
         println!("No tasks found for assignment {}", assignment_id);

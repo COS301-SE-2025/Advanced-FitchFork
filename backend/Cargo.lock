@@ -687,20 +687,19 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "chrono",
- "db",
  "dotenvy",
  "flate2",
  "reqwest",
- "sea-orm",
  "serde",
  "serde_json",
+ "services",
  "shell-escape",
  "tar",
  "tempfile",
  "tokio",
  "util",
  "uuid",
- "zip 4.3.0",
+ "zip 5.0.0",
 ]
 
 [[package]]
@@ -3317,7 +3316,7 @@ dependencies = [
  "sea-orm",
  "services",
  "tokio",
- "zip 4.3.0",
+ "zip 5.0.0",
 ]
 
 [[package]]
@@ -3429,7 +3428,9 @@ dependencies = [
  "rand 0.8.5",
  "sea-orm",
  "serde",
+ "serde_json",
  "tokio",
+ "util",
  "validator",
 ]
 

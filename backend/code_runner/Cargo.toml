@@ -4,26 +4,21 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-zip = "4.3"
-tar = "0.4.44"
+util = { path = "../util" }
+services = { path = "../services" }
+
+zip = "5.0"
+tar = "0.4"
 uuid = { version = "1.0", features = ["v4"] }
 tempfile = "3.0"
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sea-orm = { version = "1.1", features = [
-    "sqlx-sqlite",
-    "runtime-tokio-rustls",
-] }
 chrono = { version = "0.4", features = ["serde"] }
-db = { path = "../db" }
-flate2 = "1.1.2"
-util = { path = "../util" }
-shell-escape = "0.1.5"
-base64 = "0.22.1"
+flate2 = "1.1"
+shell-escape = "0.1"
+base64 = "0.22"
 reqwest = { version = "0.12", features = ["json"] }
-
-
 
 [dev-dependencies]
 dotenvy = "0.15"

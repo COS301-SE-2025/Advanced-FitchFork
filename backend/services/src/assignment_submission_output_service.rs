@@ -2,7 +2,8 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::assignment_submission_output::{ActiveModel, Entity, Model},
     repositories::{assignment_repository::AssignmentRepository, assignment_submission_output_repository::AssignmentSubmissionOutputRepository, assignment_submission_repository::AssignmentSubmissionRepository, repository::Repository},
-    filters::AssignmentSubmissionOutputFilter,
+    comparisons::Comparison,
+    filters::{AssignmentSubmissionFilter, AssignmentSubmissionOutputFilter},
 };
 use sea_orm::{DbErr, RuntimeErr, Set};
 use chrono::Utc;
@@ -148,23 +149,25 @@ impl AssignmentSubmissionOutputService {
     }
 
     pub async fn delete_for_submission(
-        submission_id: i64,
+        id: i64,
     ) -> Result<(), DbErr> {
-        let outputs = Entity::find()
-            .filter(Column::SubmissionId.eq(submission_id))
-            .all(db)
-            .await?;
+        let outputs = AssignmentSubmissionRepository::find_all(
+            AssignmentSubmissionFilter {
+                id: Some(Comparison::eq(id)),
+                ..Default::default()
+            },
+            None,
+        ).await?;
 
         for output in outputs {
-            let path = output.full_path();
+            let path = AssignmentSubmissionOutputService::full_path(output.id).await?;
             if path.exists() {
                 if let Err(e) = fs::remove_file(&path) {
                     eprintln!("Failed to delete file {:?}: {}", path, e);
                 }
             }
 
-            let am: ActiveModel = output.into();
-            am.delete(db).await?;
+            AssignmentSubmissionRepository::delete(output.id).await?;
         }
 
         Ok(())

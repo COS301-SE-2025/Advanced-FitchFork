@@ -1,21 +1,6 @@
-use argon2::{
-    Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-};
 use chrono::{DateTime, Utc};
-use rand::rngs::OsRng;
 use sea_orm::entity::prelude::*;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, Set,
-};
-
-use crate::models::user_module_role::Role;
-use crate::models::{
-    module::Entity as ModuleEntity,
-    user::{self, ActiveModel as UserActiveModel, Entity as UserEntity},
-    user_module_role::{Column as RoleColumn, Entity as RoleEntity},
-};
-use std::str::FromStr;
+use serde::Serialize;
 
 /// Represents a user in the `users` table.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize)]

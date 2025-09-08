@@ -91,7 +91,7 @@ impl ToActiveModel<Entity> for CreateUser {
         Ok(ActiveModel {
             username: Set(self.username),
             email: Set(self.email),
-            password_hash: Set(User::hash_password(self.password)),
+            password_hash: Set(UserService::hash_password(&self.password)),
             admin: Set(self.admin),
             ..Default::default()
         })
@@ -153,20 +153,19 @@ impl UserService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
     pub async fn create_fake_user_with_no_hashed_password_do_not_use(
-        db: &DatabaseConnection,
         username: &str,
         email: &str,
         password: &str,
         admin: bool,
     ) -> Result<Model, DbErr> {
-        let active = UserActiveModel {
+        let active = ActiveModel {
             username: Set(username.to_owned()),
             email: Set(email.to_owned()),
             password_hash: Set(password.to_string()),
             admin: Set(admin),
             ..Default::default()
         };
-        UserRepository::create(active_model).await
+        UserRepository::create(active).await
     }
 
     pub async fn verify_credentials(

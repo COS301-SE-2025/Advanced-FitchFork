@@ -1,4 +1,4 @@
-use sea_orm::{entity::prelude::*, ActiveValue::Set};
+use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 

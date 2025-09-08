@@ -23,14 +23,17 @@ impl Repository<Entity, AssignmentSubmissionFilter> for AssignmentSubmissionRepo
         if let Some(attempt) = &filter.attempt {
             condition = i64::apply_comparison(condition, Column::Attempt, &attempt);
         }
+        if let Some(is_practice) = &filter.is_practice {
+            condition = bool::apply_comparison(condition, Column::IsPractice, &is_practice);
+        }
+        if let Some(ignored) = &filter.ignored {
+            condition = bool::apply_comparison(condition, Column::Ignored, &ignored);
+        }
         if let Some(filename) = &filter.filename {
             condition = String::apply_comparison(condition, Column::Filename, &filename);
         }
         if let Some(file_hash) = &filter.file_hash {
             condition = String::apply_comparison(condition, Column::FileHash, &file_hash);
-        }
-        if let Some(is_practice) = &filter.is_practice {
-            condition = bool::apply_comparison(condition, Column::IsPractice, &is_practice);
         }
         query.filter(condition)
     }
@@ -73,6 +76,20 @@ impl Repository<Entity, AssignmentSubmissionFilter> for AssignmentSubmissionRepo
                             query.order_by_desc(Column::Attempt)
                         }
                     }
+                    "is_practice" => {
+                        if asc {
+                            query.order_by_asc(Column::IsPractice)
+                        } else {
+                            query.order_by_desc(Column::IsPractice)
+                        }
+                    }
+                    "ignored" => {
+                        if asc {
+                            query.order_by_asc(Column::Ignored)
+                        } else {
+                            query.order_by_desc(Column::Ignored)
+                        }
+                    }
                     "filename" => {
                         if asc {
                             query.order_by_asc(Column::Filename)
@@ -85,13 +102,6 @@ impl Repository<Entity, AssignmentSubmissionFilter> for AssignmentSubmissionRepo
                             query.order_by_asc(Column::FileHash)
                         } else {
                             query.order_by_desc(Column::FileHash)
-                        }
-                    }
-                    "is_practice" => {
-                        if asc {
-                            query.order_by_asc(Column::IsPractice)
-                        } else {
-                            query.order_by_desc(Column::IsPractice)
                         }
                     }
                     "created_at" => {

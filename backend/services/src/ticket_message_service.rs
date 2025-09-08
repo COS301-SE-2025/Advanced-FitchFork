@@ -1,8 +1,7 @@
 use crate::service::{Service, ToActiveModel};
 use db::{
-    models::ticket_messages::{ActiveModel, Entity, Model},
+    models::ticket_messages::{ActiveModel, Entity},
     repositories::{ticket_message_repository::TicketMessageRepository, repository::Repository},
-    comparisons::Comparison,
     filters::TicketMessageFilter,
 };
 use sea_orm::{DbErr, Set};
@@ -18,7 +17,7 @@ pub struct CreateTicketMessage {
 #[derive(Debug, Clone)]
 pub struct UpdateTicketMessage {
     pub id: i64,
-    pub content: String,
+    pub content: Option<String>,
 }
 
 impl ToActiveModel<Entity> for CreateTicketMessage {

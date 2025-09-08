@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 db = { path = "../db" }
+util ={ path = "../util" }
 sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 argon2 = "0.5"
 rand = "0.8"
@@ -13,3 +14,4 @@ log = "0.4"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 serde = { version = "1.0", features = ["derive"] }
 validator = { version = "0.20", features = ["derive"] }
+serde_json = "1.0"
