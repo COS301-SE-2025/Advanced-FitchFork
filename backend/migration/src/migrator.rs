@@ -24,6 +24,7 @@ impl MigratorTrait for Migrator {
             Box::new(migrations::m202508020002_create_ticket_messages::Migration),
             Box::new(migrations::m202508060001_create_announcements::Migration),
             Box::new(migrations::m202508020003_create_interpreter::Migration),
+            Box::new(migrations::m202509080001_create_attendance::Migration)
         ]
     }
 }

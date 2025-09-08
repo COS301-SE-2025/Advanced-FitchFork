@@ -921,6 +921,8 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "chrono",
+ "hex",
+ "hmac",
  "log",
  "migration",
  "rand 0.8.5",
@@ -928,6 +930,7 @@ dependencies = [
  "sea-orm-migration",
  "serde",
  "serde_json",
+ "sha2",
  "strum",
  "tempfile",
  "tokio",

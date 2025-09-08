@@ -14,6 +14,8 @@ pub mod tickets;
 pub mod announcements;
 pub mod user;
 pub mod user_module_role;
+pub mod attendance_session;
+pub mod attendance_record;
 
 pub use assignment::Entity as Assignment;
 pub use assignment_file::Entity as AssignmentFile;
@@ -31,3 +33,5 @@ pub use tickets::Entity as Tickets;
 pub use announcements::Entity as Announcements;
 pub use user::Entity as User;
 pub use user_module_role::Entity as UserModuleRole;
+pub use attendance_session::Entity as AttendanceSession;
+pub use attendance_record::Entity as AttendanceRecord;

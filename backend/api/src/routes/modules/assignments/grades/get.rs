@@ -140,30 +140,39 @@ fn report_path(
         .join("submission_report.json")
 }
 
-/// Build a map task_id → task_name for the assignment.
-async fn load_task_name_map(
+/// Build maps for task name enrichment:
+///  - by_id:  assignment_task.id          -> name
+///  - by_num: assignment_task.task_number -> name
+async fn load_task_maps(
     db: &DatabaseConnection,
     assignment_id: i64,
-) -> Result<HashMap<i64, String>, sea_orm::DbErr> {
+) -> Result<(HashMap<i64, String>, HashMap<i64, String>), sea_orm::DbErr> {
     let rows: Vec<TaskModel> = TaskEntity::find()
         .filter(TaskCol::AssignmentId.eq(assignment_id))
         .all(db)
         .await?;
-    Ok(rows
-        .into_iter()
-        .map(|t| (t.id, t.name))
-        .collect::<HashMap<i64, String>>())
+
+    let mut by_id  = HashMap::with_capacity(rows.len());
+    let mut by_num = HashMap::with_capacity(rows.len());
+    for t in rows {
+        by_id.insert(t.id, t.name.clone());
+        by_num.insert(t.task_number, t.name);
+    }
+    Ok((by_id, by_num))
 }
+
 
 /// Read per-task scores from submission_report.json for a chosen submission.
 /// If a task "name" looks like a numeric string, it's treated as a task_id and
-/// resolved via `task_name_by_id`. If the file/shape is missing or invalid,
-/// returns an empty vector gracefully.
+/// resolved via `task_name_by_id`. If that fails but `task_number` is present,
+/// resolve via `task_name_by_num`. Otherwise keep the original string.
+/// If the file/shape is missing or invalid, returns an empty vector gracefully.
 fn read_tasks_from_report(
     module_id: i64,
     assignment_id: i64,
     submission: &SubModel,
     task_name_by_id: &HashMap<i64, String>,
+    task_name_by_num: &HashMap<i64, String>,
 ) -> Vec<TaskBreakdown> {
     let base = std::env::var("ASSIGNMENT_STORAGE_ROOT")
         .unwrap_or_else(|_| "data/assignment_files".to_string());
@@ -180,17 +189,15 @@ fn read_tasks_from_report(
             .filter_map(|t| {
                 let Some(sc) = t.score else { return None; };
 
-                // Resolve name if it's a numeric string (task_id)
-                let resolved_name: Option<String> = match t.name {
-                    Some(ref s) => {
-                        if let Ok(id) = s.trim().parse::<i64>() {
-                            task_name_by_id.get(&id).cloned().or_else(|| Some(s.clone()))
-                        } else {
-                            Some(s.clone())
-                        }
-                    }
-                    None => None,
-                };
+                // 1) Try name as task_id (numeric string)
+                // 2) Fallback to task_number mapping
+                // 3) Else keep the original string (if any)
+                let resolved_name: Option<String> =
+                    t.name.as_ref()
+                        .and_then(|s| s.trim().parse::<i64>().ok())
+                        .and_then(|id| task_name_by_id.get(&id).cloned())
+                        .or_else(|| t.task_number.and_then(|n| task_name_by_num.get(&n).cloned()))
+                        .or_else(|| t.name.clone());
 
                 Some(TaskBreakdown {
                     task_number: t.task_number,
@@ -204,6 +211,7 @@ fn read_tasks_from_report(
         Err(_) => vec![],
     }
 }
+
 
 async fn load_execution_config_for(
     module_id: i64,
@@ -413,11 +421,11 @@ pub async fn list_grades(
         };
 
     // Load task name map once
-    let task_name_map = match load_task_name_map(db, assignment_id).await {
-        Ok(m) => m,
+    let (task_name_by_id, task_name_by_num) = match load_task_maps(db, assignment_id).await {
+        Ok(maps) => maps,
         Err(e) => {
-            eprintln!("list_grades: task map load error: {e}");
-            HashMap::new()
+            eprintln!("list_grades: task maps load error: {e}");
+            (HashMap::new(), HashMap::new())
         }
     };
 
@@ -481,8 +489,13 @@ pub async fn list_grades(
     let payload_rows: Vec<GradeResponse> = page_slice
         .iter()
         .map(|g| {
-            let tasks =
-                read_tasks_from_report(module_id, assignment_id, &g.submission, &task_name_map);
+            let tasks = read_tasks_from_report(
+                module_id,
+                assignment_id,
+                &g.submission,
+                &task_name_by_id,
+                &task_name_by_num,
+            );
             GradeResponse {
                 id: g.submission.id,
                 assignment_id,
@@ -613,11 +626,11 @@ pub async fn export_grades(
         };
 
     // Load task name map once
-    let task_name_map = match load_task_name_map(db, assignment_id).await {
-        Ok(m) => m,
+    let (task_name_by_id, task_name_by_num) = match load_task_maps(db, assignment_id).await {
+        Ok(maps) => maps,
         Err(e) => {
-            eprintln!("export_grades: task map load error: {e}");
-            HashMap::new()
+            eprintln!("export_grades: task maps load error: {e}");
+            (HashMap::new(), HashMap::new())
         }
     };
 
@@ -660,8 +673,13 @@ pub async fn export_grades(
 
     for r in &rows {
         // Read per-task from report for this chosen submission (with name resolution)
-        let tasks =
-            read_tasks_from_report(module_id, assignment_id, &r.submission, &task_name_map);
+        let tasks = read_tasks_from_report(
+            module_id,
+            assignment_id,
+            &r.submission,
+            &task_name_by_id,
+            &task_name_by_num,
+        );
 
         let mut map: Map<String, f32> = Map::new();
         for (idx, t) in tasks.iter().enumerate() {

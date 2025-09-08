@@ -71,6 +71,10 @@ import InterpreterPage from './pages/modules/assignments/config/InterpreterPage'
 import AssignmentFilePage from './pages/modules/assignments/config/AssignmentFilePage';
 import SubmissionIde from './pages/modules/assignments/submissions/SubmissionIde';
 import AssignmentGrades from './pages/modules/assignments/AssignmentGrades';
+import AttendanceSessionsList from './pages/modules/attendance/AttendanceSessionsList';
+import AttendanceSessionView from './pages/modules/attendance/AttendanceSessionView';
+import AttendanceMarkPage from './pages/modules/attendance/AttendanceMarkPage';
+import AttendanceSessionProjector from './pages/modules/attendance/AttendanceSessionProjector';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -98,6 +102,11 @@ export default function App() {
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/forbidden" element={<Forbidden />} />
         <Route path="*" element={<NotFound />} />
+
+        {/* Auth-only pages not wrapped in AppLayout */}
+        <Route element={<ProtectedAuthRoute />}>
+          <Route path="/attendance/mark" element={<AttendanceMarkPage />} />
+        </Route>
 
         {/* Protected Auth Routes */}
         <Route element={<ProtectedAuthRoute />}>
@@ -188,7 +197,35 @@ export default function App() {
                   element={<SubmissionIde />}
                 />
 
-                <Route path="bookings" element={<UnderConstruction />} />
+                <Route
+                  path="attendance"
+                  element={
+                    <ProtectedModuleRoute allowedRoles={['lecturer', 'assistant_lecturer']}>
+                      <AttendanceSessionsList />
+                    </ProtectedModuleRoute>
+                  }
+                />
+
+                <Route
+                  path="attendance/sessions/:session_id"
+                  element={
+                    <ProtectedModuleRoute
+                      allowedRoles={['lecturer', 'assistant_lecturer', 'tutor', 'student']}
+                    >
+                      <AttendanceSessionView />
+                    </ProtectedModuleRoute>
+                  }
+                />
+
+                <Route
+                  path="/modules/:id/attendance/sessions/:session_id/projector"
+                  element={
+                    <ProtectedModuleRoute allowedRoles={['lecturer', 'assistant_lecturer']}>
+                      <AttendanceSessionProjector />
+                    </ProtectedModuleRoute>
+                  }
+                />
+
                 <Route path="grades" element={<ModuleGrades />} />
                 <Route path="resources" element={<UnderConstruction />} />
                 <Route

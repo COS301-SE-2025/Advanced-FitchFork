@@ -27,7 +27,7 @@ pub async fn make_test_app() -> (
 
     let router = Router::new()
         .nest("/api", routes(app_state.clone()).layer(from_fn_with_state(app_state.clone(), validate_known_ids)))
-        .nest("/ws", ws_routes(app_state.clone())) // <-- Add this line
+        .nest("/ws", ws_routes(app_state.clone())) 
         .with_state(app_state.clone());
 
     let boxed = router.into_service().boxed_clone();

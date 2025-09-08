@@ -56,6 +56,9 @@ const AssignmentLayout = () => {
 
   const isOnSubmissions =
     location.pathname.startsWith(`${basePath}/submissions`) || location.pathname === `${basePath}`;
+  const isUnlimitedAttempts = !!policy && !policy.limit_attempts;
+  const attemptsExhausted =
+    !!policy?.limit_attempts && !!attempts && (attempts.remaining ?? 0) <= 0;
 
   const showHeaderCard = !isMobile || (isMobile && isOnSubmissions);
 
@@ -310,14 +313,28 @@ const AssignmentLayout = () => {
                     )}
 
                     {/* ---- Attempts ---- */}
-                    {auth.isStudent(module.id) && attempts && attempts.max !== null && (
-                      <Tag
-                        color={attempts.remaining && attempts.remaining > 0 ? 'blue' : 'red'}
-                        className="!text-xs !font-medium !h-6 !px-2 !flex items-center"
-                      >
-                        Attempts: {attempts.used}/{attempts.max}
-                      </Tag>
-                    )}
+                    {auth.isStudent(module.id) &&
+                      (isUnlimitedAttempts ? (
+                        <Tag
+                          color="blue"
+                          className="!text-xs !font-medium !h-6 !px-2 !flex items-center"
+                          title="Unlimited attempts"
+                        >
+                          Unlimited Attempts
+                        </Tag>
+                      ) : attempts ? (
+                        <Tag
+                          color={attemptsExhausted ? 'red' : 'blue'}
+                          className="!text-xs !font-medium !h-6 !px-2 !flex items-center"
+                          title={
+                            attemptsExhausted
+                              ? 'No attempts remaining'
+                              : `${attempts.remaining ?? 0} attempt(s) remaining`
+                          }
+                        >
+                          Attempts: {attempts.used}/{attempts.max}
+                        </Tag>
+                      ) : null)}
                   </div>
 
                   {assignment.description?.length > 0 && (
