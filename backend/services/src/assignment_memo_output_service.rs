@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::assignment_memo_output::{ActiveModel, Entity, Model},
     repositories::{assignment_memo_output_repository::AssignmentMemoOutputRepository, assignment_repository::AssignmentRepository, repository::Repository},
@@ -23,7 +23,7 @@ pub struct UpdateAssignmentMemoOutput {
 }
 
 impl ToActiveModel<Entity> for CreateAssignmentMemoOutput {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
             assignment_id: Set(self.assignment_id),
@@ -37,7 +37,7 @@ impl ToActiveModel<Entity> for CreateAssignmentMemoOutput {
 }
 
 impl ToActiveModel<Entity> for UpdateAssignmentMemoOutput {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let task = match AssignmentMemoOutputRepository::find_by_id(self.id).await {
             Ok(Some(task)) => task,
             Ok(None) => {
@@ -61,7 +61,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentMemoOutput, UpdateAssignmentMemoOut
 
     fn create(
             params: CreateAssignmentMemoOutput,
-        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
+        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
             let inserted: Model = AssignmentMemoOutputRepository::create(params.clone().into_active_model().await?).await?;
 
@@ -95,7 +95,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentMemoOutput, UpdateAssignmentMemoOut
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            AssignmentMemoOutputRepository::update(model).await.map_err(DbErr::from)
+            AssignmentMemoOutputRepository::update(model).await.map_err(AppError::from)
         })
     }
 }

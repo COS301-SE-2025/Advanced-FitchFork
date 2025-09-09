@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::assignment_file::{Entity, ActiveModel, FileType, Model},
     repositories::{repository::Repository, assignment_file_repository::AssignmentFileRepository},
@@ -24,7 +24,7 @@ pub struct UpdateAssignmentFile {
 }
 
 impl ToActiveModel<Entity> for CreateAssignmentFile {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now: DateTime<Utc> = Utc::now();
         Ok(ActiveModel {
             assignment_id: Set(self.assignment_id),
@@ -39,7 +39,7 @@ impl ToActiveModel<Entity> for CreateAssignmentFile {
 }
 
 impl ToActiveModel<Entity> for UpdateAssignmentFile {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let file = match AssignmentFileRepository::find_by_id(self.id).await {
             Ok(Some(file)) => file,
             Ok(None) => {
@@ -67,7 +67,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentFile, UpdateAssignmentFile, Assignm
 
     fn create(
             params: CreateAssignmentFile,
-        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
+        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
             let filters = vec![
                 FilterParam::eq("assignment_id", FilterValue::Int(params.assignment_id)),
@@ -112,7 +112,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentFile, UpdateAssignmentFile, Assignm
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            AssignmentFileRepository::update(model).await.map_err(DbErr::from)
+            AssignmentFileRepository::update(model).await.map_err(AppError::from)
         })
     }
 }

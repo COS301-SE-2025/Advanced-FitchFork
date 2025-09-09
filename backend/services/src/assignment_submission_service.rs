@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::assignment_submission::{ActiveModel, Entity, Model},
     repositories::{assignment_repository::AssignmentRepository, assignment_submission_repository::AssignmentSubmissionRepository, repository::Repository},
@@ -32,7 +32,7 @@ pub struct UpdateAssignmentSubmission {
 }
 
 impl ToActiveModel<Entity> for CreateAssignmentSubmission {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
             assignment_id: Set(self.assignment_id),
@@ -53,7 +53,7 @@ impl ToActiveModel<Entity> for CreateAssignmentSubmission {
 }
 
 impl ToActiveModel<Entity> for UpdateAssignmentSubmission {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let submission = match AssignmentSubmissionRepository::find_by_id(self.id).await {
             Ok(Some(submission)) => submission,
             Ok(None) => {
@@ -80,10 +80,10 @@ impl<'a> Service<'a, Entity, CreateAssignmentSubmission, UpdateAssignmentSubmiss
 
     fn create(
             params: CreateAssignmentSubmission,
-        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
+        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
             if params.earned > params.total {
-                return Err(DbErr::Custom("Earned score cannot be greater than total score".into()));
+                return Err(AppError::Database(DbErr::Custom("Earned score cannot be greater than total score".into())));
             }
             
             let inserted: Model = AssignmentSubmissionRepository::create(params.clone().into_active_model().await?).await?;
@@ -117,7 +117,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentSubmission, UpdateAssignmentSubmiss
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            AssignmentSubmissionRepository::update(model).await
+            AssignmentSubmissionRepository::update(model).await.map_err(AppError::from)
         })
     }
 }

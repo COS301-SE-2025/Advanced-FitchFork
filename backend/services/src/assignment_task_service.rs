@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::assignment_task::{Entity, ActiveModel},
     repositories::{repository::Repository, assignment_task_repository::AssignmentTaskRepository},
@@ -24,7 +24,7 @@ pub struct UpdateAssignmentTask {
 }
 
 impl ToActiveModel<Entity> for CreateAssignmentTask {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
             assignment_id: Set(self.assignment_id),
@@ -40,13 +40,13 @@ impl ToActiveModel<Entity> for CreateAssignmentTask {
 }
 
 impl ToActiveModel<Entity> for UpdateAssignmentTask {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let task = match AssignmentTaskRepository::find_by_id(self.id).await {
             Ok(Some(task)) => task,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("Task ID {} not found", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("Task ID {} not found", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
 
         let mut active: ActiveModel = task.into();

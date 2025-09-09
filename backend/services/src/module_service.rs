@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::module::{Entity, ActiveModel},
     repositories::{repository::Repository, module_repository::ModuleRepository},
@@ -28,7 +28,7 @@ pub struct UpdateModule {
 }
 
 impl ToActiveModel<Entity> for CreateModule {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
             code: Set(self.code),
@@ -43,13 +43,13 @@ impl ToActiveModel<Entity> for CreateModule {
 }
 
 impl ToActiveModel<Entity> for UpdateModule {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let module = match ModuleRepository::find_by_id(self.id).await {
             Ok(Some(module)) => module,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("Module ID {} not found", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("Module ID {} not found", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = module.into();
 
@@ -82,7 +82,7 @@ impl<'a> Service<'a, Entity, CreateModule, UpdateModule, ModuleRepository> for M
 
     fn delete(
         id: i64,
-    ) -> Pin<Box<dyn Future<Output = Result<(), DbErr>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send>> {
         Box::pin(async move {
             let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
                 .unwrap_or_else(|_| "data/assignment_files".to_string());
@@ -98,7 +98,7 @@ impl<'a> Service<'a, Entity, CreateModule, UpdateModule, ModuleRepository> for M
                 warn!("Expected module directory {} does not exist", module_dir.display());
             }
 
-            ModuleRepository::delete(id).await.map_err(DbErr::from)
+            ModuleRepository::delete(id).await.map_err(AppError::from)
         })
     }
 }

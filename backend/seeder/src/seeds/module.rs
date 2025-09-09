@@ -85,19 +85,20 @@ impl Seeder for ModuleSeeder {
                 ..Default::default()
             };
 
-        let _ = special_module2.insert(db).await;
+            let _ = special_module2.insert(db).await;
 
-        let dem_003 = module::ActiveModel {
-            id: Set(10003),
-            code: Set("DEM003".to_string()),
-            year: Set(2025),
-            credits: Set(16),
-            description: Set(Some("Module for Demo 3".to_string())),
-            created_at: Set(Utc::now()),
-            updated_at: Set(Utc::now()),
-            ..Default::default()
-        };
+            let dem_003 = module::ActiveModel {
+                id: Set(10003),
+                code: Set("DEM003".to_string()),
+                year: Set(2025),
+                credits: Set(16),
+                description: Set(Some("Module for Demo 3".to_string())),
+                created_at: Set(Utc::now()),
+                updated_at: Set(Utc::now()),
+                ..Default::default()
+            };
 
-        let _ = dem_003.insert(db).await;
+            let _ = dem_003.insert(db).await;
+        })
     }
 }

@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::ticket_messages::{ActiveModel, Entity},
     repositories::{ticket_message_repository::TicketMessageRepository, repository::Repository},
@@ -20,7 +20,7 @@ pub struct UpdateTicketMessage {
 }
 
 impl ToActiveModel<Entity> for CreateTicketMessage {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
             ticket_id: Set(self.ticket_id),
@@ -34,13 +34,13 @@ impl ToActiveModel<Entity> for CreateTicketMessage {
 }
 
 impl ToActiveModel<Entity> for UpdateTicketMessage {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let message = match TicketMessageRepository::find_by_id(self.id).await {
             Ok(Some(message)) => message,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("Message not found for ID {}", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("Message not found for ID {}", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = message.into();
 

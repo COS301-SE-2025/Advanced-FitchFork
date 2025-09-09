@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::user::{Model, Entity, ActiveModel},
     repositories::{repository::Repository, user_repository::UserRepository},
@@ -83,7 +83,7 @@ fn validate_password(password: &str) -> Result<(), ValidationError> {
 }
 
 impl ToActiveModel<Entity> for CreateUser {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         self.validate()
             .map_err(|e| DbErr::Custom(e.to_string()))?;
 
@@ -98,16 +98,16 @@ impl ToActiveModel<Entity> for CreateUser {
 }
 
 impl ToActiveModel<Entity> for UpdateUser {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         self.validate()
             .map_err(|e| DbErr::Custom(e.to_string()))?;
 
         let user = match UserRepository::find_by_id(self.id).await {
             Ok(Some(user)) => user,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("User ID {} not found", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("User ID {} not found", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = user.into();
 
@@ -174,7 +174,7 @@ impl UserService {
         let filters = vec![
             FilterParam::eq("username", FilterValue::String(username.trim().to_string())),
         ];
-        
+
         if let Some(user) = UserRepository::find_one(&filters, None,
         ).await? {
             if Self::verify_password(&user, password) {

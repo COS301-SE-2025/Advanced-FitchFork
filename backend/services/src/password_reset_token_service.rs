@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::password_reset_token::{ActiveModel, Entity, Model},
     repositories::{password_reset_token_repository::PasswordResetTokenRepository, repository::Repository},
@@ -22,7 +22,7 @@ pub struct UpdatePasswordResetToken {
 }
 
 impl ToActiveModel<Entity> for CreatePasswordResetToken {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let token = thread_rng()
             .sample_iter(&Alphanumeric)
             .take(32)
@@ -42,13 +42,13 @@ impl ToActiveModel<Entity> for CreatePasswordResetToken {
 }
 
 impl ToActiveModel<Entity> for UpdatePasswordResetToken {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let token = match PasswordResetTokenRepository::find_by_id(self.id).await {
             Ok(Some(token)) => token,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("Token not found for ID {}", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("Token not found for ID {}", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = token.into();
 

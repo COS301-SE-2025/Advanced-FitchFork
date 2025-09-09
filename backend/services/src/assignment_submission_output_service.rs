@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::assignment_submission_output::{ActiveModel, Entity, Model},
     repositories::{assignment_repository::AssignmentRepository, assignment_submission_output_repository::AssignmentSubmissionOutputRepository, assignment_submission_repository::AssignmentSubmissionRepository, repository::Repository},
@@ -23,7 +23,7 @@ pub struct UpdateAssignmentSubmissionOutput {
 }
 
 impl ToActiveModel<Entity> for CreateAssignmentSubmissionOutput {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
             task_id: Set(self.task_id),
@@ -37,7 +37,7 @@ impl ToActiveModel<Entity> for CreateAssignmentSubmissionOutput {
 }
 
 impl ToActiveModel<Entity> for UpdateAssignmentSubmissionOutput {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let output = match AssignmentSubmissionOutputRepository::find_by_id(self.id).await {
             Ok(Some(output)) => output,
             Ok(None) => {
@@ -60,7 +60,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentSubmissionOutput, UpdateAssignmentS
 
     fn create(
             params: CreateAssignmentSubmissionOutput,
-        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
+        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
             let inserted: Model = AssignmentSubmissionOutputRepository::create(params.clone().into_active_model().await?).await?;
 
@@ -101,7 +101,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentSubmissionOutput, UpdateAssignmentS
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            AssignmentSubmissionOutputRepository::update(model).await
+            AssignmentSubmissionOutputRepository::update(model).await.map_err(AppError::from)
         })
     }
 }

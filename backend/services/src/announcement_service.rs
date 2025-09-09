@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::announcements::{ActiveModel, Entity},
     repositories::{announcement_repository::AnnouncementRepository, repository::Repository},
@@ -24,7 +24,7 @@ pub struct UpdateAnnouncement {
 }
 
 impl ToActiveModel<Entity> for CreateAnnouncement {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
             module_id: Set(self.module_id),
@@ -40,7 +40,7 @@ impl ToActiveModel<Entity> for CreateAnnouncement {
 }
 
 impl ToActiveModel<Entity> for UpdateAnnouncement {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let announcement = match AnnouncementRepository::find_by_id(self.id).await {
             Ok(Some(announcement)) => announcement,
             Ok(None) => {

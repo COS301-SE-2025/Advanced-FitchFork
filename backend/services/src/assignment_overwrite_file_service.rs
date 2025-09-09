@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::assignment_overwrite_file::{ActiveModel, Entity, Model},
     repositories::{assignment_overwrite_file_repository::AssignmentOverwriteFileRepository, assignment_repository::AssignmentRepository, assignment_task_repository::AssignmentTaskRepository, repository::Repository},
@@ -23,7 +23,7 @@ pub struct UpdateAssignmentOverwriteFile {
 }
 
 impl ToActiveModel<Entity> for CreateAssignmentOverwriteFile {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
             assignment_id: Set(self.assignment_id),
@@ -38,7 +38,7 @@ impl ToActiveModel<Entity> for CreateAssignmentOverwriteFile {
 }
 
 impl ToActiveModel<Entity> for UpdateAssignmentOverwriteFile {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let file = match AssignmentOverwriteFileRepository::find_by_id(self.id).await {
             Ok(Some(file)) => file,
             Ok(None) => {
@@ -65,7 +65,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentOverwriteFile, UpdateAssignmentOver
 
     fn create(
             params: CreateAssignmentOverwriteFile,
-        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
+        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
             let inserted: Model = AssignmentOverwriteFileRepository::create(params.clone().into_active_model().await?).await?;
 
@@ -100,7 +100,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentOverwriteFile, UpdateAssignmentOver
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            AssignmentOverwriteFileRepository::update(model).await
+            AssignmentOverwriteFileRepository::update(model).await.map_err(AppError::from)
         })
     }
 }

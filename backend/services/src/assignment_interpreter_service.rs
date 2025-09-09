@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::assignment_interpreter::{ActiveModel, Entity, Model},
     repositories::{assignment_interpreter_repository::AssignmentInterpreterRepository, repository::Repository},
@@ -24,7 +24,7 @@ pub struct UpdateAssignmentInterpreter {
 }
 
 impl ToActiveModel<Entity> for CreateAssignmentInterpreter {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
             assignment_id: Set(self.assignment_id),
@@ -39,7 +39,7 @@ impl ToActiveModel<Entity> for CreateAssignmentInterpreter {
 }
 
 impl ToActiveModel<Entity> for UpdateAssignmentInterpreter {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let announcement = match AssignmentInterpreterRepository::find_by_id(self.id).await {
             Ok(Some(announcement)) => announcement,
             Ok(None) => {
@@ -62,7 +62,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentInterpreter, UpdateAssignmentInterp
 
     fn create(
             params: CreateAssignmentInterpreter,
-        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
+        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
             let filters = vec![
                 FilterParam::eq("assignment_id", FilterValue::Int(params.assignment_id)),
@@ -106,7 +106,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentInterpreter, UpdateAssignmentInterp
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            AssignmentInterpreterRepository::update(model).await.map_err(DbErr::from)
+            AssignmentInterpreterRepository::update(model).await.map_err(AppError::from)
         })
     }
 }

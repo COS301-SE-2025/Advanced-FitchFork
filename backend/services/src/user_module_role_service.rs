@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::{
         module,
@@ -41,7 +41,7 @@ pub struct UpdateUserModuleRole {
 }
 
 impl ToActiveModel<Entity> for CreateUserModuleRole {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         Ok(ActiveModel {
             user_id: Set(self.user_id),
             module_id: Set(self.module_id),
@@ -52,13 +52,13 @@ impl ToActiveModel<Entity> for CreateUserModuleRole {
 }
 
 impl ToActiveModel<Entity> for UpdateUserModuleRole {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let task = match UserModuleRoleRepository::find_by_id((self.user_id, self.module_id)).await {
             Ok(Some(task)) => task,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("Role not found for user ID {} and module ID {}", self.user_id, self.module_id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("Role not found for user ID {} and module ID {}", self.user_id, self.module_id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = task.into();
 

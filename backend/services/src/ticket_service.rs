@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::tickets::{ActiveModel, Entity, TicketStatus},
     repositories::{ticket_repository::TicketRepository, repository::Repository},
@@ -21,7 +21,7 @@ pub struct UpdateTicket {
 }
 
 impl ToActiveModel<Entity> for CreateTicket {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
             assignment_id: Set(self.assignment_id),
@@ -37,13 +37,13 @@ impl ToActiveModel<Entity> for CreateTicket {
 }
 
 impl ToActiveModel<Entity> for UpdateTicket {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let ticket = match TicketRepository::find_by_id(self.id).await {
             Ok(Some(ticket)) => ticket,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("Ticket not found for ID {}", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("Ticket not found for ID {}", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = ticket.into();
 

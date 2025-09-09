@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::plagiarism_case::{ActiveModel, Entity, Status},
     repositories::{plagiarism_case_repository::PlagiarismCaseRepository, repository::Repository},
@@ -21,7 +21,7 @@ pub struct UpdatePlagiarismCase {
 }
 
 impl ToActiveModel<Entity> for CreatePlagiarismCase {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
             assignment_id: Set(self.assignment_id),
@@ -38,13 +38,13 @@ impl ToActiveModel<Entity> for CreatePlagiarismCase {
 }
 
 impl ToActiveModel<Entity> for UpdatePlagiarismCase {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let case = match PlagiarismCaseRepository::find_by_id(self.id).await {
             Ok(Some(case)) => case,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("Case not found for ID {}", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("Case not found for ID {}", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = case.into();
 

@@ -19,7 +19,6 @@ mod seeds;
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
-    let db = db::get_connection().await;
 
     for (seeder, name) in [
         (
@@ -40,6 +39,6 @@ async fn main() {
         (Box::new(AssignmentInterpreterSeeder), "AssignmentInterpreter"),
         (Box::new(TicketSeeder), "Ticket"),
     ] {
-        run_seeder(&*seeder, name, &db).await;
+        run_seeder(&*seeder, name).await;
     }
 }

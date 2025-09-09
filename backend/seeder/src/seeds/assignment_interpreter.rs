@@ -16,50 +16,51 @@ impl Seeder for AssignmentInterpreterSeeder {
                 .await
                 .expect("Failed to fetch assignments");
 
-        // For each assignment, insert an interpreter file with a sample command string
-        for a in &assignments {
-            if a.module_id == 9999 || a.module_id == 9998 || a.module_id == 10003 {
-                continue;
-            }
+            // For each assignment, insert an interpreter file with a sample command string
+            for a in &assignments {
+                if a.module_id == 9999 || a.module_id == 9998 || a.module_id == 10003 {
+                    continue;
+                }
 
-            let filename = format!("interpreter_{}.zip", a.id);
-            let command = "g++ -std=c++17 Main.cpp -o main && ./main".to_string();
-            let content = create_example_interpreter_zip();
+                let filename = format!("interpreter_{}.zip", a.id);
+                let command = "g++ -std=c++17 Main.cpp -o main && ./main".to_string();
+                let content = create_example_interpreter_zip();
 
-                let _ =
-                    InterpreterModel::save_file(db, a.id, a.module_id, &filename, &command, &content)
-                        .await;
-            }
+                    let _ =
+                        InterpreterModel::save_file(db, a.id, a.module_id, &filename, &command, &content)
+                            .await;
+                }
 
-            // Special assignment with realistic interpreter file
-            let special_module_id: i64 = 9998;
-            let special_assignment_id: i64 = 9998;
+                // Special assignment with realistic interpreter file
+                let special_module_id: i64 = 9998;
+                let special_assignment_id: i64 = 9998;
 
-        let special_filename = "interpreter_cpp.zip";
-        let special_command = "g++ -std=c++17 Main.cpp -o main && ./main".to_string();
-        let special_content = create_interpreter_zip_cpp();
+            let special_filename = "interpreter_cpp.zip";
+            let special_command = "g++ -std=c++17 Main.cpp -o main && ./main".to_string();
+            let special_content = create_interpreter_zip_cpp();
 
-        let _ = InterpreterModel::save_file(
-            db,
-            special_assignment_id,
-            special_module_id,
-            &special_filename,
-            &special_command,
-            &special_content,
-        )
-        .await;
+            let _ = InterpreterModel::save_file(
+                db,
+                special_assignment_id,
+                special_module_id,
+                &special_filename,
+                &special_command,
+                &special_content,
+            )
+            .await;
 
-        let gatlam_content = create_gatlam_interpreter_zip();
+            let gatlam_content = create_gatlam_interpreter_zip();
 
-        let _ = InterpreterModel::save_file(
-            db,
-            10004,
-            10003,
-            "Interpreter.zip",
-            "javac /code/Interpreter.java && java -cp /code Interpreter",
-            &gatlam_content,
-        )
-        .await;
+            let _ = InterpreterModel::save_file(
+                db,
+                10004,
+                10003,
+                "Interpreter.zip",
+                "javac /code/Interpreter.java && java -cp /code Interpreter",
+                &gatlam_content,
+            )
+            .await;
+        })
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::service::{Service, ToActiveModel};
+use crate::service::{Service, AppError, ToActiveModel};
 use crate::assignment_task_service::AssignmentTaskService;
 use crate::assignment_file_service::AssignmentFileService;
 use db::{
@@ -32,7 +32,7 @@ pub struct UpdateAssignment {
 }
 
 impl ToActiveModel<Entity> for CreateAssignment {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         validate_dates(self.available_from, self.due_date)?;
         let now = Utc::now();
         Ok(ActiveModel {
@@ -51,7 +51,7 @@ impl ToActiveModel<Entity> for CreateAssignment {
 }
 
 impl ToActiveModel<Entity> for UpdateAssignment {
-    async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+    async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let assignment = match AssignmentRepository::find_by_id(self.id).await {
             Ok(Some(assignment)) => assignment,
             Ok(None) => {
@@ -98,25 +98,25 @@ pub struct AssignmentService;
 impl<'a> Service<'a, Entity, CreateAssignment, UpdateAssignment, AssignmentRepository> for AssignmentService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
-    fn create(
-            params: CreateAssignment,
-        ) -> Pin<Box<dyn Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
-        Box::pin(async move {
-            AssignmentRepository::create(params.into_active_model().await?).await.map_err(DbErr::from)
-        })
-    }
+    // fn create(
+    //         params: CreateAssignment,
+    //     ) -> Pin<Box<dyn Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
+    //     Box::pin(async move {
+    //         AssignmentRepository::create(params.into_active_model().await?).await.map_err(AppError::from)
+    //     })
+    // }
 
-    fn update(
-            params: UpdateAssignment,
-        ) -> Pin<Box<dyn Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
-        Box::pin(async move {
-            AssignmentRepository::update(params.into_active_model().await?).await.map_err(DbErr::from)
-        })
-    }
+    // fn update(
+    //         params: UpdateAssignment,
+    //     ) -> Pin<Box<dyn Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
+    //     Box::pin(async move {
+    //         AssignmentRepository::update(params.into_active_model().await?).await.map_err(AppError::from)
+    //     })
+    // }
 
     fn delete(
         id: i64,
-    ) -> Pin<Box<dyn Future<Output = Result<(), DbErr>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send>> {
          Box::pin(async move {
             let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
                 .unwrap_or_else(|_| "data/assignment_files".to_string());
@@ -137,7 +137,7 @@ impl<'a> Service<'a, Entity, CreateAssignment, UpdateAssignment, AssignmentRepos
                 }
             }
 
-            AssignmentRepository::delete(id).await.map_err(DbErr::from)
+            AssignmentRepository::delete(id).await.map_err(AppError::from)
         })
     }
 }

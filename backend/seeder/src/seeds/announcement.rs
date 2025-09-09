@@ -1,108 +1,103 @@
 use crate::seed::Seeder;
 use chrono::{Duration, Utc};
-use db::models::{
-    announcements::{ActiveModel as AnnouncementActiveModel, Entity as AnnouncementEntity},
-    module,
-    user,
-    user_module_role::{self, Role as ModuleRole},
-};
 use rand::rngs::{OsRng, StdRng};
 use rand::{seq::SliceRandom, Rng, SeedableRng};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use std::pin::Pin;
 
 pub struct AnnouncementSeeder;
 
-#[async_trait::async_trait]
 impl Seeder for AnnouncementSeeder {
-    async fn seed(&self, db: &DatabaseConnection) {
-        let mut rng = StdRng::from_rng(OsRng).expect("rng");
+    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async move {
+            let mut rng = StdRng::from_rng(OsRng).expect("rng");
 
-        let all_users = user::Entity::find().all(db).await.expect("users");
-        if all_users.is_empty() {
-            panic!("No users found; run UserSeeder first");
-        }
-
-        let modules = module::Entity::find().all(db).await.expect("modules");
-        if modules.is_empty() {
-            return;
-        }
-
-        let titles = [
-            "Important update",
-            "Reminder",
-            "Schedule notice",
-            "New resource available",
-            "General announcement",
-            "Assessment info",
-            "Administrative note",
-            "Office hour change",
-            "Lab session update",
-            "Reading list update",
-        ];
-
-        for m in modules {
-            // Prefer module staff as authors
-            let staff_user_ids: Vec<i64> = user_module_role::Entity::find()
-                .filter(user_module_role::Column::ModuleId.eq(m.id))
-                .filter(
-                    user_module_role::Column::Role.is_in(vec![
-                        ModuleRole::Lecturer,
-                        ModuleRole::AssistantLecturer,
-                        ModuleRole::Tutor,
-                    ]),
-                )
-                .all(db)
-                .await
-                .unwrap_or_default()
-                .into_iter()
-                .map(|r| r.user_id)
-                .collect();
-
-            let pick_author = |rng: &mut StdRng| -> i64 {
-                if !staff_user_ids.is_empty() {
-                    *staff_user_ids.choose(rng).unwrap()
-                } else {
-                    all_users.choose(rng).unwrap().id
-                }
-            };
-
-            let mut batch: Vec<AnnouncementActiveModel> = Vec::with_capacity(20);
-
-            for i in 0..20 {
-                let title = titles.choose(&mut rng).unwrap().to_string();
-
-                // Spread creation dates across the last ~6 months
-                let created_at = Utc::now()
-                    - Duration::days(rng.gen_range(0..=180))
-                    - Duration::hours(rng.gen_range(0..=23))
-                    - Duration::minutes(rng.gen_range(0..=59));
-                let updated_at = created_at + Duration::minutes(rng.gen_range(0..=240));
-
-                let body = build_long_markdown(&m.code, m.year, created_at, &mut rng);
-
-                // Ensure a couple are pinned per module; others ~22% chance
-                let pinned = if i < 3 { true } else { rng.gen_bool(0.22) };
-
-                batch.push(AnnouncementActiveModel {
-                    module_id: Set(m.id),
-                    user_id: Set(pick_author(&mut rng)),
-                    title: Set(title),
-                    body: Set(body),
-                    pinned: Set(pinned),
-                    created_at: Set(created_at),
-                    updated_at: Set(updated_at),
-                    ..Default::default()
-                });
+            let all_users = user::Entity::find().all(db).await.expect("users");
+            if all_users.is_empty() {
+                panic!("No users found; run UserSeeder first");
             }
 
-            // Single round-trip per module
-            let _ = AnnouncementEntity::insert_many(batch).exec(db).await;
-        }
+            let modules = module::Entity::find().all(db).await.expect("modules");
+            if modules.is_empty() {
+                return;
+            }
+
+            let titles = [
+                "Important update",
+                "Reminder",
+                "Schedule notice",
+                "New resource available",
+                "General announcement",
+                "Assessment info",
+                "Administrative note",
+                "Office hour change",
+                "Lab session update",
+                "Reading list update",
+            ];
+
+            for m in modules {
+                // Prefer module staff as authors
+                let staff_user_ids: Vec<i64> = user_module_role::Entity::find()
+                    .filter(user_module_role::Column::ModuleId.eq(m.id))
+                    .filter(
+                        user_module_role::Column::Role.is_in(vec![
+                            ModuleRole::Lecturer,
+                            ModuleRole::AssistantLecturer,
+                            ModuleRole::Tutor,
+                        ]),
+                    )
+                    .all(db)
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|r| r.user_id)
+                    .collect();
+
+                let pick_author = |rng: &mut StdRng| -> i64 {
+                    if !staff_user_ids.is_empty() {
+                        *staff_user_ids.choose(rng).unwrap()
+                    } else {
+                        all_users.choose(rng).unwrap().id
+                    }
+                };
+
+                let mut batch: Vec<AnnouncementActiveModel> = Vec::with_capacity(20);
+
+                for i in 0..20 {
+                    let title = titles.choose(&mut rng).unwrap().to_string();
+
+                    // Spread creation dates across the last ~6 months
+                    let created_at = Utc::now()
+                        - Duration::days(rng.gen_range(0..=180))
+                        - Duration::hours(rng.gen_range(0..=23))
+                        - Duration::minutes(rng.gen_range(0..=59));
+                    let updated_at = created_at + Duration::minutes(rng.gen_range(0..=240));
+
+                    let body = build_long_markdown(&m.code, m.year, created_at, &mut rng);
+
+                    // Ensure a couple are pinned per module; others ~22% chance
+                    let pinned = if i < 3 { true } else { rng.gen_bool(0.22) };
+
+                    batch.push(AnnouncementActiveModel {
+                        module_id: Set(m.id),
+                        user_id: Set(pick_author(&mut rng)),
+                        title: Set(title),
+                        body: Set(body),
+                        pinned: Set(pinned),
+                        created_at: Set(created_at),
+                        updated_at: Set(updated_at),
+                        ..Default::default()
+                    });
+                }
+
+                // Single round-trip per module
+                let _ = AnnouncementEntity::insert_many(batch).exec(db).await;
+            }
+        })
     }
 }
 
 /// Build a rich, longer Markdown body with sections, lists, code, quotes, and a simple table.
-fn build_long_markdown(code: &str, year: i32, ts: chrono::DateTime<Utc>, rng: &mut StdRng) -> String {
+fn build_long_markdown(code: &str, year: i64, ts: chrono::DateTime<Utc>, rng: &mut StdRng) -> String {
     let when = ts.format("%Y-%m-%d %H:%M").to_string();
 
     let intros = [
