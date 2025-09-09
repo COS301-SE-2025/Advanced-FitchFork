@@ -103,10 +103,10 @@ pub async fn generate(
         }
     };
 
-    // let memo_dir = MemoOutputModel::full_directory_path(module_id, assignment_id);
+    let memo_dir = MemoOutputModel::full_directory_path(module_id, assignment_id);
     let mut task_file_pairs = vec![];
 
-    for task in tasks.iter().filter(|t| !t.code_coverage) {
+    for task in &tasks {
         let task_info = TaskInfo {
             id: task.id,
             task_number: task.task_number,
@@ -118,23 +118,15 @@ pub async fn generate(
             },
         };
 
-        let memo_output = match assignment_memo_output::Entity::find()
+        let memo_output_res = assignment_memo_output::Entity::find()
             .filter(assignment_memo_output::Column::AssignmentId.eq(assignment_id))
             .filter(assignment_memo_output::Column::TaskId.eq(task.id))
             .one(db)
-            .await
-        {
-            Ok(Some(m)) => m,
-            Ok(None) => {
-                return (
-                    StatusCode::NOT_FOUND,
-                    Json(ApiResponse::<()>::error(format!(
-                        "Memo output not found for task {}",
-                        task.id
-                    ))),
-                )
-                    .into_response();
-            }
+            .await;
+
+        let memo_path = match memo_output_res {
+            Ok(Some(memo_output)) => MemoOutputModel::storage_root().join(&memo_output.path),
+            Ok(None) => memo_dir.join(format!("no_memo_for_task_{}", task.id)),
             Err(_) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -144,7 +136,6 @@ pub async fn generate(
             }
         };
 
-        let memo_path = MemoOutputModel::storage_root().join(&memo_output.path);
         task_file_pairs.push((task_info, memo_path));
     }
 
