@@ -7,14 +7,12 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{TimeZone, Utc};
-    use db::{
-        models::{
-            assignment::Model as AssignmentModel,
-            assignment_task::Model as AssignmentTaskModel,
-            module::Model as ModuleModel,
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        }
+    use db::models::{
+        assignment::Model as AssignmentModel,
+        assignment_task::Model as AssignmentTaskModel,
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use serial_test::serial;
     use std::{fs, io::Write, path::PathBuf};
@@ -131,10 +129,10 @@ mod tests {
         )
         .await
         .unwrap();
-        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1")
+        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1", false)
             .await
             .unwrap();
-    
+
         TestData {
             admin_user,
             lecturer_user,

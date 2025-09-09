@@ -13,8 +13,9 @@ pub struct Model {
     pub id: i64,
     pub assignment_id: i64,
     pub task_number: i64,
-    pub name: String, 
+    pub name: String,
     pub command: String,
+    pub code_coverage: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -39,12 +40,14 @@ impl Model {
         task_number: i64,
         name: &str,
         command: &str,
+        code_coverage: bool,
     ) -> Result<Self, DbErr> {
         let active = ActiveModel {
             assignment_id: Set(assignment_id),
             task_number: Set(task_number),
             name: Set(name.to_string()),
             command: Set(command.to_string()),
+            code_coverage: Set(code_coverage),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()

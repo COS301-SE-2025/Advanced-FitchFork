@@ -14,3 +14,4 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 code-runner = { path = "../code_runner" }
 dotenv = "0.15"
 util = { path = "../util" }
+serde_json = "1.0"

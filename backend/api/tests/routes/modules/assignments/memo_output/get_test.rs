@@ -7,14 +7,12 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{TimeZone, Utc};
-    use db::{
-        models::{
-            assignment::Model as AssignmentModel,
-            module::Model as ModuleModel,
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-            assignment_task, assignment_memo_output
-        }
+    use db::models::{
+        assignment::Model as AssignmentModel,
+        assignment_memo_output, assignment_task,
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use serde_json::Value;
     use serial_test::serial;
@@ -106,6 +104,7 @@ mod tests {
             task_number as i64,
             &format!("Task {}", task_number),
             "echo Hello", // dummy command
+            false,
         )
         .await
         .unwrap();

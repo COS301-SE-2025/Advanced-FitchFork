@@ -67,9 +67,16 @@ async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
     }
 
     for (task_number, command) in tasks {
-        AssignmentTaskModel::create(db, assignment_id, task_number, "Untitled Task", command)
-            .await
-            .expect("Failed to create assignment task");
+        AssignmentTaskModel::create(
+            db,
+            assignment_id,
+            task_number,
+            "Untitled Task",
+            command,
+            false,
+        )
+        .await
+        .expect("Failed to create assignment task");
     }
 }
 
