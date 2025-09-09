@@ -127,6 +127,13 @@ pub async fn create_memo_outputs_for_all_tasks(
     let code_manager_url = format!("http://{}:{}", host, port);
 
     for task in tasks {
+        if task.code_coverage {
+            // println!(
+            //     "Skipping task {} because code_coverage is true",
+            //     task.task_number
+            // );
+            continue;
+        }
         let filename = format!("task_{}_output.txt", task.task_number);
 
         let mut files: Vec<(String, Vec<u8>)> = Vec::new();
@@ -887,7 +894,7 @@ pub async fn run_interpreter(
     db: &sea_orm::DatabaseConnection,
     submission_id: i64,
     generated_string: &str,
-) -> Result<Vec<(i64, String)>, String> {
+) -> Result<(), String> {
     use db::models::assignment_submission::Entity as AssignmentSubmission;
 
     let submission = AssignmentSubmission::find_by_id(submission_id)
@@ -904,8 +911,8 @@ pub async fn run_interpreter(
     // Step 2
     create_memo_outputs_for_all_tasks(db, assignment_id).await?;
 
-    // Step 3 — now returns outputs
-    let outputs =
-        create_submission_outputs_for_all_tasks_for_interpreter(db, submission_id).await?;
-    Ok(outputs)
+    // Step 3
+    create_submission_outputs_for_all_tasks(db, submission_id).await?;
+
+    Ok(())
 }

@@ -81,7 +81,7 @@ mod tests {
         active_assignment.status = Set(db::models::assignment::Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(db).await.unwrap();
-        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1")
+        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1", false)
             .await
             .unwrap();
 

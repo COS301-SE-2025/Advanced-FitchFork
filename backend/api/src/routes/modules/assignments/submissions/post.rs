@@ -8,22 +8,27 @@ use axum::{
 };
 use chrono::Utc;
 use code_runner;
+use db::models::assignment_memo_output;
+use db::models::assignment_memo_output::Model as MemoOutputModel;
+use db::models::assignment_task;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
     assignment_submission::{self, Model as AssignmentSubmissionModel},
+    assignment_submission_output::Entity as AssignmentSubmissionOutputModel,
+    assignment_task::Entity as AssignmentTaskModel,
 };
 use marker::MarkingJob;
 use md5;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use tokio_util::bytes;
+use util::mark_allocator::mark_allocator::TaskInfo;
 use util::{
     execution_config::{ExecutionConfig, execution_config::SubmissionMode},
     mark_allocator::mark_allocator::generate_allocator,
     mark_allocator::mark_allocator::load_allocator,
     state::AppState,
 };
-
 #[derive(Debug, Deserialize)]
 pub struct RemarkRequest {
     #[serde(default)]
@@ -254,20 +259,69 @@ async fn grade_submission(
         .join(format!("attempt_{}", submission.attempt))
         .join("submission_output");
 
+    //Old system before code-coverage
+
+    // let mut student_outputs = Vec::new();
+    // if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
+    //     for entry in entries.flatten() {
+    //         let file_path = entry.path();
+    //         if file_path.is_file() {
+    //             if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+    //                 if ext.eq_ignore_ascii_case("txt") {
+    //                     student_outputs.push(file_path);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+    // student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
     let mut student_outputs = Vec::new();
+    let mut student_output_code_coverage = Vec::new();
+
+    //family reunion of if statments
     if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
         for entry in entries.flatten() {
             let file_path = entry.path();
             if file_path.is_file() {
                 if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
                     if ext.eq_ignore_ascii_case("txt") {
-                        student_outputs.push(file_path);
+                        if let Some(file_stem) = file_path.file_stem().and_then(|s| s.to_str()) {
+                            if let Ok(output_id) = file_stem.parse::<i64>() {
+                                if let Ok(Some(output)) =
+                                    AssignmentSubmissionOutputModel::find_by_id(output_id)
+                                        .one(db)
+                                        .await
+                                {
+                                    if let Ok(Some(task)) =
+                                        AssignmentTaskModel::find_by_id(output.task_id)
+                                            .one(db)
+                                            .await
+                                    {
+                                        if task.code_coverage {
+                                            student_output_code_coverage.push(file_path.clone());
+                                        } else {
+                                            student_outputs.push(file_path.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
     student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+    //TODO - Reece here is your student_output code_coverage
+    //use util/src/code_coverage_report/code_coverage_report.rs to transform it to json
+
+    //If you want to test it run the frontend - module 9998
+    //it has 4 tasks - the 4th one is the code_coverage
+    //for a student submission just submit the memo_files of the assignment
+    student_output_code_coverage.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     let marking_job = MarkingJob::new(
         memo_outputs.to_vec(),
@@ -747,7 +801,61 @@ pub async fn submit_assignment(
     }
 
     if config.project.submission_mode != SubmissionMode::Manual {
-        if let Err(_) = generate_allocator(module_id, assignment_id).await {
+        let tasks_res = assignment_task::Entity::find()
+            .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
+            .all(db)
+            .await;
+
+        let tasks = match tasks_res {
+            Ok(t) => t,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<SubmissionDetailResponse>::error(
+                        "Failed to fetch assignment tasks",
+                    )),
+                );
+            }
+        };
+
+        let memo_dir = MemoOutputModel::full_directory_path(module_id, assignment_id);
+        let mut task_file_pairs = vec![];
+
+        for task in &tasks {
+            let task_info = TaskInfo {
+                id: task.id,
+                task_number: task.task_number,
+                code_coverage: task.code_coverage,
+                name: if task.name.trim().is_empty() {
+                    format!("Task {}", task.task_number)
+                } else {
+                    task.name.clone()
+                },
+            };
+
+            let memo_output_res = assignment_memo_output::Entity::find()
+                .filter(assignment_memo_output::Column::AssignmentId.eq(assignment_id))
+                .filter(assignment_memo_output::Column::TaskId.eq(task.id))
+                .one(db)
+                .await;
+
+            let memo_path = match memo_output_res {
+                Ok(Some(memo_output)) => MemoOutputModel::storage_root().join(&memo_output.path),
+                Ok(None) => memo_dir.join(format!("no_memo_for_task_{}", task.id)),
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<SubmissionDetailResponse>::error(
+                            "Failed to fetch memo output",
+                        )),
+                    );
+                }
+            };
+
+            task_file_pairs.push((task_info, memo_path));
+        }
+
+        if let Err(_) = generate_allocator(module_id, assignment_id, &task_file_pairs).await {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<SubmissionDetailResponse>::error(

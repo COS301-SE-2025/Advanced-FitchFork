@@ -6,6 +6,7 @@ pub struct TaskResponse {
     pub task_number: i64,
     pub name: String,
     pub command: String,
+    pub code_coverage: bool,
     pub created_at: String,
     pub updated_at: String,
 }

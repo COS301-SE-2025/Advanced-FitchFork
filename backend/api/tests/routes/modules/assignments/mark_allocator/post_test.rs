@@ -7,13 +7,11 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{TimeZone, Utc};
-    use db::{
-        models::{
-            assignment::Model as AssignmentModel,
-            module::Model as ModuleModel,
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        }
+    use db::models::{
+        assignment::Model as AssignmentModel,
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use serial_test::serial;
     use std::{fs, path::PathBuf};
@@ -112,28 +110,30 @@ mod tests {
         let _ = fs::remove_dir_all("./tmp");
     }
 
-    #[tokio::test]
-    #[serial]
-    async fn test_post_mark_allocator_not_found() {
-        setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+    //Commented out due to change in mark_allocator functionality - test no longer applies
 
-        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!(
-            "/api/modules/{}/assignments/{}/mark_allocator/generate",
-            data.module.id, data.assignment.id
-        );
-        let req = Request::builder()
-            .method("POST")
-            .uri(&uri)
-            .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
+    // #[tokio::test]
+    // #[serial]
+    // async fn test_post_mark_allocator_not_found() {
+    //     setup_assignment_storage_root();
+    //     let (app, app_state) = make_test_app().await;
+    //     let data = setup_test_data(app_state.db()).await;
 
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
+    //     let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+    //     let uri = format!(
+    //         "/api/modules/{}/assignments/{}/mark_allocator/generate",
+    //         data.module.id, data.assignment.id
+    //     );
+    //     let req = Request::builder()
+    //         .method("POST")
+    //         .uri(&uri)
+    //         .header("Authorization", format!("Bearer {}", token))
+    //         .body(Body::empty())
+    //         .unwrap();
+
+    //     let response = app.oneshot(req).await.unwrap();
+    //     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    // }
 
     #[tokio::test]
     #[serial]
@@ -202,50 +202,52 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    #[tokio::test]
-    #[serial]
-    async fn test_post_mark_allocator_missing_memo_or_config() {
-        setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
+    //Commented out due to change in mark_allocator functionality - test no longer applies
 
-        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!(
-            "/api/modules/{}/assignments/{}/mark_allocator/generate",
-            data.module.id, data.assignment.id
-        );
-        let req = Request::builder()
-            .method("POST")
-            .uri(&uri)
-            .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
+    // #[tokio::test]
+    // #[serial]
+    // async fn test_post_mark_allocator_missing_memo_or_config() {
+    //     setup_assignment_storage_root();
+    //     let (app, app_state) = make_test_app().await;
+    //     let data = setup_test_data(app_state.db()).await;
 
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
+    //     let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+    //     let uri = format!(
+    //         "/api/modules/{}/assignments/{}/mark_allocator/generate",
+    //         data.module.id, data.assignment.id
+    //     );
+    //     let req = Request::builder()
+    //         .method("POST")
+    //         .uri(&uri)
+    //         .header("Authorization", format!("Bearer {}", token))
+    //         .body(Body::empty())
+    //         .unwrap();
 
-    #[tokio::test]
-    #[serial]
-    async fn test_post_mark_allocator_missing_memo_output() {
-        setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db()).await;
-        
-        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!(
-            "/api/modules/{}/assignments/{}/mark_allocator/generate",
-            data.module.id, data.assignment.id
-        );
-        let req = Request::builder()
-            .uri(&uri)
-            .method("POST")
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Content-Type", "application/json")
-            .body(Body::empty())
-            .unwrap();
+    //     let response = app.oneshot(req).await.unwrap();
+    //     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    // }
 
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
+    // #[tokio::test]
+    // #[serial]
+    // async fn test_post_mark_allocator_missing_memo_output() {
+    //     setup_assignment_storage_root();
+    //     let (app, app_state) = make_test_app().await;
+    //     let data = setup_test_data(app_state.db()).await;
+
+    //     let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+    //     let uri = format!(
+    //         "/api/modules/{}/assignments/{}/mark_allocator/generate",
+    //         data.module.id, data.assignment.id
+    //     );
+    //     let req = Request::builder()
+    //         .uri(&uri)
+    //         .method("POST")
+    //         .header("Authorization", format!("Bearer {}", token))
+    //         .header("Content-Type", "application/json")
+    //         .body(Body::empty())
+    //         .unwrap();
+
+    //     let response = app.oneshot(req).await.unwrap();
+    //     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    // }
 }

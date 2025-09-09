@@ -1,21 +1,21 @@
+use crate::response::ApiResponse;
+use crate::routes::modules::assignments::tasks::common::TaskResponse;
 use axum::{
-    extract::{State, Path},
+    Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use chrono::Utc;
+use db::models::assignment_task::{ActiveModel, Column, Entity};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
 use util::state::AppState;
-use crate::response::ApiResponse;
-use db::models::assignment_task::{ActiveModel, Column, Entity};
-use crate::routes::modules::assignments::tasks::common::TaskResponse;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateTaskRequest {
     task_number: i64,
-    name: String,    
+    name: String,
     command: String,
 }
 
@@ -148,7 +148,9 @@ pub async fn create_task(
     {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<()>::error("Invalid task_number, name, or command")),
+            Json(ApiResponse::<()>::error(
+                "Invalid task_number, name, or command",
+            )),
         )
             .into_response();
     }
@@ -186,6 +188,7 @@ pub async fn create_task(
                 task_number: task.task_number,
                 name: task.name,
                 command: task.command,
+                code_coverage: task.code_coverage,
                 created_at: task.created_at.to_rfc3339(),
                 updated_at: task.updated_at.to_rfc3339(),
             };

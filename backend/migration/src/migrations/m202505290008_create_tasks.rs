@@ -41,6 +41,12 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Alias::new("command")).string().not_null())
                     .col(
+                        ColumnDef::new(Alias::new("code_coverage"))
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
+                    .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()
                             .not_null()
