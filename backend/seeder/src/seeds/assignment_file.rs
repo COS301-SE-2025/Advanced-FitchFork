@@ -250,12 +250,12 @@ impl Seeder for AssignmentFileSeeder {
             let cpp_module_id = 9998;
             let cpp_assignment_id = 9998;
 
-            //Original main file that was created
-            fn _create_main_zip_cpp() -> Vec<u8> {
-                let mut buf = Cursor::new(Vec::new());
-                {
-                    let mut zip = zip::ZipWriter::new(&mut buf);
-                    let options = SimpleFileOptions::default().unix_permissions(0o644);
+        //Original main file that was created
+        fn create_main_zip_cpp() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                     let main_cpp = r#"
     #include <iostream>
@@ -476,20 +476,20 @@ impl Seeder for AssignmentFileSeeder {
 }
 "#;
 
-            let zipped_files_cpp = vec![
-                // (FileType::Main, "main.zip", create_main_zip_cpp()),
-                (FileType::Memo, "memo.zip", create_memo_zip_cpp()),
-                (
-                    FileType::Makefile,
-                    "makefile.zip",
-                    create_makefile_zip_cpp(),
-                ),
-                (
-                    FileType::Config,
-                    "config.json",
-                    config_json_cpp.as_bytes().to_vec(),
-                ),
-            ];
+        let zipped_files_cpp = vec![
+            (FileType::Main, "main.zip", create_main_zip_cpp()),
+            (FileType::Memo, "memo.zip", create_memo_zip_cpp()),
+            (
+                FileType::Makefile,
+                "makefile.zip",
+                create_makefile_zip_cpp(),
+            ),
+            (
+                FileType::Config,
+                "config.json",
+                config_json_cpp.as_bytes().to_vec(),
+            ),
+        ];
 
         for (file_type, filename, content) in zipped_files_cpp {
             let _ = Model::save_file(

@@ -1,31 +1,25 @@
 #[cfg(test)]
 mod tests {
-    use db::{
-        models::{user::Model as UserModel,
-            module::{Model as ModuleModel, ActiveModel as ModuleActiveModel},
-            assignment::{Model as AssignmentModel, AssignmentType},
-            user_module_role::{Model as UserModuleRoleModel, Role},
-            assignment_file::{Model as AssignmentFileModel, FileType},
-            assignment_task::Model as AssignmentTaskModel,
-            assignment_memo_output::Model as AssignmentMemoOutputModel, assignment_submission::Model as AssignmentSubmissionModel
-        },
-        repositories::user_repository::UserRepository,
-    };
+    use crate::helpers::app::make_test_app;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body,
-        http::{Request, StatusCode}
+        http::{Request, StatusCode},
     };
-    use services::{
-        service::Service,
-        user_service::{UserService, CreateUser},
+    use chrono::{TimeZone, Utc};
+    use db::models::{
+        assignment::{AssignmentType, Model as AssignmentModel},
+        assignment_file::{FileType, Model as AssignmentFileModel},
+        assignment_memo_output::Model as AssignmentMemoOutputModel,
+        assignment_submission::Model as AssignmentSubmissionModel,
+        assignment_task::Model as AssignmentTaskModel,
+        module::{ActiveModel as ModuleActiveModel, Model as ModuleModel},
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
+    use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+    use serde_json::{Value, json};
     use tower::ServiceExt;
-    use serde_json::{json, Value};
-    use api::auth::generate_jwt;
-    use chrono::{Utc, TimeZone};
-    use sea_orm::{Set, ActiveModelTrait, EntityTrait};
-    use crate::helpers::app::make_test_app;
-    use serial_test::serial;
 
     struct TestData {
         admin_user: UserModel,
@@ -43,16 +37,41 @@ mod tests {
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let empty_module = ModuleModel::create(db, "EMPTY101", 2024, Some("Empty Module"), 16).await.unwrap();
-        let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service.create(CreateUser { username: "admin1".into(), email: "admin1@test.com".into(), password: "password".into(), admin: true }).await.unwrap();
-        let lecturer_user = service.create(CreateUser { username: "lecturer1".into(), email: "lecturer1@test.com".into(), password: "password1".into(), admin: false }).await.unwrap();
-        let student_user = service.create(CreateUser { username: "student1".into(), email: "student1@test.com".into(), password: "password2".into(), admin: false }).await.unwrap();
-        let forbidden_user = service.create(CreateUser { username: "forbidden".into(), email: "forbidden@test.com".into(), password: "password3".into(), admin: false }).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, empty_module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
+            .await
+            .unwrap();
+        let empty_module = ModuleModel::create(db, "EMPTY101", 2024, Some("Empty Module"), 16)
+            .await
+            .unwrap();
+        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true)
+            .await
+            .unwrap();
+        let lecturer_user =
+            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
+                .await
+                .unwrap();
+        let student_user =
+            UserModel::create(db, "student1", "student1@test.com", "password2", false)
+                .await
+                .unwrap();
+        let forbidden_user =
+            UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false)
+                .await
+                .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            lecturer_user.id,
+            empty_module.id,
+            Role::Lecturer,
+        )
+        .await
+        .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
+            .await
+            .unwrap();
         let dummy_module = ModuleActiveModel {
             id: Set(9999),
             code: Set("DUMMY9999".to_string()),
@@ -61,8 +80,18 @@ mod tests {
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()
-        }.insert(db).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, dummy_module.id, Role::Lecturer).await.unwrap();
+        }
+        .insert(db)
+        .await
+        .unwrap();
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            lecturer_user.id,
+            dummy_module.id,
+            Role::Lecturer,
+        )
+        .await
+        .unwrap();
         let a1 = AssignmentModel::create(
             db,
             module.id,
@@ -71,7 +100,9 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         let a2 = AssignmentModel::create(
             db,
             module.id,
@@ -80,7 +111,9 @@ mod tests {
             AssignmentType::Practical,
             Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 2, 28, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         let a3 = AssignmentModel::create(
             db,
             module.id,
@@ -89,12 +122,41 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 3, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 3, 31, 23, 59, 59).unwrap(),
-        ).await.unwrap();
-        let file = AssignmentFileModel::save_file(db, a1.id, module.id, FileType::Spec, "spec.txt", b"spec").await.unwrap();
-        let task = AssignmentTaskModel::create(db, a1.id, 1, "Task 1", "echo Hello").await.unwrap();
-        let memo_output = AssignmentMemoOutputModel::save_file(db, a1.id, task.id, "memo.txt", b"memo").await.unwrap();
-        let submission = AssignmentSubmissionModel::save_file(db, a1.id, student_user.id, 1, 10, 10, false, "sub.txt", "hash123#", b"sub").await.unwrap();
-        
+        )
+        .await
+        .unwrap();
+        let file = AssignmentFileModel::save_file(
+            db,
+            a1.id,
+            module.id,
+            FileType::Spec,
+            "spec.txt",
+            b"spec",
+        )
+        .await
+        .unwrap();
+        let task = AssignmentTaskModel::create(db, a1.id, 1, "Task 1", "echo Hello", false)
+            .await
+            .unwrap();
+        let memo_output =
+            AssignmentMemoOutputModel::save_file(db, a1.id, task.id, "memo.txt", b"memo")
+                .await
+                .unwrap();
+        let submission = AssignmentSubmissionModel::save_file(
+            db,
+            a1.id,
+            student_user.id,
+            1,
+            10,
+            10,
+            false,
+            "sub.txt",
+            "hash123#",
+            b"sub",
+        )
+        .await
+        .unwrap();
+
         TestData {
             admin_user,
             lecturer_user,
@@ -118,7 +180,10 @@ mod tests {
         let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -129,10 +194,15 @@ mod tests {
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        let found = db::models::assignment::Entity::find_by_id(data.assignments[0].id).one(db::get_connection().await).await.unwrap();
+        let found = db::models::assignment::Entity::find_by_id(data.assignments[0].id)
+            .one(app_state.db())
+            .await
+            .unwrap();
         assert!(found.is_none());
     }
 
@@ -143,7 +213,10 @@ mod tests {
         let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[1].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[1].id
+        );
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -154,10 +227,15 @@ mod tests {
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        let found = db::models::assignment::Entity::find_by_id(data.assignments[1].id).one(db::get_connection().await).await.unwrap();
+        let found = db::models::assignment::Entity::find_by_id(data.assignments[1].id)
+            .one(app_state.db())
+            .await
+            .unwrap();
         assert!(found.is_none());
     }
 
@@ -168,7 +246,10 @@ mod tests {
         let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -187,7 +268,10 @@ mod tests {
         let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -205,7 +289,10 @@ mod tests {
         let app = make_test_app().await;
         let data = setup_test_data(db::get_connection().await).await;
 
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -242,7 +329,10 @@ mod tests {
         let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.empty_module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.empty_module.id, data.assignments[0].id
+        );
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -261,7 +351,10 @@ mod tests {
         let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.dummy_module_id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.dummy_module_id, data.assignments[0].id
+        );
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -281,7 +374,10 @@ mod tests {
         let data = setup_test_data(db).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -292,15 +388,30 @@ mod tests {
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let found = db::models::assignment::Entity::find_by_id(data.assignments[0].id).one(db).await.unwrap();
+        let found = db::models::assignment::Entity::find_by_id(data.assignments[0].id)
+            .one(db)
+            .await
+            .unwrap();
         assert!(found.is_none());
-        let file = db::models::assignment_file::Entity::find_by_id(data.file_id).one(db).await.unwrap();
+        let file = db::models::assignment_file::Entity::find_by_id(data.file_id)
+            .one(db)
+            .await
+            .unwrap();
         assert!(file.is_none());
-        let task = db::models::assignment_task::Entity::find_by_id(data.task_id).one(db).await.unwrap();
+        let task = db::models::assignment_task::Entity::find_by_id(data.task_id)
+            .one(db)
+            .await
+            .unwrap();
         assert!(task.is_none());
-        let memo = db::models::assignment_memo_output::Entity::find_by_id(data.memo_output_id).one(db).await.unwrap();
+        let memo = db::models::assignment_memo_output::Entity::find_by_id(data.memo_output_id)
+            .one(db)
+            .await
+            .unwrap();
         assert!(memo.is_none());
-        let sub = db::models::assignment_submission::Entity::find_by_id(data.submission_id).one(db).await.unwrap();
+        let sub = db::models::assignment_submission::Entity::find_by_id(data.submission_id)
+            .one(db)
+            .await
+            .unwrap();
         assert!(sub.is_none());
     }
 
@@ -311,7 +422,10 @@ mod tests {
         let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -340,7 +454,10 @@ mod tests {
         let data = setup_test_data(db::get_connection().await).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.empty_module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.empty_module.id, data.assignments[0].id
+        );
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -361,10 +478,10 @@ mod tests {
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
-        
+
         let ids_to_delete = vec![data.assignments[0].id, data.assignments[1].id];
         let req_body = json!({ "assignment_ids": ids_to_delete });
-        
+
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -376,9 +493,11 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Deleted 2/2 assignments");
         assert_eq!(json["data"]["deleted"], 2);
@@ -394,10 +513,10 @@ mod tests {
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
-        
+
         let ids_to_delete = vec![data.assignments[2].id];
         let req_body = json!({ "assignment_ids": ids_to_delete });
-        
+
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -409,9 +528,11 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Deleted 1/1 assignments");
         assert_eq!(json["data"]["deleted"], 1);
@@ -426,10 +547,10 @@ mod tests {
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
-        
+
         let ids_to_delete = vec![data.assignments[0].id, 9999, data.assignments[2].id];
         let req_body = json!({ "assignment_ids": ids_to_delete });
-        
+
         let req = Request::builder()
             .method("DELETE")
             .uri(&uri)
@@ -441,13 +562,15 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Deleted 2/3 assignments");
         assert_eq!(json["data"]["deleted"], 2);
-        
+
         let failed = json["data"]["failed"].as_array().unwrap();
         assert_eq!(failed.len(), 1);
         assert_eq!(failed[0]["id"], 9999);
@@ -497,7 +620,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "No assignment IDs provided");

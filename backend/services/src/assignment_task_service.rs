@@ -13,6 +13,7 @@ pub struct CreateAssignmentTask {
     pub task_number: i64,
     pub name: String,
     pub command: String,
+    pub code_coverage: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -24,11 +25,15 @@ pub struct UpdateAssignmentTask {
 
 impl ToActiveModel<Entity> for CreateAssignmentTask {
     async fn into_active_model(self) -> Result<ActiveModel, DbErr> {
+        let now = Utc::now();
         Ok(ActiveModel {
             assignment_id: Set(self.assignment_id),
             task_number: Set(self.task_number),
-            name: Set(self.name),
-            command: Set(self.command),
+            name: Set(self.name.to_string()),
+            command: Set(self.command.to_string()),
+            code_coverage: Set(self.code_coverage),
+            created_at: Set(now),
+            updated_at: Set(now),
             ..Default::default()
         })
     }

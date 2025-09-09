@@ -15,8 +15,8 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
 use serde_json::Value;
 use std::{env, fs, path::PathBuf};
-use util::execution_config::ExecutionConfig;
 use util::mark_allocator::mark_allocator::load_allocator;
+use util::{execution_config::ExecutionConfig, state::AppState};
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
 #[derive(Serialize)]
@@ -107,11 +107,7 @@ pub async fn get_task_details(
 ) -> impl IntoResponse {
     let db = db::get_connection().await;
 
-    let task = Entity::find_by_id(task_id)
-        .one(db)
-        .await
-        .unwrap()
-        .unwrap();
+    let task = Entity::find_by_id(task_id).one(db).await.unwrap().unwrap();
 
     let base_path =
         env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
@@ -180,7 +176,7 @@ pub async fn get_task_details(
     // }
     let allocator_json: Option<Value> = load_allocator(module_id, assignment_id).await.ok();
 
-    let ( _task_value, subsections_arr ): (i64, Vec<Value>) = if let Some(tasks_arr) = allocator_json
+    let (_task_value, subsections_arr): (i64, Vec<Value>) = if let Some(tasks_arr) = allocator_json
         .as_ref()
         .and_then(|v| v.get("tasks"))
         .and_then(|t| t.as_array())
@@ -193,10 +189,8 @@ pub async fn get_task_details(
             if let Some(entry_obj) = entry.as_object() {
                 if let Some(inner) = entry_obj.get(&desired_key) {
                     if let Some(inner_obj) = inner.as_object() {
-                        let task_value = inner_obj
-                            .get("value")
-                            .and_then(|v| v.as_i64())
-                            .unwrap_or(0);
+                        let task_value =
+                            inner_obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
                         let subsections = inner_obj
                             .get("subsections")
                             .and_then(|v| v.as_array())
@@ -366,6 +360,7 @@ pub async fn list_tasks(
                     task_number: task.task_number,
                     name: task.name,
                     command: task.command,
+                    code_coverage: task.code_coverage,
                     created_at: task.created_at.to_rfc3339(),
                     updated_at: task.updated_at.to_rfc3339(),
                 })

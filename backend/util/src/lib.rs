@@ -1,6 +1,7 @@
+pub mod code_coverage_report;
+pub mod config;
 pub mod execution_config;
 pub mod mark_allocator;
-pub mod ws;
-pub mod config;
 pub mod state;
 pub mod filters;
+pub mod ws;

@@ -11,8 +11,9 @@ pub struct Model {
     pub id: i64,
     pub assignment_id: i64,
     pub task_number: i64,
-    pub name: String, 
+    pub name: String,
     pub command: String,
+    pub code_coverage: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
