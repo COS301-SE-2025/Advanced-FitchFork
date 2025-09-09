@@ -1,6 +1,13 @@
 use crate::response::ApiResponse;
+use axum::extract::State;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use db::models::assignment_memo_output;
+use db::models::assignment_memo_output::Model as MemoOutputModel;
+use db::models::assignment_task;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use util::mark_allocator::mark_allocator::TaskInfo;
 use util::mark_allocator::mark_allocator::{SaveError, generate_allocator};
+use util::state::AppState;
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
@@ -74,8 +81,74 @@ use util::mark_allocator::mark_allocator::{SaveError, generate_allocator};
 /// - Task weights are automatically calculated to ensure fair distribution
 /// - Generation is restricted to users with Lecturer permissions for the module
 /// - The generated allocator can be further customized using the PUT endpoint
-pub async fn generate(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
-    match generate_allocator(module_id, assignment_id).await {
+pub async fn generate(
+    State(app_state): State<AppState>,
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
+    let tasks_res = assignment_task::Entity::find()
+        .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
+        .all(db)
+        .await;
+
+    let tasks = match tasks_res {
+        Ok(t) => t,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to fetch assignment tasks")),
+            )
+                .into_response();
+        }
+    };
+
+    // let memo_dir = MemoOutputModel::full_directory_path(module_id, assignment_id);
+    let mut task_file_pairs = vec![];
+
+    for task in tasks.iter().filter(|t| !t.code_coverage) {
+        let task_info = TaskInfo {
+            id: task.id,
+            task_number: task.task_number,
+            code_coverage: task.code_coverage,
+            name: if task.name.trim().is_empty() {
+                format!("Task {}", task.task_number)
+            } else {
+                task.name.clone()
+            },
+        };
+
+        let memo_output = match assignment_memo_output::Entity::find()
+            .filter(assignment_memo_output::Column::AssignmentId.eq(assignment_id))
+            .filter(assignment_memo_output::Column::TaskId.eq(task.id))
+            .one(db)
+            .await
+        {
+            Ok(Some(m)) => m,
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<()>::error(format!(
+                        "Memo output not found for task {}",
+                        task.id
+                    ))),
+                )
+                    .into_response();
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Failed to fetch memo outputs")),
+                )
+                    .into_response();
+            }
+        };
+
+        let memo_path = MemoOutputModel::storage_root().join(&memo_output.path);
+        task_file_pairs.push((task_info, memo_path));
+    }
+
+    match generate_allocator(module_id, assignment_id, &task_file_pairs).await {
         Ok(json) => (
             StatusCode::OK,
             Json(ApiResponse::success(
