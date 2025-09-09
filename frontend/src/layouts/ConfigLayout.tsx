@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Typography, Segmented, Menu } from 'antd';
+import { useMemo } from 'react';
+import { Typography, Menu } from 'antd';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import CodeEditor from '@/components/common/CodeEditor';
 import { useAssignment } from '@/context/AssignmentContext';
-import { DEFAULT_ASSIGNMENT_CONFIG } from '@/constants/assignments';
 
 type MenuKey =
   | 'assignment'
   | 'execution'
   | 'marking'
   | 'output'
+  | 'security'
   | 'gatlam'
   | 'interpreter'
   | 'files-main'
@@ -19,9 +18,6 @@ type MenuKey =
 
 const ConfigLayout = () => {
   const { config } = useAssignment();
-  const [rawView, setRawView] = useState(false);
-  const [rawText, setRawText] = useState(JSON.stringify(DEFAULT_ASSIGNMENT_CONFIG, null, 2));
-
   const location = useLocation();
   const path = location.pathname;
 
@@ -29,6 +25,7 @@ const ConfigLayout = () => {
     if (path.endsWith('/marking')) return 'marking';
     if (path.endsWith('/execution')) return 'execution';
     if (path.endsWith('/output')) return 'output';
+    if (path.endsWith('/security')) return 'security';
     if (path.endsWith('/gatlam')) return 'gatlam';
     if (path.endsWith('/interpreter')) return 'interpreter';
     if (path.includes('/files/main')) return 'files-main';
@@ -37,11 +34,6 @@ const ConfigLayout = () => {
     if (path.includes('/files/spec')) return 'files-spec';
     return 'assignment';
   }, [path]);
-
-  // keep JSON mirror in sync (viewer-only)
-  useEffect(() => {
-    setRawText(JSON.stringify(config ?? DEFAULT_ASSIGNMENT_CONFIG, null, 2));
-  }, [config]);
 
   // Mode-aware visibility
   const submissionMode = config?.project?.submission_mode ?? 'manual';
@@ -54,7 +46,6 @@ const ConfigLayout = () => {
     { key: 'files-spec', label: <Link to={'files/spec'}>Specification</Link> },
   ];
 
-  // GENERAL group: Assignment + Execution Limits + Marking & Feedback + Output
   const generalGroup = {
     key: 'general-group',
     label: 'General',
@@ -64,10 +55,10 @@ const ConfigLayout = () => {
       { key: 'execution', label: <Link to="execution">Execution Limits</Link> },
       { key: 'marking', label: <Link to="marking">Marking & Feedback</Link> },
       { key: 'output', label: <Link to="output">Output</Link> },
+      { key: 'security', label: <Link to="security">Security</Link> },
     ],
   };
 
-  // GATLAM-only group (only when gatlam mode)
   const gatlamGroup = isGatlam
     ? [
         {
@@ -97,55 +88,26 @@ const ConfigLayout = () => {
     <div className="h-full min-h-0 flex flex-col">
       <div className="hidden sm:flex flex-1 min-h-0 bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 overflow-hidden">
         {/* Sidebar */}
-        {!rawView && (
-          <div className="w-[240px] flex-shrink-0 bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2 overflow-auto">
-            <Menu
-              mode="inline"
-              selectedKeys={[selectedKey]}
-              items={menuItems}
-              className="!bg-transparent !p-0"
-              style={{ border: 'none' }}
-            />
-          </div>
-        )}
+        <div className="w-[240px] flex-shrink-0 bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2 overflow-auto">
+          <Menu
+            mode="inline"
+            selectedKeys={[selectedKey]}
+            items={menuItems}
+            className="!bg-transparent !p-0"
+            style={{ border: 'none' }}
+          />
+        </div>
 
         {/* Main */}
         <div className="flex-1 min-h-0 flex flex-col">
-          {/* Full-width bottom border under title/toggle */}
           <div className="flex justify-between items-center flex-wrap gap-2 border-b border-gray-200 dark:border-gray-800 p-4">
-            <div className="flex items-center gap-4">
-              <Typography.Title level={4} className="!mb-0">
-                Assignment Configuration
-              </Typography.Title>
-              <Segmented
-                options={[
-                  { label: 'Editor', value: 'form' },
-                  { label: 'JSON', value: 'raw' },
-                ]}
-                value={rawView ? 'raw' : 'form'}
-                onChange={(val) => setRawView(val === 'raw')}
-                size="small"
-              />
-            </div>
+            <Typography.Title level={4} className="!mb-0">
+              Assignment Configuration
+            </Typography.Title>
           </div>
 
           <div className="flex-1 min-h-0 overflow-auto flex flex-col p-4">
-            {rawView ? (
-              <div className="flex-1 min-h-0">
-                <CodeEditor
-                  title="Config"
-                  value={rawText}
-                  onChange={() => {}}
-                  language="json"
-                  minimal
-                  height="100%"
-                  className="h-full"
-                  readOnly
-                />
-              </div>
-            ) : (
-              <Outlet />
-            )}
+            <Outlet />
           </div>
         </div>
       </div>

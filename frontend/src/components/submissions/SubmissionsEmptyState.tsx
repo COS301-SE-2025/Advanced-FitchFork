@@ -1,5 +1,7 @@
 import { Button, Typography, Space, Tag } from 'antd';
 import { CloudUploadOutlined, ReloadOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { useAuth } from '@/context/AuthContext';
+import { useModule } from '@/context/ModuleContext';
 
 type Props = {
   assignmentName?: string;
@@ -14,13 +16,25 @@ const SubmissionsEmptyState = ({
   onSubmit,
   onRefresh,
 }: Props) => {
-  const titleText = isAssignmentOpen
-    ? `No submission for ${assignmentName}`
-    : `You didn't submit for ${assignmentName}`;
+  const module = useModule();
+  const auth = useAuth();
+  const isStudent = auth.isStudent(module.id);
 
-  const descriptionText = isAssignmentOpen
-    ? 'You have not submitted your work yet. Submit now to have it marked.'
-    : 'You did not submit your work before the deadline.';
+  const titleText = isStudent
+    ? isAssignmentOpen
+      ? `No submission for ${assignmentName}`
+      : `You didn't submit for ${assignmentName}`
+    : isAssignmentOpen
+      ? 'No submissions yet'
+      : 'No submissions for this assignment';
+
+  const descriptionText = isStudent
+    ? isAssignmentOpen
+      ? 'You have not submitted your work yet. Submit now to have it marked.'
+      : 'You did not submit your work before the deadline.'
+    : isAssignmentOpen
+      ? 'No students have submitted work for this assignment yet.'
+      : 'This assignment is closed; no more submissions can be made.';
 
   return (
     <div className="flex-1 flex items-center justify-center h-full rounded-xl border-2 border-dashed bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
@@ -28,7 +42,7 @@ const SubmissionsEmptyState = ({
         <Space direction="vertical" size="middle" className="w-full">
           <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 dark:border-gray-800 px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-400">
             <InfoCircleOutlined />
-            No submission yet
+            {isStudent ? 'No submission yet' : 'No submissions yet'}
           </div>
 
           <Typography.Title level={3} className="!m-0 !text-gray-900 dark:!text-gray-100">
@@ -51,16 +65,8 @@ const SubmissionsEmptyState = ({
                   >
                     Submit now
                   </Button>
-                ) : (
-                  <Button
-                    type="primary"
-                    icon={<CloudUploadOutlined />}
-                    disabled
-                    className="min-w-[200px]"
-                  >
-                    Submit now
-                  </Button>
-                )}
+                ) : // No submit button for staff/tutors
+                null}
                 {onRefresh && (
                   <Button icon={<ReloadOutlined />} onClick={onRefresh}>
                     Refresh

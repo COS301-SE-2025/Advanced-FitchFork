@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, Outlet } from 'react-router-dom';
+import { useParams, Outlet, useNavigate } from 'react-router-dom';
 import { Spin } from 'antd';
 
 import { useModule } from '@/context/ModuleContext';
@@ -50,6 +50,7 @@ export default function WithAssignmentContext() {
   const module = useModule();
   const { assignment_id } = useParams();
   const auth = useAuth();
+  const navigate = useNavigate();
   const assignmentIdNum = Number(assignment_id);
   const { setBreadcrumbLabel } = useBreadcrumbContext();
 
@@ -121,6 +122,32 @@ export default function WithAssignmentContext() {
           getAssignmentDetails(module.id, assignmentIdNum),
           getAssignmentReadiness(module.id, assignmentIdNum),
         ]);
+
+        if (!detailsRes.success) {
+          const msg = (detailsRes.message || '').toLowerCase();
+
+          // hard network/IP block → go to access denied page
+          if (msg.includes('ip') || msg.includes('not allowed') || msg.includes('forbidden')) {
+            navigate(`/modules/${module.id}/assignments/${assignmentIdNum}/access-denied`, {
+              replace: true,
+              state: { message: detailsRes.message },
+            });
+            return;
+          }
+
+          // password required/invalid → go to verify page
+          if (msg.includes('password') || msg.includes('pin')) {
+            const next = encodeURIComponent(window.location.pathname);
+            navigate(`/modules/${module.id}/assignments/${assignmentIdNum}/verify?next=${next}`, {
+              replace: true,
+            });
+            return;
+          }
+
+          // default fallback
+          navigate('/forbidden', { replace: true });
+          return;
+        }
 
         if (detailsRes.success && detailsRes.data) {
           const details = detailsRes.data;
@@ -209,7 +236,7 @@ export default function WithAssignmentContext() {
 
   const value = useMemo(
     () => ({
-      assignment: assignment!, // safe due to loading gate
+      assignment: assignment!, // safe when not blocked
       assignmentFiles,
       attempts,
       bestMark,

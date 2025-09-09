@@ -12,3 +12,4 @@ pub mod tickets;
 pub mod plagiarism;
 pub mod grades;
 pub mod statistics;
+pub mod assignment_access_test;

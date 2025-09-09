@@ -72,7 +72,7 @@ const AssignmentLayout = () => {
       label: 'Tickets',
       disabled: !readiness?.is_ready,
     },
-    ...(auth.isLecturer(module.id) || auth.isAdmin
+    ...(auth.isLecturer(module.id) || auth.isAssistantLecturer(module.id) || auth.isAdmin
       ? [
           {
             value: `${basePath}/tasks`,
@@ -401,14 +401,16 @@ const AssignmentLayout = () => {
             </div>
           )}
 
-          {assignment.due_date && new Date() > new Date(assignment.due_date) && (
-            <Alert
-              message="Past Due Date - Practice submissions only"
-              description="Practice submissions won't be considered for your final mark."
-              type="warning"
-              showIcon
-            />
-          )}
+          {auth.isStudent(module.id) &&
+            assignment.due_date &&
+            new Date() > new Date(assignment.due_date) && (
+              <Alert
+                message="Past Due Date - Practice submissions only"
+                description="Practice submissions won't be considered for your final mark."
+                type="warning"
+                showIcon
+              />
+            )}
 
           {isStudentOrTutor ? (
             <Outlet />

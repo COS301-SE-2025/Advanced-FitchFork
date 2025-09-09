@@ -151,6 +151,20 @@ export interface TaskSpecConfig {
   forbidden_outputs: string[];
 }
 
+/** Security options (SecurityOptions in Rust). */
+export interface AssignmentSecurityConfig {
+  /** If true, students must unlock the assignment. */
+  password_enabled: boolean;
+  /** Optional PIN in plain text; null/undefined means no PIN set. */
+  password_pin?: string | null;
+  /** Minutes the unlock cookie stays valid. */
+  cookie_ttl_minutes: number;
+  /** If true, bind cookie to user id (harder to share). */
+  bind_cookie_to_user: boolean;
+  /** Optional CIDR allowlist; empty => allow all. */
+  allowed_cidrs: string[];
+}
+
 export interface GatlamConfig {
   // ---- GA Config ----
   population_size: number;
@@ -186,4 +200,5 @@ export interface AssignmentConfig {
   project: AssignmentProjectConfig;
   output: AssignmentOutputConfig;
   gatlam: GatlamConfig;
+  security: AssignmentSecurityConfig;
 }

@@ -3,7 +3,7 @@ use util::state::AppState;
 use crate::auth::claims::AuthUser;
 use crate::response::ApiResponse;
 use sea_orm::DatabaseConnection;
-use std::collections::HashMap;
+use std::{collections::HashMap, net::{IpAddr, Ipv4Addr}};
 use sea_orm::EntityTrait;
 use sea_orm::QueryFilter;
 use sea_orm::ColumnTrait;
@@ -729,4 +729,89 @@ pub async fn require_attendance_ws_access(
     }
 
     Err((StatusCode::FORBIDDEN, Json(ApiResponse::error("Not allowed to access this attendance session websocket"))))
+}
+
+/// Guard that enforces assignment security **for students only**:
+/// 1) Checks client IP against allowlist (if configured)
+/// 2) Then verifies PIN, if required
+///
+/// Admin + staff (Lecturer, AssistantLecturer, Tutor) are bypassed.
+/// Path must include `{module_id}` and `{assignment_id}`.
+/// When required, PIN is read from `x-assignment-pin` header.
+pub async fn require_assignment_access(
+    State(app_state): State<AppState>,
+    Path(params): Path<HashMap<String, String>>,
+    req: axum::http::Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<()>>)> {
+    let db = app_state.db();
+
+    // Auth user must be inserted by an upstream guard
+    let user = req
+        .extensions()
+        .get::<AuthUser>()
+        .cloned()
+        .ok_or((StatusCode::UNAUTHORIZED, Json(ApiResponse::error("Authentication required"))))?;
+
+    let module_id = params.get("module_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((StatusCode::BAD_REQUEST, Json(ApiResponse::error("Missing or invalid module_id"))))?;
+
+    let assignment_id = params.get("assignment_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((StatusCode::BAD_REQUEST, Json(ApiResponse::error("Missing or invalid assignment_id"))))?;
+
+    // --- Bypass for admin/staff ---
+    if user.0.admin
+        || user_has_any_role(db, user.0.sub, module_id, &["Lecturer", "AssistantLecturer", "Tutor"]).await
+    {
+        return Ok(next.run(req).await);
+    }
+
+    // Only enforce for students; unknown roles fall through to next
+    let is_student = user_has_any_role(db, user.0.sub, module_id, &["Student"]).await;
+    if !is_student {
+        return Ok(next.run(req).await);
+    }
+
+    // Load assignment for security config
+    let assignment = AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id))
+        .filter(AssignmentColumn::ModuleId.eq(module_id))
+        .one(db)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while loading assignment"))))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ApiResponse::error("Assignment not found"))))?;
+
+    // ---- 1) IP allowlist check (students only) ----
+    let mut client_ip = req
+        .extensions()
+        .get::<IpAddr>()
+        .cloned()
+        .unwrap_or_else(|| "127.0.0.1".parse().unwrap());
+
+    // Normalize IPv6 loopback (::1) to IPv4 loopback (127.0.0.1) for deterministic tests & configs
+    if let IpAddr::V6(v6) = client_ip {
+        if v6.is_loopback() {
+            client_ip = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        }
+    }
+
+    if !assignment.ip_allowed(client_ip) {
+        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::error("IP not allowed"))));
+    }
+
+    // ---- 2) PIN check (students only, if enabled) ----
+    if assignment.password_required_for_students() {
+        let maybe_pin = req.headers().get("x-assignment-pin").and_then(|h| h.to_str().ok());
+        match maybe_pin {
+            Some(pin) if assignment.verify_password_from_config(pin) => { /* ok */ }
+            _ => {
+                // Signal to the client that verification is needed
+                return Err((StatusCode::FORBIDDEN, Json(ApiResponse::error("PIN required"))));
+            }
+        }
+    }
+
+    Ok(next.run(req).await)
 }

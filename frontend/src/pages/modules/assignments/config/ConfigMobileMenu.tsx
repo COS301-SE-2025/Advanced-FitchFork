@@ -11,6 +11,7 @@ import {
   SettingOutlined,
   CodeOutlined,
   ProfileOutlined,
+  LockOutlined,
 } from '@ant-design/icons';
 
 import { useModule } from '@/context/ModuleContext';
@@ -82,11 +83,7 @@ const ConfigMobileMenu = () => {
     const general: MobileGroup = {
       title: 'General',
       items: [
-        {
-          label: 'Assignment',
-          path: 'assignment',
-          icon: <SettingOutlined className="text-lg" />,
-        },
+        { label: 'Assignment', path: 'assignment', icon: <SettingOutlined className="text-lg" /> },
         {
           label: 'Execution Limits',
           path: 'execution',
@@ -97,11 +94,8 @@ const ConfigMobileMenu = () => {
           path: 'marking',
           icon: <CheckSquareOutlined className="text-lg" />,
         },
-        {
-          label: 'Output',
-          path: 'output',
-          icon: <CodeOutlined className="text-lg" />,
-        },
+        { label: 'Output', path: 'output', icon: <CodeOutlined className="text-lg" /> },
+        { label: 'Security', path: 'security', icon: <LockOutlined className="text-lg" /> },
       ],
     };
 

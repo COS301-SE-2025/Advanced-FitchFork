@@ -3,6 +3,7 @@
 //! This module defines the `Assignment` model, its relations, and
 //! methods for creating, editing, and filtering assignments.
 
+use ipnet::IpNet;
 use sea_orm::entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, IntoActiveModel, PaginatorTrait, QueryFilter, QueryOrder, Set, QuerySelect
@@ -17,9 +18,11 @@ use crate::models::user_module_role::{
     Role as ModuleRole,
 };
 use chrono::{DateTime, Utc};
+use std::net::IpAddr;
 use std::{env, fs, path::PathBuf};
 use serde::{Serialize, Deserialize};
 use strum::{Display, EnumIter, EnumString};
+use sha2::{Digest, Sha256};
 
 /// Assignment model representing the `assignments` table in the database.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -628,6 +631,57 @@ impl Model {
         }
     }
 
+    /// True if students must unlock (based on config.json).
+    pub fn password_required_for_students(&self) -> bool {
+        if let Some(cfg) = self.config() {
+            cfg.security.password_enabled && cfg.security.password_pin.is_some()
+        } else {
+            false
+        }
+    }
+
+    /// Verify a plaintext PIN against the PIN in the config.
+    pub fn verify_password_from_config(&self, candidate: &str) -> bool {
+        let Some(cfg) = self.config() else { return false; };
+        let Some(ref pin) = cfg.security.password_pin else { return false; };
+        // simple equality (you can swap to constant-time later if desired)
+        candidate == pin
+    }
+
+    /// Short, stable tag that changes when the PIN changes.
+    /// Used to invalidate old cookies immediately after rotation without DB.
+    pub fn password_tag(&self) -> Option<String> {
+        let cfg = self.config()?;
+        let pin = cfg.security.password_pin.as_ref()?;
+        let mut h = Sha256::new();
+        h.update(pin.as_bytes());
+        let hex = format!("{:x}", h.finalize());
+        Some(hex[..16].to_string())
+    }
+
+    /// Whether the security cookie should be bound to the user id.
+    pub fn bind_cookie_to_user(&self) -> bool {
+        self.config()
+            .map(|c| c.security.bind_cookie_to_user)
+            .unwrap_or(true)
+    }
+
+    /// Whether the given client IP is allowed by the config’s CIDR allowlist.
+    /// Empty allowlist => allow all. Missing/invalid config => allow.
+    pub fn ip_allowed(&self, client_ip: IpAddr) -> bool {
+        let Some(cfg) = self.config() else { return true; };
+        if cfg.security.allowed_cidrs.is_empty() {
+            return true;
+        }
+        for cidr in &cfg.security.allowed_cidrs {
+            if let Ok(net) = cidr.parse::<IpNet>() {
+                if net.contains(&client_ip) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 
 }
 

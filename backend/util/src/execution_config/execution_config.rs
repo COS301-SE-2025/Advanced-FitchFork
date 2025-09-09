@@ -265,6 +265,46 @@ impl Default for TaskSpecConfig {
     }
 }
 
+// ---------------- Security Options ----------------
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SecurityOptions {
+    /// If true, students must unlock the assignment once per device/session.
+    #[serde(default = "default_password_enabled")]
+    pub password_enabled: bool,
+
+    /// Plain PIN string. None = no PIN set.
+    #[serde(default)]
+    pub password_pin: Option<String>,
+
+    /// Minutes the unlock cookie stays valid. Default: 8h.
+    #[serde(default = "default_cookie_ttl_minutes")]
+    pub cookie_ttl_minutes: u32,
+
+    /// If true, the unlock cookie is bound to the user id (more secure, can’t share).
+    #[serde(default = "default_bind_cookie_to_user")]
+    pub bind_cookie_to_user: bool,
+
+    /// Optional allowlist of CIDRs (e.g., "10.0.0.0/24", "196.21.0.0/16").
+    /// Empty => no IP restriction.
+    #[serde(default = "default_allowed_cidrs")]
+    pub allowed_cidrs: Vec<String>,
+}
+
+
+impl Default for SecurityOptions {
+    fn default() -> Self {
+        Self {
+            password_enabled: default_password_enabled(),
+            password_pin: None,
+            cookie_ttl_minutes: default_cookie_ttl_minutes(),
+            bind_cookie_to_user: default_bind_cookie_to_user(),
+            allowed_cidrs: default_allowed_cidrs(),
+        }
+    }
+}
+
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionConfig {
     #[serde(default)]
@@ -281,6 +321,9 @@ pub struct ExecutionConfig {
 
     #[serde(default)]
     pub gatlam: GATLAM,
+
+    #[serde(default)]
+    pub security: SecurityOptions,
 }
 
 impl ExecutionConfig {
@@ -291,6 +334,7 @@ impl ExecutionConfig {
             project: ProjectSetup::default(),
             output: ExecutionOutputOptions::default(),
             gatlam: GATLAM::default(),
+            security: SecurityOptions::default(),  
         }
     }
 
@@ -505,3 +549,8 @@ fn default_genes() -> Vec<GeneConfig> {
 fn default_submission_mode() -> SubmissionMode {
     SubmissionMode::Manual
 }
+
+fn default_cookie_ttl_minutes() -> u32 { 480 } // 8 hours
+fn default_password_enabled() -> bool { false }
+fn default_bind_cookie_to_user() -> bool { true }
+fn default_allowed_cidrs() -> Vec<String> { vec![] }

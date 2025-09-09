@@ -50,4 +50,11 @@ export const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
     max_parallel_chromosomes: 4,
     verbose: false,
   },
+  security: {
+  password_enabled: false,
+  password_pin: null,
+  cookie_ttl_minutes: 120,
+  bind_cookie_to_user: true,
+  allowed_cidrs: []
+  }
 };

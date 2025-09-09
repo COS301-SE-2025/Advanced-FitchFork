@@ -60,6 +60,8 @@ export default function SubmissionsList() {
   const auth = useAuth();
   const hasStats =
     auth.isLecturer(module.id) || auth.isAssistantLecturer(module.id) || auth.isAdmin;
+  const canToggleIgnored =
+    auth.isLecturer(module.id) || auth.isAssistantLecturer(module.id) || auth.isAdmin;
 
   const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -193,42 +195,53 @@ export default function SubmissionsList() {
       title: 'Ignored',
       dataIndex: 'ignored',
       key: 'ignored',
-      defaultHidden: !auth.isStaff(module.id),
-      render: (_: boolean, record: StudentSubmission) => (
-        <Switch
-          size="small"
-          checked={record.ignored}
-          onClick={(nextChecked, e) => {
-            e?.preventDefault();
-            e?.stopPropagation();
+      // show to staff OR admin; students keep it hidden by default
+      defaultHidden: !(auth.isStaff(module.id) || auth.isAdmin),
+      render: (_: boolean, record: StudentSubmission) => {
+        if (canToggleIgnored) {
+          return (
+            <Switch
+              size="small"
+              checked={record.ignored}
+              onClick={(nextChecked, e) => {
+                e?.preventDefault();
+                e?.stopPropagation();
 
-            // optimistic patch
-            const id = record.id;
-            entityListRef.current?.updateRow(id, { ignored: nextChecked });
+                const id = record.id;
+                // optimistic update
+                entityListRef.current?.updateRow(id, { ignored: nextChecked });
 
-            (async () => {
-              try {
-                const res = await setSubmissionIgnored(module.id, assignment.id, id, nextChecked);
-                if (!res.success) {
-                  // rollback
-                  entityListRef.current?.updateRow(id, { ignored: !nextChecked });
-                  message.error(res.message || 'Failed to update ignored flag');
-                } else {
-                  // optional: if backend returns the full updated submission, prefer truth from server
-                  // entityListRef.current?.upsertRows([res.data], 'replace');
-                  await refreshAssignmentStats();
-                }
-              } catch (err) {
-                // rollback
-                entityListRef.current?.updateRow(id, { ignored: !nextChecked });
-                console.error(err);
-                message.error('Failed to update ignored flag');
-              }
-            })();
-          }}
-        />
-      ),
+                (async () => {
+                  try {
+                    const res = await setSubmissionIgnored(
+                      module.id,
+                      assignment.id,
+                      id,
+                      nextChecked,
+                    );
+                    if (!res.success) {
+                      // rollback
+                      entityListRef.current?.updateRow(id, { ignored: !nextChecked });
+                      message.error(res.message || 'Failed to update ignored flag');
+                    } else {
+                      await refreshAssignmentStats();
+                    }
+                  } catch (err) {
+                    entityListRef.current?.updateRow(id, { ignored: !nextChecked });
+                    console.error(err);
+                    message.error('Failed to update ignored flag');
+                  }
+                })();
+              }}
+            />
+          );
+        }
+
+        // read-only for non-toggle roles (e.g., Tutor)
+        return record.ignored ? <Tag color="red">Yes</Tag> : <Tag>No</Tag>;
+      },
     },
+
     {
       title: 'Is Late',
       dataIndex: 'is_late',
@@ -587,7 +600,7 @@ export default function SubmissionsList() {
             <SubmissionsEmptyState
               assignmentName={assignment.name}
               isAssignmentOpen={isAssignmentOpen}
-              onSubmit={isAssignmentOpen ? handleOpenSubmit : undefined}
+              onSubmit={isAssignmentOpen && isStudent ? handleOpenSubmit : undefined}
               onRefresh={() => entityListRef.current?.refresh()}
             />
           }

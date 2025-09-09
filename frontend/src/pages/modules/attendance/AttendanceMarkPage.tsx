@@ -46,7 +46,6 @@ export default function AttendanceMarkPage() {
   const [state, setState] = useState<MarkState>({ kind: 'idle' });
   const [manualOpen, setManualOpen] = useState<boolean>(false);
   const [manualCode, setManualCode] = useState<string>('');
-  const [lastMethod, setLastMethod] = useState<'qr' | 'manual' | null>(null);
   const triedAutoRef = useRef(false);
 
   // Fixed OTP length (backend now always returns 6-digit rolling code)
@@ -81,7 +80,6 @@ export default function AttendanceMarkPage() {
         const res = await markAttendance(moduleId, sessionId, codeFromLink, 'qr');
 
         if (res.success) {
-          setLastMethod('qr');
           setState({
             kind: 'success',
             message: res.message || 'Attendance recorded successfully.',
@@ -90,7 +88,6 @@ export default function AttendanceMarkPage() {
         } else {
           const m = (res.message || '').toLowerCase();
           if (m.includes('already recorded') || m.includes('already marked')) {
-            setLastMethod('qr');
             setState({
               kind: 'already',
               message: 'You’ve already been marked present for this session.',
@@ -126,14 +123,12 @@ export default function AttendanceMarkPage() {
     const res = await markAttendance(moduleId, sessionId, finalCode, 'manual');
 
     if (res.success) {
-      setLastMethod('manual');
       setState({ kind: 'success', message: res.message || 'Attendance recorded successfully.' });
       setManualCode('');
       setManualOpen(false);
     } else {
       const m = (res.message || '').toLowerCase();
       if (m.includes('already recorded') || m.includes('already marked')) {
-        setLastMethod('manual');
         setState({
           kind: 'already',
           message: 'You’ve already been marked present for this session.',

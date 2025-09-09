@@ -5,7 +5,7 @@ import type {
   ListAttendanceRecordsParams,
   ListAttendanceRecordsData,
 } from "@/types/modules/attendance";
-import { api, apiDownload, apiFetchBlob } from "@/utils/api";
+import { api, apiDownload } from "@/utils/api";
 
 /** GET /api/modules/{module_id}/attendance/sessions */
 export const listAttendanceSessions = async (

@@ -75,6 +75,9 @@ import AttendanceSessionsList from './pages/modules/attendance/AttendanceSession
 import AttendanceSessionView from './pages/modules/attendance/AttendanceSessionView';
 import AttendanceMarkPage from './pages/modules/attendance/AttendanceMarkPage';
 import AttendanceSessionProjector from './pages/modules/attendance/AttendanceSessionProjector';
+import SecurityPage from './pages/modules/assignments/config/SecurityPage';
+import AssignmentVerifyPage from './pages/modules/assignments/AssignmentVerifyPage';
+import AccessDeniedPage from './pages/modules/assignments/AccessDeniedPage';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -147,6 +150,17 @@ export default function App() {
                   <Route path=":announcement_id" element={<AnnouncementView />} />
                 </Route>
                 <Route path="assignments" element={<AssignmentsList />} />
+                {/* Verify page (does NOT use WithAssignmentContext) */}
+                <Route
+                  path="/modules/:id/assignments/:assignment_id/verify"
+                  element={<AssignmentVerifyPage />}
+                />
+
+                <Route
+                  path="assignments/:assignment_id/access-denied"
+                  element={<AccessDeniedPage />}
+                />
+
                 <Route path="assignments/:assignment_id" element={<WithAssignmentContext />}>
                   <Route element={<AssignmentLayout />}>
                     <Route
@@ -183,6 +197,7 @@ export default function App() {
                       <Route path="execution" element={<ExecutionPage />} />
                       <Route path="marking" element={<MarkingPage />} />
                       <Route path="output" element={<OutputPage />} />
+                      <Route path="security" element={<SecurityPage />} />
                       <Route path="gatlam" element={<GatlamPage />} />
                       <Route path="interpreter" element={<InterpreterPage />} />
                       <Route path="files/:fileType" element={<AssignmentFilePage />} />
