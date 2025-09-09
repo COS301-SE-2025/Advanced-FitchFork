@@ -8,9 +8,8 @@ use db::{
         module_repository::ModuleRepository, repository::Repository,
         user_module_role_repository::UserModuleRoleRepository,
     },
-    comparisons::Comparison,
-    filters::UserModuleRoleFilter,
 };
+use util::filters::{FilterParam, FilterValue};
 use sea_orm::{DbErr, Set};
 use std::str::FromStr;
 use serde::Serialize;
@@ -73,7 +72,7 @@ impl ToActiveModel<Entity> for UpdateUserModuleRole {
 
 pub struct UserModuleRoleService;
 
-impl<'a> Service<'a, Entity, CreateUserModuleRole, UpdateUserModuleRole, UserModuleRoleFilter, UserModuleRoleRepository> for UserModuleRoleService {
+impl<'a> Service<'a, Entity, CreateUserModuleRole, UpdateUserModuleRole, UserModuleRoleRepository> for UserModuleRoleService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
@@ -109,14 +108,10 @@ impl UserModuleRoleService {
     pub async fn get_module_roles(
         user_id: i64
     ) -> Result<Vec<UserModuleRoleInfo>, DbErr> {
-        let roles = UserModuleRoleRepository::find_all(
-            UserModuleRoleFilter {
-                user_id: Some(Comparison::eq(user_id)),
-                ..Default::default()
-            },
-            None,
-        )
-        .await?;
+        let filters = vec![
+            FilterParam::eq("user_id", FilterValue::Int(user_id)),
+        ];
+        let roles = UserModuleRoleRepository::find_all(&filters, None).await?;
 
         let module_ids: Vec<i64> = roles.iter().map(|role| role.module_id).collect();
         let modules = ModuleRepository::find_in(module::Column::Id, module_ids).await?;
@@ -148,16 +143,13 @@ impl UserModuleRoleService {
     pub async fn is_in_role(
         user_id: i64,
         module_id: i64,
-        role: &str,
+        role: String,
     ) -> Result<bool, DbErr> {
-        let parsed_role = Role::from_str(role)
-            .map_err(|_| DbErr::Custom(format!("Invalid role string: '{}'", role)))?;
-
-        UserModuleRoleRepository::exists(UserModuleRoleFilter {
-            user_id: Some(Comparison::eq(user_id)),
-            module_id: Some(Comparison::eq(module_id)),
-            role: Some(Comparison::eq(parsed_role)),
-        })
-        .await
+        let filters = vec![
+            FilterParam::eq("user_id", FilterValue::Int(user_id)),
+            FilterParam::eq("module_id", FilterValue::Int(module_id)),
+            FilterParam::eq("role", FilterValue::String(role)),
+        ];
+        UserModuleRoleRepository::exists(&filters).await
     }
 }

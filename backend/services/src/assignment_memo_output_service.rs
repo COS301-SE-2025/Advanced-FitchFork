@@ -2,7 +2,6 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::assignment_memo_output::{ActiveModel, Entity, Model},
     repositories::{assignment_memo_output_repository::AssignmentMemoOutputRepository, assignment_repository::AssignmentRepository, repository::Repository},
-    filters::AssignmentMemoOutputFilter,
 };
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
@@ -57,7 +56,7 @@ impl ToActiveModel<Entity> for UpdateAssignmentMemoOutput {
 
 pub struct AssignmentMemoOutputService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentMemoOutput, UpdateAssignmentMemoOutput, AssignmentMemoOutputFilter, AssignmentMemoOutputRepository> for AssignmentMemoOutputService {
+impl<'a> Service<'a, Entity, CreateAssignmentMemoOutput, UpdateAssignmentMemoOutput, AssignmentMemoOutputRepository> for AssignmentMemoOutputService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(

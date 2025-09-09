@@ -4,7 +4,6 @@ use crate::assignment_file_service::AssignmentFileService;
 use db::{
     models::{assignment::{Entity, ActiveModel, AssignmentType, Status, ReadinessReport}, assignment_file::FileType},
     repositories::{repository::Repository, assignment_repository::AssignmentRepository},
-    filters::AssignmentFilter,
 };
 use sea_orm::{DbErr, Set, IntoActiveModel};
 use chrono::{DateTime, Utc};
@@ -96,7 +95,7 @@ impl ToActiveModel<Entity> for UpdateAssignment {
 
 pub struct AssignmentService;
 
-impl<'a> Service<'a, Entity, CreateAssignment, UpdateAssignment, AssignmentFilter, AssignmentRepository> for AssignmentService {
+impl<'a> Service<'a, Entity, CreateAssignment, UpdateAssignment, AssignmentRepository> for AssignmentService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(

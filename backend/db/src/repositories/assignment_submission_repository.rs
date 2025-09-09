@@ -1,127 +1,26 @@
 use crate::models::assignment_submission::{Entity, Column};
 use crate::repositories::repository::Repository;
-use crate::comparisons::ApplyComparison;
-use crate::filters::AssignmentSubmissionFilter;
-use sea_orm::{QueryFilter, QueryOrder, Select, Condition};
+use crate::filter_utils::{FilterUtils, SortUtils};
+use util::filters::FilterParam;
+use sea_orm::{QueryFilter, Select, DbErr};
+use std::str::FromStr;
 
 pub struct AssignmentSubmissionRepository;
 
-impl AssignmentSubmissionRepository {}
-
-impl Repository<Entity, AssignmentSubmissionFilter> for AssignmentSubmissionRepository {
-    fn apply_filter(query: Select<Entity>, filter: &AssignmentSubmissionFilter) -> Select<Entity> {
-        let mut condition = Condition::all();
-        if let Some(id) = &filter.id {
-            condition = i64::apply_comparison(condition, Column::Id, &id);
-        }
-        if let Some(assignment_id) = &filter.assignment_id {
-            condition = i64::apply_comparison(condition, Column::AssignmentId, &assignment_id);
-        }
-        if let Some(user_id) = &filter.user_id {
-            condition = i64::apply_comparison(condition, Column::UserId, &user_id);
-        }
-        if let Some(attempt) = &filter.attempt {
-            condition = i64::apply_comparison(condition, Column::Attempt, &attempt);
-        }
-        if let Some(is_practice) = &filter.is_practice {
-            condition = bool::apply_comparison(condition, Column::IsPractice, &is_practice);
-        }
-        if let Some(ignored) = &filter.ignored {
-            condition = bool::apply_comparison(condition, Column::Ignored, &ignored);
-        }
-        if let Some(filename) = &filter.filename {
-            condition = String::apply_comparison(condition, Column::Filename, &filename);
-        }
-        if let Some(file_hash) = &filter.file_hash {
-            condition = String::apply_comparison(condition, Column::FileHash, &file_hash);
-        }
-        query.filter(condition)
+impl Repository<Entity> for AssignmentSubmissionRepository {
+    fn apply_filter(query: Select<Entity>, filter_params: &[FilterParam]) -> Result<Select<Entity>, DbErr> {
+        let condition = FilterUtils::apply_all_filters(filter_params, |column_name| {
+            Column::from_str(column_name)
+                .map_err(|_| DbErr::Custom(format!("Invalid column name: {}", column_name)))
+        })?;
+        
+        Ok(query.filter(condition))
     }
 
-    fn apply_sorting(mut query: Select<Entity>, sort_by: Option<String>) -> Select<Entity> {
-        if let Some(sort_param) = sort_by {
-            for sort in sort_param.split(',') {
-                let (field, asc) = if sort.starts_with('-') {
-                    (&sort[1..], false)
-                } else {
-                    (sort, true)
-                };
-
-                query = match field {
-                    "id" => {
-                        if asc {
-                            query.order_by_asc(Column::Id)
-                        } else {
-                            query.order_by_desc(Column::Id)
-                        }
-                    }
-                    "assignment_id" => {
-                        if asc {
-                            query.order_by_asc(Column::AssignmentId)
-                        } else {
-                            query.order_by_desc(Column::AssignmentId)
-                        }
-                    }
-                    "user_id" => {
-                        if asc {
-                            query.order_by_asc(Column::UserId)
-                        } else {
-                            query.order_by_desc(Column::UserId)
-                        }
-                    }
-                    "attempt" => {
-                        if asc {
-                            query.order_by_asc(Column::Attempt)
-                        } else {
-                            query.order_by_desc(Column::Attempt)
-                        }
-                    }
-                    "is_practice" => {
-                        if asc {
-                            query.order_by_asc(Column::IsPractice)
-                        } else {
-                            query.order_by_desc(Column::IsPractice)
-                        }
-                    }
-                    "ignored" => {
-                        if asc {
-                            query.order_by_asc(Column::Ignored)
-                        } else {
-                            query.order_by_desc(Column::Ignored)
-                        }
-                    }
-                    "filename" => {
-                        if asc {
-                            query.order_by_asc(Column::Filename)
-                        } else {
-                            query.order_by_desc(Column::Filename)
-                        }
-                    }
-                    "file_hash" => {
-                        if asc {
-                            query.order_by_asc(Column::FileHash)
-                        } else {
-                            query.order_by_desc(Column::FileHash)
-                        }
-                    }
-                    "created_at" => {
-                        if asc {
-                            query.order_by_asc(Column::CreatedAt)
-                        } else {
-                            query.order_by_desc(Column::CreatedAt)
-                        }
-                    }
-                    "updated_at" => {
-                        if asc {
-                            query.order_by_asc(Column::UpdatedAt)
-                        } else {
-                            query.order_by_desc(Column::UpdatedAt)
-                        }
-                    }
-                    _ => query,
-                };
-            }
-        }
-        query
+    fn apply_sorting(query: Select<Entity>, sort_by: Option<String>) -> Select<Entity> {
+        SortUtils::apply_sorting(query.clone(), sort_by, |column_name| {
+            Column::from_str(column_name)
+                .map_err(|_| DbErr::Custom(format!("Invalid column name: {}", column_name)))
+        }).unwrap_or(query)
     }
 }

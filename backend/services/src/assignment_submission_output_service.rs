@@ -2,9 +2,8 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::assignment_submission_output::{ActiveModel, Entity, Model},
     repositories::{assignment_repository::AssignmentRepository, assignment_submission_output_repository::AssignmentSubmissionOutputRepository, assignment_submission_repository::AssignmentSubmissionRepository, repository::Repository},
-    comparisons::Comparison,
-    filters::{AssignmentSubmissionFilter, AssignmentSubmissionOutputFilter},
 };
+use util::filters::{FilterParam, FilterValue};
 use sea_orm::{DbErr, RuntimeErr, Set};
 use chrono::Utc;
 use std::path::PathBuf;
@@ -56,7 +55,7 @@ impl ToActiveModel<Entity> for UpdateAssignmentSubmissionOutput {
 
 pub struct AssignmentSubmissionOutputService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentSubmissionOutput, UpdateAssignmentSubmissionOutput, AssignmentSubmissionOutputFilter, AssignmentSubmissionOutputRepository> for AssignmentSubmissionOutputService {
+impl<'a> Service<'a, Entity, CreateAssignmentSubmissionOutput, UpdateAssignmentSubmissionOutput, AssignmentSubmissionOutputRepository> for AssignmentSubmissionOutputService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(
@@ -151,13 +150,10 @@ impl AssignmentSubmissionOutputService {
     pub async fn delete_for_submission(
         id: i64,
     ) -> Result<(), DbErr> {
-        let outputs = AssignmentSubmissionRepository::find_all(
-            AssignmentSubmissionFilter {
-                id: Some(Comparison::eq(id)),
-                ..Default::default()
-            },
-            None,
-        ).await?;
+        let filters = vec![
+            FilterParam::eq("id", FilterValue::Int(id)),
+        ];
+        let outputs = AssignmentSubmissionRepository::find_all(&filters, None).await?;
 
         for output in outputs {
             let path = AssignmentSubmissionOutputService::full_path(output.id).await?;

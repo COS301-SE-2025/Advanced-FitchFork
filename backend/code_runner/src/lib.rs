@@ -5,6 +5,7 @@ use std::{env, fs, path::PathBuf};
 // Your own modules
 use crate::validate_files::validate_memo_files;
 use services::{assignment_task_service::AssignmentTaskService, service::Service};
+use util::filters::{FilterParam, FilterValue};
 
 // Models
 use reqwest::Client;
@@ -105,12 +106,10 @@ pub async fn create_memo_outputs_for_all_tasks(
         .await
         .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
-    let tasks = AssignmentTaskService::find_all(
-        {
-            ""
-        },
-        None,
-    )
+    let filters = vec![
+        FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
+    ]
+    let tasks = AssignmentTaskService::find_all(&filters, None).await?;
 
     if tasks.is_empty() {
         println!("No tasks found for assignment {}", assignment_id);

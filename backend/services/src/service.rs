@@ -3,6 +3,7 @@ use std::pin::Pin;
 use std::str::FromStr;
 use sea_orm::{DbErr, EntityTrait, PrimaryKeyTrait, ActiveModelTrait};
 use db::repositories::repository::Repository;
+use util::filters::FilterParam;
 
 pub trait ToActiveModel<E>
 where
@@ -11,16 +12,15 @@ where
     fn into_active_model(self) -> impl Future<Output = Result<<E as EntityTrait>::ActiveModel, DbErr>> + Send;
 }
 
-pub trait Service<'a, E, C, U, F, R>: Send + Sync
+pub trait Service<'a, E, C, U, R>: Send + Sync
 where
     E: EntityTrait,
     C: Send + 'static + ToActiveModel<E>,
     U: Send + 'static + ToActiveModel<E>,
-    F: Send + Sync + 'static,
     E::ActiveModel: ActiveModelTrait<Entity = E> + Send,
     E::Model: Send + Sync + sea_orm::IntoActiveModel<E::ActiveModel>,
     E::Column: FromStr + Send + Sync,
-    R: Repository<E, F> + Send + Sync + 'static,
+    R: Repository<E> + Send + Sync + 'static,
 {
     fn create(
         params: C,
@@ -70,7 +70,7 @@ where
     }
 
     fn find_one(
-        filter_params: F,
+        filter_params: &'a [FilterParam],
         sort_by: Option<String>,
     ) -> Pin<Box<dyn Future<Output = Result<Option<E::Model>, DbErr>> + Send + 'a>> {
         Box::pin(async move {
@@ -79,7 +79,7 @@ where
     }
 
     fn find_all(
-        filter_params: F,
+        filter_params: &'a [FilterParam],
         sort_by: Option<String>,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<E::Model>, DbErr>> + Send + 'a>> {
         Box::pin(async move {
@@ -88,7 +88,7 @@ where
     }
 
     fn filter(
-        filter_params: F,
+        filter_params: &'a [FilterParam],
         page: u64,
         per_page: u64,
         sort_by: Option<String>,
@@ -101,7 +101,7 @@ where
     }
 
     fn count(
-        filter_params: F,
+        filter_params: &'a [FilterParam],
     ) -> Pin<Box<dyn Future<Output = Result<u64, DbErr>> + Send + 'a>> {
         Box::pin(async move {
             R::count(filter_params).await.map_err(DbErr::from)
@@ -109,7 +109,7 @@ where
     }
 
     fn exists(
-        filter_params: F,
+        filter_params: &'a [FilterParam],
     ) -> Pin<Box<dyn Future<Output = Result<bool, DbErr>> + Send + 'a>> {
         Box::pin(async move {
             R::exists(filter_params).await.map_err(DbErr::from)

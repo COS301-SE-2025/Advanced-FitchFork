@@ -2,9 +2,8 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::assignment_file::{Entity, ActiveModel, FileType, Model},
     repositories::{repository::Repository, assignment_file_repository::AssignmentFileRepository},
-    comparisons::Comparison,
-    filters::AssignmentFileFilter,
 };
+use util::filters::{FilterParam, FilterValue};
 use sea_orm::{DbErr, Set};
 use std::{env, fs, path::PathBuf};
 use chrono::{Utc, DateTime};
@@ -63,22 +62,19 @@ impl ToActiveModel<Entity> for UpdateAssignmentFile {
 
 pub struct AssignmentFileService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentFile, UpdateAssignmentFile, AssignmentFileFilter, AssignmentFileRepository> for AssignmentFileService {
+impl<'a> Service<'a, Entity, CreateAssignmentFile, UpdateAssignmentFile, AssignmentFileRepository> for AssignmentFileService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(
             params: CreateAssignmentFile,
         ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
         Box::pin(async move {
-            if let Some(existing) = AssignmentFileRepository::find_one(
-                AssignmentFileFilter {
-                    assignment_id: Some(Comparison::eq(params.assignment_id)),
-                    file_type: Some(Comparison::eq(params.file_type.parse::<FileType>().map_err(|e| DbErr::Custom(format!("Invalid file type: {e}")))?)),
-                    ..Default::default()
-                },
-                None,
-            )
-                .await?
+            let filters = vec![
+                FilterParam::eq("assignment_id", FilterValue::Int(params.assignment_id)),
+                FilterParam::eq("file_type", FilterValue::String(params.clone().file_type)),
+            ];
+
+            if let Some(existing) = AssignmentFileRepository::find_one(&filters, None).await?
             {
                 let existing_path = AssignmentFileService::storage_root().join(&existing.path);
                 let _ = fs::remove_file(existing_path); // Silently ignore failure
@@ -181,11 +177,9 @@ impl AssignmentFileService {
     pub async fn get_base_files(
         assignment_id: i64
     ) -> Result<Vec<Model>, DbErr> {
-        AssignmentFileRepository::find_all(AssignmentFileFilter {
-                assignment_id: Some(Comparison::eq(assignment_id)),
-                ..Default::default()
-            },
-            None,
-        ).await
+        let filters = vec![
+            FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
+        ];
+        AssignmentFileRepository::find_all(&filters, None).await
     }
 }

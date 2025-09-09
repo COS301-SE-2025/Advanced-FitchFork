@@ -2,7 +2,6 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::ticket_messages::{ActiveModel, Entity},
     repositories::{ticket_message_repository::TicketMessageRepository, repository::Repository},
-    filters::TicketMessageFilter,
 };
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
@@ -57,7 +56,7 @@ impl ToActiveModel<Entity> for UpdateTicketMessage {
 
 pub struct TicketMessageService;
 
-impl<'a> Service<'a, Entity, CreateTicketMessage, UpdateTicketMessage, TicketMessageFilter, TicketMessageRepository> for TicketMessageService {
+impl<'a> Service<'a, Entity, CreateTicketMessage, UpdateTicketMessage, TicketMessageRepository> for TicketMessageService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 

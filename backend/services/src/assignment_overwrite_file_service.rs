@@ -2,7 +2,6 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::assignment_overwrite_file::{ActiveModel, Entity, Model},
     repositories::{assignment_overwrite_file_repository::AssignmentOverwriteFileRepository, assignment_repository::AssignmentRepository, assignment_task_repository::AssignmentTaskRepository, repository::Repository},
-    filters::AssignmentOverwriteFileFilter,
 };
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
@@ -61,7 +60,7 @@ impl ToActiveModel<Entity> for UpdateAssignmentOverwriteFile {
 
 pub struct AssignmentOverwriteFileService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentOverwriteFile, UpdateAssignmentOverwriteFile, AssignmentOverwriteFileFilter, AssignmentOverwriteFileRepository> for AssignmentOverwriteFileService {
+impl<'a> Service<'a, Entity, CreateAssignmentOverwriteFile, UpdateAssignmentOverwriteFile, AssignmentOverwriteFileRepository> for AssignmentOverwriteFileService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(

@@ -2,9 +2,8 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::assignment_submission::{ActiveModel, Entity, Model},
     repositories::{assignment_repository::AssignmentRepository, assignment_submission_repository::AssignmentSubmissionRepository, repository::Repository},
-    comparisons::Comparison,
-    filters::AssignmentSubmissionFilter,
 };
+use util::filters::{FilterParam, FilterValue};
 use util::execution_config::{ExecutionConfig, execution_config::GradingPolicy};
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
@@ -76,7 +75,7 @@ impl ToActiveModel<Entity> for UpdateAssignmentSubmission {
 
 pub struct AssignmentSubmissionService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentSubmission, UpdateAssignmentSubmission, AssignmentSubmissionFilter, AssignmentSubmissionRepository> for AssignmentSubmissionService {
+impl<'a> Service<'a, Entity, CreateAssignmentSubmission, UpdateAssignmentSubmission, AssignmentSubmissionRepository> for AssignmentSubmissionService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(
@@ -171,13 +170,10 @@ impl AssignmentSubmissionService {
     pub async fn find_by_assignment(
         assignment_id: i64,
     ) -> Result<Vec<i64>, DbErr> {
-        let submissions = AssignmentSubmissionRepository::find_all(
-            AssignmentSubmissionFilter {
-                assignment_id: Some(Comparison::eq(assignment_id)),
-                ..Default::default()
-            },
-            None,
-        ).await?;
+        let filters = vec![
+            FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
+        ];
+        let submissions = AssignmentSubmissionRepository::find_all(&filters, None).await?;
 
         Ok(submissions.into_iter().map(|s| s.id as i64).collect())
     }
@@ -185,13 +181,10 @@ impl AssignmentSubmissionService {
     pub async fn get_latest_submissions_for_assignment(
         assignment_id: i64,
     ) -> Result<Vec<Model>, DbErr> {
-        let all = AssignmentSubmissionRepository::find_all(
-            AssignmentSubmissionFilter{
-                assignment_id: Some(Comparison::eq(assignment_id)),
-                ..Default::default()
-            },
-            Some("user_id,-attempt".to_string()),
-        ).await?;
+        let filters = vec![
+            FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
+        ];
+        let all = AssignmentSubmissionRepository::find_all(&filters, Some("user_id,-attempt".to_string())).await?;
 
         let mut seen = HashSet::new();
         let mut latest = Vec::new();
@@ -209,16 +202,13 @@ impl AssignmentSubmissionService {
         assignment_id: i64,
         user_id: i64,
     ) -> Result<Option<Model>, DbErr> {
-        let mut subs = AssignmentSubmissionRepository::find_all(
-            AssignmentSubmissionFilter{
-                assignment_id: Some(Comparison::eq(assignment_id)),
-                user_id: Some(Comparison::eq(user_id)),
-                ignored: Some(Comparison::eq(false)),
-                is_practice: Some(Comparison::eq(false)),
-                ..Default::default()
-            },
-            None,
-        ).await?;
+        let filters = vec![
+            FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
+            FilterParam::eq("user_id", FilterValue::Int(user_id)),
+            FilterParam::eq("ignored", FilterValue::Bool(false)),
+            FilterParam::eq("is_practice", FilterValue::Bool(false)),
+        ];
+        let mut subs = AssignmentSubmissionRepository::find_all(&filters, None).await?;
 
         if subs.is_empty() {
             return Ok(None);

@@ -2,7 +2,6 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::module::{Entity, ActiveModel},
     repositories::{repository::Repository, module_repository::ModuleRepository},
-    filters::ModuleFilter,
 };
 use sea_orm::{DbErr, Set};
 use std::{env, fs, path::PathBuf};
@@ -78,7 +77,7 @@ impl ToActiveModel<Entity> for UpdateModule {
 
 pub struct ModuleService;
 
-impl<'a> Service<'a, Entity, CreateModule, UpdateModule, ModuleFilter, ModuleRepository> for ModuleService {
+impl<'a> Service<'a, Entity, CreateModule, UpdateModule, ModuleRepository> for ModuleService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn delete(

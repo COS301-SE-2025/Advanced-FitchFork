@@ -2,9 +2,8 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::user::{Model, Entity, ActiveModel},
     repositories::{repository::Repository, user_repository::UserRepository},
-    comparisons::Comparison,
-    filters::UserFilter,
 };
+use util::filters::{FilterParam, FilterValue};
 use sea_orm::{DbErr, Set};
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -145,7 +144,7 @@ impl ToActiveModel<Entity> for UpdateUser {
 
 pub struct UserService;
 
-impl<'a> Service<'a, Entity, CreateUser, UpdateUser, UserFilter, UserRepository> for UserService {
+impl<'a> Service<'a, Entity, CreateUser, UpdateUser, UserRepository> for UserService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
@@ -172,14 +171,11 @@ impl UserService {
         username: &str,
         password: &str,
     ) -> Result<Option<Model>, DbErr> {
-        let username = username.trim();
-
-        if let Some(user) = UserRepository::find_one(
-            UserFilter {
-                username: Some(Comparison::eq(username.to_string())),
-                ..Default::default()
-            },
-            None,
+        let filters = vec![
+            FilterParam::eq("username", FilterValue::String(username.trim().to_string())),
+        ];
+        
+        if let Some(user) = UserRepository::find_one(&filters, None,
         ).await? {
             if Self::verify_password(&user, password) {
                 return Ok(Some(user));

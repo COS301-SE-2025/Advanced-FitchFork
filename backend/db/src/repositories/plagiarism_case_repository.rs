@@ -1,107 +1,26 @@
-use crate::models::plagiarism_case::{Entity, Column, Status};
+use crate::models::plagiarism_case::{Entity, Column};
 use crate::repositories::repository::Repository;
-use crate::comparisons::ApplyComparison;
-use crate::filters::PlagiarismCaseFilter;
-use sea_orm::{QueryFilter, QueryOrder, Select, Condition};
+use crate::filter_utils::{FilterUtils, SortUtils};
+use util::filters::FilterParam;
+use sea_orm::{QueryFilter, Select, DbErr};
+use std::str::FromStr;
 
 pub struct PlagiarismCaseRepository;
 
-impl PlagiarismCaseRepository {}
-
-impl Repository<Entity, PlagiarismCaseFilter> for PlagiarismCaseRepository {
-    fn apply_filter(query: Select<Entity>, filter: &PlagiarismCaseFilter) -> Select<Entity> {
-        let mut condition = Condition::all();
-        if let Some(id) = &filter.id {
-            condition = i64::apply_comparison(condition, Column::Id, &id);
-        }
-        if let Some(assignment_id) = &filter.assignment_id {
-            condition = i64::apply_comparison(condition, Column::AssignmentId, &assignment_id);
-        }
-        if let Some(submission_id_1) = &filter.submission_id_1 {
-            condition = i64::apply_comparison(condition, Column::SubmissionId1, &submission_id_1);
-        }
-        if let Some(submission_id_2) = &filter.submission_id_2 {
-            condition = i64::apply_comparison(condition, Column::SubmissionId2, &submission_id_2);
-        }
-        if let Some(description) = &filter.description {
-            condition = String::apply_comparison(condition, Column::Description, &description);
-        }
-        if let Some(status) = &filter.status {
-            condition = Status::apply_comparison(condition, Column::Status, &status);
-        }
-        query.filter(condition)
+impl Repository<Entity> for PlagiarismCaseRepository {
+    fn apply_filter(query: Select<Entity>, filter_params: &[FilterParam]) -> Result<Select<Entity>, DbErr> {
+        let condition = FilterUtils::apply_all_filters(filter_params, |column_name| {
+            Column::from_str(column_name)
+                .map_err(|_| DbErr::Custom(format!("Invalid column name: {}", column_name)))
+        })?;
+        
+        Ok(query.filter(condition))
     }
 
-    fn apply_sorting(mut query: Select<Entity>, sort_by: Option<String>) -> Select<Entity> {
-        if let Some(sort_param) = sort_by {
-            for sort in sort_param.split(',') {
-                let (field, asc) = if sort.starts_with('-') {
-                    (&sort[1..], false)
-                } else {
-                    (sort, true)
-                };
-
-                query = match field {
-                    "id" => {
-                        if asc {
-                            query.order_by_asc(Column::Id)
-                        } else {
-                            query.order_by_desc(Column::Id)
-                        }
-                    }
-                    "assignment_id" => {
-                        if asc {
-                            query.order_by_asc(Column::AssignmentId)
-                        } else {
-                            query.order_by_desc(Column::AssignmentId)
-                        }
-                    }
-                    "submission_id_1" => {
-                        if asc {
-                            query.order_by_asc(Column::SubmissionId1)
-                        } else {
-                            query.order_by_desc(Column::SubmissionId1)
-                        }
-                    }
-                    "submission_id_2" => {
-                        if asc {
-                            query.order_by_asc(Column::SubmissionId2)
-                        } else {
-                            query.order_by_desc(Column::SubmissionId2)
-                        }
-                    }
-                    "description" => {
-                        if asc {
-                            query.order_by_asc(Column::Description)
-                        } else {
-                            query.order_by_desc(Column::Description)
-                        }
-                    }
-                    "status" => {
-                        if asc {
-                            query.order_by_asc(Column::Status)
-                        } else {
-                            query.order_by_desc(Column::Status)
-                        }
-                    }
-                    "created_at" => {
-                        if asc {
-                            query.order_by_asc(Column::CreatedAt)
-                        } else {
-                            query.order_by_desc(Column::CreatedAt)
-                        }
-                    }
-                    "updated_at" => {
-                        if asc {
-                            query.order_by_asc(Column::UpdatedAt)
-                        } else {
-                            query.order_by_desc(Column::UpdatedAt)
-                        }
-                    }
-                    _ => query,
-                };
-            }
-        }
-        query
+    fn apply_sorting(query: Select<Entity>, sort_by: Option<String>) -> Select<Entity> {
+        SortUtils::apply_sorting(query.clone(), sort_by, |column_name| {
+            Column::from_str(column_name)
+                .map_err(|_| DbErr::Custom(format!("Invalid column name: {}", column_name)))
+        }).unwrap_or(query)
     }
 }

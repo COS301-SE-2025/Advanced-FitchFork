@@ -1,7 +1,7 @@
 pub mod models;
 pub mod test_utils;
 pub mod repositories;
-pub mod filters;
+pub mod filter_utils;
 pub mod comparisons;
 
 use sea_orm::{Database, DatabaseConnection};

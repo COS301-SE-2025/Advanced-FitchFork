@@ -2,7 +2,6 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::plagiarism_case::{ActiveModel, Entity, Status},
     repositories::{plagiarism_case_repository::PlagiarismCaseRepository, repository::Repository},
-    filters::PlagiarismCaseFilter,
 };
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
@@ -57,7 +56,7 @@ impl ToActiveModel<Entity> for UpdatePlagiarismCase {
 
 pub struct PlagiarismCaseService;
 
-impl<'a> Service<'a, Entity, CreatePlagiarismCase, UpdatePlagiarismCase, PlagiarismCaseFilter, PlagiarismCaseRepository> for PlagiarismCaseService {
+impl<'a> Service<'a, Entity, CreatePlagiarismCase, UpdatePlagiarismCase, PlagiarismCaseRepository> for PlagiarismCaseService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 

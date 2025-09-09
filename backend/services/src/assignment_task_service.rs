@@ -2,9 +2,8 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::assignment_task::{Entity, ActiveModel},
     repositories::{repository::Repository, assignment_task_repository::AssignmentTaskRepository},
-    comparisons::Comparison,
-    filters::AssignmentTaskFilter,
 };
+use util::filters::{FilterParam, FilterValue};
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
 
@@ -63,7 +62,7 @@ impl ToActiveModel<Entity> for UpdateAssignmentTask {
 
 pub struct AssignmentTaskService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentTask, UpdateAssignmentTask, AssignmentTaskFilter, AssignmentTaskRepository> for AssignmentTaskService {
+impl<'a> Service<'a, Entity, CreateAssignmentTask, UpdateAssignmentTask, AssignmentTaskRepository> for AssignmentTaskService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
@@ -71,9 +70,9 @@ impl AssignmentTaskService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
     pub async fn tasks_present(assignment_id: i64) -> bool {
-        AssignmentTaskRepository::exists(AssignmentTaskFilter {
-            assignment_id: Some(Comparison::eq(assignment_id)),
-            ..Default::default()
-        }).await.unwrap_or(false)
+        let filters = vec![
+            FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
+        ];
+        AssignmentTaskRepository::exists(&filters).await.unwrap_or(false)
     }
 }

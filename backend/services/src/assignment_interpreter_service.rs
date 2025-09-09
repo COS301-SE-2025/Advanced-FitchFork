@@ -2,9 +2,8 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::assignment_interpreter::{ActiveModel, Entity, Model},
     repositories::{assignment_interpreter_repository::AssignmentInterpreterRepository, repository::Repository},
-    comparisons::Comparison,
-    filters::AssignmentInterpreterFilter,
 };
+use util::filters::{FilterParam, FilterValue};
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
 use std::{env, fs};
@@ -58,22 +57,19 @@ impl ToActiveModel<Entity> for UpdateAssignmentInterpreter {
 
 pub struct AssignmentInterpreterService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentInterpreter, UpdateAssignmentInterpreter, AssignmentInterpreterFilter, AssignmentInterpreterRepository> for AssignmentInterpreterService {
+impl<'a> Service<'a, Entity, CreateAssignmentInterpreter, UpdateAssignmentInterpreter, AssignmentInterpreterRepository> for AssignmentInterpreterService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(
             params: CreateAssignmentInterpreter,
         ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, DbErr>> + Send + 'a>> {
         Box::pin(async move {
-            if let Some(existing) = AssignmentInterpreterRepository::find_one(
-                AssignmentInterpreterFilter {
-                    assignment_id: Some(Comparison::eq(params.assignment_id)),
-                    filename: Some(Comparison::eq(params.clone().filename)),
-                    ..Default::default()
-                },
-                None,
-            )
-                .await?
+            let filters = vec![
+                FilterParam::eq("assignment_id", FilterValue::Int(params.assignment_id)),
+                FilterParam::eq("filename", FilterValue::String(params.clone().filename)),
+            ];
+
+            if let Some(existing) = AssignmentInterpreterRepository::find_one(&filters, None).await?
             {
                 let existing_path = AssignmentInterpreterService::storage_root().join(&existing.path);
                 let _ = fs::remove_file(existing_path); // Silently ignore failure

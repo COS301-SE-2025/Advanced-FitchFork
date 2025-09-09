@@ -2,7 +2,6 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::announcements::{ActiveModel, Entity},
     repositories::{announcement_repository::AnnouncementRepository, repository::Repository},
-    filters::AnnouncementFilter,
 };
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
@@ -71,7 +70,7 @@ impl ToActiveModel<Entity> for UpdateAnnouncement {
 
 pub struct AnnouncementService;
 
-impl<'a> Service<'a, Entity, CreateAnnouncement, UpdateAnnouncement, AnnouncementFilter, AnnouncementRepository> for AnnouncementService {
+impl<'a> Service<'a, Entity, CreateAnnouncement, UpdateAnnouncement, AnnouncementRepository> for AnnouncementService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 

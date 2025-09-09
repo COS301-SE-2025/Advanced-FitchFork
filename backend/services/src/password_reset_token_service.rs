@@ -2,9 +2,8 @@ use crate::service::{Service, ToActiveModel};
 use db::{
     models::password_reset_token::{ActiveModel, Entity, Model},
     repositories::{password_reset_token_repository::PasswordResetTokenRepository, repository::Repository},
-    comparisons::Comparison,
-    filters::PasswordResetTokenFilter,
 };
+use util::filters::{FilterParam, FilterValue};
 use sea_orm::{DbErr, Set};
 use chrono::{Utc, Duration};
 use rand::{thread_rng, Rng};
@@ -63,7 +62,7 @@ impl ToActiveModel<Entity> for UpdatePasswordResetToken {
 
 pub struct PasswordResetTokenService;
 
-impl<'a> Service<'a, Entity, CreatePasswordResetToken, UpdatePasswordResetToken, PasswordResetTokenFilter, PasswordResetTokenRepository> for PasswordResetTokenService {
+impl<'a> Service<'a, Entity, CreatePasswordResetToken, UpdatePasswordResetToken, PasswordResetTokenRepository> for PasswordResetTokenService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
@@ -73,14 +72,11 @@ impl PasswordResetTokenService {
     pub async fn find_valid_token(
         token: String,
     ) -> Result<Option<Model>, DbErr> {
-        PasswordResetTokenRepository::find_one(
-            PasswordResetTokenFilter {
-                token: Some(Comparison::eq(token)),
-                used: Some(Comparison::eq(false)),
-                expires_at: Some(Comparison::gt(Utc::now())),
-                ..Default::default()
-            },
-            None,
-        ).await
+        let filters = vec![
+            FilterParam::eq("token", FilterValue::String(token)),
+            FilterParam::eq("used", FilterValue::Bool(false)),
+            FilterParam::gt("expires_at", FilterValue::DateTime(Utc::now())),
+        ];
+        PasswordResetTokenRepository::find_one(&filters, None).await
     }
 }
