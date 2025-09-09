@@ -75,6 +75,16 @@ zip = "4.3"
 tempfile = "3.5.0"
 walkdir = "2.5.0"
 
+# For archiving MOSS reports
+anyhow = "1.0"
+percent-encoding = "2.3"
+reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "stream"] }
+scraper = "0.24.0"
+sha2 = "0.10"
+hex = "0.4"
+bytes = "1.6"
+
+
 [dev-dependencies]
 serial_test = "3.2"
 zip = "4.3.0"

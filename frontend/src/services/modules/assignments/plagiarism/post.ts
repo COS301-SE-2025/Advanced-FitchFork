@@ -28,3 +28,10 @@ export const runMossCheck = async (
 ): Promise<ApiResponse<RunMossResult>> => {
   return api.post(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/moss`);
 };
+
+export const archiveMossReport = async (
+  moduleId: number,
+  assignmentId: number
+): Promise<ApiResponse<{}>> => {
+  return api.post(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/moss/archive`);
+};

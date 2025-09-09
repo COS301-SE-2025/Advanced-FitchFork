@@ -1,4 +1,5 @@
-use axum::{extract::{State, Path, Query}, http::StatusCode, Json, response::IntoResponse};
+use axum::{body::Body, extract::{Path, Query, State}, http::{HeaderMap, HeaderValue, StatusCode}, response::IntoResponse, Json};
+use chrono::{DateTime, Utc};
 use db::models::{
     assignment_submission::{self, Entity as SubmissionEntity},
     plagiarism_case::{self, Entity as PlagiarismEntity, Status},
@@ -6,7 +7,9 @@ use db::models::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Condition, QuerySelect, QueryTrait, QueryOrder, PaginatorTrait};
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use tokio::fs::File;
+use tokio_util::io::ReaderStream;
+use std::{path::PathBuf, str::FromStr};
 use std::collections::HashMap;
 use util::state::AppState;
 use crate::response::ApiResponse;
@@ -16,8 +19,9 @@ use std::fs;
 pub struct MossReportResponse {
     pub report_url: String,
     pub generated_at: String,
+    pub has_archive: bool,
+    pub archive_generated_at: Option<String>,
 }
-
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss
 ///
@@ -42,6 +46,8 @@ pub struct MossReportResponse {
 /// - `200 OK` on success with the latest report metadata:
 ///   - `report_url` — The external URL to the MOSS results page
 ///   - `generated_at` — RFC 3339 timestamp for when the report file was written
+///   - `has_archive` — `true` if a ZIP archive of a mirrored report exists on the server
+///   - `archive_generated_at` — RFC 3339 timestamp for when `moss_archive.zip` was last written; `null` if absent
 /// - `404 NOT FOUND` if no report has been generated yet
 /// - `500 INTERNAL SERVER ERROR` if the report file cannot be read or parsed
 ///
@@ -53,7 +59,9 @@ pub struct MossReportResponse {
 ///   "message": "MOSS report retrieved successfully",
 ///   "data": {
 ///     "report_url": "http://moss.stanford.edu/results/123456789",
-///     "generated_at": "2025-05-30T12:34:56Z"
+///     "generated_at": "2025-05-30T12:34:56Z",
+///     "has_archive": true,
+///     "archive_generated_at": "2025-05-30T12:40:02Z"
 ///   }
 /// }
 /// ```
@@ -79,20 +87,24 @@ pub struct MossReportResponse {
 /// # Notes
 /// - Internally, the metadata is read from `reports.txt` under the assignment’s storage directory:
 ///   `.../module_{module_id}/assignment_{assignment_id}/reports.txt`.
+/// - `has_archive` checks for the presence of `moss_archive.zip` in the same directory.  
+///   `archive_generated_at` is taken from that file’s last-modified timestamp.
 /// - The `report_url` is hosted by the MOSS service and may expire per MOSS retention policy.
 /// - To refresh the report, run the POST `/plagiarism/moss` endpoint and then call this GET again.
 pub async fn get_moss_report(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let report_path = assignment_submission::Model::storage_root()
+    let base_dir = assignment_submission::Model::storage_root()
         .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id))
-        .join("reports.txt");
+        .join(format!("assignment_{}", assignment_id));
+
+    let report_path = base_dir.join("reports.txt");
+    let archive_zip_path = base_dir.join("moss_archive.zip");
 
     if !report_path.exists() {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("MOSS report not found".to_string())),
+            Json(ApiResponse::<()>::error("MOSS report not found")),
         )
             .into_response();
     }
@@ -102,14 +114,14 @@ pub async fn get_moss_report(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(format!("Failed to read MOSS report: {}", e))),
+                Json(ApiResponse::<()>::error(format!("Failed to read MOSS report: {e}"))),
             )
                 .into_response();
         }
     };
 
-    let mut report_url = "".to_string();
-    let mut generated_at = "".to_string();
+    let mut report_url = String::new();
+    let mut generated_at = String::new();
 
     for line in content.lines() {
         if let Some(url) = line.strip_prefix("Report URL: ") {
@@ -122,10 +134,22 @@ pub async fn get_moss_report(
     if report_url.is_empty() {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error("Failed to parse MOSS report".to_string())),
+            Json(ApiResponse::<()>::error("Failed to parse MOSS report")),
         )
             .into_response();
     }
+
+    let has_archive = archive_zip_path.exists();
+
+    // Best-effort read of archive modified time → RFC 3339
+    let archive_generated_at = if has_archive {
+        fs::metadata(&archive_zip_path)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .map(|st| DateTime::<Utc>::from(st).to_rfc3339())
+    } else {
+        None
+    };
 
     (
         StatusCode::OK,
@@ -133,13 +157,14 @@ pub async fn get_moss_report(
             MossReportResponse {
                 report_url,
                 generated_at,
+                has_archive,
+                archive_generated_at,
             },
             "MOSS report retrieved successfully",
         )),
     )
         .into_response()
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct ListPlagiarismCaseQueryParams {
@@ -652,4 +677,70 @@ pub async fn get_graph(
             "Plagiarism graph retrieved successfully",
         )),
     )
+}
+
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss/archive/download
+///
+/// Streams the **latest archived MOSS report** as a ZIP attachment.
+///
+/// # Path
+/// - `module_id`
+/// - `assignment_id`
+///
+/// # Storage layout
+/// - ZIP expected at:
+///   `<storage_root>/module_{module_id}/assignment_{assignment_id}/moss_archive.zip`
+///
+/// # Responses
+/// - 200 OK — streams the zip (`application/zip`, `Content-Disposition: attachment`)
+/// - 404 Not Found — archive zip not found
+/// - 500 Internal Server Error — failed to open or stream file
+pub async fn download_moss_archive(
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    // Where the zip is written by the archive endpoint
+    let zip_path: PathBuf = assignment_submission::Model::storage_root()
+        .join(format!("module_{}", module_id))
+        .join(format!("assignment_{}", assignment_id))
+        .join("moss_archive.zip");
+
+    if !zip_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("Archive not found. Please archive a MOSS report first.".to_string()))
+        )
+            .into_response();
+    }
+
+    let file = match File::open(&zip_path).await {
+        Ok(f) => f,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!("Failed to open archive: {e}"))),
+            )
+                .into_response();
+        }
+    };
+
+    let filename = zip_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("moss_archive.zip");
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        HeaderValue::from_static("application/zip"),
+    );
+    headers.insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename))
+            .unwrap_or(HeaderValue::from_static("attachment; filename=\"archive.zip\"")),
+    );
+
+    let stream = ReaderStream::new(file);
+    let body = Body::from_stream(stream);
+
+    (headers, body).into_response()
 }

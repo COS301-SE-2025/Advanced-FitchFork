@@ -18,7 +18,7 @@ import { listAttendanceSessions } from '@/services/modules/attendance/get';
 import { createAttendanceSession } from '@/services/modules/attendance/post';
 import { editAttendanceSession } from '@/services/modules/attendance/put';
 import { deleteAttendanceSession } from '@/services/modules/attendance/delete';
-import { AttendanceSessionCard } from '@/components/attendance';
+import { AttendanceEmptyState, AttendanceSessionCard } from '@/components/attendance';
 
 const fmt = (s: string) => dayjs(s).format('YYYY-MM-DD HH:mm');
 
@@ -293,16 +293,11 @@ const AttendanceSessionsList = () => {
               },
             ]}
             emptyNoEntities={
-              <div className="text-center p-8">
-                <p className="text-lg font-medium mb-2">No attendance sessions yet</p>
-                {isStaff ? (
-                  <button className="btn btn-primary" onClick={() => setCreateOpen(true)}>
-                    <PlusOutlined /> Create Session
-                  </button>
-                ) : (
-                  <p className="text-sm text-gray-500">Staff can create sessions from this page.</p>
-                )}
-              </div>
+              <AttendanceEmptyState
+                isStaff={isStaff}
+                onCreate={isStaff ? () => setCreateOpen(true) : undefined}
+                onRefresh={() => listRef.current?.refresh()}
+              />
             }
           />
         </div>

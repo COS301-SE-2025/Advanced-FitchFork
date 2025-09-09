@@ -59,4 +59,6 @@ export type GetPlagiarismGraphResponse = ApiResponse<{
 export type GetMossReportResponse = ApiResponse<{
   report_url: string;
   generated_at: string;
+  has_archive: boolean;
+  archive_generated_at: string | null;
 }>;

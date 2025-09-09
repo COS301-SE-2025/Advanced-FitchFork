@@ -1,4 +1,3 @@
-// src/pages/modules/attendance/AttendanceSessionProjector.tsx
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, QRCode, Space, Tooltip, Progress, message } from 'antd';
@@ -13,7 +12,6 @@ import {
 } from '@ant-design/icons';
 
 import { useModule } from '@/context/ModuleContext';
-import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 
 import type { AttendanceSession } from '@/types/modules/attendance';
@@ -25,7 +23,6 @@ export default function AttendanceSessionProjector() {
   const navigate = useNavigate();
   const { session_id } = useParams<{ session_id: string }>();
   const { id: moduleId } = useModule();
-  const { isDarkMode } = useTheme();
   const auth = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -34,8 +31,6 @@ export default function AttendanceSessionProjector() {
   const [codeLoading, setCodeLoading] = useState(false);
   const [currentCode, setCurrentCode] = useState('');
   const [isFs, setIsFs] = useState(false);
-
-  const qrIcon = isDarkMode ? '/ff_logo_dark.svg' : '/ff_logo_light.svg';
 
   // Load session
   const load = async () => {
@@ -260,8 +255,9 @@ export default function AttendanceSessionProjector() {
                 value={scanUrl || ' '}
                 errorLevel="H"
                 size={qrSize}
-                icon={qrIcon}
+                icon="/ff_logo_light.svg"
                 iconSize={Math.floor(qrSize * 0.24)}
+                color="#000"
               />
             </div>
           </div>

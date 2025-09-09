@@ -14,6 +14,8 @@ import {
   bulkDeletePlagiarismCases,
   flagPlagiarismCase,
   reviewPlagiarismCase,
+  downloadMossArchive,
+  archiveMossReport,
 } from '@/services/modules/assignments/plagiarism';
 import { getSubmissions } from '@/services/modules/assignments/submissions';
 import type { Submission } from '@/types/modules/assignments/submissions';
@@ -25,6 +27,7 @@ import {
   ExperimentOutlined,
   CheckCircleOutlined,
   FlagOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { EntityList, type EntityListHandle, type EntityListProps } from '@/components/EntityList';
 import CreateModal from '@/components/common/CreateModal';
@@ -48,6 +51,7 @@ import { formatModuleCode } from '@/utils/modules';
 import { DateTime, IdTag, PercentageTag } from '@/components/common';
 import ConfirmModal from '@/components/utils/ConfirmModal';
 import { dateTimeString } from '@/utils/dateTimeString';
+import useApp from 'antd/es/app/useApp';
 
 /** Build TreeSelect nodes grouped by user: parents (users) are not selectable; children are submissions */
 function buildSubmissionTree(subs: Submission[]) {
@@ -102,6 +106,7 @@ function buildSubmissionTree(subs: Submission[]) {
 }
 
 const PlagiarismCases = () => {
+  const { modal } = useApp();
   const { setValue } = useViewSlot();
   const navigate = useNavigate();
   const moduleDetails = useModule();
@@ -124,6 +129,9 @@ const PlagiarismCases = () => {
   const [mossRunning, setMossRunning] = useState(false);
   const [mossReportUrl, setMossReportUrl] = useState<string | null>(null);
   const [mossGeneratedAt, setMossGeneratedAt] = useState<string | null>(null);
+  const [hasArchive, setHasArchive] = useState<boolean>(false);
+  const [archiveUrl, setArchiveUrl] = useState<string | null>(null);
+  const [archiveGeneratedAt, setArchiveGeneratedAt] = useState<string | null>(null);
 
   const loadMossReport = async () => {
     try {
@@ -131,13 +139,22 @@ const PlagiarismCases = () => {
       if (res.success && (res.data as any)?.report_url) {
         setMossReportUrl((res.data as any).report_url);
         setMossGeneratedAt((res.data as any).generated_at ?? null);
+        setHasArchive(Boolean((res.data as any)?.has_archive));
+        setArchiveUrl((res.data as any)?.archive_url ?? null);
+        setArchiveGeneratedAt((res.data as any)?.archive_generated_at ?? null);
       } else {
         setMossReportUrl(null);
         setMossGeneratedAt(null);
+        setHasArchive(false);
+        setArchiveUrl(null);
+        setArchiveGeneratedAt(null);
       }
     } catch {
       setMossReportUrl(null);
       setMossGeneratedAt(null);
+      setHasArchive(false);
+      setArchiveUrl(null);
+      setArchiveGeneratedAt(null);
     }
   };
 
@@ -334,6 +351,7 @@ const PlagiarismCases = () => {
         message.success(res.message || 'MOSS check completed successfully');
         listRef.current?.refresh();
         await loadMossReport();
+        setMossOpen(false);
       } else {
         message.error(res.message || 'Failed to run MOSS check');
       }
@@ -361,6 +379,43 @@ const PlagiarismCases = () => {
         label: 'Run MOSS',
         icon: <ExperimentOutlined />,
         handler: () => setMossOpen(true),
+      },
+      {
+        key: 'archive',
+        label: 'Archive MOSS Report',
+        icon: <ExperimentOutlined />,
+        handler: () => {
+          modal.confirm({
+            title: 'Create/refresh offline MOSS archive?',
+            icon: <ExclamationCircleOutlined />,
+            width: 500,
+            content: (
+              <div>
+                <p>
+                  This will mirror the <em>current</em> MOSS report and package it as a ZIP. Any
+                  existing archive will be overwritten.
+                </p>
+                {hasArchive && archiveGeneratedAt && (
+                  <Typography.Text type="secondary">
+                    Last archived {dateTimeString(archiveGeneratedAt, 'relative')}.
+                  </Typography.Text>
+                )}
+              </div>
+            ),
+            okText: 'Archive',
+            cancelText: 'Cancel',
+            async onOk() {
+              const res = await archiveMossReport(moduleId, assignmentId);
+              if (!res.success) {
+                message.error(res.message || 'Failed to archive MOSS report');
+                // Throw to keep the confirm modal open on failure:
+                throw new Error(res.message || 'archive failed');
+              }
+              message.success(res.message || 'Archive created');
+              await loadMossReport(); // refresh banner/timestamps
+            },
+          });
+        },
       },
       {
         key: 'graph',
@@ -460,19 +515,50 @@ const PlagiarismCases = () => {
             showIcon
             message="Latest MOSS report"
             description={
-              <span>
-                <a href={mossReportUrl} target="_blank" rel="noreferrer" className="text-blue-600">
-                  Open MOSS Report
-                </a>
-                {mossGeneratedAt && (
-                  <>
-                    {' • '}
+              <div className="space-y-1">
+                {/* Line 1: report link + generated time */}
+                <div>
+                  <a
+                    href={mossReportUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600"
+                  >
+                    Open MOSS Report
+                  </a>
+                  {mossGeneratedAt && (
+                    <>
+                      {' • '}
+                      <Typography.Text type="secondary">
+                        Generated {dateTimeString(mossGeneratedAt, 'relative')}
+                      </Typography.Text>
+                    </>
+                  )}
+                </div>
+
+                {/* Line 2: archive link (or hint) + archived time */}
+                <div>
+                  {hasArchive ? (
+                    <>
+                      <Typography.Link onClick={() => downloadMossArchive(moduleId, assignmentId)}>
+                        Download archived ZIP
+                      </Typography.Link>
+                      {archiveGeneratedAt && (
+                        <>
+                          {' • '}
+                          <Typography.Text type="secondary">
+                            Archived {dateTimeString(archiveGeneratedAt, 'relative')}
+                          </Typography.Text>
+                        </>
+                      )}
+                    </>
+                  ) : (
                     <Typography.Text type="secondary">
-                      Generated {dateTimeString(mossGeneratedAt, 'relative')}
+                      No offline archive yet. Use <em>Archive MOSS Report</em> to generate one.
                     </Typography.Text>
-                  </>
-                )}
-              </span>
+                  )}
+                </div>
+              </div>
             }
           />
         )}
@@ -688,19 +774,19 @@ const PlagiarismCases = () => {
       <Modal
         title="Run MOSS on Latest Submissions"
         open={mossOpen}
-        onCancel={() => {
-          setMossOpen(false);
-        }}
+        onCancel={() => setMossOpen(false)}
         width={650}
         onOk={doRunMoss}
         okText={mossReportUrl ? 'Run Again' : 'Run MOSS'}
         confirmLoading={mossRunning}
+        getContainer={false} // helps modal inherit dark styles from parent
       >
         <Space direction="vertical" className="w-full">
           <Typography.Paragraph type="secondary" className="mb-1">
-            This runs MOSS on the latest attempt for every student in{' '}
+            This runs MOSS on <strong>one submission per student</strong> in{' '}
             <strong>{formatModuleCode(moduleDetails.code)}</strong> •{' '}
-            <strong>{assignment.name}</strong>.
+            <strong>{assignment.name}</strong>. The selection follows the assignment’s{' '}
+            <em>Grading Policy</em> from Assignment Config.
           </Typography.Paragraph>
 
           <Alert
@@ -712,7 +798,7 @@ const PlagiarismCases = () => {
                 Make sure the correct language is set in{' '}
                 <Link
                   to={`/modules/${moduleId}/assignments/${assignmentId}/config/assignment`}
-                  className="text-blue-600"
+                  className="text-blue-600 dark:text-blue-400"
                 >
                   Assignment Config
                 </Link>{' '}
@@ -721,10 +807,38 @@ const PlagiarismCases = () => {
             }
           />
 
+          {/* Info block explaining the policy */}
+          <Alert
+            type="info"
+            showIcon
+            message="Which submissions are compared?"
+            description={
+              <div>
+                MOSS chooses one submission per student based on <em>Grading Policy</em>:
+                <ul className="list-disc ml-6 mt-2">
+                  <li>
+                    <strong>Last</strong>: the most recent <em>non-practice</em>,{' '}
+                    <em>non-ignored</em> submission.
+                  </li>
+                  <li>
+                    <strong>Best</strong>: the highest-scoring <em>non-practice</em>,{' '}
+                    <em>non-ignored</em> submission.
+                  </li>
+                </ul>
+              </div>
+            }
+          />
+
+          {/* Live report info */}
           {mossReportUrl && (
             <div className="mt-3">
               <Typography.Text>Report URL:&nbsp;</Typography.Text>
-              <a href={mossReportUrl} target="_blank" rel="noreferrer" className="text-blue-600">
+              <a
+                href={mossReportUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 dark:text-blue-400"
+              >
                 Open MOSS Report
               </a>
               {mossGeneratedAt && (
@@ -737,6 +851,41 @@ const PlagiarismCases = () => {
               )}
             </div>
           )}
+
+          {/* Archive info (URL + archived time, with download fallback) */}
+          <div className="mt-1">
+            {hasArchive ? (
+              <>
+                <Typography.Text>Archive:&nbsp;</Typography.Text>
+                {archiveUrl ? (
+                  <a
+                    href={archiveUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 dark:text-blue-400"
+                  >
+                    Open archived ZIP
+                  </a>
+                ) : (
+                  <Typography.Link onClick={() => downloadMossArchive(moduleId, assignmentId)}>
+                    Download archived ZIP
+                  </Typography.Link>
+                )}
+                {archiveGeneratedAt && (
+                  <>
+                    {' • '}
+                    <Typography.Text type="secondary">
+                      Archived {dayjs(archiveGeneratedAt).format('YYYY-MM-DD HH:mm')}
+                    </Typography.Text>
+                  </>
+                )}
+              </>
+            ) : (
+              <Typography.Text type="secondary">
+                No offline archive yet. Use <em>Archive MOSS Report</em> to generate one.
+              </Typography.Text>
+            )}
+          </div>
         </Space>
       </Modal>
     </>

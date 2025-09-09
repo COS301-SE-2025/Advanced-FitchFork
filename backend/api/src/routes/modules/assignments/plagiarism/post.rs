@@ -1,4 +1,8 @@
+use std::fs;
+use std::path::PathBuf;
+
 use crate::{response::ApiResponse, services::moss::MossService};
+use crate::services::moss_archiver::{archive_moss_to_fs_and_zip, ArchiveOptions};
 use axum::{
     Json,
     extract::{Path, State},
@@ -12,13 +16,16 @@ use db::models::{
     plagiarism_case,
     user::Entity as UserEntity,
 };
+use db::models::assignment::{Entity as AssignmentEntity, Model as AssignmentModel};
 use moss_parser::{ParseOptions, parse_moss};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use tokio::task;
 use util::{
     execution_config::{ExecutionConfig, execution_config::Language},
     state::AppState,
 };
+use tracing::{error, info};
 
 #[derive(Serialize, Deserialize)]
 pub struct CreatePlagiarismCasePayload {
@@ -218,28 +225,47 @@ pub struct MossRequest {
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss
 ///
-/// Runs a MOSS check on the **latest submission for every student** on the assignment,
-/// then parses the report and **auto-creates plagiarism cases** for each matched pair.
+/// Runs a MOSS check for the assignment, then parses the result and **auto-creates
+/// plagiarism cases** for each matched pair. After a successful run, a **background job**
+/// also mirrors (archives) the full MOSS report (index, matches, and images) to local
+/// storage and generates a ZIP — this archiving step is **non-blocking**.
+///
 /// Each created case is inserted with:
 /// - `status = "review"`
-/// - `similarity` as a **float percentage (0.0–100.0)** taken from MOSS’ `total_percent`
-/// - a generated, human-readable `description`
+/// - `similarity` as a **float percentage (0.0–100.0)** from MOSS’ `total_percent`
+/// - an auto-generated, human-readable `description`
 ///
 /// Accessible only to lecturers and assistant lecturers assigned to the module.
 ///
 /// # Path Parameters
 ///
-/// - `module_id`: The ID of the parent module
-/// - `assignment_id`: The ID of the assignment containing the submissions
+/// - `module_id`: The ID of the parent module.
+/// - `assignment_id`: The ID of the assignment.
 ///
 /// # Request Body
 ///
-/// **None.** The programming language is read from the assignment configuration
-/// (`project.language`) persisted for this assignment.
+/// **None.** The language is read from the assignment’s execution config
+/// (`project.language`).
+///
+/// # Behavior
+///
+/// - **Submission selection respects the assignment’s grading policy**:
+///   - `grading_policy = "last"` → uses each student’s **most recent** non-practice, non-ignored submission.
+///   - `grading_policy = "best"` → uses each student’s **best-scoring** non-practice, non-ignored submission.
+/// - Base (starter) files attached to the assignment are included if present.
+/// - The MOSS result URL and timestamp are saved to:
+///   `<storage_root>/module_{module_id}/assignment_{assignment_id}/reports.txt`.
+/// - A **fire-and-forget archive job** mirrors the report for offline viewing to:
+///   - Folder: `<storage_root>/module_{module_id}/assignment_{assignment_id}/moss_archive/`
+///   - ZIP:    `<storage_root>/module_{module_id}/assignment_{assignment_id}/moss_archive.zip`
+///   The archive includes **all images** referenced by the report. Existing archives are overwritten.
+/// - Case creation is **deduplicated** per pair (order-independent).
+/// - `similarity` is stored as an `f32` percent, clamped to **0.0–100.0**.
+/// - Newly created cases start in `"review"` status and can be managed via the plagiarism APIs/UI.
 ///
 /// # Returns
 ///
-/// - `200 OK` on success with details about the MOSS run and case creation:
+/// - `200 OK` on success with details about the MOSS run and created cases:
 ///   ```json
 ///   {
 ///     "success": true,
@@ -248,20 +274,20 @@ pub struct MossRequest {
 ///       "report_url": "http://moss.stanford.edu/results/123456789",
 ///       "cases_created": 7,
 ///       "cases_skipped": 2,
-///       "title": "moss results for ... (optional)"
+///       "title": "moss results for COS123 / Assignment 1",
+///       "archive_started": true
 ///     }
 ///   }
 ///   ```
-/// - `500 INTERNAL SERVER ERROR` for MOSS server errors, parsing failures,
-///   or other unexpected failures. The response body contains an error message.
+/// - `500 INTERNAL SERVER ERROR` for MOSS errors, parsing failures, or other unexpected failures.
+///   The response message explains the reason.
 ///
 /// # Notes
-/// - Language is taken from the saved assignment config (`project.language`).
-/// - Base (starter) files attached to the assignment are included in the comparison if present.
-/// - The selected submissions are the most recent (highest `attempt`) per user.
-/// - Case creation is **deduplicated** per pair of submissions (order-independent).
-/// - `similarity` is stored as an `f32` percent, clamped to **0.0–100.0**.
-/// - Newly created cases start in `"review"` status and can be managed via the plagiarism cases API/UI.
+///
+/// - The external `report_url` may expire per MOSS retention policy, but the **local archive** and
+///   **ZIP** remain available on the server once the background job finishes.
+/// - “Practice” and “ignored” submissions are excluded from selection.
+/// - If no eligible submissions exist, no cases will be created.
 pub async fn run_moss_check(
     State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
@@ -269,194 +295,220 @@ pub async fn run_moss_check(
     // 0) Load assignment config to determine language
     let cfg = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
         Ok(c) => c,
-        Err(_e) => ExecutionConfig::default_config(), // fallback to defaults
+        Err(_e) => ExecutionConfig::default_config(),
     };
 
-    // Map your enum -> MOSS language string
     let moss_language: &str = match cfg.project.language {
         Language::Cpp => "c++",
         Language::Java => "java",
     };
 
-    // 1) Collect latest submissions
-    let submissions = assignment_submission::Model::get_latest_submissions_for_assignment(
-        app_state.db(),
-        assignment_id,
-    )
-    .await;
+    // 0.1) Load the assignment model (needed by get_best_for_user to read policy)
+    let assignment_model: AssignmentModel = match AssignmentEntity::find_by_id(assignment_id)
+        .one(app_state.db())
+        .await
+        .map_err(|_| ())
+        .ok()
+        .flatten()
+    {
+        Some(a) => a,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Assignment not found")),
+            )
+                .into_response();
+        }
+    };
 
-    match submissions {
-        Ok(submissions) => {
-            let mut submission_files = Vec::new();
-            for submission in &submissions {
-                let user = UserEntity::find_by_id(submission.user_id)
-                    .one(app_state.db())
-                    .await
-                    .map_err(|_| "Failed to fetch user")
-                    .unwrap();
-
-                // Optional username helps attribution in MOSS rows.
-                let username = user.map(|u| u.username);
-                submission_files.push((submission.full_path(), username, Some(submission.id)));
+    // 1) Select exactly ONE submission per student based on grading policy:
+    //    - exclude practice & ignored; selection happens inside get_best_for_user
+    let selected_submissions: Vec<assignment_submission::Model> = match SubmissionEntity::find()
+        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
+        .all(app_state.db())
+        .await
+    {
+        Ok(all_for_assignment) => {
+            use std::collections::HashSet;
+            let mut user_ids: HashSet<i64> = HashSet::new();
+            for s in &all_for_assignment {
+                user_ids.insert(s.user_id);
             }
 
-            let base_files =
-                match assignment_file::Model::get_base_files(app_state.db(), assignment_id).await {
-                    Ok(files) => files.into_iter().map(|f| f.full_path()).collect::<Vec<_>>(),
-                    Err(_) => vec![],
-                };
-
-            let moss_user_id =
-                std::env::var("MOSS_USER_ID").unwrap_or_else(|_| "YOUR_MOSS_USER_ID".to_string());
-            let moss_service = MossService::new(&moss_user_id);
-
-            // 🔁 Use language from config, not from request payload
-            match moss_service
-                .run(base_files, submission_files, moss_language)
-                .await
-            {
-                Ok(report_url) => {
-                    // 1) Persist a tiny text file (unchanged)
-                    let report_dir = assignment_submission::Model::storage_root()
-                        .join(format!("module_{}", module_id))
-                        .join(format!("assignment_{}", assignment_id));
-
-                    if let Err(e) = std::fs::create_dir_all(&report_dir) {
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(ApiResponse::<()>::error(format!(
-                                "Failed to create report directory: {}",
-                                e
-                            ))),
-                        )
-                            .into_response();
-                    }
-
-                    let report_path = report_dir.join("reports.txt");
-                    let content = format!(
-                        "Report URL: {}\nDate: {}",
-                        report_url,
-                        Utc::now().to_rfc3339()
-                    );
-
-                    if let Err(e) = std::fs::write(&report_path, content) {
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(ApiResponse::<()>::error(format!(
-                                "Failed to write MOSS report: {}",
-                                e
-                            ))),
-                        )
-                            .into_response();
-                    }
-
-                    // 2) Parse the report and auto-create plagiarism cases (with similarity)
-                    let parse_opts = ParseOptions {
-                        min_lines: 0,           // tweak as needed
-                        include_matches: false, // we only need aggregate % per pair
-                    };
-
-                    let parsed = match parse_moss(&report_url, parse_opts).await {
-                        Ok(out) => out,
-                        Err(e) => {
-                            return (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                Json(ApiResponse::<()>::error(format!(
-                                    "MOSS report parse failed: {}",
-                                    e
-                                ))),
-                            )
-                                .into_response();
-                        }
-                    };
-
-                    use std::collections::HashSet;
-                    let mut seen: HashSet<(i64, i64)> = HashSet::new();
-                    let mut created_count = 0usize;
-                    let mut skipped_count = 0usize;
-
-                    for r in parsed.reports {
-                        let (Some(sub_a), Some(sub_b)) = (r.submission_id_a, r.submission_id_b)
-                        else {
-                            skipped_count += 1;
-                            continue;
-                        };
-
-                        // Normalize order: (min, max)
-                        let (a, b, ua, ub) = if sub_a <= sub_b {
-                            (sub_a, sub_b, r.user_a, r.user_b)
-                        } else {
-                            (sub_b, sub_a, r.user_b, r.user_a)
-                        };
-
-                        if !seen.insert((a, b)) {
-                            continue;
-                        }
-
-                        let description = generate_description(
-                            &ua,
-                            &ub,
-                            a,
-                            b,
-                            r.total_lines_matched,
-                            r.total_percent,
-                        );
-
-                        // Convert Option<f64> -> f32 and clamp to 0..=100
-                        let similarity: f32 =
-                            r.total_percent.unwrap_or(0.0).max(0.0).min(100.0) as f32;
-
-                        match plagiarism_case::Model::create_case(
-                            app_state.db(),
-                            assignment_id,
-                            a,
-                            b,
-                            &description,
-                            similarity,
-                        )
-                        .await
-                        {
-                            Ok(_) => created_count += 1,
-                            Err(_db_err) => {
-                                // Log if desired
-                                skipped_count += 1;
-                            }
-                        }
-                    }
-
-                    (
-                        StatusCode::OK,
-                        Json(ApiResponse::success(
-                            serde_json::json!({
-                                "report_url": report_url,
-                                "cases_created": created_count,
-                                "cases_skipped": skipped_count,
-                                "title": parsed.title,
-                            }),
-                            "MOSS check completed successfully; cases created from report",
-                        )),
-                    )
-                        .into_response()
+            // For each user, pick Best or Last according to the assignment’s config
+            let mut chosen = Vec::with_capacity(user_ids.len());
+            for uid in user_ids {
+                match assignment_submission::Model::get_best_for_user(app_state.db(), &assignment_model, uid).await {
+                    Ok(Some(s)) => chosen.push(s),
+                    Ok(None) => { /* no eligible subs for this user; skip */ }
+                    Err(_) => { /* DB issue for this user; skip */ }
                 }
-                Err(e) => (
+            }
+            chosen
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to retrieve submissions")),
+            )
+                .into_response();
+        }
+    };
+
+    // 2) Prepare file tuples for MOSS (path, optional username, optional submission_id)
+    let mut submission_files = Vec::with_capacity(selected_submissions.len());
+    for submission in &selected_submissions {
+        let user = UserEntity::find_by_id(submission.user_id)
+            .one(app_state.db())
+            .await
+            .map_err(|_| "Failed to fetch user")
+            .ok()
+            .flatten();
+
+        let username = user.map(|u| u.username);
+        submission_files.push((submission.full_path(), username, Some(submission.id)));
+    }
+
+    // Base files (starter code)
+    let base_files =
+        match assignment_file::Model::get_base_files(app_state.db(), assignment_id).await {
+            Ok(files) => files.into_iter().map(|f| f.full_path()).collect::<Vec<_>>(),
+            Err(_) => vec![],
+        };
+
+    let moss_user_id =
+        std::env::var("MOSS_USER_ID").unwrap_or_else(|_| "YOUR_MOSS_USER_ID".to_string());
+    let moss_service = MossService::new(&moss_user_id);
+
+    match moss_service.run(base_files, submission_files, moss_language).await {
+        Ok(report_url) => {
+            // Persist minimal metadata
+            let base_dir = assignment_submission::Model::storage_root()
+                .join(format!("module_{}", module_id))
+                .join(format!("assignment_{}", assignment_id));
+            if let Err(e) = std::fs::create_dir_all(&base_dir) {
+                return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ApiResponse::<()>::error(format!(
-                        "Failed to run MOSS check: {}",
-                        e
+                        "Failed to create report directory: {e}"
                     ))),
                 )
-                    .into_response(),
+                    .into_response();
             }
+
+            let report_path = base_dir.join("reports.txt");
+            let content = format!(
+                "Report URL: {}\nDate: {}",
+                report_url,
+                Utc::now().to_rfc3339()
+            );
+            if let Err(e) = std::fs::write(&report_path, content) {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error(format!(
+                        "Failed to write MOSS report: {e}"
+                    ))),
+                )
+                    .into_response();
+            }
+
+            // Fire-and-forget archive job
+            let archive_index_url = report_url.clone();
+            let dest_root: PathBuf = base_dir.join("moss_archive");
+            let zip_path: PathBuf = base_dir.join("moss_archive.zip");
+            let opts = ArchiveOptions { concurrency: 12 };
+
+            task::spawn(async move {
+                match archive_moss_to_fs_and_zip(
+                    &archive_index_url,
+                    &dest_root,
+                    &zip_path,
+                    opts,
+                )
+                .await
+                {
+                    Ok((_manifest, zip_abs)) => info!("MOSS archive created at {zip_abs}"),
+                    Err(e) => error!("MOSS archive failed: {e}"),
+                }
+            });
+
+            // Parse report and create cases (unchanged)
+            let parse_opts = ParseOptions {
+                min_lines: 0,
+                include_matches: false,
+            };
+            let parsed = match parse_moss(&report_url, parse_opts).await {
+                Ok(out) => out,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<()>::error(format!(
+                            "MOSS report parse failed: {e}"
+                        ))),
+                    )
+                        .into_response();
+                }
+            };
+
+            use std::collections::HashSet;
+            let mut seen: HashSet<(i64, i64)> = HashSet::new();
+            let mut created_count = 0usize;
+            let mut skipped_count = 0usize;
+
+            for r in parsed.reports {
+                let (Some(sub_a), Some(sub_b)) = (r.submission_id_a, r.submission_id_b) else {
+                    skipped_count += 1;
+                    continue;
+                };
+                let (a, b, ua, ub) = if sub_a <= sub_b {
+                    (sub_a, sub_b, r.user_a, r.user_b)
+                } else {
+                    (sub_b, sub_a, r.user_b, r.user_a)
+                };
+                if !seen.insert((a, b)) {
+                    continue;
+                }
+
+                let description = generate_description(
+                    &ua, &ub, a, b, r.total_lines_matched, r.total_percent,
+                );
+                let similarity: f32 = r.total_percent.unwrap_or(0.0).clamp(0.0, 100.0) as f32;
+
+                match plagiarism_case::Model::create_case(
+                    app_state.db(), assignment_id, a, b, &description, similarity,
+                )
+                .await
+                {
+                    Ok(_) => created_count += 1,
+                    Err(_) => skipped_count += 1,
+                }
+            }
+
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    serde_json::json!({
+                        "report_url": report_url,
+                        "cases_created": created_count,
+                        "cases_skipped": skipped_count,
+                        "title": parsed.title,
+                        "archive_started": true
+                    }),
+                    "MOSS check completed successfully; cases created from report",
+                )),
+            )
+                .into_response()
         }
-        Err(_) => (
+        Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(
-                "Failed to retrieve submissions".to_string(),
-            )),
+            Json(ApiResponse::<()>::error(format!(
+                "Failed to run MOSS check: {e}"
+            ))),
         )
             .into_response(),
     }
 }
+
 
 fn generate_description(
     user_a: &str,
@@ -484,4 +536,111 @@ fn generate_description(
         "Submissions `{}` ({}) and `{}` ({}) show {}, with {} lines matched and a similarity score of {:.1}%.",
         sub_a, user_a, sub_b, user_b, level, total_lines, percent
     )
+}
+
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss/archive
+///
+/// Mirrors the **current** MOSS report (from `reports.txt`) to local storage and zips it.
+/// No URL is required in the request; the handler uses the last saved MOSS URL.
+///
+/// # Behavior
+/// - Reads `<storage_root>/module_{module_id}/assignment_{assignment_id}/reports.txt`
+///   and extracts `Report URL: ...`.
+/// - Mirrors index, match pages, and images into:
+///   `<storage_root>/module_{module_id}/assignment_{assignment_id}/moss_archive/`
+/// - Produces a zip at:
+///   `<storage_root>/module_{module_id}/assignment_{assignment_id}/moss_archive.zip`
+///   (overwrites if present)
+///
+/// # Returns
+/// - `200 OK` with `{ success: true, data: null }` on success
+/// - `404 NOT FOUND` if no `reports.txt` exists (MOSS hasn’t been run)
+/// - `400 BAD REQUEST` if the report file is present but malformed (URL missing)
+/// - `500 INTERNAL SERVER ERROR` for IO/network/archive errors
+///
+/// # Example (200)
+/// ```json
+/// { "success": true, "data": null, "message": "MOSS report archived and zipped successfully" }
+/// ```
+///
+/// # Example (404)
+/// ```json
+/// { "success": false, "data": null, "message": "No MOSS report found. Run MOSS before archiving." }
+/// ```
+pub async fn generate_moss_archive(
+    State(_app_state): State<AppState>,
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    // Resolve base dir and files
+    let base_dir: PathBuf = assignment_submission::Model::storage_root()
+        .join(format!("module_{}", module_id))
+        .join(format!("assignment_{}", assignment_id));
+
+    let report_path = base_dir.join("reports.txt");
+    let dest_root   = base_dir.join("moss_archive");
+    let zip_path    = base_dir.join("moss_archive.zip");
+
+    // Must have a report first
+    if !report_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("No MOSS report found. Run MOSS before archiving.")),
+        ).into_response();
+    }
+
+    // Read & parse the URL from reports.txt
+    let content = match fs::read_to_string(&report_path) {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!("Failed to read report file: {e}"))),
+            ).into_response();
+        }
+    };
+
+    let mut report_url: Option<String> = None;
+    for line in content.lines() {
+        if let Some(url) = line.strip_prefix("Report URL: ") {
+            report_url = Some(url.trim().to_string());
+            break;
+        }
+    }
+
+    let report_url = match report_url {
+        Some(u) if !u.is_empty() => u,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error("Malformed report file: missing report URL")),
+            ).into_response();
+        }
+    };
+
+    // (Re)create archive dir; remove old zip if present
+    if dest_root.exists() {
+        let _ = fs::remove_dir_all(&dest_root);
+    }
+    if zip_path.exists() {
+        let _ = fs::remove_file(&zip_path);
+    }
+    if let Err(e) = fs::create_dir_all(&dest_root) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(format!("Failed to prepare archive directory: {e}"))),
+        ).into_response();
+    }
+
+    // Mirror + zip
+    let opts = ArchiveOptions { concurrency: 12 };
+    match archive_moss_to_fs_and_zip(&report_url, &dest_root, &zip_path, opts).await {
+        Ok((_manifest, _zip_abs)) => (
+            StatusCode::OK,
+            Json(ApiResponse::<()>::success_without_data("MOSS report archived and zipped successfully")),
+        ).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(format!("Archiving failed: {e}"))),
+        ).into_response(),
+    }
 }

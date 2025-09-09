@@ -18,6 +18,8 @@ use delete::{delete_plagiarism_case, bulk_delete_plagiarism_cases};
 use patch::{patch_plagiarism_flag, patch_plagiarism_review};
 use util::state::AppState;
 
+use crate::routes::modules::assignments::plagiarism::{get::download_moss_archive, post::generate_moss_archive};
+
 pub mod get;
 pub mod post;
 pub mod put;
@@ -44,6 +46,8 @@ pub fn plagiarism_routes() -> Router<AppState> {
         .route("/", post(create_plagiarism_case))
         .route("/moss", post(run_moss_check))
         .route("/moss", get(get_moss_report))
+        .route("/moss/archive", post(generate_moss_archive))
+        .route("/moss/archive/download", get(download_moss_archive))
         .route("/{case_id}", put(update_plagiarism_case))
         .route("/{case_id}", delete(delete_plagiarism_case))
         .route("/bulk", delete(bulk_delete_plagiarism_cases))

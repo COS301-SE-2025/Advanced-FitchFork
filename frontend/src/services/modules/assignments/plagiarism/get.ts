@@ -1,6 +1,6 @@
 import type { ApiResponse, PaginationRequest } from "@/types/common";
 import type { GetListPlagiarismCasesResponse, GetMossReportResponse, GetPlagiarismGraphResponse, PlagiarismCaseStatus } from "@/types/modules/assignments/plagiarism";
-import { api } from "@/utils/api";
+import { api, apiDownload } from "@/utils/api";
 
 
 export const listPlagiarismCases = async (
@@ -33,3 +33,12 @@ export const getMossReport = async (
 ): Promise<ApiResponse<GetMossReportResponse>> => {
   return api.get(`/modules/${moduleId}/assignments/${assignmentId}/plagiarism/moss`);
 }
+
+export const downloadMossArchive = async (
+  moduleId: number,
+  assignmentId: number
+): Promise<void> => {
+  return apiDownload(
+    `/modules/${moduleId}/assignments/${assignmentId}/plagiarism/moss/archive/download`
+  );
+};

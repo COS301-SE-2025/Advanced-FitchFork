@@ -256,7 +256,7 @@ impl Model {
         let all = Entity::find()
             .filter(Column::AssignmentId.eq(assignment_id))
             .order_by_asc(Column::UserId)
-            .order_by_desc(Column::Attempt)
+            .order_by_desc(Column:: Attempt)
             .all(db)
             .await?;
 
