@@ -36,10 +36,9 @@ pub enum SubmissionMode {
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum GradingPolicy {
-    Best,   // highest score across submissions
-    Last,   // the most recent submission
+    Best, // highest score across submissions
+    Last, // the most recent submission
 }
-
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionLimits {
@@ -130,6 +129,20 @@ impl Default for ExecutionOutputOptions {
             stdout: true,
             stderr: false,
             retcode: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CodeCoverage {
+    #[serde(default = "default_code_coverage_required")]
+    pub code_coverage_required: u8, // percentage 0-100
+}
+
+impl Default for CodeCoverage {
+    fn default() -> Self {
+        Self {
+            code_coverage_required: default_code_coverage_required(),
         }
     }
 }
@@ -259,6 +272,9 @@ pub struct ExecutionConfig {
 
     #[serde(default)]
     pub gatlam: GATLAM,
+
+    #[serde(default)]
+    pub code_coverage: CodeCoverage,
 }
 
 impl ExecutionConfig {
@@ -269,6 +285,7 @@ impl ExecutionConfig {
             project: ProjectSetup::default(),
             output: ExecutionOutputOptions::default(),
             gatlam: GATLAM::default(),
+            code_coverage: CodeCoverage::default(),
         }
     }
 
@@ -466,4 +483,8 @@ fn default_genes() -> Vec<GeneConfig> {
 
 fn default_submission_mode() -> SubmissionMode {
     SubmissionMode::Manual
+}
+
+fn default_code_coverage_required() -> u8 {
+    80
 }
