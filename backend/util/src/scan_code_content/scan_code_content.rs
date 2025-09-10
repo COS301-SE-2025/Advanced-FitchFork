@@ -25,16 +25,6 @@ use crate::execution_config::execution_config::ExecutionConfig;
 /// - Reads file contents as UTF-8 text.
 /// - Stops scanning and returns `true` immediately on the first match.
 ///
-/// # Example
-///
-/// ```rust
-/// use mycrate::scanner::contains_dissalowed_code;
-/// use mycrate::execution_config::execution_config::ExecutionConfig;
-///
-/// let config = ExecutionConfig::default_config();
-/// let result = contains_dissalowed_code("submission.zip", &config).unwrap();
-/// println!("Contains dissalowed code: {}", result);
-/// ```
 pub fn contains_dissalowed_code<P: AsRef<Path>>(
     zip_path: P,
     config: &ExecutionConfig,
