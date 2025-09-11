@@ -1,3 +1,4 @@
+use services::service::AppError;
 use colored::*;
 use futures::FutureExt;
 use std::io::{self, Write};
@@ -7,7 +8,7 @@ use std::pin::Pin;
 const STATUS_COLUMN: usize = 80;
 
 pub trait Seeder {
-    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>>;
 }
 
 pub async fn run_seeder<S: Seeder + ?Sized>(seeder: &S, name: &str) {

@@ -1,26 +1,18 @@
 use crate::seed::Seeder;
-use db::models::{
-    assignment, assignment_overwrite_file::Model as AssignmentOverwriteFileModel, assignment_task,
-};
-use sea_orm::{DatabaseConnection, EntityTrait};
+use services::service::{Service, AppError};
+use services::assignment::AssignmentService;
+use services::assignment_task::AssignmentTaskService;
+use services::assignment_overwrite_file::{AssignmentOverwriteFileService, CreateAssignmentOverwriteFile};
 use std::pin::Pin;
 
 pub struct AssignmentOverwriteFileSeeder;
 
 impl Seeder for AssignmentOverwriteFileSeeder {
-    fn seed<'a>(&'a self, db: &'a DatabaseConnection) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
             // Fetch all assignments
-            let assignments = assignment::Entity::find()
-                .all(db)
-                .await
-                .expect("Failed to fetch assignments");
-
-            // Fetch all assignment tasks
-            let tasks = assignment_task::Entity::find()
-                .all(db)
-                .await
-                .expect("Failed to fetch assignment tasks");
+            let assignments = AssignmentService::find_all(&[], None).await?;
+            let tasks = AssignmentTaskService::find_all(&[], None).await?;
 
             if assignments.is_empty() || tasks.is_empty() {
                 panic!("Assignments or tasks are missing — cannot seed overwrite files");
@@ -42,27 +34,18 @@ impl Seeder for AssignmentOverwriteFileSeeder {
                         assignment.id, task.id
                     );
 
-                    match AssignmentOverwriteFileModel::save_file(
-                        db,
-                        assignment.id,
-                        task.id,
-                        dummy_filename,
-                        dummy_content.as_bytes(),
-                    )
-                    .await
-                    {
-                        Ok(_output) => {
-                            // Optionally log success
+                    AssignmentOverwriteFileService::create(
+                        CreateAssignmentOverwriteFile{
+                            assignment_id: assignment.id,
+                            task_id: task.id,
+                            filename: dummy_filename.to_string(),
+                            bytes: dummy_content.as_bytes().to_vec(),
                         }
-                        Err(e) => {
-                            eprintln!(
-                                "Failed to save overwrite file for assignment {} task {}: {}",
-                                assignment.id, task.id, e
-                            );
-                        }
-                    }
+                    ).await?;
                 }
             }
+
+            Ok(())
         })
     }
 }

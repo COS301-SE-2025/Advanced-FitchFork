@@ -15,7 +15,7 @@ use crate::routes::users::common::{CreateUserRequest, BulkCreateUsersRequest, Us
 use validator::Validate;
 use services::{
     service::Service,
-    user_service::{UserService, CreateUser},
+    user::{UserService, CreateUser},
 };
 
 /// POST /api/users

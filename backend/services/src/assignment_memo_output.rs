@@ -1,12 +1,15 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::assignment_memo_output::{ActiveModel, Entity, Model},
-    repositories::{assignment_memo_output_repository::AssignmentMemoOutputRepository, assignment_repository::AssignmentRepository, repository::Repository},
+    models::assignment_memo_output::{ActiveModel, Entity as AssignmentMemoOutputEntity, Column as AssignmentMemoOutputColumn, Model},
+    models::assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
+    repository::Repository,
 };
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
 use std::path::PathBuf;
 use std::{env, fs};
+
+pub use db::models::assignment_memo_output::Model as AssignmentMemoOutput;
 
 #[derive(Debug, Clone)]
 pub struct CreateAssignmentMemoOutput {
@@ -22,7 +25,7 @@ pub struct UpdateAssignmentMemoOutput {
     pub id: i64,
 }
 
-impl ToActiveModel<Entity> for CreateAssignmentMemoOutput {
+impl ToActiveModel<AssignmentMemoOutputEntity> for CreateAssignmentMemoOutput {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
@@ -36,14 +39,14 @@ impl ToActiveModel<Entity> for CreateAssignmentMemoOutput {
     }
 }
 
-impl ToActiveModel<Entity> for UpdateAssignmentMemoOutput {
+impl ToActiveModel<AssignmentMemoOutputEntity> for UpdateAssignmentMemoOutput {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        let task = match AssignmentMemoOutputRepository::find_by_id(self.id).await {
+        let task = match Repository::<AssignmentMemoOutputEntity, AssignmentMemoOutputColumn>::find_by_id(self.id).await {
             Ok(Some(task)) => task,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("Task ID {} not found", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("Task ID {} not found", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
 
         let mut active: ActiveModel = task.into();
@@ -56,14 +59,14 @@ impl ToActiveModel<Entity> for UpdateAssignmentMemoOutput {
 
 pub struct AssignmentMemoOutputService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentMemoOutput, UpdateAssignmentMemoOutput, AssignmentMemoOutputRepository> for AssignmentMemoOutputService {
+impl<'a> Service<'a, AssignmentMemoOutputEntity, AssignmentMemoOutputColumn, CreateAssignmentMemoOutput, UpdateAssignmentMemoOutput> for AssignmentMemoOutputService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(
             params: CreateAssignmentMemoOutput,
-        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
+        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<AssignmentMemoOutputEntity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let inserted: Model = AssignmentMemoOutputRepository::create(params.clone().into_active_model().await?).await?;
+            let inserted: Model = Repository::<AssignmentMemoOutputEntity, AssignmentMemoOutputColumn>::create(params.clone().into_active_model().await?).await?;
 
             let ext = PathBuf::from(params.filename)
                 .extension()
@@ -75,7 +78,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentMemoOutput, UpdateAssignmentMemoOut
             };
 
             //Get assignment
-            let assignment = AssignmentRepository::find_by_id(params.assignment_id).await?
+            let assignment = Repository::<AssignmentEntity, AssignmentColumn>::find_by_id(params.assignment_id).await?
                 .ok_or_else(|| DbErr::RecordNotFound(format!("Assignment ID {} not found", params.assignment_id)))?;
             let dir_path = Self::full_directory_path(assignment.module_id, params.assignment_id);
             fs::create_dir_all(&dir_path)
@@ -95,7 +98,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentMemoOutput, UpdateAssignmentMemoOut
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            AssignmentMemoOutputRepository::update(model).await.map_err(AppError::from)
+            Repository::<AssignmentMemoOutputEntity, AssignmentMemoOutputColumn>::update(model).await.map_err(AppError::from)
         })
     }
 }
@@ -125,7 +128,7 @@ impl AssignmentMemoOutputService {
     pub async fn full_path(
         id: i64
     ) -> Result<PathBuf, DbErr> {
-        let memo_output = AssignmentMemoOutputRepository::find_by_id(id).await?
+        let memo_output = Repository::<AssignmentMemoOutputEntity, AssignmentMemoOutputColumn>::find_by_id(id).await?
             .ok_or_else(|| DbErr::RecordNotFound(format!("Memo Output ID {} not found", id)))?;
         Ok(Self::storage_root().join(&memo_output.path))
     }

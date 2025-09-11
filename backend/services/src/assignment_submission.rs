@@ -1,9 +1,10 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::assignment_submission::{ActiveModel, Entity, Model},
-    repositories::{assignment_repository::AssignmentRepository, assignment_submission_repository::AssignmentSubmissionRepository, repository::Repository},
+    models::assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
+    models::assignment_submission::{ActiveModel, Entity as AssignmentSubmissionEntity, Column as AssignmentSubmissionColumn, Model},
+    repository::Repository,
 };
-use util::filters::{FilterParam, FilterValue};
+use util::filters::FilterParam;
 use util::execution_config::{ExecutionConfig, execution_config::GradingPolicy};
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
@@ -11,6 +12,8 @@ use std::path::PathBuf;
 use std::{fs, env};
 use std::collections::HashSet;
 use serde_json;
+
+pub use db::models::assignment_submission::Model as AssignmentSubmission;
 
 #[derive(Debug, Clone)]
 pub struct CreateAssignmentSubmission {
@@ -31,7 +34,7 @@ pub struct UpdateAssignmentSubmission {
     pub ignored: Option<bool>,
 }
 
-impl ToActiveModel<Entity> for CreateAssignmentSubmission {
+impl ToActiveModel<AssignmentSubmissionEntity> for CreateAssignmentSubmission {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
@@ -52,14 +55,14 @@ impl ToActiveModel<Entity> for CreateAssignmentSubmission {
     }
 }
 
-impl ToActiveModel<Entity> for UpdateAssignmentSubmission {
+impl ToActiveModel<AssignmentSubmissionEntity> for UpdateAssignmentSubmission {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        let submission = match AssignmentSubmissionRepository::find_by_id(self.id).await {
+        let submission = match Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_by_id(self.id).await {
             Ok(Some(submission)) => submission,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("Submission not found for ID {}", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("Submission not found for ID {}", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = submission.into();
 
@@ -75,18 +78,18 @@ impl ToActiveModel<Entity> for UpdateAssignmentSubmission {
 
 pub struct AssignmentSubmissionService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentSubmission, UpdateAssignmentSubmission, AssignmentSubmissionRepository> for AssignmentSubmissionService {
+impl<'a> Service<'a, AssignmentSubmissionEntity, AssignmentSubmissionColumn, CreateAssignmentSubmission, UpdateAssignmentSubmission> for AssignmentSubmissionService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(
             params: CreateAssignmentSubmission,
-        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
+        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<AssignmentSubmissionEntity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
             if params.earned > params.total {
                 return Err(AppError::Database(DbErr::Custom("Earned score cannot be greater than total score".into())));
             }
             
-            let inserted: Model = AssignmentSubmissionRepository::create(params.clone().into_active_model().await?).await?;
+            let inserted: Model = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::create(params.clone().into_active_model().await?).await?;
 
             let ext = PathBuf::from(params.filename)
                 .extension()
@@ -97,7 +100,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentSubmission, UpdateAssignmentSubmiss
                 None => inserted.id.to_string(),
             };
 
-            let assignment = AssignmentRepository::find_by_id(params.assignment_id).await?
+            let assignment = Repository::<AssignmentEntity, AssignmentColumn>::find_by_id(params.assignment_id).await?
                 .ok_or_else(|| DbErr::RecordNotFound(format!("Assignment ID {} not found", params.assignment_id)))?;
             let dir_path = Self::full_directory_path(assignment.module_id, params.assignment_id, params.user_id, params.attempt);
             fs::create_dir_all(&dir_path)
@@ -117,7 +120,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentSubmission, UpdateAssignmentSubmiss
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            AssignmentSubmissionRepository::update(model).await.map_err(AppError::from)
+            Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::update(model).await.map_err(AppError::from)
         })
     }
 }
@@ -148,7 +151,7 @@ impl AssignmentSubmissionService {
     pub async fn full_path(
         id: i64
     ) -> Result<PathBuf, DbErr> {
-        let submission = AssignmentSubmissionRepository::find_by_id(id).await?
+        let submission = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_by_id(id).await?
             .ok_or_else(|| DbErr::RecordNotFound(format!("Submission ID {} not found", id)))?;
         Ok(Self::storage_root().join(submission.path))
     }
@@ -171,9 +174,9 @@ impl AssignmentSubmissionService {
         assignment_id: i64,
     ) -> Result<Vec<i64>, DbErr> {
         let filters = vec![
-            FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
+            FilterParam::eq("assignment_id", assignment_id),
         ];
-        let submissions = AssignmentSubmissionRepository::find_all(&filters, None).await?;
+        let submissions = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(&filters, None).await?;
 
         Ok(submissions.into_iter().map(|s| s.id as i64).collect())
     }
@@ -182,9 +185,9 @@ impl AssignmentSubmissionService {
         assignment_id: i64,
     ) -> Result<Vec<Model>, DbErr> {
         let filters = vec![
-            FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
+            FilterParam::eq("assignment_id", assignment_id),
         ];
-        let all = AssignmentSubmissionRepository::find_all(&filters, Some("user_id,-attempt".to_string())).await?;
+        let all = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(&filters, Some("user_id,-attempt".to_string())).await?;
 
         let mut seen = HashSet::new();
         let mut latest = Vec::new();
@@ -203,18 +206,18 @@ impl AssignmentSubmissionService {
         user_id: i64,
     ) -> Result<Option<Model>, DbErr> {
         let filters = vec![
-            FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
-            FilterParam::eq("user_id", FilterValue::Int(user_id)),
-            FilterParam::eq("ignored", FilterValue::Bool(false)),
-            FilterParam::eq("is_practice", FilterValue::Bool(false)),
+            FilterParam::eq("assignment_id", assignment_id),
+            FilterParam::eq("user_id", user_id),
+            FilterParam::eq("ignored", false),
+            FilterParam::eq("is_practice", false),
         ];
-        let mut subs = AssignmentSubmissionRepository::find_all(&filters, None).await?;
+        let mut subs = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(&filters, None).await?;
 
         if subs.is_empty() {
             return Ok(None);
         }
 
-        let assignment = AssignmentRepository::find_by_id(assignment_id).await?
+        let assignment = Repository::<AssignmentEntity, AssignmentColumn>::find_by_id(assignment_id).await?
             .ok_or_else(|| DbErr::RecordNotFound(format!("Assignment ID {} not found", assignment_id)))?;
         let cfg = assignment
             .config

@@ -1,33 +1,30 @@
 use crate::seed::Seeder;
-use db::models::{assignment, assignment_task::Model as AssignmentTaskModel};
+use services::service::{Service, AppError};
+use services::assignment::AssignmentService;
+use services::assignment_task::{AssignmentTaskService, CreateAssignmentTask};
 use rand::seq::SliceRandom;
-use sea_orm::{DatabaseConnection, EntityTrait};
 use std::pin::Pin;
 
 pub struct AssignmentTaskSeeder;
 
 impl Seeder for AssignmentTaskSeeder {
-    fn seed<'a>(&'a self, db: &'a DatabaseConnection) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
             // Fetch all assignments
-            let assignments = assignment::Entity::find()
-                .all(db)
-                .await
-                .expect("Failed to fetch assignments");
-
+            let assignments = AssignmentService::find_all(&[], None).await?;
             if assignments.is_empty() {
                 panic!(
                     "No assignments found — at least one assignment must exist to seed assignment_tasks"
                 );
             }
 
-                let dummy_commands = vec![
-                    "fake command 1",
-                    "fake command 2",
-                    "fake command 3",
-                    "fake command 4",
-                    "fake command 5",
-                ];
+            let dummy_commands = vec![
+                "fake command 1",
+                "fake command 2",
+                "fake command 3",
+                "fake command 4",
+                "fake command 5",
+            ];
 
             for assignment in &assignments {
                 if assignment.id == 9999
@@ -37,61 +34,39 @@ impl Seeder for AssignmentTaskSeeder {
                 {
                     continue;
                 }
+
                 let task_count = 2; // Number of tasks per assignment
+                for i in 0..task_count {
+                    let task_number = i + 1;
+                    let command = dummy_commands
+                        .choose(&mut rand::thread_rng())
+                        .unwrap_or(&"echo 'Hello World'")
+                        .to_string();
 
-                    for i in 0..task_count {
-                        let task_number = i + 1;
-                        let command = dummy_commands
-                            .choose(&mut rand::thread_rng())
-                            .unwrap_or(&"echo 'Hello World'")
-                            .to_string();
-
-                    match AssignmentTaskModel::create(
-                        db,
-                        assignment.id,
-                        task_number,
-                        "Untitled Task",
-                        &command,
-                        false,
-                    )
-                    .await
-                    {
-                        Ok(_task) => {
-                            // Optionally log or handle success
+                    AssignmentTaskService::create(
+                        CreateAssignmentTask{
+                            assignment_id: assignment.id,
+                            task_number: task_number,
+                            name: "Untitled Task".to_string(),
+                            command: command,
+                            code_coverage: false,
                         }
-                        Err(e) => {
-                            eprintln!(
-                                "Failed to create assignment_task for assignment {} task {}: {}",
-                                assignment.id, task_number, e
-                            );
-                        }
-                    }
+                    ).await?;
                 }
             }
-            let special_assignment_id: i64 = 9999;
 
-                let special_tasks = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
-
+            let special_tasks = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
             for (task_number, command) in special_tasks {
-                match db::models::assignment_task::Model::create(
-                    db,
-                    special_assignment_id,
-                    task_number,
-                    "Untitled Task",
-                    command,
-                    false,
-                )
-                .await
-                {
-                    Ok(_) => {}
-                    Err(e) => eprintln!(
-                        "Failed to create special assignment task {}: {}",
-                        task_number, e
-                    ),
-                }
+                AssignmentTaskService::create(
+                    CreateAssignmentTask{
+                        assignment_id: 9999,
+                        task_number: task_number,
+                        name: "Untitled Task".to_string(),
+                        command: command.to_string(),
+                        code_coverage: false,
+                    }
+                ).await?;
             }
-
-                let special_assignment_id2: i64 = 9998;
 
             let special_tasks2 = vec![
                 (1, "make task1", false),
@@ -99,69 +74,45 @@ impl Seeder for AssignmentTaskSeeder {
                 (3, "make task3", false),
                 (4, "make task4", true),
             ];
-
             for (task_number, command, code_coverage) in special_tasks2 {
-                match db::models::assignment_task::Model::create(
-                    db,
-                    special_assignment_id2,
-                    task_number,
-                    "Untitled Task",
-                    command,
-                    code_coverage,
-                )
-                .await
-                {
-                    Ok(_) => {}
-                    Err(e) => eprintln!(
-                        "Failed to create special assignment task {}: {}",
-                        task_number, e
-                    ),
-                }
+                AssignmentTaskService::create(
+                    CreateAssignmentTask{
+                        assignment_id: 9998,
+                        task_number: task_number,
+                        name: "Untitled Task".to_string(),
+                        command: command.to_string(),
+                        code_coverage: code_coverage,
+                    }
+                ).await?;
             }
-
-            let plag_assignment_id: i64 = 10003;
 
             let special_tasks2 = vec![(1, "make task1")];
-
             for (task_number, command) in special_tasks2 {
-                match db::models::assignment_task::Model::create(
-                    db,
-                    plag_assignment_id,
-                    task_number,
-                    "Task to run code",
-                    command,
-                    false,
-                )
-                .await
-                {
-                    Ok(_) => {}
-                    Err(e) => eprintln!(
-                        "Failed to create special assignment task {}: {}",
-                        task_number, e
-                    ),
-                }
+                AssignmentTaskService::create(
+                    CreateAssignmentTask{
+                        assignment_id: 10003,
+                        task_number: task_number,
+                        name: "Untitled Task".to_string(),
+                        command: command.to_string(),
+                        code_coverage: false,
+                    }
+                ).await?;
 
                 let special_tasks3 = vec![(1, "make task1")];
-
                 for (task_number, command) in special_tasks3 {
-                    match db::models::assignment_task::Model::create(
-                        db,
-                        10004,
-                        task_number,
-                        "Task to run code",
-                        command,
-                        false,
-                    )
-                    .await
-                    {
-                        Ok(_) => {}
-                        Err(e) => eprintln!(
-                            "Failed to create special assignment task {}: {}",
-                            task_number, e
-                        ),
-                    }
+                    AssignmentTaskService::create(
+                        CreateAssignmentTask{
+                            assignment_id: 10004,
+                            task_number: task_number,
+                            name: "Task to run code".to_string(),
+                            command: command.to_string(),
+                            code_coverage: false,
+                        }
+                    ).await?;
                 }
             }
+
+            Ok(())
         })
     }
 }

@@ -71,4 +71,3 @@ impl Related<super::module::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-impl Model {}

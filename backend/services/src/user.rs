@@ -1,9 +1,9 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::user::{Model, Entity, ActiveModel},
-    repositories::{repository::Repository, user_repository::UserRepository},
+    models::user::{Model, Column, Entity, ActiveModel},
+    repository::Repository,
 };
-use util::filters::{FilterParam, FilterValue};
+use util::filters::FilterParam;
 use sea_orm::{DbErr, Set};
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -12,6 +12,8 @@ use argon2::{
 use rand::rngs::OsRng;
 use validator::{Validate, ValidationError};
 use chrono::Utc;
+
+pub use db::models::user::Model as User;
 
 #[derive(Debug, Clone, Validate)]
 pub struct CreateUser {
@@ -102,7 +104,7 @@ impl ToActiveModel<Entity> for UpdateUser {
         self.validate()
             .map_err(|e| DbErr::Custom(e.to_string()))?;
 
-        let user = match UserRepository::find_by_id(self.id).await {
+        let user = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(user)) => user,
             Ok(None) => {
                 return Err(AppError::from(DbErr::RecordNotFound(format!("User ID {} not found", self.id))));
@@ -144,7 +146,7 @@ impl ToActiveModel<Entity> for UpdateUser {
 
 pub struct UserService;
 
-impl<'a> Service<'a, Entity, CreateUser, UpdateUser, UserRepository> for UserService {
+impl<'a> Service<'a, Entity, Column, CreateUser, UpdateUser> for UserService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
@@ -164,7 +166,7 @@ impl UserService {
             admin: Set(admin),
             ..Default::default()
         };
-        UserRepository::create(active).await
+        Repository::<Entity, Column>::create(active).await
     }
 
     pub async fn verify_credentials(
@@ -172,10 +174,10 @@ impl UserService {
         password: &str,
     ) -> Result<Option<Model>, DbErr> {
         let filters = vec![
-            FilterParam::eq("username", FilterValue::String(username.trim().to_string())),
+            FilterParam::eq("username", username.trim().to_string()),
         ];
 
-        if let Some(user) = UserRepository::find_one(&filters, None,
+        if let Some(user) = Repository::<Entity, Column>::find_one(&filters, None,
         ).await? {
             if Self::verify_password(&user, password) {
                 return Ok(Some(user));

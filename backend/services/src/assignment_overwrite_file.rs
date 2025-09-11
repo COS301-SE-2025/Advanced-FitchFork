@@ -1,12 +1,16 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::assignment_overwrite_file::{ActiveModel, Entity, Model},
-    repositories::{assignment_overwrite_file_repository::AssignmentOverwriteFileRepository, assignment_repository::AssignmentRepository, assignment_task_repository::AssignmentTaskRepository, repository::Repository},
+    models::assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
+    models::assignment_task::{Entity as AssignmentTaskEntity, Column as AssignmentTaskColumn},
+    models::assignment_overwrite_file::{ActiveModel, Entity as AssignmentOverwriteFileEntity, Column as AssignmentOverwriteFileColumn, Model},
+    repository::Repository,
 };
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
 use std::path::PathBuf;
 use std::{fs, env};
+
+pub use db::models::assignment_overwrite_file::Model as AssignmentOverwriteFile;
 
 #[derive(Debug, Clone)]
 pub struct CreateAssignmentOverwriteFile {
@@ -22,7 +26,7 @@ pub struct UpdateAssignmentOverwriteFile {
     pub filename: Option<String>,
 }
 
-impl ToActiveModel<Entity> for CreateAssignmentOverwriteFile {
+impl ToActiveModel<AssignmentOverwriteFileEntity> for CreateAssignmentOverwriteFile {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
         Ok(ActiveModel {
@@ -37,14 +41,14 @@ impl ToActiveModel<Entity> for CreateAssignmentOverwriteFile {
     }
 }
 
-impl ToActiveModel<Entity> for UpdateAssignmentOverwriteFile {
+impl ToActiveModel<AssignmentOverwriteFileEntity> for UpdateAssignmentOverwriteFile {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        let file = match AssignmentOverwriteFileRepository::find_by_id(self.id).await {
+        let file = match Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::find_by_id(self.id).await {
             Ok(Some(file)) => file,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("Overwrite File not found for ID {}", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("Overwrite File not found for ID {}", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = file.into();
 
@@ -60,14 +64,14 @@ impl ToActiveModel<Entity> for UpdateAssignmentOverwriteFile {
 
 pub struct AssignmentOverwriteFileService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentOverwriteFile, UpdateAssignmentOverwriteFile, AssignmentOverwriteFileRepository> for AssignmentOverwriteFileService {
+impl<'a> Service<'a, AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn, CreateAssignmentOverwriteFile, UpdateAssignmentOverwriteFile> for AssignmentOverwriteFileService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(
             params: CreateAssignmentOverwriteFile,
-        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
+        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<AssignmentOverwriteFileEntity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let inserted: Model = AssignmentOverwriteFileRepository::create(params.clone().into_active_model().await?).await?;
+            let inserted: Model = Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::create(params.clone().into_active_model().await?).await?;
 
             let ext = PathBuf::from(params.filename)
                 .extension()
@@ -78,9 +82,9 @@ impl<'a> Service<'a, Entity, CreateAssignmentOverwriteFile, UpdateAssignmentOver
                 None => inserted.id.to_string(),
             };
 
-            let assignment = AssignmentRepository::find_by_id(params.assignment_id).await?
+            let assignment = Repository::<AssignmentEntity, AssignmentColumn>::find_by_id(params.assignment_id).await?
                 .ok_or_else(|| DbErr::RecordNotFound(format!("Assignment ID {} not found", params.assignment_id)))?;
-            let task = AssignmentTaskRepository::find_by_id(params.task_id).await?
+            let task = Repository::<AssignmentTaskEntity, AssignmentTaskColumn>::find_by_id(params.task_id).await?
                 .ok_or_else(|| DbErr::RecordNotFound(format!("Task ID {} not found", params.task_id)))?;
             let dir_path = Self::full_directory_path(assignment.module_id, params.assignment_id, task.task_number);
             fs::create_dir_all(&dir_path)
@@ -100,7 +104,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentOverwriteFile, UpdateAssignmentOver
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            AssignmentOverwriteFileRepository::update(model).await.map_err(AppError::from)
+            Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::update(model).await.map_err(AppError::from)
         })
     }
 }
@@ -129,7 +133,7 @@ impl AssignmentOverwriteFileService {
     pub async fn full_path(
         id: i64
     ) -> Result<PathBuf, DbErr> {
-        let overwrite = AssignmentOverwriteFileRepository::find_by_id(id).await?
+        let overwrite = Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::find_by_id(id).await?
             .ok_or_else(|| DbErr::RecordNotFound(format!("Overwrite File ID {} not found", id)))?;
         Ok(Self::storage_root().join(overwrite.path))
     }
@@ -137,7 +141,7 @@ impl AssignmentOverwriteFileService {
     pub async fn load_file(
         id: i64,
     ) -> Result<Vec<u8>, std::io::Error> {
-        let overwrite = AssignmentOverwriteFileRepository::find_by_id(id)
+        let overwrite = Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::find_by_id(id)
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Overwrite File ID {} not found", id)))?;
@@ -148,7 +152,7 @@ impl AssignmentOverwriteFileService {
     pub async fn delete_file_only(
         id: i64,
     ) -> Result<(), std::io::Error> {
-        let overwrite = AssignmentOverwriteFileRepository::find_by_id(id)
+        let overwrite = Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::find_by_id(id)
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Overwrite File ID {} not found", id)))?;

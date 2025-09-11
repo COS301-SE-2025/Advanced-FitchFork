@@ -19,7 +19,7 @@ mod common {
     };
     use services::{
         service::Service,
-        user_service::{CreateUser, UserService},
+        user::{CreateUser, UserService},
     };
     use sea_orm::{DatabaseConnection};
     

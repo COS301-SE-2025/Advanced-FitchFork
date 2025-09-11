@@ -7,7 +7,7 @@ mod tests {
     use db::{models::{module::{self, Model as Module}, user::Model as UserModel}, repositories::user_repository::UserRepository};
     use services::{
         service::Service,
-        user_service::{UserService, CreateUser}
+        user::{UserService, CreateUser}
     };
     use tower::ServiceExt;
     use serde_json::json;

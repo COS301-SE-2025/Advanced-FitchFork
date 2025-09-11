@@ -14,7 +14,7 @@ mod tests {
     use crate::helpers::app::make_test_app;
     use services::{
         service::Service,
-        user_service::{UserService, CreateUser}
+        user::{UserService, CreateUser}
     };
     use db::repositories::user_repository::UserRepository;
     use serial_test::serial;

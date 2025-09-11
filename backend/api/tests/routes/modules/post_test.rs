@@ -8,7 +8,7 @@ mod tests {
     use db::{models::user::Model as UserModel, repositories::user_repository::UserRepository};
     use services::{
         service::Service,
-        user_service::{UserService, CreateUser}
+        user::{UserService, CreateUser}
     };
     use api::auth::generate_jwt;
     use crate::helpers::app::make_test_app;

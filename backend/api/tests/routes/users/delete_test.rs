@@ -5,7 +5,7 @@ mod tests {
         repositories::user_repository::UserRepository,
     };
     use services::{
-        user_service::{UserService, CreateUser},
+        user::{UserService, CreateUser},
         service::Service,
     };
     use axum::{

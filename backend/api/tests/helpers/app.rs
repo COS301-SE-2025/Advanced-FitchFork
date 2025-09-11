@@ -11,7 +11,7 @@ use api::{
     routes::routes,
     ws::ws_routes,
 };
-use services::util_service::UtilService;
+use services::util::UtilService;
 use tower::util::BoxCloneService;
 use tower::ServiceExt;
 use std::convert::Infallible;

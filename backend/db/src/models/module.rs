@@ -36,4 +36,3 @@ impl Related<super::user_module_role::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-impl Model {}

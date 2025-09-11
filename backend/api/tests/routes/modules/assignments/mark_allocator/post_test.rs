@@ -15,7 +15,7 @@ mod tests {
     };
     use services::{
         service::Service,
-        user_service::{CreateUser, UserService}
+        user::{CreateUser, UserService}
     };
     use crate::helpers::app::make_test_app;
     use api::auth::generate_jwt;

@@ -10,7 +10,7 @@ mod tests {
     };
     use services::{
         service::Service,
-        user_service::{UserService, CreateUser}
+        user::{UserService, CreateUser}
     };
     use axum::{
         body::Body as AxumBody,

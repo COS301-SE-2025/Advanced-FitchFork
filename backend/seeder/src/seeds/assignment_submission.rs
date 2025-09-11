@@ -1,8 +1,10 @@
 use crate::seed::Seeder;
-use db::models::{assignment, assignment_submission::Model as AssignmentSubmissionModel, user};
+use services::service::{Service, AppError};
+use services::assignment::AssignmentService;
+use services::user::UserService;
+use services::assignment_submission::{AssignmentSubmissionService, CreateAssignmentSubmission};
 use rand::seq::SliceRandom;
 use rand::{Rng, distributions::Alphanumeric};
-use sea_orm::{DatabaseConnection, EntityTrait};
 use std::io::{Cursor, Write};
 use zip::write::SimpleFileOptions;
 use std::pin::Pin;
@@ -10,51 +12,30 @@ use std::pin::Pin;
 pub struct AssignmentSubmissionSeeder;
 
 impl Seeder for AssignmentSubmissionSeeder {
-    fn seed<'a>(&'a self, db: &'a DatabaseConnection) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
             // Fetch all assignments and users
-            let assignments = assignment::Entity::find()
-                .all(db)
-                .await
-                .expect("Failed to fetch assignments");
-
-            let mut users = user::Entity::find()
-                .all(db)
-                .await
-                .expect("Failed to fetch users");
+            let assignments = AssignmentService::find_all(&[], None).await?;
+            let mut users = UserService::find_all(&[], None).await?;
 
             if users.is_empty() {
                 panic!("No users found — at least one user must exist to seed assignment_submissions");
             }
 
             for user in &users {
-                let assignment_id = 10003;
-                let attempt_number = 1;
-                let filename = format!("studentSubmission_user{}.zip", user.id);
-                let content = create_student_submission_plagiarism(user.id);
-
-                match AssignmentSubmissionModel::save_file(
-                    db,
-                    assignment_id,
-                    user.id,
-                    attempt_number,
-                    80,
-                    100,
-                    false,
-                    &filename,
-                    "hash123#",
-                    &content,
-                )
-                .await
-                {
-                    Ok(_) => {}
-                    Err(e) => {
-                        eprintln!(
-                            "Failed to seed plagiarism submission for assignment {} user {}: {}",
-                            assignment_id, user.id, e
-                        );
+                AssignmentSubmissionService::create(
+                    CreateAssignmentSubmission{
+                        assignment_id: 10003,
+                        user_id: user.id,
+                        attempt: 1,
+                        earned: 80,
+                        total: 100,
+                        is_practice: false,
+                        filename: format!("studentSubmission_user{}.zip", user.id),
+                        file_hash: "hash123#".to_string(),
+                        bytes: create_student_submission_plagiarism(user.id),
                     }
-                }
+                ).await?;
             }
 
             users.truncate(2);
@@ -66,41 +47,37 @@ impl Seeder for AssignmentSubmissionSeeder {
                 {
                     continue;
                 }
+
                 for user in &users {
                     for counter in 1..=2 {
                         if assignment.id == 9999 && user.id == 1 && counter == 1 {
                             continue;
                         }
 
-                            let dummy_filename = "submission.txt";
-                            let dummy_content = format!(
-                                "Dummy submission content for assignment {} by user {}",
-                                assignment.id, user.id
-                            );
-
-                        let _ = AssignmentSubmissionModel::save_file(
-                            db,
-                            assignment.id,
-                            user.id,
-                            counter,
-                            rand::random::<i64>() % 100,
-                            100,
-                            false,
-                            dummy_filename,
-                            "hash123#",
-                            dummy_content.as_bytes(),
-                        ).await;
+                        AssignmentSubmissionService::create(
+                            CreateAssignmentSubmission{
+                                assignment_id: assignment.id,
+                                user_id: user.id,
+                                attempt: counter,
+                                earned: rand::random::<i64>() % 100,
+                                total: 100,
+                                is_practice: false,
+                                filename: "submission.txt".to_string(),
+                                file_hash: "hash123#".to_string(),
+                                bytes: format!("Dummy submission content for assignment {} by user {}", assignment.id, user.id).as_bytes().to_vec(),
+                            }
+                        ).await?;
                     }
                 }
             }
 
-                fn create_memo_zip_as_submission_java() -> Vec<u8> {
-                    let mut buf = Cursor::new(Vec::new());
-                    {
-                        let mut zip = zip::ZipWriter::new(&mut buf);
-                        let options = SimpleFileOptions::default().unix_permissions(0o644);
+            fn create_memo_zip_as_submission_java() -> Vec<u8> {
+                let mut buf = Cursor::new(Vec::new());
+                {
+                    let mut zip = zip::ZipWriter::new(&mut buf);
+                    let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                        let helper_one = r#"
+                    let helper_one = r#"
         public class HelperOne {
             public static String subtaskA() {
                 return "" + "HelperOne: Subtask for Task1\nThis as well\nAnd this";
@@ -142,27 +119,27 @@ impl Seeder for AssignmentSubmissionSeeder {
         }
         "#;
 
-                        zip.start_file("HelperOne.java", options).unwrap();
-                        zip.write_all(helper_one.as_bytes()).unwrap();
+                    zip.start_file("HelperOne.java", options).unwrap();
+                    zip.write_all(helper_one.as_bytes()).unwrap();
 
-                        zip.start_file("HelperTwo.java", options).unwrap();
-                        zip.write_all(helper_two.as_bytes()).unwrap();
+                    zip.start_file("HelperTwo.java", options).unwrap();
+                    zip.write_all(helper_two.as_bytes()).unwrap();
 
-                        zip.start_file("HelperThree.java", options).unwrap();
-                        zip.write_all(helper_three.as_bytes()).unwrap();
+                    zip.start_file("HelperThree.java", options).unwrap();
+                    zip.write_all(helper_three.as_bytes()).unwrap();
 
-                        zip.finish().unwrap();
-                    }
-                    buf.into_inner()
+                    zip.finish().unwrap();
                 }
+                buf.into_inner()
+            }
 
-                fn create_cpp_submission_zip() -> Vec<u8> {
-                    let mut buf = Cursor::new(Vec::new());
-                    {
-                        let mut zip = zip::ZipWriter::new(&mut buf);
-                        let options = SimpleFileOptions::default().unix_permissions(0o644);
+            fn create_cpp_submission_zip() -> Vec<u8> {
+                let mut buf = Cursor::new(Vec::new());
+                {
+                    let mut zip = zip::ZipWriter::new(&mut buf);
+                    let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                        let helper_one_cpp = r#"
+                    let helper_one_cpp = r#"
         #include "HelperOne.h"
         std::string HelperOne::subtaskA() {
             return "HelperOne: Subtask for Task1\nThis as well\nAnd this";
@@ -237,82 +214,66 @@ impl Seeder for AssignmentSubmissionSeeder {
         #endif
         "#;
 
-                        zip.start_file("HelperOne.cpp", options).unwrap();
-                        zip.write_all(helper_one_cpp.as_bytes()).unwrap();
+                    zip.start_file("HelperOne.cpp", options).unwrap();
+                    zip.write_all(helper_one_cpp.as_bytes()).unwrap();
 
-                        zip.start_file("HelperTwo.cpp", options).unwrap();
-                        zip.write_all(helper_two_cpp.as_bytes()).unwrap();
+                    zip.start_file("HelperTwo.cpp", options).unwrap();
+                    zip.write_all(helper_two_cpp.as_bytes()).unwrap();
 
-                        zip.start_file("HelperThree.cpp", options).unwrap();
-                        zip.write_all(helper_three_cpp.as_bytes()).unwrap();
+                    zip.start_file("HelperThree.cpp", options).unwrap();
+                    zip.write_all(helper_three_cpp.as_bytes()).unwrap();
 
-                        zip.start_file("HelperOne.h", options).unwrap();
-                        zip.write_all(helper_one_h.as_bytes()).unwrap();
+                    zip.start_file("HelperOne.h", options).unwrap();
+                    zip.write_all(helper_one_h.as_bytes()).unwrap();
 
-                        zip.start_file("HelperTwo.h", options).unwrap();
-                        zip.write_all(helper_two_h.as_bytes()).unwrap();
+                    zip.start_file("HelperTwo.h", options).unwrap();
+                    zip.write_all(helper_two_h.as_bytes()).unwrap();
 
-                        zip.start_file("HelperThree.h", options).unwrap();
-                        zip.write_all(helper_three_h.as_bytes()).unwrap();
+                    zip.start_file("HelperThree.h", options).unwrap();
+                    zip.write_all(helper_three_h.as_bytes()).unwrap();
 
-                        zip.finish().unwrap();
-                    }
-                    buf.into_inner()
+                    zip.finish().unwrap();
                 }
-
-                let assignment_id_java = 9999;
-                let user_id = 1;
-                let attempt_number = 1;
-                let filename_java = "submission_memo_clone.zip";
-                let content_java = create_memo_zip_as_submission_java();
-
-            match AssignmentSubmissionModel::save_file(
-                db,
-                assignment_id_java,
-                user_id,
-                attempt_number,
-                80,
-                100,
-                false,
-                filename_java,
-                "hash123#",
-                &content_java,
-            ).await
-            {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!(
-                        "Failed to seed hardcoded submission for assignment {} user {}: {}",
-                        assignment_id_java, user_id, e
-                    );
-                }
+                buf.into_inner()
             }
 
-                let assignment_id_cpp = 9998;
-                let filename_cpp = "submission_cpp_clone.zip";
-                let content_cpp = create_cpp_submission_zip();
+            let assignment_id_java = 9999;
+            let user_id = 1;
+            let attempt_number = 1;
+            let filename_java = "submission_memo_clone.zip";
+            let content_java = create_memo_zip_as_submission_java();
 
-            match AssignmentSubmissionModel::save_file(
-                db,
-                assignment_id_cpp,
-                user_id,
-                attempt_number,
-                90,
-                100,
-                false,
-                filename_cpp,
-                "hash123#",
-                &content_cpp,
-            ).await
-            {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!(
-                        "Failed to seed hardcoded C++ submission for assignment {} user {}: {}",
-                        assignment_id_cpp, user_id, e
-                    );
+            AssignmentSubmissionService::create(
+                CreateAssignmentSubmission{
+                    assignment_id: assignment_id_java,
+                    user_id: user_id,
+                    attempt: attempt_number,
+                    earned: 80,
+                    total: 100,
+                    is_practice: false,
+                    filename: filename_java.to_string(),
+                    file_hash: "hash123#".to_string(),
+                    bytes: content_java,
                 }
-            }
+            ).await?;
+
+            let assignment_id_cpp = 9998;
+            let filename_cpp = "submission_cpp_clone.zip";
+            let content_cpp = create_cpp_submission_zip();
+
+            AssignmentSubmissionService::create(
+                CreateAssignmentSubmission{
+                    assignment_id: assignment_id_cpp,
+                    user_id: user_id,
+                    attempt: attempt_number,
+                    earned: 90,
+                    total: 100,
+                    is_practice: false,
+                    filename: filename_cpp.to_string(),
+                    file_hash: "hash123#".to_string(),
+                    bytes: content_cpp,
+                }
+            ).await?;
 
             // Plagiarism Submissions
 
@@ -513,6 +474,8 @@ impl Seeder for AssignmentSubmissionSeeder {
                     .map(char::from)
                     .collect()
             }
+
+            Ok(())
         })
     }
 }

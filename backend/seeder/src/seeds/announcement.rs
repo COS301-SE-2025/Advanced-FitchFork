@@ -1,4 +1,10 @@
 use crate::seed::Seeder;
+use services::announcement::{AnnouncementService, CreateAnnouncement};
+use services::service::{Service, AppError};
+use services::user::UserService;
+use services::module::ModuleService;
+use services::user_module_role::UserModuleRoleService;
+use util::filters::FilterParam;
 use chrono::{Duration, Utc};
 use rand::rngs::{OsRng, StdRng};
 use rand::{seq::SliceRandom, Rng, SeedableRng};
@@ -7,18 +13,18 @@ use std::pin::Pin;
 pub struct AnnouncementSeeder;
 
 impl Seeder for AnnouncementSeeder {
-    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
             let mut rng = StdRng::from_rng(OsRng).expect("rng");
 
-            let all_users = user::Entity::find().all(db).await.expect("users");
+            let all_users = UserService::find_all(&[], None).await?;
             if all_users.is_empty() {
                 panic!("No users found; run UserSeeder first");
             }
 
-            let modules = module::Entity::find().all(db).await.expect("modules");
+            let modules = ModuleService::find_all(&[], None).await?;
             if modules.is_empty() {
-                return;
+                return Err(AppError::DatabaseUnknown);
             }
 
             let titles = [
@@ -36,18 +42,15 @@ impl Seeder for AnnouncementSeeder {
 
             for m in modules {
                 // Prefer module staff as authors
-                let staff_user_ids: Vec<i64> = user_module_role::Entity::find()
-                    .filter(user_module_role::Column::ModuleId.eq(m.id))
-                    .filter(
-                        user_module_role::Column::Role.is_in(vec![
-                            ModuleRole::Lecturer,
-                            ModuleRole::AssistantLecturer,
-                            ModuleRole::Tutor,
-                        ]),
-                    )
-                    .all(db)
-                    .await
-                    .unwrap_or_default()
+                let filters = vec![
+                    FilterParam::eq("module_id", m.id),
+                    FilterParam::eq("role", vec![
+                        "lecturer".to_string(),
+                        "assistant_lecturer".to_string(), 
+                        "tutor".to_string()
+                    ]),
+                ];
+                let staff_user_ids: Vec<i64> = UserModuleRoleService::find_all(&filters, None).await?
                     .into_iter()
                     .map(|r| r.user_id)
                     .collect();
@@ -60,8 +63,6 @@ impl Seeder for AnnouncementSeeder {
                     }
                 };
 
-                let mut batch: Vec<AnnouncementActiveModel> = Vec::with_capacity(20);
-
                 for i in 0..20 {
                     let title = titles.choose(&mut rng).unwrap().to_string();
 
@@ -70,28 +71,25 @@ impl Seeder for AnnouncementSeeder {
                         - Duration::days(rng.gen_range(0..=180))
                         - Duration::hours(rng.gen_range(0..=23))
                         - Duration::minutes(rng.gen_range(0..=59));
-                    let updated_at = created_at + Duration::minutes(rng.gen_range(0..=240));
 
                     let body = build_long_markdown(&m.code, m.year, created_at, &mut rng);
 
                     // Ensure a couple are pinned per module; others ~22% chance
                     let pinned = if i < 3 { true } else { rng.gen_bool(0.22) };
 
-                    batch.push(AnnouncementActiveModel {
-                        module_id: Set(m.id),
-                        user_id: Set(pick_author(&mut rng)),
-                        title: Set(title),
-                        body: Set(body),
-                        pinned: Set(pinned),
-                        created_at: Set(created_at),
-                        updated_at: Set(updated_at),
-                        ..Default::default()
-                    });
+                    AnnouncementService::create(
+                        CreateAnnouncement{
+                           module_id: m.id,
+                            user_id: pick_author(&mut rng),
+                            title: title,
+                            body: body,
+                            pinned: pinned, 
+                        }
+                    ).await?;
                 }
-
-                // Single round-trip per module
-                let _ = AnnouncementEntity::insert_many(batch).exec(db).await;
             }
+
+            Ok(())
         })
     }
 }

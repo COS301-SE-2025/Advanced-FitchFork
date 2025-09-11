@@ -1,12 +1,14 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::assignment_file::{Entity, ActiveModel, FileType, Model},
-    repositories::{repository::Repository, assignment_file_repository::AssignmentFileRepository},
+    models::assignment_file::{Entity, Column, ActiveModel, FileType, Model},
+    repository::Repository,
 };
-use util::filters::{FilterParam, FilterValue};
+use util::filters::FilterParam;
 use sea_orm::{DbErr, Set};
 use std::{env, fs, path::PathBuf};
 use chrono::{Utc, DateTime};
+
+pub use db::models::assignment_file::Model as AssignmentFile;
 
 #[derive(Debug, Clone)]
 pub struct CreateAssignmentFile {
@@ -30,7 +32,7 @@ impl ToActiveModel<Entity> for CreateAssignmentFile {
             assignment_id: Set(self.assignment_id),
             filename: Set(self.filename),
             path: Set("".to_string()), // will be updated after write
-            file_type: Set(self.file_type.parse::<FileType>().map_err(|e| DbErr::Custom(format!("Invalid file type: {e}")))?),
+            file_type: Set(self.file_type.trim().parse::<FileType>().map_err(|e| DbErr::Custom(format!("Invalid file type '{}': {}", self.file_type, e)))?),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
@@ -40,12 +42,12 @@ impl ToActiveModel<Entity> for CreateAssignmentFile {
 
 impl ToActiveModel<Entity> for UpdateAssignmentFile {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        let file = match AssignmentFileRepository::find_by_id(self.id).await {
+        let file = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(file)) => file,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("File ID {} not found", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("File ID {} not found", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
 
         let mut active: ActiveModel = file.into();
@@ -62,7 +64,7 @@ impl ToActiveModel<Entity> for UpdateAssignmentFile {
 
 pub struct AssignmentFileService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentFile, UpdateAssignmentFile, AssignmentFileRepository> for AssignmentFileService {
+impl<'a> Service<'a, Entity, Column, CreateAssignmentFile, UpdateAssignmentFile> for AssignmentFileService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(
@@ -70,19 +72,19 @@ impl<'a> Service<'a, Entity, CreateAssignmentFile, UpdateAssignmentFile, Assignm
         ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
             let filters = vec![
-                FilterParam::eq("assignment_id", FilterValue::Int(params.assignment_id)),
-                FilterParam::eq("file_type", FilterValue::String(params.clone().file_type)),
+                FilterParam::eq("assignment_id", params.assignment_id),
+                FilterParam::eq("file_type", params.clone().file_type),
             ];
 
-            if let Some(existing) = AssignmentFileRepository::find_one(&filters, None).await?
+            if let Some(existing) = Repository::<Entity, Column>::find_one(&filters, None).await?
             {
                 let existing_path = AssignmentFileService::storage_root().join(&existing.path);
                 let _ = fs::remove_file(existing_path); // Silently ignore failure
 
-                AssignmentFileRepository::delete(existing.id).await?;
+                Repository::<Entity, Column>::delete(existing.id).await?;
             }
 
-            let inserted: Model = AssignmentFileRepository::create(params.clone().into_active_model().await?).await?;
+            let inserted: Model = Repository::<Entity, Column>::create(params.clone().into_active_model().await?).await?;
 
             let ext = PathBuf::from(params.filename)
                 .extension()
@@ -112,7 +114,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentFile, UpdateAssignmentFile, Assignm
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            AssignmentFileRepository::update(model).await.map_err(AppError::from)
+            Repository::<Entity, Column>::update(model).await.map_err(AppError::from)
         })
     }
 }
@@ -154,7 +156,7 @@ impl AssignmentFileService {
     pub async fn load_file(
         id: i64,
     ) -> Result<Vec<u8>, std::io::Error> {
-        let file = AssignmentFileRepository::find_by_id(id)
+        let file = Repository::<Entity, Column>::find_by_id(id)
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("File ID {} not found", id)))?;
@@ -165,7 +167,7 @@ impl AssignmentFileService {
     pub async fn delete_file_only(
         id: i64,
     ) -> Result<(), std::io::Error> {
-        let file = AssignmentFileRepository::find_by_id(id)
+        let file = Repository::<Entity, Column>::find_by_id(id)
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("File ID {} not found", id)))?;
@@ -178,8 +180,8 @@ impl AssignmentFileService {
         assignment_id: i64
     ) -> Result<Vec<Model>, DbErr> {
         let filters = vec![
-            FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
+            FilterParam::eq("assignment_id", assignment_id),
         ];
-        AssignmentFileRepository::find_all(&filters, None).await
+        Repository::<Entity, Column>::find_all(&filters, None).await
     }
 }

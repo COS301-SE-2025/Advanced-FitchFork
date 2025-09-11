@@ -92,4 +92,3 @@ impl ReadinessReport {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-impl Model {}

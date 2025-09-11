@@ -1,10 +1,12 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::ticket_messages::{ActiveModel, Entity},
-    repositories::{ticket_message_repository::TicketMessageRepository, repository::Repository},
+    models::ticket_messages::{ActiveModel, Entity, Column},
+    repository::Repository,
 };
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
+
+pub use db::models::ticket_messages::Model as TicketMessage;
 
 #[derive(Debug, Clone)]
 pub struct CreateTicketMessage {
@@ -35,7 +37,7 @@ impl ToActiveModel<Entity> for CreateTicketMessage {
 
 impl ToActiveModel<Entity> for UpdateTicketMessage {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        let message = match TicketMessageRepository::find_by_id(self.id).await {
+        let message = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(message)) => message,
             Ok(None) => {
                 return Err(AppError::from(DbErr::RecordNotFound(format!("Message not found for ID {}", self.id))));
@@ -56,7 +58,7 @@ impl ToActiveModel<Entity> for UpdateTicketMessage {
 
 pub struct TicketMessageService;
 
-impl<'a> Service<'a, Entity, CreateTicketMessage, UpdateTicketMessage, TicketMessageRepository> for TicketMessageService {
+impl<'a> Service<'a, Entity, Column, CreateTicketMessage, UpdateTicketMessage> for TicketMessageService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
@@ -68,7 +70,7 @@ impl TicketMessageService {
         message_id: i64,
         user_id: i64,
     ) -> bool {
-        let message = TicketMessageRepository::find_by_id(message_id).await;
+        let message = Repository::<Entity, Column>::find_by_id(message_id).await;
         match message {
             Ok(Some(t)) => t.user_id == user_id,
             _ => false,

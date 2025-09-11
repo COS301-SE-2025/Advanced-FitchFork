@@ -34,7 +34,7 @@ mod tests {
     };
     use services::{
         service::Service,
-        user_service::{UserService, CreateUser}
+        user::{UserService, CreateUser}
     };
     use dotenvy::dotenv;
     use std::collections::HashMap;

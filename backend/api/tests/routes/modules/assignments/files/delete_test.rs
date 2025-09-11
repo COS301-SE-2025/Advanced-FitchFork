@@ -16,7 +16,7 @@ mod tests {
     };
     use services::{
         service::Service,
-        user_service::{CreateUser, UserService}
+        user::{CreateUser, UserService}
     };
     use tower::ServiceExt;
     use serde_json::json;

@@ -36,4 +36,3 @@ impl RelationTrait for Relation {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-impl Model {}

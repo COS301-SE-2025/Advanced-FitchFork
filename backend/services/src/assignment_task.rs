@@ -1,11 +1,13 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::assignment_task::{Entity, ActiveModel},
-    repositories::{repository::Repository, assignment_task_repository::AssignmentTaskRepository},
+    models::assignment_task::{Entity, Column, ActiveModel},
+    repository::Repository,
 };
-use util::filters::{FilterParam, FilterValue};
+use util::filters::FilterParam;
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
+
+pub use db::models::assignment_task::Model as AssignmentTask;
 
 #[derive(Debug, Clone)]
 pub struct CreateAssignmentTask {
@@ -41,7 +43,7 @@ impl ToActiveModel<Entity> for CreateAssignmentTask {
 
 impl ToActiveModel<Entity> for UpdateAssignmentTask {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        let task = match AssignmentTaskRepository::find_by_id(self.id).await {
+        let task = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(task)) => task,
             Ok(None) => {
                 return Err(AppError::from(DbErr::RecordNotFound(format!("Task ID {} not found", self.id))));
@@ -67,7 +69,7 @@ impl ToActiveModel<Entity> for UpdateAssignmentTask {
 
 pub struct AssignmentTaskService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentTask, UpdateAssignmentTask, AssignmentTaskRepository> for AssignmentTaskService {
+impl<'a> Service<'a, Entity, Column, CreateAssignmentTask, UpdateAssignmentTask> for AssignmentTaskService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
@@ -76,8 +78,8 @@ impl AssignmentTaskService {
 
     pub async fn tasks_present(assignment_id: i64) -> bool {
         let filters = vec![
-            FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
+            FilterParam::eq("assignment_id", assignment_id),
         ];
-        AssignmentTaskRepository::exists(&filters).await.unwrap_or(false)
+        Repository::<Entity, Column>::exists(&filters).await.unwrap_or(false)
     }
 }

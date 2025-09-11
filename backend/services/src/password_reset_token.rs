@@ -1,13 +1,15 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::password_reset_token::{ActiveModel, Entity, Model},
-    repositories::{password_reset_token_repository::PasswordResetTokenRepository, repository::Repository},
+    models::password_reset_token::{ActiveModel, Entity, Column, Model},
+    repository::Repository,
 };
-use util::filters::{FilterParam, FilterValue};
+use util::filters::FilterParam;
 use sea_orm::{DbErr, Set};
 use chrono::{Utc, Duration};
 use rand::{thread_rng, Rng};
 use rand::distributions::Alphanumeric;
+
+pub use db::models::password_reset_token::Model as PasswordResetToken;
 
 #[derive(Debug, Clone)]
 pub struct CreatePasswordResetToken {
@@ -43,7 +45,7 @@ impl ToActiveModel<Entity> for CreatePasswordResetToken {
 
 impl ToActiveModel<Entity> for UpdatePasswordResetToken {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        let token = match PasswordResetTokenRepository::find_by_id(self.id).await {
+        let token = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(token)) => token,
             Ok(None) => {
                 return Err(AppError::from(DbErr::RecordNotFound(format!("Token not found for ID {}", self.id))));
@@ -62,7 +64,7 @@ impl ToActiveModel<Entity> for UpdatePasswordResetToken {
 
 pub struct PasswordResetTokenService;
 
-impl<'a> Service<'a, Entity, CreatePasswordResetToken, UpdatePasswordResetToken, PasswordResetTokenRepository> for PasswordResetTokenService {
+impl<'a> Service<'a, Entity, Column, CreatePasswordResetToken, UpdatePasswordResetToken> for PasswordResetTokenService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
@@ -73,10 +75,10 @@ impl PasswordResetTokenService {
         token: String,
     ) -> Result<Option<Model>, DbErr> {
         let filters = vec![
-            FilterParam::eq("token", FilterValue::String(token)),
-            FilterParam::eq("used", FilterValue::Bool(false)),
-            FilterParam::gt("expires_at", FilterValue::DateTime(Utc::now())),
+            FilterParam::eq("token", token),
+            FilterParam::eq("used", false),
+            FilterParam::gt("expires_at", Utc::now()),
         ];
-        PasswordResetTokenRepository::find_one(&filters, None).await
+        Repository::<Entity, Column>::find_one(&filters, None).await
     }
 }

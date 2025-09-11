@@ -4,7 +4,7 @@ use std::{env, fs, path::PathBuf};
 // use db::models::AssignmentSubmissionOutput;
 // Your own modules
 use crate::validate_files::validate_memo_files;
-use services::{assignment_task_service::AssignmentTaskService, service::Service};
+use services::{assignment_task::AssignmentTaskService, service::Service};
 use util::filters::{FilterParam, FilterValue};
 
 // Models
@@ -102,14 +102,10 @@ pub async fn create_memo_outputs_for_all_tasks(
         first_archive_in(&base_path.join("main"))?,
     ];
 
-    let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
-        .await
-        .map_err(|e| format!("DB error loading tasks: {}", e))?;
-
     let filters = vec![
         FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
-    ]
-    let tasks = AssignmentTaskService::find_all(&filters, None).await?;
+    ];
+    let tasks = AssignmentTaskService::find_all(&filters, None).await;
 
     if tasks.is_empty() {
         println!("No tasks found for assignment {}", assignment_id);

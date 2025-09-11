@@ -1,5 +1,7 @@
 use crate::seed::Seeder;
-use services::assignment_file_service::AssignmentFileService;
+use services::service::{Service, AppError};
+use services::assignment::AssignmentService;
+use services::assignment_file::{AssignmentFileService, CreateAssignmentFile};
 use std::io::{Cursor, Write};
 use zip::write::SimpleFileOptions;
 use std::pin::Pin;
@@ -7,58 +9,52 @@ use std::pin::Pin;
 pub struct AssignmentFileSeeder;
 
 impl Seeder for AssignmentFileSeeder {
-    fn seed<'a>(&'a self, db: &'a DatabaseConnection) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let assignments = assignment::Entity::find()
-                .all(db)
-                .await
-                .expect("Failed to fetch assignments");
+            let assignments = AssignmentService::find_all(&[], None).await?;
 
-            let file_types: Vec<(FileType, fn(i32) -> String)> = vec![
-                (FileType::Spec, |id| format!("spec_{}.txt", id)),
-                (FileType::Memo, |id| format!("memo_{}.txt", id)),
-                (FileType::Main, |id| format!("main_{}.txt", id)),
-                (FileType::Makefile, |id| format!("makefile_{}.txt", id)),
-                (FileType::MarkAllocator, |id| {
+            let file_types: Vec<(&str, fn(i32) -> String)> = vec![
+                ("spec", |id| format!("spec_{}.txt", id)),
+                ("memo", |id| format!("memo_{}.txt", id)),
+                ("main", |id| format!("main_{}.txt", id)),
+                ("makefile", |id| format!("makefile_{}.txt", id)),
+                ("mark_allocator", |id| {
                     format!("mark_allocator_{}.txt", id)
                 }),
-                (FileType::Config, |id| format!("config_{}.txt", id)),
+                ("config", |id| format!("config_{}.txt", id)),
             ];
 
             for a in &assignments {
                 if a.module_id == 9999 || a.module_id == 9998 || a.module_id == 10003 {
                     continue;
                 }
+
                 for &(ref file_type, filename_fn) in &file_types {
                     let filename = filename_fn(a.id.try_into().unwrap());
                     let content = format!("This is the content of assignment file {}", a.id);
 
-                        let _ = Model::save_file(
-                            db,
-                            a.id,
-                            a.module_id,
-                            file_type.clone(),
-                            &filename,
-                            content.as_bytes(),
-                        )
-                        .await;
-
-                        let _ = AssignmentFileService::create(
-
-                        ).await?;
-                    }
+                    AssignmentFileService::create(
+                        CreateAssignmentFile{
+                            assignment_id: a.id,
+                            module_id: a.module_id,
+                            file_type: file_type.to_string(),
+                            filename: filename,
+                            bytes: content.as_bytes().to_vec(),
+                        }
+                    ).await?;
                 }
+            }
 
-                let special_module_id: i64 = 9999;
-                let special_assignment_id: i64 = 9999;
+            let special_module_id: i64 = 9999;
+            let special_assignment_id: i64 = 9999;
 
-                fn create_main_zip() -> Vec<u8> {
-                    let mut buf = Cursor::new(Vec::new());
-                    {
-                        let mut zip = zip::ZipWriter::new(&mut buf);
-                        let options = SimpleFileOptions::default().unix_permissions(0o644);
+            fn create_main_zip() -> Vec<u8> {
+                let mut buf = Cursor::new(Vec::new());
+                {
+                    let mut zip = zip::ZipWriter::new(&mut buf);
+                    let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                        let main_java = r#"
+                    let main_java = r#"
         public class Main {
             public static void main(String[] args) {
                 String task = args.length > 0 ? args[0] : "task1";
@@ -107,20 +103,20 @@ impl Seeder for AssignmentFileSeeder {
     }
     "#;
 
-                        zip.start_file("Main.java", options).unwrap();
-                        zip.write_all(main_java.as_bytes()).unwrap();
-                        zip.finish().unwrap();
-                    }
-                    buf.into_inner()
+                    zip.start_file("Main.java", options).unwrap();
+                    zip.write_all(main_java.as_bytes()).unwrap();
+                    zip.finish().unwrap();
                 }
+                buf.into_inner()
+            }
 
-                fn create_memo_zip() -> Vec<u8> {
-                    let mut buf = Cursor::new(Vec::new());
-                    {
-                        let mut zip = zip::ZipWriter::new(&mut buf);
-                        let options = SimpleFileOptions::default().unix_permissions(0o644);
+            fn create_memo_zip() -> Vec<u8> {
+                let mut buf = Cursor::new(Vec::new());
+                {
+                    let mut zip = zip::ZipWriter::new(&mut buf);
+                    let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                        let helper_one = r#"
+                    let helper_one = r#"
         public class HelperOne {
             public static String subtaskA() {
                 return "" + "HelperOne: Subtask for Task1\nThis as well\nAnd this";
@@ -162,27 +158,27 @@ impl Seeder for AssignmentFileSeeder {
         }
         "#;
 
-                        zip.start_file("HelperOne.java", options).unwrap();
-                        zip.write_all(helper_one.as_bytes()).unwrap();
+                    zip.start_file("HelperOne.java", options).unwrap();
+                    zip.write_all(helper_one.as_bytes()).unwrap();
 
-                        zip.start_file("HelperTwo.java", options).unwrap();
-                        zip.write_all(helper_two.as_bytes()).unwrap();
+                    zip.start_file("HelperTwo.java", options).unwrap();
+                    zip.write_all(helper_two.as_bytes()).unwrap();
 
-                        zip.start_file("HelperThree.java", options).unwrap();
-                        zip.write_all(helper_three.as_bytes()).unwrap();
+                    zip.start_file("HelperThree.java", options).unwrap();
+                    zip.write_all(helper_three.as_bytes()).unwrap();
 
-                        zip.finish().unwrap();
-                    }
-                    buf.into_inner()
+                    zip.finish().unwrap();
                 }
+                buf.into_inner()
+            }
 
-                fn create_makefile_zip() -> Vec<u8> {
-                    let mut buf = Cursor::new(Vec::new());
-                    {
-                        let mut zip = zip::ZipWriter::new(&mut buf);
-                        let options = SimpleFileOptions::default().unix_permissions(0o644);
+            fn create_makefile_zip() -> Vec<u8> {
+                let mut buf = Cursor::new(Vec::new());
+                {
+                    let mut zip = zip::ZipWriter::new(&mut buf);
+                    let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                        let makefile_content = r#"
+                    let makefile_content = r#"
         task1:
             javac -d /output Main.java HelperOne.java HelperTwo.java HelperThree.java && java -cp /output Main task1
 
@@ -193,15 +189,15 @@ impl Seeder for AssignmentFileSeeder {
             javac -d /output Main.java HelperOne.java HelperTwo.java HelperThree.java && java -cp /output Main task3
         "#;
 
-                        zip.start_file("Makefile", options).unwrap();
-                        zip.write_all(makefile_content.as_bytes()).unwrap();
-                        zip.finish().unwrap();
-                    }
-                    buf.into_inner()
+                    zip.start_file("Makefile", options).unwrap();
+                    zip.write_all(makefile_content.as_bytes()).unwrap();
+                    zip.finish().unwrap();
                 }
+                buf.into_inner()
+            }
 
-            // New config file content
-            let config_json = r#"
+        // New config file content
+        let config_json = r#"
     {
     "execution": {
         "timeout_secs": 10,
@@ -226,40 +222,40 @@ impl Seeder for AssignmentFileSeeder {
     }
     "#;
 
-                let zipped_files = vec![
-                    (FileType::Main, "main.zip", create_main_zip()),
-                    (FileType::Memo, "memo.zip", create_memo_zip()),
-                    (FileType::Makefile, "makefile.zip", create_makefile_zip()),
-                    (
-                        FileType::Config,
-                        "config.json",
-                        config_json.as_bytes().to_vec(),
-                    ),
-                ];
+            let zipped_files = vec![
+                ("main", "main.zip", create_main_zip()),
+                ("memo", "memo.zip", create_memo_zip()),
+                ("makefile", "makefile.zip", create_makefile_zip()),
+                (
+                    "config",
+                    "config.json",
+                    config_json.as_bytes().to_vec(),
+                ),
+            ];
 
-                for (file_type, filename, content) in zipped_files {
-                    let _ = Model::save_file(
-                        db,
-                        special_assignment_id,
-                        special_module_id,
-                        file_type,
-                        filename,
-                        &content,
-                    )
-                    .await;
-                }
+            for (file_type, filename, content) in zipped_files {
+                AssignmentFileService::create(
+                    CreateAssignmentFile{
+                        assignment_id: special_assignment_id,
+                        module_id: special_module_id,
+                        file_type: file_type.to_string(),
+                        filename: filename.to_string(),
+                        bytes: content,
+                    }
+                ).await?;
+            }
 
-                let cpp_module_id = 9998;
-                let cpp_assignment_id = 9998;
+            let cpp_module_id = 9998;
+            let cpp_assignment_id = 9998;
 
-            //Original main file that was created
-            fn create_main_zip_cpp() -> Vec<u8> {
-                let mut buf = Cursor::new(Vec::new());
-                {
-                    let mut zip = zip::ZipWriter::new(&mut buf);
-                    let options = SimpleFileOptions::default().unix_permissions(0o644);
+        //Original main file that was created
+        fn create_main_zip_cpp() -> Vec<u8> {
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buf);
+                let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                        let main_cpp = r#"
+                    let main_cpp = r#"
         #include <iostream>
         #include <string>
         #include "HelperOne.h"
@@ -296,21 +292,21 @@ impl Seeder for AssignmentFileSeeder {
         }
         "#;
 
-                        zip.start_file("Main.cpp", options).unwrap();
-                        zip.write_all(main_cpp.as_bytes()).unwrap();
+                    zip.start_file("Main.cpp", options).unwrap();
+                    zip.write_all(main_cpp.as_bytes()).unwrap();
 
-                        zip.finish().unwrap();
-                    }
-                    buf.into_inner()
+                    zip.finish().unwrap();
                 }
+                buf.into_inner()
+            }
 
-                fn create_memo_zip_cpp() -> Vec<u8> {
-                    let mut buf = Cursor::new(Vec::new());
-                    {
-                        let mut zip = zip::ZipWriter::new(&mut buf);
-                        let options = SimpleFileOptions::default().unix_permissions(0o644);
+            fn create_memo_zip_cpp() -> Vec<u8> {
+                let mut buf = Cursor::new(Vec::new());
+                {
+                    let mut zip = zip::ZipWriter::new(&mut buf);
+                    let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                        let helper_one_cpp = r#"
+                    let helper_one_cpp = r#"
         #include "HelperOne.h"
         std::string HelperOne::subtaskA() {
             return "HelperOne: Subtask for Task1\nThis as well\nAnd this";
@@ -385,36 +381,36 @@ impl Seeder for AssignmentFileSeeder {
         #endif
         "#;
 
-                        zip.start_file("HelperOne.cpp", options).unwrap();
-                        zip.write_all(helper_one_cpp.as_bytes()).unwrap();
+                    zip.start_file("HelperOne.cpp", options).unwrap();
+                    zip.write_all(helper_one_cpp.as_bytes()).unwrap();
 
-                        zip.start_file("HelperTwo.cpp", options).unwrap();
-                        zip.write_all(helper_two_cpp.as_bytes()).unwrap();
+                    zip.start_file("HelperTwo.cpp", options).unwrap();
+                    zip.write_all(helper_two_cpp.as_bytes()).unwrap();
 
-                        zip.start_file("HelperThree.cpp", options).unwrap();
-                        zip.write_all(helper_three_cpp.as_bytes()).unwrap();
+                    zip.start_file("HelperThree.cpp", options).unwrap();
+                    zip.write_all(helper_three_cpp.as_bytes()).unwrap();
 
-                        zip.start_file("HelperOne.h", options).unwrap();
-                        zip.write_all(helper_one_h.as_bytes()).unwrap();
+                    zip.start_file("HelperOne.h", options).unwrap();
+                    zip.write_all(helper_one_h.as_bytes()).unwrap();
 
-                        zip.start_file("HelperTwo.h", options).unwrap();
-                        zip.write_all(helper_two_h.as_bytes()).unwrap();
+                    zip.start_file("HelperTwo.h", options).unwrap();
+                    zip.write_all(helper_two_h.as_bytes()).unwrap();
 
-                        zip.start_file("HelperThree.h", options).unwrap();
-                        zip.write_all(helper_three_h.as_bytes()).unwrap();
+                    zip.start_file("HelperThree.h", options).unwrap();
+                    zip.write_all(helper_three_h.as_bytes()).unwrap();
 
-                        zip.finish().unwrap();
-                    }
-                    buf.into_inner()
+                    zip.finish().unwrap();
                 }
+                buf.into_inner()
+            }
 
-                fn create_makefile_zip_cpp() -> Vec<u8> {
-                    let mut buf = Cursor::new(Vec::new());
-                    {
-                        let mut zip = zip::ZipWriter::new(&mut buf);
-                        let options = SimpleFileOptions::default().unix_permissions(0o644);
+            fn create_makefile_zip_cpp() -> Vec<u8> {
+                let mut buf = Cursor::new(Vec::new());
+                {
+                    let mut zip = zip::ZipWriter::new(&mut buf);
+                    let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                        let makefile_content = r#"
+                    let makefile_content = r#"
         CXX = g++
         CXXFLAGS = -fprofile-arcs -ftest-coverage -O0 -std=c++17
         LDFLAGS = -lgcov
@@ -446,12 +442,12 @@ impl Seeder for AssignmentFileSeeder {
             gcov $(SRC)
         "#;
 
-                        zip.start_file("Makefile", options).unwrap();
-                        zip.write_all(makefile_content.as_bytes()).unwrap();
-                        zip.finish().unwrap();
-                    }
-                    buf.into_inner()
+                    zip.start_file("Makefile", options).unwrap();
+                    zip.write_all(makefile_content.as_bytes()).unwrap();
+                    zip.finish().unwrap();
                 }
+                buf.into_inner()
+            }
 
             let config_json_cpp = r#"
     {
@@ -479,30 +475,30 @@ impl Seeder for AssignmentFileSeeder {
     "#;
 
             let zipped_files_cpp = vec![
-                (FileType::Main, "main.zip", create_main_zip_cpp()),
-                (FileType::Memo, "memo.zip", create_memo_zip_cpp()),
+                ("main", "main.zip", create_main_zip_cpp()),
+                ("memo", "memo.zip", create_memo_zip_cpp()),
                 (
-                    FileType::Makefile,
+                    "makefile",
                     "makefile.zip",
                     create_makefile_zip_cpp(),
                 ),
                 (
-                    FileType::Config,
+                    "config",
                     "config.json",
                     config_json_cpp.as_bytes().to_vec(),
                 ),
             ];
 
             for (file_type, filename, content) in zipped_files_cpp {
-                let _ = Model::save_file(
-                    db,
-                    cpp_assignment_id,
-                    cpp_module_id,
-                    file_type,
-                    filename,
-                    &content,
-                )
-                .await;
+                AssignmentFileService::create(
+                    CreateAssignmentFile{
+                        assignment_id: cpp_assignment_id,
+                        module_id: cpp_module_id,
+                        file_type: file_type.to_string(),
+                        filename: filename.to_string(),
+                        bytes: content,
+                    }
+                ).await?;
             }
 
             //Plagerism Assignment
@@ -641,30 +637,30 @@ impl Seeder for AssignmentFileSeeder {
     "#;
 
             let zipped_files = vec![
-                (FileType::Main, "main.zip", create_plag_main_zip()),
-                (FileType::Memo, "memo.zip", create_plag_memo_zip()),
+                ("main", "main.zip", create_plag_main_zip()),
+                ("memo", "memo.zip", create_plag_memo_zip()),
                 (
-                    FileType::Makefile,
+                    "makefile",
                     "makefile.zip",
                     create_plag_makefile_zip(),
                 ),
                 (
-                    FileType::Config,
+                    "config",
                     "config.json",
                     config_json.as_bytes().to_vec(),
                 ),
             ];
 
             for (file_type, filename, content) in zipped_files {
-                let _ = Model::save_file(
-                    db,
-                    plag_assignment,
-                    plag_module,
-                    file_type,
-                    filename,
-                    &content,
-                )
-                .await;
+                AssignmentFileService::create(
+                    CreateAssignmentFile{
+                        assignment_id: plag_assignment,
+                        module_id: plag_module,
+                        file_type: file_type.to_string(),
+                        filename: filename.to_string(),
+                        bytes: content,
+                    }
+                ).await?;
             }
 
             //GATLAM
@@ -825,31 +821,33 @@ impl Seeder for AssignmentFileSeeder {
     "#;
 
             let zipped_files = vec![
-                (FileType::Main, "main.zip", create_interpreter_main_zip()),
-                (FileType::Memo, "memo.zip", create_interpreter_memo_zip()),
+                ("main", "main.zip", create_interpreter_main_zip()),
+                ("memo", "memo.zip", create_interpreter_memo_zip()),
                 (
-                    FileType::Makefile,
+                    "makefile",
                     "makefile.zip",
                     create_interpreter_makefile_zip(),
                 ),
                 (
-                    FileType::Config,
+                    "config",
                     "config.json",
                     config_json.as_bytes().to_vec(),
                 ),
             ];
 
             for (file_type, filename, content) in zipped_files {
-                let _ = Model::save_file(
-                    db,
-                    plag_assignment,
-                    plag_module,
-                    file_type,
-                    filename,
-                    &content,
-                )
-                .await;
+                AssignmentFileService::create(
+                    CreateAssignmentFile{
+                        assignment_id: plag_assignment,
+                        module_id: plag_module,
+                        file_type: file_type.to_string(),
+                        filename: filename.to_string(),
+                        bytes: content,
+                    }
+                ).await?;
             }
+
+            Ok(())
         })
     }
 }

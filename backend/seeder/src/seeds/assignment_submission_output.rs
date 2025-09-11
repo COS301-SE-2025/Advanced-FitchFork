@@ -1,25 +1,17 @@
 use crate::seed::Seeder;
-use db::models::{
-    assignment_submission::Entity as AssignmentSubmission,
-    assignment_submission_output::Model as AssignmentSubmissionOutputModel, assignment_task,
-};
-use sea_orm::{DatabaseConnection, EntityTrait};
+use services::service::{Service, AppError};
+use services::assignment_task::AssignmentTaskService;
+use services::assignment_submission::AssignmentSubmissionService;
+use services::assignment_submission_output::{AssignmentSubmissionOutputService, CreateAssignmentSubmissionOutput};
 use std::pin::Pin;
 
 pub struct AssignmentSubmissionOutputSeeder;
 
 impl Seeder for AssignmentSubmissionOutputSeeder {
-    fn seed<'a>(&'a self, db: &'a DatabaseConnection) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let tasks = assignment_task::Entity::find()
-                .all(db)
-                .await
-                .expect("Failed to fetch assignment tasks");
-
-            let submissions = AssignmentSubmission::find()
-                .all(db)
-                .await
-                .expect("Failed to fetch assignment submissions");
+            let tasks = AssignmentTaskService::find_all(&[], None).await?;
+            let submissions = AssignmentSubmissionService::find_all(&[], None).await?;
 
             if tasks.is_empty() || submissions.is_empty() {
                 panic!("Tasks or submissions are missing — cannot seed submission outputs");
@@ -45,27 +37,18 @@ impl Seeder for AssignmentSubmissionOutputSeeder {
                         submission.id, submission.assignment_id, task.task_number
                     );
 
-                    match AssignmentSubmissionOutputModel::save_file(
-                        db,
-                        task.id,
-                        submission.id,
-                        dummy_filename,
-                        dummy_content.as_bytes(),
-                    )
-                    .await
-                    {
-                        Ok(_) => {
-                            // Optionally log success
+                    AssignmentSubmissionOutputService::create(
+                        CreateAssignmentSubmissionOutput{
+                            task_id: task.id,
+                            submission_id: submission.id,
+                            filename: dummy_filename.to_string(),
+                            bytes: dummy_content.as_bytes().to_vec(),
                         }
-                        Err(e) => {
-                            eprintln!(
-                                "Failed to save submission output for submission {} assignment {} task {}: {}",
-                                submission.id, submission.assignment_id, task.task_number, e
-                            );
-                        }
-                    }
+                    ).await?;
                 }
             }
+
+            Ok(())
         })
     }
 }

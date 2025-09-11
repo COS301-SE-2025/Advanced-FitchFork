@@ -8,7 +8,7 @@ mod tests {
     };
     use services::{
         service::Service,
-        user_service::{CreateUser, UserService},
+        user::{CreateUser, UserService},
     };
     use tokio_tungstenite::connect_async;
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;

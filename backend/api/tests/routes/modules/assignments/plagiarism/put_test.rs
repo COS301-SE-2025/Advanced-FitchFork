@@ -17,7 +17,7 @@ mod update_plagiarism_tests {
     };
     use services::{
         service::Service,
-        user_service::{CreateUser, UserService},
+        user::{CreateUser, UserService},
     };
     use sea_orm::{EntityTrait, DatabaseConnection};
     use tower::ServiceExt;

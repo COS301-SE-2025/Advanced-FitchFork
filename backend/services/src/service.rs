@@ -1,8 +1,8 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
-use sea_orm::{DbErr, EntityTrait, PrimaryKeyTrait, ActiveModelTrait};
-use db::repositories::repository::Repository;
+use sea_orm::{DbErr, EntityTrait, ColumnTrait, PrimaryKeyTrait, ActiveModelTrait};
+use db::repository::Repository;
 use util::filters::FilterParam;
 use thiserror::Error;
 
@@ -10,6 +10,9 @@ use thiserror::Error;
 pub enum AppError {
     #[error("Database error: {0}")]
     Database(#[from] DbErr),
+
+    #[error("Unexpected database error")]
+    DatabaseUnknown,
 }
 
 pub trait ToActiveModel<E>
@@ -19,29 +22,31 @@ where
     fn into_active_model(self) -> impl Future<Output = Result<<E as EntityTrait>::ActiveModel, AppError>> + Send;
 }
 
-pub trait Service<'a, E, C, U, R>: Send + Sync
+pub trait Service<'a, E, C, CreateParams, UpdateParams>: Send + Sync
 where
     E: EntityTrait,
-    C: Send + 'static + ToActiveModel<E>,
-    U: Send + 'static + ToActiveModel<E>,
+    C: ColumnTrait + FromStr + 'static,
+    C::Err: std::fmt::Display,
+    CreateParams: Send + 'static + ToActiveModel<E>,
+    UpdateParams: Send + 'static + ToActiveModel<E>,
     E::ActiveModel: ActiveModelTrait<Entity = E> + Send,
     E::Model: Send + Sync + sea_orm::IntoActiveModel<E::ActiveModel>,
-    E::Column: FromStr + Send + Sync,
-    R: Repository<E> + Send + Sync + 'static,
 {
     fn create(
-        params: C,
+        params: CreateParams,
     ) -> Pin<Box<dyn Future<Output = Result<E::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            R::create(params.into_active_model().await?).await.map_err(AppError::from)
+            let active_model = params.into_active_model().await?;
+            Repository::<E, C>::create(active_model).await.map_err(AppError::from)
         })
     }
 
     fn update(
-        params: U,
+        params: UpdateParams,
     ) -> Pin<Box<dyn Future<Output = Result<E::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            R::update(params.into_active_model().await?).await.map_err(AppError::from)
+            let active_model = params.into_active_model().await?;
+            Repository::<E, C>::update(active_model).await.map_err(AppError::from)
         })
     }
 
@@ -49,7 +54,7 @@ where
         id: <E::PrimaryKey as PrimaryKeyTrait>::ValueType,
     ) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
-            R::delete(id).await.map_err(AppError::from)
+            Repository::<E, C>::delete(id).await.map_err(AppError::from)
         })
     }
 
@@ -57,7 +62,7 @@ where
         id: <E::PrimaryKey as PrimaryKeyTrait>::ValueType,
     ) -> Pin<Box<dyn Future<Output = Result<Option<E::Model>, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            R::find_by_id(id).await.map_err(AppError::from)
+            Repository::<E, C>::find_by_id(id).await.map_err(AppError::from)
         })
     }
 
@@ -69,10 +74,10 @@ where
         V: Into<sea_orm::Value> + Send + Sync + 'static,
     {
         Box::pin(async move {
-            let column_enum = E::Column::from_str(&column)
-                .map_err(|_| DbErr::Custom(format!("Invalid column name: {}", column)))?;
+            let column_enum = C::from_str(&column)
+                .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column, e)))?;
             
-            R::find_in(column_enum, values).await.map_err(AppError::from)
+            Repository::<E, C>::find_in(column_enum, values).await.map_err(AppError::from)
         })
     }
 
@@ -81,7 +86,7 @@ where
         sort_by: Option<String>,
     ) -> Pin<Box<dyn Future<Output = Result<Option<E::Model>, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            R::find_one(filter_params, sort_by).await.map_err(AppError::from)
+            Repository::<E, C>::find_one(filter_params, sort_by).await.map_err(AppError::from)
         })
     }
 
@@ -90,7 +95,7 @@ where
         sort_by: Option<String>,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<E::Model>, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            R::find_all(filter_params, sort_by).await.map_err(AppError::from)
+            Repository::<E, C>::find_all(filter_params, sort_by).await.map_err(AppError::from)
         })
     }
 
@@ -101,7 +106,7 @@ where
         sort_by: Option<String>,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<E::Model>, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            R::filter(filter_params, page, per_page, sort_by)
+            Repository::<E, C>::filter(filter_params, page, per_page, sort_by)
                 .await
                 .map_err(AppError::from)
         })
@@ -111,7 +116,7 @@ where
         filter_params: &'a [FilterParam],
     ) -> Pin<Box<dyn Future<Output = Result<u64, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            R::count(filter_params).await.map_err(AppError::from)
+            Repository::<E, C>::count(filter_params).await.map_err(AppError::from)
         })
     }
 
@@ -119,7 +124,7 @@ where
         filter_params: &'a [FilterParam],
     ) -> Pin<Box<dyn Future<Output = Result<bool, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            R::exists(filter_params).await.map_err(AppError::from)
+            Repository::<E, C>::exists(filter_params).await.map_err(AppError::from)
         })
     }
 }

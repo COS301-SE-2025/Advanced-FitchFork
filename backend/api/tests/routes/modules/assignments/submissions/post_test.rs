@@ -29,7 +29,7 @@ mod tests {
     };
     use services::{
         service::Service,
-        user_service::{CreateUser, UserService},
+        user::{CreateUser, UserService},
     };
     use flate2::{Compression, write::GzEncoder};
     use sea_orm::{

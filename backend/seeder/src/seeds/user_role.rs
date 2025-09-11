@@ -1,8 +1,8 @@
 use crate::seed::Seeder;
-use services::service::Service;
-use services::user_service::{UserService, CreateUser};
-use services::module_service::{ModuleService, CreateModule};
-use services::user_module_role_service::{UserModuleRoleService, CreateUserModuleRole};
+use services::service::{Service, AppError};
+use services::user::UserService;
+use services::module::{ModuleService, Module};
+use services::user_module_role::{UserModuleRoleService, CreateUserModuleRole, UpdateUserModuleRole};
 use rand::{seq::SliceRandom, Rng, SeedableRng};
 use rand::rngs::{StdRng, OsRng};
 use std::pin::Pin;
@@ -10,42 +10,42 @@ use std::pin::Pin;
 pub struct UserRoleSeeder;
 
 impl Seeder for UserRoleSeeder {
-    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let users = UserService::find_all(&[], None).await;
-            let modules = ModuleService::find_all(&[], None).await;
+            let users = UserService::find_all(&[], None).await?;
+            let modules = ModuleService::find_all(&[], None).await?;
 
             let mut rng = StdRng::from_rng(OsRng).expect("Failed to seed RNG");
 
             // helper: assign ALL modules with a single role
             async fn assign_all_as(
-                module_ids: Vec<i64>,
+                modules: &Vec<Module>,
                 user_id: i64,
                 role: &str,
             ) {
-                for module_id in module_ids {
+                for module in modules {
                     let _ = UserModuleRoleService::create(
                         CreateUserModuleRole{
                             user_id: user_id,
-                            module_id: module_id,
+                            module_id: module.id,
                             role: role.to_string(),
                         }
                     ).await;
                 }
             }
 
-                for u in users {
-                    // Skip only `admin` (admin)
-                    if u.username == "admin" {
-                        continue;
-                    }
+            for u in users {
+                // Skip only `admin` (admin)
+                if u.username == "admin" {
+                    continue;
+                }
 
                 match u.username.as_str() {
                     // Existing single-role fixtures
-                    "lecturer" => { assign_all_as(db, &modules, u.id, Role::Lecturer).await; }
-                    "assistant_lecturer" => { assign_all_as(db, &modules, u.id, Role::AssistantLecturer).await; }
-                    "tutor" => { assign_all_as(db, &modules, u.id, Role::Tutor).await; }
-                    "student" => { assign_all_as(db, &modules, u.id, Role::Student).await; }
+                    "lecturer" => { assign_all_as(&modules, u.id, "lecturer").await; }
+                    "assistant_lecturer" => { assign_all_as(&modules, u.id, "assistant_lecturer").await; }
+                    "tutor" => { assign_all_as(&modules, u.id, "tutor").await; }
+                    "student" => { assign_all_as(&modules, u.id, "student").await; }
 
                     // student_tutor => split half Student, half Tutor
                     "student_tutor" => {
@@ -55,82 +55,70 @@ impl Seeder for UserRoleSeeder {
                         let mid = shuffled.len() / 2;
 
                         for m in &shuffled[..mid] {
-                            let _ = user_module_role::ActiveModel {
-                                user_id: Set(u.id),
-                                module_id: Set(m.id),
-                                role: Set(Role::Student),
-                                ..Default::default()
-                            }
-                            .insert(db)
-                            .await;
+                            let _ = UserModuleRoleService::update(
+                                UpdateUserModuleRole{
+                                    user_id: u.id,
+                                    module_id: m.id,
+                                    role: Some("student".to_string()),
+                                },
+                            ).await;
                         }
                         for m in &shuffled[mid..] {
-                            let _ = user_module_role::ActiveModel {
-                                user_id: Set(u.id),
-                                module_id: Set(m.id),
-                                role: Set(Role::Tutor),
-                                ..Default::default()
-                            }
-                            .insert(db)
-                            .await;
+                            let _ = UserModuleRoleService::update(
+                                UpdateUserModuleRole{
+                                    user_id: u.id,
+                                    module_id: m.id,
+                                    role: Some("tutor".to_string()),
+                                },
+                            ).await;
                         }
                     }
 
                     // all_staff => round-robin Lecturer -> AssistantLecturer -> Tutor
                     "all_staff" => {
                         if modules.is_empty() { continue; }
-                        let mut rr = [Role::Lecturer, Role::AssistantLecturer, Role::Tutor].iter().cycle();
+                        let mut rr = ["lecturer", "assistant_lecturer", "tutor"].iter().cycle();
                         for m in &modules {
-                            let r = rr.next().unwrap().clone();
-                            let _ = user_module_role::ActiveModel {
-                                user_id: Set(u.id),
-                                module_id: Set(m.id),
-                                role: Set(r),
-                                ..Default::default()
-                            }
-                            .insert(db)
-                            .await;
+                            let r = rr.next().unwrap();
+                            let _ = UserModuleRoleService::update(
+                                UpdateUserModuleRole{
+                                    user_id: u.id,
+                                    module_id: m.id,
+                                    role: Some(r.to_string()),
+                                },
+                            ).await;
                         }
                     }
 
                     // lecturer_assistant => round-robin Lecturer -> AssistantLecturer
                     "lecturer_assistant" => {
                         if modules.is_empty() { continue; }
-                        let mut rr = [Role::Lecturer, Role::AssistantLecturer].iter().cycle();
+                        let mut rr = ["lecturer", "assistant_lecturer"].iter().cycle();
                         for m in &modules {
-                            let r = rr.next().unwrap().clone();
-                            let _ = user_module_role::ActiveModel {
-                                user_id: Set(u.id),
-                                module_id: Set(m.id),
-                                role: Set(r),
-                                ..Default::default()
-                            }
-                            .insert(db)
-                            .await;
+                            let r = rr.next().unwrap();
+                            let _ = UserModuleRoleService::update(
+                                UpdateUserModuleRole{
+                                    user_id: u.id,
+                                    module_id: m.id,
+                                    role: Some(r.to_string()),
+                                },
+                            ).await;
                         }
                     }
 
                     // NEW: all => round-robin Student -> Tutor -> AssistantLecturer -> Lecturer
                     "all" => {
                         if modules.is_empty() { continue; }
-                        let mut rr = [
-                            Role::Student,
-                            Role::Tutor,
-                            Role::AssistantLecturer,
-                            Role::Lecturer,
-                        ]
-                        .iter()
-                        .cycle();
+                        let mut rr = ["lecturer", "assistant_lecturer", "tutor", "student"].iter().cycle();
                         for m in &modules {
-                            let r = rr.next().unwrap().clone();
-                            let _ = user_module_role::ActiveModel {
-                                user_id: Set(u.id),
-                                module_id: Set(m.id),
-                                role: Set(r),
-                                ..Default::default()
-                            }
-                            .insert(db)
-                            .await;
+                            let r = rr.next().unwrap();
+                            let _ = UserModuleRoleService::update(
+                                UpdateUserModuleRole{
+                                    user_id: u.id,
+                                    module_id: m.id,
+                                    role: Some(r.to_string()),
+                                },
+                            ).await;
                         }
                     }
 
@@ -144,18 +132,19 @@ impl Seeder for UserRoleSeeder {
                             .collect::<Vec<_>>();
 
                         for m in assigned {
-                            let _ = user_module_role::ActiveModel {
-                                user_id: Set(u.id),
-                                module_id: Set(m.id),
-                                role: Set(Role::Student),
-                                ..Default::default()
-                            }
-                            .insert(db)
-                            .await;
+                            let _ = UserModuleRoleService::update(
+                                UpdateUserModuleRole{
+                                    user_id: u.id,
+                                    module_id: m.id,
+                                    role: Some("student".to_string()),
+                                },
+                            ).await;
                         }
                     }
                 }
             }
+
+            Ok(())
         })
     }
 }

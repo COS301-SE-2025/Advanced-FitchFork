@@ -1,15 +1,16 @@
 use crate::seed::Seeder;
-use chrono::Utc;
-use db::models::{tickets, assignment, user};
+use services::service::{Service, AppError};
+use services::user::UserService;
+use services::assignment::AssignmentService;
+use services::ticket::{TicketService, CreateTicket};
 use rand::rngs::{OsRng, StdRng};
 use rand::{seq::SliceRandom, SeedableRng};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 use std::pin::Pin;
 
 pub struct TicketSeeder;
 
 impl Seeder for TicketSeeder {
-    fn seed<'a>(&'a self, db: &'a DatabaseConnection) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+    fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
             let mut rng = StdRng::from_rng(OsRng).expect("Failed to seed RNG");
 
@@ -29,11 +30,11 @@ impl Seeder for TicketSeeder {
                 "Other module-related inquiry.",
             ];
 
-            let assignments = assignment::Entity::find().all(db).await.unwrap_or_default();
-            let users = user::Entity::find().all(db).await.unwrap_or_default();
+            let assignments = AssignmentService::find_all(&[], None).await?;
+            let users = UserService::find_all(&[], None).await?;
 
             if assignments.is_empty() || users.is_empty() {
-                return;
+                return Err(AppError::DatabaseUnknown);
             }
 
             for _ in 0..50 {
@@ -44,19 +45,18 @@ impl Seeder for TicketSeeder {
                 let description = descriptions.choose(&mut rng).unwrap().to_string();
                 let status = statuses.choose(&mut rng).unwrap();
 
-                let ticket = tickets::ActiveModel {
-                    assignment_id: Set(assignment.id),
-                    user_id: Set(user.id),
-                    title: Set(title),
-                    description: Set(description),
-                    status: Set(status.parse().unwrap()),
-                    created_at: Set(Utc::now()),
-                    updated_at: Set(Utc::now()),
-                    ..Default::default()
-                };
-
-                let _ = ticket.insert(db).await;
+                TicketService::create(
+                    CreateTicket{
+                        assignment_id: assignment.id,
+                        user_id: user.id,
+                        title: title,
+                        description: description,
+                        status: status.to_string(),
+                    }
+                ).await?;
             }
+
+            Ok(())
         })
     }
 }

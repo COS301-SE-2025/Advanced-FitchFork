@@ -1,8 +1,7 @@
 pub mod models;
 pub mod test_utils;
-pub mod repositories;
+pub mod repository;
 pub mod filter_utils;
-pub mod comparisons;
 
 use sea_orm::{Database, DatabaseConnection};
 use sea_orm_migration::MigratorTrait;

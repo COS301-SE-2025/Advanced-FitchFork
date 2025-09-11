@@ -1,13 +1,15 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::assignment_interpreter::{ActiveModel, Entity, Model},
-    repositories::{assignment_interpreter_repository::AssignmentInterpreterRepository, repository::Repository},
+    models::assignment_interpreter::{ActiveModel, Entity, Column, Model},
+    repository::Repository,
 };
-use util::filters::{FilterParam, FilterValue};
+use util::filters::FilterParam;
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
 use std::{env, fs};
 use std::path::PathBuf;
+
+pub use db::models::assignment_interpreter::Model as AssignmentInterpreter;
 
 #[derive(Debug, Clone)]
 pub struct CreateAssignmentInterpreter {
@@ -40,12 +42,12 @@ impl ToActiveModel<Entity> for CreateAssignmentInterpreter {
 
 impl ToActiveModel<Entity> for UpdateAssignmentInterpreter {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        let announcement = match AssignmentInterpreterRepository::find_by_id(self.id).await {
+        let announcement = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(announcement)) => announcement,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("AssignmentInterpreter not found for ID {}", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("AssignmentInterpreter not found for ID {}", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = announcement.into();
 
@@ -57,7 +59,7 @@ impl ToActiveModel<Entity> for UpdateAssignmentInterpreter {
 
 pub struct AssignmentInterpreterService;
 
-impl<'a> Service<'a, Entity, CreateAssignmentInterpreter, UpdateAssignmentInterpreter, AssignmentInterpreterRepository> for AssignmentInterpreterService {
+impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignmentInterpreter> for AssignmentInterpreterService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(
@@ -65,19 +67,19 @@ impl<'a> Service<'a, Entity, CreateAssignmentInterpreter, UpdateAssignmentInterp
         ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
             let filters = vec![
-                FilterParam::eq("assignment_id", FilterValue::Int(params.assignment_id)),
-                FilterParam::eq("filename", FilterValue::String(params.clone().filename)),
+                FilterParam::eq("assignment_id", params.assignment_id),
+                FilterParam::eq("filename", params.clone().filename),
             ];
 
-            if let Some(existing) = AssignmentInterpreterRepository::find_one(&filters, None).await?
+            if let Some(existing) = Repository::<Entity, Column>::find_one(&filters, None).await?
             {
                 let existing_path = AssignmentInterpreterService::storage_root().join(&existing.path);
                 let _ = fs::remove_file(existing_path); // Silently ignore failure
 
-                AssignmentInterpreterRepository::delete(existing.id).await?;
+                Repository::<Entity, Column>::delete(existing.id).await?;
             }
 
-            let inserted: Model = AssignmentInterpreterRepository::create(params.clone().into_active_model().await?).await?;
+            let inserted: Model = Repository::<Entity, Column>::create(params.clone().into_active_model().await?).await?;
 
             let ext = PathBuf::from(params.filename)
                 .extension()
@@ -106,7 +108,7 @@ impl<'a> Service<'a, Entity, CreateAssignmentInterpreter, UpdateAssignmentInterp
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            AssignmentInterpreterRepository::update(model).await.map_err(AppError::from)
+            Repository::<Entity, Column>::update(model).await.map_err(AppError::from)
         })
     }
 }
@@ -133,7 +135,7 @@ impl AssignmentInterpreterService {
     pub async fn load_file(
         id: i64,
     ) -> Result<Vec<u8>, std::io::Error> {
-        let interpreter = AssignmentInterpreterRepository::find_by_id(id)
+        let interpreter = Repository::<Entity, Column>::find_by_id(id)
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Interpreter ID {} not found", id)))?;
@@ -144,7 +146,7 @@ impl AssignmentInterpreterService {
     pub async fn delete_file_only(
         id: i64,
     ) -> Result<(), std::io::Error> {
-        let interpreter = AssignmentInterpreterRepository::find_by_id(id)
+        let interpreter = Repository::<Entity, Column>::find_by_id(id)
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Interpreter ID {} not found", id)))?;

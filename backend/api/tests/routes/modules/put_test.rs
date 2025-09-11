@@ -8,7 +8,7 @@ mod tests {
     use db::{models::{module::Model as Module, user::Model as UserModel, module::Entity as ModuleEntity,}, repositories::user_repository::UserRepository};
     use services::{
         service::Service,
-        user_service::{UserService, CreateUser}
+        user::{UserService, CreateUser}
     };
     use sea_orm::{DatabaseConnection, EntityTrait};
     use serde_json::json;

@@ -1,7 +1,7 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::module::{Entity, ActiveModel},
-    repositories::{repository::Repository, module_repository::ModuleRepository},
+    models::module::{Entity, Column, ActiveModel},
+    repository::Repository,
 };
 use sea_orm::{DbErr, Set};
 use std::{env, fs, path::PathBuf};
@@ -10,8 +10,11 @@ use std::future::Future;
 use std::pin::Pin;
 use chrono::Utc;
 
+pub use db::models::module::Model as Module;
+
 #[derive(Debug, Clone)]
 pub struct CreateModule {
+    pub id: Option<i64>,
     pub code: String,
     pub year: i64,
     pub description: Option<String>,
@@ -30,21 +33,27 @@ pub struct UpdateModule {
 impl ToActiveModel<Entity> for CreateModule {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         let now = Utc::now();
-        Ok(ActiveModel {
+        let mut active: ActiveModel = ActiveModel {
             code: Set(self.code),
             year: Set(self.year),
-            description: Set(self.description.map(|d| d)),
+            description: Set(self.description),
             credits: Set(self.credits),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
-        })
+        };
+
+        if let Some(id) = self.id {
+            active.id = Set(id);
+        }
+
+        Ok(active)
     }
 }
 
 impl ToActiveModel<Entity> for UpdateModule {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        let module = match ModuleRepository::find_by_id(self.id).await {
+        let module = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(module)) => module,
             Ok(None) => {
                 return Err(AppError::from(DbErr::RecordNotFound(format!("Module ID {} not found", self.id))));
@@ -77,7 +86,7 @@ impl ToActiveModel<Entity> for UpdateModule {
 
 pub struct ModuleService;
 
-impl<'a> Service<'a, Entity, CreateModule, UpdateModule, ModuleRepository> for ModuleService {
+impl<'a> Service<'a, Entity, Column, CreateModule, UpdateModule> for ModuleService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn delete(
@@ -98,7 +107,7 @@ impl<'a> Service<'a, Entity, CreateModule, UpdateModule, ModuleRepository> for M
                 warn!("Expected module directory {} does not exist", module_dir.display());
             }
 
-            ModuleRepository::delete(id).await.map_err(AppError::from)
+            Repository::<Entity, Column>::delete(id).await.map_err(AppError::from)
         })
     }
 }

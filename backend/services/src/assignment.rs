@@ -1,9 +1,10 @@
 use crate::service::{Service, AppError, ToActiveModel};
-use crate::assignment_task_service::AssignmentTaskService;
-use crate::assignment_file_service::AssignmentFileService;
+use crate::assignment_task::AssignmentTaskService;
+use crate::assignment_file::AssignmentFileService;
 use db::{
-    models::{assignment::{Entity, ActiveModel, AssignmentType, Status, ReadinessReport}, assignment_file::FileType},
-    repositories::{repository::Repository, assignment_repository::AssignmentRepository},
+    models::assignment::{Entity, Column, ActiveModel, AssignmentType, Status, ReadinessReport},
+    models::assignment_file::FileType,
+    repository::Repository,
 };
 use sea_orm::{DbErr, Set, IntoActiveModel};
 use chrono::{DateTime, Utc};
@@ -11,8 +12,11 @@ use std::{env, fs, path::PathBuf};
 use std::future::Future;
 use std::pin::Pin;
 
+pub use db::models::assignment::Model as Assignment;
+
 #[derive(Debug, Clone)]
 pub struct CreateAssignment {
+    pub id: Option<i64>,
     pub module_id: i64,
     pub name: String,
     pub description: Option<String>,
@@ -35,29 +39,35 @@ impl ToActiveModel<Entity> for CreateAssignment {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
         validate_dates(self.available_from, self.due_date)?;
         let now = Utc::now();
-        Ok(ActiveModel {
+        let mut active: ActiveModel = ActiveModel {
             module_id: Set(self.module_id),
             name: Set(self.name),
             description: Set(self.description.map(|d| d)),
-            assignment_type: Set(self.assignment_type.parse::<AssignmentType>().map_err(|_| DbErr::Custom("Invalid assignment_type".into()))?),
+            assignment_type: Set(self.assignment_type.trim().parse::<AssignmentType>().map_err(|e| DbErr::Custom(format!("Invalid assignment type '{}': {}", self.assignment_type, e)))?),
             status: Set(Status::Setup),
             available_from: Set(self.available_from),
             due_date: Set(self.due_date),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
-        })
+        };
+
+        if let Some(id) = self.id {
+            active.id = Set(id);
+        }
+
+        Ok(active)
     }
 }
 
 impl ToActiveModel<Entity> for UpdateAssignment {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        let assignment = match AssignmentRepository::find_by_id(self.id).await {
+        let assignment = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(assignment)) => assignment,
             Ok(None) => {
-                return Err(DbErr::RecordNotFound(format!("Assignment ID {} not found", self.id)));
+                return Err(AppError::from(DbErr::RecordNotFound(format!("Assignment ID {} not found", self.id))));
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(AppError::from(err)),
         };
 
         validate_dates(
@@ -76,7 +86,7 @@ impl ToActiveModel<Entity> for UpdateAssignment {
         }
 
         if let Some(assignment_type) = self.assignment_type {
-            active.assignment_type = Set(assignment_type.parse::<AssignmentType>().map_err(|_| DbErr::Custom("Invalid assignment_type".into()))?);
+            active.assignment_type = Set(assignment_type.trim().parse::<AssignmentType>().map_err(|e| DbErr::Custom(format!("Invalid assignment type '{}': {}", assignment_type, e)))?);
         }
 
         if let Some(available_from) = self.available_from {
@@ -95,7 +105,7 @@ impl ToActiveModel<Entity> for UpdateAssignment {
 
 pub struct AssignmentService;
 
-impl<'a> Service<'a, Entity, CreateAssignment, UpdateAssignment, AssignmentRepository> for AssignmentService {
+impl<'a> Service<'a, Entity, Column, CreateAssignment, UpdateAssignment> for AssignmentService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     // fn create(
@@ -122,7 +132,7 @@ impl<'a> Service<'a, Entity, CreateAssignment, UpdateAssignment, AssignmentRepos
                 .unwrap_or_else(|_| "data/assignment_files".to_string());
 
             // TODO: Find a better way @reece
-            let module_id = match AssignmentRepository::find_by_id(id).await? {
+            let module_id = match Repository::<Entity, Column>::find_by_id(id).await? {
                 Some(assignment) => assignment.module_id,
                 None => return Err(DbErr::RecordNotFound(format!("Assignment ID {} not found", id)).into()),
             };
@@ -137,7 +147,7 @@ impl<'a> Service<'a, Entity, CreateAssignment, UpdateAssignment, AssignmentRepos
                 }
             }
 
-            AssignmentRepository::delete(id).await.map_err(AppError::from)
+            Repository::<Entity, Column>::delete(id).await.map_err(AppError::from)
         })
     }
 }
@@ -230,14 +240,14 @@ impl AssignmentService {
         let report = Self::compute_readiness_report(module_id, assignment_id).await?;
 
         if report.is_ready() {
-            let mut active = AssignmentRepository::find_by_id(assignment_id).await?
+            let mut active = Repository::<Entity, Column>::find_by_id(assignment_id).await?
                 .ok_or(DbErr::RecordNotFound("Assignment not found".into()))?
                 .into_active_model();
 
             if active.status.as_ref() == &Status::Setup {
                 active.status = Set(Status::Ready);
                 active.updated_at = Set(Utc::now());
-                AssignmentRepository::update(active).await?;
+                Repository::<Entity, Column>::update(active).await?;
             }
         }
 

@@ -24,7 +24,7 @@ use crate::auth::AuthUser;
 
 use services::{
     service::Service,
-    user_service::{UserService, CreateUser},
+    user::{UserService, CreateUser},
 };
 
 #[derive(Debug, Deserialize, Validate)]
