@@ -173,10 +173,12 @@ impl AssignmentSubmissionService {
     pub async fn find_by_assignment(
         assignment_id: i64,
     ) -> Result<Vec<i64>, DbErr> {
-        let filters = vec![
-            FilterParam::eq("assignment_id", assignment_id),
-        ];
-        let submissions = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(&filters, None).await?;
+        let submissions = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(
+            &vec![
+                FilterParam::eq("assignment_id", assignment_id),
+            ],
+            None
+        ).await?;
 
         Ok(submissions.into_iter().map(|s| s.id as i64).collect())
     }
@@ -184,10 +186,12 @@ impl AssignmentSubmissionService {
     pub async fn get_latest_submissions_for_assignment(
         assignment_id: i64,
     ) -> Result<Vec<Model>, DbErr> {
-        let filters = vec![
-            FilterParam::eq("assignment_id", assignment_id),
-        ];
-        let all = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(&filters, Some("user_id,-attempt".to_string())).await?;
+        let all = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(
+            &vec![
+                FilterParam::eq("assignment_id", assignment_id),
+            ],
+            Some("user_id,-attempt".to_string())
+        ).await?;
 
         let mut seen = HashSet::new();
         let mut latest = Vec::new();
@@ -205,13 +209,15 @@ impl AssignmentSubmissionService {
         assignment_id: i64,
         user_id: i64,
     ) -> Result<Option<Model>, DbErr> {
-        let filters = vec![
-            FilterParam::eq("assignment_id", assignment_id),
-            FilterParam::eq("user_id", user_id),
-            FilterParam::eq("ignored", false),
-            FilterParam::eq("is_practice", false),
-        ];
-        let mut subs = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(&filters, None).await?;
+        let mut subs = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(
+            &vec![
+                FilterParam::eq("assignment_id", assignment_id),
+                FilterParam::eq("user_id", user_id),
+                FilterParam::eq("ignored", false),
+                FilterParam::eq("is_practice", false),
+            ],
+            None
+        ).await?;
 
         if subs.is_empty() {
             return Ok(None);

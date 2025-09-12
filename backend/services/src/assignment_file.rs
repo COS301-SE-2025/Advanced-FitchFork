@@ -71,12 +71,13 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentFile, UpdateAssignmentFile>
             params: CreateAssignmentFile,
         ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let filters = vec![
-                FilterParam::eq("assignment_id", params.assignment_id),
-                FilterParam::eq("file_type", params.clone().file_type),
-            ];
-
-            if let Some(existing) = Repository::<Entity, Column>::find_one(&filters, None).await?
+            if let Some(existing) = Repository::<Entity, Column>::find_one(
+                &vec![
+                    FilterParam::eq("assignment_id", params.assignment_id),
+                    FilterParam::eq("file_type", params.clone().file_type),
+                ],
+                None
+            ).await?
             {
                 let existing_path = AssignmentFileService::storage_root().join(&existing.path);
                 let _ = fs::remove_file(existing_path); // Silently ignore failure
@@ -179,9 +180,10 @@ impl AssignmentFileService {
     pub async fn get_base_files(
         assignment_id: i64
     ) -> Result<Vec<Model>, DbErr> {
-        let filters = vec![
-            FilterParam::eq("assignment_id", assignment_id),
-        ];
-        Repository::<Entity, Column>::find_all(&filters, None).await
+        Repository::<Entity, Column>::find_all(&vec![
+                FilterParam::eq("assignment_id", assignment_id),
+            ],
+            None
+        ).await
     }
 }

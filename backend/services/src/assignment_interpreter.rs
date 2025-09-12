@@ -66,13 +66,13 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignme
             params: CreateAssignmentInterpreter,
         ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let filters = vec![
-                FilterParam::eq("assignment_id", params.assignment_id),
-                FilterParam::eq("filename", params.clone().filename),
-            ];
-
-            if let Some(existing) = Repository::<Entity, Column>::find_one(&filters, None).await?
-            {
+            if let Some(existing) = Repository::<Entity, Column>::find_one(
+                &vec![
+                    FilterParam::eq("assignment_id", params.assignment_id),
+                    FilterParam::eq("filename", params.clone().filename),
+                ],
+                None
+            ).await? {
                 let existing_path = AssignmentInterpreterService::storage_root().join(&existing.path);
                 let _ = fs::remove_file(existing_path); // Silently ignore failure
 

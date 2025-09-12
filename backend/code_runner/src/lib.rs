@@ -97,12 +97,12 @@ pub async fn create_memo_outputs_for_all_tasks(
             .map_err(|e| format!("Failed to delete old memo_output dir: {}", e))?;
     }
 
-    let filters = vec![
-        FilterParam::eq("assignment_id", assignment_id),
-    ];
-    AssignmentMemoOutputService::delete(&filters)
-        .await
-        .map_err(|e| format!("Failed to delete old memo outputs: {}", e))?;
+    AssignmentMemoOutputService::delete(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+        ]
+    ).await
+    .map_err(|e| format!("Failed to delete old memo outputs: {}", e))?;
 
     // Load archives
     let archive_paths = vec![
@@ -111,12 +111,13 @@ pub async fn create_memo_outputs_for_all_tasks(
         first_archive_in(&base_path.join("main"))?,
     ];
 
-    let filters = vec![
-        FilterParam::eq("assignment_id", assignment_id),
-    ];
-    let tasks = AssignmentTaskService::find_all(&filters, None)
-        .await
-        .map_err(|e| format!("DB error loading tasks: {}", e))?;
+    let tasks = AssignmentTaskService::find_all(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        None
+    ).await
+    .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
     if tasks.is_empty() {
         println!("No tasks found for assignment {}", assignment_id);
@@ -303,12 +304,13 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
     }
 
     // Get tasks
-    let filters = vec![
-        FilterParam::eq("assignment_id", assignment_id),
-    ];
-    let tasks = AssignmentTaskService::find_all(&filters, None)
-        .await
-        .map_err(|e| format!("DB error loading tasks: {}", e))?;
+    let tasks = AssignmentTaskService::find_all(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        None
+    ).await
+    .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
     if tasks.is_empty() {
         println!("No tasks found for assignment {}", assignment_id);
@@ -474,12 +476,13 @@ pub async fn create_submission_outputs_for_all_tasks(
     }
 
     // Get tasks
-    let filters = vec![
-        FilterParam::eq("assignment_id", assignment_id),
-    ];
-    let tasks = AssignmentTaskService::find_all(&filters, None)
-        .await
-        .map_err(|e| format!("DB error loading tasks: {}", e))?;
+    let tasks = AssignmentTaskService::find_all(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        None
+    ).await
+    .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
     if tasks.is_empty() {
         println!("No tasks found for assignment {}", assignment_id);
@@ -588,13 +591,14 @@ pub async fn create_main_from_interpreter(
         .map_err(|e| format!("Failed to fetch submission: {}", e))?
         .ok_or_else(|| format!("Submission {} not found", submission_id))?;
 
-    let filters = vec![
-        FilterParam::eq("assignment_id", submission.assignment_id),
-    ];
-    let interpreter = AssignmentInterpreterService::find_one(&filters, None)
-        .await
-        .map_err(|e| format!("Failed to fetch interpreter: {}", e))?
-        .ok_or_else(|| "Interpreter not found".to_string())?;
+    let interpreter = AssignmentInterpreterService::find_one(
+        &vec![
+            FilterParam::eq("assignment_id", submission.assignment_id),
+        ],
+        None
+    ).await
+    .map_err(|e| format!("Failed to fetch interpreter: {}", e))?
+    .ok_or_else(|| "Interpreter not found".to_string())?;
 
     let assignment = AssignmentService::find_by_id(submission.assignment_id)
         .await

@@ -154,10 +154,12 @@ impl AssignmentSubmissionOutputService {
     pub async fn delete_for_submission(
         id: i64,
     ) -> Result<(), DbErr> {
-        let filters = vec![
-            FilterParam::eq("id", id),
-        ];
-        let outputs = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(&filters, None).await?;
+        let outputs = Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(
+            &vec![
+                FilterParam::eq("id", id),
+            ],
+            None
+        ).await?;
 
         for output in outputs {
             let path = AssignmentSubmissionOutputService::full_path(output.id).await?;

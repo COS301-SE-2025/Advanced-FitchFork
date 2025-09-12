@@ -182,11 +182,11 @@ impl UserService {
         username: &str,
         password: &str,
     ) -> Result<Option<Model>, DbErr> {
-        let filters = vec![
-            FilterParam::eq("username", username.trim().to_string()),
-        ];
-
-        if let Some(user) = Repository::<Entity, Column>::find_one(&filters, None,
+        if let Some(user) = Repository::<Entity, Column>::find_one(
+            &vec![
+                FilterParam::eq("username", username.trim().to_string()),
+            ],
+            None,
         ).await? {
             if Self::verify_password(&user, password) {
                 return Ok(Some(user));

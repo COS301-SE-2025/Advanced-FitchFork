@@ -64,7 +64,7 @@ dependencies = [
 name = "ai"
 version = "0.1.0"
 dependencies = [
- "code-runner",
+ "code_runner",
  "dotenv",
  "rand 0.8.5",
  "serde_json",
@@ -179,9 +179,8 @@ dependencies = [
  "axum",
  "axum-extra",
  "chrono",
- "code-runner",
+ "code_runner",
  "common",
- "db",
  "dotenvy",
  "flate2",
  "futures",
@@ -198,13 +197,10 @@ dependencies = [
  "once_cell",
  "portpicker",
  "regex",
- "sea-orm",
- "sea-orm-migration",
  "serde",
  "serde_json",
  "serial_test",
  "services",
- "sqlx",
  "tar",
  "tempfile",
  "tokio",
@@ -682,27 +678,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
-name = "code-runner"
-version = "0.1.0"
-dependencies = [
- "base64",
- "chrono",
- "dotenvy",
- "flate2",
- "reqwest",
- "serde",
- "serde_json",
- "services",
- "shell-escape",
- "tar",
- "tempfile",
- "tokio",
- "util",
- "uuid",
- "zip 5.1.1",
-]
-
-[[package]]
 name = "code_manager"
 version = "0.1.0"
 dependencies = [
@@ -720,6 +695,27 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "util",
+ "zip 5.1.1",
+]
+
+[[package]]
+name = "code_runner"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "chrono",
+ "dotenvy",
+ "flate2",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "services",
+ "shell-escape",
+ "tar",
+ "tempfile",
+ "tokio",
+ "util",
+ "uuid",
  "zip 5.1.1",
 ]
 

@@ -106,15 +106,18 @@ impl UserModuleRoleService {
     pub async fn get_module_roles(
         user_id: i64
     ) -> Result<Vec<UserModuleRoleInfo>, DbErr> {
-        let filters = vec![
-            FilterParam::eq("user_id", user_id),
-        ];
-        let roles = Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::find_all(&filters, None).await?;
-
-        let filters = vec![
-            FilterParam::eq("id", roles.iter().map(|role| role.module_id).collect::<Vec<i64>>()),
-        ];
-        let modules = Repository::<ModuleEntity, ModuleColumn>::find_all(&filters, None).await?;
+        let roles = Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::find_all(
+            &vec![
+                FilterParam::eq("user_id", user_id),
+            ],
+            None
+        ).await?;
+        let modules = Repository::<ModuleEntity, ModuleColumn>::find_all(
+            &vec![
+                FilterParam::eq("id", roles.iter().map(|role| role.module_id).collect::<Vec<i64>>()),
+            ],
+            None
+        ).await?;
 
         let modules_by_id: std::collections::HashMap<i64, Model> =
             modules.into_iter().map(|m| (m.id, m)).collect();
@@ -145,11 +148,12 @@ impl UserModuleRoleService {
         module_id: i64,
         role: String,
     ) -> Result<bool, DbErr> {
-        let filters = vec![
-            FilterParam::eq("user_id", user_id),
-            FilterParam::eq("module_id", module_id),
-            FilterParam::eq("role", role),
-        ];
-        Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::exists(&filters).await
+        Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::exists(
+            &vec![
+                FilterParam::eq("user_id", user_id),
+                FilterParam::eq("module_id", module_id),
+                FilterParam::eq("role", role),
+            ]
+        ).await
     }
 }

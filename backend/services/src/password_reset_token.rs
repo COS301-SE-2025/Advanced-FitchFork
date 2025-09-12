@@ -74,11 +74,13 @@ impl PasswordResetTokenService {
     pub async fn find_valid_token(
         token: String,
     ) -> Result<Option<Model>, DbErr> {
-        let filters = vec![
-            FilterParam::eq("token", token),
-            FilterParam::eq("used", false),
-            FilterParam::gt("expires_at", Utc::now()),
-        ];
-        Repository::<Entity, Column>::find_one(&filters, None).await
+        Repository::<Entity, Column>::find_one(
+            &vec![
+                FilterParam::eq("token", token),
+                FilterParam::eq("used", false),
+                FilterParam::gt("expires_at", Utc::now()),
+            ],
+            None
+        ).await
     }
 }

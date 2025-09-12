@@ -42,18 +42,20 @@ impl Seeder for AnnouncementSeeder {
 
             for m in modules {
                 // Prefer module staff as authors
-                let filters = vec![
-                    FilterParam::eq("module_id", m.id),
-                    FilterParam::eq("role", vec![
-                        "lecturer".to_string(),
-                        "assistant_lecturer".to_string(), 
-                        "tutor".to_string()
-                    ]),
-                ];
-                let staff_user_ids: Vec<i64> = UserModuleRoleService::find_all(&filters, None).await?
-                    .into_iter()
-                    .map(|r| r.user_id)
-                    .collect();
+                let staff_user_ids: Vec<i64> = UserModuleRoleService::find_all(
+                    &vec![
+                        FilterParam::eq("module_id", m.id),
+                        FilterParam::eq("role", vec![
+                            "lecturer".to_string(),
+                            "assistant_lecturer".to_string(), 
+                            "tutor".to_string()
+                        ]),
+                    ],
+                    None
+                ).await?
+                .into_iter()
+                .map(|r| r.user_id)
+                .collect();
 
                 let pick_author = |rng: &mut StdRng| -> i64 {
                     if !staff_user_ids.is_empty() {

@@ -116,15 +116,16 @@ async fn test_create_submission_outputs_for_all_tasks_9999_java() {
 
     setup_test_db_with_seeded_tasks(9999, 9999).await;
 
-    let filters = vec![
-        FilterParam::eq("assignment_id", 9999),
-        FilterParam::eq("user_id", 1),
-        FilterParam::eq("attempt", 1),
-    ];
-    let submission = AssignmentSubmissionService::find_one(&filters, None)
-        .await
-        .expect("DB error during submission lookup")
-        .expect("No matching submission found");
+    let submission = AssignmentSubmissionService::find_one(
+        &vec![
+            FilterParam::eq("assignment_id", 9999),
+            FilterParam::eq("user_id", 1),
+            FilterParam::eq("attempt", 1),
+        ],
+        None
+    ).await
+    .expect("DB error during submission lookup")
+    .expect("No matching submission found");
 
     match create_submission_outputs_for_all_tasks(submission.id).await {
         Ok(_) => {}
@@ -139,15 +140,16 @@ async fn test_create_submission_outputs_for_all_tasks_9998_cpp() {
 
     setup_test_db_with_seeded_tasks(9998, 9998).await;
 
-    let filters = vec![
-        FilterParam::eq("assignment_id", 9998),
-        FilterParam::eq("user_id", 1),
-        FilterParam::eq("attempt", 1),
-    ];
-    let submission = AssignmentSubmissionService::find_one(&filters, None)
-        .await
-        .expect("DB error during submission lookup")
-        .expect("No matching submission found");
+    let submission = AssignmentSubmissionService::find_one(
+        &vec![
+            FilterParam::eq("assignment_id", 9998),
+            FilterParam::eq("user_id", 1),
+            FilterParam::eq("attempt", 1),
+        ],
+        None
+    ).await
+    .expect("DB error during submission lookup")
+    .expect("No matching submission found");
 
     match create_submission_outputs_for_all_tasks(submission.id).await {
         Ok(_) => {}

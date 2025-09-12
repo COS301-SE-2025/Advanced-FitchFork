@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-code-runner = { path = "../code_runner" }
+code_runner = { path = "../code_runner" }
 services = { path = "../services" }
 util = { path = "../util" }
 

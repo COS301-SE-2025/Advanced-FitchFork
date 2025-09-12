@@ -117,13 +117,14 @@ async fn seed_interpreter_file(assignment_id: i64, interpreter_id: i64) {
         .to_string();
 
     // Check if an interpreter for this assignment already exists
-    let filters = vec![
-        FilterParam::eq("assignment_id", assignment_id),
-    ];
-    if AssignmentInterpreterService::find_one(&filters, None)
-        .await
-        .expect("DB error")
-        .is_none()
+    if AssignmentInterpreterService::find_one(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        None
+    ).await
+    .expect("DB error")
+    .is_none()
     {
         let _ = AssignmentInterpreterService::create(
             CreateAssignmentInterpreter {

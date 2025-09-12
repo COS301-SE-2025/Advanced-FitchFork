@@ -77,9 +77,10 @@ impl AssignmentTaskService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
     pub async fn tasks_present(assignment_id: i64) -> bool {
-        let filters = vec![
-            FilterParam::eq("assignment_id", assignment_id),
-        ];
-        Repository::<Entity, Column>::exists(&filters).await.unwrap_or(false)
+        Repository::<Entity, Column>::exists(
+            &vec![
+                FilterParam::eq("assignment_id", assignment_id),
+            ]
+        ).await.unwrap_or(false)
     }
 }
