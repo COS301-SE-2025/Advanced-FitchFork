@@ -83,6 +83,9 @@ pub struct MarkingOptions {
 
     #[serde(default = "default_grading_policy")]
     pub grading_policy: GradingPolicy,
+
+    #[serde(default)]
+    pub dissalowed_code: Vec<String>,
 }
 
 impl Default for MarkingOptions {
@@ -92,6 +95,7 @@ impl Default for MarkingOptions {
             feedback_scheme: default_feedback_scheme(),
             deliminator: default_deliminator(),
             grading_policy: default_grading_policy(),
+            dissalowed_code: vec![],
         }
     }
 }
