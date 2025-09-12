@@ -2151,6 +2151,7 @@ dependencies = [
  "sea-orm-migration",
  "tokio",
  "url",
+ "util",
 ]
 
 [[package]]
@@ -4451,13 +4452,13 @@ dependencies = [
  "dotenvy",
  "futures",
  "jsonwebtoken",
- "migration",
  "once_cell",
  "regex",
  "sea-orm",
  "sea-orm-migration",
  "serde",
  "serde_json",
+ "serial_test",
  "tempfile",
  "tokio",
  "tracing",

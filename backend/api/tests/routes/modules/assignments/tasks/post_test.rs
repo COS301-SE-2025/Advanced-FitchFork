@@ -15,10 +15,8 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::{Value, json};
     use api::auth::generate_jwt;
-    use dotenvy;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use chrono::{Utc, TimeZone};
-    use tempfile::{tempdir, TempDir};
     use serial_test::serial;
 
     struct TestData {
@@ -29,11 +27,7 @@ mod tests {
         assignment: AssignmentModel,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> (TestData, TempDir) {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let temp_dir = tempdir().expect("Failed to create temporary directory");
-        unsafe { std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
-
+    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         let module = ModuleModel::create(db, "TASK101", 2024, Some("Test Task Module"), 16).await.expect("Failed to create test module");
         let admin_user = UserModel::create(db, "task_admin", "task_admin@test.com", "password", true).await.expect("Failed to create admin user");
         let forbidden_user = UserModel::create(db, "task_unauthed", "task_unauthed@test.com", "password", false).await.expect("Failed to create forbidden user");
@@ -51,24 +45,21 @@ mod tests {
         .await
         .expect("Failed to create test assignment");
 
-        (
-            TestData {
-                admin_user,
-                forbidden_user,
-                lecturer1,
-                module,
-                assignment,
-            },
-            temp_dir,
-        )
+        TestData {
+            admin_user,
+            forbidden_user,
+            lecturer1,
+            module,
+            assignment,
+        }
     }
 
     /// Test Case: Successful Creation of a New Task as Admin
     #[tokio::test]
     #[serial]
     async fn test_create_task_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({
@@ -106,8 +97,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_task_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer1.id, data.lecturer1.admin);
         let payload = json!({
@@ -132,8 +123,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_task_assignment_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({
@@ -163,8 +154,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_task_module_assignment_mismatch() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let module2 = ModuleModel::create(app_state.db(), "MISMTCH101", 2024, Some("Mismatch Module"), 16).await.expect("Failed to create second module");
         let assignment2_in_module2 = AssignmentModel::create(
@@ -207,8 +198,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_task_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
 
@@ -234,8 +225,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_task_invalid_task_number_zero() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({
@@ -265,8 +256,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_task_invalid_task_number_negative() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({
@@ -296,8 +287,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_task_invalid_command_empty() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({
@@ -327,8 +318,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_task_invalid_command_whitespace() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let payload = json!({
@@ -358,8 +349,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_task_duplicate_task_number() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let initial_payload = json!({

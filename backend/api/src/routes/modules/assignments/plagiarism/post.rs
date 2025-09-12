@@ -21,6 +21,8 @@ use moss_parser::{ParseOptions, parse_moss};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use tokio::task;
+use util::config;
+use util::paths::assignment_dir;
 use util::{
     execution_config::{ExecutionConfig, execution_config::Language},
     state::AppState,
@@ -376,16 +378,14 @@ pub async fn run_moss_check(
             Err(_) => vec![],
         };
 
-    let moss_user_id =
-        std::env::var("MOSS_USER_ID").unwrap_or_else(|_| "YOUR_MOSS_USER_ID".to_string());
+    let moss_user_id = config::moss_user_id();
     let moss_service = MossService::new(&moss_user_id);
 
     match moss_service.run(base_files, submission_files, moss_language).await {
         Ok(report_url) => {
             // Persist minimal metadata
-            let base_dir = assignment_submission::Model::storage_root()
-                .join(format!("module_{}", module_id))
-                .join(format!("assignment_{}", assignment_id));
+            let base_dir = assignment_dir(module_id, assignment_id);
+
             if let Err(e) = std::fs::create_dir_all(&base_dir) {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -572,9 +572,7 @@ pub async fn generate_moss_archive(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
     // Resolve base dir and files
-    let base_dir: PathBuf = assignment_submission::Model::storage_root()
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id));
+    let base_dir: PathBuf = assignment_dir(module_id, assignment_id);
 
     let report_path = base_dir.join("reports.txt");
     let dest_root   = base_dir.join("moss_archive");

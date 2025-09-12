@@ -5,8 +5,8 @@ use axum::{
     http::StatusCode,
 };
 use code_runner::create_memo_outputs_for_all_tasks;
-use util::state::AppState;
-use std::{env, fs, path::PathBuf};
+use util::{paths::{config_dir, memo_dir}, state::AppState};
+use std::fs;
 use tracing::{error, info};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/memo_output/generate
@@ -71,8 +71,7 @@ use tracing::{error, info};
 /// ```
 ///
 /// ### Directory Requirements
-/// The endpoint validates the presence of required directories under:
-/// `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/`
+/// The endpoint validates the presence of required directories under and assignment:
 ///
 /// - `memo/` directory: Must exist and contain at least one file
 ///   - Contains memo files that define expected outputs for each task
@@ -100,20 +99,12 @@ pub async fn generate_memo_output(
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let db = app_state.db();
 
-    let base_path =
-        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
-
-    let assignment_root = PathBuf::from(&base_path)
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id));
-
-    let memo_dir = assignment_root.join("memo");
+    // Use centralized helpers for directories
+    let memo_dir = memo_dir(module_id, assignment_id);
     let memo_valid = memo_dir.is_dir()
         && fs::read_dir(&memo_dir)
-            .map(|entries| {
-                entries
-                    .filter_map(Result::ok)
-                    .any(|entry| entry.path().is_file())
+            .map(|mut entries| {
+                entries.any(|e| e.ok().map(|f| f.path().is_file()).unwrap_or(false))
             })
             .unwrap_or(false);
 
@@ -126,13 +117,11 @@ pub async fn generate_memo_output(
         );
     }
 
-    let config_dir = assignment_root.join("config");
-    let config_valid = config_dir.is_dir()
-        && fs::read_dir(&config_dir)
-            .map(|entries| {
-                entries
-                    .filter_map(Result::ok)
-                    .any(|entry| entry.path().is_file())
+    let cfg_dir = config_dir(module_id, assignment_id);
+    let config_valid = cfg_dir.is_dir()
+        && fs::read_dir(&cfg_dir)
+            .map(|mut entries| {
+                entries.any(|e| e.ok().map(|f| f.path().is_file()).unwrap_or(false))
             })
             .unwrap_or(false);
 
@@ -145,10 +134,7 @@ pub async fn generate_memo_output(
 
     match create_memo_outputs_for_all_tasks(db, assignment_id).await {
         Ok(_) => {
-            info!(
-                "Memo output generation complete for assignment {}",
-                assignment_id
-            );
+            info!("Memo output generation complete for assignment {}", assignment_id);
             (
                 StatusCode::OK,
                 Json(ApiResponse::<()>::success(
@@ -158,7 +144,6 @@ pub async fn generate_memo_output(
             )
         }
         Err(e) => {
-            println!("{}", e);
             error!(
                 "Memo output generation failed for assignment {}: {:?}",
                 assignment_id, e

@@ -190,6 +190,9 @@ export interface GatlamConfig {
   verbose: boolean;
 }
 
+export interface CodeCoverage {
+  code_coverage_required: number;
+}
 /**
  * Top-level assignment configuration (ExecutionConfig in Rust).
  * Combines execution limits, marking rules, project setup, output options, and GA/TLAM config.
@@ -201,4 +204,5 @@ export interface AssignmentConfig {
   output: AssignmentOutputConfig;
   gatlam: GatlamConfig;
   security: AssignmentSecurityConfig;
+  code_coverage: CodeCoverage;
 }

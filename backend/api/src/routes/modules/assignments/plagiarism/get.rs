@@ -11,7 +11,7 @@ use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 use std::{path::PathBuf, str::FromStr};
 use std::collections::HashMap;
-use util::state::AppState;
+use util::{paths::assignment_dir, state::AppState};
 use crate::response::ApiResponse;
 use std::fs;
 
@@ -94,10 +94,7 @@ pub struct MossReportResponse {
 pub async fn get_moss_report(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let base_dir = assignment_submission::Model::storage_root()
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id));
-
+    let base_dir = assignment_dir(module_id, assignment_id);
     let report_path = base_dir.join("reports.txt");
     let archive_zip_path = base_dir.join("moss_archive.zip");
 
@@ -699,10 +696,7 @@ pub async fn download_moss_archive(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
     // Where the zip is written by the archive endpoint
-    let zip_path: PathBuf = assignment_submission::Model::storage_root()
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id))
-        .join("moss_archive.zip");
+    let zip_path: PathBuf = assignment_dir(module_id, assignment_id).join("moss_archive.zip");
 
     if !zip_path.exists() {
         return (

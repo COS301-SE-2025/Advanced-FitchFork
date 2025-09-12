@@ -14,10 +14,8 @@ use db::models::{
 use sea_orm::{ColumnTrait, EntityTrait, Order, QueryFilter, QueryOrder};
 use serde::Serialize;
 use serde_json::Value;
-use std::path::PathBuf;
 use util::{
-    execution_config::{execution_config::GradingPolicy, ExecutionConfig},
-    state::AppState,
+    execution_config::{execution_config::GradingPolicy, ExecutionConfig}, paths::submission_report_path, state::AppState
 };
 
 // ---------- Response DTO ----------
@@ -306,10 +304,6 @@ pub async fn get_assignment_stats(
     use std::collections::{HashMap, HashSet};
     let mut user_marks: HashMap<i64, Vec<(DateTime<Utc>, i64)>> = HashMap::new();
 
-    // FS base for reports
-    let base =
-        std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
-
     for s in &rows {
         if is_late(s.created_at, Some(assignment.due_date)) {
             late += 1;
@@ -317,14 +311,8 @@ pub async fn get_assignment_stats(
             on_time += 1;
         }
 
-        // read mark from submission_report.json
-        let report_path = PathBuf::from(&base)
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join("assignment_submissions")
-            .join(format!("user_{}", s.user_id))
-            .join(format!("attempt_{}", s.attempt))
-            .join("submission_report.json");
+        // read mark from centralized path helper
+        let report_path = submission_report_path(module_id, assignment_id, s.user_id, s.attempt);
 
         if let Ok(content) = std::fs::read_to_string(&report_path) {
             if let Ok(json) = serde_json::from_str::<Value>(&content) {
@@ -406,4 +394,3 @@ pub async fn get_assignment_stats(
     )
         .into_response()
 }
-

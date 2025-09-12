@@ -14,7 +14,7 @@ mod tests {
     use tower::ServiceExt;
 
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
@@ -136,7 +136,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn verify_pin_ok_when_enabled() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Enable PIN, allow all IPs
@@ -181,7 +181,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn verify_pin_invalid_when_enabled() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         write_security_config(
@@ -222,7 +222,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn verify_pin_ignored_when_disabled() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         write_security_config(
@@ -270,7 +270,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn student_blocked_by_ip_allowlist() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Only allow 10.0.0.0/8; test client defaults to 127.0.0.1 (blocked)
@@ -306,7 +306,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn student_allowed_by_ip_allowlist() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Allow 127.0.0.1
@@ -342,7 +342,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn student_blocked_without_pin_when_required() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // PIN required; IP allowed
@@ -379,7 +379,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn student_allowed_with_correct_pin_and_ip_ok() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         write_security_config(
@@ -417,7 +417,7 @@ mod tests {
     #[serial]
     async fn ip_checked_before_pin_even_if_pin_correct() {
         // If IP is not allowed, even a correct PIN should not grant access.
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         write_security_config(
@@ -458,7 +458,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn lecturer_bypasses_ip_and_pin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Disallow client IP and require PIN; lecturer should still pass
@@ -495,7 +495,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn tutor_bypasses_ip_and_pin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         write_security_config(
@@ -531,7 +531,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn admin_bypasses_ip_and_pin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         write_security_config(
@@ -571,7 +571,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn unassigned_user_forbidden_even_without_security() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // No special security (allow all IPs, no PIN)
@@ -608,7 +608,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn verify_requires_authentication() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // PIN disabled; still requires auth because of global auth layer.
@@ -644,7 +644,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn pin_required_error_message_when_missing() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         write_security_config(
@@ -684,7 +684,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn ip_not_allowed_error_message_even_with_correct_pin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         write_security_config(
@@ -725,7 +725,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn assistant_lecturer_bypasses_ip_and_pin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Create an assistant lecturer and assign to module

@@ -20,7 +20,7 @@ mod tests {
     };
     use sea_orm::{ActiveModelTrait, Set};
 
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestCtx {
         _admin: UserModel,        // not assigned to the module
@@ -135,7 +135,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_sessions_as_lecturer_allowed() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
@@ -163,7 +163,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_sessions_as_student_forbidden_now() {
         // Assigned but not Lecturer/Assistant -> 403
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.student1.id, ctx.student1.admin);
@@ -183,7 +183,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_sessions_as_tutor_forbidden_now() {
         // Assigned Tutor is not Lecturer/Assistant -> 403
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.tutor.id, ctx.tutor.admin);
@@ -203,7 +203,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_sessions_forbidden_user_not_assigned() {
         // Not assigned -> 403 (outer `require_assigned_to_module`)
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.forbidden.id, ctx.forbidden.admin);
@@ -222,7 +222,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_sessions_missing_auth_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
         let uri = format!("/api/modules/{}/attendance/sessions", ctx.module.id);
 
@@ -242,7 +242,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_session_as_lecturer_allowed() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
@@ -272,7 +272,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_session_as_student_forbidden_now() {
         // Assigned Student -> 403
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.student1.id, ctx.student1.admin);
@@ -296,7 +296,7 @@ mod tests {
     async fn test_get_session_not_found_still_403_for_student() {
         // Student may be blocked by the guard (403) or, depending on routing/middleware
         // evaluation order, the handler might run and return 404. Accept either.
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
         let (token, _) = generate_jwt(ctx.student1.id, ctx.student1.admin);
 
@@ -328,7 +328,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_session_not_found_as_lecturer_yields_404() {
         // Lecturer passes guards -> handler should return 404 with a specific message
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
 
@@ -369,7 +369,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_session_code_as_lecturer_ok_when_active() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
@@ -400,7 +400,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_session_code_inactive_session_bad_request_for_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
@@ -427,7 +427,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_session_code_forbidden_for_tutor_and_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         for uid in [ctx.tutor.id, ctx.student1.id] {
@@ -455,7 +455,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_session_records_as_lecturer_ok() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
@@ -485,7 +485,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_session_records_forbidden_for_student_and_tutor() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         for uid in [ctx.student1.id, ctx.tutor.id] {
@@ -513,7 +513,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_export_session_records_csv_as_lecturer_ok() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
@@ -564,7 +564,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_export_session_records_csv_forbidden_for_student_and_tutor() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         for uid in [ctx.student1.id, ctx.tutor.id] {

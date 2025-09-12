@@ -16,7 +16,7 @@ mod create_plagiarism_tests {
     use tower::ServiceExt;
     use serde_json::{Value, json};
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use chrono::{Datelike, TimeZone, Utc};
     use api::routes::modules::assignments::plagiarism::post::CreatePlagiarismCasePayload;
 
@@ -133,7 +133,7 @@ mod create_plagiarism_tests {
     /// Test Case: Successful Creation by Lecturer (explicit similarity)
     #[tokio::test]
     async fn test_create_plagiarism_case_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = CreatePlagiarismCasePayload {
@@ -184,7 +184,7 @@ mod create_plagiarism_tests {
     /// Test Case: Successful Creation by Assistant Lecturer (explicit 0.0 similarity)
     #[tokio::test]
     async fn test_create_plagiarism_case_success_as_assistant() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = CreatePlagiarismCasePayload {
@@ -213,7 +213,7 @@ mod create_plagiarism_tests {
     /// Test Case: Forbidden Access for Tutor
     #[tokio::test]
     async fn test_create_plagiarism_case_forbidden_as_tutor() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = CreatePlagiarismCasePayload {
@@ -237,7 +237,7 @@ mod create_plagiarism_tests {
     /// Test Case: Same Submission IDs Validation
     #[tokio::test]
     async fn test_create_plagiarism_case_same_submission_ids() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = CreatePlagiarismCasePayload {
@@ -266,7 +266,7 @@ mod create_plagiarism_tests {
     /// Test Case: Submission Not Found Validation
     #[tokio::test]
     async fn test_create_plagiarism_case_submission_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = CreatePlagiarismCasePayload {
@@ -298,7 +298,7 @@ mod create_plagiarism_tests {
     /// Test Case: Submission from Different Assignment
     #[tokio::test]
     async fn test_create_plagiarism_case_wrong_assignment() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Create another assignment and submission
@@ -354,7 +354,7 @@ mod create_plagiarism_tests {
     /// Test Case: Missing Authorization Header
     #[tokio::test]
     async fn test_create_plagiarism_case_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = CreatePlagiarismCasePayload {
@@ -383,7 +383,7 @@ mod create_plagiarism_tests {
     /// Test Case: Invalid Payload Format (serde 422)
     #[tokio::test]
     async fn test_create_plagiarism_case_invalid_payload() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Wrong types + missing required fields => 422
@@ -414,7 +414,7 @@ mod create_plagiarism_tests {
     /// NEW: Missing similarity alone should 422 (required field)
     #[tokio::test]
     async fn test_create_plagiarism_case_missing_similarity_is_422() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Build JSON manually without "similarity"
@@ -444,7 +444,7 @@ mod create_plagiarism_tests {
     /// Test Case: Similarity boundary 0.0 and 100.0 are accepted
     #[tokio::test]
     async fn test_create_plagiarism_case_similarity_boundaries() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // 0.0
@@ -479,7 +479,7 @@ mod create_plagiarism_tests {
     /// Test Case: Similarity out of range (negative) -> 400
     #[tokio::test]
     async fn test_create_plagiarism_case_similarity_too_low() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = CreatePlagiarismCasePayload {
@@ -497,7 +497,7 @@ mod create_plagiarism_tests {
     /// Test Case: Similarity out of range (>100) -> 400
     #[tokio::test]
     async fn test_create_plagiarism_case_similarity_too_high() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = CreatePlagiarismCasePayload {
@@ -515,7 +515,7 @@ mod create_plagiarism_tests {
     /// NEW: Similarity with fractional value is preserved (precision check)
     #[tokio::test]
     async fn test_create_plagiarism_case_similarity_fractional_precision() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let sim = 33.333_f32;

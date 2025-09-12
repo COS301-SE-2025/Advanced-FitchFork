@@ -16,7 +16,7 @@ mod plagiarism_tests {
     use tower::ServiceExt;
     use serde_json::Value;
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use chrono::{Datelike, Utc, TimeZone};
 
     struct TestData {
@@ -137,7 +137,7 @@ mod plagiarism_tests {
     /// Test Case: Successful Retrieval of Plagiarism Cases as Admin
     #[tokio::test]
     async fn test_list_plagiarism_cases_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
@@ -179,7 +179,7 @@ mod plagiarism_tests {
     /// Test Case: Successful Retrieval as Lecturer
     #[tokio::test]
     async fn test_list_plagiarism_cases_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
@@ -200,7 +200,7 @@ mod plagiarism_tests {
     /// Test Case: Successful Retrieval as Assistant Lecturer
     #[tokio::test]
     async fn test_list_plagiarism_cases_success_as_assistant_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
@@ -221,7 +221,7 @@ mod plagiarism_tests {
     /// Test Case: Forbidden Access for Unauthorized Tutor
     #[tokio::test]
     async fn test_list_plagiarism_cases_forbidden_for_tutor() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
@@ -238,7 +238,7 @@ mod plagiarism_tests {
     /// Test Case: Forbidden Access for Unauthorized Student
     #[tokio::test]
     async fn test_list_plagiarism_cases_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
@@ -255,7 +255,7 @@ mod plagiarism_tests {
     /// Test Case: Empty List for Assignment Without Plagiarism Cases
     #[tokio::test]
     async fn test_list_plagiarism_cases_empty() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let new_assignment = AssignmentModel::create(
@@ -289,7 +289,7 @@ mod plagiarism_tests {
     /// Test Case: Filtering by `review` Status
     #[tokio::test]
     async fn test_list_plagiarism_cases_filter_by_review_status() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         
         let _ = create_additional_plagiarism_cases(
@@ -320,7 +320,7 @@ mod plagiarism_tests {
     /// Test Case: Filtering by `Flagged` Status
     #[tokio::test]
     async fn test_list_plagiarism_cases_filter_by_flagged_status() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         
         let _ = create_additional_plagiarism_cases(
@@ -351,7 +351,7 @@ mod plagiarism_tests {
     /// Test Case: Filtering by `reviewed` Status
     #[tokio::test]
     async fn test_list_plagiarism_cases_filter_by_reviewed_status() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         
         let _ = create_additional_plagiarism_cases(
@@ -382,7 +382,7 @@ mod plagiarism_tests {
     /// Test Case: Search by Username
     #[tokio::test]
     async fn test_list_plagiarism_cases_search_by_username() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
@@ -410,7 +410,7 @@ mod plagiarism_tests {
     /// Test Case: Sorting by Created At
     #[tokio::test]
     async fn test_list_plagiarism_cases_sorting() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         
         let _ = create_additional_plagiarism_cases(
@@ -452,7 +452,7 @@ mod plagiarism_tests {
     /// Test Case: Pagination Works Correctly
     #[tokio::test]
     async fn test_list_plagiarism_cases_pagination() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         
         for _ in 0..15 {
@@ -511,7 +511,7 @@ mod plagiarism_tests {
     /// Test Case: Missing Authorization Header
     #[tokio::test]
     async fn test_list_plagiarism_cases_unauthorized_missing_header() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let uri = format!(
@@ -531,7 +531,7 @@ mod plagiarism_tests {
     /// Test Case: Invalid JWT Token
     #[tokio::test]
     async fn test_list_plagiarism_cases_unauthorized_invalid_token() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let uri = format!(
@@ -552,7 +552,7 @@ mod plagiarism_tests {
     /// Test Case: Accessing Non-Existent Assignment
     #[tokio::test]
     async fn test_list_plagiarism_cases_non_existent_assignment() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
@@ -574,7 +574,7 @@ mod plagiarism_tests {
     /// Test Case: Invalid Status Filter
     #[tokio::test]
     async fn test_list_plagiarism_cases_invalid_status() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(

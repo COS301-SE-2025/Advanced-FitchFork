@@ -20,7 +20,7 @@ mod tests {
     };
     use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     // ---------------------------
     // Shared setup
@@ -89,7 +89,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_session_as_lecturer_ok_minimal() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
@@ -135,7 +135,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_session_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.student.id, ctx.student.admin);
@@ -162,7 +162,7 @@ mod tests {
     #[tokio::test]
     async fn test_mark_attendance_student_ok_and_broadcast_received() {
 
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         // Create a fresh active session with no records to make count deterministic
@@ -218,7 +218,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_forbidden_for_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
@@ -245,7 +245,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_invalid_code_bad_request() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.student.id, ctx.student.admin);
@@ -273,7 +273,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_ip_restricted_bad_request() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         // Create session restricted to creator IP (198.51.100.50), then try mark from a different IP
@@ -316,7 +316,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_duplicate_bad_request() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         // Fresh active session
@@ -370,7 +370,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_inactive_session_bad_request() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         // Make an inactive session
@@ -409,7 +409,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_student_not_assigned_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         // Create a second module + student not assigned to ctx.module
@@ -437,7 +437,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_session_not_in_module_404() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         // Make another module and put a session there
@@ -469,7 +469,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_tolerance_window_boundaries() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         // Fresh session with rotation=30s
@@ -520,7 +520,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_preserves_leading_zeros_and_trims() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let sess = SessionModel::create(
@@ -552,7 +552,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_two_students_broadcast_counts_1_then_2() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let sess = SessionModel::create(
@@ -603,7 +603,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_missing_body_is_422() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.student.id, false);
@@ -623,7 +623,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ws_guard_auth_via_query_param_token() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
@@ -652,7 +652,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ws_guard_unknown_session_yields_404() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
 
@@ -672,7 +672,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ws_guard_forbidden_for_tutor() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
         let (token, _) = generate_jwt(ctx.tutor.id, ctx.tutor.admin);
 

@@ -19,7 +19,7 @@ mod tests {
     };
     use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestCtx {
         lecturer: UserModel, // lecturer of `module`
@@ -91,7 +91,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_session_as_lecturer_ok() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         // sanity: exists
@@ -127,7 +127,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_session_not_found_returns_404() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
         let unknown = ctx.session.id + 1_000_001;
@@ -153,8 +153,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_session_forbidden_for_student_and_tutor() {
-        let (app, _app_state) = make_test_app().await;
-        let ctx = setup(_app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let ctx = setup(app_state.db()).await;
 
         for uid in [ctx.student.id, ctx.tutor.id] {
             let (token, _) = generate_jwt(uid, false);
@@ -174,8 +174,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_session_forbidden_for_unassigned_user() {
-        let (app, _app_state) = make_test_app().await;
-        let ctx = setup(_app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.forbidden.id, ctx.forbidden.admin);
         let uri = format!("/api/modules/{}/attendance/sessions/{}", ctx.module.id, ctx.session.id);
@@ -194,8 +194,8 @@ mod tests {
     #[tokio::test]
     async fn test_delete_session_lecturer_of_other_module_forbidden() {
         // Lecturer of another module should be blocked by the guard (not assigned to THIS module)
-        let (app, _app_state) = make_test_app().await;
-        let ctx = setup(_app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.other_lecturer.id, ctx.other_lecturer.admin);
         let uri = format!("/api/modules/{}/attendance/sessions/{}", ctx.module.id, ctx.session.id);
@@ -213,8 +213,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_session_missing_auth_unauthorized() {
-        let (app, _app_state) = make_test_app().await;
-        let ctx = setup(_app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let ctx = setup(app_state.db()).await;
 
         let uri = format!("/api/modules/{}/attendance/sessions/{}", ctx.module.id, ctx.session.id);
 

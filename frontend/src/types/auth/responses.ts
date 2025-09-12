@@ -21,4 +21,4 @@ export type PostRegisterResponse = ApiResponse<AuthUser | null>;
 export type PostRequestPasswordResetResponse = ApiResponse<null>;
 export type PostResetPasswordResponse = ApiResponse<null>;
 export type PostVerifyResetTokenResponse = ApiResponse<{ email_hint?: string }>;
-export type PostUploadProfilePictureResponse = ApiResponse<{ profile_picture_path: string }>;
+export type PostUploadProfilePictureResponse = ApiResponse<null>;

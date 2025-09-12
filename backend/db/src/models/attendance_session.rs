@@ -200,20 +200,40 @@ mod tests {
     use super::*;
     use crate::test_utils::setup_test_db;
     use chrono::{TimeZone, Utc};
+    use crate::models::{module, user};
 
     #[tokio::test]
     async fn test_session_code_rotates() {
         let db = setup_test_db().await;
 
-        let s = Model::create(
-            &db, 1, 1, "Lecture 5",
-            true, 30,
-            false, None, None,
-            Some("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"),
-        ).await.unwrap();
+        // --- seed FK dependencies: a user and a module ---
+        let lecturer = user::Model::create(&db, "lect1", "lect1@test.com", "pw", false)
+            .await
+            .expect("create lecturer");
+        let m = module::Model::create(&db, "COS101", 2025, Some("Test Module"), 16)
+            .await
+            .expect("create module");
 
-        let t1 = Utc.with_ymd_and_hms(2025, 9, 8, 10, 0, 14).unwrap();
-        let t2 = Utc.with_ymd_and_hms(2025, 9, 8, 10, 0, 31).unwrap();
+        // --- create the session using real FK ids ---
+        let s = Model::create(
+            &db,
+            m.id,                      // module_id
+            lecturer.id,               // created_by
+            "Lecture 5",
+            true,                      // active
+            30,                        // rotation_seconds
+            false,                     // restrict_by_ip
+            None,                      // allowed_ip_cidr
+            None,                      // created_from_ip
+            Some("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"),
+        )
+        .await
+        .unwrap();
+
+        // codes should differ across a window boundary
+        let t1 = Utc.with_ymd_and_hms(2025, 9, 8, 10, 0, 14).unwrap(); // window N
+        let t2 = Utc.with_ymd_and_hms(2025, 9, 8, 10, 0, 31).unwrap(); // window N+1
         assert_ne!(s.current_code(t1), s.current_code(t2));
     }
 }
+

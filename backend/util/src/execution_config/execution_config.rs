@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::{env, fs, path::PathBuf};
+use std::fs;
+
+use crate::paths::{config_dir};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -337,6 +339,8 @@ pub struct ExecutionConfig {
 
     #[serde(default)]
     pub security: SecurityOptions,
+
+    #[serde(default)]
     pub code_coverage: CodeCoverage,
 }
 
@@ -353,55 +357,30 @@ impl ExecutionConfig {
         }
     }
 
-    fn resolve_storage_root() -> PathBuf {
-        if let Ok(p) = env::var("ASSIGNMENT_STORAGE_ROOT") {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                let mut adjusted = env::current_dir().expect("failed to get current dir");
-
-                if !cfg!(windows) {
-                    adjusted.pop();
-                }
-
-                adjusted.push(path);
-                adjusted
-            } else {
-                path
-            }
-        } else {
-            PathBuf::from("../data/assignment_files")
-        }
-    }
-
-    pub fn get_execution_config_with_base(
+    pub fn get_execution_config(
         module_id: i64,
         assignment_id: i64,
-        base_path: Option<&str>,
     ) -> Result<Self, String> {
-        let base_path = base_path
-            .map(PathBuf::from)
-            .unwrap_or_else(Self::resolve_storage_root);
+        let cfg_dir = config_dir(module_id, assignment_id);
 
-        let config_dir = base_path
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("config");
-
-        let entries = fs::read_dir(&config_dir)
-            .map_err(|_| format!("Failed to read config dir at {:?}", config_dir))?;
-
-        let mut config_file_path = None;
-        for entry in entries {
-            let entry = entry.map_err(|_| "Failed to read config dir entry")?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                config_file_path = Some(path);
-                break;
-            }
+        // 1) Prefer canonical config.json if it exists
+        let canonical = cfg_dir.join("config.json");
+        if canonical.exists() {
+            let s = fs::read_to_string(&canonical)
+                .map_err(|_| format!("Failed to read config file at {:?}", canonical))?;
+            return serde_json::from_str(&s)
+                .map_err(|_| "Invalid config JSON format".to_string());
         }
 
-        let config_path = config_file_path
-            .ok_or_else(|| format!("No config json file found in config dir {:?}", config_dir))?;
+        // 2) Fallback: any *.json in the directory
+        let entries = fs::read_dir(&cfg_dir)
+            .map_err(|_| format!("Failed to read config dir at {:?}", cfg_dir))?;
+
+        let config_path = entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .find(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
+            .ok_or_else(|| format!("No config json file found in config dir {:?}", cfg_dir))?;
 
         let file_contents = fs::read_to_string(&config_path)
             .map_err(|_| format!("Failed to read config file at {:?}", config_path))?;
@@ -409,25 +388,15 @@ impl ExecutionConfig {
         serde_json::from_str(&file_contents).map_err(|_| "Invalid config JSON format".to_string())
     }
 
-    pub fn get_execution_config(module_id: i64, assignment_id: i64) -> Result<Self, String> {
-        Self::get_execution_config_with_base(module_id, assignment_id, None)
-    }
-
-    /// Save the configuration to disk under the derived path based on module and assignment IDs.
     pub fn save(&self, module_id: i64, assignment_id: i64) -> Result<(), String> {
-        let base_path = Self::resolve_storage_root();
+        let cfg_dir = config_dir(module_id, assignment_id);
 
-        let config_dir = base_path
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("config");
-
-        // Create directory if it doesn't exist
-        if let Err(e) = fs::create_dir_all(&config_dir) {
+        // Ensure directory exists
+        if let Err(e) = fs::create_dir_all(&cfg_dir) {
             return Err(format!("Failed to create config directory: {:?}", e));
         }
 
-        let config_path = config_dir.join("config.json");
+        let config_path = cfg_dir.join("config.json");
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize config to JSON: {}", e))?;
 

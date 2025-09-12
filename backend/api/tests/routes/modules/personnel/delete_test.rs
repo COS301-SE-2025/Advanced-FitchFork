@@ -11,7 +11,7 @@ mod tests {
             user_module_role::{Model as UserModuleRoleModel, Role},
         },
     };
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin: UserModel,
@@ -34,7 +34,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_as_admin_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
@@ -57,7 +57,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_as_lecturer_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -80,7 +80,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_as_lecturer_forbidden_target_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -103,7 +103,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_as_outsider_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.outsider.id, false);
@@ -126,7 +126,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_user_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
@@ -149,7 +149,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_empty_user_ids() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
@@ -172,7 +172,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_personnel_conflict_user_not_assigned() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);

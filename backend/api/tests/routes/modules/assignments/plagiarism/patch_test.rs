@@ -18,7 +18,7 @@ mod patch_plagiarism_tests {
     use serde_json::Value;
     use tower::ServiceExt;
 
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     pub struct TestData {
         pub lecturer_user: UserModel,
@@ -163,7 +163,7 @@ mod patch_plagiarism_tests {
 
     #[tokio::test]
     async fn test_flag_plagiarism_case_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_patch_request(
@@ -195,7 +195,7 @@ mod patch_plagiarism_tests {
 
     #[tokio::test]
     async fn test_flag_plagiarism_case_success_as_assistant() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_patch_request(
@@ -218,7 +218,7 @@ mod patch_plagiarism_tests {
 
     #[tokio::test]
     async fn test_flag_plagiarism_case_forbidden_roles() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Test tutor
@@ -244,7 +244,7 @@ mod patch_plagiarism_tests {
 
     #[tokio::test]
     async fn test_flag_plagiarism_case_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_patch_request(
@@ -260,7 +260,7 @@ mod patch_plagiarism_tests {
 
     #[tokio::test]
     async fn test_flag_plagiarism_case_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let uri = format!(
@@ -305,7 +305,7 @@ mod review_plagiarism_tests {
     use serde_json::Value;
     use tower::ServiceExt;
 
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     fn make_review_request(
         user: &UserModel,
@@ -329,7 +329,7 @@ mod review_plagiarism_tests {
 
     #[tokio::test]
     async fn test_review_plagiarism_case_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_review_request(
@@ -361,7 +361,7 @@ mod review_plagiarism_tests {
 
     #[tokio::test]
     async fn test_review_plagiarism_case_success_as_assistant() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_review_request(
@@ -384,7 +384,7 @@ mod review_plagiarism_tests {
 
     #[tokio::test]
     async fn test_review_plagiarism_case_forbidden_roles() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Test tutor
@@ -410,7 +410,7 @@ mod review_plagiarism_tests {
 
     #[tokio::test]
     async fn test_review_plagiarism_case_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_review_request(
@@ -426,7 +426,7 @@ mod review_plagiarism_tests {
 
     #[tokio::test]
     async fn test_review_plagiarism_case_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let uri = format!(

@@ -9,6 +9,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, IntoActiveModel, PaginatorTrait, QueryFilter, QueryOrder, Set, QuerySelect
 };
 use util::execution_config::ExecutionConfig;
+use util::paths::{assignment_dir, memo_output_dir};
 use crate::models::assignment_file::{Model as AssignmentFileModel, FileType};
 use crate::models::assignment_task::{Entity as TaskEntity, Column as TaskColumn};
 use crate::models::assignment_submission::{Entity as SubmissionEntity, Column as SubmissionCol};
@@ -19,7 +20,7 @@ use crate::models::user_module_role::{
 };
 use chrono::{DateTime, Utc};
 use std::net::IpAddr;
-use std::{env, fs, path::PathBuf};
+use std::fs;
 use serde::{Serialize, Deserialize};
 use strum::{Display, EnumIter, EnumString};
 use sha2::{Digest, Sha256};
@@ -189,16 +190,10 @@ impl Model {
         let active = model.into_active_model();
         active.delete(db).await?;
 
-        let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-            .unwrap_or_else(|_| "data/assignment_files".to_string());
-
-        let assignment_dir = PathBuf::from(storage_root)
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{id}"));
-
-        if assignment_dir.exists() {
-            if let Err(e) = fs::remove_dir_all(&assignment_dir) {
-                eprintln!("Warning: Failed to delete assignment directory {:?}: {}", assignment_dir, e);
+        let dir = assignment_dir(module_id as i64, id as i64);
+        if dir.exists() {
+            if let Err(e) = fs::remove_dir_all(&dir) {
+                eprintln!("Warning: Failed to delete assignment directory {:?}: {}", dir, e);
             }
         }
 
@@ -348,11 +343,7 @@ impl Model {
         .unwrap_or(false);
 
         let memo_output_present = {
-            let base_path = AssignmentFileModel::storage_root()
-                .join(format!("module_{}", module_id))
-                .join(format!("assignment_{}", assignment_id))
-                .join("memo_output");
-
+            let base_path = memo_output_dir(module_id, assignment_id);
             if let Ok(entries) = fs::read_dir(&base_path) {
                 entries.flatten().any(|entry| entry.path().is_file())
             } else {

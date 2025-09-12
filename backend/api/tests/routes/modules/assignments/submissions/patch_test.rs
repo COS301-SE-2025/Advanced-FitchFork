@@ -7,9 +7,7 @@ mod patch_submission_ignore_tests {
     use tower::ServiceExt;
     use serde_json::{json, Value};
     use serial_test::serial;
-    use tempfile::tempdir;
     use chrono::Utc;
-    use dotenvy;
 
     use api::auth::generate_jwt;
 
@@ -21,7 +19,7 @@ mod patch_submission_ignore_tests {
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
 
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app:: make_test_app_with_storage;
 
     struct TestData {
         lecturer: UserModel,
@@ -36,14 +34,6 @@ mod patch_submission_ignore_tests {
     }
 
     async fn setup_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        dotenvy::dotenv().ok();
-
-        // Isolated storage root (even though PATCHes don’t read it, be consistent)
-        let tmp = tempdir().expect("tmpdir");
-        unsafe {
-            std::env::set_var("ASSIGNMENT_STORAGE_ROOT", tmp.path().to_str().unwrap());
-        }
-
         // users
         let lecturer = UserModel::create(db, "lect1", "lect1@test.com", "pw", false).await.unwrap();
         let assistant = UserModel::create(db, "al1", "al1@test.com", "pw", false).await.unwrap();
@@ -132,7 +122,7 @@ mod patch_submission_ignore_tests {
     #[tokio::test]
     #[serial]
     async fn lecturer_can_set_single_ignored_and_unignored() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
@@ -178,7 +168,7 @@ mod patch_submission_ignore_tests {
     #[tokio::test]
     #[serial]
     async fn assistant_lecturer_can_set_single_ignored() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.assistant.id, data.assistant.admin);
@@ -207,7 +197,7 @@ mod patch_submission_ignore_tests {
     #[tokio::test]
     #[serial]
     async fn tutor_cannot_set_single_ignored_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.tutor.id, data.tutor.admin);
@@ -231,7 +221,7 @@ mod patch_submission_ignore_tests {
     #[tokio::test]
     #[serial]
     async fn student_cannot_set_single_ignored_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student.id, data.student.admin);
@@ -254,7 +244,7 @@ mod patch_submission_ignore_tests {
     #[tokio::test]
     #[serial]
     async fn single_ignored_404_when_submission_not_in_assignment() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         // sub1 belongs to `assignment`; call with `other_assignment` → 404

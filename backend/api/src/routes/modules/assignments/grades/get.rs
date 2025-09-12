@@ -32,8 +32,8 @@ use sea_orm::{
     QueryTrait, RelationTrait,
 };
 use serde::{Deserialize, Serialize};
-use std::{cmp::Ordering, collections::HashMap, path::PathBuf};
-use util::execution_config::{execution_config::GradingPolicy, ExecutionConfig};
+use std::{cmp::Ordering, collections::HashMap};
+use util::{execution_config::{execution_config::GradingPolicy, ExecutionConfig}, paths::submission_report_path};
 use util::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -124,22 +124,6 @@ fn pct(earned: i64, total: i64) -> f32 {
     }
 }
 
-fn report_path(
-    base: &str,
-    module_id: i64,
-    assignment_id: i64,
-    user_id: i64,
-    attempt: i64,
-) -> PathBuf {
-    PathBuf::from(base)
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id))
-        .join("assignment_submissions")
-        .join(format!("user_{}", user_id))
-        .join(format!("attempt_{}", attempt))
-        .join("submission_report.json")
-}
-
 /// Build maps for task name enrichment:
 ///  - by_id:  assignment_task.id          -> name
 ///  - by_num: assignment_task.task_number -> name
@@ -174,11 +158,14 @@ fn read_tasks_from_report(
     task_name_by_id: &HashMap<i64, String>,
     task_name_by_num: &HashMap<i64, String>,
 ) -> Vec<TaskBreakdown> {
-    let base = std::env::var("ASSIGNMENT_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/assignment_files".to_string());
+    let path = submission_report_path(
+        module_id,
+        assignment_id,
+        submission.user_id,
+        submission.attempt,
+    );
 
-    let path = report_path(&base, module_id, assignment_id, submission.user_id, submission.attempt);
-    let Ok(raw) = std::fs::read_to_string(path) else {
+    let Ok(raw) = std::fs::read_to_string(&path) else {
         return vec![];
     };
 
@@ -211,7 +198,6 @@ fn read_tasks_from_report(
         Err(_) => vec![],
     }
 }
-
 
 async fn load_execution_config_for(
     module_id: i64,
@@ -386,8 +372,6 @@ async fn compute_grades_for_assignment(
 ///   assignment does not exist under the module), or an I/O/JSON error while reading reports
 ///
 /// # Notes
-/// - The per-task data comes from:
-///   `<ASSIGNMENT_STORAGE_ROOT>/module_{module_id}/assignment_{assignment_id}/assignment_submissions/user_{user_id}/attempt_{attempt}/submission_report.json`.
 /// - If the report is missing or malformed, `tasks` is returned as an empty array for that row.
 /// - `score` is computed as `(earned / total) * 100`. Practice submissions are ignored.
 /// - Only **students** (role `student` in `user_module_roles`) are included.

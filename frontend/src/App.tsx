@@ -39,7 +39,6 @@ import HelpSubmissions from './pages/help/HelpSubmissions';
 import HelpTroubleshooting from './pages/help/HelpTroubleshooting';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
-import Tasks from './pages/modules/assignments/Tasks';
 import AuthLayout from './layouts/AuthLayout';
 import ModulesList from './pages/modules/ModulesList';
 import ModuleGrades from './pages/modules/ModuleGrades';
@@ -78,6 +77,8 @@ import AttendanceSessionProjector from './pages/modules/attendance/AttendanceSes
 import SecurityPage from './pages/modules/assignments/config/SecurityPage';
 import AssignmentVerifyPage from './pages/modules/assignments/AssignmentVerifyPage';
 import AccessDeniedPage from './pages/modules/assignments/AccessDeniedPage';
+import TaskView from './pages/modules/assignments/tasks/TaskView';
+import TasksPage from './pages/modules/assignments/tasks';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -172,9 +173,9 @@ export default function App() {
                     <Route path="files" element={<AssignmentFiles />} />
                     <Route path="submissions" element={<SubmissionsList />} />
                     <Route path="submissions/:submission_id" element={<SubmissionView />} />
-                    <Route path="tasks" element={<Tasks />}>
-                      <Route index element={<></>} />
-                      <Route path=":task_id" element={<></>} />
+                    <Route path="tasks" element={<TasksPage />}>
+                      <Route index element={<TaskView />} />
+                      <Route path=":task_id" element={<TaskView />} />
                     </Route>
                     <Route path="tickets" element={<Tickets />} />
                     <Route path="memo-output" element={<MemoOutput />} />

@@ -7,7 +7,7 @@ mod tests {
     use chrono::{Datelike, Utc};
     use db::{models::user::Model as UserModel};
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use serde_json::json;
     use tower::ServiceExt;
 
@@ -31,7 +31,7 @@ mod tests {
     /// Test Case: Admin creates module successfully
     #[tokio::test]
     async fn test_create_module_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -64,7 +64,7 @@ mod tests {
     /// Test Case: Non-admin user attempts to create module
     #[tokio::test]
     async fn test_create_module_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
@@ -89,7 +89,7 @@ mod tests {
     /// Test Case: Invalid module code format
     #[tokio::test]
     async fn test_create_module_invalid_code() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -114,7 +114,7 @@ mod tests {
     /// Test Case: Year in the past
     #[tokio::test]
     async fn test_create_module_year_in_past() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -140,7 +140,7 @@ mod tests {
     /// Test Case: Invalid credits value
     #[tokio::test]
     async fn test_create_module_invalid_credits() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -165,7 +165,7 @@ mod tests {
     /// Test Case: Description too long
     #[tokio::test]
     async fn test_create_module_description_too_long() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -191,7 +191,7 @@ mod tests {
     /// Test Case: Duplicate module code
     #[tokio::test]
     async fn test_create_module_duplicate_code() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -228,7 +228,7 @@ mod tests {
     /// Test Case: Multiple validation errors
     #[tokio::test]
     async fn test_create_module_multiple_errors() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -255,7 +255,7 @@ mod tests {
     /// Test Case: Missing required fields
     #[tokio::test]
     async fn test_create_module_missing_fields() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);

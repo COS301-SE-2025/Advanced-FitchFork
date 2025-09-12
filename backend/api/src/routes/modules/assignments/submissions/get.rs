@@ -29,7 +29,7 @@ use sea_orm::{
 };
 use serde::Serialize;
 use serde_json::Value;
-use util::state::AppState;
+use util::{paths::submission_zip_path, state::AppState};
 use std::{collections::HashMap, fs, path::PathBuf};
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
 
@@ -71,6 +71,8 @@ fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
 ///
 /// ### Notes
 /// - No filtering on other students or usernames is possible in this endpoint.
+use util::paths::submission_report_path; // add near the other imports
+
 async fn get_user_submissions(
     db: &DatabaseConnection,
     module_id: i64,
@@ -147,9 +149,6 @@ async fn get_user_submissions(
         .await
         .unwrap_or_default();
 
-    let base =
-        std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
-
     let user_resp = {
         let u = user::Entity::find_by_id(user_id)
             .one(db)
@@ -174,13 +173,13 @@ async fn get_user_submissions(
     let mut items: Vec<SubmissionListItem> = rows
         .into_iter()
         .map(|s| {
-            let report_path = PathBuf::from(&base)
-                .join(format!("module_{module_id}"))
-                .join(format!("assignment_{assignment_id}"))
-                .join("assignment_submissions")
-                .join(format!("user_{}", s.user_id))
-                .join(format!("attempt_{}", s.attempt))
-                .join("submission_report.json");
+            // Centralized report path
+            let report_path = submission_report_path(
+                module_id,
+                assignment_id,
+                s.user_id,
+                s.attempt,
+            );
 
             let (mark, is_practice) = match fs::read_to_string(&report_path) {
                 Ok(content) => {
@@ -415,9 +414,6 @@ async fn get_list_submissions(
         .await
         .unwrap_or_default();
 
-    let base =
-        std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
-
     let mut items: Vec<SubmissionListItem> = rows
         .into_iter()
         .map(|(s, u)| {
@@ -435,13 +431,7 @@ async fn get_list_submissions(
                 }
             };
 
-            let report_path = PathBuf::from(&base)
-                .join(format!("module_{module_id}"))
-                .join(format!("assignment_{assignment_id}"))
-                .join("assignment_submissions")
-                .join(format!("user_{}", s.user_id))
-                .join(format!("attempt_{}", s.attempt))
-                .join("submission_report.json");
+            let report_path = submission_report_path(module_id, assignment_id, s.user_id, s.attempt);
 
             let (mark, is_practice) = match fs::read_to_string(&report_path) {
                 Ok(content) => {
@@ -662,21 +652,13 @@ pub async fn list_submissions(
 ///   "message": "Failed to parse submission report"
 /// }
 /// ```
-/// or
-/// ```json
-/// {
-///   "success": false,
-///   "message": "ASSIGNMENT_STORAGE_ROOT not set"
-/// }
-/// ```
 ///
 /// ### Notes
-/// - The submission report is read from the filesystem at:
-///   `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/assignment_submissions/user_{user_id}/attempt_{attempt}/submission_report.json`
 /// - User metadata is only included for non-student users (lecturers, tutors, admins)
 /// - The response contains the complete grading report including marks, tasks, and optional
 ///   code coverage/complexity analysis
 /// - Access is restricted to users with appropriate permissions for the module
+
 pub async fn get_submission(
     State(app_state): State<AppState>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
@@ -732,24 +714,7 @@ pub async fn get_submission(
     let user_id = submission.user_id;
     let attempt = submission.attempt;
 
-    let base = match std::env::var("ASSIGNMENT_STORAGE_ROOT") {
-        Ok(val) => val,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("ASSIGNMENT_STORAGE_ROOT not set")),
-            )
-                .into_response();
-        }
-    };
-
-    let path = PathBuf::from(&base)
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id))
-        .join("assignment_submissions")
-        .join(format!("user_{}", user_id))
-        .join(format!("attempt_{}", attempt))
-        .join("submission_report.json");
+    let path = submission_report_path(module_id, assignment_id, user_id, attempt);
 
     let content = match fs::read_to_string(&path) {
         Ok(c) => c,
@@ -1027,7 +992,7 @@ pub async fn download_submission_file(
     }
 
     // Resolve file path and read bytes
-    let full_path: PathBuf = submission.full_path();
+    let full_path: PathBuf = submission_zip_path(module_id, assignment_id, submission.user_id, submission.attempt);
     if tokio::fs::metadata(&full_path).await.is_err() {
         return (
             StatusCode::NOT_FOUND,

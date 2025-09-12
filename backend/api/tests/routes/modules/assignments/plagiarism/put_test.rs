@@ -16,7 +16,7 @@ mod update_plagiarism_tests {
     use tower::ServiceExt;
     use serde_json::Value;
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use chrono::{Datelike, TimeZone, Utc};
     use api::routes::modules::assignments::plagiarism::put::UpdatePlagiarismCasePayload;
 
@@ -141,7 +141,7 @@ mod update_plagiarism_tests {
     /// Successful Update by Lecturer (description + status + similarity)
     #[tokio::test]
     async fn test_update_plagiarism_case_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let original_updated_at = data.plagiarism_case.updated_at;
@@ -192,7 +192,7 @@ mod update_plagiarism_tests {
     /// Partial Update by Assistant Lecturer (description only; similarity & status unchanged)
     #[tokio::test]
     async fn test_update_plagiarism_case_partial_update() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         
         let original_updated_at = data.plagiarism_case.updated_at;
@@ -239,7 +239,7 @@ mod update_plagiarism_tests {
     /// Update similarity only
     #[tokio::test]
     async fn test_update_plagiarism_case_similarity_only() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = UpdatePlagiarismCasePayload {
@@ -274,7 +274,7 @@ mod update_plagiarism_tests {
     /// Forbidden Access for Non-Permitted Roles
     #[tokio::test]
     async fn test_update_plagiarism_case_forbidden_roles() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = UpdatePlagiarismCasePayload {
@@ -307,7 +307,7 @@ mod update_plagiarism_tests {
     /// Validation Failures
     #[tokio::test]
     async fn test_update_plagiarism_case_validation_errors() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // No fields -> 400
@@ -387,7 +387,7 @@ mod update_plagiarism_tests {
     /// Case Not Found
     #[tokio::test]
     async fn test_update_plagiarism_case_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = UpdatePlagiarismCasePayload {
@@ -420,7 +420,7 @@ mod update_plagiarism_tests {
     /// Unauthorized Access
     #[tokio::test]
     async fn test_update_plagiarism_case_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = UpdatePlagiarismCasePayload {

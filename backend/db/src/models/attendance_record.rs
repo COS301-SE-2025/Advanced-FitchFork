@@ -100,7 +100,7 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::attendance_session;
+    use crate::models::{attendance_session, module, user};
     use crate::test_utils::setup_test_db;
     use chrono::{TimeZone, Utc};
 
@@ -108,22 +108,44 @@ mod tests {
     async fn test_mark_attendance_once() {
         let db = setup_test_db().await;
 
+        // --- seed FK dependencies ---
+        let lecturer = user::Model::create(&db, "lect1", "lect1@test.com", "pw", false)
+            .await
+            .unwrap();
+        let student = user::Model::create(&db, "stud1", "stud1@test.com", "pw", false)
+            .await
+            .unwrap();
+        let m = module::Model::create(&db, "COS101", 2025, Some("Test Module"), 16)
+            .await
+            .unwrap();
+
+        // session must reference real module + creator user
         let sess = attendance_session::Model::create(
             &db,
-            1, 1, "Lec",
-            true, 30,
-            false, None, None,
-            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-        ).await.unwrap();
+            m.id,                          // module_id FK
+            lecturer.id,                  // created_by / owner FK
+            "Lec",
+            true,                         // manual/active flag (as per your signature)
+            30,                           // rotation seconds
+            false,                        // restrict IP?
+            None,                         // ip subnet / prefix
+            None,                         // location / whatever the option is
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), // salt
+        )
+        .await
+        .unwrap();
 
         let now = Utc.with_ymd_and_hms(2025, 9, 8, 10, 15, 2).unwrap();
         let code = sess.current_code(now);
 
-        let rec = Model::mark(&db, &sess, 42, &code, Some("203.0.113.5"), now, 1).await.unwrap();
+        // use real student.id — not 42
+        let rec = Model::mark(&db, &sess, student.id, &code, Some("203.0.113.5"), now, 1)
+            .await
+            .unwrap();
         assert_eq!(rec.session_id, sess.id);
-        assert_eq!(rec.user_id, 42);
+        assert_eq!(rec.user_id, student.id);
 
-        let dup = Model::mark(&db, &sess, 42, &code, Some("203.0.113.5"), now, 1).await;
+        let dup = Model::mark(&db, &sess, student.id, &code, Some("203.0.113.5"), now, 1).await;
         assert!(dup.is_err());
     }
 }

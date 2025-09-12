@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::helpers::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use db::models::{
         announcements::Model as AnnouncementModel,
@@ -71,7 +71,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_announcement_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
@@ -93,7 +93,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_announcement_forbidden_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student.id, data.student.admin);
@@ -115,7 +115,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_announcement_forbidden_invalid_user() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.invalid_user.id, data.invalid_user.admin);
@@ -137,7 +137,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_nonexistent_announcement() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);

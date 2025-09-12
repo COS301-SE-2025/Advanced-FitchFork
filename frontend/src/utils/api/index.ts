@@ -68,6 +68,47 @@ const redactHeadersForLog = (headers: Record<string, any>) => {
   return redacted;
 };
 
+/** Should we log sensitive fields (full headers/body) without redaction? */
+const shouldLogSensitive = (): boolean => {
+  try {
+    // Enable with: localStorage.LOG_SENSITIVE = "1" or window.__LOG_SENSITIVE__ = true
+    // @ts-ignore
+    if (typeof window !== "undefined" && (window.__LOG_SENSITIVE__ === true)) return true;
+    if (typeof window !== "undefined" && localStorage.getItem("LOG_SENSITIVE") === "1") return true;
+  } catch { /* noop */ }
+  return false;
+};
+
+/** Make a plain object from Headers (Response headers). */
+const headersToObject = (h: Headers): Record<string, string> => {
+  const obj: Record<string, string> = {};
+  try {
+    h.forEach((v, k) => { obj[k] = v; });
+  } catch { /* noop */ }
+  return obj;
+};
+
+/** Ensure request body is printable. */
+const bodyPreviewForLog = (body: unknown) => {
+  try {
+    if (typeof body === "string") {
+      return body.length > 10000 ? `${body.slice(0, 10000)}… [truncated]` : body;
+    }
+    if (body instanceof URLSearchParams) return body.toString();
+    if (body instanceof FormData) {
+      const entries: Record<string, any> = {};
+      (body as FormData).forEach((v, k) => {
+        entries[k] = v instanceof Blob ? `[Blob ${v.type} ${v.size}B]` : v;
+      });
+      return entries;
+    }
+    if (body instanceof Blob) return `[Blob ${body.type} ${body.size}B]`;
+    if (body instanceof ArrayBuffer) return `[ArrayBuffer ${body.byteLength}B]`;
+    if (typeof body === "object" && body !== null) return JSON.stringify(body);
+  } catch { /* noop */ }
+  return body as any;
+};
+
 /** If server says the PIN is invalid, clear it so the user gets re-prompted. */
 const maybeClearPinOnForbidden = async (res: Response, url: string) => {
   if (res.status !== 403) return;
@@ -100,6 +141,7 @@ const maybeClearPinOnForbidden = async (res: Response, url: string) => {
  * - Handles token expiration.
  * - Injects `x-assignment-pin` for assignment endpoints (if present in sessionStorage).
  * - Parses and returns the API response as `ApiResponse<T>`.
+ * - Logs the full request & full response (redacted by default; see shouldLogSensitive()).
  */
 export async function apiFetch<T>(
   endpoint: string,
@@ -134,24 +176,30 @@ export async function apiFetch<T>(
     credentials: options.credentials ?? "include",
   };
 
-  // SAFE log (redacted)
-  console.log("[apiFetch] →", {
+  // Print full REQUEST
+  const reqLog = {
     url,
     method: finalOptions.method || "GET",
-    headers: redactHeadersForLog(finalOptions.headers as Record<string, any>),
-    body: finalOptions.body,
-  });
+    credentials: finalOptions.credentials,
+    headers: shouldLogSensitive()
+      ? (finalOptions.headers as Record<string, any>)
+      : redactHeadersForLog(finalOptions.headers as Record<string, any>),
+    body: bodyPreviewForLog(finalOptions.body),
+  };
+  console.log("[apiFetch] → REQUEST", reqLog);
 
+  // Do fetch
   const res = await fetch(url, finalOptions);
-
   await maybeClearPinOnForbidden(res, url);
 
+  // Clone to read body for logs without consuming stream
+  const resClone = res.clone();
   const contentType = res.headers.get("content-type") || "";
+  const respHeadersObj = headersToObject(res.headers);
 
-  // Non-JSON path (ngrok page, etc.)
+  // Print full RESPONSE (non-JSON)
   if (!contentType.includes("application/json")) {
-    const text = await res.text();
-
+    const text = await resClone.text().catch(() => "");
     const looksLikeNgrokInterstitial =
       text.includes("cdn.ngrok.com/static/js/error.js") ||
       text.includes("ERR_NGROK_6024") ||
@@ -168,14 +216,34 @@ export async function apiFetch<T>(
       message,
     };
 
-    console.log("[apiFetch] ← (non-JSON)", { status: res.status, ok: res.ok, message });
+    console.log("[apiFetch] ← RESPONSE (non-JSON)", {
+      status: res.status,
+      ok: res.ok,
+      headers: respHeadersObj,
+      body: text,
+    });
+
     return data;
   }
 
   // JSON path
   try {
+    // Read the clone to log full JSON body
+    const bodyText = await resClone.text();
+    let parsedForLog: any = bodyText;
+    try {
+      parsedForLog = JSON.parse(bodyText);
+    } catch { /* keep as text if not valid JSON */ }
+
+    console.log("[apiFetch] ← RESPONSE", {
+      status: res.status,
+      ok: res.ok,
+      headers: respHeadersObj,
+      body: parsedForLog,
+    });
+
+    // Now parse the actual response to return
     const data = (await res.json()) as ApiResponse<T>;
-    console.log("[apiFetch] ←", { status: res.status, ok: res.ok, success: data.success, message: data.message });
     return data;
   } catch (err) {
     console.error("[apiFetch] Failed to parse JSON", err);
@@ -200,19 +268,49 @@ export async function apiFetchBlob(endpoint: string): Promise<Blob> {
 
   const headers = buildHeaders({} as any, url, token);
 
+  console.log("[apiFetchBlob] → REQUEST", {
+    url,
+    method: "GET",
+    headers: shouldLogSensitive() ? headers : redactHeadersForLog(headers),
+  });
+
   const res = await fetch(url, { method: "GET", headers, credentials: "include" });
   await maybeClearPinOnForbidden(res, url);
+
+  const respHeadersObj = headersToObject(res.headers);
 
   if (!res.ok) {
     // Try to extract API error details
     try {
-      const j = await res.json();
+      const j = await res.clone().json();
+      console.log("[apiFetchBlob] ← RESPONSE (error JSON)", {
+        status: res.status,
+        ok: res.ok,
+        headers: respHeadersObj,
+        body: j,
+      });
       throw new Error(j?.message || res.statusText);
     } catch {
-      const t = await res.text().catch(() => "");
+      const t = await res.clone().text().catch(() => "");
+      console.log("[apiFetchBlob] ← RESPONSE (error text)", {
+        status: res.status,
+        ok: res.ok,
+        headers: respHeadersObj,
+        body: t,
+      });
       throw new Error(t || res.statusText || "Download failed");
     }
   }
+
+  const blob = await res.clone().blob();
+  console.log("[apiFetchBlob] ← RESPONSE (blob)", {
+    status: res.status,
+    ok: res.ok,
+    headers: respHeadersObj,
+    size: blob.size,
+    type: blob.type,
+  });
+
   return res.blob();
 }
 
@@ -246,6 +344,21 @@ export async function apiUpload<T>(
     if (pin) (headers as any)["x-assignment-pin"] = pin;
   }
 
+  // Log request with a readable FormData preview
+  const formPreview: Record<string, any> = {};
+  try {
+    form.forEach((v, k) => {
+      formPreview[k] = v instanceof Blob ? `[Blob ${v.type} ${v.size}B]` : v;
+    });
+  } catch { /* noop */ }
+
+  console.log("[apiUpload] → REQUEST", {
+    url,
+    method: "POST",
+    headers: shouldLogSensitive() ? headers : redactHeadersForLog(headers as any),
+    form: formPreview,
+  });
+
   const res = await fetch(url, {
     method: "POST",
     headers,
@@ -255,10 +368,24 @@ export async function apiUpload<T>(
 
   await maybeClearPinOnForbidden(res, url);
 
+  const respHeadersObj = headersToObject(res.headers);
+
   let data: ApiResponse<T>;
   try {
+    const text = await res.clone().text();
+    let parsed: any = text;
+    try { parsed = JSON.parse(text); } catch { /* keep text */ }
+
+    console.log("[apiUpload] ← RESPONSE", {
+      status: res.status,
+      ok: res.ok,
+      headers: respHeadersObj,
+      body: parsed,
+    });
+
     data = await res.json();
   } catch {
+    console.error("[apiUpload] Failed to parse response from file upload.");
     throw new Error("Failed to parse response from file upload.");
   }
   return data;
@@ -292,16 +419,37 @@ export async function apiDownload(endpoint: string): Promise<void> {
     if (pin) (headers as any)["x-assignment-pin"] = pin;
   }
 
+  console.log("[apiDownload] → REQUEST", {
+    url,
+    method: "GET",
+    headers: shouldLogSensitive() ? headers : redactHeadersForLog(headers as any),
+  });
+
   const res = await fetch(url, { method: "GET", headers, credentials: "include" });
   await maybeClearPinOnForbidden(res, url);
 
+  const respHeadersObj = headersToObject(res.headers);
+
   if (!res.ok) {
-    const fallback = await res.text();
-    console.error("[apiDownload] Error:", fallback);
+    const fallback = await res.clone().text();
+    console.log("[apiDownload] ← RESPONSE (error)", {
+      status: res.status,
+      ok: res.ok,
+      headers: respHeadersObj,
+      body: fallback,
+    });
     throw new Error("Download failed");
   }
 
-  const blob = await res.blob();
+  const blob = await res.clone().blob();
+
+  console.log("[apiDownload] ← RESPONSE (blob)", {
+    status: res.status,
+    ok: res.ok,
+    headers: respHeadersObj,
+    size: blob.size,
+    type: blob.type,
+  });
 
   const disposition = res.headers.get("Content-Disposition") || "";
   const filenameMatch = disposition.match(/filename="(.+?)"/);

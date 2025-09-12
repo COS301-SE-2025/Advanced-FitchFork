@@ -1,3 +1,5 @@
+use std::{fs, path::PathBuf};
+
 use super::common::{CodeComplexity, CodeComplexitySummary, MarkSummary, SubmissionDetailResponse};
 use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late};
 use axum::{
@@ -9,7 +11,6 @@ use axum::{
 use chrono::Utc;
 use code_runner;
 use db::models::assignment_memo_output;
-use db::models::assignment_memo_output::Model as MemoOutputModel;
 use db::models::assignment_task;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
@@ -22,13 +23,22 @@ use md5;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use tokio_util::bytes;
-use util::mark_allocator::mark_allocator::TaskInfo;
+use util::{mark_allocator::mark_allocator::TaskInfo, paths::storage_root};
 use util::{
     execution_config::{ExecutionConfig, execution_config::SubmissionMode},
     mark_allocator::mark_allocator::generate_allocator,
     mark_allocator::mark_allocator::load_allocator,
     state::AppState,
 };
+use util::paths::{
+    assignment_dir,
+    memo_output_dir,
+    mark_allocator_path as allocator_path,
+    submission_output_dir,
+    submission_report_path,
+    attempt_dir,
+};
+
 #[derive(Debug, Deserialize)]
 pub struct RemarkRequest {
     #[serde(default)]
@@ -129,25 +139,12 @@ async fn load_assignment_allocator(module_id: i64, assignment_id: i64) -> Result
 fn get_assignment_paths(
     module_id: i64,
     assignment_id: i64,
-) -> Result<
-    (
-        std::path::PathBuf,
-        std::path::PathBuf,
-        Vec<std::path::PathBuf>,
-    ),
-    String,
-> {
-    let assignment_storage_root = std::env::var("ASSIGNMENT_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/assignment_files".to_string());
+) -> Result<(PathBuf, PathBuf, Vec<PathBuf>), String> {
+    let base_path = assignment_dir(module_id, assignment_id);
+    let mark_allocator_path = allocator_path(module_id, assignment_id);
+    let memo_dir = memo_output_dir(module_id, assignment_id);
 
-    let base_path = std::path::PathBuf::from(&assignment_storage_root)
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id));
-
-    let mark_allocator_path = base_path.join("mark_allocator/allocator.json");
-    let memo_output_dir = base_path.join("memo_output");
-
-    let mut memo_outputs: Vec<_> = match std::fs::read_dir(&memo_output_dir) {
+    let mut memo_outputs: Vec<_> = match fs::read_dir(&memo_dir) {
         Ok(rd) => rd
             .filter_map(|e| e.ok().map(|e| e.path()))
             .filter(|p| p.is_file())
@@ -247,17 +244,17 @@ async fn get_next_attempt(
 async fn grade_submission(
     submission: AssignmentSubmissionModel,
     assignment: &db::models::assignment::Model,
-    base_path: &std::path::Path,
     memo_outputs: &[std::path::PathBuf],
     mark_allocator_path: &std::path::Path,
     config: &util::execution_config::ExecutionConfig,
     db: &sea_orm::DatabaseConnection,
 ) -> Result<SubmissionDetailResponse, String> {
-    let student_output_dir = base_path
-        .join("assignment_submissions")
-        .join(format!("user_{}", submission.user_id))
-        .join(format!("attempt_{}", submission.attempt))
-        .join("submission_output");
+    let student_output_dir = submission_output_dir(
+        assignment.module_id,
+        assignment.id,
+        submission.user_id,
+        submission.attempt,
+    );
 
     //Old system before code-coverage
 
@@ -399,16 +396,18 @@ async fn grade_submission(
         code_complexity,
     };
 
-    let attempt_dir = base_path
-        .join("assignment_submissions")
-        .join(format!("user_{}", submission.user_id))
-        .join(format!("attempt_{}", submission.attempt));
-    let report_path = attempt_dir.join("submission_report.json");
-    if let Ok(json) = serde_json::to_string_pretty(&resp) {
-        std::fs::write(&report_path, json).map_err(|e| e.to_string())?;
-    } else {
-        return Err("Failed to serialize submission report".to_string());
+    let report_path = submission_report_path(
+        assignment.module_id,
+        assignment.id,
+        submission.user_id,
+        submission.attempt,
+    );
+    if let Some(parent) = report_path.parent() {
+        let _ = fs::create_dir_all(parent);
     }
+    let json = serde_json::to_string_pretty(&resp)
+        .map_err(|_| "Failed to serialize submission report".to_string())?;
+    fs::write(&report_path, json).map_err(|e| e.to_string())?;
 
     Ok(resp)
 }
@@ -435,65 +434,57 @@ async fn process_submission_code(
 /// Clears the submission output directory
 fn clear_submission_output(
     submission: &AssignmentSubmissionModel,
-    base_path: &std::path::Path,
+    module_id: i64,
+    assignment_id: i64,
 ) -> Result<(), String> {
-    let attempt_dir = base_path
-        .join("assignment_submissions")
-        .join(format!("user_{}", submission.user_id))
-        .join(format!("attempt_{}", submission.attempt));
-
-    let output_dir = attempt_dir.join("submission_output");
-
+    let attempt = attempt_dir(module_id, assignment_id, submission.user_id, submission.attempt);
+    let output_dir = attempt.join("submission_output");
     if output_dir.exists() {
-        std::fs::remove_dir_all(&output_dir)
+        fs::remove_dir_all(&output_dir)
             .map_err(|e| format!("Failed to clear output directory: {}", e))?;
     }
 
-    let report_path = attempt_dir.join("submission_report.json");
+    let report_path = submission_report_path(module_id, assignment_id, submission.user_id, submission.attempt);
     if report_path.exists() {
-        std::fs::remove_file(&report_path)
+        fs::remove_file(&report_path)
             .map_err(|e| format!("Failed to remove existing report: {}", e))?;
     }
-
     Ok(())
 }
 
+
 /// Read JSON into `SubmissionDetailResponse`, mutate, and write atomically.
 async fn update_submission_report_marks(
-    base_path: &std::path::Path,
+    module_id: i64,
+    assignment_id: i64,
     submission: &AssignmentSubmissionModel,
     new_mark: &MarkSummary,
 ) -> Result<(), String> {
-    let attempt_dir = base_path
-        .join("assignment_submissions")
-        .join(format!("user_{}", submission.user_id))
-        .join(format!("attempt_{}", submission.attempt));
-    let report_path = attempt_dir.join("submission_report.json");
+    let report_path = submission_report_path(
+        module_id,
+        assignment_id,
+        submission.user_id,
+        submission.attempt,
+    );
 
-    let content = std::fs::read_to_string(&report_path)
+    let content = fs::read_to_string(&report_path)
         .map_err(|e| format!("Failed to read existing report: {}", e))?;
 
-    let mut resp: SubmissionDetailResponse = serde_json::from_str(&content).map_err(|e| {
-        format!(
-            "Failed to deserialize report into SubmissionDetailResponse: {}",
-            e
-        )
-    })?;
+    let mut resp: SubmissionDetailResponse =
+        serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to deserialize report: {}", e))?;
 
-    resp.mark = MarkSummary {
-        earned: new_mark.earned,
-        total: new_mark.total,
-    };
-
+    resp.mark = MarkSummary { earned: new_mark.earned, total: new_mark.total };
     resp.updated_at = Utc::now().to_rfc3339();
 
     let output = serde_json::to_string_pretty(&resp)
         .map_err(|e| format!("Failed to serialize updated report: {}", e))?;
-    std::fs::write(&report_path, output)
-        .map_err(|e| format!("Failed to write temp report: {}", e))?;
+    fs::write(&report_path, output)
+        .map_err(|e| format!("Failed to write report: {}", e))?;
 
     Ok(())
 }
+
 
 /// Executes bulk operation on submissions (remark or resubmit)
 async fn execute_bulk_operation<F, Fut>(
@@ -645,10 +636,6 @@ where
 /// - Saves the uploaded file and generated outputs to disk
 /// - Triggers code execution and marking
 /// - Saves a copy of the grading report as `submission_report.json` in the attempt folder
-///
-/// ### Filesystem
-/// - Uploaded file and outputs are stored under:
-///   `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/assignment_submissions/user_{user_id}/attempt_{n}/`
 ///
 /// ### Notes
 /// - Each submission increments the attempt number for the user/assignment
@@ -818,7 +805,7 @@ pub async fn submit_assignment(
             }
         };
 
-        let memo_dir = MemoOutputModel::full_directory_path(module_id, assignment_id);
+        let memo_dir = memo_output_dir(module_id, assignment_id);
         let mut task_file_pairs = vec![];
 
         for task in &tasks {
@@ -840,7 +827,7 @@ pub async fn submit_assignment(
                 .await;
 
             let memo_path = match memo_output_res {
-                Ok(Some(memo_output)) => MemoOutputModel::storage_root().join(&memo_output.path),
+                Ok(Some(memo_output)) => storage_root().join(&memo_output.path),
                 Ok(None) => memo_dir.join(format!("no_memo_for_task_{}", task.id)),
                 Err(_) => {
                     return (
@@ -872,7 +859,7 @@ pub async fn submit_assignment(
         );
     }
 
-    let (base_path, mark_allocator_path, memo_outputs) =
+    let (_, mark_allocator_path, memo_outputs) =
         match get_assignment_paths(assignment.module_id, assignment.id) {
             Ok(paths) => paths,
             Err(e) => {
@@ -886,7 +873,6 @@ pub async fn submit_assignment(
     match grade_submission(
         submission,
         &assignment,
-        &base_path,
         &memo_outputs,
         &mark_allocator_path,
         &config,
@@ -1004,7 +990,7 @@ pub async fn remark_submissions(
         );
     }
 
-    let (base_path, mark_allocator_path, memo_outputs) =
+    let (_, mark_allocator_path, memo_outputs) =
         match get_assignment_paths(assignment.module_id, assignment.id) {
             Ok(paths) => paths,
             Err(e) => {
@@ -1028,16 +1014,16 @@ pub async fn remark_submissions(
     let (regraded, failed) =
         execute_bulk_operation(submission_ids.clone(), assignment_id, db, |submission| {
             let assignment = assignment.clone();
-            let base_path = base_path.clone();
             let memo_outputs = memo_outputs.clone();
             let mark_allocator_path = mark_allocator_path.clone();
             let config = config.clone();
             async move {
-                let student_output_dir = base_path
-                    .join("assignment_submissions")
-                    .join(format!("user_{}", submission.user_id))
-                    .join(format!("attempt_{}", submission.attempt))
-                    .join("submission_output");
+                let student_output_dir = submission_output_dir(
+                    assignment.module_id,
+                    assignment.id,
+                    submission.user_id,
+                    submission.attempt,
+                );
 
                 let mut student_outputs = Vec::new();
                 if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
@@ -1071,12 +1057,16 @@ pub async fn remark_submissions(
                     total: mark_report.data.mark.total,
                 };
 
-                match update_submission_report_marks(&base_path, &submission, &mark).await {
+                match update_submission_report_marks(
+                    assignment.module_id,
+                    assignment.id,
+                    &submission,
+                    &mark,
+                ).await {
                     Ok(_) => Ok(()),
                     Err(_err) => grade_submission(
                         submission,
                         &assignment,
-                        &base_path,
                         &memo_outputs,
                         &mark_allocator_path,
                         &config,
@@ -1219,7 +1209,7 @@ pub async fn resubmit_submissions(
         );
     }
 
-    let (base_path, mark_allocator_path, memo_outputs) =
+    let (_, mark_allocator_path, memo_outputs) =
         match get_assignment_paths(assignment.module_id, assignment.id) {
             Ok(paths) => paths,
             Err(e) => {
@@ -1244,12 +1234,11 @@ pub async fn resubmit_submissions(
         execute_bulk_operation(submission_ids.clone(), assignment_id, db, |submission| {
             let db = db.clone();
             let assignment = assignment.clone();
-            let base_path = base_path.clone();
             let memo_outputs = memo_outputs.clone();
             let mark_allocator_path = mark_allocator_path.clone();
             let config = config.clone();
             async move {
-                if let Err(e) = clear_submission_output(&submission, &base_path) {
+                if let Err(e) = clear_submission_output(&submission, assignment.module_id, assignment.id) {
                     return Err(e);
                 }
                 if let Err(e) = process_submission_code(
@@ -1267,7 +1256,6 @@ pub async fn resubmit_submissions(
                 grade_submission(
                     submission,
                     &assignment,
-                    &base_path,
                     &memo_outputs,
                     &mark_allocator_path,
                     &config,

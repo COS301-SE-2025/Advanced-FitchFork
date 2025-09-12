@@ -65,7 +65,7 @@ use util::{execution_config::ExecutionConfig, state::AppState};
 /// - **500** – Failed to load configuration from disk
 ///
 /// ### Notes
-/// - Configurations are stored on disk under `ASSIGNMENT_STORAGE_ROOT/module_{id}/assignment_{id}/config/config.json`
+/// - Configurations are stored on disk.
 /// - Config format uses [`ExecutionConfig`] as the schema
 /// - This is an example schema and will evolve over time
 pub async fn get_assignment_config(

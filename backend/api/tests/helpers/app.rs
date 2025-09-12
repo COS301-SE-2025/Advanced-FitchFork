@@ -6,7 +6,9 @@ use axum::{
     Router,
 };
 use sea_orm::DatabaseConnection;
-use util::{config::AppConfig, state::AppState, ws::WebSocketManager};
+use tempfile::TempDir;
+use util::test_helpers::{setup_test_storage_root};
+use util::{state::AppState, ws::WebSocketManager};
 use api::{
     auth::guards::validate_known_ids,
     routes::routes,
@@ -21,7 +23,6 @@ pub async fn make_test_app() -> (
     AppState,
 ) {
     let db: DatabaseConnection = db::test_utils::setup_test_db().await;
-    let _ = AppConfig::from_env(); // Initialize the config singleton
     let ws = WebSocketManager::new();
     let app_state = AppState::new(db, ws);
 
@@ -32,4 +33,15 @@ pub async fn make_test_app() -> (
 
     let boxed = router.into_service().boxed_clone();
     (boxed, app_state)
+}
+
+pub async fn make_test_app_with_storage() -> (
+    BoxCloneService<Request<Body>, Response, Infallible>,
+    AppState,
+    TempDir,
+) {
+    let tmp = setup_test_storage_root();
+
+    let (app, app_state) = make_test_app().await;
+    (app, app_state, tmp)
 }

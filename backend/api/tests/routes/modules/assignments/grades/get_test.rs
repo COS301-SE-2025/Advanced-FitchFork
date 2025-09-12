@@ -14,12 +14,12 @@ mod tests {
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use serde_json::{json, Value};
-    use std::{collections::HashMap, fs, path::PathBuf};
-    use tempfile::{tempdir, TempDir};
+    use util::paths::{config_dir, submission_report_path};
+    use std::{collections::HashMap, fs};
     use tower::ServiceExt;
 
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     use sea_orm::{ActiveModelTrait, Set};
     use serial_test::serial;
@@ -35,31 +35,17 @@ mod tests {
         student2: UserModel,
         module: ModuleModel,
         assignment_last: AssignmentModel,
-        tmp: TempDir,
         // assignment tasks created for assignment_last
         t_ids_by_num: HashMap<i64, i64>, // task_number -> task_id
     }
 
-    // ─────────────────────────────────────────────────────────────────────────────
-    // Helpers
-    // ─────────────────────────────────────────────────────────────────────────────
-    fn set_storage_root(tmp: &TempDir) {
-        unsafe {
-            std::env::set_var("ASSIGNMENT_STORAGE_ROOT", tmp.path().as_os_str());
-        }
-    }
-
     fn write_config_json(
-        base: &TempDir,
         module_id: i64,
         assignment_id: i64,
         grading_policy_lower: &str, // "best" | "last"
         pass_mark: u32,
     ) {
-        let config_dir = PathBuf::from(base.path())
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("config");
+        let config_dir = config_dir(module_id, assignment_id);
         fs::create_dir_all(&config_dir).unwrap();
 
         let cfg = json!({
@@ -114,7 +100,6 @@ mod tests {
     /// Writes a submission_report.json matching the handler's shape.
     /// "tasks[].name" is set to the **task id as a string** so the route must resolve it.
     fn write_submission_report(
-        base: &TempDir,
         module_id: i64,
         assignment_id: i64,
         user_id: i64,
@@ -125,16 +110,14 @@ mod tests {
         created_at: chrono::DateTime<Utc>,
         mark_earned: i64,
         mark_total: i64,
-        is_practice: bool, // 👈
+        is_practice: bool,
         tasks_payload: Vec<(i64 /* task_id */, i64 /* task_number */, i64 /* earned */, i64 /* total */)>,
     ) {
-        let path = PathBuf::from(base.path())
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("assignment_submissions")
-            .join(format!("user_{}", user_id))
-            .join(format!("attempt_{}", attempt));
-        fs::create_dir_all(&path).unwrap();
+        let path = submission_report_path(module_id, assignment_id, user_id, attempt);
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
 
         let tasks_json: Vec<Value> = tasks_payload
             .into_iter()
@@ -157,19 +140,18 @@ mod tests {
           "created_at": created_at.to_rfc3339(),
           "updated_at": created_at.to_rfc3339(),
           "mark": { "earned": mark_earned, "total": mark_total },
-          "is_practice": is_practice, // 👈
+          "is_practice": is_practice,
           "is_late": false,
           "tasks": tasks_json
         });
 
-        fs::write(path.join("submission_report.json"), serde_json::to_string_pretty(&report).unwrap())
+        fs::write(path, serde_json::to_string_pretty(&report).unwrap())
             .unwrap();
     }
 
     /// Simple seeder (non-practice, non-ignored).
     async fn seed_submission(
         db: &sea_orm::DatabaseConnection,
-        tmp: &TempDir,
         module_id: i64,
         assignment: &AssignmentModel,
         user: &UserModel,
@@ -200,7 +182,6 @@ mod tests {
 
         update_submission_time(db, sub.id, created).await;
         write_submission_report(
-            tmp,
             module_id,
             assignment.id,
             user.id,
@@ -221,7 +202,6 @@ mod tests {
     /// Seeder that lets you set practice/ignored flags explicitly.
     async fn seed_submission_with_flags(
         db: &sea_orm::DatabaseConnection,
-        tmp: &TempDir,
         module_id: i64,
         assignment: &AssignmentModel,
         user: &UserModel,
@@ -259,7 +239,6 @@ mod tests {
         }
 
         write_submission_report(
-            tmp,
             module_id,
             assignment.id,
             user.id,
@@ -278,9 +257,6 @@ mod tests {
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let tmp = tempdir().unwrap();
-        set_storage_root(&tmp);
-
         // Users & module
         let lecturer_user =
             UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
@@ -337,14 +313,14 @@ mod tests {
         )
         .await
         .unwrap();
-        write_config_json(&tmp, module.id, assignment_last.id, "last", 50);
+        write_config_json(module.id, assignment_last.id, "last", 50);
 
         // assignment_tasks (task_number → name). IDs are auto; we capture them.
         let mut t_ids_by_num = HashMap::new();
 
-        let t1 = AssignmentTaskModel::create(db, assignment_last.id, 1, "FizzBuzz", "run fizz").await.unwrap();
-        let t2 = AssignmentTaskModel::create(db, assignment_last.id, 2, "Palindrome", "run pal").await.unwrap();
-        let t3 = AssignmentTaskModel::create(db, assignment_last.id, 3, "Sorting", "run sort").await.unwrap();
+        let t1 = AssignmentTaskModel::create(db, assignment_last.id, 1, "FizzBuzz", "run fizz", false).await.unwrap();
+        let t2 = AssignmentTaskModel::create(db, assignment_last.id, 2, "Palindrome", "run pal", false).await.unwrap();
+        let t3 = AssignmentTaskModel::create(db, assignment_last.id, 3, "Sorting", "run sort", false).await.unwrap();
         t_ids_by_num.insert(1, t1.id);
         t_ids_by_num.insert(2, t2.id);
         t_ids_by_num.insert(3, t3.id);
@@ -357,7 +333,6 @@ mod tests {
             student2,
             module,
             assignment_last,
-            tmp,
             t_ids_by_num,
         }
     }
@@ -369,13 +344,13 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn access_control_only_lecturer_and_assistant_can_list_grades() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
         // Seed a minimal submission so the handler has something to chew on
         let _ = seed_submission(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student1,
+            db, data.module.id, &data.assignment_last, &data.student1,
             1, 10, 20, -10,
             vec![(data.t_ids_by_num[&1], 1, 5, 10)],
         ).await;
@@ -416,13 +391,13 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn access_control_only_lecturer_and_assistant_can_export_csv() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
         // Minimal seed
         let _ = seed_submission(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student2,
+            db, data.module.id, &data.assignment_last, &data.student2,
             1, 18, 20, -5,
             vec![(data.t_ids_by_num[&2], 2, 9, 10)],
         ).await;
@@ -462,14 +437,14 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn list_grades_happy_last_policy_with_task_name_mapping() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
         // student1 → attempt 1 older, attempt 2 newer → LAST picks attempt 2
         // Report has "name" = task_id string; handler must map to real names.
         let _s1a1 = seed_submission(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student1,
+            db, data.module.id, &data.assignment_last, &data.student1,
             1, 10, 27, -200,
             vec![
                 (data.t_ids_by_num[&1], 1, 3, 9),
@@ -478,7 +453,7 @@ mod tests {
         ).await;
 
         let _s1a2 = seed_submission(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student1,
+            db, data.module.id, &data.assignment_last, &data.student1,
             2, 21, 27, -100,
             vec![
                 (data.t_ids_by_num[&1], 1, 8, 9),
@@ -489,7 +464,7 @@ mod tests {
 
         // student2 → one attempt
         let _s2a1 = seed_submission(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student2,
+            db, data.module.id, &data.assignment_last, &data.student2,
             1, 24, 27, -50,
             vec![
                 (data.t_ids_by_num[&1], 1, 9, 9),
@@ -547,7 +522,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn list_grades_excludes_practice_and_ignored() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
@@ -556,7 +531,7 @@ mod tests {
         //  a2: practice (excluded)
         //  a3: ignored (excluded)
         let _s1a1_valid = seed_submission_with_flags(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student1,
+            db, data.module.id, &data.assignment_last, &data.student1,
             1, 10, 20, -300,
             false, /* is_practice */
             false, /* ignored */
@@ -564,7 +539,7 @@ mod tests {
         ).await;
 
         let _s1a2_practice = seed_submission_with_flags(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student1,
+            db, data.module.id, &data.assignment_last, &data.student1,
             2, 18, 20, -200,
             true,  /* is_practice */
             false, /* ignored */
@@ -572,7 +547,7 @@ mod tests {
         ).await;
 
         let _s1a3_ignored = seed_submission_with_flags(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student1,
+            db, data.module.id, &data.assignment_last, &data.student1,
             3, 19, 20, -100,
             false, /* is_practice */
             true,  /* ignored */
@@ -581,7 +556,7 @@ mod tests {
 
         // student2: only ignored → should not appear in final list
         let _s2a1_ignored = seed_submission_with_flags(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student2,
+            db, data.module.id, &data.assignment_last, &data.student2,
             1, 20, 20, -50,
             false, /* is_practice */
             true,  /* ignored */
@@ -629,7 +604,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn list_grades_invalid_sort_returns_400() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
@@ -651,19 +626,19 @@ mod tests {
     #[tokio::test]
     #[serial] 
     async fn list_grades_username_query_filters() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
         // minimal: one submission each + reports
         let _ = seed_submission(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student1,
+            db,  data.module.id, &data.assignment_last, &data.student1,
             1, 10, 20, -10,
             vec![(data.t_ids_by_num[&1], 1, 5, 10)],
         ).await;
 
         let _ = seed_submission(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student2,
+            db, data.module.id, &data.assignment_last, &data.student2,
             1, 18, 20, -5,
             vec![(data.t_ids_by_num[&2], 2, 9, 10)],
         ).await;
@@ -693,18 +668,18 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn export_grades_csv_union_of_tasks_and_percentages() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
         // student1 (last attempt is #2)
         let _s1a1 = seed_submission(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student1,
+            db,  data.module.id, &data.assignment_last, &data.student1,
             1, 10, 27, -200,
             vec![(data.t_ids_by_num[&1], 1, 5, 9)],
         ).await;
         let _s1a2 = seed_submission(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student1,
+            db, data.module.id, &data.assignment_last, &data.student1,
             2, 21, 27, -100,
             vec![
                 (data.t_ids_by_num[&1], 1, 8, 9), // 88.888…
@@ -715,7 +690,7 @@ mod tests {
 
         // student2 (only attempt). Leave out task 3 to test empty cells.
         let _s2a1 = seed_submission(
-            db, &data.tmp, data.module.id, &data.assignment_last, &data.student2,
+            db, data.module.id, &data.assignment_last, &data.student2,
             1, 24, 27, -50,
             vec![
                 (data.t_ids_by_num[&1], 1, 9, 9), // 100

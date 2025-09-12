@@ -12,6 +12,30 @@ use db::test_utils::setup_test_db;
 use sea_orm::ColumnTrait;
 use sea_orm::QueryFilter;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+use util::paths::{
+    storage_root, makefile_dir, memo_dir, submission_zip_path, interpreter_dir,
+};
+use util::execution_config::ExecutionConfig;
+use util::test_helpers::setup_test_storage_root;
+
+
+fn write_zip(path: &std::path::Path, entries: &[(&str, &[u8])]) -> std::io::Result<()> {
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+    let mut buf = Vec::new();
+    {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts = SimpleFileOptions::default();
+        for (name, bytes) in entries {
+            zip.start_file(*name, opts)?;
+            zip.write_all(bytes)?;
+        }
+        zip.finish()?;
+    }
+    if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
+    std::fs::write(path, &buf)
+}
+
 
 async fn seed_user(db: &DatabaseConnection) -> i64 {
     let user_id = 1;
@@ -104,11 +128,9 @@ async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
 async fn seed_submission(
     db: &DatabaseConnection,
     assignment_id: i64,
-    assignment_submission_id: i64,
 ) -> SubmissionModel {
     let user_id = seed_user(db).await;
     let attempt = 1;
-    let filename = "submission.zip";
 
     let assignment = AssignmentEntity::find_by_id(assignment_id)
         .one(db)
@@ -118,15 +140,19 @@ async fn seed_submission(
 
     let module_id = assignment.module_id;
 
-    let submission_dir =
-        SubmissionModel::full_directory_path(module_id, assignment_id, user_id, attempt);
-    let file_path = submission_dir.join(format!("{}.zip", assignment_submission_id));
+    // Where the submission lives on disk:
+    let file_path = submission_zip_path(module_id, assignment_id, user_id, attempt);
 
-    let relative_path = file_path
-        .strip_prefix(SubmissionModel::storage_root())
-        .unwrap()
+    // Write a minimal valid zip so downstream reads succeed:
+    write_zip(&file_path, &[("README.txt", b"dummy submission")]).expect("write submission zip");
+
+    // DB wants a relative path from the storage root:
+    let rel = file_path
+        .strip_prefix(storage_root())
+        .expect("strip prefix")
         .to_string_lossy()
         .to_string();
+
 
     let now = Utc::now();
 
@@ -134,9 +160,16 @@ async fn seed_submission(
         assignment_id: Set(assignment_id),
         user_id: Set(user_id),
         attempt: Set(attempt),
-        filename: Set(filename.to_string()),
+        // use the actual filename we created
+        filename: Set(
+            file_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("submission.zip")
+                .to_string(),
+        ),
         file_hash: Set("0".to_string()),
-        path: Set(relative_path),
+        path: Set(rel),
         is_practice: Set(false),
         created_at: Set(now),
         updated_at: Set(now),
@@ -165,21 +198,28 @@ async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, inte
 
     let module_id = assignment.module_id;
 
-    // The filename on disk is "{interpreter_id}.zip"
     let filename = format!("{}.zip", interpreter_id);
 
-    // Path relative to ASSIGNMENT_STORAGE_ROOT, matching your model's logic:
-    let relative_path = format!(
-        "module_{}/assignment_{}/interpreter/{}",
-        module_id, assignment_id, filename
-    );
+    // Place on disk using path utils:
+    let interp_dir = interpreter_dir(module_id, assignment_id);
+    let interp_path = interp_dir.join(&filename);
 
-    // The command to run the interpreter - put your actual interpreter command here
-    let command = "g++ /code/interpreter.cpp -o /code/interpreter_exe &&
- /code/interpreter_exe"
+
+    // Minimal interpreter payload (content won't be used in compile stopgap case)
+    write_zip(&interp_path, &[("interpreter.cpp", b"int main(){return 0;}")])
+        .expect("write interpreter zip");
+
+    // Relative DB path:
+    let relative_path = interp_path
+        .strip_prefix(storage_root())
+        .expect("strip prefix")
+        .to_string_lossy()
         .to_string();
 
-    // Check if an interpreter for this assignment already exists
+
+    // The command; choose something that triggers the compile stopgap if desired
+    let command = "g++ Main.cpp -o main && ./main".to_string();
+
     if InterpreterEntity::find()
         .filter(InterpreterColumn::AssignmentId.eq(assignment_id))
         .one(db)
@@ -196,39 +236,54 @@ async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, inte
             updated_at: Set(now),
             ..Default::default()
         };
-        interpreter
-            .insert(db)
-            .await
-            .expect("Failed to insert interpreter");
+        interpreter.insert(db).await.expect("Failed to insert interpreter");
     }
 }
 
 async fn setup_test_db_for_run_interpreter(
     assignment_id: i64,
     module_id: i64,
-    assignment_submission_id: i64,
     interpreter_id: i64,
 ) -> (DatabaseConnection, i64) {
     let db = setup_test_db().await;
+
+    // IMPORTANT: make sure storage root is set and lives long enough
+    // e.g., in your test use a TempDir and set the env var before calling this helper.
 
     seed_user(&db).await;
     seed_module(&db, module_id, &format!("COS{}", module_id)).await;
     seed_assignment(&db, assignment_id, module_id).await;
     seed_tasks(&db, assignment_id).await;
-    let submission = seed_submission(&db, assignment_id, assignment_submission_id).await;
+
+    // Write default execution config
+    ExecutionConfig::default_config()
+        .save(module_id, assignment_id)
+        .expect("save config.json");
+
+    // Satisfy validators: memo + makefile need a .zip present
+    {
+        let memo_zip = memo_dir(module_id, assignment_id).join("memo.zip");
+        write_zip(&memo_zip, &[("memo.txt", b"memo")]).expect("write memo.zip");
+
+        let make_zip = makefile_dir(module_id, assignment_id).join("makefile.zip");
+        write_zip(&make_zip, &[("Makefile", b"all:\n\t@echo ok")]).expect("write makefile.zip");
+    }
+
+    let submission = seed_submission(&db, assignment_id).await;
     seed_interpreter_file(&db, assignment_id, interpreter_id).await;
 
     (db, submission.id)
 }
 
+
 #[tokio::test]
 #[ignore]
 async fn test_run_interpreter_9998_cpp() {
-    dotenvy::dotenv().ok();
+    // Keep this TempDir alive for the whole test so files remain on disk
+    let _tmp = setup_test_storage_root();
 
     let assignment_id = 9998;
     let module_id = 9998;
-    let assignment_submission_id = 182;
     let interpreter_id = 19;
 
     let gene_string = "01234";
@@ -236,13 +291,19 @@ async fn test_run_interpreter_9998_cpp() {
     let (db, submission_id) = setup_test_db_for_run_interpreter(
         assignment_id,
         module_id,
-        assignment_submission_id,
         interpreter_id,
     )
     .await;
 
-    match run_interpreter(&db, submission_id, &gene_string).await {
+    // run_interpreter will:
+    // 1) synthesize main zip (compile stopgap)
+    // 2) validate memo/makefile/main (memo+makefile we seeded, main just created)
+    // 3) run tasks and save outputs
+    match run_interpreter(&db, submission_id, gene_string).await {
         Ok(_) => println!("run_interpreter completed successfully for assignment 9998."),
         Err(e) => panic!("run_interpreter failed: {}", e),
     }
+
+    // keep `tmp` in scope until here
 }
+

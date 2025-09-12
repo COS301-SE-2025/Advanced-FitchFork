@@ -8,7 +8,7 @@ mod tests {
     use dotenvy;
     use chrono::{Utc, TimeZone, DateTime};
     use sea_orm::{Set, ActiveModelTrait, EntityTrait};
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin_user: UserModel,
@@ -88,7 +88,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_shouldnt_update_status() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -121,7 +121,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_optional_description_none() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -153,7 +153,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_success_status_variants() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -183,7 +183,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -210,7 +210,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_forbidden_for_unassigned_user() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
@@ -237,7 +237,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_invalid_assignment_type() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -269,7 +269,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_invalid_dates() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -301,7 +301,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_missing_fields() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -323,7 +323,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -350,7 +350,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_wrong_module() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -378,7 +378,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_module_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -406,7 +406,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_put_assignment_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
@@ -432,7 +432,7 @@ mod tests {
     /// Test Case: Successful Transition from Ready to Open
     #[tokio::test]
     async fn test_open_assignment_success_from_ready() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -464,7 +464,7 @@ mod tests {
     /// Test Case: Successful Transition from Closed to Open
     #[tokio::test]
     async fn test_open_assignment_success_from_closed() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -489,7 +489,7 @@ mod tests {
     /// Test Case: Successful Transition from Archived to Open
     #[tokio::test]
     async fn test_open_assignment_success_from_archived() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -514,7 +514,7 @@ mod tests {
     /// Test Case: Forbidden When Already Open
     #[tokio::test]
     async fn test_open_assignment_already_open() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -539,7 +539,7 @@ mod tests {
     /// Test Case: Forbidden for Student
     #[tokio::test]
     async fn test_open_assignment_forbidden_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -564,7 +564,7 @@ mod tests {
     /// Test Case: Forbidden When in Setup State
     #[tokio::test]
     async fn test_open_assignment_invalid_setup_state() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let assignment = data.assignments[0].clone();
@@ -587,7 +587,7 @@ mod tests {
     /// Test Case: Not Found for Wrong Module
     #[tokio::test]
     async fn test_open_assignment_wrong_module() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -612,7 +612,7 @@ mod tests {
     /// Test Case: Unauthorized Access
     #[tokio::test]
     async fn test_open_assignment_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -635,7 +635,7 @@ mod tests {
     /// Test Case: Admin Can Open Without Module Role
     #[tokio::test]
     async fn test_open_assignment_admin_without_role() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -660,7 +660,7 @@ mod tests {
     /// Test Case: Assignment Not Found
     #[tokio::test]
     async fn test_open_assignment_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -679,7 +679,7 @@ mod tests {
     /// Test Case: Successful Transition from Open to Closed (Lecturer)
     #[tokio::test]
     async fn test_close_assignment_success_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -711,7 +711,7 @@ mod tests {
     /// Test Case: Successful Transition from Open to Closed (Admin)
     #[tokio::test]
     async fn test_close_assignment_success_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -736,7 +736,7 @@ mod tests {
     /// Test Case: Forbidden When Not Open
     #[tokio::test]
     async fn test_close_assignment_invalid_state() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -789,7 +789,7 @@ mod tests {
     /// Test Case: Forbidden for Student
     #[tokio::test]
     async fn test_close_assignment_forbidden_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -814,7 +814,7 @@ mod tests {
     /// Test Case: Not Found for Wrong Module
     #[tokio::test]
     async fn test_close_assignment_wrong_module() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -839,7 +839,7 @@ mod tests {
     /// Test Case: Unauthorized Access
     #[tokio::test]
     async fn test_close_assignment_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -862,7 +862,7 @@ mod tests {
     /// Test Case: Admin Can Close Without Module Role
     #[tokio::test]
     async fn test_close_assignment_admin_without_role() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -887,7 +887,7 @@ mod tests {
     /// Test Case: Assignment Not Found
     #[tokio::test]
     async fn test_close_assignment_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -906,7 +906,7 @@ mod tests {
     /// Test Case: Forbidden for Unassigned User
     #[tokio::test]
     async fn test_close_assignment_forbidden_unassigned() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -931,7 +931,7 @@ mod tests {
     /// Test Case: Module Not Found
     #[tokio::test]
     async fn test_close_assignment_module_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
@@ -956,7 +956,7 @@ mod tests {
     /// Test Case: Successful Bulk Update by Lecturer
     #[tokio::test]
     async fn test_bulk_update_assignments_success_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -1011,7 +1011,7 @@ mod tests {
     /// Test Case: Successful Bulk Update by Admin
     #[tokio::test]
     async fn test_bulk_update_assignments_success_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -1050,7 +1050,7 @@ mod tests {
     /// Test Case: Partial Success with Some Failures
     #[tokio::test]
     async fn test_bulk_update_assignments_partial_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -1103,7 +1103,7 @@ mod tests {
     /// Test Case: No Assignment IDs Provided
     #[tokio::test]
     async fn test_bulk_update_assignments_no_ids() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -1132,7 +1132,7 @@ mod tests {
     /// Test Case: Forbidden for Student
     #[tokio::test]
     async fn test_bulk_update_assignments_forbidden_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -1156,7 +1156,7 @@ mod tests {
     /// Test Case: Update Only Available From
     #[tokio::test]
     async fn test_bulk_update_only_available_from() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -1200,7 +1200,7 @@ mod tests {
     /// Test Case: Update Only Due Date
     #[tokio::test]
     async fn test_bulk_update_only_due_date() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -1244,7 +1244,7 @@ mod tests {
     /// Test Case: Assignment in Wrong Module
     #[tokio::test]
     async fn test_bulk_update_wrong_module() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let other_assignment = AssignmentModel::create(
@@ -1314,7 +1314,7 @@ mod tests {
     /// Test Case: Unauthorized Access
     #[tokio::test]
     async fn test_bulk_update_assignments_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
@@ -1336,7 +1336,7 @@ mod tests {
     /// Test Case: Forbidden for Unassigned User
     #[tokio::test]
     async fn test_bulk_update_assignments_forbidden_unassigned() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);

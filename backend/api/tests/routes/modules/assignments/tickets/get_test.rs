@@ -15,7 +15,7 @@ mod tests {
         tickets::Model as TicketModel,
     };
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> (UserModel, UserModel, UserModel, ModuleModel, AssignmentModel, TicketModel) {
         let module = ModuleModel::create(db, "COS133", 2025, Some("Testing Module"), 12)
@@ -68,7 +68,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_author, _lecturer, _outsider, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
@@ -95,7 +95,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_author, lecturer, _, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
@@ -123,7 +123,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_success_as_assistant_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_author, _lecturer, _outsider, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
@@ -158,7 +158,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_success_as_tutor() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_author, _lecturer, _outsider, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
@@ -194,7 +194,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_success_as_author() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (author, _, _, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
@@ -216,7 +216,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_, _, outsider, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
@@ -238,7 +238,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_author, lecturer, _, module, assignment, _) =
             setup_test_data(app_state.db()).await;
 
@@ -260,7 +260,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_, _, _, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
@@ -280,7 +280,7 @@ mod tests {
 
         #[tokio::test]
     async fn test_get_ticket_with_user_student_not_author_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_, _, _, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
