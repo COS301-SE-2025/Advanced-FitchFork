@@ -1,6 +1,3 @@
-// ai/src/utils/evaluator.rs
-
-
 use util::execution_config::ExecutionConfig;
 use crate::HashMap;
 

@@ -1,5 +1,3 @@
-// lib.rs
-
 // GA ⇄ Interpreter driver
 //
 // This file wires to Genetic Algorithm to the external code interpreter, the process is as follows
@@ -31,12 +29,10 @@ use crate::algorithms::genetic_algorithm::{Chromosome, GeneticAlgorithm};
 use crate::utils::evaluator::{Evaluator, TaskSpec};
 use crate::utils::output::Output;
 use code_runner::run_interpreter;
-use db::models::assignment_submission::Entity as AssignmentSubmission;
-use sea_orm::DatabaseConnection;
-use sea_orm::EntityTrait;
-// use serde_json::Value;
 use std::collections::HashMap;
 use util::execution_config::ExecutionConfig;
+use services::service::Service;
+use services::assignment_submission::AssignmentSubmissionService;
 
 // -----------------------------------------------------------------------------
 // Public entrypoint: build GA + Evaluator + Components, then run the loop
@@ -62,7 +58,6 @@ use util::execution_config::ExecutionConfig;
 /// # Returns
 /// - `Ok(())` on success, or a `String` error propagated from the interpreter or GA driver
 pub async fn run_ga_job(
-    db: &DatabaseConnection,
     submission_id: i64,
     config: ExecutionConfig,
     module_id: i64,
@@ -99,13 +94,11 @@ pub async fn run_ga_job(
     };
 
     // Unused fetch closure for signature compatibility
-    let mut unused_fetch = |_db: &DatabaseConnection,
-                            _sid: i64|
+    let mut unused_fetch = |_sid: i64|
      -> Result<Vec<(i64, String)>, String> { Err("unused".into()) };
 
     // Run the GA ↔ interpreter loop
     run_ga_end_to_end(
-        db,
         submission_id,
         &mut ga,
         &mut comps,
@@ -137,7 +130,6 @@ pub async fn run_ga_job(
 /// # Errors
 /// - Any error from the interpreter or the caller-supplied closures is propagated.
 pub async fn run_ga_end_to_end<D, F>(
-    db: &DatabaseConnection,
     submission_id: i64,
     ga: &mut GeneticAlgorithm,
     comps: &mut Components,
@@ -150,7 +142,7 @@ where
     // Given raw outputs for this chromosome, return counts the Components expect
     D: FnMut(&[(i64, String)], &[(i64, String)]) -> (usize, usize),
     // Same as mentioned earlier, not used
-    F: FnMut(&DatabaseConnection, i64) -> Result<Vec<(i64, String)>, String>,
+    F: FnMut(i64) -> Result<Vec<(i64, String)>, String>,
 {
     let _ = &mut fetch_outputs; // suppress unused
 
@@ -172,8 +164,7 @@ where
                 .join(",");
 
             // Load submission to get user_id and attempt_number
-            let submission = AssignmentSubmission::find_by_id(submission_id)
-                .one(db)
+            let submission = AssignmentSubmissionService::find_by_id(submission_id)
                 .await
                 .map_err(|e| format!("Failed to fetch submission: {}", e))?
                 .ok_or_else(|| format!("Submission {} not found", submission_id))?;
@@ -184,10 +175,9 @@ where
             // Run interpreter: executes code for this chromosome, writes artifacts
             //    to DB, and returns per-task outputs for *this* submission.
             //    The interpreter is the source of truth for stdout/stderr/exit codes.
-            run_interpreter(db, submission_id, &generated_string).await?;
+            run_interpreter(submission_id, &generated_string).await?;
 
             let task_outputs: Vec<(i64, String)> = Output::get_submission_output_no_coverage(
-                db,
                 module_id,
                 assignment_id,
                 user_id,

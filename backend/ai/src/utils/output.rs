@@ -1,11 +1,9 @@
-use db::models::assignment_memo_output::Model as MemoOutputModel;
-use db::models::assignment_submission_output::Entity as SubmissionOutputEntity;
-use db::models::assignment_submission_output::Model as SubmissionOutputModel;
-use db::models::assignment_task::Entity as AssignmentTaskEntity;
-
-use sea_orm::EntityTrait;
 use std::fs;
 use std::io::{self, ErrorKind};
+use services::service::Service;
+use services::assignment_memo_output::AssignmentMemoOutputService;
+use services::assignment_submission_output::AssignmentSubmissionOutputService;
+use services::assignment_task::AssignmentTaskService;
 
 #[allow(dead_code)]
 pub struct Output;
@@ -15,7 +13,7 @@ impl Output {
     /// returning Vec<(task_number, file_contents_as_string)>
     #[allow(dead_code)]
     pub fn get_memo_output(module_id: i64, assignment_id: i64) -> io::Result<Vec<(i64, String)>> {
-        let dir_path = MemoOutputModel::storage_root()
+        let dir_path = AssignmentMemoOutputService::storage_root()
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{assignment_id}"))
             .join("memo_output");
@@ -50,14 +48,12 @@ impl Output {
     /// returning Vec<(task_number, file_contents_as_string)>
     #[allow(dead_code)]
     pub async fn get_submission_output_no_coverage(
-        db: &sea_orm::DatabaseConnection,
         module_id: i64,
         assignment_id: i64,
         user_id: i64,
         attempt_number: i64,
     ) -> io::Result<Vec<(i64, String)>> {
         Self::get_submission_output_filtered(
-            db,
             module_id,
             assignment_id,
             user_id,
@@ -69,14 +65,12 @@ impl Output {
 
     #[allow(dead_code)]
     pub async fn get_submission_output_code_coverage(
-        db: &sea_orm::DatabaseConnection,
         module_id: i64,
         assignment_id: i64,
         user_id: i64,
         attempt_number: i64,
     ) -> io::Result<Vec<(i64, String)>> {
         Self::get_submission_output_filtered(
-            db,
             module_id,
             assignment_id,
             user_id,
@@ -87,14 +81,13 @@ impl Output {
     }
 
     async fn get_submission_output_filtered(
-        db: &sea_orm::DatabaseConnection,
         module_id: i64,
         assignment_id: i64,
         user_id: i64,
         attempt_number: i64,
         code_coverage: bool,
     ) -> io::Result<Vec<(i64, String)>> {
-        let dir_path = SubmissionOutputModel::storage_root()
+        let dir_path = AssignmentMemoOutputService::storage_root()
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{assignment_id}"))
             .join("assignment_submissions")
@@ -124,13 +117,10 @@ impl Output {
             if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
                 if let Ok(output_id) = file_stem.parse::<i64>() {
                     // Look up the output in the DB
-                    if let Ok(Some(output)) =
-                        SubmissionOutputEntity::find_by_id(output_id).one(db).await
+                    if let Ok(Some(output)) = AssignmentSubmissionOutputService::find_by_id(output_id).await
                     {
                         // Look up the task to check code_coverage
-                        if let Ok(Some(task)) = AssignmentTaskEntity::find_by_id(output.task_id)
-                            .one(db)
-                            .await
+                        if let Ok(Some(task)) = AssignmentTaskService::find_by_id(output.task_id).await
                         {
                             if task.code_coverage == code_coverage {
                                 let content = fs::read_to_string(&path)?;
