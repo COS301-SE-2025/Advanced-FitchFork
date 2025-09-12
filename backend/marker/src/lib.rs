@@ -231,7 +231,7 @@ impl<'a> MarkingJob<'a> {
                 return Ok(report.into());
             }
         };
-        //End of temporary fix
+        // TODO - End of temporary fix
 
         let mut all_results: Vec<TaskResult> = Vec::new();
         let mut per_task_results: Vec<Vec<TaskResult>> = Vec::new();

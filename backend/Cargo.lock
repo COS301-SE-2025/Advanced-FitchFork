@@ -186,6 +186,7 @@ dependencies = [
  "futures",
  "futures-util",
  "headers",
+ "hyper",
  "jsonwebtoken",
  "lazy_static",
  "lettre",
@@ -215,7 +216,7 @@ dependencies = [
  "util",
  "validator",
  "walkdir",
- "zip 5.1.1",
+ "zip 4.3.0",
 ]
 
 [[package]]
@@ -695,7 +696,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "util",
- "zip 5.1.1",
+ "uuid",
+ "zip 4.3.0",
 ]
 
 [[package]]
@@ -715,8 +717,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "util",
- "uuid",
- "zip 5.1.1",
+ "zip 4.3.0",
 ]
 
 [[package]]
@@ -1589,13 +1590,14 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "hyper"
-version = "1.6.0"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc2b571658e38e0c01b1fdca3bbbe93c00d3d71693ff2770043f8c29bc7d6f80"
+checksum = "eb3aa54a13a0dfe7fbe3a59e0c76093041720fdc77b110cc0fc260fafb4dc51e"
 dependencies = [
+ "atomic-waker",
  "bytes",
  "futures-channel",
- "futures-util",
+ "futures-core",
  "h2",
  "http",
  "http-body",
@@ -1603,6 +1605,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
+ "pin-utils",
  "smallvec",
  "tokio",
  "want",
@@ -3310,8 +3313,7 @@ dependencies = [
  "rand 0.8.5",
  "services",
  "tokio",
- "util",
- "zip 5.1.1",
+ "zip 4.3.0",
 ]
 
 [[package]]
@@ -4462,6 +4464,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "zip 5.0.1",
 ]
 
 [[package]]
@@ -5204,9 +5207,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "5.1.1"
+version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f852905151ac8d4d06fdca66520a661c09730a74c6d4e2b0f27b436b382e532"
+checksum = "c7bd5b91aa407cb977468d108ca3fede2c992ea44bb1d989e21756749d7dccff"
 dependencies = [
  "aes",
  "arbitrary",
