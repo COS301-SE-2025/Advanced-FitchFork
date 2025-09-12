@@ -103,6 +103,8 @@ pub struct MarkingOptions {
     /// Default: false
     #[serde(default = "default_allow_practice_submissions")]
     pub allow_practice_submissions: bool,
+    #[serde(default)]
+    pub dissalowed_code: Vec<String>,
 }
 
 impl Default for MarkingOptions {
@@ -115,7 +117,8 @@ impl Default for MarkingOptions {
             max_attempts: default_max_attempts(),
             limit_attempts: default_limit_attempts(),
             pass_mark: default_pass_mark(),
-            allow_practice_submissions: default_allow_practice_submissions()
+            allow_practice_submissions: default_allow_practice_submissions(),
+            dissalowed_code: vec![],
         }
     }
 }

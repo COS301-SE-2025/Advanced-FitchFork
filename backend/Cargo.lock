@@ -227,7 +227,7 @@ dependencies = [
  "util",
  "validator",
  "walkdir",
- "zip",
+ "zip 4.3.0",
 ]
 
 [[package]]
@@ -708,7 +708,7 @@ dependencies = [
  "tokio",
  "util",
  "uuid",
- "zip",
+ "zip 4.3.0",
 ]
 
 [[package]]
@@ -729,7 +729,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "util",
- "zip",
+ "zip 4.3.0",
 ]
 
 [[package]]
@@ -946,7 +946,7 @@ dependencies = [
  "tokio",
  "util",
  "uuid",
- "zip",
+ "zip 4.3.0",
 ]
 
 [[package]]
@@ -2059,6 +2059,16 @@ name = "log"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
+
+[[package]]
+name = "lzma-rust2"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c60a23ffb90d527e23192f1246b14746e2f7f071cb84476dd879071696c18a4a"
+dependencies = [
+ "crc",
+ "sha2",
+]
 
 [[package]]
 name = "mac"
@@ -3325,7 +3335,7 @@ dependencies = [
  "rand 0.8.5",
  "sea-orm",
  "tokio",
- "zip",
+ "zip 4.3.0",
 ]
 
 [[package]]
@@ -4462,6 +4472,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "zip 5.0.1",
 ]
 
 [[package]]
@@ -5205,6 +5216,33 @@ dependencies = [
  "hmac",
  "indexmap",
  "liblzma",
+ "memchr",
+ "pbkdf2",
+ "ppmd-rust",
+ "sha1",
+ "time",
+ "zeroize",
+ "zopfli",
+ "zstd",
+]
+
+[[package]]
+name = "zip"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7bd5b91aa407cb977468d108ca3fede2c992ea44bb1d989e21756749d7dccff"
+dependencies = [
+ "aes",
+ "arbitrary",
+ "bzip2",
+ "constant_time_eq",
+ "crc32fast",
+ "deflate64",
+ "flate2",
+ "getrandom 0.3.3",
+ "hmac",
+ "indexmap",
+ "lzma-rust2",
  "memchr",
  "pbkdf2",
  "ppmd-rust",

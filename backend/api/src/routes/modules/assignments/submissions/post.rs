@@ -28,6 +28,7 @@ use util::{
     execution_config::{ExecutionConfig, execution_config::SubmissionMode},
     mark_allocator::mark_allocator::generate_allocator,
     mark_allocator::mark_allocator::load_allocator,
+    scan_code_content::scan_code_content,
     state::AppState,
 };
 use util::paths::{
@@ -724,6 +725,62 @@ pub async fn submit_assignment(
         }
     }
 
+    // Load config early
+    let config = match get_execution_config(module_id, assignment_id) {
+        Ok(config) => config,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(&e)),
+            );
+        }
+    };
+
+    // --- New: check dissalowed code in the submission zip ---
+    let mut disallowed_present = false;
+    {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Write uploaded zip bytes to a temporary file
+        let mut temp_file = match NamedTempFile::new() {
+            Ok(f) => f,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<SubmissionDetailResponse>::error(&format!(
+                        "Failed to create temp file: {}",
+                        e
+                    ))),
+                );
+            }
+        };
+
+        if let Err(e) = temp_file.write_all(&file_bytes) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(&format!(
+                    "Failed to write temp file: {}",
+                    e
+                ))),
+            );
+        }
+
+        let temp_path = temp_file.into_temp_path();
+
+        match scan_code_content::contains_dissalowed_code(&temp_path, &config) {
+            Ok(result) => disallowed_present = result,
+            Err(e) => {
+                eprintln!("Failed to check dissalowed code: {}", e);
+            }
+        }
+    }
+
+    /*
+    TODO
+    Reece this dissalowed_present boolean - if its true then they have dissalowed imports - they need to be given a mark of 0
+     */
+
     let file_hash = format!("{:x}", md5::compute(&file_bytes));
 
     let attempt = match get_next_attempt(assignment_id, claims.sub, db).await {
@@ -761,16 +818,6 @@ pub async fn submit_assignment(
                 Json(ApiResponse::<SubmissionDetailResponse>::error(
                     "Failed to save submission",
                 )),
-            );
-        }
-    };
-
-    let config = match get_execution_config(module_id, assignment_id) {
-        Ok(config) => config,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SubmissionDetailResponse>::error(&e)),
             );
         }
     };
@@ -1238,6 +1285,11 @@ pub async fn resubmit_submissions(
             let mark_allocator_path = mark_allocator_path.clone();
             let config = config.clone();
             async move {
+                /*
+                TODO
+                Here you need to check for dissalowed imports as well - refer to the submit_assignment method
+                */
+
                 if let Err(e) = clear_submission_output(&submission, assignment.module_id, assignment.id) {
                     return Err(e);
                 }
