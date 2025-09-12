@@ -11,6 +11,7 @@ impl Seeder for UserSeeder {
         Box::pin(async move {
             // Fixed Admin User
             UserService::create(CreateUser {
+                id: None,
                 username: "admin".to_string(),
                 email: "admin@example.com".to_string(),
                 password: "1".to_string(),
@@ -19,6 +20,7 @@ impl Seeder for UserSeeder {
 
             // Fixed Lecturer User
             UserService::create(CreateUser {
+                id: None,
                 username: "lecturer".to_string(),
                 email: "lecturer@example.com".to_string(),
                 password: "1".to_string(),
@@ -27,6 +29,7 @@ impl Seeder for UserSeeder {
 
             // Fixed Assistant Lecturer User
             UserService::create(CreateUser {
+                id: None,
                 username: "assistant_lecturer".to_string(),
                 email: "assistant_lecturer@example.com".to_string(),
                 password: "1".to_string(),
@@ -35,6 +38,7 @@ impl Seeder for UserSeeder {
 
             // Fixed Tutor User
             UserService::create(CreateUser {
+                id: None,
                 username: "tutor".to_string(),
                 email: "tutor@example.com".to_string(),
                 password: "1".to_string(),
@@ -43,6 +47,7 @@ impl Seeder for UserSeeder {
 
             // Fixed Student User
             UserService::create(CreateUser {
+                id: None,
                 username: "student".to_string(),
                 email: "student@example.com".to_string(),
                 password: "1".to_string(),
@@ -51,18 +56,21 @@ impl Seeder for UserSeeder {
 
             // Composite-role users
             UserService::create(CreateUser {
+                id: None,
                 username: "student_tutor".to_string(),
                 email: "student_tutor@example.com".to_string(),
                 password: "1".to_string(),
                 admin: false,
             }).await?;
             UserService::create(CreateUser {
+                id: None,
                 username: "all_staff".to_string(),
                 email: "all_staff@example.com".to_string(),
                 password: "1".to_string(),
                 admin: false,
             }).await?;
             UserService::create(CreateUser {
+                id: None,
                 username: "lecturer_assistant".to_string(),
                 email: "lecturer_assistant@example.com".to_string(),
                 password: "1".to_string(),
@@ -71,6 +79,7 @@ impl Seeder for UserSeeder {
 
             // User with every role (distributed across modules)
             UserService::create(CreateUser {
+                id: None,
                 username: "all".to_string(),
                 email: "all@example.com".to_string(),
                 password: "1".to_string(),

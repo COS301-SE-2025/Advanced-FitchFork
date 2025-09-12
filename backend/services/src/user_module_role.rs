@@ -111,8 +111,10 @@ impl UserModuleRoleService {
         ];
         let roles = Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::find_all(&filters, None).await?;
 
-        let module_ids: Vec<i64> = roles.iter().map(|role| role.module_id).collect();
-        let modules = Repository::<ModuleEntity, ModuleColumn>::find_in(ModuleColumn::Id, module_ids).await?;
+        let filters = vec![
+            FilterParam::eq("id", roles.iter().map(|role| role.module_id).collect::<Vec<i64>>()),
+        ];
+        let modules = Repository::<ModuleEntity, ModuleColumn>::find_all(&filters, None).await?;
 
         let modules_by_id: std::collections::HashMap<i64, Model> =
             modules.into_iter().map(|m| (m.id, m)).collect();

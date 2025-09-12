@@ -76,7 +76,7 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignme
                 let existing_path = AssignmentInterpreterService::storage_root().join(&existing.path);
                 let _ = fs::remove_file(existing_path); // Silently ignore failure
 
-                Repository::<Entity, Column>::delete(existing.id).await?;
+                Repository::<Entity, Column>::delete_by_id(existing.id).await?;
             }
 
             let inserted: Model = Repository::<Entity, Column>::create(params.clone().into_active_model().await?).await?;

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use std::marker::PhantomData;
-use sea_orm::{DbErr, EntityTrait, PrimaryKeyTrait, ActiveModelTrait, Select, QueryFilter, ColumnTrait};
+use sea_orm::{DbErr, EntityTrait, PaginatorTrait, IntoActiveModel, PrimaryKeyTrait, ActiveModelTrait, Select, QueryFilter, ColumnTrait};
 use util::filters::FilterParam;
 use crate::get_connection;
 use crate::filter_utils::{FilterUtils, SortUtils};
@@ -11,7 +11,7 @@ where
     E: EntityTrait,
     E::Model: Sync + Send + 'static,
     E::ActiveModel: ActiveModelTrait<Entity = E> + Send,
-    E::Model: sea_orm::IntoActiveModel<E::ActiveModel>,
+    E::Model: IntoActiveModel<E::ActiveModel>,
     C: ColumnTrait + FromStr + 'static,
     C::Err: std::fmt::Display,
 {
@@ -23,7 +23,7 @@ where
     E: EntityTrait,
     E::Model: Sync + Send + 'static,
     E::ActiveModel: ActiveModelTrait<Entity = E> + Send,
-    E::Model: sea_orm::IntoActiveModel<E::ActiveModel>,
+    E::Model: IntoActiveModel<E::ActiveModel>,
     C: ColumnTrait + FromStr + 'static,
     C::Err: std::fmt::Display,
 {
@@ -57,30 +57,39 @@ where
         active_model.update(get_connection().await).await.map_err(DbErr::from)
     }
 
-    pub async fn delete(id: <E::PrimaryKey as PrimaryKeyTrait>::ValueType) -> Result<(), DbErr> {
-        E::delete_by_id(id).exec(get_connection().await).await.map_err(DbErr::from)?;
+    pub async fn delete_by_id(id: <E::PrimaryKey as PrimaryKeyTrait>::ValueType) -> Result<(), DbErr> {
+        E::delete_by_id(id)
+            .exec(get_connection().await)
+            .await
+            .map_err(DbErr::from)?;
         Ok(())
+    }
+
+    pub async fn delete(filter_params: &[FilterParam]) -> Result<u64, DbErr> {
+        if filter_params.is_empty() {
+            return Err(DbErr::Custom(
+                "Refusing to delete without filters. Provide at least one filter param.".to_string(),
+            ));
+        }
+
+        let condition = FilterUtils::apply_all_filters(filter_params, |column_name| {
+            C::from_str(column_name)
+                .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e)))
+        })?;
+
+        let res = E::delete_many()
+            .filter(condition)
+            .exec(get_connection().await)
+            .await
+            .map_err(DbErr::from)?;
+
+        Ok(res.rows_affected)
     }
 
     pub async fn find_by_id(
         id: <E::PrimaryKey as PrimaryKeyTrait>::ValueType,
     ) -> Result<Option<E::Model>, DbErr> {
         E::find_by_id(id).one(get_connection().await).await.map_err(DbErr::from)
-    }
-
-    pub async fn find_in<Col, V>(
-        column: Col,
-        values: Vec<V>,
-    ) -> Result<Vec<E::Model>, DbErr>
-    where
-        Col: sea_orm::ColumnTrait + 'static,
-        V: Into<sea_orm::Value> + Send + Sync + 'static,
-    {
-        E::find()
-            .filter(column.is_in(values))
-            .all(get_connection().await)
-            .await
-            .map_err(DbErr::from)
     }
 
     pub async fn find_one(
@@ -114,7 +123,7 @@ where
         let query = Self::apply_filter(E::find(), filter_params)?;
         let query = Self::apply_sorting(query, sort_by);
         let page_index = page.saturating_sub(1);
-        let paginator = <Select<E> as sea_orm::PaginatorTrait<'_, _>>::paginate(query, get_connection().await, per_page);
+        let paginator = <Select<E> as PaginatorTrait<'_, _>>::paginate(query, get_connection().await, per_page);
         paginator
             .fetch_page(page_index)
             .await
@@ -123,7 +132,7 @@ where
 
     pub async fn count(filter_params: &[FilterParam]) -> Result<u64, DbErr> {
         let query = Self::apply_filter(E::find(), filter_params)?;
-        let count = <Select<E> as sea_orm::PaginatorTrait<'_, _>>::count(query, get_connection().await)
+        let count = <Select<E> as PaginatorTrait<'_, _>>::count(query, get_connection().await)
             .await
             .map_err(DbErr::from)?;
         Ok(count)
@@ -131,7 +140,7 @@ where
 
     pub async fn exists(filter_params: &[FilterParam]) -> Result<bool, DbErr> {
         let query = Self::apply_filter(E::find(), filter_params)?;
-        let count = <Select<E> as sea_orm::PaginatorTrait<'_, _>>::count(query, get_connection().await)
+        let count = <Select<E> as PaginatorTrait<'_, _>>::count(query, get_connection().await)
             .await
             .map_err(DbErr::from)?;
         Ok(count > 0)

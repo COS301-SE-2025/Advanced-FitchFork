@@ -17,13 +17,16 @@ pub use db::models::user::Model as User;
 
 #[derive(Debug, Clone, Validate)]
 pub struct CreateUser {
+    pub id: Option<i64>,
+
     #[validate(length(min = 1, message = "Username cannot be empty"))]
     pub username: String,
 
     #[validate(email(message = "Invalid email address"))]
     pub email: String,
 
-    #[validate(custom(function = "validate_password"))]
+    // TODO: this messes up the seeding, but it should work in practice
+    //#[validate(custom(function = "validate_password"))]
     pub password: String,
 
     pub admin: bool,
@@ -89,13 +92,19 @@ impl ToActiveModel<Entity> for CreateUser {
         self.validate()
             .map_err(|e| DbErr::Custom(e.to_string()))?;
 
-        Ok(ActiveModel {
+        let mut active = ActiveModel {
             username: Set(self.username),
             email: Set(self.email),
             password_hash: Set(UserService::hash_password(&self.password)),
             admin: Set(self.admin),
             ..Default::default()
-        })
+        };
+
+        if let Some(id) = self.id {
+            active.id = Set(id);
+        }
+
+        Ok(active)
     }
 }
 

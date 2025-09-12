@@ -1,16 +1,29 @@
 // Core dependencies
 use std::{env, fs, path::PathBuf};
+use services::assignment_file::CreateAssignmentFile;
+use tokio::fs::read;
+use zip::ZipWriter;
+use zip::write::FileOptions;
+use std::io::Write;
 
-// use db::models::AssignmentSubmissionOutput;
 // Your own modules
-use crate::validate_files::validate_memo_files;
-use services::{assignment_task::AssignmentTaskService, service::Service};
-use util::filters::{FilterParam, FilterValue};
+use crate::validate_files::{validate_submission_files, validate_memo_files};
+use services::service::Service;
+use services::assignment::AssignmentService;
+use services::assignment_submission::AssignmentSubmissionService;
+use services::assignment_task::AssignmentTaskService;
+use services::assignment_memo_output::{AssignmentMemoOutputService, CreateAssignmentMemoOutput};
+use services::assignment_overwrite_file::AssignmentOverwriteFileService;
+use services::assignment_submission_output::{AssignmentSubmissionOutputService, CreateAssignmentSubmissionOutput};
+use services::assignment_interpreter::AssignmentInterpreterService;
+use services::assignment_file::AssignmentFileService;
+use util::filters::FilterParam;
 
 // Models
 use reqwest::Client;
 use serde_json::json;
 use util::execution_config::ExecutionConfig;
+use util::execution_config::execution_config::Language;
 pub mod validate_files;
 
 /// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
@@ -55,29 +68,25 @@ fn resolve_storage_root(storage_root: &str) -> PathBuf {
 /// 3. Running the configured commands inside Docker
 /// 4. Saving the resulting output as memo files in the databaseencode
 pub async fn create_memo_outputs_for_all_tasks(
-    db: &DatabaseConnection,
     assignment_id: i64,
 ) -> Result<(), String> {
     // Fetch the assignment to get module_id
-    let assignment = Assignment::find_by_id(assignment_id)
-        .one(db)
+    let assignment = AssignmentService::find_by_id(assignment_id)
         .await
         .map_err(|e| format!("Failed to fetch assignment: {}", e))?
         .ok_or_else(|| format!("Assignment {} not found", assignment_id))?;
 
-    let module_id = assignment.module_id;
-
     // Validate required input files
-    validate_memo_files(module_id, assignment_id)?;
+    validate_memo_files(assignment.module_id, assignment_id)?;
 
-    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
+    let config = ExecutionConfig::get_execution_config(assignment.module_id, assignment_id)
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
     let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
         .map_err(|_| "ASSIGNMENT_STORAGE_ROOT not set".to_string())?;
 
     let base_path = resolve_storage_root(&storage_root)
-        .join(format!("module_{}", module_id))
+        .join(format!("module_{}", assignment.module_id))
         .join(format!("assignment_{}", assignment_id));
 
     let memo_output_dir = base_path.join("memo_output");
@@ -88,10 +97,10 @@ pub async fn create_memo_outputs_for_all_tasks(
             .map_err(|e| format!("Failed to delete old memo_output dir: {}", e))?;
     }
 
-    // Delete old entries from DB
-    MemoOutputEntity::delete_many()
-        .filter(MemoOutputColumn::AssignmentId.eq(assignment_id))
-        .exec(db)
+    let filters = vec![
+        FilterParam::eq("assignment_id", assignment_id),
+    ];
+    AssignmentMemoOutputService::delete(&filters)
         .await
         .map_err(|e| format!("Failed to delete old memo outputs: {}", e))?;
 
@@ -103,9 +112,11 @@ pub async fn create_memo_outputs_for_all_tasks(
     ];
 
     let filters = vec![
-        FilterParam::eq("assignment_id", FilterValue::Int(assignment_id)),
+        FilterParam::eq("assignment_id", assignment_id),
     ];
-    let tasks = AssignmentTaskService::find_all(&filters, None).await;
+    let tasks = AssignmentTaskService::find_all(&filters, None)
+        .await
+        .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
     if tasks.is_empty() {
         println!("No tasks found for assignment {}", assignment_id);
@@ -146,8 +157,7 @@ pub async fn create_memo_outputs_for_all_tasks(
             files.push((file_name, content));
         }
 
-        let overwrite_dir =
-            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
+        let overwrite_dir = AssignmentOverwriteFileService::full_directory_path(assignment.module_id, assignment_id, task.task_number);
         if overwrite_dir.exists() {
             let entries = std::fs::read_dir(&overwrite_dir)
                 .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
@@ -212,23 +222,19 @@ pub async fn create_memo_outputs_for_all_tasks(
 
         let output_combined = output_vec.join("\n");
 
-        if let Err(e) = db::models::assignment_memo_output::Model::save_file(
-            db,
-            assignment_id,
-            task.id,
-            &filename,
-            output_combined.as_bytes(),
-        )
-        .await
-        {
-            println!("Failed to save output: {}", e);
-        }
+        AssignmentMemoOutputService::create(
+            CreateAssignmentMemoOutput {
+                assignment_id: assignment_id,
+                task_id: task.id,
+                filename: filename,
+                bytes: output_combined.as_bytes().to_vec(),
+            }
+        ).await
+        .map_err(|e| format!("Failed to create memo output: {}", e))?;
     }
 
     Ok(())
 }
-
-use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 
 /// Runs all configured tasks for a given assignment ID and student attempt by:
 /// 1. Validating submission files
@@ -236,25 +242,14 @@ use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 /// 3. Running the configured commands inside Docker
 /// 4. Saving the output to disk and database as `assignment_submission_output`
 pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
-    db: &DatabaseConnection,
     submission_id: i64,
 ) -> Result<Vec<(i64, String)>, String> {
-    use crate::validate_files::validate_submission_files;
-    use db::models::assignment::Entity as Assignment;
-    use db::models::assignment_submission::Entity as AssignmentSubmission;
-    use reqwest::Client;
-    use sea_orm::EntityTrait;
-    use serde_json::json;
-    use std::env;
-    use tokio::fs::read;
-
-    SubmissionOutputModel::delete_for_submission(db, submission_id)
+    AssignmentSubmissionOutputService::delete_for_submission(submission_id)
         .await
         .map_err(|e| format!("Failed to fetch submission: {}", e))?;
 
     // Fetch submission
-    let submission = AssignmentSubmission::find_by_id(submission_id)
-        .one(db)
+    let submission = AssignmentSubmissionService::find_by_id(submission_id)
         .await
         .map_err(|e| format!("Failed to fetch submission: {}", e))?
         .ok_or_else(|| format!("Submission {} not found", submission_id))?;
@@ -264,25 +259,22 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
     let attempt_number = submission.attempt;
 
     // Fetch assignment
-    let assignment = Assignment::find_by_id(assignment_id)
-        .one(db)
+    let assignment = AssignmentService::find_by_id(assignment_id)
         .await
         .map_err(|e| format!("Failed to fetch assignment: {}", e))?
         .ok_or_else(|| format!("Assignment {} not found", assignment_id))?;
 
-    let module_id = assignment.module_id;
-
     // Validate files
-    validate_submission_files(module_id, assignment_id, user_id, attempt_number)?;
+    validate_submission_files(assignment.module_id, assignment_id, user_id, attempt_number)?;
 
-    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
+    let config = ExecutionConfig::get_execution_config(assignment.module_id, assignment_id)
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
     let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
         .map_err(|_| "ASSIGNMENT_STORAGE_ROOT not set".to_string())?;
 
     let base_path = resolve_storage_root(&storage_root)
-        .join(format!("module_{}", module_id))
+        .join(format!("module_{}", assignment.module_id))
         .join(format!("assignment_{}", assignment_id));
 
     let submission_path = base_path
@@ -311,7 +303,10 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
     }
 
     // Get tasks
-    let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
+    let filters = vec![
+        FilterParam::eq("assignment_id", assignment_id),
+    ];
+    let tasks = AssignmentTaskService::find_all(&filters, None)
         .await
         .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
@@ -342,8 +337,7 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
 
         let mut task_files = files.clone();
 
-        let overwrite_dir =
-            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
+        let overwrite_dir = AssignmentOverwriteFileService::full_directory_path(assignment.module_id, assignment_id, task.task_number);
         if overwrite_dir.exists() {
             let entries = std::fs::read_dir(&overwrite_dir)
                 .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
@@ -401,17 +395,15 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
 
         let output_combined = output_vec.join("\n");
 
-        if let Err(e) = SubmissionOutputModel::save_file(
-            db,
-            task.id,
-            submission_id,
-            &filename,
-            output_combined.as_bytes(),
-        )
-        .await
-        {
-            println!("Failed to save submission output: {}", e);
-        }
+        AssignmentSubmissionOutputService::create(
+            CreateAssignmentSubmissionOutput {
+                task_id: task.id,
+                submission_id: submission_id,
+                filename: filename,
+                bytes: output_combined.as_bytes().to_vec(),
+            }
+        ).await
+        .map_err(|e| format!("Failed to create submission output: {}", e))?;
 
         collected.push((task.id, output_combined));
     }
@@ -425,21 +417,10 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
 /// 3. Running the configured commands inside Docker
 /// 4. Saving the output to disk and database as `assignment_submission_output`
 pub async fn create_submission_outputs_for_all_tasks(
-    db: &DatabaseConnection,
     submission_id: i64,
 ) -> Result<(), String> {
-    use crate::validate_files::validate_submission_files;
-    use db::models::assignment::Entity as Assignment;
-    use db::models::assignment_submission::Entity as AssignmentSubmission;
-    use reqwest::Client;
-    use sea_orm::EntityTrait;
-    use serde_json::json;
-    use std::env;
-    use tokio::fs::read;
-
     // Fetch submission
-    let submission = AssignmentSubmission::find_by_id(submission_id)
-        .one(db)
+    let submission = AssignmentSubmissionService::find_by_id(submission_id)
         .await
         .map_err(|e| format!("Failed to fetch submission: {}", e))?
         .ok_or_else(|| format!("Submission {} not found", submission_id))?;
@@ -449,25 +430,22 @@ pub async fn create_submission_outputs_for_all_tasks(
     let attempt_number = submission.attempt;
 
     // Fetch assignment
-    let assignment = Assignment::find_by_id(assignment_id)
-        .one(db)
+    let assignment = AssignmentService::find_by_id(assignment_id)
         .await
         .map_err(|e| format!("Failed to fetch assignment: {}", e))?
         .ok_or_else(|| format!("Assignment {} not found", assignment_id))?;
 
-    let module_id = assignment.module_id;
-
     // Validate files
-    validate_submission_files(module_id, assignment_id, user_id, attempt_number)?;
+    validate_submission_files(assignment.module_id, assignment_id, user_id, attempt_number)?;
 
-    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
+    let config = ExecutionConfig::get_execution_config(assignment.module_id, assignment_id)
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
     let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
         .map_err(|_| "ASSIGNMENT_STORAGE_ROOT not set".to_string())?;
 
     let base_path = resolve_storage_root(&storage_root)
-        .join(format!("module_{}", module_id))
+        .join(format!("module_{}", assignment.module_id))
         .join(format!("assignment_{}", assignment_id));
 
     let submission_path = base_path
@@ -496,7 +474,10 @@ pub async fn create_submission_outputs_for_all_tasks(
     }
 
     // Get tasks
-    let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
+    let filters = vec![
+        FilterParam::eq("assignment_id", assignment_id),
+    ];
+    let tasks = AssignmentTaskService::find_all(&filters, None)
         .await
         .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
@@ -525,8 +506,7 @@ pub async fn create_submission_outputs_for_all_tasks(
 
         let mut task_files = files.clone();
 
-        let overwrite_dir =
-            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
+        let overwrite_dir = AssignmentOverwriteFileService::full_directory_path(assignment.module_id, assignment_id, task.task_number);
         if overwrite_dir.exists() {
             let entries = std::fs::read_dir(&overwrite_dir)
                 .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
@@ -584,65 +564,42 @@ pub async fn create_submission_outputs_for_all_tasks(
 
         let output_combined = output_vec.join("\n");
 
-        if let Err(e) = SubmissionOutputModel::save_file(
-            db,
-            task.id,
-            submission_id,
-            &filename,
-            output_combined.as_bytes(),
-        )
-        .await
-        {
-            println!("Failed to save submission output: {}", e);
-        }
+        AssignmentSubmissionOutputService::create(
+            CreateAssignmentSubmissionOutput {
+                task_id: task.id,
+                submission_id: submission_id,
+                filename: filename,
+                bytes: output_combined.as_bytes().to_vec(),
+            }
+        ).await
+        .map_err(|e| format!("Failed to create submission output: {}", e))?;
     }
 
     Ok(())
 }
 
 pub async fn create_main_from_interpreter(
-    db: &DatabaseConnection,
     submission_id: i64,
     generated_string: &str,
 ) -> Result<(), String> {
-    use db::models::assignment::Entity as AssignmentEntity;
-    use db::models::assignment_file::{FileType, Model as AssignmentFileModel};
-    use db::models::assignment_interpreter::{
-        Column as InterpreterColumn, Entity as AssignmentInterpreterEntity,
-    };
-    use db::models::assignment_submission::Entity as AssignmentSubmissionEntity;
-
-    use reqwest::Client;
-    use serde_json::json;
-    use std::env;
-    use std::io::Write;
-    use util::execution_config::ExecutionConfig;
-    use util::execution_config::execution_config::Language;
-    use zip::write::{FileOptions, ZipWriter};
-
     // --- Fetch submission, assignment, interpreter rows ---
-    let submission = AssignmentSubmissionEntity::find_by_id(submission_id)
-        .one(db)
+    let submission = AssignmentSubmissionService::find_by_id(submission_id)
         .await
         .map_err(|e| format!("Failed to fetch submission: {}", e))?
         .ok_or_else(|| format!("Submission {} not found", submission_id))?;
 
-    let assignment_id = submission.assignment_id;
-
-    let interpreter = AssignmentInterpreterEntity::find()
-        .filter(InterpreterColumn::AssignmentId.eq(assignment_id))
-        .one(db)
+    let filters = vec![
+        FilterParam::eq("assignment_id", submission.assignment_id),
+    ];
+    let interpreter = AssignmentInterpreterService::find_one(&filters, None)
         .await
         .map_err(|e| format!("Failed to fetch interpreter: {}", e))?
         .ok_or_else(|| "Interpreter not found".to_string())?;
 
-    let assignment = AssignmentEntity::find_by_id(assignment_id)
-        .one(db)
+    let assignment = AssignmentService::find_by_id(submission.assignment_id)
         .await
         .map_err(|e| format!("Failed to fetch assignment: {}", e))?
-        .ok_or_else(|| format!("Assignment {} not found", assignment_id))?;
-
-    let module_id = assignment.module_id;
+        .ok_or_else(|| format!("Assignment {} not found", submission.assignment_id))?;
 
     // // Debug: show the interpreter command & payload
     // eprintln!("Using interpreter: {}", interpreter.command);
@@ -652,7 +609,7 @@ pub async fn create_main_from_interpreter(
     // }
 
     // Load full execution config (includes language)
-    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
+    let config = ExecutionConfig::get_execution_config(assignment.module_id, submission.assignment_id)
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
     // Determine main file name from language
@@ -719,15 +676,15 @@ pub async fn create_main_from_interpreter(
                 .map_err(|e| format!("zip finish failed: {}", e))?;
         }
 
-        AssignmentFileModel::save_file(
-            db,
-            assignment_id,
-            module_id,
-            FileType::Main,
-            &zip_filename,
-            &zip_data,
-        )
-        .await
+        AssignmentFileService::create(
+            CreateAssignmentFile{
+                assignment_id: submission.assignment_id,
+                module_id: assignment.module_id,
+                file_type: "main".to_string(),
+                filename: zip_filename.clone(),
+                bytes: zip_data.clone(),
+            }
+        ).await
         .map_err(|e| format!("Failed to save synthesized main zip: {}", e))?;
 
         if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
@@ -744,9 +701,9 @@ pub async fn create_main_from_interpreter(
 
     // --- GENERATOR BRANCH (original intent) ---
     // The interpreter is a true generator: run it and expect source code on stdout.
-    let interpreter_bytes = interpreter
-        .load_file()
-        .map_err(|e| format!("Failed to load interpreter file from disk: {}", e))?;
+    let interpreter_bytes = AssignmentInterpreterService::load_file(interpreter.id)
+        .await
+        .map_err(|e| format!("Failed to load interpreter file from DB: {}", e))?;
 
     // Combine the interpreter command with the GA-produced string.
     // e.g., "python3 interpreter.py <args>"
@@ -847,15 +804,15 @@ pub async fn create_main_from_interpreter(
             .map_err(|e| format!("Failed to finish zip: {}", e))?;
     }
 
-    AssignmentFileModel::save_file(
-        db,
-        assignment_id,
-        module_id,
-        FileType::Main,
-        &zip_filename,
-        &zip_data,
-    )
-    .await
+    AssignmentFileService::create(
+        CreateAssignmentFile{
+            assignment_id: submission.assignment_id,
+            module_id: assignment.module_id,
+            file_type: "main".to_string(),
+            filename: zip_filename.clone(),
+            bytes: zip_data.clone(),
+        }
+    ).await
     .map_err(|e| format!("Failed to save zipped main file: {}", e))?;
 
     Ok(())
@@ -888,28 +845,22 @@ pub async fn create_main_from_interpreter(
 /// This function coordinates the entire workflow for interpreting and processing
 /// a student's submission according to the assignment tasks.
 pub async fn run_interpreter(
-    db: &sea_orm::DatabaseConnection,
     submission_id: i64,
     generated_string: &str,
 ) -> Result<(), String> {
-    use db::models::assignment_submission::Entity as AssignmentSubmission;
-
-    let submission = AssignmentSubmission::find_by_id(submission_id)
-        .one(db)
+    let submission = AssignmentSubmissionService::find_by_id(submission_id)
         .await
         .map_err(|e| format!("Failed to fetch submission: {}", e))?
         .ok_or_else(|| format!("Submission {} not found", submission_id))?;
 
-    let assignment_id = submission.assignment_id;
-
     // Step 1
-    create_main_from_interpreter(db, submission_id, generated_string).await?;
+    create_main_from_interpreter(submission_id, generated_string).await?;
 
     // Step 2
-    create_memo_outputs_for_all_tasks(db, assignment_id).await?;
+    create_memo_outputs_for_all_tasks(submission.assignment_id).await?;
 
     // Step 3
-    create_submission_outputs_for_all_tasks(db, submission_id).await?;
+    create_submission_outputs_for_all_tasks(submission_id).await?;
 
     Ok(())
 }

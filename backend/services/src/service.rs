@@ -50,11 +50,19 @@ where
         })
     }
 
-    fn delete(
+    fn delete_by_id(
         id: <E::PrimaryKey as PrimaryKeyTrait>::ValueType,
     ) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
-            Repository::<E, C>::delete(id).await.map_err(AppError::from)
+            Repository::<E, C>::delete_by_id(id).await.map_err(AppError::from)
+        })
+    }
+
+    fn delete(
+        filter_params: &'a [FilterParam],
+    ) -> Pin<Box<dyn Future<Output = Result<u64, AppError>> + Send + 'a>> {
+        Box::pin(async move {
+            Repository::<E, C>::delete(filter_params).await.map_err(AppError::from)
         })
     }
 
@@ -63,21 +71,6 @@ where
     ) -> Pin<Box<dyn Future<Output = Result<Option<E::Model>, AppError>> + Send + 'a>> {
         Box::pin(async move {
             Repository::<E, C>::find_by_id(id).await.map_err(AppError::from)
-        })
-    }
-
-    fn find_in<V>(
-        column: String,
-        values: Vec<V>,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<E::Model>, AppError>> + Send + 'a>>
-    where
-        V: Into<sea_orm::Value> + Send + Sync + 'static,
-    {
-        Box::pin(async move {
-            let column_enum = C::from_str(&column)
-                .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column, e)))?;
-            
-            Repository::<E, C>::find_in(column_enum, values).await.map_err(AppError::from)
         })
     }
 

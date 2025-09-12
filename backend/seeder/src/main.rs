@@ -12,6 +12,7 @@ use crate::seeds::{
     plagiarism_case::PlagiarismCaseSeeder, tickets::TicketSeeder, user::UserSeeder,
     user_role::UserRoleSeeder,
 };
+use util::state::AppState;
 
 mod seed;
 mod seeds;
@@ -19,6 +20,8 @@ mod seeds;
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
+
+    let _ = AppState::init(false);
 
     for (seeder, name) in [
         (

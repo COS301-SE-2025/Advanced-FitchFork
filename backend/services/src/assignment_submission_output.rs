@@ -167,7 +167,7 @@ impl AssignmentSubmissionOutputService {
                 }
             }
 
-            Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::delete(output.id).await?;
+            Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::delete_by_id(output.id).await?;
         }
 
         Ok(())

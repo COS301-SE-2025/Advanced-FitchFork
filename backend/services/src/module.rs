@@ -89,7 +89,7 @@ pub struct ModuleService;
 impl<'a> Service<'a, Entity, Column, CreateModule, UpdateModule> for ModuleService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
-    fn delete(
+    fn delete_by_id(
         id: i64,
     ) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send>> {
         Box::pin(async move {
@@ -107,7 +107,7 @@ impl<'a> Service<'a, Entity, Column, CreateModule, UpdateModule> for ModuleServi
                 warn!("Expected module directory {} does not exist", module_dir.display());
             }
 
-            Repository::<Entity, Column>::delete(id).await.map_err(AppError::from)
+            Repository::<Entity, Column>::delete_by_id(id).await.map_err(AppError::from)
         })
     }
 }
