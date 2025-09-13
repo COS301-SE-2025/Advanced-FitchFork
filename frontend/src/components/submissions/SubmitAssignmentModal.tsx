@@ -7,7 +7,7 @@ type Props = {
   open: boolean;
   loading?: boolean;
   onClose: () => void;
-  onSubmit: (file: File, isPractice: boolean) => Promise<void> | void;
+  onSubmit: (file: File, isPractice: boolean, attestsOwnership: boolean) => Promise<void> | void;
 
   /** Optional UX props */
   title?: string;
@@ -34,11 +34,13 @@ const SubmitAssignmentModal = ({
 }: Props) => {
   const [file, setFile] = useState<File | null>(null);
   const [isPractice, setIsPractice] = useState<boolean>(defaultIsPractice);
+  const [attestsOwnership, setAttestsOwnership] = useState<boolean>(false);
 
   useEffect(() => {
     if (!open) {
       setFile(null);
       setIsPractice(defaultIsPractice);
+      setAttestsOwnership(false);
     }
   }, [open, defaultIsPractice]);
 
@@ -59,10 +61,12 @@ const SubmitAssignmentModal = ({
   const handleClear = () => setFile(null);
 
   const handleSubmit = async () => {
-    if (!file || loading) return;
+    if (!file || loading || !attestsOwnership) return;
     const effectivePractice = allowPractice ? isPractice : false;
-    await onSubmit(file, effectivePractice);
+    await onSubmit(file, effectivePractice, attestsOwnership);
   };
+
+  const submitDisabled = !file || !attestsOwnership || loading;
 
   return (
     <Modal
@@ -149,6 +153,40 @@ const SubmitAssignmentModal = ({
           to="/help/submissions"
         />
 
+        {/* Ownership attestation (required) – bottom; separate checkbox + text */}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="ownership-attestation"
+              checked={attestsOwnership}
+              onChange={(e) => setAttestsOwnership(e.target.checked)}
+              disabled={loading}
+              data-cy="ownership-attestation"
+              aria-required
+              aria-describedby="ownership-attestation-text"
+              className="mt-0.5"
+            />
+            <label
+              htmlFor="ownership-attestation"
+              id="ownership-attestation-text"
+              className="text-sm leading-5 text-gray-800 dark:text-gray-200"
+              data-cy="ownership-attestation-text"
+            >
+              I confirm that this submission is <strong>entirely my own work</strong> and that I
+              have not shared or received unauthorized assistance. I understand that violations may
+              result in disciplinary action.
+            </label>
+          </div>
+
+          {file && !attestsOwnership && (
+            <div className="pl-6">
+              <Text type="danger" className="!text-xs">
+                You must confirm ownership before submitting.
+              </Text>
+            </div>
+          )}
+        </div>
+
         {/* Practice toggle + actions */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           {allowPractice && (
@@ -156,13 +194,12 @@ const SubmitAssignmentModal = ({
               checked={isPractice}
               onChange={(e) => setIsPractice(e.target.checked)}
               disabled={loading}
-              className="sm:mr-auto" // pushes actions to the right when checkbox is visible
+              className="sm:mr-auto"
             >
               This is a practice submission
             </Checkbox>
           )}
 
-          {/* Actions always pinned to the right on wide screens */}
           <Space className="sm:ml-auto">
             <Button onClick={onClose} disabled={loading} data-cy="submit-modal-cancel">
               Cancel
@@ -172,8 +209,10 @@ const SubmitAssignmentModal = ({
               icon={<UploadOutlined />}
               onClick={handleSubmit}
               loading={loading}
-              disabled={!file || loading}
+              disabled={submitDisabled}
               data-cy="submit-modal-submit"
+              aria-disabled={submitDisabled}
+              aria-describedby={!attestsOwnership ? 'ownership-attestation-text' : undefined}
             >
               Submit
             </Button>

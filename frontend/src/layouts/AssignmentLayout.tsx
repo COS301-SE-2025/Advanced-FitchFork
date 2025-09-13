@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
-import { Spin, Dropdown, Button, Alert, Tag, Typography, Segmented } from 'antd';
+import { Dropdown, Button, Alert, Tag, Typography, Segmented } from 'antd';
 import type { MenuProps } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined } from '@ant-design/icons';
 
@@ -48,6 +48,7 @@ const AssignmentLayout = () => {
   const [setupOpen, setSetupOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [downloadingSpec, setDownloadingSpec] = useState(false);
+  const [outletNonce, setOutletNonce] = useState(0);
 
   const basePath = `/modules/${module.id}/assignments/${assignment.id}`;
   const isLecturerOrAdmin = auth.isLecturer(module.id) || auth.isAdmin;
@@ -98,6 +99,27 @@ const AssignmentLayout = () => {
         ]
       : []),
   ];
+
+  const segmentsClickable = segments.map((seg) => ({
+    ...seg,
+    label: (
+      <span
+        onClick={() => {
+          if (seg.disabled) return;
+          navigate(seg.value); // always go to the tab’s URL
+          if (activeKey === seg.value) {
+            setOutletNonce((n) => n + 1); // soft refresh: remount children
+            refreshAssignment?.(); // optional: re-fetch meta
+            // revalidator.revalidate();       // optional: revalidate loader data
+            // OR do a full-page reload instead: navigate(0)
+          }
+        }}
+        style={{ display: 'inline-block', width: '100%' }}
+      >
+        {seg.label}
+      </span>
+    ),
+  }));
 
   const activeKey =
     segments.find(
@@ -184,12 +206,22 @@ const AssignmentLayout = () => {
     }
   };
 
-  const handleSubmitAssignment = async (file: File, isPractice: boolean) => {
+  const handleSubmitAssignment = async (
+    file: File,
+    isPractice: boolean,
+    attestsOwnership: boolean,
+  ) => {
     setModalOpen(false);
     setLoading(true);
     const hide = message.loading('Submitting assignment...');
     try {
-      const res = await submitAssignment(module.id, assignment.id, file, isPractice);
+      const res = await submitAssignment(
+        module.id,
+        assignment.id,
+        file,
+        isPractice,
+        attestsOwnership,
+      );
 
       if (res.success && res.data) {
         message.success('Submission successful');
@@ -275,10 +307,6 @@ const AssignmentLayout = () => {
       disabled: loading,
     },
   ];
-
-  if (!assignment) {
-    return <Spin className="p-6" tip="Loading assignment..." />;
-  }
 
   const isSetupIncomplete = !readiness?.is_ready;
 
@@ -389,9 +417,9 @@ const AssignmentLayout = () => {
               {showTabs && (
                 <div className=" hidden md:block mt-4">
                   <Segmented
-                    options={segments}
+                    options={segmentsClickable}
                     value={activeKey}
-                    onChange={(key) => navigate(key as string)}
+                    onChange={(key) => navigate(key as string)} // still handles keyboard / non-label clicks
                     size="middle"
                     block
                     className="dark:!bg-gray-950"
@@ -412,65 +440,67 @@ const AssignmentLayout = () => {
               />
             )}
 
-          {isStudentOrTutor ? (
-            <Outlet />
-          ) : isSetupIncomplete && isLecturerOrAdmin ? (
-            <div className="flex flex-col h-full items-center justify-center text-center bg-white dark:bg-gray-950 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-12 space-y-6">
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                Assignment setup incomplete
-              </h2>
-              <p className="text-gray-600 dark:text-gray-400 max-w-xl">
-                This assignment is not yet ready for use. Please complete the setup process to
-                configure the necessary files, tasks, and settings before students can submit or
-                view it.
-              </p>
-              <div className="space-y-2 w-full max-w-2xl text-left">
-                {[
-                  { key: 'config_present', label: 'Configuration file' },
-                  { key: 'main_present', label: 'Main file' },
-                  { key: 'makefile_present', label: 'Makefile' },
-                  { key: 'memo_present', label: 'Memo file' },
-                  { key: 'tasks_present', label: 'Tasks' },
-                  { key: 'memo_output_present', label: 'Memo Output' },
-                  { key: 'mark_allocator_present', label: 'Mark Allocator' },
-                ].map((item) => {
-                  const complete = readiness?.[item.key as keyof AssignmentReadiness];
-                  return (
-                    <div
-                      key={item.key}
-                      className="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
-                    >
-                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                        {item.label}
-                      </span>
-
-                      <span
-                        className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
-                          complete
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                            : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                        }`}
+          <div key={`${activeKey}:${outletNonce}`} className="h-full">
+            {isStudentOrTutor ? (
+              <Outlet />
+            ) : isSetupIncomplete && isLecturerOrAdmin ? (
+              <div className="flex flex-col h-full items-center justify-center text-center bg-white dark:bg-gray-950 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-12 space-y-6">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                  Assignment setup incomplete
+                </h2>
+                <p className="text-gray-600 dark:text-gray-400 max-w-xl">
+                  This assignment is not yet ready for use. Please complete the setup process to
+                  configure the necessary files, tasks, and settings before students can submit or
+                  view it.
+                </p>
+                <div className="space-y-2 w-full max-w-2xl text-left">
+                  {[
+                    { key: 'config_present', label: 'Configuration file' },
+                    { key: 'main_present', label: 'Main file' },
+                    { key: 'makefile_present', label: 'Makefile' },
+                    { key: 'memo_present', label: 'Memo file' },
+                    { key: 'tasks_present', label: 'Tasks' },
+                    { key: 'memo_output_present', label: 'Memo Output' },
+                    { key: 'mark_allocator_present', label: 'Mark Allocator' },
+                  ].map((item) => {
+                    const complete = readiness?.[item.key as keyof AssignmentReadiness];
+                    return (
+                      <div
+                        key={item.key}
+                        className="flex items-center justify-between p-3 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
                       >
-                        {complete ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
-                        {complete ? 'Complete' : 'Incomplete'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+                        <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                          {item.label}
+                        </span>
 
-              <Button
-                type="primary"
-                size="large"
-                onClick={() => setSetupOpen(true)}
-                loading={loading}
-              >
-                Complete Setup
-              </Button>
-            </div>
-          ) : (
-            <Outlet />
-          )}
+                        <span
+                          className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
+                            complete
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                              : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                          }`}
+                        >
+                          {complete ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+                          {complete ? 'Complete' : 'Incomplete'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <Button
+                  type="primary"
+                  size="large"
+                  onClick={() => setSetupOpen(true)}
+                  loading={loading}
+                >
+                  Complete Setup
+                </Button>
+              </div>
+            ) : (
+              <Outlet />
+            )}
+          </div>
         </div>
 
         <AssignmentSetup
@@ -490,7 +520,7 @@ const AssignmentLayout = () => {
           onClose={() => setModalOpen(false)}
           onSubmit={handleSubmitAssignment}
           loading={loading}
-          title="Submit Assignment"
+          title={`Submit: ${assignment.name}`}
           accept=".zip,.tar,.gz,.tgz"
           maxSizeMB={50}
           defaultIsPractice={false}

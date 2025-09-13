@@ -24,12 +24,13 @@ mod tests {
     };
     use flate2::{Compression, write::GzEncoder};
     use sea_orm::{
-        ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
+        ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, QueryOrder
     };
     use serde_json::{Value, json};
     use serial_test::serial;
-    use util::execution_config::execution_config::{GradingPolicy, Language, SubmissionMode};
+    use util::execution_config::execution_config::{GradingPolicy, SubmissionMode};
     use util::execution_config::ExecutionConfig;
+    use util::languages::Language;
     use util::paths::{storage_root, config_dir, main_dir, makefile_dir, mark_allocator_dir, mark_allocator_path, memo_output_dir, submission_output_dir, submission_output_path, submission_zip_path};
     use std::convert::Infallible;
     use std::{fs, io::Write};
@@ -313,13 +314,24 @@ mod tests {
         filename: &str,
         file_content: &[u8],
         is_practice: Option<&str>,
+        attests_ownership: Option<&str>, // "true" | "false"
     ) -> (String, Vec<u8>) {
         let boundary = "----BoundaryTest".to_string();
         let mut body = Vec::new();
+
+        // file
         body.extend(format!("--{}\r\n", boundary).as_bytes());
-        body.extend(format!("Content-Disposition: form-data; name=\"file\"; filename=\"{}\"\r\nContent-Type: application/octet-stream\r\n\r\n", filename).as_bytes());
+        body.extend(
+            format!(
+                "Content-Disposition: form-data; name=\"file\"; filename=\"{}\"\r\nContent-Type: application/octet-stream\r\n\r\n",
+                filename
+            )
+            .as_bytes(),
+        );
         body.extend(file_content);
         body.extend(b"\r\n");
+
+        // optional is_practice
         if let Some(val) = is_practice {
             body.extend(format!("--{}\r\n", boundary).as_bytes());
             body.extend(
@@ -330,6 +342,16 @@ mod tests {
                 .as_bytes(),
             );
         }
+
+        // optional attests_ownership
+        if let Some(val) = attests_ownership {
+            body.extend(format!("--{}\r\n", boundary).as_bytes());
+            body.extend(b"Content-Disposition: form-data; name=\"attests_ownership\"\r\n\r\n");
+            body.extend(val.as_bytes());
+            body.extend(b"\r\n");
+        }
+
+        // end
         body.extend(format!("--{}--\r\n", boundary).as_bytes());
         (boundary, body)
     }
@@ -387,7 +409,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -422,7 +444,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = create_submission_tar();
 
-        let (boundary, body) = multipart_body("solution.tar", &file, None);
+        let (boundary, body) = multipart_body("solution.tar", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -457,7 +479,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = create_submission_tgz();
 
-        let (boundary, body) = multipart_body("solution.tgz", &file, None);
+        let (boundary, body) = multipart_body("solution.tgz", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -492,7 +514,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = create_submission_gz();
 
-        let (boundary, body) = multipart_body("solution.gz", &file, None);
+        let (boundary, body) = multipart_body("solution.gz", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -536,7 +558,7 @@ mod tests {
         );
 
         let file = create_submission_zip();
-        let (boundary, body) = multipart_body("solution.zip", &file, Some("true"));
+        let (boundary, body) = multipart_body("solution.zip", &file, Some("true"), Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
 
         let uri = format!(
@@ -567,7 +589,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -641,7 +663,7 @@ mod tests {
 
         // 1st submission -> OK
         {
-            let (boundary, body) = multipart_body("solution.zip", &file, None);
+            let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
             let req = Request::builder()
                 .method("POST")
                 .uri(&uri)
@@ -655,7 +677,7 @@ mod tests {
 
         // 2nd submission -> FORBIDDEN (max attempts reached)
         {
-            let (boundary, body) = multipart_body("solution.zip", &file, None);
+            let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
             let req = Request::builder()
                 .method("POST")
                 .uri(&uri)
@@ -690,7 +712,7 @@ mod tests {
         );
 
         let file = create_submission_zip();
-        let (boundary, body) = multipart_body("solution.zip", &file, Some("true")); // is_practice=true
+        let (boundary, body) = multipart_body("solution.zip", &file, Some("true"), Some("true")); // is_practice=true
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
 
         let uri = format!(
@@ -741,7 +763,7 @@ mod tests {
 
         let file = create_submission_zip();
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -795,7 +817,7 @@ mod tests {
 
         // First submission as staff
         {
-            let (boundary, body) = multipart_body("solution.zip", &file, None);
+            let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
             let req = Request::builder()
                 .method("POST")
                 .uri(&uri)
@@ -809,7 +831,7 @@ mod tests {
 
         // Second submission as staff (still OK; students would be blocked)
         {
-            let (boundary, body) = multipart_body("solution.zip", &file, None);
+            let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
             let req = Request::builder()
                 .method("POST")
                 .uri(&uri)
@@ -871,7 +893,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -919,7 +941,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -967,7 +989,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -1003,7 +1025,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = create_large_zip_file(1000 * 1000);
 
-        let (boundary, body) = multipart_body("large.zip", &file, None);
+        let (boundary, body) = multipart_body("large.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -1039,8 +1061,11 @@ mod tests {
 
         let boundary = "----BoundaryTest".to_string();
         let mut body = Vec::new();
-        body.extend(format!("--{}\r\n", boundary).as_bytes());
-        body.extend(format!("--{}--\r\n", boundary).as_bytes());
+
+        // attests_ownership=true, but no file part
+        body.extend(format!("--{}\r\n", &boundary).as_bytes());
+        body.extend(b"Content-Disposition: form-data; name=\"attests_ownership\"\r\n\r\ntrue\r\n");
+        body.extend(format!("--{}--\r\n", &boundary).as_bytes());
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
@@ -1051,23 +1076,19 @@ mod tests {
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(
-                CONTENT_TYPE,
-                format!("multipart/form-data; boundary={}", boundary),
-            )
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
             .body(Body::from(body))
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "No file provided");
     }
+
 
     #[tokio::test]
     #[serial]
@@ -1076,7 +1097,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = Vec::new();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -1111,7 +1132,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = create_exe_file();
 
-        let (boundary, body) = multipart_body("solution.exe", &file, None);
+        let (boundary, body) = multipart_body("solution.exe", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -1149,7 +1170,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = create_corrupted_zip();
 
-        let (boundary, body) = multipart_body("corrupted.zip", &file, None);
+        let (boundary, body) = multipart_body("corrupted.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -1186,7 +1207,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let invalid_assignment_id = 9999;
         let uri = format!(
@@ -1222,7 +1243,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.unassigned_user.id, data.unassigned_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -1257,7 +1278,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -1333,7 +1354,7 @@ mod tests {
         std::fs::remove_file(&allocator_path)
             .expect("Failed to delete allocator.json for test setup");
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -2342,4 +2363,124 @@ mod tests {
         assert_eq!(body["success"], false);
         assert_eq!(body["message"], "Assignment 9999 in Module 1 not found.");
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submit_missing_attests_ownership_returns_422() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+        let file = create_submission_zip();
+
+        // no attests_ownership field
+        let (boundary, body) = multipart_body("solution.zip", &file, None, None);
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert!(json["message"].as_str().unwrap_or_default().to_lowercase().contains("ownership"));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submit_attests_ownership_false_returns_422() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+        let file = create_submission_zip();
+
+        // multipart with attests_ownership = false
+        let boundary = "----BoundaryAttestFalse".to_string();
+        let mut body = Vec::new();
+
+        body.extend(format!("--{}\r\n", boundary).as_bytes());
+        body.extend(b"Content-Disposition: form-data; name=\"file\"; filename=\"solution.zip\"\r\nContent-Type: application/octet-stream\r\n\r\n");
+        body.extend(&file);
+        body.extend(b"\r\n");
+
+        body.extend(format!("--{}\r\n", boundary).as_bytes());
+        body.extend(b"Content-Disposition: form-data; name=\"attests_ownership\"\r\n\r\nfalse\r\n");
+        body.extend(format!("--{}--\r\n", boundary).as_bytes());
+
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert!(json["message"].as_str().unwrap_or_default().to_lowercase().contains("ownership"));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submit_attests_ownership_true_ok() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+        let file = create_submission_zip();
+
+        // multipart with attests_ownership = true
+        let boundary = "----BoundaryAttestTrue".to_string();
+        let mut body = Vec::new();
+
+        body.extend(format!("--{}\r\n", boundary).as_bytes());
+        body.extend(b"Content-Disposition: form-data; name=\"file\"; filename=\"solution.zip\"\r\nContent-Type: application/octet-stream\r\n\r\n");
+        body.extend(&file);
+        body.extend(b"\r\n");
+
+        body.extend(format!("--{}\r\n", boundary).as_bytes());
+        body.extend(b"Content-Disposition: form-data; name=\"attests_ownership\"\r\n\r\ntrue\r\n");
+        body.extend(format!("--{}--\r\n", boundary).as_bytes());
+
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // verify a submission row exists (we no longer assert any DB column for attestation)
+        use db::models::assignment_submission::Column as SubCol;
+        let saved = db::models::assignment_submission::Entity::find()
+            .filter(SubCol::AssignmentId.eq(data.assignment.id))
+            .filter(SubCol::UserId.eq(data.student_user.id))
+            .order_by(SubCol::Attempt, sea_orm::Order::Desc)
+            .one(db)
+            .await
+            .expect("db ok")
+            .expect("submission row exists");
+        assert_eq!(saved.assignment_id, data.assignment.id);
+        assert_eq!(saved.user_id, data.student_user.id);
+        assert_eq!(saved.filename, "solution.zip");
+    }
+
 }

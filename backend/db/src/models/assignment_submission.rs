@@ -368,7 +368,7 @@ mod tests {
 
         // Save file via submission
         let content = fake_bytes();
-        let file = Model::save_file(&db, assignment.id, user.id, 6, 10, 10, false, "solution.zip", "hash123#", &content)
+        let file = Model::save_file(&db, assignment.id, user.id, 6, 10, 10, false,   "solution.zip", "hash123#", &content)
             .await
             .expect("Failed to save file");
 

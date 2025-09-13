@@ -122,6 +122,22 @@ pub fn interpreter_path(module_id: i64, assignment_id: i64, file_id: i64) -> Pat
     interpreter_dir(module_id, assignment_id).join(format!("{file_id}.zip"))
 }
 
+// MOSS archives (versioned)
+// {STORAGE_ROOT}/module_{module_id}/assignment_{assignment_id}/moss_archives
+pub fn moss_archives_dir(module_id: i64, assignment_id: i64) -> PathBuf {
+    assignment_dir(module_id, assignment_id).join("moss_archives")
+}
+
+// One specific archive folder: .../moss_archives/{archive_id}
+pub fn moss_archive_dir(module_id: i64, assignment_id: i64, archive_id: &str) -> PathBuf {
+    moss_archives_dir(module_id, assignment_id).join(archive_id)
+}
+
+// Zip path for a specific archive: .../moss_archives/{archive_id}/archive.zip
+pub fn moss_archive_zip_path(module_id: i64, assignment_id: i64, archive_id: &str) -> PathBuf {
+    moss_archive_dir(module_id, assignment_id, archive_id).join("archive.zip")
+}
+
 // Overwrite files
 pub fn overwrite_files_dir(module_id: i64, assignment_id: i64) -> PathBuf {
     assignment_dir(module_id, assignment_id).join("overwrite_files")

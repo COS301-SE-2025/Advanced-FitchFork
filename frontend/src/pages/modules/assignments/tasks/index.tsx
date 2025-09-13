@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Button, Empty, Grid, Typography } from 'antd';
+import { Button, Empty, Typography } from 'antd';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import TaskView from './TaskView';
 import { TasksPageProvider, useTasksPage } from './context';
@@ -32,8 +32,6 @@ const DesktopLayout: React.FC = () => {
 };
 
 const TasksPageBody: React.FC = () => {
-  const screens = Grid.useBreakpoint();
-  const isMobile = !screens.md;
   // (Optional) You can implement a Mobile layout later using the same context
   return <DesktopLayout />;
 };

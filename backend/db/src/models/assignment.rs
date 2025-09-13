@@ -13,6 +13,7 @@ use util::paths::{assignment_dir, memo_output_dir};
 use crate::models::assignment_file::{Model as AssignmentFileModel, FileType};
 use crate::models::assignment_task::{Entity as TaskEntity, Column as TaskColumn};
 use crate::models::assignment_submission::{Entity as SubmissionEntity, Column as SubmissionCol};
+use crate::models::moss_report;
 use crate::models::user_module_role::{
     Entity as UserModuleRoleEntity,
     Column as UserModuleRoleCol,
@@ -51,6 +52,13 @@ pub enum Relation {
         to = "super::module::Column::Id"
     )]
     Module,
+
+    #[sea_orm(has_many = "super::moss_report::Entity")]
+    MossReports,
+}
+
+impl Related<moss_report::Entity> for Entity {
+    fn to() -> RelationDef { Relation::MossReports.def() }
 }
 
 impl ActiveModelBehavior for ActiveModel {}

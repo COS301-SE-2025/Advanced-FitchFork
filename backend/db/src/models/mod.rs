@@ -16,6 +16,7 @@ pub mod user;
 pub mod user_module_role;
 pub mod attendance_session;
 pub mod attendance_record;
+pub mod moss_report;
 
 pub use assignment::Entity as Assignment;
 pub use assignment_file::Entity as AssignmentFile;

@@ -27,15 +27,18 @@ export default function MarkingPage() {
     );
   }, [setValue]);
 
-  // Seed form whenever config.marking changes
+  // Seed form whenever config.marking changes (ensure default for new field)
   useEffect(() => {
     if (!config?.marking) return;
-    form.setFieldsValue(config.marking);
+    form.setFieldsValue({
+      ...config.marking,
+      dissalowed_code: config.marking.dissalowed_code ?? [],
+    });
   }, [config?.marking, form]);
 
   const onSave = useCallback(async () => {
     if (!config) return message.error('No configuration loaded yet.');
-    const values = await form.validateFields(); // FormShape
+    const values = await form.validateFields();
 
     try {
       const toSave: AssignmentMarkingConfig = {
@@ -47,6 +50,7 @@ export default function MarkingPage() {
         limit_attempts: values.limit_attempts,
         pass_mark: values.pass_mark,
         allow_practice_submissions: values.allow_practice_submissions,
+        dissalowed_code: values.dissalowed_code ?? [],
       };
       await updateConfig({ marking: toSave });
       message.success('Marking config saved');
@@ -159,6 +163,22 @@ export default function MarkingPage() {
           extra="Used to split output sections when parsing results."
         >
           <Input className="w-full" placeholder="e.g., &-=-&" />
+        </Form.Item>
+
+        {/* ---- Disallowed code substrings ---- */}
+        <Form.Item
+          name="dissalowed_code"
+          label="Disallowed Code Substrings"
+          className="w-full max-w-2xl"
+          tooltip="Any file inside a submitted ZIP containing one of these substrings will be flagged."
+          extra="Tip: press Enter or comma after each token."
+          rules={[{ type: 'array' }]}
+        >
+          <Select
+            mode="tags"
+            tokenSeparators={[',', '\n']}
+            placeholder="e.g., import forbidden_code, system(, eval("
+          />
         </Form.Item>
 
         <div className="pt-2">

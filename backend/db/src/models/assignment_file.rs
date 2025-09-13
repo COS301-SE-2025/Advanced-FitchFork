@@ -202,7 +202,6 @@ impl Model {
         fs::remove_file(full_path)
     }
 
-    // TODO: Change this to get the skeleton files instead of the memo files
     pub async fn get_base_files(
         db: &DatabaseConnection,
         assignment_id: i64,
@@ -210,7 +209,7 @@ impl Model {
         use crate::models::assignment_file::Column;
         Entity::find()
             .filter(Column::AssignmentId.eq(assignment_id))
-            .filter(Column::FileType.eq(FileType::Main))
+            .filter(Column::FileType.eq(FileType::Spec))
             .all(db)
             .await
     }

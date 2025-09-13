@@ -7,7 +7,33 @@ export const MARKING_SCHEMES = ['exact', 'percentage', 'regex'] as const;
 /** Feedback schemes */
 export const FEEDBACK_SCHEMES = ['auto', 'manual', 'ai'] as const;
 /** Languages (Rust currently supports only C++ and Java) */
-export const LANGUAGES = ['cpp', 'java'] as const;
+export const LANGUAGES = [
+  'c',
+  'cpp',
+  'java',
+  'ml',
+  'pascal',
+  'ada',
+  'lisp',
+  'scheme',
+  'haskell',
+  'fortran',
+  'ascii',
+  'vhdl',
+  'perl',
+  'matlab',
+  'python',
+  'mips',
+  'prolog',
+  'spice',
+  'vb',
+  'csharp',
+  'modula2',
+  'a8086',
+  'javascript',
+  'plsql',
+] as const;
+
 /** Submission modes */
 export const SUBMISSION_MODES = ['manual', 'gatlam', 'rng', 'codecoverage'] as const;
 /** Grading policies (mirrors Rust enum) */
@@ -28,8 +54,38 @@ export const FEEDBACK_SCHEME_OPTIONS = FEEDBACK_SCHEMES.map((val) => ({
   value: val,
 }));
 
+// pretty labels (C++/C#/PL/SQL/…)
+const NOT_IMPL = ' (not implemented)';
+
+export const LANGUAGE_LABELS: Record<(typeof LANGUAGES)[number], string> = {
+  c: `C${NOT_IMPL}`,
+  cpp: 'C++',
+  java: 'Java',
+  ml: `ML${NOT_IMPL}`,
+  pascal: `Pascal${NOT_IMPL}`,
+  ada: `Ada${NOT_IMPL}`,
+  lisp: `Lisp${NOT_IMPL}`,
+  scheme: `Scheme${NOT_IMPL}`,
+  haskell: `Haskell${NOT_IMPL}`,
+  fortran: `Fortran${NOT_IMPL}`,
+  ascii: `ASCII${NOT_IMPL}`,
+  vhdl: `VHDL${NOT_IMPL}`,
+  perl: `Perl${NOT_IMPL}`,
+  matlab: `MATLAB${NOT_IMPL}`,
+  python: `Python${NOT_IMPL}`,
+  mips: `MIPS${NOT_IMPL}`,
+  prolog: `Prolog${NOT_IMPL}`,
+  spice: `SPICE${NOT_IMPL}`,
+  vb: `VB${NOT_IMPL}`,
+  csharp: `C#${NOT_IMPL}`,
+  modula2: `Modula-2${NOT_IMPL}`,
+  a8086: `8086 Assembly${NOT_IMPL}`,
+  javascript: `JavaScript${NOT_IMPL}`,
+  plsql: `PL/SQL${NOT_IMPL}`,
+};
+
 export const LANGUAGE_OPTIONS = LANGUAGES.map((val) => ({
-  label: val.charAt(0).toUpperCase() + val.slice(1),
+  label: LANGUAGE_LABELS[val],
   value: val,
 }));
 
@@ -122,6 +178,9 @@ export interface AssignmentMarkingConfig {
    * Staff (lecturer/assistant/admin) are unaffected (always allowed).
    */
   allow_practice_submissions: boolean;
+
+  /** Substrings to flag as disallowed in source files (serialized as `dissalowed_code`). */
+  dissalowed_code: string[];
 }
 
 /** Options for execution output capture (ExecutionOutputOptions). */

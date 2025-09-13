@@ -51,7 +51,16 @@ mod plagiarism_tests {
         let assignment = AssignmentModel::create(db, module.id, "Assignment 1", Some("Desc 1"), AssignmentType::Assignment, Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(), Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap()).await.unwrap();
         let submission1 = SubmissionModel::save_file(db, assignment.id, student_user1.id, 1, 10, 10, false, "sub1.txt", "hash123#", b"ontime").await.unwrap();
         let submission2 = SubmissionModel::save_file(db, assignment.id, student_user2.id, 1, 10, 10, false, "sub2.txt", "hash123#", b"ontime").await.unwrap();
-        let plagiarism_case = PlagiarismCaseModel::create_case(db, assignment.id, submission1.id, submission2.id, "High similarity detected", 0.0).await.unwrap();
+        let plagiarism_case = PlagiarismCaseModel::create_case(
+            db,
+            assignment.id,
+            submission1.id,
+            submission2.id,
+            "High similarity detected",
+            0.0,       // similarity
+            0,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
 
         TestData {
             admin_user,
@@ -83,9 +92,16 @@ mod plagiarism_tests {
             .await
             .unwrap();
 
-        let mut case1 = PlagiarismCaseModel::create_case(db, assignment_id, sub3.id, sub4.id, "Resolved case", 0.0)
-            .await
-            .unwrap();
+        let mut case1 = PlagiarismCaseModel::create_case(
+            db,
+            assignment_id,
+            sub3.id,
+            sub4.id,
+            "Resolved case",
+            0.0,       // similarity
+            0,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
 
         let mut active_case1 = case1.into_active_model();
         active_case1.status = Set(Status::Flagged);
@@ -94,9 +110,16 @@ mod plagiarism_tests {
         case1 = active_case1.update(db).await.unwrap();
         cases.push(case1);
 
-        let mut case2 = PlagiarismCaseModel::create_case(db, assignment_id, sub3.id, sub4.id, "Pending case", 0.0)
-            .await
-            .unwrap();
+        let mut case2 = PlagiarismCaseModel::create_case(
+            db,
+            assignment_id,
+            sub3.id,
+            sub4.id,
+            "Pending case",
+            0.0,       // similarity
+            0_i64,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
 
         let mut active_case2 = case2.into_active_model();
         active_case2.status = Set(Status::Reviewed);
@@ -475,7 +498,9 @@ mod plagiarism_tests {
                 data.submission1.id,
                 sub.id,
                 "Test case description",
-                0.0
+                0.0,       // similarity
+                0,     // lines_matched
+                None,      // report_id
             ).await.unwrap();
         }
 

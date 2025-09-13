@@ -122,10 +122,10 @@ mod common {
             submission1.id,
             submission2.id,
             "Initial description",
-            0.0
-        )
-        .await
-        .unwrap();
+            0.0,       // similarity
+            0,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
 
         TestData {
             lecturer_user,
@@ -364,20 +364,28 @@ mod bulk_delete_plagiarism_tests {
         .await
         .unwrap();
 
-        let case2 =
-            PlagiarismCaseModel::create_case(db, data.assignment.id, submission3.id, submission4.id, "Case 2", 0.0)
-                .await
-                .unwrap();
+        let case2 = PlagiarismCaseModel::create_case(
+            db,
+            data.assignment.id,
+            submission3.id,
+            submission4.id,
+            "Case 2",
+            0.0,       // similarity
+            0,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
+
         let case3 = PlagiarismCaseModel::create_case(
             db,
             data.assignment.id,
             data.submission1.id,
             submission3.id,
             "Case 3",
-            0.0
-        )
-        .await
-        .unwrap();
+            0.0,       // similarity
+            0_i64,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
+
 
         extra_cases.push(case2);
         extra_cases.push(case3);

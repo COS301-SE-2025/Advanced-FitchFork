@@ -102,6 +102,8 @@ mod update_plagiarism_tests {
             submission2.id,
             "Initial description",
             25.0_f32,
+            12_i64,          // lines_matched
+            None,            // report_id
         ).await.unwrap();
 
         TestData {

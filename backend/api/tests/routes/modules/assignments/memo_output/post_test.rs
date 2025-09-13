@@ -15,7 +15,7 @@ mod tests {
     use std::{fs, io::Write};
     use tower::ServiceExt;
     use zip::write::SimpleFileOptions;
-    use util::{execution_config::{execution_config::{Language, SubmissionMode}, ExecutionConfig}, paths::{
+    use util::{execution_config::{execution_config::SubmissionMode, ExecutionConfig}, languages::Language, paths::{
         main_dir, makefile_dir, mark_allocator_dir, memo_dir, memo_output_dir
     }};
 

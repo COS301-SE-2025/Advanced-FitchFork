@@ -571,8 +571,8 @@ pub async fn create_main_from_interpreter(
     use std::env;
     use std::io::Write;
     use util::execution_config::ExecutionConfig;
-    use util::execution_config::execution_config::Language;
     use zip::write::{FileOptions, ZipWriter};
+    use util::languages::{LanguageExt}; 
 
     // --- Fetch submission, assignment, interpreter rows ---
     let submission = AssignmentSubmissionEntity::find_by_id(submission_id)
@@ -610,54 +610,33 @@ pub async fn create_main_from_interpreter(
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
     // Determine main file name from language
-    let main_file_name = match config.project.language {
-        Language::Cpp => "Main.cpp",
-        Language::Java => "Main.java",
-        // Language::Python => "Main.py",
-    };
+    let lang = config.project.language;
+    let main_file_name = lang.main_filename();
 
     // Heuristic: if the "interpreter" is actually a compile/run line (e.g., g++ Main.cpp),
     // then there's no source to compile yet. Synthesize a Main.cpp (or Main.*)
     // from the generated_string and save it as the main archive locally.
-    let looks_like_compile: bool = {
-        let cmd = interpreter.command.to_lowercase();
-        // very basic detection; expand as needed
-        (cmd.contains("g++")
-            || cmd.contains("clang++")
-            || cmd.contains("javac")
-            || cmd.contains("python "))
-            && cmd.contains("Main.")
-    };
+    let looks_like_compile = lang.is_compile_cmd(&interpreter.command);
 
     if looks_like_compile {
         // --- STOPGAP BRANCH ---
         // Build a simple source file from `generated_string`.
         // Adjust templates per language as needed.
-        let synthesized = match config.project.language {
-            Language::Cpp => format!(
-                r#"#include <bits/stdc++.h>
-                int main() {{
-                    std::cout << "{}" << std::endl;
-                    return 0;
-                }}
-                "#,
-                generated_string.replace('"', "\\\"")
-            ),
-            Language::Java => format!(
-                r#"public class Main {{
-                public static void main(String[] args) {{
-                    System.out.println("{}");
-                }}
-            }}
-            "#,
-                generated_string.replace('"', "\\\"")
-            ),
-            // Language::Python => format!(r#"print("{}")"#, generated_string.replace('"', "\\\"")),
-        };
+        let synthesized = lang
+        .synthesize_program(generated_string)
+        .unwrap_or_else(|| {
+            // very safe fallback (keeps old behavior working even if a new lang lacks a template)
+            format!("// synthesized stub\n// {}\n", generated_string)
+        });
+
 
         // Zip and save as the "main" archive
-        let zip_ext = main_file_name.rsplit('.').next().unwrap_or("txt");
+        let zip_ext = std::path::Path::new(main_file_name)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("txt");
         let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
+
 
         let mut zip_data = Vec::new();
         {
@@ -757,13 +736,7 @@ pub async fn create_main_from_interpreter(
     }
 
     // Sanity-check: generator should produce plausible source
-    let looks_like_source = match config.project.language {
-        Language::Cpp => {
-            combined_output.contains("int main") || combined_output.contains("#include")
-        }
-        Language::Java => combined_output.contains("class Main"),
-        // Language::Python => combined_output.contains("def ") || combined_output.contains("print("),
-    };
+    let looks_like_source = lang.looks_like_source(&combined_output);
 
     if !looks_like_source {
         println!(
@@ -782,8 +755,12 @@ pub async fn create_main_from_interpreter(
     }
 
     // Zip the generated source as Main.*
-    let zip_ext = main_file_name.rsplit('.').next().unwrap_or("txt");
+    let zip_ext = std::path::Path::new(main_file_name)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("txt");
     let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
+
 
     let mut zip_data = Vec::new();
     {

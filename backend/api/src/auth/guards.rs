@@ -16,6 +16,7 @@ use db::models::{
     assignment_file::{Entity as FileEntity, Column as FileColumn},
     user::Entity as UserEntity,
     attendance_session::{Entity as AttendanceSessionEntity, Column as AttendanceSessionColumn},
+    moss_report::{Entity as MossReportEntity, Column as MossReportColumn},
     user
 };
 
@@ -551,6 +552,39 @@ async fn check_attendance_session_hierarchy(
     Ok(())
 }
 
+async fn check_moss_report_hierarchy(
+    module_id: i32,
+    assignment_id: i32,
+    report_id: i32,
+    db: &DatabaseConnection,
+) -> Result<(), (StatusCode, Json<ApiResponse<Empty>>)> {
+    // Ensure module & assignment exist / relate
+    check_assignment_hierarchy(module_id, assignment_id, db).await?;
+
+    // Ensure the report belongs to the assignment
+    let found = MossReportEntity::find()
+        .filter(MossReportColumn::Id.eq(report_id))
+        .filter(MossReportColumn::AssignmentId.eq(assignment_id))
+        .one(db)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error("Database error while checking MOSS report")),
+            )
+        })?;
+
+    if found.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!(
+                "MOSS report {} in Assignment {} not found.",
+                report_id, assignment_id
+            ))),
+        ));
+    }
+    Ok(())
+}
 
 pub async fn validate_known_ids(
     State(app_state): State<AppState>,
@@ -560,76 +594,85 @@ pub async fn validate_known_ids(
 ) -> Result<Response, Response> {
     let db = app_state.db();
 
-    let mut module_id: Option<i32>     = None;
-    let mut assignment_id: Option<i32> = None;
-    let mut task_id: Option<i32>       = None;
-    let mut submission_id: Option<i32> = None;
-    let mut file_id: Option<i32>       = None;
-    let mut user_id: Option<i32>       = None;
-    let mut ticket_id: Option<i32>     = None;
-    let mut message_id: Option<i32>    = None;
-    let mut case_id: Option<i32>       = None;
+    let mut module_id: Option<i32>       = None;
+    let mut assignment_id: Option<i32>   = None;
+    let mut task_id: Option<i32>         = None;
+    let mut submission_id: Option<i32>   = None;
+    let mut file_id: Option<i32>         = None;
+    let mut user_id: Option<i32>         = None;
+    let mut ticket_id: Option<i32>       = None;
+    let mut message_id: Option<i32>      = None;
+    let mut case_id: Option<i32>         = None;
     let mut announcement_id: Option<i32> = None;
-    let mut session_id: Option<i32> = None;
+    let mut session_id: Option<i32>      = None;
+    let mut report_id: Option<i32>     = None;
 
     for (key, raw) in &params {
-        let id = raw.parse::<i32>().map_err(|_| {
-            (StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Invalid {}: '{}'. Must be an integer.", key, raw)))).into_response()
-        })?;
         match key.as_str() {
-            "module_id"     => module_id = Some(id),
-            "assignment_id" => assignment_id = Some(id),
-            "task_id"       => task_id = Some(id),
-            "submission_id" => submission_id = Some(id),
-            "file_id"       => file_id = Some(id),
-            "user_id"       => user_id = Some(id),
-            "ticket_id"     => ticket_id = Some(id),
-            "case_id" => case_id = Some(id),
-            "announcement_id" => announcement_id = Some(id),
-            "message_id" => message_id = Some(id),
-            "session_id"      => session_id = Some(id),  
-            _ => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Unexpected parameter: '{}'.", key)))).into_response()),
+            // numeric ids → parse i32 (existing behavior)
+            "module_id"     |
+            "assignment_id" |
+            "task_id"       |
+            "submission_id" |
+            "file_id"       |
+            "user_id"       |
+            "ticket_id"     |
+            "case_id"       |
+            "announcement_id" |
+            "message_id"    |
+            "session_id" |
+            "report_id"  => {
+                let id = raw.parse::<i32>().map_err(|_| {
+                    (StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(
+                        format!("Invalid {}: '{}'. Must be an integer.", key, raw)
+                    ))).into_response()
+                })?;
+                match key.as_str() {
+                    "module_id"       => module_id = Some(id),
+                    "assignment_id"   => assignment_id = Some(id),
+                    "task_id"         => task_id = Some(id),
+                    "submission_id"   => submission_id = Some(id),
+                    "file_id"         => file_id = Some(id),
+                    "user_id"         => user_id = Some(id),
+                    "ticket_id"       => ticket_id = Some(id),
+                    "case_id"         => case_id = Some(id),
+                    "announcement_id" => announcement_id = Some(id),
+                    "message_id"      => message_id = Some(id),
+                    "session_id"      => session_id = Some(id),
+                    "report_id"       => report_id = Some(id), 
+                    _ => {}
+                }
+            }
+
+            // anything else → still reject
+            _ => {
+                return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(
+                    format!("Unexpected parameter: '{}'.", key)
+                ))).into_response());
+            }
         }
     }
-    
-    if let Some(uid) = user_id {
-        check_user_exists(uid, db).await.map_err(|e| e.into_response())?;
+
+    // existing checks (unchanged)
+    if let Some(uid) = user_id { check_user_exists(uid, db).await.map_err(|e| e.into_response())?; }
+    if let Some(mid) = module_id { check_module_exists(mid, db).await.map_err(|e| e.into_response())?; }
+    if let (Some(mid), Some(aid)) = (module_id, assignment_id) { check_assignment_hierarchy(mid, aid, db).await.map_err(|e| e.into_response())?; }
+    if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, task_id) { check_task_hierarchy(mid, aid, tid, db).await.map_err(|e| e.into_response())?; }
+    if let (Some(mid), Some(aid), Some(sid)) = (module_id, assignment_id, submission_id) { check_submission_hierarchy(mid, aid, sid, db).await.map_err(|e| e.into_response())?; }
+    if let (Some(mid), Some(aid), Some(fid)) = (module_id, assignment_id, file_id) { check_file_hierarchy(mid, aid, fid, db).await.map_err(|e| e.into_response())?; }
+    if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, ticket_id) { check_ticket_hierarchy(mid, aid, tid, db).await.map_err(|e| e.into_response())?; }
+    if let (Some(mid), Some(aid), Some(cid)) = (module_id, assignment_id, case_id) { check_plagiarism_hierarchy(mid, aid, cid, db).await.map_err(|e| e.into_response())?; }
+    if let (Some(mid), Some(ann_id)) = (module_id, announcement_id) { check_announcement_hierarchy(mid, ann_id, db).await.map_err(|e| e.into_response())?; }
+    if let (Some(mid), Some(aid), Some(tid), Some(meid)) = (module_id, assignment_id, ticket_id, message_id) { check_message_hierarchy(mid, aid, tid, meid, db).await.map_err(|e| e.into_response())?; }
+    if let (Some(mid), Some(sid)) = (module_id, session_id) { check_attendance_session_hierarchy(mid, sid, db).await.map_err(|e| e.into_response())?; }
+    if let (Some(mid), Some(aid), Some(rid)) = (module_id, assignment_id, report_id) {
+        check_moss_report_hierarchy(mid, aid, rid, db).await.map_err(|e| e.into_response())?;
     }
-    if let Some(mid) = module_id {
-        check_module_exists(mid, db).await.map_err(|e| e.into_response())?;
-    }
-    if let (Some(mid), Some(aid)) = (module_id, assignment_id) {
-        check_assignment_hierarchy(mid, aid, db).await.map_err(|e| e.into_response())?;
-    }
-    if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, task_id) {
-        check_task_hierarchy(mid, aid, tid, db).await.map_err(|e| e.into_response())?;
-    }
-    if let (Some(mid), Some(aid), Some(sid)) = (module_id, assignment_id, submission_id) {
-        check_submission_hierarchy(mid, aid, sid, db).await.map_err(|e| e.into_response())?;
-    }
-    if let (Some(mid), Some(aid), Some(fid)) = (module_id, assignment_id, file_id) {
-        check_file_hierarchy(mid, aid, fid, db).await.map_err(|e| e.into_response())?;
-    }
-    if let (Some(mid), Some(aid), Some(tid)) = (module_id, assignment_id, ticket_id) {
-        check_ticket_hierarchy(mid, aid, tid, db).await.map_err(|e| e.into_response())?;
-    }
-    if let (Some(mid), Some(aid), Some(sid)) = (module_id, assignment_id, case_id) {
-        check_plagiarism_hierarchy(mid, aid, sid, db).await.map_err(|e| e.into_response())?;
-    }
-    if let (Some(mid), Some(ann_id)) = (module_id, announcement_id) {
-        check_announcement_hierarchy(mid, ann_id, db).await.map_err(|e| e.into_response())?;
-    }
-    if let (Some(mid), Some(aid), Some(tid), Some(meid)) = (module_id, assignment_id, ticket_id, message_id) {
-        check_message_hierarchy(mid, aid, tid, meid, db).await.map_err(|e| e.into_response())?;
-    }
-    if let (Some(mid), Some(sid)) = (module_id, session_id) {
-        check_attendance_session_hierarchy(mid, sid, db)
-            .await
-            .map_err(|e| e.into_response())?;
-    }
+
 
     Ok(next.run(req).await)
 }
+
 
 // TODO Write tests for this gaurd
 pub async fn require_ticket_ws_access(

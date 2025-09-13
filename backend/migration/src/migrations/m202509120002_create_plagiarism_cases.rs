@@ -18,9 +18,11 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Alias::new("assignment_id")).big_integer().not_null())
                     .col(ColumnDef::new(Alias::new("submission_id_1")).big_integer().not_null())
                     .col(ColumnDef::new(Alias::new("submission_id_2")).big_integer().not_null())
+                    .col(ColumnDef::new(Alias::new("report_id")).big_integer().null())
                     .col(ColumnDef::new(Alias::new("description")).text().not_null())
                     .col(ColumnDef::new(Alias::new("status")).string().not_null().default("review"))
                     .col(ColumnDef::new(Alias::new("similarity")).float().not_null().default(0.0))
+                    .col(ColumnDef::new(Alias::new("lines_matched")).integer().not_null().default(0))
                     .col(ColumnDef::new(Alias::new("created_at")).timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
                     .col(ColumnDef::new(Alias::new("updated_at")).timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
                     .foreign_key(
@@ -37,12 +39,22 @@ impl MigrationTrait for Migration {
                             .to(Alias::new("assignment_submissions"), Alias::new("id"))
                             .on_delete(ForeignKeyAction::Cascade),
                     )
+                    // NEW FK to moss_reports with SET NULL to avoid cascading deletes
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_plagiarism_report")
+                            .from(Alias::new("plagiarism_cases"), Alias::new("report_id"))
+                            .to(Alias::new("moss_reports"), Alias::new("id"))
+                            .on_delete(ForeignKeyAction::SetNull),
+                    )
                     .to_owned(),
             )
             .await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager.drop_table(Table::drop().table(Alias::new("plagiarism_cases")).to_owned()).await
+        manager
+            .drop_table(Table::drop().table(Alias::new("plagiarism_cases")).to_owned())
+            .await
     }
 }

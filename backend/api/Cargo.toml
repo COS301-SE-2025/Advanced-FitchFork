@@ -74,6 +74,7 @@ portpicker = "0.1"
 zip = "4.3"
 tempfile = "3.5.0"
 walkdir = "2.5.0"
+globset = "0.4"
 
 # For archiving MOSS reports
 anyhow = "1.0"

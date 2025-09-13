@@ -125,10 +125,10 @@ mod patch_plagiarism_tests {
             submission1.id,
             submission2.id,
             "Initial description",
-            0.0
-        )
-        .await
-        .unwrap();
+            0.0,    // similarity
+            0,  // lines_matched
+            None,   // report_id
+        ).await.unwrap();
 
         TestData {
             lecturer_user,

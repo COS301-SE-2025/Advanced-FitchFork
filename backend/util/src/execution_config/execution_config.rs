@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-use crate::paths::{config_dir};
+use crate::{languages::Language, paths::config_dir};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -17,13 +17,6 @@ pub enum FeedbackScheme {
     Auto,
     Manual,
     Ai,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Language {
-    Cpp,
-    Java,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Eq)]

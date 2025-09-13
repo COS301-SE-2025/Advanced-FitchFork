@@ -658,17 +658,17 @@ pub async fn submit_assignment(
         Err(_) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<SubmissionDetailResponse>::error(
-                    "Assignment not found",
-                )),
+                Json(ApiResponse::<SubmissionDetailResponse>::error("Assignment not found")),
             );
         }
     };
 
     let mut is_practice: bool = false;
+    let mut attests_ownership: bool = false; // NEW: require this
     let mut file_name: Option<String> = None;
     let mut file_bytes: Option<bytes::Bytes> = None;
 
+    // Parse multipart
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         match field.name() {
             Some("file") => {
@@ -677,19 +677,48 @@ pub async fn submit_assignment(
             }
             Some("is_practice") => {
                 let val = field.text().await.unwrap_or_default();
-                is_practice = val == "true" || val == "1";
+                let v = val.trim().to_ascii_lowercase();
+                is_practice = v == "true" || v == "1" || v == "on";
+            }
+            Some("attests_ownership") => {
+                let val = field.text().await.unwrap_or_default();
+                let v = val.trim().to_ascii_lowercase();
+                attests_ownership = v == "true" || v == "1" || v == "on";
             }
             _ => {}
         }
     }
 
+    // Require attestation (422)
+    if !attests_ownership {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ApiResponse::<SubmissionDetailResponse>::error(
+                "You must confirm the ownership attestation before submitting",
+            )),
+        );
+    }
+
+    // Validate file presence, type, non-empty
     let (file_name, file_bytes) = match validate_file_upload(&file_name, &file_bytes) {
         Ok((name, bytes)) => (name, bytes),
         Err(response) => return response,
     };
 
+    // Enforce max size (mirror UI 50MB)
+    const MAX_SIZE_MB: usize = 50;
+    if file_bytes.len() > MAX_SIZE_MB * 1024 * 1024 {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(ApiResponse::<SubmissionDetailResponse>::error(
+                "File too large. Max size is 50 MB",
+            )),
+        );
+    }
+
+    // Policy check
     match assignment.can_submit_for(db, claims.sub, is_practice).await {
-        Ok(true) => { /* allowed, continue */ }
+        Ok(true) => {}
         Ok(false) => {
             let msg = if is_practice {
                 "Practice submissions are disabled for this assignment.".to_string()
@@ -708,7 +737,6 @@ pub async fn submit_assignment(
                     Err(_) => "Submission attempts not allowed by policy.".to_string(),
                 }
             };
-
             return (
                 StatusCode::FORBIDDEN,
                 Json(ApiResponse::<SubmissionDetailResponse>::error(&msg)),
@@ -725,7 +753,7 @@ pub async fn submit_assignment(
         }
     }
 
-    // Load config early
+    // Load execution config
     let config = match get_execution_config(module_id, assignment_id) {
         Ok(config) => config,
         Err(e) => {
@@ -736,13 +764,12 @@ pub async fn submit_assignment(
         }
     };
 
-    // --- New: check dissalowed code in the submission zip ---
+    // Scan for disallowed code (best-effort; failure just logs)
     let mut disallowed_present = false;
     {
         use std::io::Write;
         use tempfile::NamedTempFile;
 
-        // Write uploaded zip bytes to a temporary file
         let mut temp_file = match NamedTempFile::new() {
             Ok(f) => f,
             Err(e) => {
@@ -755,7 +782,6 @@ pub async fn submit_assignment(
                 );
             }
         };
-
         if let Err(e) = temp_file.write_all(&file_bytes) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -765,24 +791,20 @@ pub async fn submit_assignment(
                 ))),
             );
         }
-
         let temp_path = temp_file.into_temp_path();
-
         match scan_code_content::contains_dissalowed_code(&temp_path, &config) {
             Ok(result) => disallowed_present = result,
-            Err(e) => {
-                eprintln!("Failed to check dissalowed code: {}", e);
-            }
+            Err(e) => eprintln!("Disallowed scan error: {}", e),
         }
     }
 
-    /*
+        /*
     TODO
     Reece this dissalowed_present boolean - if its true then they have dissalowed imports - they need to be given a mark of 0
      */
 
+    // Hash + attempt
     let file_hash = format!("{:x}", md5::compute(&file_bytes));
-
     let attempt = match get_next_attempt(assignment_id, claims.sub, db).await {
         Ok(attempt) => attempt,
         Err(e) => {
@@ -796,6 +818,7 @@ pub async fn submit_assignment(
         }
     };
 
+    // Persist file + attestation
     let submission = match AssignmentSubmissionModel::save_file(
         db,
         assignment_id,
@@ -822,6 +845,7 @@ pub async fn submit_assignment(
         }
     };
 
+    // Run the pipeline (manual vs GA)
     if let Err(e) =
         process_submission_code(db, submission.id, config.clone(), module_id, assignment_id).await
     {
@@ -834,6 +858,7 @@ pub async fn submit_assignment(
         );
     }
 
+    // Ensure allocator (non-manual may need (re)generation)
     if config.project.submission_mode != SubmissionMode::Manual {
         let tasks_res = assignment_task::Entity::find()
             .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
@@ -867,14 +892,13 @@ pub async fn submit_assignment(
                 },
             };
 
-            let memo_output_res = assignment_memo_output::Entity::find()
+            let memo_path = match assignment_memo_output::Entity::find()
                 .filter(assignment_memo_output::Column::AssignmentId.eq(assignment_id))
                 .filter(assignment_memo_output::Column::TaskId.eq(task.id))
                 .one(db)
-                .await;
-
-            let memo_path = match memo_output_res {
-                Ok(Some(memo_output)) => storage_root().join(&memo_output.path),
+                .await
+            {
+                Ok(Some(m)) => storage_root().join(&m.path),
                 Ok(None) => memo_dir.join(format!("no_memo_for_task_{}", task.id)),
                 Err(_) => {
                     return (
@@ -917,8 +941,9 @@ pub async fn submit_assignment(
             }
         };
 
+    // Mark
     match grade_submission(
-        submission,
+        submission.clone(),
         &assignment,
         &memo_outputs,
         &mark_allocator_path,
@@ -927,16 +952,61 @@ pub async fn submit_assignment(
     )
     .await
     {
-        Ok(resp) => (
-            StatusCode::OK,
-            Json(ApiResponse::success(resp, "Submission received and graded")),
-        ),
+        Ok(mut resp) => {
+            // If disallowed imports, force mark to 0 and persist/report it
+            if disallowed_present {
+                // Update DB mark to 0
+                if let Ok(Some(existing)) =
+                    assignment_submission::Entity::find_by_id(submission.id).one(db).await
+                {
+                    let mut am: assignment_submission::ActiveModel = existing.into();
+                    am.earned = sea_orm::ActiveValue::Set(0);
+                    am.updated_at = sea_orm::ActiveValue::Set(Utc::now());
+                    if let Err(e) = assignment_submission::Entity::update(am).exec(db).await {
+                        eprintln!("Failed to zero mark in DB: {}", e);
+                    }
+                }
+
+                // Update report JSON atomically
+                let new_mark = MarkSummary {
+                    earned: 0,
+                    total: resp.mark.total,
+                };
+                if let Err(e) = update_submission_report_marks(
+                    assignment.module_id,
+                    assignment.id,
+                    &submission,
+                    &new_mark,
+                )
+                .await
+                {
+                    eprintln!("Failed to zero mark in report: {}", e);
+                }
+
+                // Mutate response
+                resp.mark = new_mark;
+
+                return (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(
+                        resp,
+                        "Submission received and graded (disallowed code detected: mark set to 0)",
+                    )),
+                );
+            }
+
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(resp, "Submission received and graded")),
+            )
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<SubmissionDetailResponse>::error(e)),
         ),
     }
 }
+
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions/remark
 ///

@@ -141,6 +141,8 @@ mod create_plagiarism_tests {
             submission_id_2: data.submission2.id,
             description: "Code similarity detected".to_string(),
             similarity: 67.5,
+            lines_matched: 0,
+            report_id: None,
         };
 
         let req = make_post_request(
@@ -170,6 +172,8 @@ mod create_plagiarism_tests {
         assert!(case_data["updated_at"].is_string());
         assert!(case_data["similarity"].is_number());
         assert!(approx_eq_f64(case_data["similarity"].as_f64().unwrap(), 67.5, 1e-6));
+        assert_eq!(case_data["lines_matched"], 0);       // server defaults to 0
+        assert!(case_data["report_id"].is_null());       // manually created case has no report
 
         // Verify DB row
         let case = PlagiarismCaseEntity::find_by_id(case_data["id"].as_i64().unwrap())
@@ -192,6 +196,8 @@ mod create_plagiarism_tests {
             submission_id_2: data.submission2.id,
             description: "Similar solution structure".to_string(),
             similarity: 0.0,
+            lines_matched: 0,
+            report_id: None,
         };
 
         let req = make_post_request(
@@ -221,6 +227,8 @@ mod create_plagiarism_tests {
             submission_id_2: data.submission2.id,
             description: "Tutor should not access".to_string(),
             similarity: 10.0,
+            lines_matched: 0,
+            report_id: None,
         };
 
         let req = make_post_request(
@@ -245,6 +253,8 @@ mod create_plagiarism_tests {
             submission_id_2: data.submission1.id, // Same submission
             description: "Invalid same submission".to_string(),
             similarity: 50.0,
+            lines_matched: 0,
+            report_id: None,
         };
 
         let req = make_post_request(
@@ -274,6 +284,8 @@ mod create_plagiarism_tests {
             submission_id_2: 999999, // Non-existent submission
             description: "Invalid submission".to_string(),
             similarity: 15.0,
+            lines_matched: 0,
+            report_id: None,
         };
 
         let req = make_post_request(
@@ -330,6 +342,8 @@ mod create_plagiarism_tests {
             submission_id_2: other_submission.id, // From different assignment
             description: "Cross-assignment submission".to_string(),
             similarity: 88.0,
+            lines_matched: 0,
+            report_id: None,
         };
 
         let req = make_post_request(
@@ -362,6 +376,8 @@ mod create_plagiarism_tests {
             submission_id_2: data.submission2.id,
             description: "Unauthorized attempt".to_string(),
             similarity: 10.0,
+            lines_matched: 0,
+            report_id: None,
         };
 
         let uri = format!(
@@ -453,6 +469,8 @@ mod create_plagiarism_tests {
             submission_id_2: data.submission2.id,
             description: "Boundary 0".to_string(),
             similarity: 0.0,
+            lines_matched: 0,
+            report_id: None,
         };
         let req0 = make_post_request(&data.lecturer_user, data.module.id, data.assignment.id, payload0);
         let resp0 = app.clone().oneshot(req0).await.unwrap();
@@ -467,6 +485,8 @@ mod create_plagiarism_tests {
             submission_id_2: data.submission2.id,
             description: "Boundary 100".to_string(),
             similarity: 100.0,
+            lines_matched: 0,
+            report_id: None,
         };
         let req100 = make_post_request(&data.lecturer_user, data.module.id, data.assignment.id, payload100);
         let resp100 = app.oneshot(req100).await.unwrap();
@@ -487,6 +507,8 @@ mod create_plagiarism_tests {
             submission_id_2: data.submission2.id,
             description: "Too low".to_string(),
             similarity: -1.0,
+            lines_matched: 0,
+            report_id: None,
         };
 
         let req = make_post_request(&data.lecturer_user, data.module.id, data.assignment.id, payload);
@@ -505,6 +527,8 @@ mod create_plagiarism_tests {
             submission_id_2: data.submission2.id,
             description: "Too high".to_string(),
             similarity: 120.0,
+            lines_matched: 0,
+            report_id: None,
         };
 
         let req = make_post_request(&data.lecturer_user, data.module.id, data.assignment.id, payload);
@@ -524,6 +548,8 @@ mod create_plagiarism_tests {
             submission_id_2: data.submission2.id,
             description: "Fractional".to_string(),
             similarity: sim,
+            lines_matched: 0,
+            report_id: None,
         };
 
         let req = make_post_request(&data.lecturer_user, data.module.id, data.assignment.id, payload);
