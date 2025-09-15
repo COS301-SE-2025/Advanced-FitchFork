@@ -4,10 +4,10 @@
 //!
 //! **Permissions:** Only authorized users (lecturer/assistant) can create announcements.
 
-use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Extension, Json};
-use util::state::AppState;
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Extension, Json};
 use crate::{auth::AuthUser, response::ApiResponse, routes::modules::announcements::common::AnnouncementRequest};
-use db::models::announcements::Model as AnnouncementModel;
+use services::service::Service;
+use services::announcement::{AnnouncementService, CreateAnnouncement};
 
 /// POST /api/modules/{module_id}/announcements
 ///
@@ -105,10 +105,15 @@ pub async fn create_announcement(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(req): Json<AnnouncementRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-    let user_id = claims.sub;
-
-    match AnnouncementModel::create(db, module_id, user_id, &req.title, &req.body, req.pinned).await {
+    match AnnouncementService::create(
+        CreateAnnouncement {
+            module_id,
+            user_id: claims.sub,
+            title: req.title,
+            body: req.body,
+            pinned: req.pinned,
+        }
+    ).await {
         Ok(announcement) => (
             StatusCode::OK,
             Json(ApiResponse::success(

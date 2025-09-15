@@ -4,9 +4,10 @@
 //!
 //! **Permissions:** Only users with the proper roles (e.g., lecturer/assistant) can delete announcements.
 
-use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
-use db::models::announcements::Model as AnnouncementModel;
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crate::response::ApiResponse;
+use services::service::Service;
+use services::announcement::AnnouncementService;
 
 /// DELETE /api/modules/{module_id}/announcements/{announcement_id}
 ///
@@ -65,8 +66,7 @@ use crate::response::ApiResponse;
 pub async fn delete_announcement(
     Path((_, announcement_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-    match AnnouncementModel::delete(db, announcement_id).await {
+    match AnnouncementService::delete_by_id(announcement_id).await {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::success(

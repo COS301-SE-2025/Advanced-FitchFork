@@ -13,8 +13,7 @@
 //! Call `announcement_routes(app_state)` to get a configured `Router` for announcements
 //! to be mounted under a module in the main app.
 
-use axum::{middleware::from_fn_with_state, Router};
-use util::state::AppState;
+use axum::{middleware::from_fn, Router};
 use axum::routing::{post, delete, put, get};
 use post::create_announcement;
 use delete::delete_announcement;
@@ -38,11 +37,11 @@ pub mod common;
 /// - GET `/{announcement_id}`  → get single announcement (with author id & username)
 /// - PUT `/{announcement_id}`  → edit announcement (lecturer or assistant lecturer only)
 /// - DELETE `/{announcement_id}` → delete announcement (lecturer or assistant lecturer only)
-pub fn announcement_routes(app_state: AppState) -> Router<AppState> {
+pub fn announcement_routes() -> Router {
     Router::new()
-        .route("/",post(create_announcement).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .route("/{announcement_id}",delete(delete_announcement).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
-        .route("/{announcement_id}",put(edit_announcement).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
+        .route("/",post(create_announcement).route_layer(from_fn(require_lecturer_or_assistant_lecturer)))
+        .route("/{announcement_id}",delete(delete_announcement).route_layer(from_fn(require_lecturer_or_assistant_lecturer)))
+        .route("/{announcement_id}",put(edit_announcement).route_layer(from_fn(require_lecturer_or_assistant_lecturer)))
         .route("/", get(get_announcements))
         .route("/{announcement_id}", get(get_announcement))
 }

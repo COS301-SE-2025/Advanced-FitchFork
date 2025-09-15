@@ -4,10 +4,10 @@
 //!
 //! **Permissions:** Only authorized users (lecturer/assistant) can edit announcements.
 
-use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
-use db::models::announcements::Model as AnnouncementModel;
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crate::{response::ApiResponse, routes::modules::announcements::common::AnnouncementRequest};
-use util::state::AppState;
+use services::service::Service;
+use services::announcement::{AnnouncementService, UpdateAnnouncement};
 
 /// PUT /api/modules/{module_id}/announcements/{announcement_id}
 ///
@@ -89,9 +89,14 @@ pub async fn edit_announcement(
     Path((_, announcement_id)): Path<(i64, i64)>,
     Json(req): Json<AnnouncementRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
-    match AnnouncementModel::update(db, announcement_id, &req.title, &req.body, req.pinned).await {
+    match AnnouncementService::update(
+        UpdateAnnouncement {
+            id: announcement_id,
+            title: Some(req.title),
+            body: Some(req.body),
+            pinned: Some(req.pinned),
+        }
+    ).await {
         Ok(updated_announcement) => (
             StatusCode::OK,
             Json(ApiResponse::success(

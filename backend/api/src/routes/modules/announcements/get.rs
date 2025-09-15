@@ -10,12 +10,10 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
-use db::models::announcements::{
-    Column as AnnouncementColumn, Entity as AnnouncementEntity, Model as AnnouncementModel,
-};
-use db::models::user::{Entity as UserEntity};
+use util::filters::{FilterParam, QueryParam};
+use services::service::Service;
+use services::announcement::{AnnouncementService, Announcement};
 
 #[derive(Serialize)]
 pub struct MinimalUser {
@@ -25,15 +23,15 @@ pub struct MinimalUser {
 
 #[derive(Serialize)]
 pub struct ShowAnnouncementResponse {
-    pub announcement: AnnouncementModel,
+    pub announcement: Announcement,
     pub user: MinimalUser,
 }
 
 
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
-    pub page: Option<i32>,
-    pub per_page: Option<i32>,
+    pub page: Option<u64>,
+    pub per_page: Option<u64>,
     pub query: Option<String>,
     pub pinned: Option<String>,
     pub sort: Option<String>,
@@ -41,14 +39,14 @@ pub struct FilterReq {
 
 #[derive(Serialize)]
 pub struct FilterResponse {
-    pub announcements: Vec<AnnouncementModel>,
-    pub page: i32,
-    pub per_page: i32,
-    pub total: i32,
+    pub announcements: Vec<Announcement>,
+    pub page: u64,
+    pub per_page: u64,
+    pub total: u64,
 }
 
 impl FilterResponse {
-    fn new(announcements: Vec<AnnouncementModel>, page: i32, per_page: i32, total: i32) -> Self {
+    fn new(announcements: Vec<Announcement>, page: u64, per_page: u64, total: u64) -> Self {
         Self {
             announcements,
             page,
@@ -145,141 +143,80 @@ impl FilterResponse {
 /// ```
 pub async fn get_announcements(
     Path(module_id): Path<i64>,
-    Query(params): Query<FilterReq>,
+    Query(query): Query<FilterReq>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(20).min(100).max(1);
+    let mut sort = query.sort.clone();
 
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).min(100);
+    let mut filters = vec![FilterParam::eq("module_id", module_id)];
+    let mut queries = Vec::new();
 
-    if let Some(sort_field) = &params.sort {
-        let valid_fields = ["created_at", "updated_at", "title", "pinned"];
-        for field in sort_field.split(',') {
-            let field = field.trim().trim_start_matches('-');
-            if !valid_fields.contains(&field) {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
-                )
-                .into_response();
-            }
-        }
+    if let Some(query_text) = query.query {
+        queries.push(QueryParam::new(
+            vec!["title".to_string(), "body".to_string()],
+            query_text,
+        ));
     }
 
-    let mut condition = Condition::all().add(AnnouncementColumn::ModuleId.eq(module_id));
-
-    if let Some(ref query) = params.query {
-        let pattern = format!("%{}%", query.to_lowercase());
-        condition = condition.add(
-            Condition::any()
-                .add(AnnouncementColumn::Title.contains(&pattern))
-                .add(AnnouncementColumn::Body.contains(&pattern)),
-        );
-    }
-
-    if let Some(ref pinned) = params.pinned {
-        match pinned.parse::<bool>() {
+    if let Some(pinned_str) = query.pinned {
+        match pinned_str.parse::<bool>() {
             Ok(pinned_bool) => {
-                condition = condition.add(AnnouncementColumn::Pinned.eq(pinned_bool));
+                filters.push(FilterParam::eq("pinned", pinned_bool));
             }
             Err(_) => {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<FilterResponse>::error("Invalid pinned value")),
-                )
-                .into_response();
+                    Json(ApiResponse::<FilterResponse>::error(
+                        "Invalid pinned value",
+                    )),
+                );
             }
         }
     }
 
-    let mut query = AnnouncementEntity::find().filter(condition);
-
     let mut applied_pinned_sort = false;
-
-    if let Some(sort_param) = &params.sort {
-        for sort in sort_param.split(',') {
-            let (field, asc) = if sort.starts_with('-') {
-                (&sort[1..], false)
-            } else {
-                (sort, true)
-            };
-
-            query = match field {
-                "created_at" => {
-                    if asc {
-                        query.order_by_asc(AnnouncementColumn::CreatedAt)
-                    } else {
-                        query.order_by_desc(AnnouncementColumn::CreatedAt)
-                    }
-                }
-                "updated_at" => {
-                    if asc {
-                        query.order_by_asc(AnnouncementColumn::UpdatedAt)
-                    } else {
-                        query.order_by_desc(AnnouncementColumn::UpdatedAt)
-                    }
-                }
-                "title" => {
-                    if asc {
-                        query.order_by_asc(AnnouncementColumn::Title)
-                    } else {
-                        query.order_by_desc(AnnouncementColumn::Title)
-                    }
-                }
-                "pinned" => {
-                    applied_pinned_sort = true;
-                    if asc {
-                        query.order_by_asc(AnnouncementColumn::Pinned)
-                    } else {
-                        query.order_by_desc(AnnouncementColumn::Pinned)
-                    }
-                }
-                _ => query,
-            };
-        }
+    if let Some(sort_str) = &sort {
+        applied_pinned_sort = sort_str.split(',').any(|s| {
+            let field = s.trim().trim_start_matches('-');
+            field == "pinned"
+        });
     }
 
-    // Default pinned DESC if not explicitly sorted by pinned
     if !applied_pinned_sort {
-        query = query.order_by_desc(AnnouncementColumn::Pinned).order_by_desc(AnnouncementColumn::CreatedAt);
+        let default_sort = "-pinned,-created_at";
+        sort = match sort {
+            Some(existing_sort) => Some(format!("{},{}", existing_sort, default_sort)),
+            None => Some(default_sort.to_string()),
+        };
     }
 
-    let paginator = query.clone().paginate(db, per_page as u64);
-    let total = match paginator.num_items().await {
-        Ok(n) => n as i32,
+    let (announcements, total) = match AnnouncementService::filter(
+        &filters,
+        &queries,
+        page,
+        per_page,
+        sort,
+    ).await {
+        Ok(result) => result,
         Err(e) => {
-            eprintln!("Error counting announcements: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<FilterResponse>::error("Error counting announcements")),
-            )
-            .into_response();
+                Json(ApiResponse::<FilterResponse>::error(
+                    format!("Database error: {}", e),
+                )),
+            );
         }
     };
 
-    match paginator.fetch_page((page - 1) as u64).await {
-        Ok(results) => {
-            let response = FilterResponse::new(results, page, per_page, total);
-            (
-                StatusCode::OK,
-                Json(ApiResponse::success(
-                    response,
-                    "Announcements retrieved successfully",
-                )),
-            )
-            .into_response()
-        }
-        Err(err) => {
-            eprintln!("Error fetching announcements: {:?}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<FilterResponse>::error(
-                    "Failed to retrieve announcements",
-                )),
-            )
-            .into_response()
-        }
-    }
+    let response = FilterResponse::new(announcements, page, per_page, total);
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            response,
+            "Announcements retrieved successfully",
+        )),
+    )
 }
 
 /// GET /api/modules/{module_id}/announcements/{announcement_id}
@@ -337,11 +274,8 @@ pub async fn get_announcements(
 /// { "success": false, "message": "Failed to retrieve announcement" }
 /// ```
 pub async fn get_announcement(
-    State(app_state): State<AppState>,
     Path((module_id, announcement_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
     let result = AnnouncementEntity::find_by_id(announcement_id)
         .filter(AnnouncementColumn::ModuleId.eq(module_id))
         .find_also_related(UserEntity)
