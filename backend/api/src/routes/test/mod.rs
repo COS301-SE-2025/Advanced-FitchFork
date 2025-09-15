@@ -12,7 +12,6 @@ use axum::{
     routing::{delete, post},
     Router,
 };
-use util::state::AppState;
 
 mod common;
 mod get;
@@ -39,9 +38,8 @@ pub use delete::delete_user;
 ///   Fetch a test user by their username.
 /// - **DELETE** `/api/test/users/{id}`  
 ///   Delete a test user by numeric ID.
-pub fn test_routes(app_state: AppState) -> Router<AppState> {
+pub fn test_routes() -> Router {
     Router::new()
         .route("/users", post(upsert_user).get(get_user))
         .route("/users/{user_id}", delete(delete_user))
-        .with_state(app_state)
 }

@@ -1,16 +1,14 @@
 use axum::{
-    extract::{Query, State},
+    extract::Query,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
-use util::state::AppState;
-
+use util::filters::FilterParam;
+use services::service::Service;
+use services::user::UserService;
 use crate::response::ApiResponse;
-use db::models::user::{Column as UserColumn, Entity as UserEntity};
-
 use super::common::TestUserResponse;
 
 /// Query parameters for fetching a test user.
@@ -72,16 +70,15 @@ pub struct GetUserParams {
 /// }
 /// ```
 pub async fn get_user(
-    State(app): State<AppState>,
     Query(params): Query<GetUserParams>,
 ) -> impl IntoResponse {
-    let db = app.db();
-
-    match UserEntity::find()
-        .filter(UserColumn::Username.eq(params.username.clone()))
-        .one(db)
-        .await
-    {
+    match UserService::find_one(
+        &vec![
+            FilterParam::eq("username", params.username),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(Some(user)) => (
             StatusCode::OK,
             Json(ApiResponse::success(

@@ -1,14 +1,12 @@
 use axum::{
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use sea_orm::{ActiveModelTrait, EntityTrait};
-use util::state::AppState;
-
 use crate::response::ApiResponse;
-use db::models::user::{ActiveModel as UserActiveModel, Entity as UserEntity};
+use services::service::Service;
+use services::user::UserService;
 
 /// DELETE `/api/test/users/{user_id}`
 ///
@@ -33,15 +31,11 @@ use db::models::user::{ActiveModel as UserActiveModel, Entity as UserEntity};
 /// { "success": false, "data": null, "message": "User not found" }
 /// ```
 pub async fn delete_user(
-    State(app): State<AppState>,
-    Path(user_id): Path<i32>,
+    Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
-    let db = app.db();
-
-    match UserEntity::find_by_id(user_id).one(db).await {
-        Ok(Some(user)) => {
-            let am: UserActiveModel = user.into();
-            if let Err(e) = am.delete(db).await {
+    match UserService::find_by_id(user_id).await {
+        Ok(Some(_)) => {
+            if let Err(e) = UserService::delete_by_id(user_id).await {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ApiResponse::<()>::error(format!("Database error: {e}"))),

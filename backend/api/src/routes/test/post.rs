@@ -1,16 +1,12 @@
 //! POST handlers for `/api/test`.
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
-use util::state::AppState;
+use axum::{http::StatusCode, response::IntoResponse, Json};
 use validator::Validate;
-
 use crate::response::ApiResponse;
-use db::models::user::{
-    ActiveModel as UserActiveModel, Column as UserColumn, Entity as UserEntity, Model as UserModel,
-};
-
 use super::common::{TestUserResponse, UpsertUserRequest};
+use services::service::Service;
+use services::user::{UserService, CreateUser, UpdateUser};
+use util::filters::FilterParam;
 
 /// POST `/api/test/users`
 ///
@@ -90,7 +86,6 @@ use super::common::{TestUserResponse, UpsertUserRequest};
 /// }
 /// ```
 pub async fn upsert_user(
-    State(app): State<AppState>,
     Json(req): Json<UpsertUserRequest>,
 ) -> impl IntoResponse {
     if let Err(e) = req.validate() {
@@ -101,23 +96,27 @@ pub async fn upsert_user(
             .into_response();
     }
 
-    let db = app.db();
     let admin = req.admin.unwrap_or(false);
 
-    match UserEntity::find()
-        .filter(UserColumn::Username.eq(req.username.clone()))
-        .one(db)
-        .await
-    {
+    match UserService::find_one(
+        &vec![
+            FilterParam::eq("username", req.username),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(Some(existing)) => {
             // Update existing user
-            let hash = UserModel::hash_password(&req.password);
-            let mut am: UserActiveModel = existing.into();
-            am.email = Set(req.email.clone());
-            am.admin = Set(admin);
-            am.password_hash = Set(hash);
-
-            match am.update(db).await {
+            match UserService::update(
+                UpdateUser{
+                    id: existing.id,
+                    username: None,
+                    email: Some(req.email.clone()),
+                    password: Some(req.password.clone()),
+                    admin: Some(admin),
+                    profile_picture_path: None,
+                }
+            ).await {
                 Ok(updated) => (
                     StatusCode::OK,
                     Json(ApiResponse::success(
@@ -135,7 +134,15 @@ pub async fn upsert_user(
         }
         Ok(None) => {
             // Create new user
-            match UserModel::create(db, &req.username, &req.email, &req.password, admin).await {
+            match UserService::create(
+                CreateUser{
+                    id: None,
+                    username: req.username.clone(),
+                    email: req.email.clone(),
+                    password: req.password.clone(),
+                    admin,
+                }
+            ).await {
                 Ok(user) => (
                     StatusCode::CREATED,
                     Json(ApiResponse::success(

@@ -1,4 +1,4 @@
-use db::models::user::Model as UserModel;
+use services::user::User;
 use validator::Validate;
 
 /// Request body used by POST `/api/test/users` to create-or-update a user.
@@ -27,8 +27,8 @@ pub struct TestUserResponse {
     pub admin: bool,
 }
 
-impl From<UserModel> for TestUserResponse {
-    fn from(u: UserModel) -> Self {
+impl From<User> for TestUserResponse {
+    fn from(u: User) -> Self {
         Self {
             id: u.id,
             username: u.username,
