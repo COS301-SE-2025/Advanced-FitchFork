@@ -175,11 +175,6 @@ jobs:
         run: |
           cargo nextest run --workspace --release --no-capture
 
-      # Nextest instead of cargo test (debug build, like before)
-      - name: Run integration tests (nextest)
-        working-directory: backend
-        run: cargo nextest run --workspace --no-capture
-
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
