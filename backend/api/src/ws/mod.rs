@@ -1,5 +1,4 @@
 use axum::{middleware::from_fn, Router};
-use util::state::AppState;
 
 use crate::{
     auth::guards::require_authenticated,
@@ -9,10 +8,9 @@ use crate::{
 pub mod modules;
 pub mod tickets;
 
-pub fn ws_routes(app_state: AppState) -> Router<AppState> {
+pub fn ws_routes() -> Router {
     Router::new()
-        .nest("/modules", ws_module_routes(app_state.clone()))
-        .nest("/tickets", ws_ticket_routes(app_state.clone()))
+        .nest("/modules", ws_module_routes())
+        .nest("/tickets", ws_ticket_routes())
         .route_layer(from_fn(require_authenticated))
-        .with_state(app_state)
 }
