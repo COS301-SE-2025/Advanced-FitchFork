@@ -18,7 +18,8 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use sea_orm::{DbErr};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, DbErr};
+use serde::Deserialize;
 use util::state::AppState;
 use crate::response::ApiResponse;
 use db::{
@@ -30,6 +31,7 @@ use db::{
     },
 };
 use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
+use db::models::assignment::{Entity as AssignmentEntity, Column as AssignmentCol};
 
 /// POST /api/modules/{module_id}/assignments
 ///
@@ -167,4 +169,66 @@ pub async fn create_assignment(
             )
         }
     }
+}
+
+#[derive(Deserialize)]
+pub struct VerifyBody {
+    pin: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct VerifyResponse {
+    password_tag: Option<String>,
+}
+
+/// POST /modules/:module_id/assignments/:assignment_id/verify
+/// Body: { "pin": "1234" }
+pub async fn verify_assignment_pin(
+    State(app_state): State<AppState>,
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    Json(body): Json<VerifyBody>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
+    let assignment_res = AssignmentEntity::find()
+        .filter(AssignmentCol::Id.eq(assignment_id as i32))
+        .filter(AssignmentCol::ModuleId.eq(module_id as i32))
+        .one(db)
+        .await;
+
+    let assignment = match assignment_res {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<VerifyResponse>::error("Assignment not found")),
+            );
+        }
+        Err(e) => {
+            eprintln!("DB error in verify_assignment_pin: {e:?}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<VerifyResponse>::error("Database error")),
+            );
+        }
+    };
+
+    if assignment.password_required_for_students()
+        && !assignment.verify_password_from_config(&body.pin)
+    {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ApiResponse::<VerifyResponse>::error("Invalid PIN")),
+        );
+    }
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            VerifyResponse {
+                password_tag: assignment.password_tag(),
+            },
+            "PIN verified successfully",
+        )),
+    )
 }

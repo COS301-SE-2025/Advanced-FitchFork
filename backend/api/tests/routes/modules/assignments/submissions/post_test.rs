@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
     use axum::{
@@ -19,19 +19,22 @@ mod tests {
         assignment_task::Model as AssignmentTaskModel,
         module::Model as ModuleModel,
         user::Model as UserModel,
+        assignment_task,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use flate2::{Compression, write::GzEncoder};
     use sea_orm::{
-        ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
+        ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, QueryOrder
     };
     use serde_json::{Value, json};
     use serial_test::serial;
+    use util::execution_config::execution_config::{GradingPolicy, SubmissionMode};
+    use util::execution_config::ExecutionConfig;
+    use util::languages::Language;
+    use util::paths::{storage_root, config_dir, main_dir, makefile_dir, mark_allocator_dir, mark_allocator_path, memo_output_dir, submission_output_dir, submission_output_path};
     use std::convert::Infallible;
-    use std::path::Path;
     use std::{fs, io::Write};
     use tar::Builder as TarBuilder;
-    use tempfile::{TempDir, tempdir};
     use tower::ServiceExt;
     use tower::util::BoxCloneService;
     use zip::write::SimpleFileOptions;
@@ -43,15 +46,7 @@ mod tests {
         assignment: AssignmentModel,
     }
 
-    fn setup_assignment_storage_root() -> TempDir {
-        let temp_dir = tempdir().expect("Failed to create temporary directory");
-        unsafe {
-            std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path());
-        }
-        temp_dir
-    }
-
-    async fn setup_test_data(db: &DatabaseConnection, temp_dir: &TempDir) -> TestData {
+    async fn setup_test_data(db: &DatabaseConnection) -> TestData {
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
             .await
             .unwrap();
@@ -85,16 +80,12 @@ mod tests {
             .await
             .unwrap();
 
-        let assignment_base_path = temp_dir
-            .path()
-            .join(format!("module_{}", module.id))
-            .join(format!("assignment_{}", assignment.id));
-        create_assignment_structure(&assignment_base_path);
-        create_mark_allocator(&assignment_base_path);
-        create_memo_outputs(&assignment_base_path);
-        create_execution_config(&assignment_base_path);
-        create_makefile_zip(&assignment_base_path);
-        create_main_zip(&assignment_base_path);
+        create_assignment_structure(module.id, assignment.id);
+        create_mark_allocator(module.id, assignment.id);
+        create_memo_outputs(module.id, assignment.id);
+        create_execution_config(module.id, assignment.id);
+        create_makefile_zip(module.id, assignment.id);
+        create_main_zip(module.id, assignment.id);
 
         TestData {
             student_user,
@@ -104,17 +95,17 @@ mod tests {
         }
     }
 
-    fn create_assignment_structure(base_path: &Path) {
-        fs::create_dir_all(base_path.join("mark_allocator")).unwrap();
-        fs::create_dir_all(base_path.join("memo_output")).unwrap();
-        fs::create_dir_all(base_path.join("assignment_submissions")).unwrap();
-        fs::create_dir_all(base_path.join("config")).unwrap();
-        fs::create_dir_all(base_path.join("makefile")).unwrap();
-        fs::create_dir_all(base_path.join("main")).unwrap();
+    fn create_assignment_structure(module_id: i64, assignment_id: i64) {
+        fs::create_dir_all(mark_allocator_dir(module_id, assignment_id)).unwrap();
+        fs::create_dir_all(memo_output_dir(module_id, assignment_id)).unwrap();
+        fs::create_dir_all(config_dir(module_id, assignment_id)).unwrap();
+        fs::create_dir_all(makefile_dir(module_id, assignment_id)).unwrap();
+        fs::create_dir_all(main_dir(module_id, assignment_id)).unwrap();
+        // submissions tree is created by the app paths when saving submissions;
+        // you don't need to pre-create it for these tests unless a test reads it directly.
     }
 
-    fn create_mark_allocator(base_path: &Path) {
-        let path = base_path.join("mark_allocator");
+    fn create_mark_allocator(module_id: i64, assignment_id: i64) {
         let allocator_content = r#"{
             "generated_at": "2025-07-21T10:00:00Z",
             "tasks": [
@@ -129,62 +120,60 @@ mod tests {
                 }
             ]
         }"#;
-        fs::write(path.join("allocator.json"), allocator_content).unwrap();
+        fs::create_dir_all(mark_allocator_dir(module_id, assignment_id)).unwrap();
+        fs::write(mark_allocator_path(module_id, assignment_id), allocator_content).unwrap();
     }
 
-    fn create_memo_outputs(base_path: &std::path::Path) {
-        let path = base_path.join("memo_output");
+    fn create_memo_outputs(module_id: i64, assignment_id: i64) {
+        let dir = memo_output_dir(module_id, assignment_id);
+        fs::create_dir_all(&dir).unwrap();
         let memo_content = "make task1\n&-=-&Subtask 1 Output\nOutput A";
-        fs::write(path.join("task1.txt"), memo_content).unwrap();
+        fs::write(dir.join("task1.txt"), memo_content).unwrap();
     }
 
-    fn create_execution_config(base_path: &Path) {
-        let path = base_path.join("config");
-        let config_content = r#"{
-            "execution": {
-                "timeout_secs": 10,
-                "max_memory": 8589934592,
-                "max_cpus": 2,
-                "max_uncompressed_size": 100000000,
-                "max_processes": 256
-            },
-            "marking": {
-                "marking_scheme": "exact",
-                "feedback_scheme": "auto",
-                "deliminator": "&-=-&"
-            }
-        }"#;
-        fs::write(path.join("config.json"), config_content).unwrap();
+    fn create_execution_config(module_id: i64, assignment_id: i64) {
+        let mut cfg = ExecutionConfig::default_config();
+        // Only override what the tests require:
+        cfg.project.language = Language::Java;               // because we ship .java files
+        cfg.project.submission_mode = SubmissionMode::Manual;
+        cfg.marking.deliminator = "&-=-&".to_string();       // your parser expects this exact token
+        // (Other defaults: pass_mark=50, grading_policy=Last, etc.)
+
+        cfg.save(module_id, assignment_id).expect("write config.json");
     }
 
-    fn create_makefile_zip(base_path: &Path) {
+
+    fn create_makefile_zip(module_id: i64, assignment_id: i64) {
         let mut buf = Vec::new();
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
-        let options = SimpleFileOptions::default();
-
-        zip.start_file("Makefile", options).unwrap();
+        zip.start_file("Makefile", SimpleFileOptions::default()).unwrap();
         zip.write_all(&create_makefile_content()).unwrap();
-
         zip.finish().unwrap();
-        fs::write(base_path.join("makefile").join("makefile.zip"), buf).unwrap();
+
+        let out = makefile_dir(module_id, assignment_id).join("makefile.zip");
+        fs::create_dir_all(out.parent().unwrap()).unwrap();
+        fs::write(out, buf).unwrap();
     }
 
-    fn create_main_zip(base_path: &Path) {
+    fn create_main_zip(module_id: i64, assignment_id: i64) {
         let mut buf = Vec::new();
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
-        let options = SimpleFileOptions::default();
+        let opts = SimpleFileOptions::default();
 
-        zip.start_file("Main.java", options).unwrap();
+        zip.start_file("Main.java", opts).unwrap();
         zip.write_all(&create_main_content()).unwrap();
 
-        zip.start_file("HelperOne.java", options).unwrap();
+        zip.start_file("HelperOne.java", opts).unwrap();
         zip.write_all(&create_helper_one_content()).unwrap();
 
-        zip.start_file("HelperTwo.java", options).unwrap();
+        zip.start_file("HelperTwo.java", opts).unwrap();
         zip.write_all(&create_helper_two_content()).unwrap();
 
         zip.finish().unwrap();
-        fs::write(base_path.join("main").join("main.zip"), buf).unwrap();
+
+        let out = main_dir(module_id, assignment_id).join("main.zip");
+        fs::create_dir_all(out.parent().unwrap()).unwrap();
+        fs::write(out, buf).unwrap();
     }
 
     fn create_submission_zip() -> Vec<u8> {
@@ -325,13 +314,24 @@ mod tests {
         filename: &str,
         file_content: &[u8],
         is_practice: Option<&str>,
+        attests_ownership: Option<&str>, // "true" | "false"
     ) -> (String, Vec<u8>) {
         let boundary = "----BoundaryTest".to_string();
         let mut body = Vec::new();
+
+        // file
         body.extend(format!("--{}\r\n", boundary).as_bytes());
-        body.extend(format!("Content-Disposition: form-data; name=\"file\"; filename=\"{}\"\r\nContent-Type: application/octet-stream\r\n\r\n", filename).as_bytes());
+        body.extend(
+            format!(
+                "Content-Disposition: form-data; name=\"file\"; filename=\"{}\"\r\nContent-Type: application/octet-stream\r\n\r\n",
+                filename
+            )
+            .as_bytes(),
+        );
         body.extend(file_content);
         body.extend(b"\r\n");
+
+        // optional is_practice
         if let Some(val) = is_practice {
             body.extend(format!("--{}\r\n", boundary).as_bytes());
             body.extend(
@@ -342,19 +342,74 @@ mod tests {
                 .as_bytes(),
             );
         }
+
+        // optional attests_ownership
+        if let Some(val) = attests_ownership {
+            body.extend(format!("--{}\r\n", boundary).as_bytes());
+            body.extend(b"Content-Disposition: form-data; name=\"attests_ownership\"\r\n\r\n");
+            body.extend(val.as_bytes());
+            body.extend(b"\r\n");
+        }
+
+        // end
         body.extend(format!("--{}--\r\n", boundary).as_bytes());
         (boundary, body)
+    }
+
+    fn write_attempt_policy_config(
+        module_id: i64,
+        assignment_id: i64,
+        limit_attempts: bool,
+        max_attempts: u32,
+        allow_practice: bool,
+    ) {
+        let mut cfg = ExecutionConfig::default_config();
+        cfg.project.submission_mode = SubmissionMode::Manual; // ensure manual path
+        cfg.marking.limit_attempts = limit_attempts;
+        cfg.marking.max_attempts = max_attempts;
+        cfg.marking.allow_practice_submissions = allow_practice;
+        cfg.marking.pass_mark = 50;
+        cfg.marking.grading_policy = GradingPolicy::Last;     // same as your previous JSON
+        cfg.marking.deliminator = "&-=-&".to_string();
+
+        cfg.save(module_id, assignment_id).expect("write config.json");
+    }
+
+    /// Seed a submission row that does *not* count (ignored or practice).
+    async fn seed_submission_row(
+        db: &DatabaseConnection,
+        assignment_id: i64,
+        user_id: i64,
+        attempt: i64,
+        is_practice: bool,
+        ignored: bool,
+    ) {
+        use db::models::assignment_submission as sub;
+        let mut m = sub::ActiveModel {
+            assignment_id: Set(assignment_id),
+            user_id: Set(user_id),
+            attempt: Set(attempt),
+            earned: Set(0),
+            total: Set(0),
+            filename: Set("seed.zip".into()),
+            file_hash: Set("seedhash".into()),
+            path: Set("seed/path.zip".into()),
+            is_practice: Set(is_practice),
+            ..Default::default()
+        };
+        // Only if your schema has it (your queries use Column::Ignored, so it should exist):
+        m.ignored = Set(ignored);
+        m.insert(db).await.unwrap();
     }
 
     #[tokio::test]
     #[serial]
     async fn test_valid_submission_zip() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -385,12 +440,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_valid_submission_tar() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_tar();
 
-        let (boundary, body) = multipart_body("solution.tar", &file, None);
+        let (boundary, body) = multipart_body("solution.tar", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -421,12 +475,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_valid_submission_tgz() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_tgz();
 
-        let (boundary, body) = multipart_body("solution.tgz", &file, None);
+        let (boundary, body) = multipart_body("solution.tgz", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -457,12 +510,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_valid_submission_gz() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_gz();
 
-        let (boundary, body) = multipart_body("solution.gz", &file, None);
+        let (boundary, body) = multipart_body("solution.gz", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -493,13 +545,22 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_practice_submission() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
-        let file = create_submission_zip();
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
-        let (boundary, body) = multipart_body("solution.zip", &file, Some("true"));
+        // allow practice submissions for this assignment via execution config
+        write_attempt_policy_config(
+            data.module.id,
+            data.assignment.id,
+            /*limit_attempts*/ false,
+            /*max_attempts*/ 10,
+            /*allow_practice*/ true,
+        );
+
+        let file = create_submission_zip();
+        let (boundary, body) = multipart_body("solution.zip", &file, Some("true"), Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
             data.module.id, data.assignment.id
@@ -508,20 +569,15 @@ mod tests {
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(
-                CONTENT_TYPE,
-                format!("multipart/form-data; boundary={}", boundary),
-            )
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
             .body(Body::from(body))
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let json: Value = serde_json::from_slice(&body).unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["is_practice"], true);
     }
@@ -529,12 +585,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_multiple_attempts_increments() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -583,6 +638,213 @@ mod tests {
         assert_eq!(json2["data"]["attempt"], 2);
     }
 
+    #[tokio::test]
+    #[serial]
+    async fn test_submit_blocked_when_max_attempts_reached_for_student() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // Force strict attempt policy: max 1, practice irrelevant here.
+        write_attempt_policy_config(
+            data.module.id,
+            data.assignment.id,
+            /*limit_attempts*/ true,
+            /*max_attempts*/ 1,
+            /*allow_practice*/ false,
+        );
+
+        let file = create_submission_zip();
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+
+        // 1st submission -> OK
+        {
+            let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
+            let req = Request::builder()
+                .method("POST")
+                .uri(&uri)
+                .header(AUTHORIZATION, format!("Bearer {}", token))
+                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .body(Body::from(body))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
+
+        // 2nd submission -> FORBIDDEN (max attempts reached)
+        {
+            let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
+            let req = Request::builder()
+                .method("POST")
+                .uri(&uri)
+                .header(AUTHORIZATION, format!("Bearer {}", token))
+                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .body(Body::from(body))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+            let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json["success"], false);
+            assert_eq!(json["message"], "Maximum attempts reached: used 1 of 1 (remaining 0).");
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_practice_submission_denied_when_disabled() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // Practice disabled in config
+        write_attempt_policy_config(
+            data.module.id,
+            data.assignment.id,
+            /*limit_attempts*/ true,
+            /*max_attempts*/ 5,
+            /*allow_practice*/ false,
+        );
+
+        let file = create_submission_zip();
+        let (boundary, body) = multipart_body("solution.zip", &file, Some("true"), Some("true")); // is_practice=true
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["message"], "Practice submissions are disabled for this assignment.");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_allowed_when_previous_attempt_was_ignored() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // max 1 attempt, but we'll seed a single IGNORED prior attempt → should NOT count
+        write_attempt_policy_config(
+            data.module.id,
+            data.assignment.id,
+            /*limit_attempts*/ true,
+            /*max_attempts*/ 1,
+            /*allow_practice*/ false,
+        );
+
+        seed_submission_row(
+            db,
+            data.assignment.id,
+            data.student_user.id,
+            1,
+            /*is_practice*/ false,
+            /*ignored*/ true,
+        ).await;
+
+        let file = create_submission_zip();
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
+
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body))
+            .unwrap();
+
+        // Should be allowed because prior attempt is ignored
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], true);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_staff_bypass_attempt_limit() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // Strict limit (1 attempt), but submit as lecturer → staff bypass
+        write_attempt_policy_config(
+            data.module.id,
+            data.assignment.id,
+            /*limit_attempts*/ true,
+            /*max_attempts*/ 1,
+            /*allow_practice*/ false,
+        );
+
+        let lecturer = UserModel::create(db, "lect1", "lect1@test.com", "pw", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, data.module.id, Role::Lecturer)
+            .await
+            .unwrap();
+
+        let file = create_submission_zip();
+        let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+
+        // First submission as staff
+        {
+            let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
+            let req = Request::builder()
+                .method("POST")
+                .uri(&uri)
+                .header(AUTHORIZATION, format!("Bearer {}", token))
+                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .body(Body::from(body))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
+
+        // Second submission as staff (still OK; students would be blocked)
+        {
+            let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
+            let req = Request::builder()
+                .method("POST")
+                .uri(&uri)
+                .header(AUTHORIZATION, format!("Bearer {}", token))
+                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .body(Body::from(body))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
+    }
+
+
     // TODO: Once coverage and complexity have been implemented, uncomment this test.
     //
     // #[tokio::test]
@@ -614,9 +876,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_exactly_at_due_date() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
         let mut assignment_active_model: AssignmentActiveModel =
@@ -632,7 +893,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -663,9 +924,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_just_after_due_date() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
         let mut assignment_active_model: AssignmentActiveModel =
@@ -681,7 +941,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -712,9 +972,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_just_before_due_date() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
         let mut assignment_active_model: AssignmentActiveModel =
@@ -730,7 +989,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -762,12 +1021,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_large_file_submission() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_large_zip_file(1000 * 1000);
 
-        let (boundary, body) = multipart_body("large.zip", &file, None);
+        let (boundary, body) = multipart_body("large.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -798,14 +1056,16 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_missing_file() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let boundary = "----BoundaryTest".to_string();
         let mut body = Vec::new();
-        body.extend(format!("--{}\r\n", boundary).as_bytes());
-        body.extend(format!("--{}--\r\n", boundary).as_bytes());
+
+        // attests_ownership=true, but no file part
+        body.extend(format!("--{}\r\n", &boundary).as_bytes());
+        body.extend(b"Content-Disposition: form-data; name=\"attests_ownership\"\r\n\r\ntrue\r\n");
+        body.extend(format!("--{}--\r\n", &boundary).as_bytes());
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
@@ -816,33 +1076,28 @@ mod tests {
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(
-                CONTENT_TYPE,
-                format!("multipart/form-data; boundary={}", boundary),
-            )
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
             .body(Body::from(body))
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "No file provided");
     }
 
+
     #[tokio::test]
     #[serial]
     async fn test_empty_file() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = Vec::new();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -873,12 +1128,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_invalid_file_extension() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_exe_file();
 
-        let (boundary, body) = multipart_body("solution.exe", &file, None);
+        let (boundary, body) = multipart_body("solution.exe", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -912,12 +1166,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_corrupted_archive() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_corrupted_zip();
 
-        let (boundary, body) = multipart_body("corrupted.zip", &file, None);
+        let (boundary, body) = multipart_body("corrupted.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -950,12 +1203,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_assignment_not_found() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let invalid_assignment_id = 9999;
         let uri = format!(
@@ -987,12 +1239,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_user_not_assigned() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.unassigned_user.id, data.unassigned_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -1023,12 +1274,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submitting_to_invalid_assignment() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -1096,20 +1346,15 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_failed_to_load_mark_allocator() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let file = create_submission_zip();
 
-        let allocator_path = std::path::PathBuf::from(temp_dir.path())
-            .join(format!("module_{}", data.module.id))
-            .join(format!("assignment_{}", data.assignment.id))
-            .join("mark_allocator")
-            .join("allocator.json");
+        let allocator_path = mark_allocator_path(data.module.id, data.assignment.id);
         std::fs::remove_file(&allocator_path)
             .expect("Failed to delete allocator.json for test setup");
 
-        let (boundary, body) = multipart_body("solution.zip", &file, None);
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/submissions",
@@ -1144,7 +1389,7 @@ mod tests {
     // async fn test_failed_marking_due_to_broken_allocator() {
     //     let temp_dir = setup_assignment_storage_root();
     //     let (app, app_state) = make_test_app().await;
-    //     let data = setup_test_data(app_state.db(), &temp_dir).await;
+    //     let data = setup_test_data(app_state.db()).await;
     //     let file = create_submission_zip();
 
     //     let base_path = temp_dir
@@ -1202,71 +1447,82 @@ mod tests {
     // }
 
     // Helper function to create a submission
+    // Helper function to create a submission with an output file wired via path utilities.
     async fn create_remarkable_submission(
         db: &DatabaseConnection,
         module_id: i64,
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
-        temp_dir: &TempDir,
     ) -> AssignmentSubmissionModel {
-        let submission = assignment_submission::ActiveModel {
-            assignment_id: Set(assignment_id),
-            user_id: Set(user_id),
-            attempt: Set(attempt),
-            earned: Set(10),
-            total: Set(10),
-            filename: Set("test_submission.zip".to_string()),
-            file_hash: Set("d41d8cd98f00b204e9800998ecf8427e".to_string()),
-            path: Set(format!(
-                "module_{}/assignment_{}/assignment_submissions/user_{}/attempt_{}/submission.zip",
-                module_id, assignment_id, user_id, attempt
-            )),
-            is_practice: Set(false),
-            ..Default::default()
-        };
-        let submission = submission.insert(db).await.unwrap();
+        // Create the submission row (and a dummy file) via the model helper for consistency.
+        // Filename matches the path utility (attempt dir contains "<user_id>.zip").
+        let filename = format!("{user_id}.zip");
+        let submission = assignment_submission::Model::save_file(
+            db,
+            assignment_id,
+            user_id,
+            attempt,
+            /* earned */ 10,
+            /* total  */ 10,
+            /* is_practice */ false,
+            &filename,
+            "d41d8cd98f00b204e9800998ecf8427e", // dummy hash
+            b"dummy",
+        )
+        .await
+        .unwrap();
 
+        // Grab any task for this assignment (your tests create at least one).
         let task = db::models::assignment_task::Entity::find()
             .filter(db::models::assignment_task::Column::AssignmentId.eq(assignment_id))
             .one(db)
             .await
             .unwrap()
-            .unwrap();
+            .expect("assignment must have a task");
 
+        // Create the output row first (we'll update path after we write the file).
         let output = assignment_submission_output::ActiveModel {
             task_id: Set(task.id),
             submission_id: Set(submission.id),
-            path: Set("".to_string()),
+            path: Set(String::new()),
             ..Default::default()
-        };
-        let output = output.insert(db).await.unwrap();
+        }
+        .insert(db)
+        .await
+        .unwrap();
 
-        let output_dir = temp_dir
-            .path()
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("assignment_submissions")
-            .join(format!("user_{}", user_id))
-            .join(format!("attempt_{}", attempt))
-            .join("submission_output");
+        // Write an output artifact to the canonical location.
+        let out_dir = submission_output_dir(module_id, assignment_id, user_id, attempt);
+        std::fs::create_dir_all(&out_dir).unwrap();
 
-        std::fs::create_dir_all(&output_dir).unwrap();
-        let file_path = output_dir.join(format!("{}.txt", output.id));
-        std::fs::write(&file_path, "make task1\n&-=-&Subtask 1 Output\nOutput A").unwrap();
+        let out_file_path = submission_output_path(
+            module_id,
+            assignment_id,
+            user_id,
+            attempt,
+            &format!("{}.txt", output.id),
+        );
+        std::fs::write(
+            &out_file_path,
+            "make task1\n&-=-&Subtask 1 Output\nOutput A",
+        )
+        .unwrap();
 
-        let relative_path = file_path
-            .strip_prefix(temp_dir.path())
-            .unwrap()
+        let root = storage_root();
+        let rel_path = out_file_path
+            .strip_prefix(&root)
+            .unwrap_or(&out_file_path)
             .to_string_lossy()
             .to_string();
 
         let mut output_active: assignment_submission_output::ActiveModel = output.into();
-        output_active.path = Set(relative_path);
+        output_active.path = Set(rel_path);
         output_active.update(db).await.unwrap();
 
         submission
     }
+
 
     // Helper to send remark request
     async fn send_remark_request(
@@ -1300,10 +1556,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_specific_submissions_as_lec() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
             .await
@@ -1318,7 +1573,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            &temp_dir,
         )
         .await;
         let sub2 = create_remarkable_submission(
@@ -1327,7 +1581,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             2,
-            &temp_dir,
         )
         .await;
 
@@ -1349,10 +1602,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_specific_submissions_as_al() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let assistant =
             UserModel::create(db, "assistant1", "assistant@test.com", "password", false)
@@ -1373,7 +1625,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            &temp_dir,
         )
         .await;
         let sub2 = create_remarkable_submission(
@@ -1382,7 +1633,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             2,
-            &temp_dir,
         )
         .await;
 
@@ -1404,10 +1654,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_all_submissions_as_lec() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
             .await
@@ -1422,7 +1671,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            &temp_dir,
         )
         .await;
         create_remarkable_submission(
@@ -1431,7 +1679,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             2,
-            &temp_dir,
         )
         .await;
 
@@ -1453,10 +1700,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_all_submissions() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let assistant =
             UserModel::create(db, "assistant1", "assistant@test.com", "password", false)
@@ -1477,7 +1723,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            &temp_dir,
         )
         .await;
         create_remarkable_submission(
@@ -1486,7 +1731,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             2,
-            &temp_dir,
         )
         .await;
 
@@ -1508,10 +1752,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_missing_parameters() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let admin = UserModel::create(db, "admin1", "admin@test.com", "password", true)
             .await
@@ -1535,10 +1778,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_unauthorized_user() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let submission = create_remarkable_submission(
             db,
@@ -1546,7 +1788,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            &temp_dir,
         )
         .await;
 
@@ -1570,10 +1811,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_assignment_not_found() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
             .await
@@ -1598,10 +1838,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_submission_not_found() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
             .await
@@ -1630,10 +1869,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_failed_allocator() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
             .await
@@ -1648,17 +1886,11 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            &temp_dir,
         )
         .await;
 
-        let allocator_path = temp_dir
-            .path()
-            .join(format!("module_{}", data.module.id))
-            .join(format!("assignment_{}", data.assignment.id))
-            .join("mark_allocator")
-            .join("allocator.json");
-        fs::remove_file(allocator_path).unwrap();
+        let allocator_path = mark_allocator_path(data.module.id, data.assignment.id);
+        fs::remove_file(&allocator_path).unwrap();
 
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({
@@ -1682,10 +1914,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_grading_failure() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
             .await
@@ -1700,19 +1931,12 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            &temp_dir,
         )
         .await;
 
-        let student_output_dir = temp_dir
-            .path()
-            .join(format!("module_{}", data.module.id))
-            .join(format!("assignment_{}", data.assignment.id))
-            .join("assignment_submissions")
-            .join(format!("user_{}", data.student_user.id))
-            .join("attempt_1")
-            .join("submission_output");
-        fs::remove_dir_all(student_output_dir).unwrap();
+        let student_output_dir =
+            submission_output_dir(data.module.id, data.assignment.id, data.student_user.id, 1);
+        fs::remove_dir_all(&student_output_dir).unwrap();
 
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({
@@ -1741,10 +1965,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_mixed_results() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
             .await
@@ -1759,7 +1982,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            &temp_dir,
         )
         .await;
         let invalid_sub_id = 9999;
@@ -1770,18 +1992,12 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             2,
-            &temp_dir,
         )
         .await;
-        let student_output_dir = temp_dir
-            .path()
-            .join(format!("module_{}", data.module.id))
-            .join(format!("assignment_{}", data.assignment.id))
-            .join("assignment_submissions")
-            .join(format!("user_{}", data.student_user.id))
-            .join("attempt_2")
-            .join("submission_output");
-        fs::remove_dir_all(student_output_dir).unwrap();
+
+        let student_output_dir =
+            submission_output_dir(data.module.id, data.assignment.id, data.student_user.id, 2);
+        fs::remove_dir_all(&student_output_dir).unwrap();
 
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let body = json!({
@@ -1815,10 +2031,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_remark_invalid_module() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         let lecturer = UserModel::create(db, "lecturer1", "lecturer@test.com", "password", false)
             .await
@@ -1868,62 +2083,62 @@ mod tests {
         serde_json::from_slice(&body).unwrap()
     }
 
+
+    // Create a submission that also writes the submission archive to disk
+    // using the centralized save_file (stores as {attempt}/{submission_id}.zip).
     async fn create_resubmitable_submission(
         db: &DatabaseConnection,
-        module_id: i64,
+        _module_id: i64,      // kept for signature parity; not used here
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
-        temp_dir: &TempDir,
     ) -> AssignmentSubmissionModel {
-        let submission = assignment_submission::ActiveModel {
-            assignment_id: Set(assignment_id),
-            user_id: Set(user_id),
-            attempt: Set(attempt),
-            earned: Set(10),
-            total: Set(10),
-            filename: Set("test_submission.zip".to_string()),
-            file_hash: Set("d41d8cd98f00b204e9800998ecf8427e".to_string()),
-            path: Set(format!(
-                "module_{}/assignment_{}/assignment_submissions/user_{}/attempt_{}/submission.zip",
-                module_id, assignment_id, user_id, attempt
-            )),
-            is_practice: Set(false),
-            ..Default::default()
-        };
-        let submission = submission.insert(db).await.unwrap();
+        // Write the file and row via the model helper (uses {submission_id}.ext on disk,
+        // and stores a RELATIVE path in the DB).
+        let submission = assignment_submission::Model::save_file(
+            db,
+            assignment_id,
+            user_id,
+            attempt,
+            /* earned */ 10,
+            /* total  */ 10,
+            /* is_practice */ false,
+            "test_submission.zip",                  // original filename (what users see)
+            "d41d8cd98f00b204e9800998ecf8427e",     // dummy hash
+            &create_submission_zip(),               // actual bytes
+        )
+        .await
+        .unwrap();
 
-        let task = db::models::assignment_task::Entity::find()
-            .filter(db::models::assignment_task::Column::AssignmentId.eq(assignment_id))
+        // Seed an output row (empty path is fine for resubmit tests)
+        let task = assignment_task::Entity::find()
+            .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
             .one(db)
             .await
             .unwrap()
-            .unwrap();
+            .expect("assignment has at least one task");
 
-        let output = assignment_submission_output::ActiveModel {
+        let _ = assignment_submission_output::ActiveModel {
             task_id: Set(task.id),
             submission_id: Set(submission.id),
-            path: Set("".to_string()),
+            path: Set(String::new()),
             ..Default::default()
-        };
-        let _output = output.insert(db).await.unwrap();
-
-        let submission_file_path = temp_dir.path().join(&submission.path);
-        if let Some(parent) = submission_file_path.parent() {
-            std::fs::create_dir_all(parent).unwrap();
         }
-        std::fs::write(&submission_file_path, create_submission_zip()).unwrap();
+        .insert(db)
+        .await
+        .unwrap();
 
         submission
     }
 
+
+
     #[tokio::test]
     #[serial]
     async fn test_resubmit_specific_submissions() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         // Create submissions
         let sub1 = create_resubmitable_submission(
@@ -1932,7 +2147,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            &temp_dir,
         )
         .await;
         let sub2 = create_resubmitable_submission(
@@ -1941,7 +2155,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             2,
-            &temp_dir,
         )
         .await;
 
@@ -1973,10 +2186,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_resubmit_all_submissions() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         // Create submissions
         create_resubmitable_submission(
@@ -1985,7 +2197,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            &temp_dir,
         )
         .await;
         create_resubmitable_submission(
@@ -1994,7 +2205,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             2,
-            &temp_dir,
         )
         .await;
 
@@ -2023,9 +2233,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_resubmit_invalid_parameters() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         // Create lecturer user
         let lecturer = UserModel::create(
@@ -2077,10 +2286,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_resubmit_unauthorized_access() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         // Create submission
         let submission = create_resubmitable_submission(
@@ -2089,7 +2297,6 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            &temp_dir,
         )
         .await;
 
@@ -2115,10 +2322,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_resubmit_assignment_not_found() {
-        let temp_dir = setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
-        let data = setup_test_data(app_state.db(), &temp_dir).await;
+        let data = setup_test_data(app_state.db()).await;
 
         // Create admin user
         let admin = UserModel::create(db, "admin1", "admin@test.com", "password", true)
@@ -2145,4 +2351,124 @@ mod tests {
         assert_eq!(body["success"], false);
         assert_eq!(body["message"], "Assignment 9999 in Module 1 not found.");
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submit_missing_attests_ownership_returns_422() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+        let file = create_submission_zip();
+
+        // no attests_ownership field
+        let (boundary, body) = multipart_body("solution.zip", &file, None, None);
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert!(json["message"].as_str().unwrap_or_default().to_lowercase().contains("ownership"));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submit_attests_ownership_false_returns_422() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+        let file = create_submission_zip();
+
+        // multipart with attests_ownership = false
+        let boundary = "----BoundaryAttestFalse".to_string();
+        let mut body = Vec::new();
+
+        body.extend(format!("--{}\r\n", boundary).as_bytes());
+        body.extend(b"Content-Disposition: form-data; name=\"file\"; filename=\"solution.zip\"\r\nContent-Type: application/octet-stream\r\n\r\n");
+        body.extend(&file);
+        body.extend(b"\r\n");
+
+        body.extend(format!("--{}\r\n", boundary).as_bytes());
+        body.extend(b"Content-Disposition: form-data; name=\"attests_ownership\"\r\n\r\nfalse\r\n");
+        body.extend(format!("--{}--\r\n", boundary).as_bytes());
+
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert!(json["message"].as_str().unwrap_or_default().to_lowercase().contains("ownership"));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submit_attests_ownership_true_ok() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+        let file = create_submission_zip();
+
+        // multipart with attests_ownership = true
+        let boundary = "----BoundaryAttestTrue".to_string();
+        let mut body = Vec::new();
+
+        body.extend(format!("--{}\r\n", boundary).as_bytes());
+        body.extend(b"Content-Disposition: form-data; name=\"file\"; filename=\"solution.zip\"\r\nContent-Type: application/octet-stream\r\n\r\n");
+        body.extend(&file);
+        body.extend(b"\r\n");
+
+        body.extend(format!("--{}\r\n", boundary).as_bytes());
+        body.extend(b"Content-Disposition: form-data; name=\"attests_ownership\"\r\n\r\ntrue\r\n");
+        body.extend(format!("--{}--\r\n", boundary).as_bytes());
+
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // verify a submission row exists (we no longer assert any DB column for attestation)
+        use db::models::assignment_submission::Column as SubCol;
+        let saved = db::models::assignment_submission::Entity::find()
+            .filter(SubCol::AssignmentId.eq(data.assignment.id))
+            .filter(SubCol::UserId.eq(data.student_user.id))
+            .order_by(SubCol::Attempt, sea_orm::Order::Desc)
+            .one(db)
+            .await
+            .expect("db ok")
+            .expect("submission row exists");
+        assert_eq!(saved.assignment_id, data.assignment.id);
+        assert_eq!(saved.user_id, data.student_user.id);
+        assert_eq!(saved.filename, "solution.zip");
+    }
+
 }

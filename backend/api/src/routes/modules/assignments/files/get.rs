@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::{path::PathBuf};
 use axum::{
     extract::{State, Path},
     http::{header, HeaderMap, HeaderValue, StatusCode},
@@ -10,7 +10,7 @@ use sea_orm::{
     EntityTrait,
     QueryFilter,
 };
-use util::state::AppState;
+use util::{paths::storage_root, state::AppState};
 use crate::response::ApiResponse;
 use db::models::assignment_file::{
     Column as FileColumn,
@@ -58,7 +58,7 @@ pub async fn download_file(
         .one(db)
         .await.unwrap().unwrap();
 
-    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".to_string());
+    let storage_root = storage_root();
     let fs_path = PathBuf::from(storage_root).join(&file.path);
 
     if tokio::fs::metadata(&fs_path).await.is_err() {

@@ -1,9 +1,8 @@
-// models/assignment_interpreter.rs
-
 use chrono::{DateTime, Utc};
 use sea_orm::ActiveValue::Set;
 use sea_orm::entity::prelude::*;
-use std::env;
+use util::paths::storage_root;
+use util::paths::interpreter_dir;
 use std::fs;
 use std::path::PathBuf;
 
@@ -43,22 +42,8 @@ pub enum Relation {
 
 impl ActiveModelBehavior for ActiveModel {}
 
+
 impl Model {
-    /// Returns the base directory for interpreter file storage from the environment.
-    pub fn storage_root() -> PathBuf {
-        env::var("ASSIGNMENT_STORAGE_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("data/interpreters"))
-    }
-
-    /// Computes the full directory path based on module ID and assignment ID.
-    pub fn full_directory_path(module_id: i64, assignment_id: i64) -> PathBuf {
-        Self::storage_root()
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("interpreter")
-    }
-
     pub async fn save_file(
         db: &DatabaseConnection,
         assignment_id: i64,
@@ -70,13 +55,14 @@ impl Model {
         use crate::models::assignment_interpreter::{Column, Entity as AssignmentInterpreter};
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
+        // Remove any existing interpreter for this assignment
         let existing = AssignmentInterpreter::find()
             .filter(Column::AssignmentId.eq(assignment_id))
             .all(db)
             .await?;
 
         for record in existing {
-            let existing_path = Self::storage_root().join(&record.path);
+            let existing_path = storage_root().join(&record.path);
             let _ = fs::remove_file(existing_path);
             record.delete(db).await?;
         }
@@ -86,7 +72,7 @@ impl Model {
         let partial = ActiveModel {
             assignment_id: Set(assignment_id),
             filename: Set(filename.to_string()),
-            path: Set("".to_string()),
+            path: Set(String::new()),
             command: Set(command.to_string()),
             created_at: Set(now),
             updated_at: Set(now),
@@ -104,19 +90,19 @@ impl Model {
             None => inserted.id.to_string(),
         };
 
-        let dir_path = Self::full_directory_path(module_id, assignment_id);
+        let dir_path = interpreter_dir(module_id, assignment_id);
         fs::create_dir_all(&dir_path)
             .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to create directory: {}", e)))?;
 
         let file_path = dir_path.join(&stored_filename);
+        fs::write(&file_path, bytes)
+            .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to write file: {}", e)))?;
+
         let relative_path = file_path
-            .strip_prefix(Self::storage_root())
+            .strip_prefix(storage_root())
             .unwrap()
             .to_string_lossy()
             .to_string();
-
-        fs::write(&file_path, bytes)
-            .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to write file: {}", e)))?;
 
         let mut model: ActiveModel = inserted.into();
         model.path = Set(relative_path);
@@ -127,13 +113,13 @@ impl Model {
 
     /// Load interpreter file content from disk.
     pub fn load_file(&self) -> Result<Vec<u8>, std::io::Error> {
-        let full_path = Self::storage_root().join(&self.path);
+        let full_path = storage_root().join(&self.path);
         fs::read(full_path)
     }
 
     /// Delete the interpreter file from disk (but not DB record).
     pub fn delete_file_only(&self) -> Result<(), std::io::Error> {
-        let full_path = Self::storage_root().join(&self.path);
+        let full_path = storage_root().join(&self.path);
         fs::remove_file(full_path)
     }
 }
@@ -147,23 +133,20 @@ impl Model {
 //     use chrono::Utc;
 //     use sea_orm::Set;
 //     use tempfile::TempDir;
-
+//     use util::test_helpers::setup_test_assignment_root; // <── use your new helper
+//     use util::paths::{interpreter_dir, interpreter_path};
+//     use serial_test::serial;
+//
 //     fn fake_bytes() -> Vec<u8> {
-//         vec![0x50, 0x4B, 0x03, 0x04] // ZIP file signature
+//         vec![0x50, 0x4B, 0x03, 0x04] // ZIP signature
 //     }
-
-//     fn override_storage_dir(temp: &TempDir) {
-//         unsafe {
-//             std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
-//         }
-//     }
-
+//
 //     #[tokio::test]
+//     #[serial]
 //     async fn test_save_and_load_file() {
-//         let temp_dir = TempDir::new().unwrap();
-//         override_storage_dir(&temp_dir);
+//         let temp_dir = setup_test_assignment_root();
 //         let db = setup_test_db().await;
-
+//
 //         // Insert dummy module so assignment FK passes
 //         let _module = crate::models::module::ActiveModel {
 //             code: Set("COS301".to_string()),
@@ -176,8 +159,8 @@ impl Model {
 //         .insert(&db)
 //         .await
 //         .expect("Insert module failed");
-
-//         // Insert dummy assignment using enum value for assignment_type
+//
+//         // Insert dummy assignment
 //         let _assignment = crate::models::assignment::Model::create(
 //             &db,
 //             1,
@@ -189,29 +172,38 @@ impl Model {
 //         )
 //         .await
 //         .expect("Insert assignment failed");
-
+//
+//         // Save a fake file
 //         let content = fake_bytes();
 //         let filename = "interpreter.sh";
 //         let command = "sh interpreter.sh";
-
 //         let saved = Model::save_file(&db, 1, 1, filename, command, &content)
 //             .await
 //             .expect("Failed to save interpreter");
-
+//
 //         assert_eq!(saved.assignment_id, 1);
 //         assert_eq!(saved.filename, filename);
 //         assert_eq!(saved.command, command);
-
-//         // Confirm file on disk
-//         let full_path = Model::storage_root().join(&saved.path);
-//         assert!(full_path.exists());
-
+//
+//         // Build expected path using path utils
+//         let expected_dir = interpreter_dir(1, 1);
+//         let expected_path = expected_dir.join(filename);
+//         assert!(
+//             expected_path.exists(),
+//             "expected file missing at {:?}",
+//             expected_path
+//         );
+//
 //         // Load contents
 //         let bytes = saved.load_file().unwrap();
 //         assert_eq!(bytes, content);
-
+//
 //         // Delete file only
 //         saved.delete_file_only().unwrap();
-//         assert!(!full_path.exists());
+//         assert!(
+//             !expected_path.exists(),
+//             "file should be removed at {:?}",
+//             expected_path
+//         );
 //     }
-//}
+// }

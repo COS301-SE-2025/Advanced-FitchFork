@@ -122,10 +122,10 @@ mod common {
             submission1.id,
             submission2.id,
             "Initial description",
-            0.0
-        )
-        .await
-        .unwrap();
+            0.0,       // similarity
+            0,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
 
         TestData {
             lecturer_user,
@@ -164,7 +164,7 @@ mod common {
 #[cfg(test)]
 mod delete_plagiarism_tests {
     use super::common::*;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use axum::http::StatusCode;
     use db::models::plagiarism_case::Entity as PlagiarismCaseEntity;
     use sea_orm::EntityTrait;
@@ -174,7 +174,7 @@ mod delete_plagiarism_tests {
     /// Test Case: Successful Deletion by Lecturer
     #[tokio::test]
     async fn test_delete_plagiarism_case_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_delete_request(
@@ -206,7 +206,7 @@ mod delete_plagiarism_tests {
     /// Test Case: Successful Deletion by Assistant Lecturer
     #[tokio::test]
     async fn test_delete_plagiarism_case_success_as_assistant() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_delete_request(
@@ -230,7 +230,7 @@ mod delete_plagiarism_tests {
     /// Test Case: Forbidden Access for Non-Permitted Roles
     #[tokio::test]
     async fn test_delete_plagiarism_case_forbidden_roles() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Test tutor
@@ -257,7 +257,7 @@ mod delete_plagiarism_tests {
     /// Test Case: Case Not Found
     #[tokio::test]
     async fn test_delete_plagiarism_case_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req = make_delete_request(
@@ -281,7 +281,7 @@ mod delete_plagiarism_tests {
     /// Test Case: Unauthorized Access
     #[tokio::test]
     async fn test_delete_plagiarism_case_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let uri = format!(
@@ -313,7 +313,7 @@ mod delete_plagiarism_tests {
 #[cfg(test)]
 mod bulk_delete_plagiarism_tests {
     use super::common::*;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
@@ -364,20 +364,28 @@ mod bulk_delete_plagiarism_tests {
         .await
         .unwrap();
 
-        let case2 =
-            PlagiarismCaseModel::create_case(db, data.assignment.id, submission3.id, submission4.id, "Case 2", 0.0)
-                .await
-                .unwrap();
+        let case2 = PlagiarismCaseModel::create_case(
+            db,
+            data.assignment.id,
+            submission3.id,
+            submission4.id,
+            "Case 2",
+            0.0,       // similarity
+            0,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
+
         let case3 = PlagiarismCaseModel::create_case(
             db,
             data.assignment.id,
             data.submission1.id,
             submission3.id,
             "Case 3",
-            0.0
-        )
-        .await
-        .unwrap();
+            0.0,       // similarity
+            0_i64,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
+
 
         extra_cases.push(case2);
         extra_cases.push(case3);
@@ -410,7 +418,7 @@ mod bulk_delete_plagiarism_tests {
 
     #[tokio::test]
     async fn test_bulk_delete_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, extra_cases) = setup_bulk_test_data(app_state.db()).await;
         let req = make_bulk_delete_request(
             &data.lecturer_user,
@@ -448,7 +456,7 @@ mod bulk_delete_plagiarism_tests {
     #[ignore]
     #[tokio::test]
     async fn test_bulk_delete_empty_list() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let req =
@@ -465,7 +473,7 @@ mod bulk_delete_plagiarism_tests {
 
     #[tokio::test]
     async fn test_bulk_delete_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _) = setup_bulk_test_data(app_state.db()).await;
         let case_ids_to_delete = vec![data.plagiarism_case.id, 999999];
 
@@ -490,7 +498,7 @@ mod bulk_delete_plagiarism_tests {
 
     #[tokio::test]
     async fn test_bulk_delete_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, extra_cases) = setup_bulk_test_data(app_state.db()).await;
         let case_ids_to_delete = vec![data.plagiarism_case.id, extra_cases[0].id];
 

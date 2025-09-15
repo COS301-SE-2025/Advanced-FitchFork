@@ -19,7 +19,7 @@ use post::create;
 use put::{edit_module, bulk_edit_modules};
 use assignments::assignment_routes;
 use util::state::AppState;
-use crate::{auth::guards::{require_admin, require_assigned_to_module, require_lecturer}, routes::modules::{announcements::announcement_routes, personnel::personnel_routes}};
+use crate::{auth::guards::{require_admin, require_assigned_to_module, require_lecturer}, routes::modules::{announcements::announcement_routes, attendance::attendance_routes, personnel::personnel_routes}};
 
 pub mod assignments;
 pub mod personnel;
@@ -29,6 +29,7 @@ pub mod post;
 pub mod put;
 pub mod common;
 pub mod announcements;
+pub mod attendance;
 
 /// Builds and returns the `/modules` route group.
 ///
@@ -56,4 +57,5 @@ pub fn modules_routes(app_state: AppState) -> Router<AppState> {
         .nest("/{module_id}/assignments", assignment_routes(app_state.clone()))
         .nest("/{module_id}/personnel", personnel_routes().route_layer(from_fn_with_state(app_state.clone(),require_lecturer)))
         .nest("/{module_id}/announcements", announcement_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
+        .nest("/{module_id}/attendance",attendance_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
 }

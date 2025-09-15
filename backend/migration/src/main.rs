@@ -1,5 +1,6 @@
-use migration::{Migrator};
+use migration::Migrator;
 use std::{env, fs, path::Path};
+use util::{config, paths::storage_root};
 
 mod runner;
 
@@ -7,7 +8,7 @@ mod runner;
 async fn main() {
     dotenvy::dotenv().ok();
 
-    let db_path = env::var("DATABASE_PATH").expect("DATABASE_PATH must be set");
+    let db_path = config::database_path();
     let url = format!("sqlite://{}?mode=rwc", db_path);
     let args: Vec<String> = env::args().collect();
 
@@ -28,6 +29,7 @@ async fn main() {
 }
 
 fn remove_db_file(path: &str) {
+    // Delete DB file
     let db_path = Path::new(path);
     if db_path.exists() {
         fs::remove_file(db_path).expect("Failed to delete DB file");
@@ -36,26 +38,13 @@ fn remove_db_file(path: &str) {
         println!("DB file does not exist: {}", db_path.display());
     }
 
-    // Delete assignment storage
-    if let Ok(storage_root) = env::var("ASSIGNMENT_STORAGE_ROOT") {
-        let storage_path = Path::new(&storage_root);
-        if storage_path.exists() {
-            fs::remove_dir_all(storage_path).expect("Failed to delete assignment files");
-            println!("Deleted assignment files: {}", storage_path.display());
-        } else {
-            println!("Assignment storage does not exist: {}", storage_path.display());
-        }
-    }
-
-    // Delete user profile storage
-    if let Ok(user_profile_root) = env::var("USER_PROFILE_STORAGE_ROOT") {
-        let profile_path = Path::new(&user_profile_root);
-        if profile_path.exists() {
-            fs::remove_dir_all(profile_path).expect("Failed to delete user profile pictures");
-            println!("Deleted user profile pictures: {}", profile_path.display());
-        } else {
-            println!("User profile storage does not exist: {}", profile_path.display());
-        }
+    // Delete entire storage tree (single STORAGE_ROOT via util::paths)
+    let root = storage_root();
+    if root.exists() {
+        fs::remove_dir_all(&root).expect("Failed to delete storage root");
+        println!("Deleted storage root: {}", root.display());
+    } else {
+        println!("Storage root does not exist: {}", root.display());
     }
 }
 

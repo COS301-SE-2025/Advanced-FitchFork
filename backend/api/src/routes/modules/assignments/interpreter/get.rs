@@ -9,9 +9,9 @@ use db::models::assignment_interpreter::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::Serialize;
-use std::{env, path::PathBuf};
+use std::{path::PathBuf};
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
-use util::state::AppState;
+use util::{paths::storage_root, state::AppState};
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/interpreter
 ///
@@ -56,8 +56,7 @@ pub async fn download_interpreter(
         }
     };
 
-    let storage_root =
-        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/interpreters".to_string());
+    let storage_root = storage_root();
     let fs_path = PathBuf::from(storage_root).join(&interpreter.path);
 
     if tokio::fs::metadata(&fs_path).await.is_err() {

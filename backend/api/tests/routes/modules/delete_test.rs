@@ -8,7 +8,7 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::json;
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use sea_orm::{DatabaseConnection, EntityTrait};
 
     struct TestData {
@@ -42,7 +42,7 @@ mod tests {
     /// Test Case: Admin deletes module successfully
     #[tokio::test]
     async fn test_delete_module_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -75,7 +75,7 @@ mod tests {
     /// Test Case: Non-admin user attempts to delete module
     #[tokio::test]
     async fn test_delete_module_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
@@ -106,7 +106,7 @@ mod tests {
     /// Test Case: Delete non-existent module
     #[tokio::test]
     async fn test_delete_module_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -130,7 +130,7 @@ mod tests {
     /// Test Case: Missing authorization header
     #[tokio::test]
     async fn test_delete_module_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/modules/{}", data.module.id);
@@ -171,7 +171,7 @@ mod tests {
     /// Test Case: Admin bulk deletes modules successfully
     #[tokio::test]
     async fn test_bulk_delete_modules_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
         let modules = create_multiple_modules(db, 3).await;
@@ -211,7 +211,7 @@ mod tests {
     /// Test Case: Bulk delete with no module IDs
     #[tokio::test]
     async fn test_bulk_delete_no_ids() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
@@ -237,7 +237,7 @@ mod tests {
     /// Test Case: Non-admin attempts bulk delete
     #[tokio::test]
     async fn test_bulk_delete_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
@@ -270,7 +270,7 @@ mod tests {
     /// Test Case: Partial success with some modules not found
     #[tokio::test]
     async fn test_bulk_delete_partial_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
@@ -307,7 +307,7 @@ mod tests {
     /// Test Case: Database error during bulk delete
     #[tokio::test]
     async fn test_bulk_delete_database_error() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 

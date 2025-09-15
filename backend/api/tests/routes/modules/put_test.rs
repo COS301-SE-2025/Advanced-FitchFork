@@ -10,7 +10,7 @@ mod tests {
     use serde_json::json;
     use tower::ServiceExt;
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin_user: UserModel,
@@ -43,7 +43,7 @@ mod tests {
     /// Test Case: Admin updates module successfully
     #[tokio::test]
     async fn test_edit_module_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -76,7 +76,7 @@ mod tests {
     /// Test Case: Non-admin user attempts to update module
     #[tokio::test]
     async fn test_edit_module_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
@@ -102,7 +102,7 @@ mod tests {
     /// Test Case: Invalid module code format
     #[tokio::test]
     async fn test_edit_module_invalid_code() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -128,7 +128,7 @@ mod tests {
     /// Test Case: Year in the past
     #[tokio::test]
     async fn test_edit_module_year_in_past() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -154,7 +154,7 @@ mod tests {
     /// Test Case: Invalid credits value
     #[tokio::test]
     async fn test_edit_module_invalid_credits() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -180,7 +180,7 @@ mod tests {
     /// Test Case: Description too long
     #[tokio::test]
     async fn test_edit_module_description_too_long() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -211,7 +211,7 @@ mod tests {
     /// Test Case: Duplicate module code
     #[tokio::test]
     async fn test_edit_module_duplicate_code() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let _other_module = Module::create(
@@ -247,7 +247,7 @@ mod tests {
     /// Test Case: Update non-existent module
     #[tokio::test]
     async fn test_edit_module_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -273,7 +273,7 @@ mod tests {
     /// Test Case: Multiple validation errors
     #[tokio::test]
     async fn test_edit_module_multiple_errors() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -302,7 +302,7 @@ mod tests {
     /// Test Case: Update with same code (should succeed)
     #[tokio::test]
     async fn test_edit_module_same_code() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -345,7 +345,7 @@ mod tests {
     /// Test Case: Admin bulk updates modules successfully
     #[tokio::test]
     async fn test_bulk_update_modules_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
@@ -391,7 +391,7 @@ mod tests {
     /// Test Case: Attempt to update module code
     #[tokio::test]
     async fn test_bulk_update_code_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
@@ -423,7 +423,7 @@ mod tests {
     /// Test Case: Bulk update with no module IDs
     #[tokio::test]
     async fn test_bulk_update_no_ids() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
@@ -452,7 +452,7 @@ mod tests {
     /// Test Case: Partial success with some updates failing
     #[tokio::test]
     async fn test_bulk_update_partial_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
@@ -502,7 +502,7 @@ mod tests {
     /// Test Case: Validation errors in bulk update
     #[tokio::test]
     async fn test_bulk_update_validation_errors() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 
@@ -537,7 +537,7 @@ mod tests {
     /// Test Case: Non-admin attempts bulk update
     #[tokio::test]
     async fn test_bulk_update_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let data = setup_test_data(db).await;
 

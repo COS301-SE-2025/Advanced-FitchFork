@@ -8,6 +8,7 @@ export const editTask = async (
   payload: {
     name: string,
     command: string,
+    code_coverage: boolean,
   }
 ): Promise<PutEditTaskResponse> => {
   return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/tasks/${taskId}`,

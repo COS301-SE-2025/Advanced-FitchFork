@@ -35,10 +35,13 @@ const AssignmentMobileMenu = () => {
         {assignment.name}
       </Typography.Text>,
     );
-  }, [assignment.name]);
+  }, [assignment.name, setValue]);
 
   const navigateTo = (path: string) =>
     navigate(`/modules/${module.id}/assignments/${assignment.id}/${path}`);
+
+  const isLecturerLike =
+    auth.isAdmin || auth.isLecturer(module.id) || auth.isAssistantLecturer(module.id);
 
   return (
     <div className="bg-gray-50 dark:bg-gray-950 space-y-6 !pb-4">
@@ -86,8 +89,8 @@ const AssignmentMobileMenu = () => {
         </Space.Compact>
       </div>
 
-      {/* Lecturer/Admin Extras */}
-      {(auth.isLecturer(module.id) || auth.isAdmin) && (
+      {/* Lecturer/Admin/Assistant Lecturer Extras */}
+      {isLecturerLike && (
         <div>
           <Typography.Text className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 block">
             Lecturer Tools
@@ -136,26 +139,28 @@ const AssignmentMobileMenu = () => {
         </div>
       )}
 
-      {/* Config Section */}
-      <div>
-        <Typography.Text className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 block">
-          Configuration
-        </Typography.Text>
-        <Space.Compact direction="vertical" className="w-full">
-          <Button
-            type="default"
-            block
-            className="!h-14 px-4 flex items-center !justify-between text-base"
-            onClick={() => navigateTo('config')}
-          >
-            <Typography.Text className="flex items-center gap-2 text-left">
-              <SettingOutlined className="text-lg" />
-              Files & Config
-            </Typography.Text>
-            <RightOutlined />
-          </Button>
-        </Space.Compact>
-      </div>
+      {/* Configuration (only for lecturer, assistant lecturer, or admin) */}
+      {isLecturerLike && (
+        <div>
+          <Typography.Text className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 block">
+            Configuration
+          </Typography.Text>
+          <Space.Compact direction="vertical" className="w-full">
+            <Button
+              type="default"
+              block
+              className="!h-14 px-4 flex items-center !justify-between text-base"
+              onClick={() => navigateTo('config')}
+            >
+              <Typography.Text className="flex items-center gap-2 text-left">
+                <SettingOutlined className="text-lg" />
+                Files &amp; Config
+              </Typography.Text>
+              <RightOutlined />
+            </Button>
+          </Space.Compact>
+        </div>
+      )}
     </div>
   );
 };

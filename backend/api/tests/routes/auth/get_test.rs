@@ -14,7 +14,8 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::Value;
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use util::paths::user_profile_path;
+    use crate::helpers::app::make_test_app_with_storage;
     use tempfile::{tempdir, TempDir};
     use std::io::Write;
     use serial_test::serial;
@@ -50,7 +51,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_me_success_regular_user() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
@@ -91,7 +92,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_me_success_admin_user() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -126,7 +127,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_me_user_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let _  = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(999999, false);
@@ -151,7 +152,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_me_missing_auth_header() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let _  = setup_test_data(app_state.db()).await;
 
         let uri = "/api/auth/me";
@@ -169,7 +170,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_me_invalid_token() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let _  = setup_test_data(app_state.db()).await;
 
         let uri = "/api/auth/me";
@@ -188,19 +189,25 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_avatar_success() {
-        let (app, app_state) = make_test_app().await;
-        let (data, temp_dir)  = setup_test_data(app_state.db()).await;
 
+        // Use the version that sets STORAGE_ROOT to a TempDir
+        let (app, app_state, _) = make_test_app_with_storage().await;
+        let (data, _) = setup_test_data(app_state.db()).await;
+
+        // Place the fake avatar in the correct location under STORAGE_ROOT/users/user_{id}/profile
         let avatar_filename = format!("avatar_{}.png", data.regular_user.id);
-        let avatar_path = temp_dir.path().join(&avatar_filename);
+        let avatar_path = user_profile_path(data.regular_user.id, &avatar_filename);
 
+        std::fs::create_dir_all(avatar_path.parent().unwrap()).unwrap();
         let mut file = std::fs::File::create(&avatar_path).expect("Failed to create avatar file");
         file.write_all(b"fake_png_data_content").expect("Failed to write to avatar file");
 
+        // Update DB to point to the relative path we’ll serve
         let mut user_active_model: db::models::user::ActiveModel = data.regular_user.clone().into();
         user_active_model.profile_picture_path = Set(Some(avatar_filename.clone()));
-        let _ = user_active_model.update(app_state.db()).await.expect("Failed to update user profile picture path");
+        user_active_model.update(app_state.db()).await.expect("Failed to update profile path");
 
+        // Request avatar
         let uri = format!("/api/auth/avatar/{}", data.regular_user.id);
         let req = Request::builder()
             .method("GET")
@@ -218,11 +225,12 @@ mod tests {
         assert_eq!(&body_bytes[..], b"fake_png_data_content");
     }
 
+
     /// Test Case: Retrieving Avatar for Non-Existent User (/api/auth/avatar/{user_id})
     #[tokio::test]
     #[serial]
     async fn test_get_avatar_user_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let _  = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/auth/avatar/{}", 999999);
@@ -245,7 +253,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_avatar_no_avatar_set() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/auth/avatar/{}", data.regular_user.id);
@@ -268,7 +276,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_avatar_file_missing() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/auth/avatar/{}", data.regular_user.id);
@@ -291,7 +299,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_has_role_in_module_success_has_role() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
@@ -317,7 +325,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_has_role_in_module_success_does_not_have_role() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
@@ -343,7 +351,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_has_role_in_module_invalid_role() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
@@ -368,7 +376,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_has_role_in_module_missing_parameters() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
@@ -388,7 +396,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_has_role_in_module_missing_auth() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/auth/has-role?module_id={}&role=student", data.module.id);
@@ -406,7 +414,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_role_success_with_role() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
@@ -433,7 +441,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_role_success_no_role() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         // Create a new module that user is not assigned to
@@ -465,7 +473,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_role_missing_module_id() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
@@ -485,7 +493,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_role_unauthenticated() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/auth/module-role?module_id={}", data.module.id);
@@ -503,7 +511,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_role_invalid_module_id() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (data, _temp_dir)  = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);

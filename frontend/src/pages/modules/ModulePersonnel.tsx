@@ -235,7 +235,7 @@ const ModulePersonnel = () => {
         description="Assign eligible users to a specific role in this module."
       />
 
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end mb-4 mt-4">
         <Segmented
           options={availableRoles.map((role) => ({
             label: roleLabels[role],

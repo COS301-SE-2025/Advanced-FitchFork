@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::helpers::app::make_test_app_with_storage;
     use crate::helpers::{connect_ws, make_test_app, spawn_server};
     use api::auth::generate_jwt;
     use db::models::user::Model as UserModel;
@@ -28,8 +29,8 @@ mod tests {
     #[ignore]
     #[tokio::test]
     async fn authenticated_user_can_connect_to_chat() {
-        let (app, state) = make_test_app().await;
-        let data = setup_test_data(state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let addr = spawn_server(app).await;
         let (token, _) = generate_jwt(data.user1.id, data.user1.admin);
 
@@ -62,8 +63,8 @@ mod tests {
     #[ignore]
     #[tokio::test]
     async fn users_can_exchange_chat_messages() {
-        let (app, state) = make_test_app().await;
-        let data = setup_test_data(state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let addr = spawn_server(app).await;
 
         let (token1, _) = generate_jwt(data.user1.id, data.user1.admin);
@@ -96,8 +97,8 @@ mod tests {
     #[ignore]
     #[tokio::test]
     async fn server_responds_to_ping_with_pong() {
-        let (app, state) = make_test_app().await;
-        let data = setup_test_data(state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         let addr = spawn_server(app).await;
         let (token, _) = generate_jwt(data.user1.id, data.user1.admin);
         let (mut ws, _) = connect_ws(&addr.to_string(), "chat", &token).await.unwrap();

@@ -55,8 +55,9 @@ use util::{execution_config::ExecutionConfig, state::AppState};
 /// - **500** – Internal error saving the file
 ///
 /// ### Notes
-/// - Configuration is saved to disk under `ASSIGNMENT_STORAGE_ROOT/module_{id}/assignment_{id}/config/config.json`.
+/// - Configuration is saved to disk.
 /// - Only valid `ExecutionConfig` objects are accepted.
+// api route
 pub async fn set_assignment_config(
     State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
@@ -81,30 +82,30 @@ pub async fn set_assignment_config(
         }
     };
 
-    // Check assignment existence
-    let assignment = match AssignmentEntity::find()
+    // Ensure assignment exists
+    if let Err(resp) = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
         .one(db)
         .await
-    {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment or module not found")),
-            );
-        }
-        Err(e) => {
+        .map_err(|e| {
             eprintln!("DB error: {:?}", e);
-            return (
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Database error")),
-            );
-        }
-    };
+            )
+        })
+        .and_then(|opt| {
+            opt.ok_or((
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment or module not found")),
+            ))
+        })
+    {
+        return resp;
+    }
 
-    // Save as assignment file using `save_file`
+    // Serialize and overwrite-in-place (handled inside save_file)
     let bytes = match serde_json::to_vec_pretty(&config) {
         Ok(b) => b,
         Err(e) => {
@@ -118,7 +119,7 @@ pub async fn set_assignment_config(
 
     match AssignmentFile::save_file(
         &db,
-        assignment.id.into(),
+        assignment_id,
         module_id,
         FileType::Config,
         "config.json",
@@ -134,7 +135,7 @@ pub async fn set_assignment_config(
             eprintln!("File save error: {:?}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Failed to save config as assignment file")),
+                Json(ApiResponse::<()>::error("Failed to save config")),
             )
         }
     }
