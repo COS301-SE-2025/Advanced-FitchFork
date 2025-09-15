@@ -134,6 +134,10 @@ jobs:
         with:
           node-version: "20"
 
+      # Install cargo-nextest (prebuilt binary)
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest # official rec from Nextest docs
+
       # --- Cache Rust build ---
       - name: Cache Cargo registry + git + target
         uses: actions/cache@v4
@@ -166,9 +170,15 @@ jobs:
           run-seeder: "true"
           code-url: "http://localhost:5000/health"
 
-      - name: Run integration tests
+      - name: Run integration tests (nextest)
         working-directory: backend
-        run: cargo test --all -- --nocapture
+        run: |
+          cargo nextest run --workspace --release --no-capture
+
+      # Nextest instead of cargo test (debug build, like before)
+      - name: Run integration tests (nextest)
+        working-directory: backend
+        run: cargo nextest run --workspace --no-capture
 
       - name: Upload logs on failure
         if: failure()
