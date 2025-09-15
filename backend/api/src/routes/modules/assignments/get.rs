@@ -27,25 +27,18 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
+use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sea_orm::{
-    ColumnTrait, /*Condition,*/ EntityTrait, /*PaginatorTrait,*/ QueryFilter,
-    QueryOrder, /*sea_query::Expr,*/
-};
-use util::state::AppState;
 use crate::{auth::AuthUser, response::ApiResponse};
 use crate::routes::modules::assignments::common::{File, AssignmentResponse};
-use db::{
-    models::{
-        assignment::{
-            self, /*AssignmentType,*/ Column as AssignmentColumn, Entity as AssignmentEntity, Model as AssignmentModel
-        }, 
-        assignment_file,
-        assignment_submission, 
-        user
-    },
-};
+use util::filters::{FilterParam, QueryParam};
+use services::service::Service;
+use services::user::UserService;
+use services::assignment::{AssignmentService, Assignment};
+use services::assignment_file::AssignmentFileService;
+use services::user_module_role::UserModuleRoleService;
+use services::assignment_submission::AssignmentSubmissionService;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AssignmentFileResponse {
@@ -63,8 +56,8 @@ pub struct BestMark {
     pub submission_id: i64,
 }
 
-impl From<AssignmentModel> for AssignmentFileResponse {
-    fn from(assignment: AssignmentModel) -> Self {
+impl From<Assignment> for AssignmentFileResponse {
+    fn from(assignment: Assignment) -> Self {
         Self {
             assignment: AssignmentResponse {
                 id: assignment.id,
@@ -157,38 +150,22 @@ pub async fn get_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     AuthUser(user): AuthUser,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
-    let assignment_res = assignment::Entity::find()
-        .filter(assignment::Column::Id.eq(assignment_id as i32))
-        .filter(assignment::Column::ModuleId.eq(module_id as i32))
-        .one(db)
-        .await;
-
-    match assignment_res {
+    match AssignmentService::find_by_id(assignment_id).await {
         Ok(Some(a)) => {
-            let files_res = assignment_file::Entity::find()
-                .filter(assignment_file::Column::AssignmentId.eq(a.id))
-                .all(db)
-                .await;
-
-            match files_res {
+            match AssignmentFileService::find_all(
+                &vec![
+                    FilterParam::eq("assignment_id", assignment_id),
+                ],
+                &vec![],
+                None,
+            ).await {
                 Ok(files) => {
-                    let converted_files: Vec<File> =
-                        files.into_iter().map(File::from).collect();
-
+                    let converted_files: Vec<File> =files.into_iter().map(File::from).collect();
                     let mut best_mark = None;
 
-                    let user_id: i64 = user.sub;
-
                     // only if user is a student in this module
-                    if user::Model::is_in_role(db, user_id, module_id, "student")
-                        .await
-                        .unwrap_or(false)
-                    {
-                        if let Ok(Some(sub)) =
-                            assignment_submission::Model::get_best_for_user(db, &a, user_id).await
-                        {
+                    if let Ok(true) = UserModuleRoleService::is_in_role(user.sub, module_id, "student".to_string()).await {
+                        if let Ok(Some(sub)) = AssignmentSubmissionService::get_best_for_user(assignment_id, user.sub).await {
                             best_mark = Some(BestMark {
                                 earned: sub.earned,
                                 total: sub.total,
@@ -239,8 +216,8 @@ pub async fn get_assignment(
 
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
-    pub page: Option<i32>,
-    pub per_page: Option<i32>,
+    pub page: Option<u64>,
+    pub per_page: Option<u64>,
     pub sort: Option<String>,
     pub query: Option<String>,
     pub name: Option<String>,
@@ -251,29 +228,29 @@ pub struct FilterReq {
     pub due_after: Option<String>,
 }
 
-// #[derive(Serialize)]
-// pub struct FilterResponse {
-//     pub assignments: Vec<AssignmentResponse>,
-//     pub page: i32,
-//     pub per_page: i32,
-//     pub total: i32,
-// }
+#[derive(Serialize)]
+pub struct FilterResponse {
+    pub assignments: Vec<AssignmentResponse>,
+    pub page: u64,
+    pub per_page: u64,
+    pub total: u64,
+}
 
-// impl FilterResponse {
-//     fn new(
-//         assignments: Vec<AssignmentResponse>,
-//         page: i32,
-//         per_page: i32,
-//         total: i32,
-//     ) -> Self {
-//         Self {
-//             assignments,
-//             page,
-//             per_page,
-//             total,
-//         }
-//     }
-// }
+impl FilterResponse {
+    fn new(
+        assignments: Vec<AssignmentResponse>,
+        page: u64,
+        per_page: u64,
+        total: u64,
+    ) -> Self {
+        Self {
+            assignments,
+            page,
+            per_page,
+            total,
+        }
+    }
+}
 
 /// GET /api/modules/{module_id}/assignments
 ///
@@ -340,92 +317,106 @@ pub struct FilterReq {
 /// }
 /// ```
 pub async fn get_assignments(
-    Path(_module_id): Path<i64>,
-    Query(_params): Query<FilterReq>,
+    Path(module_id): Path<i64>,
+    Query(query): Query<FilterReq>,
 ) -> impl IntoResponse {
-    // let page = params.page.unwrap_or(1).max(1) as u64;
-    // let per_page = (params.per_page.unwrap_or(20).min(100).max(1)) as u64;
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(20).min(100).max(1);
+    let sort = query.sort.clone();
 
-    // // Validate sort fields (keeps existing behavior)
-    // if let Some(ref sort_field) = params.sort {
-    //     let valid_fields = [
-    //         "name",
-    //         "description", 
-    //         "assignment_type",
-    //         "status",
-    //         "available_from",
-    //         "due_date",
-    //         "created_at",
-    //         "updated_at",
-    //     ];
+    let mut filters = vec![FilterParam::eq("module_id", module_id)];
+    let mut queries = Vec::new();
 
-    //     let mut valid = true;
-    //     for field in sort_field.split(',') {
-    //         let field = field.trim().trim_start_matches('-');
-    //         if !valid_fields.contains(&field) {
-    //             valid = false;
-    //             break;
-    //         }
-    //     }
+    if let Some(query_text) = query.query {
+        queries.push(QueryParam::new(
+            vec!["name".to_string(), "description".to_string()],
+            query_text,
+        ));
+    }
 
-    //     if !valid {
-    //         return (
-    //             StatusCode::BAD_REQUEST,
-    //             Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
-    //         );
-    //     }
-    // }
+    if let Some(name) = query.name {
+        filters.push(FilterParam::like("name", name));
+    }
 
-    // // Clone sort out before moving `params` into service
-    // let sort_by = params.sort.clone();
+    if let Some(assignment_type) = query.assignment_type {
+        filters.push(FilterParam::eq("assignment_type", assignment_type));
+    }
 
-    // // Move the whole `params` into the service. Service will build AssignmentFilter.
-    // match assignment_service
-    //     .filter_with_req(params, module_id, page, per_page, sort_by)
-    //     .await
-    // {
-    //     Ok(result) => {
-    //         let assignments: Vec<AssignmentResponse> = result
-    //             .assignments
-    //             .into_iter()
-    //             .map(AssignmentResponse::from)
-    //             .collect();
+    if let Some(available_before) = query.available_before {
+        if let Ok(date) = DateTime::parse_from_rfc3339(&available_before) {
+            filters.push(FilterParam::lt("available_from", date.with_timezone(&Utc)));
+        } else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::error("Invalid available_before date format")),
+            );
+        }
+    }
 
-    //         let response = FilterResponse::new(
-    //             assignments,
-    //             page as i32,
-    //             per_page as i32,
-    //             result.total as i32,
-    //         );
+    if let Some(available_after) = query.available_after {
+        if let Ok(date) = DateTime::parse_from_rfc3339(&available_after) {
+            filters.push(FilterParam::gt("available_from", date.with_timezone(&Utc)));
+        } else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::error("Invalid available_after date format")),
+            );
+        }
+    }
 
-    //         (
-    //             StatusCode::OK,
-    //             Json(ApiResponse::success(
-    //                 response,
-    //                 "Assignments retrieved successfully",
-    //             )),
-    //         )
-    //     }
+    if let Some(due_before) = query.due_before {
+        if let Ok(date) = DateTime::parse_from_rfc3339(&due_before) {
+            filters.push(FilterParam::lt("due_date", date.with_timezone(&Utc)));
+        } else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::error("Invalid due_before date format")),
+            );
+        }
+    }
 
-    //     Err(err) => {
-    //         // Treat custom DB errors (we use them for validation failures) as 400.
-    //         match err {
-    //             sea_orm::DbErr::Custom(msg) => (
-    //                 StatusCode::BAD_REQUEST,
-    //                 Json(ApiResponse::<FilterResponse>::error(&msg)),
-    //             ),
-    //             other => {
-    //                 eprintln!("Service error: {:?}", other);
-    //                 (
-    //                     StatusCode::INTERNAL_SERVER_ERROR,
-    //                     Json(ApiResponse::<FilterResponse>::error(
-    //                         "Failed to retrieve assignments",
-    //                     )),
-    //                 )
-    //             }
-    //         }
-    //     }
-    // }
+    if let Some(due_after) = query.due_after {
+        if let Ok(date) = DateTime::parse_from_rfc3339(&due_after) {
+            filters.push(FilterParam::gt("due_date", date.with_timezone(&Utc)));
+        } else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::error("Invalid due_after date format")),
+            );
+        }
+    }
+
+    let (assignments, total) = match AssignmentService::filter(
+        &filters,
+        &queries,
+        page,
+        per_page,
+        sort,
+    ).await {
+        Ok(result) => result,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(
+                    format!("Database error: {}", e),
+                )),
+            );
+        }
+    };
+
+    let assignments: Vec<AssignmentResponse> = assignments
+        .into_iter()
+        .map(AssignmentResponse::from)
+        .collect();
+
+    let response = FilterResponse::new(assignments, page, per_page, total);
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            response,
+            "Assignments retrieved successfully",
+        )),
+    )
 }
 
 #[derive(Debug, Serialize)]
@@ -506,16 +497,9 @@ pub fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
 /// }
 /// ```
 pub async fn get_assignment_stats(
-    Path((module_id, assignment_id)): Path<(i64, i64)>
+    Path((_, assignment_id)): Path<(i64, i64)>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
-    let assignment = match AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(db)
-        .await
-    {
+    let assignment = match AssignmentService::find_by_id(assignment_id).await {
         Ok(Some(a)) => a,
         Ok(None) => {
             return (
@@ -534,18 +518,17 @@ pub async fn get_assignment_stats(
         }
     };
 
-    match assignment_submission::Entity::find()
-        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
-        .order_by_desc(assignment_submission::Column::CreatedAt)
-        .all(db)
-        .await
-    {
+    match AssignmentSubmissionService::find_all(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        &vec![],
+        Some("-created_at".to_string()),
+    ).await {
         Ok(submissions) => {
-            use std::collections::HashMap;
-
             let mut total_submissions = 0;
             let mut late_submissions = 0;
-            let mut unique_users: HashMap<i64, Vec<DateTime<Utc>>> = HashMap::new(); // user_id -> Vec<created_at>
+            let mut unique_users: HashMap<i64, Vec<DateTime<Utc>>> = HashMap::new();
 
             for sub in &submissions {
                 total_submissions += 1;
@@ -561,10 +544,13 @@ pub async fn get_assignment_stats(
 
             let user_ids: Vec<i64> = unique_users.keys().copied().collect();
             
-            let user_models = user::Entity::find()
-                .filter(user::Column::Id.is_in(user_ids.clone()))
-                .all(db)
-                .await;
+            let user_models = UserService::find_all(
+                &vec![
+                    FilterParam::eq("id", user_ids),
+                ],
+                &vec![],
+                None,
+            ).await;
 
             let mut user_id_to_username = HashMap::new();
             match user_models {
@@ -683,11 +669,11 @@ pub struct AssignmentReadiness {
 pub async fn get_assignment_readiness(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> (StatusCode, Json<ApiResponse<AssignmentReadiness>>) {
-    match AssignmentModel::compute_readiness_report(module_id, assignment_id).await {
+    match AssignmentService::compute_readiness_report(module_id, assignment_id).await {
         Ok(report) => {
             if report.is_ready() {
                 if let Err(e) =
-                    AssignmentModel::try_transition_to_ready(module_id, assignment_id).await
+                    AssignmentService::try_transition_to_ready(module_id, assignment_id).await
                 {
                     tracing::warn!(
                         "Failed to transition assignment {} to Ready: {:?}",

@@ -18,17 +18,10 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use sea_orm::{DbErr};
 use crate::response::ApiResponse;
-use db::{
-    models::{
-        assignment::{
-            AssignmentType,
-            Model as AssignmentModel,
-        }
-    },
-};
 use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
+use services::service::Service;
+use services::assignment::{AssignmentService, CreateAssignment};
 
 /// POST /api/modules/{module_id}/assignments
 ///
@@ -86,8 +79,6 @@ pub async fn create_assignment(
     Path(module_id): Path<i64>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
         .map(|dt| dt.with_timezone(&Utc)) {
         Ok(date) => date,
@@ -114,29 +105,17 @@ pub async fn create_assignment(
         }
     };
 
-    let assignment_type = match req.assignment_type.parse::<AssignmentType>() {
-        Ok(t) => t,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error(
-                    "assignment_type must be 'assignment' or 'practical'",
-                )),
-            );
+    match AssignmentService::create(
+        CreateAssignment {
+            id: None,
+            module_id,
+            name: req.name,
+            description: req.description,
+            assignment_type: req.assignment_type,
+            available_from,
+            due_date,
         }
-    };
-
-    match AssignmentModel::create(
-        db,
-        module_id,
-        &req.name,
-        req.description.as_deref(),
-        assignment_type,
-        available_from,
-        due_date,
-    )
-    .await
-    {
+    ).await {
         Ok(model) => {
             let response = AssignmentResponse::from(model);
             (

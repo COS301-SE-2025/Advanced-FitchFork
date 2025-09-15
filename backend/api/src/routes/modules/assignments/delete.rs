@@ -18,11 +18,12 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use sqlx::types::JsonValue;
 use serde_json::json;
-use db::models::assignment;
+use serde::{Serialize, Deserialize};
 use crate::response::ApiResponse;
-use super::common::BulkDeleteRequest;
+//use super::common::{BulkDeleteRequest, BulkDeleteResponse};
+use services::service::Service;
+use services::assignment::AssignmentService;
 
 /// DELETE /api/modules/:module_id/assignments/:assignment_id
 ///
@@ -61,7 +62,7 @@ use super::common::BulkDeleteRequest;
 pub async fn delete_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    match AssignmentService::delete(module_id, assignment_id).await {
+    match AssignmentService::delete_by_id(module_id).await {
         Ok(()) => (
             StatusCode::OK,
             Json(json!({
@@ -77,6 +78,23 @@ pub async fn delete_assignment(
             })),
         ),
     }
+}
+
+#[derive(Deserialize)]
+pub struct BulkDeleteRequest {
+    pub assignment_ids: Vec<i64>,
+}
+
+#[derive(Serialize)]
+pub struct BulkDeleteResult {
+    pub deleted: usize,
+    pub failed: Vec<FailedDelete>,
+}
+
+#[derive(Serialize)]
+pub struct FailedDelete {
+    pub id: i64,
+    pub error: String,
 }
 
 /// DELETE /api/modules/:module_id/assignments/bulk
@@ -108,32 +126,35 @@ pub async fn delete_assignment(
 /// }
 /// ```
 pub async fn bulk_delete_assignments(
-    Path(module_id): Path<i64>,
+    Path(_): Path<i64>,
     Json(req): Json<BulkDeleteRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if req.assignment_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<JsonValue>::error("No assignment IDs provided")),
+            Json(ApiResponse::<BulkDeleteResult>::error("No assignment IDs provided")),
         );
     }
 
     let mut deleted_count = 0;
-    let mut failed: Vec<JsonValue> = Vec::new();
+    let mut failed = Vec::new();
 
     for &id in &req.assignment_ids {
-        match assignment::Model::delete(db, id as i32, module_id as i32).await {
+        match AssignmentService::delete_by_id(id).await {
             Ok(_) => deleted_count += 1,
             Err(e) => {
-                failed.push(json!({
-                    "id": id,
-                    "error": e.to_string()
-                }));
+                failed.push(FailedDelete {
+                    id,
+                    error: format!("Failed to delete assignment: {}", e),
+                });
             }
         }
     }
+    
+    let result = BulkDeleteResult {
+        deleted: deleted_count,
+        failed,
+    };
 
     let message = format!(
         "Deleted {}/{} assignments",
@@ -141,15 +162,8 @@ pub async fn bulk_delete_assignments(
         req.assignment_ids.len()
     );
 
-    let data = json!({
-        "deleted": deleted_count,
-        "failed": failed
-    });
-
-    let response = ApiResponse::success(data, message);
-
     (
         StatusCode::OK,
-        Json(response),
+        Json(ApiResponse::success(result, message)),
     )
 }
