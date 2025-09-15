@@ -1,20 +1,22 @@
 use axum::{
-    extract::{State, Path, Query},
+    extract::{Path, Query},
     http::{StatusCode, Response},
     response::IntoResponse,
     Json,
 };
-use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 use crate::response::ApiResponse;
 use crate::routes::common::UserModule;
-use db::models::user::{Entity as UserEntity, Model as UserModel, Column as UserColumn};
 use std::{path::PathBuf};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 use axum::body::Body;
 use mime_guess::from_path;
+use util::filters::{FilterParam, QueryParam};
+use services::service::Service;
+use services::user::{UserService, User};
+use services::user_module_role::UserModuleRoleService;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct ListUsersQuery {
@@ -47,8 +49,8 @@ pub struct UsersListResponse {
     pub total: u64,
 }
 
-impl From<UserModel> for UserListItem {
-    fn from(user: UserModel) -> Self {
+impl From<User> for UserListItem {
+    fn from(user: User) -> Self {
         Self {
             id: user.id.to_string(),
             email: user.email,
@@ -117,8 +119,6 @@ impl From<UserModel> for UserListItem {
 pub async fn list_users(
     Query(query): Query<ListUsersQuery>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-    
     if let Err(e) = query.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -128,88 +128,57 @@ pub async fn list_users(
         );
     }
 
-    let page = query.page.unwrap_or(1);
-    let per_page = query.per_page.unwrap_or(20);
+    let mut filters = Vec::new();
+    let mut queries = Vec::new();
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(20).min(100).max(1);
+    let sort = query.sort.or_else(|| Some("id".to_string()));
 
-    let mut condition = Condition::all();
-
-    if let Some(q) = &query.query {
-        let pattern = format!("%{}%", q.to_lowercase());
-        condition = condition.add(
-            Condition::any()
-                .add(UserColumn::Email.contains(&pattern))
-                .add(UserColumn::Username.contains(&pattern)),
-        );
+    if let Some(email) = query.email {
+        filters.push(FilterParam::like("email", email));
     }
-
-    if let Some(email) = &query.email {
-        condition = condition.add(UserColumn::Email.contains(&format!("%{}%", email)));
+    
+    if let Some(username) = query.username {
+        filters.push(FilterParam::like("username", username));
     }
-
-    if let Some(sn) = &query.username {
-        condition = condition.add(UserColumn::Username.contains(&format!("%{}%", sn)));
-    }
-
+    
     if let Some(admin) = query.admin {
-        condition = condition.add(UserColumn::Admin.eq(admin));
+        filters.push(FilterParam::eq("admin", admin));
     }
 
-    let mut query_builder = UserEntity::find().filter(condition);
+    if let Some(query_text) = query.query {
+        queries.push(QueryParam::new(
+            vec!["email".to_string(), "username".to_string()],
+            query_text
+        ));
+    }
 
-    if let Some(sort_param) = &query.sort {
-        for sort_field in sort_param.split(',') {
-            let (field, desc) = if sort_field.starts_with('-') {
-                (&sort_field[1..], true)
-            } else {
-                (sort_field, false)
-            };
-
-            match field {
-                "email" => {
-                    query_builder = if desc {
-                        query_builder.order_by_desc(UserColumn::Email)
-                    } else {
-                        query_builder.order_by_asc(UserColumn::Email)
-                    };
-                }
-                "username" => {
-                    query_builder = if desc {
-                        query_builder.order_by_desc(UserColumn::Username)
-                    } else {
-                        query_builder.order_by_asc(UserColumn::Username)
-                    };
-                }
-                "created_at" => {
-                    query_builder = if desc {
-                        query_builder.order_by_desc(UserColumn::CreatedAt)
-                    } else {
-                        query_builder.order_by_asc(UserColumn::CreatedAt)
-                    };
-                }
-                "admin" => {
-                    query_builder = if desc {
-                        query_builder.order_by_desc(UserColumn::Admin)
-                    } else {
-                        query_builder.order_by_asc(UserColumn::Admin)
-                    };
-                }
-                _ => {}
-            }
+    let (users, total) = match UserService::filter(
+        &filters,
+        &queries,
+        page,
+        per_page,
+        sort,
+    ).await {
+        Ok(users) => users,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<UsersListResponse>::error(format!("Database error: {}", e))),
+            );
         }
-    } else {
-        query_builder = query_builder.order_by_asc(UserColumn::Id);
-    }
+    };
 
-    let paginator = query_builder.paginate(db, per_page);
-    let total = paginator.num_items().await.unwrap_or(0);
-    let users = paginator.fetch_page(page - 1).await.unwrap_or_default();
-    let users = users.into_iter().map(UserListItem::from).collect();
+    let user_list_items: Vec<UserListItem> = users
+        .into_iter()
+        .map(UserListItem::from)
+        .collect();
 
     (
         StatusCode::OK,
         Json(ApiResponse::success(
             UsersListResponse {
-                users,
+                users: user_list_items,
                 page,
                 per_page,
                 total,
@@ -234,9 +203,7 @@ pub async fn list_users(
 pub async fn get_user(
     Path(user_id): Path<i64>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
-    match UserEntity::find_by_id(user_id).one(db).await {
+    match UserService::find_by_id(user_id).await {
         Ok(Some(user)) => {
             let user_item = UserListItem::from(user);
             (
@@ -312,9 +279,7 @@ pub async fn get_user(
 pub async fn get_user_modules(
     Path(user_id): Path<i64>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
-    let roles = match UserModel::get_module_roles(db, user_id).await {
+    let roles = match UserModuleRoleService::get_module_roles(user_id).await {
         Ok(r) => r,
         Err(e) => {
             return (
@@ -351,7 +316,6 @@ pub async fn get_user_modules(
 ///
 /// Returns the avatar image file for a user if it exists.
 pub async fn get_avatar(
-    State(_state): State<AppState>,
     Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
     let root = std::env::var("USER_PROFILE_STORAGE_ROOT")

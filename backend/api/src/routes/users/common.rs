@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use validator::Validate;
+use services::user::User;
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct CreateUserRequest {
@@ -30,8 +31,8 @@ pub struct UserResponse {
     pub updated_at: String,
 }
 
-impl From<db::models::user::Model> for UserResponse {
-    fn from(user: db::models::user::Model) -> Self {
+impl From<User> for UserResponse {
+    fn from(user: User) -> Self {
         Self {
             id: user.id,
             username: user.username,

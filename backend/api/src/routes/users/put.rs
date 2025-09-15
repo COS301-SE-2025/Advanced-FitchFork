@@ -6,15 +6,16 @@ use axum::{
     Json,
 };
 use axum::extract::Multipart;
-use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, IntoActiveModel, QueryFilter, Set};
 use serde::Deserialize;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use validator::Validate;
 use crate::{response::ApiResponse};
 use common::format_validation_errors;
-use db::models::user;
 use crate::routes::common::UserResponse;
+use util::filters::FilterParam;
+use services::service::Service;
+use services::user::{UpdateUser, UserService};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateUserRequest {
@@ -99,8 +100,6 @@ pub async fn update_user(
     Path(user_id): Path<i64>,
     Json(req): Json<UpdateUserRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -115,11 +114,17 @@ pub async fn update_user(
         );
     }
 
-    let current_user = user::Entity::find_by_id(user_id)
-        .one(db).await.unwrap().unwrap();
+    let current_user = match UserService::find_by_id(user_id).await {
+        Ok(Some(user)) => user,
+        Ok(None) | Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<UserResponse>::error("User not found")),
+            );
+        }
+    };
 
     // TODO: Should probably make a more robust system with a super admin
-    // Prevent changing your own admin status or changing others' admin status
     if let Some(_) = req.admin {
         return (
             StatusCode::FORBIDDEN,
@@ -129,14 +134,14 @@ pub async fn update_user(
 
     if let Some(email) = &req.email {
         if email != &current_user.email {
-            let exists_result = user::Entity::find()
-                .filter(
-                    Condition::all()
-                        .add(user::Column::Email.eq(email.clone()))
-                        .add(user::Column::Id.ne(user_id)),
-                )
-                .one(db)
-                .await;
+            let exists_result = UserService::find_one(
+                &vec![
+                    FilterParam::eq("email", email.clone()),
+                    FilterParam::ne("id", user_id),
+                ],
+                &vec![],
+                None,
+            ).await;
 
             match exists_result {
                 Ok(Some(_)) => {
@@ -158,14 +163,14 @@ pub async fn update_user(
 
     if let Some(sn) = &req.username {
         if sn != &current_user.username {
-            let exists_result = user::Entity::find()
-                .filter(
-                    Condition::all()
-                        .add(user::Column::Username.eq(sn.clone()))
-                        .add(user::Column::Id.ne(user_id)),
-                )
-                .one(db)
-                .await;
+            let exists_result = UserService::find_one(
+                &vec![
+                    FilterParam::eq("username", sn.clone()),
+                    FilterParam::ne("id", user_id),
+                ],
+                &vec![],
+                None,
+            ).await;
 
             match exists_result {
                 Ok(Some(_)) => {
@@ -187,18 +192,16 @@ pub async fn update_user(
         }
     }
 
-    let mut active_model: user::ActiveModel = current_user.into();
-    if let Some(sn) = req.username {
-        active_model.username = Set(sn);
-    }
-    if let Some(email) = req.email {
-        active_model.email = Set(email);
-    }
-    if let Some(admin) = req.admin {
-        active_model.admin = Set(admin);
-    }
-
-    match active_model.update(db).await {
+    match UserService::update(
+        UpdateUser {
+            id: user_id,
+            username: req.username.clone(),
+            email: req.email.clone(),
+            password: None,
+            admin: req.admin,
+            profile_picture_path: None,
+        }
+    ).await {
         Ok(updated) => (
             StatusCode::OK,
             Json(ApiResponse::success(
@@ -276,8 +279,6 @@ pub async fn upload_avatar(
     Path(user_id): Path<i64>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     const MAX_SIZE: u64 = 2 * 1024 * 1024;
     const ALLOWED_MIME: &[&str] = &["image/jpeg", "image/png", "image/gif"];
 
@@ -339,20 +340,29 @@ pub async fn upload_avatar(
         .unwrap()
         .to_string_lossy()
         .to_string();
-
-    let current = user::Entity::find_by_id(user_id)
-        .one(db).await.unwrap().unwrap();
-
-    let mut model = current.into_active_model();
-    model.profile_picture_path = Set(Some(relative_path.clone()));
-    model.update(db).await.unwrap();
-
-    let response = ProfilePictureResponse {
-        profile_picture_path: relative_path,
-    };
+    
+    UserService::update(
+        UpdateUser {
+            id: user_id,
+            username: None,
+            email: None,
+            password: None,
+            admin: None,
+            profile_picture_path: Some(relative_path.clone()),
+        }
+    ).await
+    .map_err(|_| (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ApiResponse::<ProfilePictureResponse>::error("Database error.")),
+    ));
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response, "Avatar uploaded for user.")),
+        Json(ApiResponse::success(
+            ProfilePictureResponse {
+                profile_picture_path: relative_path,
+            },
+            "Avatar uploaded for user.",
+        )),
     )
 }

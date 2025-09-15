@@ -13,10 +13,8 @@ use axum::{
 use crate::response::ApiResponse;
 use crate::routes::users::common::{CreateUserRequest, BulkCreateUsersRequest, UserResponse};
 use validator::Validate;
-use services::{
-    service::Service,
-    user::{UserService, CreateUser},
-};
+use services::service::Service;
+use services::user::{UserService, CreateUser};
 
 /// POST /api/users
 ///
@@ -49,6 +47,7 @@ pub async fn create_user(
     }
 
     match UserService::create(CreateUser {
+        id: None,
         username: req.username,
         email: req.email,
         password: req.password,
@@ -76,7 +75,6 @@ pub async fn create_user(
         }
     }
 }
-
 
 /// POST /api/users/bulk
 ///
@@ -113,6 +111,7 @@ pub async fn bulk_create_users(
 
     for user_req in req.users {
         match UserService::create(CreateUser {
+            id: None,
             username: user_req.username.clone(),
             email: user_req.email,
             password: user_req.password,
