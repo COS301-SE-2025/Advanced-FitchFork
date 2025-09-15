@@ -1,5 +1,5 @@
 use api::{auth::middleware::log_request, ws::ws_routes};
-use api::auth::guards::validate_known_ids;
+use api::auth::guards::{validate_known_ids, SUPERUSER_IDS};
 use api::routes::routes;
 use axum::{
     http::header::{CONTENT_DISPOSITION, CONTENT_TYPE},
@@ -17,6 +17,9 @@ async fn main() {
     // Load configuration and initialize logging
     let config = AppConfig::from_env();
     let _log_guard = init_logging(&config.log_file, &config.log_level);
+
+    // Initialize superuser IDs
+    SUPERUSER_IDS.set(config.superuser_ids).unwrap();
 
     // Set up dependencies
     let db = connect().await;

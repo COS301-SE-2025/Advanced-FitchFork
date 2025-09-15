@@ -1,9 +1,10 @@
 use axum::{extract::{Path, State, FromRequestParts}, http::{Request, StatusCode}, middleware::Next, body::Body, response::{Response, IntoResponse}, Json};
+use once_cell::sync::OnceCell;
 use util::state::AppState;
 use crate::auth::claims::AuthUser;
 use crate::response::ApiResponse;
 use sea_orm::DatabaseConnection;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use sea_orm::EntityTrait;
 use sea_orm::QueryFilter;
 use sea_orm::ColumnTrait;
@@ -17,6 +18,13 @@ use db::models::{
     user::Entity as UserEntity,
     user
 };
+
+// --- Superuser ---
+pub static SUPERUSER_IDS: OnceCell<HashSet<i64>> = OnceCell::new();
+
+pub async fn is_superuser(user_id: i64) -> bool {
+    SUPERUSER_IDS.get().unwrap().contains(&user_id)
+}
 
 // --- Role Based Access Guards ---
 
@@ -47,16 +55,31 @@ async fn user_has_any_role(
     module_id: i64,
     roles: &[&str],
 ) -> bool {
+    if roles.is_empty() {
+        // No roles specified -> deny (fail-safe)
+        return false;
+    }
+
     for role in roles {
-        if user::Model::is_in_role(db, user_id, module_id, role).await.unwrap_or(false) {
-            return true;
+        match user::Model::is_in_role(db, user_id, module_id, role).await {
+            Ok(true) => return true,
+            Ok(false) => continue,
+            Err(e) => {
+                // Log and deny on DB error (fail-safe)
+                tracing::warn!(
+                    error = %e,
+                    user_id, module_id, role,
+                    "DB error while checking role; denying access"
+                );
+                return false;
+            }
         }
     }
     false
 }
 
 /// Basic guard to ensure the request is authenticated.
-pub async fn require_authenticated(
+pub async fn allow_authenticated(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
@@ -66,7 +89,7 @@ pub async fn require_authenticated(
 }
 
 /// Admin-only guard.
-pub async fn require_admin(
+pub async fn allow_admin(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
@@ -83,7 +106,7 @@ pub async fn require_admin(
 }
 
 /// Base role-based access guard that other guards can build upon
-async fn require_role_base(
+async fn allow_role_base(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
@@ -106,6 +129,10 @@ async fn require_role_base(
         return Ok(next.run(req).await);
     }
 
+    if is_superuser(user.0.sub).await {
+        return Ok(next.run(req).await);
+    }
+
     if user_has_any_role(&db, user.0.sub, module_id, required_roles).await {
         Ok(next.run(req).await)
     } else {
@@ -113,117 +140,139 @@ async fn require_role_base(
     }
 }
 
-/// Guard for requiring lecturer access.
-pub async fn require_lecturer(
+/// Compute the set of roles that are considered "lower or equal" in privilege to the provided role.
+///
+/// Hierarchy (high -> low): Lecturer > AssistantLecturer > Tutor > Student
+/// If you allow a role you implicitly allow all roles BELOW it ("lower roles") as per new access rule.
+/// This inverses the previous semantics where a "require_*" guard allowed only the exact role.
+fn roles_lower_or_equal(role: &str) -> &'static [&'static str] {
+    match role {
+        "Lecturer" => &["Lecturer", "AssistantLecturer", "Tutor", "Student"],
+        "AssistantLecturer" => &["AssistantLecturer", "Tutor", "Student"],
+        "Tutor" => &["Tutor", "Student"],
+        "Student" => &["Student"],
+        _ => &[], // Fail-safe: unknown role => deny later
+    }
+}
+
+/// Guard for allowing Lecturer and all lower roles (AssistantLecturer, Tutor, Student).
+pub async fn allow_lecturer(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
+    let allowed = roles_lower_or_equal("Lecturer");
+    allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
-        &["Lecturer"],
-        "Lecturer access required for this module"
+        allowed,
+        "Lecturer (or lower) access required for this module"
     ).await
 }
 
-/// Guard for requiring assistant lecturer access.
-pub async fn require_assistant_lecturer(
+/// Guard for allowing AssistantLecturer and all lower roles (Tutor, Student).
+pub async fn allow_assistant_lecturer(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
+    let allowed = roles_lower_or_equal("AssistantLecturer");
+    allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
-        &["AssistantLecturer"],
-        "Assistant lecturer access required for this module"
+        allowed,
+        "Assistant lecturer (or lower) access required for this module"
     ).await
 }
 
-/// Guard for requiring tutor access.
-pub async fn require_tutor(
+/// Guard for allowing Tutor and all lower roles (Student).
+pub async fn allow_tutor(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
+    let allowed = roles_lower_or_equal("Tutor");
+    allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
-        &["Tutor"],
-        "Tutor access required for this module"
+        allowed,
+        "Tutor (or lower) access required for this module"
     ).await
 }
 
-/// Guard for requiring student access.
-pub async fn require_student(
+/// Guard for allowing only Student role.
+pub async fn allow_student(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
+    let allowed = roles_lower_or_equal("Student");
+    allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
-        &["Student"],
+        allowed,
         "Student access required for this module"
     ).await
 }
 
-/// Guard for requiring lecturer or assistant lecturer access.
-pub async fn require_lecturer_or_assistant_lecturer(
+/// Guard for allowing Lecturer or AssistantLecturer (and their lower roles).
+pub async fn allow_lecturer_or_assistant_lecturer(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
+    // Union of lower-or-equal sets for Lecturer and AssistantLecturer collapses to Lecturer's set.
+    let allowed = roles_lower_or_equal("Lecturer");
+    allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
-        &["Lecturer", "AssistantLecturer"],
-        "Lecturer or assistant lecturer access required for this module"
+        allowed,
+        "Lecturer / AssistantLecturer (or lower) access required for this module"
     ).await
 }
 
-/// Guard for requiring lecturer or tutor access.
-/// TODO: Add ALs to this?
-pub async fn require_lecturer_or_tutor(
+/// Guard for allowing Lecturer or Tutor (and their lower roles).
+pub async fn allow_lecturer_or_tutor(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
+    // Lecturer already includes all lower roles.
+    let allowed = roles_lower_or_equal("Lecturer");
+    allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
-        &["Lecturer", "Tutor"],
-        "Lecturer or tutor access required for this module"
+        allowed,
+        "Lecturer or Tutor (or lower) access required for this module"
     ).await
 }
 
-/// Guard for requiring any assigned role (lecturer, tutor, student).
-pub async fn require_assigned_to_module(
+/// Guard for allowing any assigned role (Lecturer, AssistantLecturer, Tutor, Student).
+pub async fn allow_assigned_to_module(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
+    allow_role_base(
         State(app_state),
         Path(params),
         req,
@@ -233,7 +282,7 @@ pub async fn require_assigned_to_module(
     ).await
 }
 
-pub async fn require_ready_assignment(
+pub async fn allow_ready_assignment(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
@@ -255,7 +304,7 @@ pub async fn require_ready_assignment(
             Json(ApiResponse::error("Missing or invalid assignment_id"))
         ))?;
 
-    if let Err(e) = db::models::assignment::Model::try_transition_to_ready(db, module_id, assignment_id).await {
+     if let Err(e) = db::models::assignment::Model::try_transition_to_ready(db, module_id, assignment_id).await {
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::error(format!("Failed to transition assignment to ready: {}", e)))
@@ -540,9 +589,14 @@ pub async fn validate_known_ids(
     let mut announcement_id: Option<i32> = None;
 
     for (key, raw) in &params {
-        let id = raw.parse::<i32>().map_err(|_| {
-            (StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Invalid {}: '{}'. Must be an integer.", key, raw)))).into_response()
-        })?;
+        let id = match raw.parse::<i32>() {
+            Ok(v) => v,
+            Err(_) => {
+                return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!(
+                    "Invalid {}: '{}'. Must be an integer.", key, raw
+                )))).into_response());
+            }
+        };
         match key.as_str() {
             "module_id"     => module_id = Some(id),
             "assignment_id" => assignment_id = Some(id),
@@ -554,7 +608,10 @@ pub async fn validate_known_ids(
             "case_id" => case_id = Some(id),
             "announcement_id" => announcement_id = Some(id),
             "message_id" => message_id = Some(id),
-            _ => return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Unexpected parameter: '{}'.", key)))).into_response()),
+            other => {
+                tracing::warn!(param = other, "Unexpected parameter encountered; rejecting request");
+                return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::<Empty>::error(format!("Unexpected parameter: '{}'.", other)))).into_response());
+            }
         }
     }
     
@@ -595,7 +652,7 @@ pub async fn validate_known_ids(
 }
 
 // TODO Write tests for this gaurd
-pub async fn require_ticket_ws_access(
+pub async fn allow_ticket_ws_access(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: axum::http::Request<Body>,

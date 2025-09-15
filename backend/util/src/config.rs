@@ -4,6 +4,7 @@
 //! runtime configuration values loaded from environment variables. It provides
 //! thread-safe access and mutation for testing or overrides in runtime environments.
 
+use std::collections::HashSet;
 use std::env;
 use std::sync::{OnceLock, RwLock};
 
@@ -31,6 +32,7 @@ pub struct AppConfig {
     pub frontend_url: String,
     pub email_from_name: String,
     pub gemini_api_key: String,
+    pub superuser_ids: HashSet<i64>,
 }
 
 /// Lazily-initialized, thread-safe singleton instance of `AppConfig`.
@@ -85,6 +87,11 @@ impl AppConfig {
             frontend_url: env::var("FRONTEND_URL").unwrap_or_default(),
             email_from_name: env::var("EMAIL_FROM_NAME").unwrap_or_else(|_| "FitchFork".into()),
             gemini_api_key: env::var("GEMINI_API_KEY").unwrap_or_default(),
+            superuser_ids: env::var("SUPERUSER_IDS")
+                .unwrap_or_default()
+                .split(',')
+                .filter_map(|s| s.trim().parse().ok())
+                .collect(),
         }
     }
 
@@ -196,5 +203,9 @@ impl AppConfig {
 
     pub fn set_gemini_api_key(value: impl Into<String>) {
         AppConfig::set_field(|cfg| cfg.gemini_api_key = value.into());
+    }
+
+    pub fn set_superuser_ids(value: HashSet<i64>) {
+        AppConfig::set_field(|cfg| cfg.superuser_ids = value);
     }
 }
