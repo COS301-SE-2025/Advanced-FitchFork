@@ -13,7 +13,7 @@ use sea_orm::ColumnTrait;
 use sea_orm::QueryFilter;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 use util::paths::{
-    storage_root, makefile_dir, memo_dir, submission_zip_path, interpreter_dir,
+    interpreter_dir, makefile_dir, memo_dir, storage_root, submission_file_path
 };
 use util::execution_config::ExecutionConfig;
 use util::test_helpers::setup_test_storage_root;
@@ -140,47 +140,57 @@ async fn seed_submission(
 
     let module_id = assignment.module_id;
 
-    // Where the submission lives on disk:
-    let file_path = submission_zip_path(module_id, assignment_id, user_id, attempt);
-
-    // Write a minimal valid zip so downstream reads succeed:
-    write_zip(&file_path, &[("README.txt", b"dummy submission")]).expect("write submission zip");
-
-    // DB wants a relative path from the storage root:
-    let rel = file_path
-        .strip_prefix(storage_root())
-        .expect("strip prefix")
-        .to_string_lossy()
-        .to_string();
-
-
     let now = Utc::now();
 
-    let submission = SubmissionActiveModel {
+    // 1) Insert placeholder to get the submission ID
+    let placeholder = SubmissionActiveModel {
         assignment_id: Set(assignment_id),
         user_id: Set(user_id),
         attempt: Set(attempt),
-        // use the actual filename we created
-        filename: Set(
-            file_path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("submission.zip")
-                .to_string(),
-        ),
+        // Keep the *original uploaded name* user would have provided.
+        // Tests can use anything; keep it stable:
+        filename: Set("submission.zip".to_string()),
         file_hash: Set("0".to_string()),
-        path: Set(rel),
+        path: Set(String::new()), // will be filled after writing the file
         is_practice: Set(false),
         created_at: Set(now),
         updated_at: Set(now),
         ..Default::default()
     };
 
-    submission
+    let inserted: SubmissionModel = placeholder
         .insert(db)
         .await
-        .expect("Failed to insert submission")
+        .expect("Failed to insert submission placeholder");
+
+    // 2) Build the on-disk path using the REAL submission id and ".zip"
+    let file_path = submission_file_path(
+        module_id,
+        assignment_id,
+        user_id,
+        attempt,
+        inserted.id,
+        Some("zip"),
+    );
+
+    // 3) Write a minimal valid zip so downstream reads succeed
+    write_zip(&file_path, &[("README.txt", b"dummy submission")]).expect("write submission zip");
+
+    // 4) Store the *relative* path in DB
+    let rel = file_path
+        .strip_prefix(storage_root())
+        .expect("strip prefix")
+        .to_string_lossy()
+        .to_string();
+
+    // 5) Update submission with resolved path (and updated_at)
+    let mut update: SubmissionActiveModel = inserted.into();
+    update.path = Set(rel);
+    update.updated_at = Set(Utc::now());
+
+    update.update(db).await.expect("Failed to update submission")
 }
+
 
 async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, interpreter_id: i64) {
     use db::models::assignment_interpreter::{

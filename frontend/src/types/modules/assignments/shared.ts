@@ -30,9 +30,11 @@ export interface AssignmentFile extends Timestamp {
 }
 
 export interface AssignmentReadiness {
+  submission_mode: SubmissionMode;
   config_present: boolean;
   tasks_present: boolean;
   main_present: boolean;
+  interpreter_present: boolean;
   memo_present: boolean;
   makefile_present: boolean;
   memo_output_present: boolean;

@@ -32,11 +32,6 @@ import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
 import MemoOutput from './pages/modules/assignments/MemoOutput';
 import MarkAllocator from './pages/modules/assignments/MarkAllocator';
 import HelpPageLayout from './layouts/HelpPageLayout';
-import HelpAccount from './pages/help/HelpAccount';
-import HelpAssignments from './pages/help/HelpAssignments';
-import HelpContact from './pages/help/HelpContact';
-import HelpSubmissions from './pages/help/HelpSubmissions';
-import HelpTroubleshooting from './pages/help/HelpTroubleshooting';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import AuthLayout from './layouts/AuthLayout';
@@ -66,6 +61,7 @@ import PlagiarismCases from './pages/modules/assignments/PlagiarismCases';
 import AssignmentPage from './pages/modules/assignments/config/AssignmentPage';
 import OutputPage from './pages/modules/assignments/config/OutputPage';
 import GatlamPage from './pages/modules/assignments/config/GatlamPage';
+import CodeCoveragePage from './pages/modules/assignments/config/CodeCoveragePage';
 import InterpreterPage from './pages/modules/assignments/config/InterpreterPage';
 import AssignmentFilePage from './pages/modules/assignments/config/AssignmentFilePage';
 import SubmissionIde from './pages/modules/assignments/submissions/SubmissionIde';
@@ -79,6 +75,24 @@ import AssignmentVerifyPage from './pages/modules/assignments/AssignmentVerifyPa
 import AccessDeniedPage from './pages/modules/assignments/AccessDeniedPage';
 import TaskView from './pages/modules/assignments/tasks/TaskView';
 import TasksPage from './pages/modules/assignments/tasks';
+import MakefileHelp from './pages/help/assignments/files/Makefile';
+import MainFile from './pages/help/assignments/files/MainFile';
+import MemoFiles from './pages/help/assignments/files/MemoFiles';
+import Specification from './pages/help/assignments/files/Specification';
+import ExecutionHelp from './pages/help/assignments/config/ExecutionHelp';
+import OutputHelp from './pages/help/assignments/config/OutputHelp';
+import MarkingHelp from './pages/help/assignments/config/MarkingHelp';
+import ProjectHelp from './pages/help/assignments/config/ProjectHelp';
+import SecurityHelp from './pages/help/assignments/config/SecurityHelp';
+import GATLAMHelp from './pages/help/assignments/config/GATLAMHelp';
+import ConceptGATLAM from './pages/help/assignments/gatlam/ConceptGATLAM';
+import ConceptCodeCoverage from './pages/help/assignments/coverage/ConceptCodeCoverage';
+import ConfigOverviewHelp from './pages/help/assignments/config/ConfigOverviewHelp';
+import MemoOutputHelp from './pages/help/assignments/MemoOutputHelp';
+import MarkAllocatorHelp from './pages/help/assignments/MarkAllocatorHelp';
+import HowToSubmitHelp from './pages/help/assignments/submissions/HowToSubmitHelp';
+import AssignmentSetupHelp from './pages/help/assignments/AssignmentSetupHelp';
+import TasksHelp from './pages/help/assignments/TasksHelp';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -199,6 +213,7 @@ export default function App() {
                       <Route path="marking" element={<MarkingPage />} />
                       <Route path="output" element={<OutputPage />} />
                       <Route path="security" element={<SecurityPage />} />
+                      <Route path="code-coverage" element={<CodeCoveragePage />} />
                       <Route path="gatlam" element={<GatlamPage />} />
                       <Route path="interpreter" element={<InterpreterPage />} />
                       <Route path="files/:fileType" element={<AssignmentFilePage />} />
@@ -257,12 +272,88 @@ export default function App() {
 
             {/* Help Routes */}
             <Route path="/help" element={<HelpPageLayout />}>
-              <Route index element={<Navigate to="account" replace />} />
-              <Route path="account" element={<HelpAccount />} />
-              <Route path="assignments" element={<HelpAssignments />} />
-              <Route path="submissions" element={<HelpSubmissions />} />
-              <Route path="troubleshooting" element={<HelpTroubleshooting />} />
-              <Route path="contact" element={<HelpContact />} />
+              {/* Default → Getting Started / Overview */}
+              <Route index element={<Navigate to="getting-started/overview" replace />} />
+
+              {/* Ambiguous roots → first leaf */}
+              <Route
+                path="getting-started"
+                element={<Navigate to="getting-started/overview" replace />}
+              />
+              <Route path="modules" element={<Navigate to="modules/overview" replace />} />
+              <Route path="assignments" element={<Navigate to="assignments/setup" replace />} />
+              <Route
+                path="assignments/config-sections"
+                element={<Navigate to="assignments/config" replace />}
+              />
+              <Route
+                path="assignments/files"
+                element={<Navigate to="assignments/files/main-files" replace />}
+              />
+              <Route
+                path="assignments/concepts"
+                element={<Navigate to="assignments/tasks" replace />}
+              />
+              <Route
+                path="assignments/submissions"
+                element={<Navigate to="assignments/submissions/how-to-submit" replace />}
+              />
+              {/* Grading wasn't a clickable key, but support a direct path anyway */}
+              <Route
+                path="assignments/grading"
+                element={<Navigate to="assignments/memo-output" replace />}
+              />
+              <Route path="support" element={<Navigate to="support/troubleshooting" replace />} />
+
+              {/* Getting Started */}
+              <Route path="getting-started/overview" element={<UnderConstruction />} />
+
+              {/* Modules */}
+              <Route path="modules/overview" element={<UnderConstruction />} />
+              <Route path="modules/announcements" element={<UnderConstruction />} />
+              <Route path="modules/attendance" element={<UnderConstruction />} />
+              <Route path="modules/grades" element={<UnderConstruction />} />
+              <Route path="modules/personnel" element={<UnderConstruction />} />
+
+              {/* Assignments → Setup */}
+              <Route path="assignments/setup" element={<AssignmentSetupHelp />} />
+
+              {/* Assignments → Assignment Config (Overview + subsections) */}
+              <Route path="assignments/config" element={<Navigate to="overview" replace />} />
+              <Route path="assignments/config/overview" element={<ConfigOverviewHelp />} />
+              <Route path="assignments/config/project" element={<ProjectHelp />} />
+              <Route path="assignments/config/execution" element={<ExecutionHelp />} />
+              <Route path="assignments/config/output" element={<OutputHelp />} />
+              <Route path="assignments/config/marking" element={<MarkingHelp />} />
+              <Route path="assignments/config/security" element={<SecurityHelp />} />
+              <Route path="assignments/config/gatlam" element={<GATLAMHelp />} />
+
+              {/* Assignments → Files */}
+              <Route path="assignments/files/main-files" element={<MainFile />} />
+              <Route path="assignments/files/makefile" element={<MakefileHelp />} />
+              <Route path="assignments/files/memo-files" element={<MemoFiles />} />
+              <Route path="assignments/files/specification" element={<Specification />} />
+
+              {/* Assignments → Concepts */}
+              <Route path="assignments/tasks" element={<TasksHelp />} />
+              <Route path="assignments/code-coverage" element={<ConceptCodeCoverage />} />
+              <Route path="assignments/gatlam" element={<ConceptGATLAM />} />
+
+              {/* Assignments → Submissions */}
+              <Route path="assignments/submissions/how-to-submit" element={<HowToSubmitHelp />} />
+              <Route path="assignments/submissions/policy" element={<UnderConstruction />} />
+              <Route
+                path="assignments/submissions/understanding-results"
+                element={<UnderConstruction />}
+              />
+
+              {/* Assignments → Grading */}
+              <Route path="assignments/memo-output" element={<MemoOutputHelp />} />
+              <Route path="assignments/mark-allocator" element={<MarkAllocatorHelp />} />
+
+              {/* Support */}
+              <Route path="support/troubleshooting" element={<UnderConstruction />} />
+              <Route path="support/contact" element={<UnderConstruction />} />
             </Route>
 
             {/* Explicit Unauthorized Fallbacks */}

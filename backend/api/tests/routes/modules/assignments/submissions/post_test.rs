@@ -31,7 +31,7 @@ mod tests {
     use util::execution_config::execution_config::{GradingPolicy, SubmissionMode};
     use util::execution_config::ExecutionConfig;
     use util::languages::Language;
-    use util::paths::{storage_root, config_dir, main_dir, makefile_dir, mark_allocator_dir, mark_allocator_path, memo_output_dir, submission_output_dir, submission_output_path, submission_zip_path};
+    use util::paths::{storage_root, config_dir, main_dir, makefile_dir, mark_allocator_dir, mark_allocator_path, memo_output_dir, submission_output_dir, submission_output_path};
     use std::convert::Infallible;
     use std::{fs, io::Write};
     use tar::Builder as TarBuilder;
@@ -2084,46 +2084,33 @@ mod tests {
     }
 
 
-    // Create a submission that also writes the submission.zip on disk in the expected location.
+    // Create a submission that also writes the submission archive to disk
+    // using the centralized save_file (stores as {attempt}/{submission_id}.zip).
     async fn create_resubmitable_submission(
         db: &DatabaseConnection,
-        module_id: i64,
+        _module_id: i64,      // kept for signature parity; not used here
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
     ) -> AssignmentSubmissionModel {
-        // 1) Compute absolute path where the submission zip should live, and ensure dirs exist
-        let zip_abs = submission_zip_path(module_id, assignment_id, user_id, attempt);
-        if let Some(parent) = zip_abs.parent() {
-            std::fs::create_dir_all(parent).unwrap();
-        }
-        std::fs::write(&zip_abs, create_submission_zip()).unwrap();
-
-        let root = storage_root();
-        let rel_zip = zip_abs
-            .strip_prefix(&root)
-            .unwrap_or(&zip_abs)
-            .to_string_lossy()
-            .to_string();
-
-        // 2) Insert submission row
-        let submission = assignment_submission::ActiveModel {
-            assignment_id: Set(assignment_id),
-            user_id: Set(user_id),
-            attempt: Set(attempt),
-            earned: Set(10),
-            total: Set(10),
-            filename: Set("test_submission.zip".to_string()),
-            file_hash: Set("d41d8cd98f00b204e9800998ecf8427e".to_string()),
-            path: Set(rel_zip),
-            is_practice: Set(false),
-            ..Default::default()
-        }
-        .insert(db)
+        // Write the file and row via the model helper (uses {submission_id}.ext on disk,
+        // and stores a RELATIVE path in the DB).
+        let submission = assignment_submission::Model::save_file(
+            db,
+            assignment_id,
+            user_id,
+            attempt,
+            /* earned */ 10,
+            /* total  */ 10,
+            /* is_practice */ false,
+            "test_submission.zip",                  // original filename (what users see)
+            "d41d8cd98f00b204e9800998ecf8427e",     // dummy hash
+            &create_submission_zip(),               // actual bytes
+        )
         .await
         .unwrap();
 
-        // 3) Create an output row (empty path is fine for “resubmittable” seed)
+        // Seed an output row (empty path is fine for resubmit tests)
         let task = assignment_task::Entity::find()
             .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
             .one(db)
@@ -2143,6 +2130,7 @@ mod tests {
 
         submission
     }
+
 
 
     #[tokio::test]

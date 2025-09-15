@@ -1,10 +1,29 @@
 import { useEffect, useState } from 'react';
-import { Typography, Button, Input, Spin, Empty, message } from 'antd';
-import { PlusOutlined, SaveOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import {
+  Typography,
+  Button,
+  Input,
+  Spin,
+  Empty,
+  message,
+  Upload,
+  Switch,
+  Tooltip,
+  Space,
+} from 'antd';
+import {
+  PlusOutlined,
+  SaveOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  UploadOutlined,
+} from '@ant-design/icons';
+import Tip from '@/components/common/Tip';
 
 import { useModule } from '@/context/ModuleContext';
 import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
 import { listTasks, createTask, editTask, deleteTask } from '@/services/modules/assignments/tasks';
+import { uploadOverwriteFiles } from '@/services/modules/assignments/overwrite_files/post';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -13,6 +32,7 @@ type TaskRow = {
   task_number: number;
   name: string;
   command: string;
+  code_coverage: boolean;
 };
 
 const StepTasks = () => {
@@ -26,6 +46,7 @@ const StepTasks = () => {
   const [editedName, setEditedName] = useState('');
   const [editedCommand, setEditedCommand] = useState('');
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [uploadingFor, setUploadingFor] = useState<number | null>(null);
 
   const fetchTasks = async () => {
     if (!assignmentId) return;
@@ -61,10 +82,10 @@ const StepTasks = () => {
       task_number: nextTaskNumber,
       name: `Task ${nextTaskNumber}`,
       command: 'echo Hello World',
+      code_coverage: false,
     });
 
     if (res.success) {
-      message.success('Task created');
       await fetchTasks();
       await refreshAssignment?.();
     } else {
@@ -90,10 +111,10 @@ const StepTasks = () => {
       const res = await editTask(module.id, assignmentId, taskId, {
         name: editedName.trim(),
         command: editedCommand.trim(),
+        code_coverage: original?.code_coverage ?? false,
       });
 
       if (res.success) {
-        message.success('Task updated');
         await fetchTasks();
         await refreshAssignment?.();
         setEditingTaskId(null);
@@ -112,7 +133,6 @@ const StepTasks = () => {
       const res = await deleteTask(module.id, assignmentId, taskId);
 
       if (res.success) {
-        message.success(res.message || 'Task deleted');
         await fetchTasks();
         await refreshAssignment?.();
       } else {
@@ -123,6 +143,47 @@ const StepTasks = () => {
       // eslint-disable-next-line no-console
       console.error(err);
     }
+  };
+
+  const handleToggleCoverage = async (task: TaskRow, value: boolean) => {
+    if (!assignmentId) return;
+    if (savingId === task.id) return;
+    try {
+      setSavingId(task.id);
+      const res = await editTask(module.id, assignmentId, task.id, {
+        name: task.name,
+        command: task.command,
+        code_coverage: value,
+      });
+      if (res.success) {
+        setTasks((prev) =>
+          prev.map((t) => (t.id === task.id ? { ...t, code_coverage: value } : t)),
+        );
+      } else {
+        message.error(res.message || 'Failed to update coverage');
+      }
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const beforeUploadOverwrite = (taskId: number) => async (file: File) => {
+    if (!assignmentId) return false;
+    try {
+      setUploadingFor(taskId);
+      const res = await uploadOverwriteFiles(module.id, assignmentId, taskId, [file]);
+      if (res.success) {
+        message.success('Overwrite files uploaded');
+      } else {
+        message.error(res.message || 'Upload failed');
+      }
+    } catch (e) {
+      console.error(e);
+      message.error('Upload failed');
+    } finally {
+      setUploadingFor(null);
+    }
+    return false; // prevent auto upload list
   };
 
   const beginEdit = (task: TaskRow) => {
@@ -139,7 +200,12 @@ const StepTasks = () => {
 
   return (
     <div className="space-y-6">
-      <Title level={3}>Define Tasks</Title>
+      <div className="flex items-center gap-2">
+        <Title level={3} className="!mb-0">
+          Define Tasks
+        </Title>
+        <Tip iconOnly newTab to="/help/assignments/tasks" text="Tasks help" />
+      </div>
       <Paragraph type="secondary">
         Below are the tasks that make up this assignment. You can edit a task inline or add new
         ones.
@@ -205,34 +271,63 @@ const StepTasks = () => {
                   )}
                 </div>
 
-                <div className="flex gap-2">
-                  {isEditing ? (
-                    <>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
+                    <Tooltip title="Mark this task as coverage-only (excluded from pass/fail)">
+                      <span>Coverage</span>
+                    </Tooltip>
+                    <Switch
+                      size="small"
+                      checked={!!task.code_coverage}
+                      loading={savingId === task.id}
+                      onChange={(v) => handleToggleCoverage(task, v)}
+                    />
+                  </div>
+
+                  <Space.Compact>
+                    <Upload
+                      beforeUpload={beforeUploadOverwrite(task.id)}
+                      showUploadList={false}
+                      accept=".zip,application/zip,application/x-zip-compressed"
+                    >
                       <Button
-                        icon={<SaveOutlined />}
-                        type="primary"
+                        icon={<UploadOutlined />}
                         size="small"
-                        onClick={() => handleSaveTask(task.id)}
-                        loading={isSaving}
-                        disabled={isSaving}
+                        loading={uploadingFor === task.id}
                         style={{ height: 32 }}
                       >
-                        Save
+                        Overwrite
                       </Button>
-                      <Button size="small" onClick={cancelEdit} style={{ height: 32 }}>
-                        Cancel
+                    </Upload>
+
+                    {isEditing ? (
+                      <>
+                        <Button
+                          icon={<SaveOutlined />}
+                          type="primary"
+                          size="small"
+                          onClick={() => handleSaveTask(task.id)}
+                          loading={isSaving}
+                          disabled={isSaving}
+                          style={{ height: 32 }}
+                        >
+                          Save
+                        </Button>
+                        <Button size="small" onClick={cancelEdit} style={{ height: 32 }}>
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        icon={<EditOutlined />}
+                        size="small"
+                        onClick={() => beginEdit(task)}
+                        style={{ height: 32 }}
+                      >
+                        Edit
                       </Button>
-                    </>
-                  ) : (
-                    <Button
-                      icon={<EditOutlined />}
-                      size="small"
-                      onClick={() => beginEdit(task)}
-                      style={{ height: 32 }}
-                    >
-                      Edit
-                    </Button>
-                  )}
+                    )}
+                  </Space.Compact>
 
                   <Button
                     icon={<DeleteOutlined />}
@@ -247,18 +342,15 @@ const StepTasks = () => {
               </div>
             );
           })}
-        </div>
-      )}
 
-      {/* Bottom "Add Task" dashed button */}
-      {!loading && (
-        <div className="pt-2">
+          {/* Full-width Add Task button, same spacing as rows */}
           <Button
             icon={<PlusOutlined />}
             type="dashed"
             block
             onClick={handleCreateTask}
             data-cy="add-task"
+            className="!h-[56px]"
           >
             Add Task
           </Button>

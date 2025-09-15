@@ -4,7 +4,7 @@ use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
 use util::execution_config::execution_config::GradingPolicy;
 use util::execution_config::ExecutionConfig;
-use util::paths::{storage_root, attempt_dir, ensure_dir};
+use util::paths::{ensure_parent_dir, storage_root};
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
@@ -85,25 +85,13 @@ impl Model {
         storage_root().join(&self.path)
     }
 
-    /// Saves a file to disk and creates or updates its metadata in the database.
+     /// Saves a file to disk and creates or updates its metadata in the database.
     ///
     /// This method:
     /// 1. Creates a temporary DB entry.
     /// 2. Looks up the associated assignment and module.
     /// 3. Saves the file with a generated name on disk.
-    /// 4. Updates the DB entry with the file path.
-    ///
-    /// # Arguments
-    /// - `db`: Reference to the active database connection.
-    /// - `assignment_id`: ID of the assignment this submission is for.
-    /// - `user_id`: ID of the user submitting.
-    /// - `attempt`: Attempt number,
-    /// - `filename`: The original filename as submitted.
-    /// - `bytes`: The file content as a byte slice.
-    ///
-    /// # Returns
-    /// - `Ok(Model)`: The complete, updated `Model` representing the saved file.
-    /// - `Err(DbErr)`: If any database or filesystem operation fails.
+    /// 4. Updates the DB entry with the file path (relative to STORAGE_ROOT).
     pub async fn save_file(
         db: &DatabaseConnection,
         assignment_id: i64,
@@ -133,7 +121,7 @@ impl Model {
             total: Set(total),
             filename: Set(filename.to_string()),
             file_hash: Set(file_hash.to_string()),
-            path: Set("".to_string()),
+            path: Set(String::new()),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
@@ -146,29 +134,29 @@ impl Model {
             .one(db)
             .await?
             .ok_or_else(|| DbErr::Custom("Assignment not found".into()))?;
-
         let module_id = assignment.module_id;
 
-        // Step 3: Construct stored filename
+        // Step 3: Derive extension from the *uploaded filename* (no content sniffing)
         let ext = PathBuf::from(filename)
             .extension()
             .map(|e| e.to_string_lossy().to_string());
 
-        let stored_filename = match ext {
-            Some(ext) => format!("{}.{}", inserted.id, ext),
-            None => inserted.id.to_string(),
-        };
-
-        // Step 4: Write file to disk
-        let dir_path = attempt_dir(module_id, assignment_id, user_id, attempt);
-        ensure_dir(&dir_path)
+        // Step 4: Build target path via utilities and write file
+        let file_path = util::paths::submission_file_path(
+            module_id,
+            assignment_id,
+            user_id,
+            attempt,
+            inserted.id,
+            ext.as_deref(),
+        );
+        ensure_parent_dir(&file_path)
             .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
-
-        let file_path = dir_path.join(&stored_filename);
 
         fs::write(&file_path, bytes)
             .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
 
+        // Compute relative path from STORAGE_ROOT and persist
         let relative_path = file_path
             .strip_prefix(storage_root())
             .unwrap()

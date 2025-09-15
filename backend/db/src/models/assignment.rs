@@ -8,8 +8,9 @@ use sea_orm::entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, IntoActiveModel, PaginatorTrait, QueryFilter, QueryOrder, Set, QuerySelect
 };
+use util::execution_config::execution_config::SubmissionMode;
 use util::execution_config::ExecutionConfig;
-use util::paths::{assignment_dir, memo_output_dir};
+use util::paths::{assignment_dir, interpreter_dir, memo_output_dir};
 use crate::models::assignment_file::{Model as AssignmentFileModel, FileType};
 use crate::models::assignment_task::{Entity as TaskEntity, Column as TaskColumn};
 use crate::models::assignment_submission::{Entity as SubmissionEntity, Column as SubmissionCol};
@@ -93,9 +94,11 @@ pub enum Status {
 /// Detailed report of assignment readiness state.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ReadinessReport {
+    pub submission_mode: SubmissionMode,
     pub config_present: bool,
     pub tasks_present: bool,
     pub main_present: bool,
+    pub interpreter_present: bool,
     pub memo_present: bool,
     pub makefile_present: bool,
     pub memo_output_present: bool,
@@ -103,15 +106,27 @@ pub struct ReadinessReport {
 }
 
 impl ReadinessReport {
-    /// Convenience helper: true if all components are present.
+    /// Readiness is conditional:
+    /// - Manual  -> require main
+    /// - GATLAM  -> require interpreter
+    /// - Others  -> neither main nor interpreter are required
     pub fn is_ready(&self) -> bool {
-        self.config_present
+        let common_ok = self.config_present
             && self.tasks_present
-            && self.main_present
             && self.memo_present
             && self.makefile_present
             && self.memo_output_present
-            && self.mark_allocator_present
+            && self.mark_allocator_present;
+
+        if !common_ok {
+            return false;
+        }
+
+        match self.submission_mode {
+            SubmissionMode::Manual => self.main_present,
+            SubmissionMode::GATLAM => self.interpreter_present,
+            _ => true, // RNG / CodeCoverage, etc.
+        }
     }
 }
 
@@ -150,8 +165,19 @@ impl Model {
             ..Default::default()
         };
 
-        active.insert(db).await
+        let created = active.insert(db).await?;
+
+        // auto-create default config.json
+        if let Err(e) = ExecutionConfig::default_config().save(module_id, created.id) {
+            eprintln!(
+                "Warning: failed to save default execution config for assignment {}: {}",
+                created.id, e
+            );
+        }
+
+        Ok(created)
     }
+
 
     pub async fn edit(
         db: &DatabaseConnection,
@@ -272,40 +298,46 @@ impl Model {
         }
     }
 
-    /// Computes a detailed readiness report for an assignment by checking if all required components are present.
+    /// Computes a detailed readiness report for an assignment, with requirements
+    /// that adapt to the configured `SubmissionMode`.
     ///
-    /// This function verifies the presence of all expected resources for an assignment:
-    /// - At least one task is defined in the database.
-    /// - A configuration file exists.
-    /// - A main file exists.
-    /// - A memo file exists.
-    /// - A makefile exists.
-    /// - A memo output file exists.
-    /// - A JSON mark allocator file exists.
+    /// This function verifies the presence of all expected resources:
+    /// - At least one **task** exists in the database.
+    /// - A **configuration** file (`config.json` under `.../config/`) exists.
+    /// - A **memo** file exists.
+    /// - A **makefile** exists.
+    /// - At least one **memo output** file exists.
+    /// - A JSON **mark allocator** file exists.
+    /// - **Main** or **Interpreter** presence is required **conditionally**:
+    ///     - If `SubmissionMode::Manual`  → **main** file must be present.
+    ///     - If `SubmissionMode::GATLAM`  → **interpreter** must be present.
+    ///     - Other modes (e.g., `RNG`, `CodeCoverage`) do **not** require main/interpreter.
     ///
-    /// The returned [`ReadinessReport`] (or [`AssignmentReadiness`]) contains boolean flags for each component
-    /// and an `is_ready` field indicating whether the assignment is fully ready
-    /// (i.e., suitable to transition from `Setup` to `Ready` state).
+    /// The returned [`ReadinessReport`] includes:
+    /// - `submission_mode`: the mode resolved from `config.json` (or default if missing/invalid).
+    /// - Boolean flags for each component, including `main_present` and `interpreter_present`.
+    /// - `is_ready()` that applies the conditional rule above.
     ///
-    /// This function only checks readiness — it does **not** modify the assignment's status in the database.
+    /// This function only checks readiness — it does **not** modify the assignment's status.
     ///
     /// # Arguments
-    /// * `db` - A reference to the database connection.
-    /// * `module_id` - The ID of the module to which the assignment belongs.
-    /// * `assignment_id` - The ID of the assignment to check.
+    /// * `db` — Database connection.
+    /// * `module_id` — The module ID.
+    /// * `assignment_id` — The assignment ID.
     ///
     /// # Returns
     /// * `Ok(ReadinessReport)` with per-component readiness details.
     /// * `Err(DbErr)` if a database error occurs while checking tasks.
     ///
     /// # Notes
-    /// File presence is checked on the file system under the expected directories for each file type.
+    /// File presence is checked on the filesystem under canonical directories.
     /// Missing directories or I/O errors are treated as absence of the respective component.
     pub async fn compute_readiness_report(
         db: &DatabaseConnection,
         module_id: i64,
         assignment_id: i64,
     ) -> Result<ReadinessReport, DbErr> {
+        // presence checks (unchanged ones kept)
         let config_present = AssignmentFileModel::full_directory_path(
             module_id,
             assignment_id,
@@ -331,6 +363,12 @@ impl Model {
         .read_dir()
         .map(|mut it| it.any(|f| f.is_ok()))
         .unwrap_or(false);
+
+        // interpreter presence
+        let interpreter_present = interpreter_dir(module_id, assignment_id)
+            .read_dir()
+            .map(|mut it| it.any(|f| f.is_ok()))
+            .unwrap_or(false);
 
         let memo_present = AssignmentFileModel::full_directory_path(
             module_id,
@@ -371,16 +409,24 @@ impl Model {
         })
         .unwrap_or(false);
 
+        // Determine submission mode: prefer on-disk config.json; fallback to default
+        let submission_mode = ExecutionConfig::get_execution_config(module_id, assignment_id)
+            .map(|c| c.project.submission_mode)
+            .unwrap_or_else(|_| ExecutionConfig::default_config().project.submission_mode);
+
         Ok(ReadinessReport {
+            submission_mode,
             config_present,
             tasks_present,
             main_present,
+            interpreter_present,
             memo_present,
             makefile_present,
             memo_output_present,
             mark_allocator_present,
         })
     }
+
 
     /// Attempts to transition an assignment to `Ready` state if all readiness conditions are met.
     ///

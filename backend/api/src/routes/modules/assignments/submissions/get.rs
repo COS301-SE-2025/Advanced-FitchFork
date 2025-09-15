@@ -29,9 +29,8 @@ use sea_orm::{
 };
 use serde::Serialize;
 use serde_json::Value;
-use util::{paths::submission_zip_path, state::AppState};
+use util::state::AppState;
 use std::{collections::HashMap, fs, path::PathBuf};
-use tokio::{fs::File as FsFile, io::AsyncReadExt};
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
@@ -922,7 +921,7 @@ pub async fn download_submission_file(
 ) -> Response {
     let db = app_state.db();
 
-    // Still load records we need for auth + filename/path.
+    // Load assignment (module guard)
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id))
         .filter(AssignmentColumn::ModuleId.eq(module_id))
@@ -946,6 +945,7 @@ pub async fn download_submission_file(
         }
     };
 
+    // Load submission
     let submission: SubmissionModel = match SubmissionEntity::find()
         .filter(SubmissionColumn::Id.eq(submission_id))
         .filter(SubmissionColumn::AssignmentId.eq(assignment.id))
@@ -969,7 +969,7 @@ pub async fn download_submission_file(
         }
     };
 
-    // Authorization: allow owner or module staff or admin
+    // Authorization: owner, staff on this module, or admin
     let is_owner = claims.sub == submission.user_id;
     let is_admin = claims.admin;
     let is_staff = if is_admin {
@@ -991,8 +991,9 @@ pub async fn download_submission_file(
             .into_response();
     }
 
-    // Resolve file path and read bytes
-    let full_path: PathBuf = submission_zip_path(module_id, assignment_id, submission.user_id, submission.attempt);
+    // Resolve file path from the stored relative path (submission.full_path() joins STORAGE_ROOT)
+    let full_path: PathBuf = submission.full_path();
+
     if tokio::fs::metadata(&full_path).await.is_err() {
         return (
             StatusCode::NOT_FOUND,
@@ -1001,25 +1002,17 @@ pub async fn download_submission_file(
             .into_response();
     }
 
-    let mut fh = match FsFile::open(&full_path).await {
-        Ok(f) => f,
+    // Read file bytes
+    let buffer = match tokio::fs::read(&full_path).await {
+        Ok(b) => b,
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Could not open file")),
+                Json(ApiResponse::<()>::error("Failed to read file")),
             )
                 .into_response()
         }
     };
-
-    let mut buffer = Vec::new();
-    if let Err(_) = fh.read_to_end(&mut buffer).await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error("Failed to read file")),
-        )
-            .into_response();
-    }
 
     // Build response with sensible headers
     let mut headers = HeaderMap::new();

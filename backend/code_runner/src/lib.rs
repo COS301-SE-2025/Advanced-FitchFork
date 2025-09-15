@@ -90,8 +90,7 @@ pub async fn create_memo_outputs_for_all_tasks(
         .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
     if tasks.is_empty() {
-        println!("No tasks found for assignment {}", assignment_id);
-        return Ok(());
+        return Err("No tasks are defined for this assignment. Add at least one task before generating memo output.".to_string());
     }
 
     // Prepare HTTP client

@@ -6,7 +6,7 @@
 //! - Create, read, update, delete assignments (single and bulk)
 //! - Open/close assignments
 //! - Assignment stats and readiness checks
-//! - Nested routes for tasks, config, memo output, mark allocation, submissions, files, interpreter, tickets, plagiarism, and grades
+//! - Nested routes for tasks, config, memo output, mark allocation, submissions, files, interpreter, tickets, plagiarism, grades, and starter packs
 //!
 //! Access control is enforced via middleware guards for lecturers, assistants, and assigned users.
 
@@ -52,6 +52,7 @@ pub mod submissions;
 pub mod tasks;
 pub mod tickets;
 pub mod statistics;
+pub mod starter;
 
 /// Expects a module ID.
 /// If an assignment ID is included it will be modified or deleted.
@@ -77,9 +78,13 @@ pub mod statistics;
 /// - Mark allocator routes         → `mark_allocator_routes`
 /// - Submissions routes            → `submission_routes`
 /// - Files routes                  → `files_routes`
+/// - Interpreter routes            → `interpreter_routes`
 /// - Tickets routes                → `ticket_routes`
 /// - Plagiarism routes             → `plagiarism_routes`
 /// - Grades routes                 → `grade_routes`
+/// - Overwrite files routes        → `overwrite_file_routes`
+/// - Statistics routes             → `statistics_routes`
+/// - Starter routes                → `starter_routes`
 pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", post(create_assignment).route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
@@ -105,4 +110,5 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .nest("/{assignment_id}/overwrite_files", overwrite_file_routes(app_state.clone()).layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
         .nest("/{assignment_id}/stats", statistics_routes(app_state.clone()))
         .route("/{assignment_id}/verify", post(verify_assignment_pin))
+        .nest("/{assignment_id}/starter",starter::routes().route_layer(from_fn_with_state(app_state.clone(), require_lecturer_or_assistant_lecturer)))
 }

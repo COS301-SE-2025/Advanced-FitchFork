@@ -637,9 +637,11 @@ pub fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
 
 #[derive(Debug, Serialize)]
 pub struct AssignmentReadiness {
+    pub submission_mode: SubmissionMode,
     pub config_present: bool,
     pub tasks_present: bool,
     pub main_present: bool,
+    pub interpreter_present: bool,
     pub memo_present: bool,
     pub makefile_present: bool,
     pub memo_output_present: bool,
@@ -650,11 +652,15 @@ pub struct AssignmentReadiness {
 /// GET /api/modules/:module_id/assignments/:assignment_id/readiness
 ///
 /// Retrieve a detailed readiness report for a specific assignment.
-/// The report includes boolean flags indicating whether each required
-/// component of the assignment is present on disk or in the database.
 ///
-/// This endpoint is useful to check if an assignment is fully set up
-/// and eligible to transition from `Setup` to `Ready` state.
+/// The report includes boolean flags indicating whether each component is present
+/// and the resolved `submission_mode` from `config.json`. Readiness is **conditional**:
+/// - If `submission_mode` is **manual** → a **main** file must be present.
+/// - If `submission_mode` is **gatlam** → an **interpreter** must be present.
+/// - Other modes (e.g., `rng`, `codecoverage`) do not require main/interpreter.
+///
+/// This endpoint is useful to check if an assignment is fully set up and eligible
+/// to transition from `Setup` to `Ready`.
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): The ID of the module containing the assignment.
@@ -668,9 +674,11 @@ pub struct AssignmentReadiness {
 ///   "success": true,
 ///   "message": "Assignment readiness checked successfully",
 ///   "data": {
+///     "submission_mode": "manual",
 ///     "config_present": true,
 ///     "tasks_present": true,
 ///     "main_present": true,
+///     "interpreter_present": false,
 ///     "memo_present": true,
 ///     "makefile_present": true,
 ///     "memo_output_present": true,
@@ -696,6 +704,7 @@ pub async fn get_assignment_readiness(
 
     match AssignmentModel::compute_readiness_report(db, module_id, assignment_id).await {
         Ok(report) => {
+            // If fully ready, try to flip Setup → Ready (best-effort)
             if report.is_ready() {
                 if let Err(e) =
                     AssignmentModel::try_transition_to_ready(db, module_id, assignment_id).await
@@ -709,9 +718,11 @@ pub async fn get_assignment_readiness(
             }
 
             let response = AssignmentReadiness {
+                submission_mode: report.submission_mode,
                 config_present: report.config_present,
                 tasks_present: report.tasks_present,
                 main_present: report.main_present,
+                interpreter_present: report.interpreter_present,
                 memo_present: report.memo_present,
                 makefile_present: report.makefile_present,
                 memo_output_present: report.memo_output_present,

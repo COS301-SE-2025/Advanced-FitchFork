@@ -6,6 +6,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Language {
+    /// Not supported by MOSS, but supported in our runtime and starters.
+    /// Serialized as "rust".
+    Rust,
+    /// Not supported by MOSS, but supported in our runtime and starters.
+    /// Serialized as "go".
+    #[serde(alias = "golang")]
+    Go,
     C,                                  // "c"
     #[serde(alias = "cc", alias = "c++")]
     Cpp,                                // maps to MOSS "cc"
@@ -39,6 +46,10 @@ impl Language {
     /// Exact MOSS language string required by the service.
     pub fn to_moss(self) -> &'static str {
         match self {
+            // MOSS does not have native Rust support. Use ascii fallback when needed.
+            Language::Rust     => "ascii",
+            // MOSS does not have native Go support either; use ascii.
+            Language::Go       => "ascii",
             Language::C         => "c",
             Language::Cpp       => "cc",
             Language::Java      => "java",
@@ -84,6 +95,8 @@ pub trait LanguageExt {
 impl LanguageExt for Language {
     fn main_filename(&self) -> &'static str {
         match self {
+            Language::Rust      => "main.rs",
+            Language::Go        => "main.go",
             Language::C          => "main.c",
             Language::Cpp        => "Main.cpp",
             Language::Java       => "Main.java",
@@ -114,6 +127,8 @@ impl LanguageExt for Language {
     fn is_compile_cmd(&self, cmd: &str) -> bool {
         let c = cmd.to_lowercase();
         match self {
+            Language::Rust => c.contains("cargo ") || c.contains("rustc "),
+            Language::Go => c.contains("go build") || c.contains("go run"),
             Language::Cpp => c.contains("g++") || c.contains("clang++") || c.contains("c++"),
             Language::C   => c.contains("gcc") || c.contains("clang ") || c.contains("clang-"),
             Language::Java => c.contains("javac"),
@@ -143,6 +158,16 @@ impl LanguageExt for Language {
     fn synthesize_program(&self, s: &str) -> Option<String> {
         let msg = s.replace('"', "\\\"");
         Some(match self {
+            Language::Rust => format!(
+r#"fn main() {{
+    println!("{}");
+}}"#, msg),
+            Language::Go => format!(
+r#"package main
+import "fmt"
+func main() {{
+    fmt.Println("{}")
+}}"#, msg),
             Language::Cpp => format!(
 r#"#include <bits/stdc++.h>
 int main() {{
@@ -184,6 +209,8 @@ end."#, msg.replace('\'', "''")),
     fn looks_like_source(&self, text: &str) -> bool {
         let t = text;
         match self {
+            Language::Rust => t.contains("fn main()") || t.contains("mod ") || t.contains("use "),
+            Language::Go => t.contains("package main") && t.contains("func main()"),
             Language::Cpp | Language::C => t.contains("#include") || t.contains("int main"),
             Language::Java => t.contains("class Main") || t.contains("public static void main"),
             Language::Python => t.contains("def ") || t.contains("print("),

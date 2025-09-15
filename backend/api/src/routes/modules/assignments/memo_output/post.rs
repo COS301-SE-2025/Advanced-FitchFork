@@ -144,14 +144,70 @@ pub async fn generate_memo_output(
             )
         }
         Err(e) => {
-            error!(
-                "Memo output generation failed for assignment {}: {:?}",
-                assignment_id, e
-            );
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Failed to generate memo output")),
-            )
+            let err_str = e.to_string();
+            error!("Memo output generation failed for assignment {}: {}", assignment_id, err_str);
+
+            // Map low-level error strings to user-friendly messages + appropriate status codes.
+            let (status, message) = if err_str.contains("Config validation failed")
+                || err_str.contains("Failed to load execution config")
+            {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "Your configuration is missing or invalid. Open the Config step and save settings before generating memo output.",
+                )
+            } else if err_str.contains("memo")
+                && (err_str.contains("Required directory")
+                    || err_str.contains("Missing directory")
+                    || err_str.contains("No .zip"))
+            {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "Memo archive (.zip) not found. Upload your Memo files under Files & Resources.",
+                )
+            } else if err_str.contains("makefile")
+                && (err_str.contains("Required directory")
+                    || err_str.contains("Missing directory")
+                    || err_str.contains("No .zip"))
+            {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "Makefile archive (.zip) not found. Upload a Makefile under Files & Resources.",
+                )
+            } else if err_str.contains("main")
+                && (err_str.contains("Required directory")
+                    || err_str.contains("Missing directory")
+                    || err_str.contains("No .zip"))
+            {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "Main files (.zip) not found. In manual mode, upload Main Files; in GATLAM mode, ensure the Interpreter is configured.",
+                )
+            } else if err_str.contains("No tasks are defined") || err_str.contains("No tasks found") {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "No tasks are defined yet. Add at least one task and try again.",
+                )
+            } else if err_str.contains("Failed to send request to code_manager") {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "The runner service is unavailable. Please try again shortly or contact support if it persists.",
+                )
+            } else if err_str.contains("code_manager responded with error")
+                || err_str.contains("Failed to parse response JSON")
+                || err_str.contains("Response missing 'output'")
+            {
+                (
+                    StatusCode::BAD_GATEWAY,
+                    "The runner failed to execute your tasks. Check your build/commands and execution limits, then retry.",
+                )
+            } else {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to generate memo output. Please retry; if it continues, contact support.",
+                )
+            };
+
+            (status, Json(ApiResponse::<()>::error(message)))
         }
     }
 }

@@ -169,14 +169,32 @@ pub fn attempt_dir(
 ) -> PathBuf {
     user_submission_dir(module_id, assignment_id, user_id).join(format!("attempt_{attempt}"))
 }
-pub fn submission_zip_path(
+
+/// Stored filename used for a submission's primary file: "{submission_id}{.ext?}"
+#[inline]
+pub fn submission_stored_filename(submission_id: i64, ext: Option<&str>) -> String {
+    match ext {
+        Some(e) if !e.is_empty() => {
+            let e = e.trim_start_matches('.');
+            format!("{submission_id}.{e}")
+        }
+        _ => submission_id.to_string(),
+    }
+}
+
+/// Full path to the stored submission file (id + optional extension).
+pub fn submission_file_path(
     module_id: i64,
     assignment_id: i64,
     user_id: i64,
     attempt: i64,
+    submission_id: i64,
+    ext: Option<&str>,
 ) -> PathBuf {
-    attempt_dir(module_id, assignment_id, user_id, attempt).join(format!("{user_id}.zip"))
+    attempt_dir(module_id, assignment_id, user_id, attempt)
+        .join(submission_stored_filename(submission_id, ext))
 }
+
 pub fn submission_report_path(
     module_id: i64,
     assignment_id: i64,
@@ -202,6 +220,7 @@ pub fn submission_output_path(
 ) -> PathBuf {
     submission_output_dir(module_id, assignment_id, user_id, attempt).join(filename)
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -316,17 +335,25 @@ mod tests {
             base.join("overwrite_files").join("task_3").join("foo.c")
         );
 
-        // Submissions tree
+                // Submissions tree
         assert_eq!(submissions_dir(m, a), base.join("assignment_submissions"));
         assert_eq!(user_submission_dir(m, a, u), base.join("assignment_submissions").join("user_5"));
         assert_eq!(
             attempt_dir(m, a, u, attempt),
             base.join("assignment_submissions").join("user_5").join("attempt_2")
         );
+
+        // Use a fake submission id to validate filename construction
+        let s = 123_i64;
         assert_eq!(
-            submission_zip_path(m, a, u, attempt),
-            base.join("assignment_submissions").join("user_5").join("attempt_2").join("5.zip")
+            submission_file_path(m, a, u, attempt, s, Some("zip")),
+            base.join("assignment_submissions").join("user_5").join("attempt_2").join("123.zip")
         );
+        assert_eq!(
+            submission_file_path(m, a, u, attempt, s, None),
+            base.join("assignment_submissions").join("user_5").join("attempt_2").join("123")
+        );
+
         assert_eq!(
             submission_report_path(m, a, u, attempt),
             base.join("assignment_submissions").join("user_5").join("attempt_2").join("submission_report.json")
@@ -339,5 +366,6 @@ mod tests {
             submission_output_path(m, a, u, attempt, "stdout.txt"),
             base.join("assignment_submissions").join("user_5").join("attempt_2").join("submission_output").join("stdout.txt")
         );
+
     }
 }

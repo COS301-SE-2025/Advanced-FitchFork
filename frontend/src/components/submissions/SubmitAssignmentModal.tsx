@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Upload, Button, Checkbox, Typography, Space, Tag } from 'antd';
 import { CloudUploadOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons';
 import Tip from '@/components/common/Tip';
+import ArchivePreview from '@/components/common/ArchivePreview';
 
 type Props = {
   open: boolean;
@@ -101,23 +102,27 @@ const SubmitAssignmentModal = ({
           </Upload.Dragger>
 
           {file && (
-            <div className="mt-3 flex items-center justify-between rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 p-2">
-              <Space size="small" direction="vertical">
-                <Text strong className="!text-gray-900 dark:!text-gray-100">
-                  {file.name}
-                </Text>
-                <Text type="secondary" className="!text-xs">
-                  {(file.size / (1024 * 1024)).toFixed(2)} MB
-                </Text>
-              </Space>
-              <Button
-                size="small"
-                type="text"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={handleClear}
-                aria-label="Remove selected file"
-              />
+            <div className="mt-3 space-y-3">
+              <div className="flex items-center justify-between rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-950 p-2">
+                <Space size="small" direction="vertical">
+                  <Text strong className="!text-gray-900 dark:!text-gray-100">
+                    {file.name}
+                  </Text>
+                  <Text type="secondary" className="!text-xs">
+                    {(file.size / (1024 * 1024)).toFixed(2)} MB
+                  </Text>
+                </Space>
+                <Button
+                  size="small"
+                  type="text"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={handleClear}
+                  aria-label="Remove selected file"
+                />
+              </div>
+
+              <ArchivePreview file={file} className="rounded-md" />
             </div>
           )}
         </div>
@@ -150,7 +155,8 @@ const SubmitAssignmentModal = ({
           type="info"
           showIcon
           text="Tip: Make sure your archive contains the correct structure."
-          to="/help/submissions"
+          to="/help/assignments/submissions/how-to-submit"
+          newTab
         />
 
         {/* Ownership attestation (required) – bottom; separate checkbox + text */}
