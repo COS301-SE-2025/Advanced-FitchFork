@@ -46,7 +46,7 @@ pub struct UpdateUser {
     pub password: Option<String>,
 
     pub admin: Option<bool>,
-    pub profile_picture_path: Option<Option<String>>,
+    pub profile_picture_path: Option<String>,
 }
 
 fn validate_password(password: &str) -> Result<(), ValidationError> {
@@ -144,7 +144,7 @@ impl ToActiveModel<Entity> for UpdateUser {
         }
 
         if let Some(profile_path_opt) = self.profile_picture_path {
-            active.profile_picture_path = Set(profile_path_opt);
+            active.profile_picture_path = Set(Some(profile_path_opt));
         }
 
         active.updated_at = Set(Utc::now());
@@ -186,6 +186,7 @@ impl UserService {
             &vec![
                 FilterParam::eq("username", username.trim().to_string()),
             ],
+            &vec![],
             None,
         ).await? {
             if Self::verify_password(&user, password) {

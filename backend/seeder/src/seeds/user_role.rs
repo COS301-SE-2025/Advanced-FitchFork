@@ -12,8 +12,16 @@ pub struct UserRoleSeeder;
 impl Seeder for UserRoleSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let users = UserService::find_all(&[], None).await?;
-            let modules = ModuleService::find_all(&[], None).await?;
+            let users = UserService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
+            let modules = ModuleService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
 
             let mut rng = StdRng::from_rng(OsRng).expect("Failed to seed RNG");
 

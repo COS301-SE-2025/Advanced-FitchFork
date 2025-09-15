@@ -80,7 +80,8 @@ impl AssignmentTaskService {
         Repository::<Entity, Column>::exists(
             &vec![
                 FilterParam::eq("assignment_id", assignment_id),
-            ]
+            ],
+            &vec![],
         ).await.unwrap_or(false)
     }
 }

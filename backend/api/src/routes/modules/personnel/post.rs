@@ -5,15 +5,6 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
-use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, QueryFilter, Set, ActiveModelTrait,
-    IntoActiveModel,
-};
-
-use db::models::{
-    user::Entity as UserEntity,
-    user_module_role::{Entity as RoleEntity, ActiveModel as RoleActiveModel, Column as RoleCol, Role},
-};
 use crate::{
     auth::AuthUser,
     response::{ApiResponse},
@@ -23,7 +14,7 @@ use crate::{
 #[derive(Debug, Deserialize)]
 pub struct AssignPersonnelRequest {
     pub user_ids: Vec<i64>,
-    pub role: Role,
+    pub role: String,
 }
 
 /// POST /api/modules/{module_id}/personnel
@@ -107,7 +98,6 @@ pub async fn assign_personnel(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(body): Json<AssignPersonnelRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
     let user_id = claims.sub;
 
     if body.user_ids.is_empty() {
@@ -122,7 +112,7 @@ pub async fn assign_personnel(
 
     if !claims.admin {
         // Only admins can assign lecturers
-        if *assigning_role == Role::Lecturer {
+        if *assigning_role == "lecturer".to_string() {
             return (
                 StatusCode::FORBIDDEN,
                 Json(ApiResponse::<()>::error("Only admins can assign lecturers")),

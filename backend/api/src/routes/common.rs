@@ -1,13 +1,14 @@
 use serde::Serialize;
 use serde::Deserialize;
+use services::user::User;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserModule {
     pub id: i64,
     pub code: String,
-    pub year: i32,
+    pub year: i64,
     pub description: String,
-    pub credits: i32,
+    pub credits: i64,
     pub role: String,
     pub created_at: String,
     pub updated_at: String,
@@ -23,8 +24,8 @@ pub struct UserResponse {
     pub updated_at: String,
 }
 
-impl From<db::models::user::Model> for UserResponse {
-    fn from(user: db::models::user::Model) -> Self {
+impl From<User> for UserResponse {
+    fn from(user: User) -> Self {
         Self {
             id: user.id,
             username: user.username,

@@ -4,16 +4,6 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, JoinType, PaginatorTrait,
-    QueryFilter, QueryOrder, QuerySelect, Order
-};
-
-use db::models::{
-    user,
-    user_module_role::{self, Column as RoleCol, Role},
-    user::Model as UserModel
-};
 use crate::{
     auth::AuthUser,
     response::{ApiResponse},
@@ -24,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, serde::Deserialize)]
 pub struct RoleParam {
-    pub role: Role,
+    pub role: String,
 }
 
 /// GET /api/modules/{module_id}/personnel
@@ -98,7 +88,6 @@ pub async fn get_personnel(
     Query(role_param): Query<RoleParam>,
     Query(params): Query<RoleQuery>,
 ) -> Response {
-    let db = db::get_connection().await;
     let user_id = claims.sub;
     let requested_role = &role_param.role;
 

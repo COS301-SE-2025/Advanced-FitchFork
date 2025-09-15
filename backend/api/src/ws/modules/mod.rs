@@ -21,6 +21,6 @@ pub mod assignments;
 /// - `require_assigned_to_module` ensures only users assigned to the module can subscribe to its announcement topic
 pub fn ws_module_routes() -> Router {
     Router::new()
-        .route("/{module_id}/announcements", get(default_websocket_handler).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
+        .route("/{module_id}/announcements", get(default_websocket_handler).route_layer(from_fn(require_assigned_to_module)))
         .nest("/{module_id}/assignments", ws_assignment_routes())
 }

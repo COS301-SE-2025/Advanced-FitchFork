@@ -158,7 +158,8 @@ impl AssignmentSubmissionOutputService {
             &vec![
                 FilterParam::eq("id", id),
             ],
-            None
+            &vec![],
+            None,
         ).await?;
 
         for output in outputs {

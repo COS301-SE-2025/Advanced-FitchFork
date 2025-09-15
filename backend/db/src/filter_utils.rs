@@ -1,5 +1,5 @@
 use sea_orm::{Condition, QueryOrder, ColumnTrait, DbErr, prelude::Expr};
-use util::filters::{FilterParam, FilterValue, CompareOp};
+use util::filters::{FilterParam, QueryParam, FilterValue, CompareOp};
 
 pub struct FilterUtils;
 
@@ -12,7 +12,6 @@ impl FilterUtils {
     where 
         C: ColumnTrait
     {
-        // Check for empty values
         if filter_param.value.is_empty() {
             return Err(DbErr::Custom("Filter value cannot be empty".to_string()));
         }
@@ -26,7 +25,7 @@ impl FilterUtils {
                     Ok(condition.add(column.is_in(values.clone())))
                 }
             },
-            (FilterValue::String(values), CompareOp::NotEq) => {
+            (FilterValue::String(values), CompareOp::Ne) => {
                 if values.len() == 1 {
                     Ok(condition.add(column.ne(&values[0])))
                 } else {
@@ -34,7 +33,6 @@ impl FilterUtils {
                 }
             },
             (FilterValue::String(values), CompareOp::Like) => {
-                // For LIKE, use the first value and ignore the rest
                 let pattern = format!("%{}%", values[0].to_lowercase());
                 Ok(condition.add(
                     Expr::cust(&format!("LOWER({})", column.as_str())).like(&pattern)
@@ -73,7 +71,7 @@ impl FilterUtils {
                     Ok(condition.add(column.is_in(values.clone())))
                 }
             },
-            (FilterValue::Int(values), CompareOp::NotEq) => {
+            (FilterValue::Int(values), CompareOp::Ne) => {
                 if values.len() == 1 {
                     Ok(condition.add(column.ne(values[0])))
                 } else {
@@ -105,7 +103,6 @@ impl FilterUtils {
                 Ok(condition.add(column.lte(values[0])))
             },
             (FilterValue::Int(values), CompareOp::Like) => {
-                // LIKE for integers - use first value
                 let pattern = format!("%{}%", values[0]);
                 Ok(condition.add(column.like(&pattern)))
             },
@@ -118,7 +115,7 @@ impl FilterUtils {
                     Ok(condition.add(column.is_in(values.clone())))
                 }
             },
-            (FilterValue::Bool(values), CompareOp::NotEq) => {
+            (FilterValue::Bool(values), CompareOp::Ne) => {
                 if values.len() == 1 {
                     Ok(condition.add(column.ne(values[0])))
                 } else {
@@ -134,7 +131,7 @@ impl FilterUtils {
                     Ok(condition.add(column.is_in(values.clone())))
                 }
             },
-            (FilterValue::DateTime(values), CompareOp::NotEq) => {
+            (FilterValue::DateTime(values), CompareOp::Ne) => {
                 if values.len() == 1 {
                     Ok(condition.add(column.ne(values[0])))
                 } else {
@@ -176,7 +173,6 @@ impl FilterUtils {
         }
     }
 
-    /// Generic method to apply all filter parameters with proper column resolution
     pub fn apply_all_filters<C>(
         filter_params: &[FilterParam],
         column_resolver: impl Fn(&str) -> Result<C, DbErr>
@@ -195,7 +191,60 @@ impl FilterUtils {
     }
 }
 
-// Generic sorting utility
+pub struct QueryUtils;
+
+impl QueryUtils {
+    /// Apply a single query parameter to a condition
+    /// Creates OR conditions across multiple columns for the same search term
+    pub fn apply_query<C>(
+        condition: Condition, 
+        query_param: &QueryParam,
+        column_resolver: impl Fn(&str) -> Result<C, DbErr>
+    ) -> Result<Condition, DbErr>
+    where
+        C: ColumnTrait
+    {
+        if query_param.query.trim().is_empty() {
+            return Ok(condition);
+        }
+
+        if query_param.columns.is_empty() {
+            return Err(DbErr::Custom("Query parameter must specify at least one column".to_string()));
+        }
+
+        // Create OR condition for searching across multiple columns
+        let mut or_condition = Condition::any();
+        let pattern = format!("%{}%", query_param.query.to_lowercase());
+
+        for column_name in &query_param.columns {
+            let column = column_resolver(column_name)?;
+            or_condition = or_condition.add(
+                Expr::cust(&format!("LOWER({})", column.as_str())).like(&pattern)
+            );
+        }
+
+        Ok(condition.add(or_condition))
+    }
+
+    /// Apply multiple query parameters 
+    /// Each QueryParam creates its own OR condition, and they're combined with AND
+    pub fn apply_all_queries<C>(
+        query_params: &[QueryParam],
+        column_resolver: impl Fn(&str) -> Result<C, DbErr>
+    ) -> Result<Condition, DbErr>
+    where
+        C: ColumnTrait
+    {
+        let mut condition = Condition::all();
+        
+        for query_param in query_params {
+            condition = Self::apply_query(condition, query_param, &column_resolver)?;
+        }
+        
+        Ok(condition)
+    }
+}
+
 pub struct SortUtils;
 
 impl SortUtils {

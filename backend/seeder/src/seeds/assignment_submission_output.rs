@@ -10,8 +10,16 @@ pub struct AssignmentSubmissionOutputSeeder;
 impl Seeder for AssignmentSubmissionOutputSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let tasks = AssignmentTaskService::find_all(&[], None).await?;
-            let submissions = AssignmentSubmissionService::find_all(&[], None).await?;
+            let tasks = AssignmentTaskService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
+            let submissions = AssignmentSubmissionService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
 
             if tasks.is_empty() || submissions.is_empty() {
                 panic!("Tasks or submissions are missing — cannot seed submission outputs");

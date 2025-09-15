@@ -15,8 +15,16 @@ impl Seeder for AssignmentSubmissionSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
             // Fetch all assignments and users
-            let assignments = AssignmentService::find_all(&[], None).await?;
-            let mut users = UserService::find_all(&[], None).await?;
+            let assignments = AssignmentService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
+            let mut users = UserService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
 
             if users.is_empty() {
                 panic!("No users found — at least one user must exist to seed assignment_submissions");

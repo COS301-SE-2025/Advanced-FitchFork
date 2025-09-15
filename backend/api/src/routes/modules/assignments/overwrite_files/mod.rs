@@ -27,7 +27,7 @@ use post::post_task_overwrite_files;
 ///   Accepts multipart/form-data or JSON (depending on implementation).
 ///
 /// - `DELETE /task/{task_id}` → Delete all overwrite files for the specific task.
-pub fn overwrite_file_routes(app_state: AppState) -> Router<AppState> {
+pub fn overwrite_file_routes() -> Router {
     Router::new()
         .route(
             "/task/{task_id}",

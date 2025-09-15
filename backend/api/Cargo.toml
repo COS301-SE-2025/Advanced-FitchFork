@@ -13,7 +13,6 @@ common = { path = "../common" }
 util = { path = "../util" }
 services = { path = "../services" }
 marker = { path = "../marker" }
-migration = { path = "../migration" }
 code_runner = { path = "../code_runner" }
 moss_parser = { path = "../moss_parser" }
 ai = { path = "../ai" }
@@ -27,6 +26,7 @@ tower-http = { version = "0.6", features = ["cors"] }
 # Async and concurrency
 tokio = { version = "1.0", features = ["full"] }
 hyper = { version = "1.7.0", features = ["full"] }
+
 # Serialization and validation
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

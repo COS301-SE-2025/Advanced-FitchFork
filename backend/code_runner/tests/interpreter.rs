@@ -121,7 +121,8 @@ async fn seed_interpreter_file(assignment_id: i64, interpreter_id: i64) {
         &vec![
             FilterParam::eq("assignment_id", assignment_id),
         ],
-        None
+        &vec![],
+        None,
     ).await
     .expect("DB error")
     .is_none()

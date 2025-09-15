@@ -1,23 +1,22 @@
 use chrono::{DateTime, Utc};
 
-// Internal enum that handles both single and multiple values
 #[derive(Debug, Clone)]
 pub enum FilterValue {
-    String(Vec<String>),        // Always a vector internally
-    Int(Vec<i64>),             // Always a vector internally  
-    Bool(Vec<bool>),           // Always a vector internally
-    DateTime(Vec<DateTime<Utc>>), // Always a vector internally
+    String(Vec<String>),
+    Int(Vec<i64>),  
+    Bool(Vec<bool>),
+    DateTime(Vec<DateTime<Utc>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CompareOp {
-    Eq,      // Will use = for single values, IN for multiple
+    Eq,
     Gt,
     Gte,
     Lt,
     Lte,
     Like,
-    NotEq,   // Will use != for single values, NOT IN for multiple
+    Ne,
 }
 
 #[derive(Debug, Clone)]
@@ -27,12 +26,11 @@ pub struct FilterParam {
     pub value: FilterValue,
 }
 
-// Trait for types that can be converted to FilterValue
+// Implementations for single values
 pub trait IntoFilterValue<T> {
     fn into_filter_value(self) -> FilterValue;
 }
 
-// Implementations for single values
 impl IntoFilterValue<String> for String {
     fn into_filter_value(self) -> FilterValue {
         FilterValue::String(vec![self])
@@ -94,7 +92,7 @@ impl IntoFilterValue<DateTime<Utc>> for Vec<DateTime<Utc>> {
     }
 }
 
-// Implementations for arrays (common use case)
+// Implementations for arrays
 impl<const N: usize> IntoFilterValue<String> for [&str; N] {
     fn into_filter_value(self) -> FilterValue {
         FilterValue::String(self.into_iter().map(|s| s.to_string()).collect())
@@ -113,7 +111,6 @@ impl<const N: usize> IntoFilterValue<bool> for [bool; N] {
     }
 }
 
-// Helper methods for FilterValue
 impl FilterValue {
     pub fn is_single(&self) -> bool {
         match self {
@@ -144,7 +141,6 @@ impl FilterValue {
 }
 
 impl FilterParam {
-    // Generic constructor that accepts anything that can convert to FilterValue
     pub fn eq<T>(column: &str, value: impl IntoFilterValue<T>) -> Self {
         Self { 
             column: column.to_string(), 
@@ -153,18 +149,16 @@ impl FilterParam {
         }
     }
     
-    pub fn not_eq<T>(column: &str, value: impl IntoFilterValue<T>) -> Self {
+    pub fn ne<T>(column: &str, value: impl IntoFilterValue<T>) -> Self {
         Self { 
             column: column.to_string(), 
-            operator: CompareOp::NotEq, 
+            operator: CompareOp::Ne, 
             value: value.into_filter_value() 
         }
     }
     
-    // These only make sense for single values, so we'll be more restrictive
     pub fn like(column: &str, value: impl IntoFilterValue<String>) -> Self {
         let filter_value = value.into_filter_value();
-        // For LIKE, we'll just use the first value if multiple are provided
         Self { column: column.to_string(), operator: CompareOp::Like, value: filter_value }
     }
     
@@ -198,5 +192,17 @@ impl FilterParam {
             panic!("Less than or equal comparison requires a single value");
         }
         Self { column: column.to_string(), operator: CompareOp::Lte, value: filter_value }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct QueryParam {
+    pub columns: Vec<String>,
+    pub query: String,
+}
+
+impl QueryParam {
+    pub fn new(columns: Vec<String>, query: String) -> Self {
+        Self { columns, query }
     }
 }

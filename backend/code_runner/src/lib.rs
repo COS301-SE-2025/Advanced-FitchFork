@@ -100,7 +100,8 @@ pub async fn create_memo_outputs_for_all_tasks(
     AssignmentMemoOutputService::delete(
         &vec![
             FilterParam::eq("assignment_id", assignment_id),
-        ]
+        ],
+        &vec![],
     ).await
     .map_err(|e| format!("Failed to delete old memo outputs: {}", e))?;
 
@@ -115,7 +116,8 @@ pub async fn create_memo_outputs_for_all_tasks(
         &vec![
             FilterParam::eq("assignment_id", assignment_id),
         ],
-        None
+        &vec![],
+        None,
     ).await
     .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
@@ -308,7 +310,8 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
         &vec![
             FilterParam::eq("assignment_id", assignment_id),
         ],
-        None
+        &vec![],
+        None,
     ).await
     .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
@@ -480,7 +483,8 @@ pub async fn create_submission_outputs_for_all_tasks(
         &vec![
             FilterParam::eq("assignment_id", assignment_id),
         ],
-        None
+        &vec![],
+        None,
     ).await
     .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
@@ -595,7 +599,8 @@ pub async fn create_main_from_interpreter(
         &vec![
             FilterParam::eq("assignment_id", submission.assignment_id),
         ],
-        None
+        &vec![],
+        None,
     ).await
     .map_err(|e| format!("Failed to fetch interpreter: {}", e))?
     .ok_or_else(|| "Interpreter not found".to_string())?;

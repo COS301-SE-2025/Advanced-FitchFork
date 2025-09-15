@@ -14,7 +14,6 @@
 //! Call `me_routes()` to get a configured `Router` for `/me` endpoints to be mounted in the main app.
 
 use axum::{routing::get, Router};
-use util::state::AppState;
 
 pub mod announcements;
 pub mod assignments;
@@ -34,7 +33,7 @@ pub mod events;
 /// - `GET /me/events`        → fetch events for the logged-in user
 ///
 /// All routes operate on the currently authenticated user and require the application state.
-pub fn me_routes() -> Router<AppState> {
+pub fn me_routes() -> Router {
     Router::new()
         .route("/announcements", get(announcements::get_my_announcements))
         .route("/tickets", get(tickets::get_my_tickets))

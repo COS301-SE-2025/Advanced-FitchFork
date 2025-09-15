@@ -177,7 +177,8 @@ impl AssignmentSubmissionService {
             &vec![
                 FilterParam::eq("assignment_id", assignment_id),
             ],
-            None
+            &vec![],
+            None,
         ).await?;
 
         Ok(submissions.into_iter().map(|s| s.id as i64).collect())
@@ -190,7 +191,8 @@ impl AssignmentSubmissionService {
             &vec![
                 FilterParam::eq("assignment_id", assignment_id),
             ],
-            Some("user_id,-attempt".to_string())
+            &vec![],
+            Some("user_id,-attempt".to_string()),
         ).await?;
 
         let mut seen = HashSet::new();
@@ -216,7 +218,8 @@ impl AssignmentSubmissionService {
                 FilterParam::eq("ignored", false),
                 FilterParam::eq("is_practice", false),
             ],
-            None
+            &vec![],
+            None,
         ).await?;
 
         if subs.is_empty() {

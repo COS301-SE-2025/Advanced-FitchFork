@@ -17,12 +17,20 @@ impl Seeder for AnnouncementSeeder {
         Box::pin(async move {
             let mut rng = StdRng::from_rng(OsRng).expect("rng");
 
-            let all_users = UserService::find_all(&[], None).await?;
+            let all_users = UserService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
             if all_users.is_empty() {
                 panic!("No users found; run UserSeeder first");
             }
 
-            let modules = ModuleService::find_all(&[], None).await?;
+            let modules = ModuleService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
             if modules.is_empty() {
                 return Err(AppError::DatabaseUnknown);
             }
@@ -51,7 +59,8 @@ impl Seeder for AnnouncementSeeder {
                             "tutor".to_string()
                         ]),
                     ],
-                    None
+                    &vec![],
+                    None,
                 ).await?
                 .into_iter()
                 .map(|r| r.user_id)

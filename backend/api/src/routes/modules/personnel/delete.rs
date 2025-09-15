@@ -5,14 +5,6 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
-use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, QueryFilter,
-};
-
-use db::models::{
-    user::Entity as UserEntity,
-    user_module_role::{Entity as RoleEntity, Column as RoleCol, Role},
-};
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
@@ -21,7 +13,7 @@ use crate::{
 #[derive(Debug, Deserialize)]
 pub struct RemovePersonnelRequest {
     pub user_ids: Vec<i64>,
-    pub role: Role,
+    pub role: String,
 }
 
 /// DELETE /api/modules/{module_id}/personnel
@@ -112,7 +104,6 @@ pub async fn remove_personnel(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(body): Json<RemovePersonnelRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
     let requester_id = claims.sub;
 
     if body.user_ids.is_empty() {

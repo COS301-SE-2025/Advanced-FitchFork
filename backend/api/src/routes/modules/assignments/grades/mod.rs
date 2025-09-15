@@ -25,7 +25,7 @@ pub mod get;
 /// - `GET /grades/export`  → Export grades as CSV
 // TODO: Write tests for GET /grades
 // TODO: Write tests for GET /grades/export
-pub fn grade_routes(app_state: AppState) -> Router<AppState> {
+pub fn grade_routes() -> Router {
     Router::new()
         .route("/", get(list_grades).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
         .route("/export", get(export_grades).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))

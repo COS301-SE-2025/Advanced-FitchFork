@@ -5,22 +5,9 @@ use axum::{
     Extension, Json,
 };
 use common::format_validation_errors;
-use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, RelationTrait, QuerySelect, FromQueryResult, prelude::Expr,
-};
-use sea_orm_migration::prelude::Alias;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-
 use crate::{auth::claims::AuthUser, response::ApiResponse};
-use db::models::{
-    assignment,
-    assignment_submission::{self, Column as SubmissionColumn, Entity as SubmissionEntity},
-    module,
-    user,
-    user_module_role::{self, Column as RoleColumn, Role},
-};
-use util::state::AppState;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct GetSubmissionsQuery {
@@ -81,7 +68,7 @@ pub struct GetSubmissionsResponse {
     pub total: u64,
 }
 
-#[derive(Debug, FromQueryResult)]
+#[derive(Debug, Serialize)]
 pub struct SubmissionWithRelations {
     pub id: i64,
     pub earned: i64,
@@ -150,7 +137,6 @@ pub struct SubmissionWithRelations {
 /// - `400 Bad Request`: Invalid query parameters.
 /// - `401 Unauthorized`: Not logged in.
 pub async fn get_my_submissions(
-    State(app_state): State<AppState>,
     Extension(user): Extension<AuthUser>,
     Query(query): Query<GetSubmissionsQuery>,
 ) -> impl IntoResponse {

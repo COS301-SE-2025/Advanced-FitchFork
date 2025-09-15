@@ -8,17 +8,11 @@
 
 use axum::{
     Extension, Json,
-    extract::{Query, State},
+    extract::Query,
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::{assignment, module, user_module_role};
-use migration::Expr;
-use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait
-};
 use serde::{Deserialize, Serialize};
-use util::state::AppState;
 use crate::{auth::AuthUser, response::ApiResponse};
 
 /// Query parameters for filtering, sorting, and pagination of assignments
@@ -112,11 +106,9 @@ impl FilterAssignmentResponse {
 /// }
 /// ```
 pub async fn get_my_assignments(
-    State(state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Query(params): Query<AssignmentFilterReq>,
 ) -> impl IntoResponse {
-    let db = state.db();
     let user_id = claims.sub;
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100);

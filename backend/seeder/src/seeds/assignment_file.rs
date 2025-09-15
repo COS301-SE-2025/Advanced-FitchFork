@@ -11,7 +11,11 @@ pub struct AssignmentFileSeeder;
 impl Seeder for AssignmentFileSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let assignments = AssignmentService::find_all(&[], None).await?;
+            let assignments = AssignmentService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
 
             let file_types: Vec<(&str, fn(i32) -> String)> = vec![
                 ("spec", |id| format!("spec_{}.txt", id)),

@@ -1,8 +1,8 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
     models::{
-        module::{Model, Entity as ModuleEntity, Column as ModuleColumn},
-        user_module_role::{ActiveModel, Entity as UserModuleRoleEntity, Column as UserModuleRoleColumn, Role},
+        module::{Model as ModuleModel, Entity as ModuleEntity, Column as ModuleColumn},
+        user_module_role::{Model as UserModuleRoleModel, ActiveModel, Entity as UserModuleRoleEntity, Column as UserModuleRoleColumn, Role},
     },
     repository::Repository,
 };
@@ -77,18 +77,19 @@ impl<'a> Service<'a, UserModuleRoleEntity, UserModuleRoleColumn, CreateUserModul
 impl UserModuleRoleService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-    // pub async fn get_users_by_module_role(
-    //     module_id: i64,
-    //     role: String,
-    // ) -> Result<Vec<Model>, DbErr> {
-    //     Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::find_all(
-    //         UserModuleRoleFilter {
-    //             module_id: Some(module_id),
-    //             role: Some(Role::from_str(&role).map_err(|_| DbErr::Custom(format!("Invalid role string: '{}'", role)))?),
-    //             ..Default::default()
-    //         }
-    //     ).await
-    // }
+    pub async fn get_users_by_module_role(
+        module_id: i64,
+        role: String,
+    ) -> Result<Vec<UserModuleRoleModel>, DbErr> {
+        Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::find_all(
+            &vec![
+                FilterParam::eq("module_id", module_id),
+                FilterParam::eq("role", role),
+            ],
+            &vec![],
+            None,
+        ).await
+    }
 
     // pub async fn get_modules_by_user_role(
     //     user_id: i64,
@@ -110,16 +111,18 @@ impl UserModuleRoleService {
             &vec![
                 FilterParam::eq("user_id", user_id),
             ],
-            None
+            &vec![],
+            None,
         ).await?;
         let modules = Repository::<ModuleEntity, ModuleColumn>::find_all(
             &vec![
                 FilterParam::eq("id", roles.iter().map(|role| role.module_id).collect::<Vec<i64>>()),
             ],
-            None
+            &vec![],
+            None,
         ).await?;
 
-        let modules_by_id: std::collections::HashMap<i64, Model> =
+        let modules_by_id: std::collections::HashMap<i64, ModuleModel> =
             modules.into_iter().map(|m| (m.id, m)).collect();
 
         let result = roles
@@ -153,7 +156,8 @@ impl UserModuleRoleService {
                 FilterParam::eq("user_id", user_id),
                 FilterParam::eq("module_id", module_id),
                 FilterParam::eq("role", role),
-            ]
+            ],
+            &vec![],
         ).await
     }
 }

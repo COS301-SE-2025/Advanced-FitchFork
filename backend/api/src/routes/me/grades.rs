@@ -1,24 +1,13 @@
 use axum::{
-    extract::{Query, State},
+    extract::Query,
     http::StatusCode,
     response::IntoResponse,
     Extension, Json,
 };
 use common::format_validation_errors;
-use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, RelationTrait, QuerySelect, FromQueryResult,
-};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 use crate::{auth::claims::AuthUser, response::ApiResponse};
-use db::models::{
-    assignment,
-    assignment_submission::{self, Column as GradeColumn, Entity as GradeEntity},
-    module,
-    user,
-    user_module_role::{self, Column as RoleColumn, Role},
-};
-use util::state::AppState;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct GetGradesQuery {
@@ -76,7 +65,7 @@ pub struct GetGradesResponse {
     pub total: u64,
 }
 
-#[derive(Debug, FromQueryResult)]
+#[derive(Debug, Serialize)]
 pub struct GradeWithRelations {
     pub id: i64,
     pub earned: i64,
@@ -154,7 +143,6 @@ pub struct GradeWithRelations {
 /// - `403 Forbidden`: Missing or invalid authentication token.
 /// - `500 Internal Server Error`: Database or other internal errors.
 pub async fn get_my_grades(
-    State(app_state): State<AppState>,
     Extension(user): Extension<AuthUser>,
     Query(query): Query<GetGradesQuery>,
 ) -> impl IntoResponse {
@@ -166,7 +154,6 @@ pub async fn get_my_grades(
             .into_response();
     }
 
-    let db = app_state.db();
     let caller_id = user.0.sub;
 
     let page = query.page.unwrap_or(1);

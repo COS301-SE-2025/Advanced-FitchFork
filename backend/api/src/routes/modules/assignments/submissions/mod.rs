@@ -47,7 +47,7 @@ pub mod patch;
 /// - `PATCH  /{submission_id}/ignore`    — Toggle `ignored` flag (**lecturer/assistant lecturer only**)
 /// - `DELETE /{submission_id}`           — Delete a submission (**lecturer/assistant lecturer only**)
 /// - `DELETE /bulk`                      — Bulk delete submissions (**lecturer/assistant lecturer only**)
-pub fn submission_routes(app_state: AppState) -> Router<AppState> {
+pub fn submission_routes() -> Router {
     Router::new()
         .route("/", get(list_submissions))
         .route("/{submission_id}", get(get_submission))

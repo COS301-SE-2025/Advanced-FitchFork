@@ -122,7 +122,8 @@ async fn test_create_submission_outputs_for_all_tasks_9999_java() {
             FilterParam::eq("user_id", 1),
             FilterParam::eq("attempt", 1),
         ],
-        None
+        &vec![],
+        None,
     ).await
     .expect("DB error during submission lookup")
     .expect("No matching submission found");
@@ -146,7 +147,8 @@ async fn test_create_submission_outputs_for_all_tasks_9998_cpp() {
             FilterParam::eq("user_id", 1),
             FilterParam::eq("attempt", 1),
         ],
-        None
+        &vec![],
+        None,
     ).await
     .expect("DB error during submission lookup")
     .expect("No matching submission found");

@@ -11,8 +11,16 @@ impl Seeder for AssignmentMemoOutputSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
             // Fetch all assignments
-            let assignments = AssignmentService::find_all(&[], None).await?;
-            let tasks = AssignmentTaskService::find_all(&[], None).await?;
+            let assignments = AssignmentService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
+            let tasks = AssignmentTaskService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
 
             if assignments.is_empty() || tasks.is_empty() {
                 panic!("Assignments or tasks are missing — cannot seed memo outputs");

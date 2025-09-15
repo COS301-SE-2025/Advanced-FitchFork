@@ -320,6 +320,7 @@ async fn check_assignment_hierarchy(
             FilterParam::eq("id", assignment_id),
             FilterParam::eq("module_id", module_id),
         ],
+        &vec![],
         None,
     ).await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking assignment"))))?;
@@ -345,6 +346,7 @@ async fn check_task_hierarchy(
             FilterParam::eq("id", task_id),
             FilterParam::eq("assignment_id", assignment_id),
         ],
+        &vec![],
         None,
     ).await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking task"))))?;     
@@ -370,6 +372,7 @@ async fn check_submission_hierarchy(
             FilterParam::eq("id", submission_id),
             FilterParam::eq("assignment_id", assignment_id),
         ],
+        &vec![],
         None,
     ).await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking submission"))))?;
@@ -395,6 +398,7 @@ async fn check_file_hierarchy(
             FilterParam::eq("id", file_id),
             FilterParam::eq("assignment_id", assignment_id),
         ],
+        &vec![],
         None,
     ).await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking file"))))?;
@@ -420,6 +424,7 @@ pub async fn check_ticket_hierarchy(
             FilterParam::eq("id", ticket_id),
             FilterParam::eq("assignment_id", assignment_id),
         ],
+        &vec![],
         None,
     ).await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking ticket"))))?;
@@ -446,6 +451,7 @@ pub async fn check_message_hierarchy(
             FilterParam::eq("id", message_id),
             FilterParam::eq("ticket_id", ticket_id),
         ],
+        &vec![],
         None,
     ).await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking message"))))?;
@@ -471,6 +477,7 @@ pub async fn check_plagiarism_hierarchy(
             FilterParam::eq("id", case_id),
             FilterParam::eq("assignment_id", assignment_id),
         ],
+        &vec![],
         None,
     ).await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking plagiarism case"))))?;
@@ -495,6 +502,7 @@ pub async fn check_announcement_hierarchy(
             FilterParam::eq("id", announcement_id),
             FilterParam::eq("module_id", module_id),
         ],
+        &vec![],
         None,
     ).await
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error("Database error while checking announcement"))))?;

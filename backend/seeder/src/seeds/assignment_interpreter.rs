@@ -11,7 +11,11 @@ pub struct AssignmentInterpreterSeeder;
 impl Seeder for AssignmentInterpreterSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let assignments = AssignmentService::find_all(&[], None).await?;
+            let assignments = AssignmentService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
 
             // For each assignment, insert an interpreter file with a sample command string
             for a in &assignments {

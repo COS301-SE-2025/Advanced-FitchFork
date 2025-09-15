@@ -13,7 +13,11 @@ impl Seeder for PlagiarismCaseSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
             // Fetch all assignment submissions
-            let submissions = AssignmentSubmissionService::find_all(&[], None).await?;
+            let submissions = AssignmentSubmissionService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
 
             if submissions.len() < 2 {
                 eprintln!("Not enough submissions to create plagiarism cases");

@@ -10,7 +10,11 @@ pub struct AssignmentSeeder;
 impl Seeder for AssignmentSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let modules = ModuleService::find_all(&[], None).await?;
+            let modules = ModuleService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
 
             for m in &modules {
                 if m.id == 9999 || m.id == 9998 || m.id == 10003 {

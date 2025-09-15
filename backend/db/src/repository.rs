@@ -1,9 +1,9 @@
 use std::str::FromStr;
 use std::marker::PhantomData;
 use sea_orm::{DbErr, EntityTrait, PaginatorTrait, IntoActiveModel, PrimaryKeyTrait, ActiveModelTrait, Select, QueryFilter, ColumnTrait};
-use util::filters::FilterParam;
+use util::filters::{FilterParam, QueryParam};
 use crate::get_connection;
-use crate::filter_utils::{FilterUtils, SortUtils};
+use crate::filter_utils::{FilterUtils, QueryUtils, SortUtils};
 
 /// Generic repository that works with any SeaORM entity
 pub struct Repository<E, C>
@@ -42,6 +42,15 @@ where
         Ok(query.filter(condition))
     }
 
+    pub fn apply_query(query: Select<E>, query_params: &[QueryParam]) -> Result<Select<E>, DbErr> {
+        let condition = QueryUtils::apply_all_queries(query_params, |column_name| {
+            C::from_str(column_name)
+                .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e)))
+        })?;
+        
+        Ok(query.filter(condition))
+    }
+
     pub fn apply_sorting(query: Select<E>, sort_by: Option<String>) -> Select<E> {
         SortUtils::apply_sorting(query.clone(), sort_by, |column_name| {
             C::from_str(column_name)
@@ -65,24 +74,35 @@ where
         Ok(())
     }
 
-    pub async fn delete(filter_params: &[FilterParam]) -> Result<u64, DbErr> {
-        if filter_params.is_empty() {
+    pub async fn delete(
+        filter_params: &[FilterParam],
+        query_params: &[QueryParam]
+    ) -> Result<u64, DbErr> {
+        if filter_params.is_empty() && query_params.is_empty() {
             return Err(DbErr::Custom(
-                "Refusing to delete without filters. Provide at least one filter param.".to_string(),
+                "Refusing to delete without filters or queries. Provide at least one filter or query param.".to_string(),
             ));
         }
 
-        let condition = FilterUtils::apply_all_filters(filter_params, |column_name| {
-            C::from_str(column_name)
-                .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e)))
-        })?;
+        let mut query = E::delete_many();
+        
+        if !filter_params.is_empty() {
+            let condition = FilterUtils::apply_all_filters(filter_params, |column_name| {
+                C::from_str(column_name)
+                    .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e)))
+            })?;
+            query = query.filter(condition);
+        }
 
-        let res = E::delete_many()
-            .filter(condition)
-            .exec(get_connection().await)
-            .await
-            .map_err(DbErr::from)?;
+        if !query_params.is_empty() {
+            let condition = QueryUtils::apply_all_queries(query_params, |column_name| {
+                C::from_str(column_name)
+                    .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e)))
+            })?;
+            query = query.filter(condition);
+        }
 
+        let res = query.exec(get_connection().await).await.map_err(DbErr::from)?;
         Ok(res.rows_affected)
     }
 
@@ -94,9 +114,11 @@ where
 
     pub async fn find_one(
         filter_params: &[FilterParam],
+        query_params: &[QueryParam],
         sort_by: Option<String>,
     ) -> Result<Option<E::Model>, DbErr> {
         let query = Self::apply_filter(E::find(), filter_params)?;
+        let query = Self::apply_query(query, query_params)?;
         let query = Self::apply_sorting(query, sort_by);
         query.one(get_connection().await)
             .await
@@ -105,9 +127,11 @@ where
 
     pub async fn find_all(
         filter_params: &[FilterParam],
+        query_params: &[QueryParam],
         sort_by: Option<String>,
     ) -> Result<Vec<E::Model>, DbErr> {
         let query = Self::apply_filter(E::find(), filter_params)?;
+        let query = Self::apply_query(query, query_params)?;
         let query = Self::apply_sorting(query, sort_by);
         query.all(get_connection().await)
             .await
@@ -116,30 +140,42 @@ where
 
     pub async fn filter(
         filter_params: &[FilterParam],
+        query_params: &[QueryParam],
         page: u64,
         per_page: u64,
         sort_by: Option<String>,
-    ) -> Result<Vec<E::Model>, DbErr> {
+    ) -> Result<(Vec<E::Model>, u64), DbErr> {
         let query = Self::apply_filter(E::find(), filter_params)?;
+        let query = Self::apply_query(query, query_params)?;
         let query = Self::apply_sorting(query, sort_by);
-        let page_index = page.saturating_sub(1);
-        let paginator = <Select<E> as PaginatorTrait<'_, _>>::paginate(query, get_connection().await, per_page);
-        paginator
-            .fetch_page(page_index)
+        
+        let paginator = query.paginate(get_connection().await, per_page);
+        let total = paginator.num_items().await?;
+        let items = paginator.fetch_page(page.saturating_sub(1))
             .await
-            .map_err(DbErr::from)
+            .map_err(DbErr::from)?;
+
+        Ok((items, total))
     }
 
-    pub async fn count(filter_params: &[FilterParam]) -> Result<u64, DbErr> {
+    pub async fn count(
+        filter_params: &[FilterParam],
+        query_params: &[QueryParam],
+    ) -> Result<u64, DbErr> {
         let query = Self::apply_filter(E::find(), filter_params)?;
+        let query = Self::apply_query(query, query_params)?;
         let count = <Select<E> as PaginatorTrait<'_, _>>::count(query, get_connection().await)
             .await
             .map_err(DbErr::from)?;
         Ok(count)
     }
 
-    pub async fn exists(filter_params: &[FilterParam]) -> Result<bool, DbErr> {
+    pub async fn exists(
+        filter_params: &[FilterParam],
+        query_params: &[QueryParam],
+    ) -> Result<bool, DbErr> {
         let query = Self::apply_filter(E::find(), filter_params)?;
+        let query = Self::apply_query(query, query_params)?;
         let count = <Select<E> as PaginatorTrait<'_, _>>::count(query, get_connection().await)
             .await
             .map_err(DbErr::from)?;

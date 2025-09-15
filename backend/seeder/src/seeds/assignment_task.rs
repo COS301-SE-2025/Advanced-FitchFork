@@ -11,7 +11,11 @@ impl Seeder for AssignmentTaskSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
             // Fetch all assignments
-            let assignments = AssignmentService::find_all(&[], None).await?;
+            let assignments = AssignmentService::find_all(
+                &vec![],
+                &vec![],
+                None
+            ).await?;
             if assignments.is_empty() {
                 panic!(
                     "No assignments found — at least one assignment must exist to seed assignment_tasks"

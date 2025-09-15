@@ -76,7 +76,8 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentFile, UpdateAssignmentFile>
                     FilterParam::eq("assignment_id", params.assignment_id),
                     FilterParam::eq("file_type", params.clone().file_type),
                 ],
-                None
+                &vec![],
+                None,
             ).await?
             {
                 let existing_path = AssignmentFileService::storage_root().join(&existing.path);
@@ -183,7 +184,8 @@ impl AssignmentFileService {
         Repository::<Entity, Column>::find_all(&vec![
                 FilterParam::eq("assignment_id", assignment_id),
             ],
-            None
+            &vec![],
+            None,
         ).await
     }
 }

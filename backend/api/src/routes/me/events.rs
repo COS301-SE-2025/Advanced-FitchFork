@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Query, State},
+    extract::Query,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -13,9 +13,6 @@ use crate::{
     response::ApiResponse,
 };
 use common::format_validation_errors;
-use db::models::{assignment, module, user_module_role};
-use sea_orm::{ColumnTrait, Condition, EntityTrait, JoinType, QueryFilter, RelationTrait, QuerySelect};
-use util::state::AppState;
 
 /// Query parameters for filtering events.
 #[derive(Debug, Deserialize, Validate)]
@@ -85,7 +82,6 @@ fn parse_optional_datetime(s: Option<&str>) -> Result<Option<DateTime<Utc>>, Str
 ///   - Each event has a type ("warning" for availability, "error" for due dates)
 ///   - Event content describes the assignment name and event type
 pub async fn get_my_events(
-    State(state): State<AppState>,
     axum::Extension(user): axum::Extension<AuthUser>,
     Query(query): Query<GetEventsQuery>,
 ) -> impl IntoResponse {

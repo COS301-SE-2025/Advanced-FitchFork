@@ -1,12 +1,10 @@
 use serde_json::json;
 use util::ws::handler_trait::WsHandler;
 use util::ws::runtime::WsContext;
-use util::ws::handler_trait::async_trait;
 use super::common::TicketIncoming;
 
 pub struct TicketWsHandler;
 
-#[async_trait]
 impl WsHandler for TicketWsHandler {
     type In = TicketIncoming;
 

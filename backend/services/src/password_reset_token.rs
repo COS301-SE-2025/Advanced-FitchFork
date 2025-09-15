@@ -80,7 +80,8 @@ impl PasswordResetTokenService {
                 FilterParam::eq("used", false),
                 FilterParam::gt("expires_at", Utc::now()),
             ],
-            None
+            &vec![],
+            None,
         ).await
     }
 }

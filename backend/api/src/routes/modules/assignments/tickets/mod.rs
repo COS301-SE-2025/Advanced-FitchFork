@@ -34,7 +34,7 @@ use ticket_messages::ticket_message_routes;
 ///
 /// Nested routes:
 /// - Ticket messages routes → `/{ticket_id}/messages` handled by `ticket_message_routes`
-pub fn ticket_routes(app_state: AppState) -> Router<AppState> {
+pub fn ticket_routes() -> Router {
     Router::new()
         .route("/", post(create_ticket))
         .route("/{ticket_id}/close", put(close_ticket))

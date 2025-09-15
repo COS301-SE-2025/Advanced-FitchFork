@@ -21,7 +21,7 @@ use crate::routes::{
     test::test_routes,
 };
 use axum::{middleware::from_fn, routing::get, Router};
-use util::{config::AppConfig, state::AppState};
+use util::config::AppConfig;
 use crate::routes::me::me_routes;
 
 pub mod auth;
@@ -50,15 +50,14 @@ pub mod me;
 /// 1. Keep `main` focused on server startup logic only.
 /// 2. Avoid changing the `Router` type after construction, which can cause trait bound issues.
 /// 3. Ensure that all route registration logic is centralized in one place.
-pub fn routes(app_state: AppState) -> Router<AppState> {
-    let mut router: Router<AppState> = Router::new()
+pub fn routes() -> Router {
+    let mut router: Router = Router::new()
         .nest("/health", health_routes())
         .nest("/auth", auth_routes())
         .nest("/users", users_routes().route_layer(from_fn(require_admin)))
         .route("/users/{user_id}/avatar", get(get_avatar))
-        .nest("/modules",modules_routes(app_state.clone()).route_layer(from_fn(require_authenticated)),)
-        .nest("/me", me_routes().route_layer(from_fn(require_authenticated)))
-        .with_state(app_state.clone());
+        .nest("/modules", modules_routes().route_layer(from_fn(require_authenticated)))
+        .nest("/me", me_routes().route_layer(from_fn(require_authenticated)));
 
     // Conditionally mount the `/test` route group if *not* in production.
     //
@@ -66,7 +65,7 @@ pub fn routes(app_state: AppState) -> Router<AppState> {
     // but still makes them available in `development` or `test` modes.
     let env = AppConfig::global().env.to_lowercase();
     if env != "production" {
-        router = router.nest("/test", test_routes(app_state.clone()));
+        router = router.nest("/test", test_routes());
         tracing::info!("[dev/test] Mounted /test routes (env = {env})");
     } else {
         tracing::info!("[prod] Skipping /test routes");

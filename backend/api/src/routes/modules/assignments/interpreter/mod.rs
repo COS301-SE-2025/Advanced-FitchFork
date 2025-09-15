@@ -32,7 +32,7 @@ pub mod post;
 ///
 /// # Returns
 /// An [`axum::Router`] with the file endpoints and their associated middleware.
-pub fn interpreter_routes(app_state: AppState) -> Router<AppState> {
+pub fn interpreter_routes() -> Router {
     Router::new()
         .route("/",post(upload_interpreter).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)))
         .route("/",get(download_interpreter).route_layer(from_fn_with_state(app_state.clone(),require_lecturer)))

@@ -30,8 +30,16 @@ impl Seeder for TicketSeeder {
                 "Other module-related inquiry.",
             ];
 
-            let assignments = AssignmentService::find_all(&[], None).await?;
-            let users = UserService::find_all(&[], None).await?;
+            let assignments = AssignmentService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
+            let users = UserService::find_all(
+                &vec![],
+                &vec![],
+                None,
+            ).await?;
 
             if assignments.is_empty() || users.is_empty() {
                 return Err(AppError::DatabaseUnknown);

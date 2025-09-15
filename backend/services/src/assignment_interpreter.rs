@@ -71,7 +71,8 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignme
                     FilterParam::eq("assignment_id", params.assignment_id),
                     FilterParam::eq("filename", params.clone().filename),
                 ],
-                None
+                &vec![],
+                None,
             ).await? {
                 let existing_path = AssignmentInterpreterService::storage_root().join(&existing.path);
                 let _ = fs::remove_file(existing_path); // Silently ignore failure
