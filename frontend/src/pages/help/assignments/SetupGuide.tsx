@@ -28,7 +28,6 @@ import {
   CheckCircleOutlined,
   ExperimentOutlined,
 } from '@ant-design/icons';
-import React from 'react';
 
 const { Title, Paragraph, Text, Link } = Typography;
 

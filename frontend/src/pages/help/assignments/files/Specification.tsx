@@ -58,38 +58,38 @@ int sum(const std::vector<int>& a) {
 }
 `;
 
-const baseVsStudentCols = [
-  { title: 'Example', dataIndex: 'ex', key: 'ex', width: 280 },
-  { title: 'In Spec ZIP (Base)?', dataIndex: 'base', key: 'base', width: 180 },
-  { title: 'Similarity Flagged?', dataIndex: 'flag', key: 'flag' },
-];
+// const baseVsStudentCols = [
+//   { title: 'Example', dataIndex: 'ex', key: 'ex', width: 280 },
+//   { title: 'In Spec ZIP (Base)?', dataIndex: 'base', key: 'base', width: 180 },
+//   { title: 'Similarity Flagged?', dataIndex: 'flag', key: 'flag' },
+// ];
 
-const baseVsStudentRows = [
-  {
-    key: 'r1',
-    ex: 'Empty function signatures / headers',
-    base: 'Yes (uploaded as base)',
-    flag: 'Ignored as boilerplate',
-  },
-  {
-    key: 'r2',
-    ex: 'Provided stub with TODO + return 0',
-    base: 'Yes (uploaded as base)',
-    flag: 'Ignored (identical to skeleton)',
-  },
-  {
-    key: 'r3',
-    ex: 'Student’s real implementation body',
-    base: 'No (not in skeleton)',
-    flag: 'Can be flagged if matches another student',
-  },
-  {
-    key: 'r4',
-    ex: 'spec.pdf / README.md',
-    base: 'Yes (uploaded as base)',
-    flag: 'Ignored (shared docs)',
-  },
-];
+// const baseVsStudentRows = [
+//   {
+//     key: 'r1',
+//     ex: 'Empty function signatures / headers',
+//     base: 'Yes (uploaded as base)',
+//     flag: 'Ignored as boilerplate',
+//   },
+//   {
+//     key: 'r2',
+//     ex: 'Provided stub with TODO + return 0',
+//     base: 'Yes (uploaded as base)',
+//     flag: 'Ignored (identical to skeleton)',
+//   },
+//   {
+//     key: 'r3',
+//     ex: 'Student’s real implementation body',
+//     base: 'No (not in skeleton)',
+//     flag: 'Can be flagged if matches another student',
+//   },
+//   {
+//     key: 'r4',
+//     ex: 'spec.pdf / README.md',
+//     base: 'Yes (uploaded as base)',
+//     flag: 'Ignored (shared docs)',
+//   },
+// ];
 
 export default function Specification() {
   const { setBreadcrumbLabel } = useBreadcrumbContext();

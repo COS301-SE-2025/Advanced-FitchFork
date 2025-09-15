@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Typography, Tree } from 'antd';
-import { listArchiveEntries, type ArchiveEntry, type ArchivePreviewResult } from '@/utils/archivePreview';
+import { Alert, Tree } from 'antd';
+import {
+  listArchiveEntries,
+  type ArchiveEntry,
+  type ArchivePreviewResult,
+} from '@/utils/archivePreview';
 
 type Props = {
   file: File | null;
@@ -9,10 +13,8 @@ type Props = {
   className?: string;
 };
 
-const { Text } = Typography;
-
 const ArchivePreview: React.FC<Props> = ({ file, maxDepth = 5, className }) => {
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [entries, setEntries] = useState<ArchiveEntry[]>([]);
   const [type, setType] = useState<ArchivePreviewResult['type']>('unsupported');

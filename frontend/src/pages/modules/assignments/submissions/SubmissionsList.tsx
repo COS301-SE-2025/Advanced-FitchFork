@@ -140,12 +140,16 @@ export default function SubmissionsList() {
     return { items, total };
   };
 
-  const handleSubmitAssignment = async (file: File, isPractice: boolean) => {
+  const handleSubmitAssignment = async (
+    file: File,
+    isPractice: boolean,
+    attestOwnership: boolean,
+  ) => {
     setModalOpen(false);
     setLoading(true);
     const hide = message.loading('Submitting assignment...');
     try {
-      await submitAssignment(module.id, assignment.id, file, isPractice);
+      await submitAssignment(module.id, assignment.id, file, isPractice, attestOwnership);
       await refreshAssignment();
       message.success('Submission successful');
       EventBus.emit('submission:updated');

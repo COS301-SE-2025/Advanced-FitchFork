@@ -17,6 +17,7 @@ export const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
     max_attempts: 10,
     pass_mark: 50,
     allow_practice_submissions: false,
+    dissalowed_code: [],
   },
   project: {
     language: "cpp",
@@ -56,5 +57,8 @@ export const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
   cookie_ttl_minutes: 120,
   bind_cookie_to_user: true,
   allowed_cidrs: []
+  },
+  code_coverage: {
+    code_coverage_required: 0.0,
   }
 };
