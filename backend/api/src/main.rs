@@ -9,14 +9,13 @@ use axum::{
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 use tracing_appender::rolling;
-use util::{config::AppConfig, state::AppState, ws::WebSocketManager};
+use util::{config, state::AppState, ws::WebSocketManager};
 use db::connect;
 
 #[tokio::main]
 async fn main() {
     // Load configuration and initialize logging
-    let config = AppConfig::from_env();
-    let _log_guard = init_logging(&config.log_file, &config.log_level);
+    let _log_guard = init_logging(&config::log_file(), &config::log_level());
 
     // Initialize superuser IDs
     SUPERUSER_IDS.set(config.superuser_ids).unwrap();
@@ -38,13 +37,13 @@ async fn main() {
         .with_state(app_state);
 
     // Start server
-    let addr: SocketAddr = format!("{}:{}", config.host, config.port)
+    let addr: SocketAddr = format!("{}:{}", config::host(), config::port())
         .parse()
         .expect("Invalid address");
 
     println!(
         "Starting {} on http://{}:{}",
-        config.project_name, config.host, config.port
+        config::project_name(), config::host(), config::port()
     );
 
     axum::serve(
@@ -56,7 +55,7 @@ async fn main() {
 }
 
 fn init_logging(log_file: &str, _log_level: &str) -> tracing_appender::non_blocking::WorkerGuard {
-    use std::{env, fs};
+    use std::fs;
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
     fs::create_dir_all("logs").ok();
@@ -70,10 +69,7 @@ fn init_logging(log_file: &str, _log_level: &str) -> tracing_appender::non_block
         .with_target(true)
         .with_thread_ids(true);
 
-    let log_to_stdout = env::var("LOG_TO_STDOUT")
-        .unwrap_or_else(|_| "false".to_string())
-        .to_lowercase()
-        == "true";
+    let log_to_stdout = config::log_to_stdout();
 
     let stdout_layer = fmt::layer()
         .with_writer(std::io::stdout)

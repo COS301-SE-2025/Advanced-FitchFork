@@ -11,6 +11,7 @@ import {
   UserOutlined,
   NotificationOutlined,
   RightOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import { ModuleHeader } from '@/components/modules';
@@ -22,6 +23,8 @@ const ModuleMobileMenu = () => {
   const { setValue } = useViewSlot();
   const auth = useAuth();
   const showPersonnel = auth.isAdmin || auth.isLecturer(module.id);
+  const showAttendance =
+    auth.isAdmin || auth.isLecturer(module.id) || auth.isAssistantLecturer(module.id);
 
   useEffect(() => {
     setValue(
@@ -50,6 +53,9 @@ const ModuleMobileMenu = () => {
           path: 'assignments',
           icon: <FileTextOutlined className="text-lg" />,
         },
+        ...(showAttendance
+          ? [{ path: 'attendance', icon: <CalendarOutlined />, label: 'Attendance' }]
+          : []),
       ],
     },
     {

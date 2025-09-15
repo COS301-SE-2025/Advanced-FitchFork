@@ -17,6 +17,7 @@ export interface PercentageTagProps {
   className?: string;
   style?: React.CSSProperties;
   'data-testid'?: string;
+  asText?: boolean;
 }
 
 const PRESET_PALETTES: Record<PaletteName, string[]> = {
@@ -28,7 +29,6 @@ const PRESET_PALETTES: Record<PaletteName, string[]> = {
   gray: ['#e5e7eb', '#9ca3af', '#4b5563'],
 };
 
-// ---------- tiny color helpers ----------
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const norm = (v: number, lo: number, hi: number) =>
   hi === lo ? 0 : clamp((v - lo) / (hi - lo), 0, 1);
@@ -69,7 +69,6 @@ const pickColor = (stops: string[], t01: number) => {
   return mix(stops[i], stops[Math.min(i + 1, stops.length - 1)], f);
 };
 
-// ---------- component ----------
 const PercentageTag: React.FC<PercentageTagProps> = ({
   value,
   min = 0,
@@ -83,18 +82,35 @@ const PercentageTag: React.FC<PercentageTagProps> = ({
   className,
   style,
   'data-testid': dataTestId,
+  asText = false,
 }) => {
   const { isDarkMode } = useTheme();
-
   const stops = colors && colors.length >= 2 ? colors : PRESET_PALETTES[palette];
   const t = norm(value, min, max);
-  const main = pickColor(stops, t); // brand color for border
+  const main = pickColor(stops, t);
 
-  // Light mode: very light tint background toward white; text slightly darker than main
-  // Dark mode: dark tint background toward black; text slightly lighter than main
+  // Light vs dark adjustments
   const bg = isDarkMode ? mix(main, '#000000', 0.82) : mix(main, '#ffffff', 0.86);
   const text = isDarkMode ? lighten(main, 0.35) : darken(main, 0.25);
+  const content =
+    children ?? (showValue ? `${value.toFixed(Math.max(0, decimals))}${suffix}` : null);
+  const title = `${value.toFixed(Math.max(0, decimals))}${suffix}`;
 
+  if (asText) {
+    // Plain colored text (no border/background)
+    return (
+      <span
+        data-testid={dataTestId ?? 'percentage-text'}
+        className={['font-medium', className].filter(Boolean).join(' ')}
+        style={{ color: text, ...style }}
+        title={title}
+      >
+        {content}
+      </span>
+    );
+  }
+
+  // Default: AntD Tag
   return (
     <Tag
       data-testid={dataTestId ?? 'percentage-tag'}
@@ -104,13 +120,12 @@ const PercentageTag: React.FC<PercentageTagProps> = ({
         color: text,
         backgroundColor: bg,
         borderColor: main,
-        // subtle polish to feel closer to AntD tokens
         boxShadow: 'inset 0 0 0 1px var(--tag-border, currentColor, 0)',
         ...style,
       }}
-      title={`${value.toFixed(Math.max(0, decimals))}${suffix}`}
+      title={title}
     >
-      {children ?? (showValue ? `${value.toFixed(Math.max(0, decimals))}${suffix}` : null)}
+      {content}
     </Tag>
   );
 };

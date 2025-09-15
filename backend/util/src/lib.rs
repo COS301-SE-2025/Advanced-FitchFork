@@ -5,3 +5,7 @@ pub mod mark_allocator;
 pub mod scan_code_content;
 pub mod state;
 pub mod ws;
+pub mod paths;
+pub mod test_helpers;
+pub mod http;
+pub mod languages;

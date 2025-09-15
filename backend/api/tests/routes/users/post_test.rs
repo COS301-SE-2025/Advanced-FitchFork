@@ -10,7 +10,7 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::{json, Value};
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin_user: UserModel,
@@ -37,7 +37,7 @@ mod tests {
     /// Test Case: Successful Creation of Single User as Admin
     #[tokio::test]
     async fn test_create_user_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -66,7 +66,7 @@ mod tests {
     /// Test Case: Creating Single User is Forbidden for Non-Admin
     #[tokio::test]
     async fn test_create_user_forbidden_as_non_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
@@ -91,7 +91,7 @@ mod tests {
     /// Test Case: Single User Creation Validation Failure
     #[tokio::test]
     async fn test_create_user_validation_failure() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -116,7 +116,7 @@ mod tests {
     /// Test Case: Successful Bulk User Creation
     #[tokio::test]
     async fn test_bulk_create_users_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -146,7 +146,7 @@ mod tests {
     /// Test Case: Bulk User Creation Validation Failure
     #[tokio::test]
     async fn test_bulk_create_users_validation_failure() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -171,7 +171,7 @@ mod tests {
     /// Test Case: Bulk User Creation Conflict on Duplicate
     #[tokio::test]
     async fn test_bulk_create_users_conflict() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         UserModel::create(app_state.db(), "dupe", "dupe@test.com", "pass1234", false).await.unwrap();

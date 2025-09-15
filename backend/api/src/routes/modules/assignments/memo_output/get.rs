@@ -2,7 +2,7 @@ use crate::response::ApiResponse;
 use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
 use tokio::fs as tokio_fs;
-use util::{execution_config::ExecutionConfig, state::AppState};
+use util::{execution_config::ExecutionConfig, paths::storage_root, state::AppState};
 use db::models::{assignment_memo_output, assignment_task};
 use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 
@@ -89,7 +89,7 @@ pub async fn get_all_memo_outputs(
     let mut results = Vec::new();
 
     for memo in memo_outputs {
-        let full_path = memo.full_path();
+        let full_path = storage_root().join(&memo.path);
         if !full_path.is_file() {
             continue;
         }

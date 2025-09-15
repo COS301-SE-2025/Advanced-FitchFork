@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use axum::{
         body::Body,
@@ -14,14 +14,12 @@ mod tests {
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use dotenvy;
     use serde_json::Value;
     use serde_json::json;
     use serial_test::serial;
     use std::fs;
-    use tempfile::{TempDir, tempdir};
     use tower::ServiceExt;
-    use util::mark_allocator::mark_allocator::save_allocator;
+    use util::{mark_allocator::mark_allocator::save_allocator, paths::memo_output_dir};
 
     struct TestData {
         admin_user: UserModel,
@@ -33,13 +31,7 @@ mod tests {
         task2: AssignmentTaskModel,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> (TestData, TempDir) {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let temp_dir = tempdir().expect("Failed to create temporary directory");
-        unsafe {
-            std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path().to_str().unwrap());
-        }
-
+    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         let module = ModuleModel::create(db, "TASK101", 2024, Some("Test Task Module"), 16)
             .await
             .expect("Failed to create test module");
@@ -129,11 +121,7 @@ mod tests {
         });
         let _ = save_allocator(module.id, assignment.id, allocator_data).await;
 
-        let memo_dir = temp_dir
-            .path()
-            .join(format!("module_{}", module.id))
-            .join(format!("assignment_{}", assignment.id))
-            .join("memo_output");
+        let memo_dir = memo_output_dir(module.id, assignment.id);
         fs::create_dir_all(&memo_dir).expect("Failed to create memo output directory");
 
         let memo_file_path = memo_dir.join("task_1.txt");
@@ -141,18 +129,15 @@ mod tests {
             "Overall Feedback\n&-=-&\nFeedback for Subsection A\n&-=-&\nFeedback for Subsection B";
         fs::write(&memo_file_path, memo_content).expect("Failed to write task memo file");
 
-        (
-            TestData {
-                admin_user,
-                forbidden_user,
-                lecturer1,
-                module,
-                assignment,
-                task1,
-                task2,
-            },
-            temp_dir,
-        )
+        TestData {
+            admin_user,
+            forbidden_user,
+            lecturer1,
+            module,
+            assignment,
+            task1,
+            task2,
+        }
     }
 
     // --- Tests for GET /api/modules/{module_id}/assignments/{assignment_id}/tasks (list_tasks) ---
@@ -161,8 +146,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_list_tasks_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
@@ -204,8 +189,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_list_tasks_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer1.id, data.lecturer1.admin);
         let uri = format!(
@@ -235,8 +220,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_list_tasks_assignment_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, 9999);
@@ -261,8 +246,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_list_tasks_module_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
@@ -290,8 +275,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_list_tasks_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!(
@@ -314,8 +299,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_task_details_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
@@ -366,8 +351,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_task_details_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer1.id, data.lecturer1.admin);
         let uri = format!(
@@ -388,8 +373,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_task_details_task_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
@@ -417,8 +402,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_task_details_task_wrong_assignment() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let open_date = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
         let due_date = Utc.with_ymd_and_hms(2024, 12, 31, 23, 59, 59).unwrap();
@@ -470,8 +455,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_task_details_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!(

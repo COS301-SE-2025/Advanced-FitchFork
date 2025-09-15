@@ -7,10 +7,8 @@ mod delete_submission_tests {
         http::{Request, StatusCode},
     };
     use chrono::Utc;
-    use dotenvy;
     use serde_json::{json, Value};
     use serial_test::serial;
-    use tempfile::tempdir;
     use tower::ServiceExt;
 
     use api::auth::generate_jwt;
@@ -24,7 +22,7 @@ mod delete_submission_tests {
     };
     use sea_orm::EntityTrait;
 
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::{make_test_app_with_storage};
 
     struct TestData {
         lecturer: UserModel,
@@ -39,14 +37,6 @@ mod delete_submission_tests {
     }
 
     async fn setup_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        dotenvy::dotenv().ok();
-
-        // give each run an isolated storage root; save_file() writes to disk
-        let tmp = tempdir().expect("tmpdir");
-        unsafe {
-            std::env::set_var("ASSIGNMENT_STORAGE_ROOT", tmp.path().to_str().unwrap());
-        }
-
         // users
         let lecturer =
             UserModel::create(db, "lect_del", "lect_del@test.com", "pw", false).await.unwrap();
@@ -154,7 +144,7 @@ mod delete_submission_tests {
     #[tokio::test]
     #[serial]
     async fn lecturer_can_delete_single_submission() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         // Ensure present
@@ -195,7 +185,7 @@ mod delete_submission_tests {
     #[tokio::test]
     #[serial]
     async fn assistant_can_delete_single_submission() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.assistant.id, data.assistant.admin);
@@ -225,7 +215,7 @@ mod delete_submission_tests {
     #[tokio::test]
     #[serial]
     async fn tutor_cannot_delete_single_submission_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.tutor.id, data.tutor.admin);
@@ -255,7 +245,7 @@ mod delete_submission_tests {
     #[tokio::test]
     #[serial]
     async fn student_cannot_delete_single_submission_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student.id, data.student.admin);
@@ -285,7 +275,7 @@ mod delete_submission_tests {
     #[tokio::test]
     #[serial]
     async fn single_delete_404_when_submission_not_in_assignment() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         // call with wrong assignment id
@@ -318,7 +308,7 @@ mod delete_submission_tests {
     #[tokio::test]
     #[serial]
     async fn bulk_delete_all_ok_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let mut data = setup_data(app_state.db()).await;
 
         // create a third one to delete
@@ -379,7 +369,7 @@ mod delete_submission_tests {
     #[tokio::test]
     #[serial]
     async fn bulk_delete_mixed_some_fail() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         // create a submission in OTHER assignment to force a per-ID failure
@@ -442,7 +432,7 @@ mod delete_submission_tests {
     #[tokio::test]
     #[serial]
     async fn bulk_delete_empty_ids_400() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
@@ -466,7 +456,7 @@ mod delete_submission_tests {
     #[tokio::test]
     #[serial]
     async fn tutor_cannot_bulk_delete_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.tutor.id, data.tutor.admin);
@@ -497,7 +487,7 @@ mod delete_submission_tests {
     #[tokio::test]
     #[serial]
     async fn student_cannot_bulk_delete_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student.id, data.student.admin);

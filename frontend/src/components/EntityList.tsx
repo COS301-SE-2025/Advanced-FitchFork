@@ -55,6 +55,12 @@ export type EntityListHandle = {
   refresh: () => void;
   clearSelection: () => void;
   getSelectedRowKeys: () => React.Key[];
+  /** Optimistically update a single row by key with a partial patch */
+  updateRow: (key: React.Key, patch: Partial<any>) => void;
+  /** Remove a set of rows by keys (keeps pagination.total in sync) */
+  removeRows: (keys: React.Key[]) => void;
+  /** Insert or update rows; mode=replace replaces by key if exists, else inserts (append/prepend) */
+  upsertRows: (rows: any[], mode?: 'append' | 'prepend' | 'replace') => void;
 };
 
 const EntityList = forwardRef(function <T>(
@@ -194,10 +200,98 @@ const EntityList = forwardRef(function <T>(
     }
   };
 
+  // Key resolver (stable reference)
+  const keyOf = (item: T) => props.getRowKey(item);
+
+  // --- Local mutation helpers ---
+  const updateRow = (key: React.Key, patch: Partial<T>) => {
+    setItems((prev) => {
+      if (!prev) return prev;
+      let changed = false;
+      const next = prev.map((it) => {
+        if (keyOf(it) === key) {
+          changed = true;
+          return { ...it, ...patch };
+        }
+        return it;
+      });
+      return changed ? next : prev;
+    });
+  };
+
+  const removeRows = (keys: React.Key[]) => {
+    if (!keys.length) return;
+
+    setItems((prev) => {
+      if (!prev) return prev;
+
+      const keySet = new Set(keys);
+      const next = prev.filter((it) => !keySet.has(keyOf(it)));
+
+      // keep pagination.total in sync if it exists
+      if (next.length !== prev.length) {
+        const removedCount = prev.length - next.length;
+
+        // use the *current* pagination from closure; pass a partial object (no function)
+        const nextTotal = Math.max(0, (pagination.total ?? prev.length) - removedCount);
+        const nextCurrent =
+          next.length === 0 && (pagination.current ?? 1) > 1
+            ? (pagination.current as number) - 1
+            : pagination.current;
+
+        setPagination({
+          total: nextTotal,
+          current: nextCurrent,
+        });
+      }
+
+      return next;
+    });
+
+    // clear selection of removed rows (non-functional form)
+    setSelectedRowKeys(selectedRowKeys.filter((k) => !keys.includes(k)));
+  };
+
+  const upsertRows = (rows: T[], mode: 'append' | 'prepend' | 'replace' = 'replace') => {
+    if (!rows.length) return;
+    setItems((prev) => {
+      const prevList = prev ?? [];
+      const byKey = new Map(prevList.map((r) => [keyOf(r), r]));
+      for (const r of rows) {
+        const k = keyOf(r);
+        if (byKey.has(k)) {
+          // replace existing
+          byKey.set(k, { ...byKey.get(k)!, ...r });
+        } else {
+          // insert new
+          if (mode === 'prepend') {
+            byKey.set(Symbol('___prepend___') as any, r); // marker to control order
+          } else {
+            byKey.set(k, r);
+          }
+        }
+      }
+      // rebuild preserving original order + new inserts at chosen side
+      const existing = prevList.map((r) => byKey.get(keyOf(r))!).filter(Boolean);
+      const inserted = rows.filter((r) => !prevList.some((p) => keyOf(p) === keyOf(r)));
+      const next =
+        mode === 'prepend'
+          ? [...inserted, ...existing]
+          : mode === 'append'
+            ? [...existing, ...inserted]
+            : existing; // replace mode doesn't add brand-new rows unless they were in rows
+      return next;
+    });
+  };
+
+  // --- expose in imperative handle ---
   useImperativeHandle(ref, () => ({
     refresh: fetchData,
     clearSelection: () => setSelectedRowKeys([]),
     getSelectedRowKeys: () => selectedRowKeys,
+    updateRow,
+    removeRows,
+    upsertRows,
   }));
 
   useEffect(() => {

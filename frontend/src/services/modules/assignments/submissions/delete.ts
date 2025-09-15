@@ -10,7 +10,7 @@ export function deleteSubmission(
   assignmentId: number,
   submissionId: number
 ) {
-  const endpoint = `/api/modules/${moduleId}/assignments/${assignmentId}/submissions/${submissionId}`;
+  const endpoint = `/modules/${moduleId}/assignments/${assignmentId}/submissions/${submissionId}`;
   return api.delete<null>(endpoint);
 }
 
@@ -19,7 +19,7 @@ export function bulkDeleteSubmissions(
   assignmentId: number,
   submissionIds: number[]
 ) {
-  const endpoint = `/api/modules/${moduleId}/assignments/${assignmentId}/submissions/bulk`;
+  const endpoint = `/modules/${moduleId}/assignments/${assignmentId}/submissions/bulk`;
   return api.delete<BulkDeleteSubmissionsResult>(endpoint, {
     submission_ids: submissionIds,
   });

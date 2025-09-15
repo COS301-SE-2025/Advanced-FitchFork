@@ -10,7 +10,7 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::{Value, json};
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin_user: UserModel,
@@ -42,7 +42,7 @@ mod tests {
     /// Test Case: Successful Update of User (Username and Email) as Admin
     #[tokio::test]
     async fn test_update_user_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -76,7 +76,7 @@ mod tests {
     /// Test Case: Successful Update of User Admin Status as Admin
     #[tokio::test]
     async fn test_update_user_admin_status_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -102,7 +102,7 @@ mod tests {
     /// Test Case: Update User without Admin Role
     #[tokio::test]
     async fn test_update_user_forbidden_non_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
@@ -123,7 +123,7 @@ mod tests {
      /// Test Case: Update Own User Info as Non-Admin
     #[tokio::test]
     async fn test_update_user_forbidden_update_self_as_non_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
@@ -144,7 +144,7 @@ mod tests {
     /// Test Case: Update Non-Existent User
     #[tokio::test]
     async fn test_update_user_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -169,7 +169,7 @@ mod tests {
     /// Test Case: Update User with Invalid Data (e.g., Duplicate Email)
     #[tokio::test]
     async fn test_update_user_invalid_data_duplicate_email() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -194,7 +194,7 @@ mod tests {
     /// Test Case: Update User with Invalid Data (e.g., Duplicate Username)
     #[tokio::test]
     async fn test_update_user_invalid_data_duplicate_username() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -219,7 +219,7 @@ mod tests {
     /// Test Case: Update User without Authentication Header
     #[tokio::test]
     async fn test_update_user_missing_auth_header() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = json!({ "username": "no_auth_update_attempt" });
@@ -238,7 +238,7 @@ mod tests {
     /// Test Case: Update User with Invalid JWT Token
     #[tokio::test]
     async fn test_update_user_invalid_token() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = json!({ "username": "invalid_token_update" });

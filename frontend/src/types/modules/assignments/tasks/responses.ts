@@ -12,6 +12,7 @@ export type GetTaskResponse = ApiResponse<
     name?: string;
     value?: number;
     memo_output?: string;
+    has_overwrite_files: boolean;
     subsections: SubsectionDetail[];
   } & Task
 >;

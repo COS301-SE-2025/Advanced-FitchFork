@@ -11,7 +11,7 @@ mod tests {
             user_module_role::{Model as UserModuleRoleModel, Role},
         },
     };
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin: UserModel,
@@ -34,7 +34,7 @@ mod tests {
 
     #[tokio::test]
     async fn assign_personnel_as_admin_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, data.admin.admin);
@@ -62,7 +62,7 @@ mod tests {
 
     #[tokio::test]
     async fn assign_personnel_as_lecturer_success_for_non_lecturer_roles() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
@@ -82,7 +82,7 @@ mod tests {
 
     #[tokio::test]
     async fn assign_lecturer_role_as_lecturer_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
@@ -102,7 +102,7 @@ mod tests {
 
     #[tokio::test]
     async fn assign_personnel_as_non_lecturer_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.outsider.id, false);
@@ -122,7 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn assign_personnel_as_student_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         // Student is assigned to the module, but still shouldn't have assign permissions
@@ -143,7 +143,7 @@ mod tests {
 
     #[tokio::test]
     async fn assign_personnel_user_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
@@ -163,7 +163,7 @@ mod tests {
 
     #[tokio::test]
     async fn assign_personnel_empty_user_ids() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);

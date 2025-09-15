@@ -2,9 +2,8 @@ use sea_orm::entity::prelude::*;
 use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, Set};
 use chrono::{DateTime, Utc};
 use log::{info, warn};
-use std::path::PathBuf;
+use util::paths::module_dir;
 use std::fs;
-use std::env;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "modules")]
@@ -80,19 +79,17 @@ impl Model {
         info!("Deleting module {} and cascading assignments", self.id);
 
         // Step 2: Remove module-level folder
-        let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-            .unwrap_or_else(|_| "data/assignment_files".to_string());
+        let dir = module_dir(self.id);
 
-        let module_dir = PathBuf::from(storage_root).join(format!("module_{}", self.id));
-
-        if module_dir.exists() {
-            match fs::remove_dir_all(&module_dir) {
-                Ok(_) => info!("Deleted module directory {}", module_dir.display()),
-                Err(e) => warn!("Failed to delete module directory {}: {}", module_dir.display(), e),
+        if dir.exists() {
+            match fs::remove_dir_all(&dir) {
+                Ok(_) => info!("Deleted module directory {}", dir.display()),
+                Err(e) => warn!("Failed to delete module directory {}: {}", dir.display(), e),
             }
         } else {
-            warn!("Expected module directory {} does not exist", module_dir.display());
+            warn!("Expected module directory {} does not exist", dir.display());
         }
+
 
         // Step 3: Delete the module
         Entity::delete_by_id(self.id).exec(db).await?;

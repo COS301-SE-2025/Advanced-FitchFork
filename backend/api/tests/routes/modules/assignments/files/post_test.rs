@@ -7,7 +7,7 @@ mod tests {
     use chrono::{Utc, TimeZone};
     use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
     use axum::http::header::{CONTENT_TYPE, AUTHORIZATION};
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -55,7 +55,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
@@ -75,7 +75,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
@@ -95,7 +95,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_assignment_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
@@ -115,7 +115,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_missing_file_type() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let boundary = "----BoundaryTest".to_string();
@@ -139,7 +139,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_empty_file() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"");
@@ -159,7 +159,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
@@ -177,7 +177,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_invalid_file_type() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("not_a_type", "spec.txt", b"spec file content");
@@ -197,7 +197,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_duplicate_file_type_replaces() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);

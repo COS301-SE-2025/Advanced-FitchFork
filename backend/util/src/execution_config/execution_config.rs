@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::{env, fs, path::PathBuf};
+use std::fs;
+
+use crate::{languages::Language, paths::config_dir};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -15,13 +17,6 @@ pub enum FeedbackScheme {
     Auto,
     Manual,
     Ai,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Language {
-    Cpp,
-    Java,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Eq)]
@@ -84,6 +79,23 @@ pub struct MarkingOptions {
     #[serde(default = "default_grading_policy")]
     pub grading_policy: GradingPolicy,
 
+    /// Maximum number of attempts (only enforced if `limit_attempts = true`).
+    #[serde(default = "default_max_attempts")]
+    pub max_attempts: u32,
+
+    /// If false, attempt limits are not enforced.
+    #[serde(default = "default_limit_attempts")]
+    pub limit_attempts: bool,
+
+    /// Minimum percentage required to pass (0–100).
+    #[serde(default = "default_pass_mark")]
+    pub pass_mark: u32,
+
+    /// If true, students may make **practice** submissions.
+    /// Practice submissions never consume graded-attempt budget.
+    /// Default: false
+    #[serde(default = "default_allow_practice_submissions")]
+    pub allow_practice_submissions: bool,
     #[serde(default)]
     pub dissalowed_code: Vec<String>,
 }
@@ -95,6 +107,10 @@ impl Default for MarkingOptions {
             feedback_scheme: default_feedback_scheme(),
             deliminator: default_deliminator(),
             grading_policy: default_grading_policy(),
+            max_attempts: default_max_attempts(),
+            limit_attempts: default_limit_attempts(),
+            pass_mark: default_pass_mark(),
+            allow_practice_submissions: default_allow_practice_submissions(),
             dissalowed_code: vec![],
         }
     }
@@ -260,6 +276,46 @@ impl Default for TaskSpecConfig {
     }
 }
 
+// ---------------- Security Options ----------------
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SecurityOptions {
+    /// If true, students must unlock the assignment once per device/session.
+    #[serde(default = "default_password_enabled")]
+    pub password_enabled: bool,
+
+    /// Plain PIN string. None = no PIN set.
+    #[serde(default)]
+    pub password_pin: Option<String>,
+
+    /// Minutes the unlock cookie stays valid. Default: 8h.
+    #[serde(default = "default_cookie_ttl_minutes")]
+    pub cookie_ttl_minutes: u32,
+
+    /// If true, the unlock cookie is bound to the user id (more secure, can’t share).
+    #[serde(default = "default_bind_cookie_to_user")]
+    pub bind_cookie_to_user: bool,
+
+    /// Optional allowlist of CIDRs (e.g., "10.0.0.0/24", "196.21.0.0/16").
+    /// Empty => no IP restriction.
+    #[serde(default = "default_allowed_cidrs")]
+    pub allowed_cidrs: Vec<String>,
+}
+
+
+impl Default for SecurityOptions {
+    fn default() -> Self {
+        Self {
+            password_enabled: default_password_enabled(),
+            password_pin: None,
+            cookie_ttl_minutes: default_cookie_ttl_minutes(),
+            bind_cookie_to_user: default_bind_cookie_to_user(),
+            allowed_cidrs: default_allowed_cidrs(),
+        }
+    }
+}
+
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionConfig {
     #[serde(default)]
@@ -278,6 +334,9 @@ pub struct ExecutionConfig {
     pub gatlam: GATLAM,
 
     #[serde(default)]
+    pub security: SecurityOptions,
+
+    #[serde(default)]
     pub code_coverage: CodeCoverage,
 }
 
@@ -289,59 +348,35 @@ impl ExecutionConfig {
             project: ProjectSetup::default(),
             output: ExecutionOutputOptions::default(),
             gatlam: GATLAM::default(),
+            security: SecurityOptions::default(),  
             code_coverage: CodeCoverage::default(),
         }
     }
 
-    fn resolve_storage_root() -> PathBuf {
-        if let Ok(p) = env::var("ASSIGNMENT_STORAGE_ROOT") {
-            let path = PathBuf::from(p);
-            if path.is_relative() {
-                let mut adjusted = env::current_dir().expect("failed to get current dir");
-
-                if !cfg!(windows) {
-                    adjusted.pop();
-                }
-
-                adjusted.push(path);
-                adjusted
-            } else {
-                path
-            }
-        } else {
-            PathBuf::from("../data/assignment_files")
-        }
-    }
-
-    pub fn get_execution_config_with_base(
+    pub fn get_execution_config(
         module_id: i64,
         assignment_id: i64,
-        base_path: Option<&str>,
     ) -> Result<Self, String> {
-        let base_path = base_path
-            .map(PathBuf::from)
-            .unwrap_or_else(Self::resolve_storage_root);
+        let cfg_dir = config_dir(module_id, assignment_id);
 
-        let config_dir = base_path
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("config");
-
-        let entries = fs::read_dir(&config_dir)
-            .map_err(|_| format!("Failed to read config dir at {:?}", config_dir))?;
-
-        let mut config_file_path = None;
-        for entry in entries {
-            let entry = entry.map_err(|_| "Failed to read config dir entry")?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                config_file_path = Some(path);
-                break;
-            }
+        // 1) Prefer canonical config.json if it exists
+        let canonical = cfg_dir.join("config.json");
+        if canonical.exists() {
+            let s = fs::read_to_string(&canonical)
+                .map_err(|_| format!("Failed to read config file at {:?}", canonical))?;
+            return serde_json::from_str(&s)
+                .map_err(|_| "Invalid config JSON format".to_string());
         }
 
-        let config_path = config_file_path
-            .ok_or_else(|| format!("No config json file found in config dir {:?}", config_dir))?;
+        // 2) Fallback: any *.json in the directory
+        let entries = fs::read_dir(&cfg_dir)
+            .map_err(|_| format!("Failed to read config dir at {:?}", cfg_dir))?;
+
+        let config_path = entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .find(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
+            .ok_or_else(|| format!("No config json file found in config dir {:?}", cfg_dir))?;
 
         let file_contents = fs::read_to_string(&config_path)
             .map_err(|_| format!("Failed to read config file at {:?}", config_path))?;
@@ -349,25 +384,15 @@ impl ExecutionConfig {
         serde_json::from_str(&file_contents).map_err(|_| "Invalid config JSON format".to_string())
     }
 
-    pub fn get_execution_config(module_id: i64, assignment_id: i64) -> Result<Self, String> {
-        Self::get_execution_config_with_base(module_id, assignment_id, None)
-    }
-
-    /// Save the configuration to disk under the derived path based on module and assignment IDs.
     pub fn save(&self, module_id: i64, assignment_id: i64) -> Result<(), String> {
-        let base_path = Self::resolve_storage_root();
+        let cfg_dir = config_dir(module_id, assignment_id);
 
-        let config_dir = base_path
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("config");
-
-        // Create directory if it doesn't exist
-        if let Err(e) = fs::create_dir_all(&config_dir) {
+        // Ensure directory exists
+        if let Err(e) = fs::create_dir_all(&cfg_dir) {
             return Err(format!("Failed to create config directory: {:?}", e));
         }
 
-        let config_path = config_dir.join("config.json");
+        let config_path = cfg_dir.join("config.json");
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize config to JSON: {}", e))?;
 
@@ -414,6 +439,22 @@ fn default_deliminator() -> String {
 
 fn default_grading_policy() -> GradingPolicy {
     GradingPolicy::Last
+}
+
+fn default_limit_attempts() -> bool {
+    false
+}
+
+fn default_max_attempts() -> u32 {
+    10
+}
+
+fn default_pass_mark() -> u32 {
+    50
+}
+
+fn default_allow_practice_submissions() -> bool { 
+    false 
 }
 
 fn default_language() -> Language {
@@ -487,6 +528,21 @@ fn default_genes() -> Vec<GeneConfig> {
 
 fn default_submission_mode() -> SubmissionMode {
     SubmissionMode::Manual
+}
+
+fn default_cookie_ttl_minutes() -> u32 { 
+    480 
+} // 8 hours
+
+fn default_password_enabled() -> bool { 
+    false 
+}
+fn default_bind_cookie_to_user() -> bool { 
+    true
+}
+
+fn default_allowed_cidrs() -> Vec<String> { 
+    vec![] 
 }
 
 fn default_code_coverage_required() -> u8 {

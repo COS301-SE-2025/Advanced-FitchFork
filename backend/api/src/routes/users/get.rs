@@ -6,12 +6,11 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
-use util::state::AppState;
+use util::{paths::user_profile_path, state::AppState};
 use validator::Validate;
 use crate::response::ApiResponse;
 use crate::routes::common::UserModule;
 use db::models::user::{Entity as UserEntity, Model as UserModel, Column as UserColumn};
-use std::{path::PathBuf};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 use axum::body::Body;
@@ -358,15 +357,10 @@ pub async fn get_avatar(
     State(_state): State<AppState>,
     Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
-    let root = std::env::var("USER_PROFILE_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/user_profile_pictures".to_string());
-
-    let avatar_path = PathBuf::from(&root).join(format!("user_{}/avatar", user_id));
-
-    // Try common extensions
+    // Try common extensions under the user's profile dir: .../user_{id}/profile/avatar.{ext}
     for ext in ["jpg", "png", "gif"] {
-        let try_path = avatar_path.with_extension(ext);
-        if try_path.exists() {
+        let try_path = user_profile_path(user_id, &format!("avatar.{ext}"));
+        if tokio::fs::metadata(&try_path).await.is_ok() {
             let file = match File::open(&try_path).await {
                 Ok(f) => f,
                 Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),

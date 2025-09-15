@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use axum::{
     extract::{State, Path},
     http::StatusCode,
@@ -8,9 +7,8 @@ use axum::{
 use axum::extract::Multipart;
 use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, IntoActiveModel, QueryFilter, Set};
 use serde::Deserialize;
-use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use util::state::AppState;
+use util::{paths::{ensure_dir, user_profile_dir, user_profile_path}, state::AppState};
 use validator::Validate;
 use crate::{response::ApiResponse};
 use common::format_validation_errors;
@@ -326,22 +324,36 @@ pub async fn upload_avatar(
         _ => "bin",
     };
 
-    let root = std::env::var("USER_PROFILE_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/user_profile_pictures".to_string());
+        // Ensure the user's profile directory exists under USERS_STORAGE_ROOT
+    if let Err(_) = ensure_dir(user_profile_dir(user_id)) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<ProfilePictureResponse>::error("Failed to prepare user directory")),
+        );
+    }
 
-    let user_dir = PathBuf::from(&root).join(format!("user_{}", user_id));
-    let _ = fs::create_dir_all(&user_dir);
-
+    // Save as avatar.{ext} inside .../user_{id}/profile/
     let filename = format!("avatar.{}", ext);
-    let path = user_dir.join(&filename);
-    let mut file = tokio::fs::File::create(&path).await.unwrap();
-    file.write_all(&file_bytes).await.unwrap();
+    let path = user_profile_path(user_id, &filename);
 
-    let relative_path = path
-        .strip_prefix(&root)
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
+    let mut file = match tokio::fs::File::create(&path).await {
+        Ok(f) => f,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ProfilePictureResponse>::error("Failed to create avatar file")),
+            );
+        }
+    };
+    if let Err(_) = file.write_all(&file_bytes).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<ProfilePictureResponse>::error("Failed to write avatar file")),
+        );
+    }
+
+    // We store the path relative to the user's profile dir (so get_avatar can use user_profile_path(user_id, &path))
+    let relative_path = filename.clone();
 
     let current = user::Entity::find_by_id(user_id)
         .one(db).await.unwrap().unwrap();

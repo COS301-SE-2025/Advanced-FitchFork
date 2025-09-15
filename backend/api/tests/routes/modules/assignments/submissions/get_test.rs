@@ -5,13 +5,12 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::{json, Value};
     use api::auth::generate_jwt;
-    use dotenvy;
     use chrono::{Duration, Utc};
-    use std::{fs, path::PathBuf};
-    use crate::helpers::app::make_test_app;
+    use util::paths::submission_report_path;
+    use std::fs;
+    use crate::helpers::app::make_test_app_with_storage;
     use serial_test::serial;
     use sea_orm::{Set, ActiveModelTrait};
-    use tempfile::{TempDir, tempdir};
 
     struct TestData {
         lecturer_user: UserModel,
@@ -22,11 +21,7 @@ mod tests {
         submissions: Vec<AssignmentSubmissionModel>,
     }
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> (TestData, TempDir) {
-        dotenvy::dotenv().expect("Failed to load .env");
-        let temp_dir = tempdir().expect("Failed to create temporary directory");
-        unsafe{ std::env::set_var("ASSIGNMENT_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
-
+    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
         let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
         let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
@@ -46,39 +41,36 @@ mod tests {
         let sub1 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 1, 10, 10, false, "ontime.txt", "hash123#", b"ontime").await.unwrap();
         let sub1_time = assignment.due_date - Duration::days(1);
         update_submission_time(db, sub1.id, sub1_time).await;
-        write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 1, &sub1, false, false, Some(json!({"earned": 80, "total": 100})), sub1_time);
+        write_submission_report(module.id, assignment.id, student_user.id, 1, &sub1, false, false, Some(json!({"earned": 80, "total": 100})), sub1_time);
 
         let sub2 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 2, 10, 10, false, "late.txt", "hash123#", b"late").await.unwrap();
         let sub2_time = assignment.due_date + Duration::days(1);
         update_submission_time(db, sub2.id, sub2_time).await;
-        write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 2, &sub2, false, false, Some(json!({"earned": 50, "total": 100})), sub2_time);
+        write_submission_report(module.id, assignment.id, student_user.id, 2, &sub2, false, false, Some(json!({"earned": 50, "total": 100})), sub2_time);
 
         let sub3 = AssignmentSubmissionModel::save_file(db, assignment.id, student_user.id, 3, 10, 10, false, "practice.txt", "hash123#", b"practice").await.unwrap();
         let sub3_time = assignment.due_date - Duration::days(2);
         update_submission_time(db, sub3.id, sub3_time).await;
-        write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, student_user.id, 3, &sub3, true, false, Some(json!({"earned": 100, "total": 100})), sub3_time);
+        write_submission_report(module.id, assignment.id, student_user.id, 3, &sub3, true, false, Some(json!({"earned": 100, "total": 100})), sub3_time);
 
         let sub4 = AssignmentSubmissionModel::save_file(db, assignment.id, forbidden_user.id, 1, 10, 10, false, "forbidden.txt", "hash123#", b"forbidden").await.unwrap();
         let sub4_time = assignment.due_date - Duration::days(1);
         update_submission_time(db, sub4.id, sub4_time).await;
-        write_submission_report(temp_dir.path().to_str().unwrap(), module.id, assignment.id, forbidden_user.id, 1, &sub4, false, false, Some(json!({"earned": 0, "total": 100})), sub4_time);
+        write_submission_report(module.id, assignment.id, forbidden_user.id, 1, &sub4, false, false, Some(json!({"earned": 0, "total": 100})), sub4_time);
 
         // mark one submission as ignored so we can assert both states
         AssignmentSubmissionModel::set_ignored(db, sub2.id, true).await.unwrap();
 
         let submissions = [sub1, sub2, sub3, sub4].to_vec();
 
-        (
-            TestData {
-                lecturer_user,
-                student_user,
-                forbidden_user,
-                module,
-                assignment,
-                submissions,
-            },
-            temp_dir
-        )
+        TestData {
+            lecturer_user,
+            student_user,
+            forbidden_user,
+            module,
+            assignment,
+            submissions,
+        }
     }
 
     async fn update_submission_time(db: &sea_orm::DatabaseConnection, submission_id: i64, new_time: chrono::DateTime<Utc>) {
@@ -92,14 +84,8 @@ mod tests {
         }
     }
 
-    fn write_submission_report(base: &str, module_id: i64, assignment_id: i64, user_id: i64, attempt: i64, submission: &AssignmentSubmissionModel, is_practice: bool, is_late: bool, mark: Option<Value>, created_at: chrono::DateTime<Utc>) {
-        let path = PathBuf::from(base)
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("assignment_submissions")
-            .join(format!("user_{}", user_id))
-            .join(format!("attempt_{}", attempt))
-            .join("submission_report.json");
+    fn write_submission_report(module_id: i64, assignment_id: i64, user_id: i64, attempt: i64, submission: &AssignmentSubmissionModel, is_practice: bool, is_late: bool, mark: Option<Value>, created_at: chrono::DateTime<Utc>) {
+        let path = submission_report_path(module_id, assignment_id, user_id, attempt);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let mut report = json!({
             "id": submission.id,
@@ -121,8 +107,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_student_sees_only_own_submissions() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
@@ -151,8 +137,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_lecturer_sees_all_submissions_with_pagination() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions?per_page=2&page=1", data.module.id, data.assignment.id);
@@ -180,8 +166,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_query_by_username_returns_only_that_user() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions?username=student1", data.module.id, data.assignment.id);
@@ -206,8 +192,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_filter_by_late_status() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions?late=true", data.module.id, data.assignment.id);
@@ -232,8 +218,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_forbidden_user_gets_403() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
@@ -250,8 +236,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_filter_by_ignored_true_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -280,8 +266,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_filter_by_ignored_false_lecturer() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -310,8 +296,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_filter_by_ignored_true_student_scope() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
@@ -343,8 +329,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_student_gets_own_submission() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let sub = &data.submissions[0];
@@ -370,8 +356,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_lecturer_gets_any_submission_with_user_info() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let sub = &data.submissions[0];
@@ -398,8 +384,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_forbidden_user_gets_403_on_submission() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let sub = &data.submissions[0];
@@ -417,8 +403,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_not_found_returns_404() {
-        let (app, app_state) = make_test_app().await;
-        let (data, _temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/submissions/999999", data.module.id, data.assignment.id);
@@ -435,17 +421,11 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_submission_report_missing_returns_404() {
-        let (app, app_state) = make_test_app().await;
-        let (data, temp_dir) = setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let sub = &data.submissions[0];
-        let path = PathBuf::from(temp_dir.path())
-            .join(format!("module_{}", data.module.id))
-            .join(format!("assignment_{}", data.assignment.id))
-            .join("assignment_submissions")
-            .join(format!("user_{}", data.student_user.id))
-            .join(format!("attempt_{}", sub.attempt))
-            .join("submission_report.json");
+        let path =submission_report_path(data.module.id, data.assignment.id, data.student_user.id, sub.attempt);
         let _ = fs::remove_file(&path);
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);

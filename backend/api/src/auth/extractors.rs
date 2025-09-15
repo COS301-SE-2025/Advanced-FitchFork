@@ -6,8 +6,8 @@ use axum_extra::extract::TypedHeader;
 use headers::{Authorization, authorization::Bearer};
 use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
 use std::collections::HashMap;
-use std::env;
 use crate::auth::claims::{Claims, AuthUser};
+use util::config;
 
 /// Implements extraction of `AuthUser` from request headers.
 ///
@@ -58,7 +58,7 @@ where
 }
 
 fn decode_token(token: &str) -> Result<AuthUser, (StatusCode, &'static str)> {
-    let secret = env::var("JWT_SECRET").map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "JWT secret not set"))?;
+    let secret = config::jwt_secret();
     let data = decode::<Claims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),
