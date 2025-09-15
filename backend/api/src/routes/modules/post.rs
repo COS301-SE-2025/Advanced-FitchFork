@@ -10,9 +10,10 @@ use axum::{
 };
 use chrono::{Datelike, Utc};
 use validator::Validate;
-use db::models::module::{Model as Module};
 use crate::response::ApiResponse;
 use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
+use services::service::{Service, AppError};
+use services::module::{ModuleService, CreateModule};
 
 /// POST /api/modules
 ///
@@ -87,8 +88,6 @@ use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
 pub async fn create(
     Json(req): Json<ModuleRequest>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -98,7 +97,7 @@ pub async fn create(
     }
 
     let current_year = Utc::now().year();
-    if req.year < current_year {
+    if req.year < current_year.into() {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<ModuleResponse>::error(format!(
@@ -108,15 +107,15 @@ pub async fn create(
         );
     }
 
-    match Module::create(
-        db,
-        &req.code,
-        req.year,
-        req.description.as_deref(),
-        req.credits,
-    )
-    .await
-    {
+    match ModuleService::create(
+        CreateModule {
+            id: None,
+            code: req.code,
+            year: req.year,
+            description: req.description,
+            credits: req.credits,
+        }
+    ).await {
         Ok(module) => {
             let response = ModuleResponse::from(module);
             (
@@ -125,7 +124,7 @@ pub async fn create(
             )
         }
         Err(e) => {
-            if let sea_orm::DbErr::Exec(err) = &e {
+            if let AppError::Database(err) = &e {
                 if err.to_string().contains("UNIQUE constraint failed: modules.code") {
                     return (
                         StatusCode::CONFLICT,

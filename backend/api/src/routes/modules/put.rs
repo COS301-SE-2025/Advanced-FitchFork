@@ -10,27 +10,14 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::Utc;
 use validator::Validate;
-use sea_orm::{
-    IntoActiveModel,
-    ActiveModelTrait,
-    ColumnTrait,
-    Condition,
-    EntityTrait,
-    QueryFilter,
-    Set,
-};
-use db::models::module::{
-    self,
-    ActiveModel as ModuleActiveModel,
-    Column as ModuleCol,
-    Entity as ModuleEntity,
-};
 use crate::response::ApiResponse;
 use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use util::filters::FilterParam;
+use services::service::Service;
+use services::module::{ModuleService, UpdateModule};
 
 /// PUT /api/modules/{module_id}
 ///
@@ -111,8 +98,6 @@ pub async fn edit_module(
     Path(module_id): Path<i64>,
     Json(req): Json<ModuleRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -121,33 +106,37 @@ pub async fn edit_module(
         );
     }
 
-    let duplicate = ModuleEntity::find()
-        .filter(
-            Condition::all()
-                .add(ModuleCol::Code.eq(req.code.clone()))
-                .add(ModuleCol::Id.ne(module_id)),
-        )
-        .one(db)
-        .await;
-
-    if let Ok(Some(_)) = duplicate {
-        return (
-            StatusCode::CONFLICT,
-            Json(ApiResponse::<ModuleResponse>::error("Module code already exists")),
-        );
+    match ModuleService::exists(
+        &vec![
+            FilterParam::eq("code", req.code.clone()),
+            FilterParam::ne("id", module_id),
+        ],
+        &vec![],
+    ).await {
+        Ok(true) => {
+            return (
+                StatusCode::CONFLICT,
+                Json(ApiResponse::<ModuleResponse>::error("Module code already exists")),
+            );
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ModuleResponse>::error("Database error while checking module code uniqueness")),
+            );
+        }
+        _ => {}
     }
 
-    let updated_module = ModuleActiveModel {
-        id: Set(module_id),
-        code: Set(req.code.clone()),
-        year: Set(req.year),
-        description: Set(req.description.clone()),
-        credits: Set(req.credits),
-        updated_at: Set(Utc::now()),
-        ..Default::default()
-    };
-
-    match updated_module.update(db).await {
+    match ModuleService::update(
+        UpdateModule {
+            id: module_id,
+            code: Some(req.code),
+            year: Some(req.year),
+            description: req.description,
+            credits: Some(req.credits),
+        }
+    ).await {
         Ok(module) => (
             StatusCode::OK,
             Json(ApiResponse::success(ModuleResponse::from(module), "Module updated successfully")),
@@ -166,13 +155,13 @@ pub struct BulkUpdateRequest {
     pub module_ids: Vec<i64>,
     
     #[validate(range(min = 2024, message = "Year must be at least 2024"))]
-    pub year: Option<i32>,
+    pub year: Option<i64>,
     
     #[validate(length(max = 1000, message = "Description must be at most 1000 characters"))]
     pub description: Option<String>,
     
     #[validate(range(min = 1, message = "Credits must be positive"))]
-    pub credits: Option<i32>,
+    pub credits: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -234,9 +223,6 @@ pub struct FailedUpdate {
 pub async fn bulk_edit_modules(
     Json(raw_value): Json<Value>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
-    // First check for forbidden 'code' field
     if let Some(obj) = raw_value.as_object() {
         if obj.keys().any(|k| k.to_lowercase() == "code") {
             return (
@@ -246,7 +232,6 @@ pub async fn bulk_edit_modules(
         }
     }
 
-    // Then parse and validate the request
     let req: BulkUpdateRequest = match serde_json::from_value(raw_value) {
         Ok(req) => req,
         Err(e) => {
@@ -257,7 +242,6 @@ pub async fn bulk_edit_modules(
         }
     };
 
-    // Validate the request
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -270,56 +254,24 @@ pub async fn bulk_edit_modules(
     let mut failed = Vec::new();
 
     for id in &req.module_ids {
-        let res = module::Entity::find()
-            .filter(module::Column::Id.eq(*id))
-            .one(db)
-            .await;
-
-        match res {
-            Ok(Some(model)) => {
-                let mut active = model.into_active_model();
-                let mut has_changes = false;
-
-                // Only update fields that are provided
-                if let Some(year) = req.year {
-                    active.year = Set(year);
-                    has_changes = true;
-                }
-
-                if let Some(ref description) = req.description {
-                    active.description = Set(Some(description.clone()));
-                    has_changes = true;
-                }
-
-                if let Some(credits) = req.credits {
-                    active.credits = Set(credits);
-                    has_changes = true;
-                }
-
-                if has_changes {
-                    active.updated_at = Set(Utc::now());
-
-                    if active.update(db).await.is_ok() {
-                        updated += 1;
-                    } else {
-                        failed.push(FailedUpdate {
-                            id: *id,
-                            error: "Failed to save updated module".into(),
-                        });
-                    }
-                } else {
-                    // No changes to apply, count as successful
-                    updated += 1;
-                }
+        match ModuleService::update(
+            UpdateModule {
+                id: *id,
+                code: None,
+                year: req.year,
+                description: req.description.clone(),
+                credits: req.credits,
             }
-            Ok(None) => failed.push(FailedUpdate {
-                id: *id,
-                error: "Module not found".into(),
-            }),
-            Err(e) => failed.push(FailedUpdate {
-                id: *id,
-                error: e.to_string(),
-            }),
+        ).await {
+            Ok(_) => {
+                updated += 1;
+            }
+            Err(e) => {
+                failed.push(FailedUpdate {
+                    id: *id,
+                    error: format!("Failed to update module: {}", e),
+                });
+            }
         }
     }
 

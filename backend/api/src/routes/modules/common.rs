@@ -10,6 +10,8 @@
 use chrono::{Datelike, Utc};
 use serde::{Serialize, Deserialize};
 use validator::Validate;
+use services::user::User;
+use services::module::Module;
 
 #[derive(Debug, Deserialize)]
 pub struct ModifyUsersModuleRequest {
@@ -26,8 +28,8 @@ pub struct RoleResponse {
     pub updated_at: String,
 }
 
-impl From<db::models::user::Model> for RoleResponse {
-    fn from(user: db::models::user::Model) -> Self {
+impl From<User> for RoleResponse {
+    fn from(user: User) -> Self {
         Self {
             id: user.id,
             username: user.username,
@@ -75,29 +77,29 @@ pub struct ModuleRequest {
     ))]
     pub code: String,
 
-    #[validate(range(min = Utc::now().year(), message = "Year must be current year or later"))]
-    pub year: i32,
+    #[validate(range(min = Utc::now().year().into(), message = "Year must be current year or later"))]
+    pub year: i64,
 
     #[validate(length(max = 1000, message = "Description must be at most 1000 characters"))]
     pub description: Option<String>,
 
     #[validate(range(min = 1, message = "Credits must be a positive number"))]
-    pub credits: i32,
+    pub credits: i64,
 }
 
 #[derive(Debug, Serialize)]
 pub struct ModuleResponse {
     pub id: i64,
     pub code: String,
-    pub year: i32,
+    pub year: i64,
     pub description: Option<String>,
-    pub credits: i32,
+    pub credits: i64,
     pub created_at: String,
     pub updated_at: String,
 }
 
-impl From<db::models::module::Model> for ModuleResponse {
-    fn from(module: db::models::module::Model) -> Self {
+impl From<Module> for ModuleResponse {
+    fn from(module: Module) -> Self {
         Self {
             id: module.id,
             code: module.code,

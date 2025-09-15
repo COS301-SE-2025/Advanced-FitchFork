@@ -11,39 +11,33 @@ use crate::routes::common::UserResponse;
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use db::models::user_module_role;
-use db::models::{
-    module::{Column as ModuleCol, Entity as ModuleEntity, Model as Module},
-    user::{Column as UserCol, Entity as UserEntity, Model as UserModel},
-    user_module_role::{Column as RoleCol, Entity as RoleEntity, Role},
-};
-use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect,
-};
 use serde::{Deserialize, Serialize};
-use util::state::AppState;
+use util::filters::{FilterParam, QueryParam};
+use services::service::{AppError, Service};
+use services::module::{ModuleService, Module};
+use services::user_module_role::UserModuleRoleService;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModuleResponse {
     pub id: i64,
     pub code: String,
-    pub year: i32,
+    pub year: i64,
     pub description: Option<String>,
-    pub credits: i32,
+    pub credits: i64,
     pub created_at: String,
     pub updated_at: String,
     pub lecturers: Vec<UserResponse>,
+    pub assistant_lecturers: Vec<UserResponse>,
     pub tutors: Vec<UserResponse>,
     pub students: Vec<UserResponse>,
 }
 
-impl From<db::models::module::Model> for ModuleResponse {
-    fn from(m: db::models::module::Model) -> Self {
+impl From<Module> for ModuleResponse {
+    fn from(m: Module) -> Self {
         Self {
             id: m.id,
             code: m.code,
@@ -53,6 +47,7 @@ impl From<db::models::module::Model> for ModuleResponse {
             created_at: m.created_at.to_rfc3339(),
             updated_at: m.updated_at.to_rfc3339(),
             lecturers: vec![],
+            assistant_lecturers: vec![],
             tutors: vec![],
             students: vec![],
         }
@@ -73,7 +68,7 @@ impl From<db::models::module::Model> for ModuleResponse {
 /// Returns an HTTP response indicating the result:
 /// - `200 OK` with the full module details (including associated lecturers, tutors, and students) if successful.
 /// - `404 NOT FOUND` if no module is found with the given `module_id`.
-/// - `500 INTERNAL SERVER ERROR` if a database error occurs or if related personnel data (lecturers, tutors, or students) fails to load.
+/// - `500 INTERNAL SERVER ERROR` if a database error occurs or if related personnel data (lecturers, assistant_lecturers, tutors, or students) fails to load.
 ///
 /// The response body is a JSON object using a standardized API response format, containing:
 /// - Module information.
@@ -98,6 +93,16 @@ impl From<db::models::module::Model> for ModuleResponse {
 ///         "id": 1,
 ///         "username": "lecturer1",
 ///         "email": "lecturer1@example.com",
+///         "admin": false,
+///         "created_at": "2024-01-01T00:00:00Z",
+///         "updated_at": "2024-01-01T00:00:00Z"
+///       }
+///     ],
+///     "assitant_lecturers": [
+///       {
+///         "id": 1,
+///         "username": "assistant_lecturer1",
+///         "email": "assistant_lecturer1@example.com",
 ///         "admin": false,
 ///         "created_at": "2024-01-01T00:00:00Z",
 ///         "updated_at": "2024-01-01T00:00:00Z"
@@ -143,22 +148,35 @@ impl From<db::models::module::Model> for ModuleResponse {
 ///   "message": "Database error retrieving module"
 /// }
 /// ```
-pub async fn get_module(State(state): State<AppState>, Path(module_id): Path<i64>) -> Response {
-    let db = state.db();
+pub async fn get_module(
+    Path(module_id): Path<i64>,
+) -> Response {
+    let module = match ModuleService::find_by_id(module_id).await {
+        Ok(Some(module)) => module,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Module not found")),
+            )
+            .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!("Database error retrieving module: {}", e))),
+            )
+            .into_response();
+        }
+    };
 
-    let module = ModuleEntity::find_by_id(module_id)
-        .one(db)
-        .await
-        .unwrap()
-        .unwrap();
-
-    let (lecturers, tutors, students) = tokio::join!(
-        get_users_by_role(db, module_id, Role::Lecturer),
-        get_users_by_role(db, module_id, Role::Tutor),
-        get_users_by_role(db, module_id, Role::Student),
+    let (lecturers, assistant_lecturers, tutors, students) = tokio::join!(
+        get_users_by_role(module_id, "lecturer".to_string()),
+        get_users_by_role(module_id, "assistant_lecturer".to_string()),
+        get_users_by_role(module_id, "tutor".to_string()),
+        get_users_by_role(module_id, "student".to_string()),
     );
 
-    if lecturers.is_err() || tutors.is_err() || students.is_err() {
+    if lecturers.is_err() || assistant_lecturers.is_err() || tutors.is_err() || students.is_err() {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error(
@@ -170,6 +188,11 @@ pub async fn get_module(State(state): State<AppState>, Path(module_id): Path<i64
 
     let mut response = ModuleResponse::from(module);
     response.lecturers = lecturers
+        .unwrap()
+        .into_iter()
+        .map(UserResponse::from)
+        .collect();
+    response.assistant_lecturers = assistant_lecturers
         .unwrap()
         .into_iter()
         .map(UserResponse::from)
@@ -196,10 +219,9 @@ pub async fn get_module(State(state): State<AppState>, Path(module_id): Path<i64
 }
 
 async fn get_users_by_role(
-    db: &DatabaseConnection,
     module_id: i64,
-    role: Role,
-) -> Result<Vec<UserModel>, sea_orm::DbErr> {
+    role: String,
+) -> Result<Vec<User>, AppError> {
     UserEntity::find()
         .join(
             JoinType::InnerJoin,
@@ -219,20 +241,21 @@ async fn get_users_by_role(
 
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
-    pub page: Option<i32>,
-    pub per_page: Option<i32>,
+    pub page: Option<u64>,
+    pub per_page: Option<u64>,
     pub query: Option<String>,
     pub code: Option<String>,
-    pub year: Option<i32>,
+    pub year: Option<i64>,
     pub sort: Option<String>,
 }
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ModuleDetailsResponse {
     pub id: i64,
     pub code: String,
-    pub year: i32,
+    pub year: i64,
     pub description: Option<String>,
-    pub credits: i32,
+    pub credits: i64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -254,13 +277,13 @@ impl From<Module> for ModuleDetailsResponse {
 #[derive(Serialize)]
 pub struct FilterResponse {
     pub modules: Vec<ModuleDetailsResponse>,
-    pub page: i32,
-    pub per_page: i32,
-    pub total: i32,
+    pub page: u64,
+    pub per_page: u64,
+    pub total: u64,
 }
 
-impl From<(Vec<Module>, i32, i32, i32)> for FilterResponse {
-    fn from(data: (Vec<Module>, i32, i32, i32)) -> Self {
+impl From<(Vec<Module>, u64, u64, u64)> for FilterResponse {
+    fn from(data: (Vec<Module>, u64, u64, u64)) -> Self {
         let (modules, page, per_page, total) = data;
         Self {
             modules: modules
@@ -343,99 +366,57 @@ impl From<(Vec<Module>, i32, i32, i32)> for FilterResponse {
 /// }
 /// ```
 pub async fn get_modules(
-    State(state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
-    Query(params): Query<FilterReq>,
+    Query(query): Query<FilterReq>,
 ) -> impl IntoResponse {
-    let db = state.db();
     let user_id = claims.sub;
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).min(100);
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(20).min(100).max(1);
+    let sort = query.sort.clone();
 
-    let build_query = |query: sea_orm::Select<ModuleEntity>| -> sea_orm::Select<ModuleEntity> {
-        let mut query = query;
+    let mut filters = Vec::new();
+    let mut queries = Vec::new();
 
-        if let Some(ref q) = params.query {
-            let q = q.to_lowercase();
-            query = query.filter(
-                ModuleCol::Code
-                    .contains(&q)
-                    .or(ModuleCol::Description.contains(&q)),
-            );
-        }
-        if let Some(ref code) = params.code {
-            query = query.filter(ModuleCol::Code.contains(&code.to_lowercase()));
-        }
-        if let Some(year) = params.year {
-            query = query.filter(ModuleCol::Year.eq(year));
-        }
-        if let Some(sort_str) = &params.sort {
-            for field in sort_str.split(',') {
-                let trimmed = field.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                let (column, descending) = if trimmed.starts_with('-') {
-                    (&trimmed[1..], true)
-                } else {
-                    (trimmed, false)
-                };
-                query = match column {
-                    "code" => {
-                        if descending {
-                            query.order_by_desc(ModuleCol::Code)
-                        } else {
-                            query.order_by_asc(ModuleCol::Code)
-                        }
-                    }
-                    "created_at" => {
-                        if descending {
-                            query.order_by_desc(ModuleCol::CreatedAt)
-                        } else {
-                            query.order_by_asc(ModuleCol::CreatedAt)
-                        }
-                    }
-                    "year" => {
-                        if descending {
-                            query.order_by_desc(ModuleCol::Year)
-                        } else {
-                            query.order_by_asc(ModuleCol::Year)
-                        }
-                    }
-                    "credits" => {
-                        if descending {
-                            query.order_by_desc(ModuleCol::Credits)
-                        } else {
-                            query.order_by_asc(ModuleCol::Credits)
-                        }
-                    }
-                    "description" => {
-                        if descending {
-                            query.order_by_desc(ModuleCol::Description)
-                        } else {
-                            query.order_by_asc(ModuleCol::Description)
-                        }
-                    }
-                    _ => query,
-                };
+    if let Some(code) = query.code {
+        filters.push(FilterParam::like("code", code));
+    }
+    if let Some(year) = query.year {
+        filters.push(FilterParam::eq("year", year));
+    }
+    if let Some(query_text) = query.query {
+        queries.push(QueryParam::new(
+            vec!["code".to_string(), "description".to_string()],
+            query_text
+        ));
+    }
+
+    let module_ids = if !claims.admin {
+        match UserModuleRoleService::find_all(
+            &vec![
+                FilterParam::eq("user_id", user_id)
+            ],
+            &vec![],
+            None,
+        ).await {
+            Ok(memberships) => {
+                let ids: Vec<i64> = memberships.into_iter().map(|m| m.module_id).collect();
+                Some(ids)
+            },
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<FilterResponse>::error(
+                        format!("Database error: {}", e)
+                    )),
+                );
             }
         }
-
-        query
+    } else {
+        None
     };
 
-    // If admin, fetch all modules
-    let query = if claims.admin {
-        build_query(ModuleEntity::find())
-    } else {
-        // Otherwise, filter by membership
-        let memberships = user_module_role::Entity::find()
-            .filter(user_module_role::Column::UserId.eq(user_id))
-            .all(db)
-            .await
-            .unwrap_or_default();
-
-        if memberships.is_empty() {
+    if let Some(ids) = module_ids {
+        if ids.is_empty() {
             let response = FilterResponse::from((Vec::<Module>::new(), page, per_page, 0));
             return (
                 StatusCode::OK,
@@ -445,17 +426,26 @@ pub async fn get_modules(
                 )),
             );
         }
+        filters.push(FilterParam::eq("id", ids));
+    }
 
-        let module_ids: Vec<i64> = memberships.iter().map(|m| m.module_id).collect();
-        build_query(ModuleEntity::find().filter(ModuleCol::Id.is_in(module_ids)))
+    let (modules, total) = match ModuleService::filter(
+        &filters,
+        &queries,
+        page,
+        per_page,
+        sort,
+    ).await {
+        Ok(result) => result,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<FilterResponse>::error(
+                    format!("Database error: {}", e)
+                )),
+            );
+        }
     };
-
-    let paginator = query.paginate(db, per_page as u64);
-    let total = paginator.num_items().await.unwrap_or(0) as i32;
-    let modules: Vec<Module> = paginator
-        .fetch_page((page - 1) as u64)
-        .await
-        .unwrap_or_default();
 
     let response = FilterResponse::from((modules, page, per_page, total));
     (
@@ -555,15 +545,13 @@ impl From<(Vec<Module>, Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsRes
 pub async fn get_my_details(
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db = state.db();
-
     let user_id = claims.sub;
 
     let (as_student, as_tutor, as_lecturer, as_assistant_lecturer) = tokio::join!(
-        get_modules_by_user_and_role(db, user_id, Role::Student),
-        get_modules_by_user_and_role(db, user_id, Role::Tutor),
-        get_modules_by_user_and_role(db, user_id, Role::Lecturer),
-        get_modules_by_user_and_role(db, user_id, Role::AssistantLecturer),
+        get_modules_by_user_and_role(user_id, "student".to_string()),
+        get_modules_by_user_and_role(user_id, "tutor".to_string()),
+        get_modules_by_user_and_role(user_id, "lecturer".to_string()),
+        get_modules_by_user_and_role(user_id, "assistant_lecturer".to_string()),
     );
 
     match (as_student, as_tutor, as_lecturer, as_assistant_lecturer) {
@@ -588,10 +576,9 @@ pub async fn get_my_details(
 
 /// Helper to fetch modules by user_id and role using SeaORM relations
 async fn get_modules_by_user_and_role(
-    db: &DatabaseConnection,
     user_id: i64,
-    role: Role,
-) -> Result<Vec<Module>, sea_orm::DbErr> {
+    role: String,
+) -> Result<Vec<Module>, AppError> {
     RoleEntity::find()
         .filter(
             Condition::all()
