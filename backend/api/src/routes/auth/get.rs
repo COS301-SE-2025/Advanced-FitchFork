@@ -1,11 +1,10 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, vec};
 use axum::{
     extract::{Query, Path},
     http::{StatusCode, header, HeaderMap, HeaderValue},
     response::IntoResponse,
     Json,
 };
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use tokio::fs::File as FsFile;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
@@ -13,8 +12,11 @@ use crate::{
     auth::claims::AuthUser,
     response::ApiResponse,
 };
-use db::models::{user, module, user_module_role, user_module_role::Role};
 use crate::routes::common::UserModule;
+use util::filters::FilterParam;
+use services::service::Service;
+use services::user::UserService;
+use services::user_module_role::UserModuleRoleService;
 
 #[derive(Debug, Serialize)]
 pub struct MeResponse {
@@ -88,14 +90,9 @@ pub struct HasRoleResponse {
 pub async fn get_me(
     AuthUser(claims): AuthUser
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
     let user_id = claims.sub;
 
-    let user = match user::Entity::find()
-        .filter(user::Column::Id.eq(user_id))
-        .one(db)
-        .await
-    {
+    let user = match UserService::find_by_id(user_id).await {
         Ok(Some(u)) => u,
         Ok(None) => {
             return (
@@ -205,9 +202,23 @@ pub async fn get_me(
 pub async fn get_avatar(
     Path(user_id): Path<i64>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
-    let user = user::Entity::find_by_id(user_id).one(db).await.unwrap().unwrap();
+    let user = match UserService::find_by_id(user_id).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("User not found")),
+            )
+                .into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response();
+        }
+    };
 
     let Some(path) = user.profile_picture_path else {
         return (
@@ -291,28 +302,27 @@ pub async fn has_role_in_module(
     AuthUser(claims): AuthUser,
     Query(params): Query<HasRoleQuery>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
-    let role = match params.role.to_lowercase().as_str() {
-        "lecturer" => Role::Lecturer,
-        "assistant_lecturer" => Role::AssistantLecturer,
-        "tutor" => Role::Tutor,
-        "student" => Role::Student,
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<HasRoleResponse>::error("Invalid role specified")),
-            )
-        }
-    };
-
-    let exists = match user_module_role::Entity::find()
-        .filter(user_module_role::Column::UserId.eq(claims.sub))
-        .filter(user_module_role::Column::ModuleId.eq(params.module_id))
-        .filter(user_module_role::Column::Role.eq(role))
-        .one(db)
-        .await
+    let role = params.role.to_lowercase();
+    if role != "lecturer"
+        && role != "assistant_lecturer"
+        && role != "tutor"
+        && role != "student"
     {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<HasRoleResponse>::error("Invalid role specified")),
+        );
+    }
+
+    let exists = match UserModuleRoleService::find_one(
+        &vec![
+            FilterParam::eq("user_id", claims.sub),
+            FilterParam::eq("module_id", params.module_id),
+            FilterParam::eq("role", role),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(Some(_)) => true,
         Ok(None) => false,
         Err(_) => {
@@ -333,7 +343,7 @@ pub async fn has_role_in_module(
 
 #[derive(Debug, Deserialize)]
 pub struct ModuleRoleQuery {
-    pub module_id: i32,
+    pub module_id: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -366,14 +376,14 @@ pub async fn get_module_role(
     AuthUser(claims): AuthUser,
     Query(params): Query<ModuleRoleQuery>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
-    let role = match user_module_role::Entity::find()
-        .filter(user_module_role::Column::UserId.eq(claims.sub))
-        .filter(user_module_role::Column::ModuleId.eq(params.module_id))
-        .one(db)
-        .await
-    {
+    let role = match UserModuleRoleService::find_one(
+        &vec![
+            FilterParam::eq("user_id", claims.sub),
+            FilterParam::eq("module_id", params.module_id),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(Some(model)) => Some(model.role.to_string().to_lowercase()),
         Ok(None) => None,
         Err(_) => {

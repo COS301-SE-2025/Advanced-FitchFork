@@ -6,7 +6,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set, IntoActiveModel};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 use chrono::{Utc, Duration};
@@ -16,16 +15,11 @@ use crate::{
     response::ApiResponse,
     services::email::EmailService,
 };
-use db::models::{
-    user,
-    password_reset_token::{self, Model as PasswordResetTokenModel}
-};
 use crate::auth::AuthUser;
-
-use services::{
-    service::Service,
-    user::{UserService, CreateUser},
-};
+use util::filters::FilterParam;
+use services::service::Service;
+use services::user::{UserService, CreateUser, UpdateUser};
+use services::password_reset_token::{PasswordResetTokenService, CreatePasswordResetToken, UpdatePasswordResetToken};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -107,8 +101,6 @@ pub struct UserResponse {
 pub async fn register(
     Json(req): Json<RegisterRequest>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -117,33 +109,48 @@ pub async fn register(
         );
     }
 
-    let email_exists = user::Entity::find()
-        .filter(user::Column::Email.eq(req.email.clone()))
-        .one(db)
-        .await
-        .unwrap();
+    match UserService::find_one(
+        &vec![FilterParam::eq("email", req.email.clone())],
+        &vec![],
+        None,
+    ).await {
+        Ok(Some(_)) => {
+            return (
+                StatusCode::CONFLICT,
+                Json(ApiResponse::<UserResponse>::error("A user with this email already exists")),
+            );
+        }
+        Ok(None) => false,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
+            );
+        }
+    };
 
-    if email_exists.is_some() {
-        return (
-            StatusCode::CONFLICT,
-            Json(ApiResponse::<UserResponse>::error("A user with this email already exists")),
-        );
-    }
-
-    let sn_exists = user::Entity::find()
-        .filter(user::Column::Username.eq(req.username.clone()))
-        .one(db)
-        .await
-        .unwrap();
-
-    if sn_exists.is_some() {
-        return (
-            StatusCode::CONFLICT,
-            Json(ApiResponse::<UserResponse>::error("A user with this student number already exists")),
-        );
+    match UserService::find_one(
+        &vec![FilterParam::eq("username", req.username.clone())],
+        &vec![],
+        None,
+    ).await {
+        Ok(Some(_)) => {
+            return (
+                StatusCode::CONFLICT,
+                Json(ApiResponse::<UserResponse>::error("A user with this student number already exists")),
+            );
+        }
+        Ok(None) => {}
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
+            );
+        }
     }
 
     let inserted_user = match UserService::create(CreateUser {
+        id: None,
         username: req.username,
         email: req.email,
         password: req.password,
@@ -323,8 +330,6 @@ pub struct RequestPasswordResetRequest {
 pub async fn request_password_reset(
     Json(req): Json<RequestPasswordResetRequest>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -333,11 +338,11 @@ pub async fn request_password_reset(
         );
     }
 
-    let user = match user::Entity::find()
-        .filter(user::Column::Email.eq(req.email.clone()))
-        .one(db)
-        .await
-    {
+    let user = match UserService::find_one(
+        &vec![FilterParam::eq("email", req.email.clone())],
+        &vec![],
+        None,
+    ).await {
         Ok(Some(u)) => u,
         Ok(None) => {
             return (
@@ -357,12 +362,13 @@ pub async fn request_password_reset(
     };
 
     let one_hour_ago = Utc::now() - Duration::hours(1);
-    let recent_requests = password_reset_token::Entity::find()
-        .filter(password_reset_token::Column::UserId.eq(user.id))
-        .filter(password_reset_token::Column::CreatedAt.gt(one_hour_ago))
-        .count(db)
-        .await
-        .unwrap_or(0);
+    let recent_requests = PasswordResetTokenService::count(
+        &vec![
+            FilterParam::eq("user_id", user.id),
+            FilterParam::gt("created_at", one_hour_ago),
+        ],
+        &vec![],
+    ).await.unwrap_or(0);
 
     let max_requests = std::env::var("MAX_PASSWORD_RESET_REQUESTS_PER_HOUR")
         .unwrap_or_else(|_| "3".to_string())
@@ -383,7 +389,12 @@ pub async fn request_password_reset(
         .parse::<i64>()
         .unwrap_or(15);
 
-    match PasswordResetTokenModel::create(db, user.id, expiry_minutes).await {
+    match PasswordResetTokenService::create(
+        CreatePasswordResetToken {
+            user_id: user.id,
+            expiry_minutes,
+        }
+    ).await {
         Ok(token) => {
             match EmailService::send_password_reset_email(&user.email, &token.token).await {
                 Ok(_) => (
@@ -467,8 +478,6 @@ pub struct VerifyResetTokenResponse {
 pub async fn verify_reset_token(
     Json(req): Json<VerifyResetTokenRequest>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -477,9 +486,9 @@ pub async fn verify_reset_token(
         );
     }
 
-    match PasswordResetTokenModel::find_valid_token(db, &req.token).await {
+    match PasswordResetTokenService::find_valid_token(req.token).await {
         Ok(Some(token)) => {
-            match user::Entity::find_by_id(token.user_id).one(db).await {
+            match UserService::find_by_id(token.user_id).await {
                 Ok(Some(user)) => {
                     let email_parts: Vec<&str> = user.email.split('@').collect();
                     let username = email_parts[0];
@@ -567,8 +576,6 @@ pub struct ResetPasswordRequest {
 pub async fn reset_password(
     Json(req): Json<ResetPasswordRequest>
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -577,18 +584,29 @@ pub async fn reset_password(
         );
     }
 
-    match PasswordResetTokenModel::find_valid_token(db, &req.token).await {
+    match PasswordResetTokenService::find_valid_token(req.token).await {
         Ok(Some(token)) => {
-            match user::Entity::find_by_id(token.user_id).one(db).await {
+            match UserService::find_by_id(token.user_id).await {
                 Ok(Some(user)) => {
                     let user_email = user.email.clone();
                     
-                    let mut active_model: user::ActiveModel = user.into();
-                    active_model.password_hash = Set(UserService::hash_password(&req.new_password));
-                    
-                    match active_model.update(db).await {
+                    match UserService::update(
+                        UpdateUser {
+                            id: token.user_id,
+                            username: None,
+                            email: None,
+                            password: Some(req.new_password),
+                            admin: None,
+                            profile_picture_path: None,
+                        }
+                    ).await {
                         Ok(_) => {
-                            if let Err(e) = token.mark_as_used(db).await {
+                            if let Err(e) = PasswordResetTokenService::update(
+                                UpdatePasswordResetToken {
+                                    id: token.id,
+                                    used: Some(true),
+                                }
+                            ).await {
                                 eprintln!("Failed to mark token as used: {}", e);
                             }
 
@@ -694,8 +712,6 @@ pub async fn upload_profile_picture(
     AuthUser(claims): AuthUser,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     const MAX_SIZE: u64 = 2 * 1024 * 1024;
     const ALLOWED_MIME: &[&str] = &["image/jpeg", "image/png", "image/gif"];
 
@@ -758,10 +774,24 @@ pub async fn upload_profile_picture(
         .to_string_lossy()
         .to_string();
 
-    let current = user::Entity::find_by_id(claims.sub).one(db).await.unwrap().unwrap();
-    let mut model = current.into_active_model();
-    model.profile_picture_path = Set(Some(relative_path.clone()));
-    model.update(db).await.unwrap();
+    match UserService::update(
+        UpdateUser {
+            id: claims.sub,
+            username: None,
+            email: None,
+            password: None,
+            admin: None,
+            profile_picture_path: Some(relative_path.clone()),
+        }
+    ).await {
+        Ok(_) => {}
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ProfilePictureResponse>::error(format!("Database error: {}", e))),
+            );
+        }
+    }
 
     let response = ProfilePictureResponse {
         profile_picture_path: relative_path,
@@ -832,8 +862,6 @@ pub async fn change_password(
     AuthUser(claims): AuthUser,
     Json(req): Json<ChangePasswordRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -842,7 +870,7 @@ pub async fn change_password(
         );
     }
 
-    let user = match user::Entity::find_by_id(claims.sub).one(db).await {
+    let user = match UserService::find_by_id(claims.sub).await {
         Ok(Some(user)) => user,
         Ok(None) => {
             return (
@@ -864,11 +892,17 @@ pub async fn change_password(
             Json(ApiResponse::<()>::error("Current password is incorrect")),
         );
     }
-
-    let mut active_user = user.into_active_model();
-    active_user.password_hash = Set(UserService::hash_password(&req.new_password));
     
-    match active_user.update(db).await {
+    match UserService::update(
+        UpdateUser {
+            id: claims.sub,
+            username: None,
+            email: None,
+            password: Some(req.new_password),
+            admin: None,
+            profile_picture_path: None,
+        }
+    ).await {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::success((), "Password changed successfully.")),
