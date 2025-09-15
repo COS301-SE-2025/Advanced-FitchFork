@@ -2,7 +2,7 @@ use crate::service::{Service, AppError, ToActiveModel};
 use crate::assignment_task::AssignmentTaskService;
 use crate::assignment_file::AssignmentFileService;
 use db::{
-    models::assignment::{Entity, Column, ActiveModel, AssignmentType, Status, ReadinessReport},
+    models::assignment::{Entity, Column, ActiveModel, ReadinessReport},
     models::assignment_file::FileType,
     repository::Repository,
 };
@@ -13,6 +13,8 @@ use std::future::Future;
 use std::pin::Pin;
 
 pub use db::models::assignment::Model as Assignment;
+pub use db::models::assignment::AssignmentType;
+pub use db::models::assignment::Status;
 
 #[derive(Debug, Clone)]
 pub struct CreateAssignment {
@@ -20,7 +22,7 @@ pub struct CreateAssignment {
     pub module_id: i64,
     pub name: String,
     pub description: Option<String>,
-    pub assignment_type: String,
+    pub assignment_type: AssignmentType,
     pub available_from: DateTime<Utc>,
     pub due_date: DateTime<Utc>,
 }
@@ -30,7 +32,8 @@ pub struct UpdateAssignment {
     pub id: i64,
     pub name: Option<String>,
     pub description: Option<String>,
-    pub assignment_type: Option<String>,
+    pub assignment_type: Option<AssignmentType>,
+    pub status: Option<Status>,
     pub available_from: Option<DateTime<Utc>>,
     pub due_date: Option<DateTime<Utc>>,
 }
@@ -43,7 +46,7 @@ impl ToActiveModel<Entity> for CreateAssignment {
             module_id: Set(self.module_id),
             name: Set(self.name),
             description: Set(self.description.map(|d| d)),
-            assignment_type: Set(self.assignment_type.trim().parse::<AssignmentType>().map_err(|e| DbErr::Custom(format!("Invalid assignment type '{}': {}", self.assignment_type, e)))?),
+            assignment_type: Set(self.assignment_type),
             status: Set(Status::Setup),
             available_from: Set(self.available_from),
             due_date: Set(self.due_date),
@@ -86,7 +89,11 @@ impl ToActiveModel<Entity> for UpdateAssignment {
         }
 
         if let Some(assignment_type) = self.assignment_type {
-            active.assignment_type = Set(assignment_type.trim().parse::<AssignmentType>().map_err(|e| DbErr::Custom(format!("Invalid assignment type '{}': {}", assignment_type, e)))?);
+            active.assignment_type = Set(assignment_type);
+        }
+
+        if let Some(status) = self.status {
+            active.status = Set(status);
         }
 
         if let Some(available_from) = self.available_from {

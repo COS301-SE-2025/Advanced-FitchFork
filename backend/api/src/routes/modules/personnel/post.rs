@@ -9,6 +9,10 @@ use crate::{
     auth::AuthUser,
     response::{ApiResponse},
 };
+use util::filters::FilterParam;
+use services::{service::Service, user_module_role::{CreateUserModuleRole, UpdateUserModuleRole}};
+use services::user::UserService;
+use services::user_module_role::UserModuleRoleService;
 
 /// Request body for assigning or updating users in a module with a role
 #[derive(Debug, Deserialize)]
@@ -119,77 +123,85 @@ pub async fn assign_personnel(
             );
         }
 
-        // Check if current user is a lecturer for the module
-        let is_module_lecturer = RoleEntity::find()
-            .filter(
-                Condition::all()
-                    .add(RoleCol::UserId.eq(user_id))
-                    .add(RoleCol::ModuleId.eq(module_id))
-                    .add(RoleCol::Role.eq(Role::Lecturer)),
-            )
-            .one(db)
-            .await
-            .map(|res| res.is_some())
-            .unwrap_or(false);
-
-        if !is_module_lecturer {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(ApiResponse::<()>::error("Lecturer access required for this module")),
-            );
+        match UserModuleRoleService::find_one(
+            &vec![
+                FilterParam::eq("user_id", user_id),
+                FilterParam::eq("module_id", module_id),
+                FilterParam::eq("role", "lecturer".to_string()),
+            ],
+            &vec![],
+            None,
+        ).await {
+            Ok(Some(_)) => {}
+            Ok(None) | Err(_) => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(ApiResponse::<()>::error("Lecturer access required for this module")),
+                );
+            }
         }
     }
 
     // === PROCESS ASSIGNMENTS ===
     for &target_user_id in &body.user_ids {
-        let user_exists = UserEntity::find_by_id(target_user_id)
-            .one(db)
-            .await
-            .map(|opt| opt.is_some())
-            .unwrap_or(false);
-
-        if !user_exists {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", target_user_id))),
-            );
+        match UserService::find_by_id(target_user_id).await {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", target_user_id))),
+                );
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Database error while checking user existence")),
+                );
+            }
         }
 
-        let existing_role = RoleEntity::find()
-            .filter(
-                Condition::all()
-                    .add(RoleCol::UserId.eq(target_user_id))
-                    .add(RoleCol::ModuleId.eq(module_id)),
-            )
-            .one(db)
-            .await;
-
-        match existing_role {
+        match UserModuleRoleService::find_one(
+            &vec![
+                FilterParam::eq("user_id", target_user_id),
+                FilterParam::eq("module_id", module_id),
+            ],
+            &vec![],
+            None,
+        ).await {
             Ok(Some(existing)) => {
-                if existing.role != *assigning_role {
-                    let mut active = existing.into_active_model();
-                    active.role = Set(assigning_role.clone());
-
-                    if let Err(_) = active.update(db).await {
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(ApiResponse::<()>::error("Failed to update role")),
-                        );
+                if existing.role.to_string() != *assigning_role {
+                    match UserModuleRoleService::update(
+                        UpdateUserModuleRole {
+                            user_id: target_user_id,
+                            module_id: module_id,
+                            role: Some(assigning_role.clone()),
+                        }
+                    ).await {
+                        Ok(_) => {},
+                        Err(_) => {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(ApiResponse::<()>::error("Failed to update role")),
+                            );
+                        }
                     }
                 }
             }
             Ok(None) => {
-                let new_role = RoleActiveModel {
-                    user_id: Set(target_user_id),
-                    module_id: Set(module_id),
-                    role: Set(assigning_role.clone()),
-                };
-
-                if let Err(_) = new_role.insert(db).await {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<()>::error("Failed to assign role")),
-                    );
+                match UserModuleRoleService::create(
+                    CreateUserModuleRole {
+                        user_id: target_user_id,
+                        module_id: module_id,
+                        role: assigning_role.clone(),
+                    }
+                ).await {
+                    Ok(_) => {},
+                    Err(_) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(ApiResponse::<()>::error("Failed to assign role")),
+                        );
+                    }
                 }
             }
             Err(_) => {

@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, Query, Extension},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     Json,
 };
 use crate::{
@@ -9,8 +9,11 @@ use crate::{
     response::{ApiResponse},
     routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleResponse},
 };
-
 use serde::{Deserialize, Serialize};
+use util::filters::{FilterParam, QueryParam};
+use services::service::Service;
+use services::user::{UserService, User};
+use services::user_module_role::UserModuleRoleService;
 
 #[derive(Debug, serde::Deserialize)]
 pub struct RoleParam {
@@ -87,110 +90,121 @@ pub async fn get_personnel(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Query(role_param): Query<RoleParam>,
     Query(params): Query<RoleQuery>,
-) -> Response {
+) -> impl IntoResponse {
     let user_id = claims.sub;
     let requested_role = &role_param.role;
 
-    // === Permission Enforcement ===
+    if !["lecturer", "tutor", "assistant_lecturer", "student"].contains(&requested_role.as_str()) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<PaginatedRoleResponse>::error("Invalid role specified")),
+        );
+    }
+
     if !claims.admin {
-        if requested_role == &Role::Lecturer {
+        if requested_role == "lecturer" {
             return (
                 StatusCode::FORBIDDEN,
-                Json(ApiResponse::<()>::error("Only admins can view lecturers")),
-            )
-            .into_response();
+                Json(ApiResponse::<PaginatedRoleResponse>::error(
+                    "Only admins can view lecturers",
+                )),
+            );
         }
 
-        // For other roles, user must be part of the module
-        let is_member = user_module_role::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(RoleCol::UserId.eq(user_id))
-                    .add(RoleCol::ModuleId.eq(module_id)),
-            )
-            .one(db)
-            .await
-            .map(|opt| opt.is_some())
-            .unwrap_or(false);
-
-        if !is_member {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(ApiResponse::<()>::error("You do not have permission to view this module's users")),
-            )
-            .into_response();
+        match UserModuleRoleService::find_one(
+            &vec![
+                FilterParam::eq("user_id", user_id),
+                FilterParam::eq("module_id", module_id),
+            ],
+            &vec![],
+            None,
+        ).await {
+            Ok(is_member) => {
+                if is_member.is_none() {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(ApiResponse::<PaginatedRoleResponse>::error(
+                            "You do not have permission to view this module's users",
+                        )),
+                    );
+                }
+            }
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<PaginatedRoleResponse>::error(
+                        format!("Database error: {}", e),
+                    )),
+                );
+            }
         }
     }
 
-
-    // === Data Query ===
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
+    let sort = params.sort.clone();
 
-    let mut condition = Condition::all()
-        .add(RoleCol::ModuleId.eq(module_id))
-        .add(RoleCol::Role.eq(requested_role.clone()));
+    let mut filters = vec![
+        FilterParam::eq("module_id", module_id),
+        FilterParam::eq("role", requested_role.clone()),
+    ];
 
-    if let Some(ref q) = params.query {
-        let q_lower = q.to_lowercase();
-        condition = condition.add(
-            Condition::any()
-                .add(user::Column::Email.contains(&q_lower))
-                .add(user::Column::Username.contains(&q_lower)),
-        );
+    let mut queries = Vec::new();
+
+    if let Some(query_text) = params.query {
+        queries.push(QueryParam::new(
+            vec!["email".to_string(), "username".to_string()],
+            query_text,
+        ));
     } else {
-        if let Some(ref email) = params.email {
-            condition = condition.add(user::Column::Email.contains(email));
+        if let Some(email) = params.email {
+            filters.push(FilterParam::like("email", email));
         }
-        if let Some(ref sn) = params.username {
-            condition = condition.add(user::Column::Username.contains(sn));
+        if let Some(username) = params.username {
+            filters.push(FilterParam::like("username", username));
         }
     }
 
-    let mut query = user::Entity::find()
-        .join(
-            JoinType::InnerJoin,
-            user::Entity::belongs_to(user_module_role::Entity)
-                .from(user::Column::Id)
-                .to(RoleCol::UserId)
-                .into(),
-        )
-        .filter(condition);
+    let (users, total) = match UserService::filter(
+        &filters,
+        &queries,
+        page,
+        per_page,
+        sort,
+    ).await {
+        Ok(result) => result,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<PaginatedRoleResponse>::error(
+                    format!("Database error: {}", e),
+                )),
+            );
+        }
+    };
 
-    match params.sort.as_deref() {
-        Some("-email") => query = query.order_by_desc(user::Column::Email),
-        Some("email") => query = query.order_by_asc(user::Column::Email),
-        Some("-username") => query = query.order_by_desc(user::Column::Username),
-        Some("username") => query = query.order_by_asc(user::Column::Username),
-        Some("-created_at") => query = query.order_by_desc(user::Column::CreatedAt),
-        Some("created_at") => query = query.order_by_asc(user::Column::CreatedAt),
-        _ => query = query.order_by_asc(user::Column::Id),
-    }
+    let user_responses: Vec<RoleResponse> = users.into_iter().map(RoleResponse::from).collect();
 
-    let paginator = query.paginate(db, per_page.into());
-    let total = paginator.num_items().await.unwrap_or(0);
-    let users = paginator.fetch_page((page - 1) as u64).await.unwrap_or_default();
-    let result = users.into_iter().map(RoleResponse::from).collect();
+    let response = PaginatedRoleResponse {
+        users: user_responses,
+        page,
+        per_page,
+        total,
+    };
 
     (
         StatusCode::OK,
         Json(ApiResponse::success(
-            PaginatedRoleResponse {
-                users: result,
-                page,
-                per_page,
-                total,
-            },
+            response,
             "Personnel retrieved successfully",
         )),
     )
-        .into_response()
 }
 
 #[derive(Debug, Deserialize)]
 pub struct EligibleUserQuery {
-    pub page: Option<u32>,
-    pub per_page: Option<u32>,
+    pub page: Option<u64>,
+    pub per_page: Option<u64>,
     pub sort: Option<String>,
     pub query: Option<String>,
     pub email: Option<String>,
@@ -205,8 +219,8 @@ pub struct MinimalUserResponse {
     pub admin: bool,
 }
 
-impl From<UserModel> for MinimalUserResponse {
-    fn from(user: UserModel) -> Self {
+impl From<User> for MinimalUserResponse {
+    fn from(user: User) -> Self {
         Self {
             id: user.id,
             username: user.username,
@@ -219,8 +233,8 @@ impl From<UserModel> for MinimalUserResponse {
 #[derive(Debug, Serialize)]
 pub struct EligibleUserListResponse {
     pub users: Vec<MinimalUserResponse>,
-    pub page: u32,
-    pub per_page: u32,
+    pub page: u64,
+    pub per_page: u64,
     pub total: u64,
 }
 
@@ -261,76 +275,82 @@ pub struct EligibleUserListResponse {
 pub async fn get_eligible_users_for_module(
     Path(module_id): Path<i64>,
     Query(params): Query<EligibleUserQuery>,
-) -> Response {
-    let db = db::get_connection().await;
-
-    let assigned_ids: Vec<i64> = user_module_role::Entity::find()
-        .select_only()
-        .column(user_module_role::Column::UserId)
-        .filter(user_module_role::Column::ModuleId.eq(module_id))
-        .into_tuple::<i64>()
-        .all(db)
-        .await
-        .unwrap_or_default();
-
+) -> impl IntoResponse {
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
+    let sort = params.sort.clone();
 
-    let mut condition = Condition::all();
+    let assigned_ids = match UserModuleRoleService::find_all(
+        &vec![
+            FilterParam::eq("module_id", module_id),
+        ],
+        &vec![],
+        None,
+    ).await {
+        Ok(models) => models.into_iter().map(|m| m.user_id).collect::<Vec<i64>>(),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<EligibleUserListResponse>::error(
+                    format!("Database error: {}", e),
+                )),
+            );
+        }
+    };
+
+    let mut filters = Vec::new();
+    let mut queries = Vec::new();
+
     if !assigned_ids.is_empty() {
-        condition = condition.add(user::Column::Id.is_not_in(assigned_ids));
+        filters.push(FilterParam::ne("id", assigned_ids));
     }
 
-    if let Some(ref q) = params.query {
-        let pattern = format!("%{}%", q.to_lowercase());
-        condition = condition.add(
-            Condition::any()
-                .add(user::Column::Email.contains(&pattern))
-                .add(user::Column::Username.contains(&pattern)),
-        );
+    if let Some(query_text) = params.query {
+        queries.push(QueryParam::new(
+            vec!["email".to_string(), "username".to_string()],
+            query_text,
+        ));
     } else {
-        if let Some(ref email) = params.email {
-            condition = condition.add(user::Column::Email.contains(email));
+        if let Some(email) = params.email {
+            filters.push(FilterParam::like("email", email));
         }
-        if let Some(ref username) = params.username {
-            condition = condition.add(user::Column::Username.contains(username));
+        if let Some(username) = params.username {
+            filters.push(FilterParam::like("username", username));
         }
     }
 
-    let mut query = user::Entity::find().filter(condition);
-    if let Some(sort) = &params.sort {
-        let (field, dir) = if sort.starts_with('-') {
-            (&sort[1..], Order::Desc)
-        } else {
-            (sort.as_str(), Order::Asc)
-        };
-
-        match field {
-            "email" => query = query.order_by(user::Column::Email, dir),
-            "username" => query = query.order_by(user::Column::Username, dir),
-            "created_at" => query = query.order_by(user::Column::CreatedAt, dir),
-            _ => {}
+    let (users, total) = match UserService::filter(
+        &filters,
+        &queries,
+        page,
+        per_page,
+        sort,
+    ).await {
+        Ok(result) => result,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<EligibleUserListResponse>::error(
+                    format!("Database error: {}", e),
+                )),
+            );
         }
-    } else {
-        query = query.order_by(user::Column::Id, Order::Asc);
-    }
+    };
 
-    let paginator = query.paginate(db, per_page.into());
-    let total = paginator.num_items().await.unwrap_or(0);
-    let raw_users = paginator.fetch_page((page - 1).into()).await.unwrap_or_default();
-    let users = raw_users.into_iter().map(MinimalUserResponse::from).collect();
+    let user_responses: Vec<MinimalUserResponse> = users.into_iter().map(MinimalUserResponse::from).collect();
+
+    let response = EligibleUserListResponse {
+        users: user_responses,
+        page,
+        per_page,
+        total,
+    };
 
     (
         StatusCode::OK,
         Json(ApiResponse::success(
-            EligibleUserListResponse {
-                users,
-                page,
-                per_page,
-                total,
-            },
+            response,
             "Eligible users fetched",
         )),
     )
-        .into_response()
 }

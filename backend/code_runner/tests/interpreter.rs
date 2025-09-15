@@ -3,7 +3,7 @@ use code_runner::run_interpreter;
 use services::service::Service;
 use services::user::{UserService, CreateUser};
 use services::module::{ModuleService, CreateModule};
-use services::assignment::{AssignmentService, CreateAssignment};
+use services::assignment::{AssignmentService, AssignmentType, CreateAssignment};
 use services::assignment_task::{AssignmentTaskService, CreateAssignmentTask};
 use services::assignment_submission::{AssignmentSubmissionService, AssignmentSubmission, CreateAssignmentSubmission};
 use services::assignment_interpreter::{AssignmentInterpreterService, CreateAssignmentInterpreter};
@@ -58,7 +58,7 @@ async fn seed_assignment(assignment_id: i64, module_id: i64) {
                 module_id,
                 name: "Special Assignment".to_string(),
                 description: Some("Special assignment for testing".to_string()),
-                assignment_type: "assignment".to_string(),
+                assignment_type: AssignmentType::Assignment,
                 available_from: Utc::now(),
                 due_date: Utc::now(),
             }

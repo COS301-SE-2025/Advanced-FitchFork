@@ -194,8 +194,6 @@ impl FilterUtils {
 pub struct QueryUtils;
 
 impl QueryUtils {
-    /// Apply a single query parameter to a condition
-    /// Creates OR conditions across multiple columns for the same search term
     pub fn apply_query<C>(
         condition: Condition, 
         query_param: &QueryParam,
@@ -212,7 +210,6 @@ impl QueryUtils {
             return Err(DbErr::Custom("Query parameter must specify at least one column".to_string()));
         }
 
-        // Create OR condition for searching across multiple columns
         let mut or_condition = Condition::any();
         let pattern = format!("%{}%", query_param.query.to_lowercase());
 
@@ -226,8 +223,6 @@ impl QueryUtils {
         Ok(condition.add(or_condition))
     }
 
-    /// Apply multiple query parameters 
-    /// Each QueryParam creates its own OR condition, and they're combined with AND
     pub fn apply_all_queries<C>(
         query_params: &[QueryParam],
         column_resolver: impl Fn(&str) -> Result<C, DbErr>

@@ -13,12 +13,12 @@
 //! - Direct modification of `status` is not allowed through edit/bulk endpoints; status updates are automatic.
 //! - All date fields must be in ISO 8601 format (RFC 3339).
 
-use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use chrono::{DateTime, Utc};
 use crate::response::ApiResponse;
-use db::models::assignment::{self, AssignmentType, Status};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, IntoActiveModel, DbErr};
 use super::common::{AssignmentRequest, AssignmentResponse, BulkUpdateRequest, BulkUpdateResult};
+use services::service::Service;
+use services::assignment::{AssignmentService, AssignmentType, Status, UpdateAssignment};
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}
 ///
@@ -79,8 +79,6 @@ pub async fn edit_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
         .map(|dt| dt.with_timezone(&Utc))
     {
@@ -121,18 +119,17 @@ pub async fn edit_assignment(
         }
     };
 
-    match assignment::Model::edit(
-        db,
-        assignment_id,
-        module_id,
-        &req.name,
-        req.description.as_deref(),
-        assignment_type,
-        available_from,
-        due_date,
-    )
-    .await
-    {
+    match AssignmentService::update(
+        UpdateAssignment {
+            id: assignment_id,
+            name: Some(req.name),
+            description: req.description,
+            assignment_type: Some(assignment_type),
+            status: None,
+            available_from: Some(available_from),
+            due_date: Some(due_date),
+        }
+    ).await {
         Ok(updated) => {
             let response = AssignmentResponse::from(updated);
             (
@@ -143,14 +140,6 @@ pub async fn edit_assignment(
                 )),
             )
         }
-        Err(DbErr::RecordNotFound(_)) => (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<AssignmentResponse>::error("Assignment not found")),
-        ),
-        Err(DbErr::Custom(msg)) => (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<AssignmentResponse>::error(&msg)),
-        ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<AssignmentResponse>::error(
@@ -220,11 +209,9 @@ pub async fn edit_assignment(
 /// }
 /// ```
 pub async fn bulk_update_assignments(
-    Path(module_id): Path<i64>,
+    Path(_): Path<i64>,
     Json(req): Json<BulkUpdateRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if req.assignment_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
@@ -236,47 +223,31 @@ pub async fn bulk_update_assignments(
     let mut failed = Vec::new();
 
     for id in &req.assignment_ids {
-        let res = assignment::Entity::find()
-            .filter(assignment::Column::Id.eq(*id))
-            .filter(assignment::Column::ModuleId.eq(module_id))
-            .one(db)
-            .await;
-
-        match res {
-            Ok(Some(model)) => {
-                let mut active = model.into_active_model();
-
-                if let Some(available_from) = &req.available_from {
-                    if let Ok(dt) = DateTime::parse_from_rfc3339(available_from) {
-                        active.available_from = Set(dt.with_timezone(&Utc));
-                    }
-                }
-
-                if let Some(due_date) = &req.due_date {
-                    if let Ok(dt) = DateTime::parse_from_rfc3339(due_date) {
-                        active.due_date = Set(dt.with_timezone(&Utc));
-                    }
-                }
-
-                active.updated_at = Set(Utc::now());
-
-                if active.update(db).await.is_ok() {
-                    updated += 1;
-                } else {
-                    failed.push(crate::routes::modules::assignments::common::FailedUpdate {
-                        id: *id,
-                        error: "Failed to save updated assignment".into(),
-                    });
-                }
+        match AssignmentService::update(
+            UpdateAssignment {
+                id: *id,
+                name: None,
+                description: None,
+                assignment_type: None,
+                status: None,
+                available_from: req.available_from
+                    .as_ref()
+                    .and_then(|af| DateTime::parse_from_rfc3339(af).ok())
+                    .map(|dt| dt.with_timezone(&Utc)),
+                due_date: req.due_date
+                    .as_ref()
+                    .and_then(|dd| DateTime::parse_from_rfc3339(dd).ok())
+                    .map(|dt| dt.with_timezone(&Utc)),
+            }).await {
+            Ok(_) => {
+                updated += 1;
             }
-            Ok(None) => failed.push(crate::routes::modules::assignments::common::FailedUpdate {
-                id: *id,
-                error: "Assignment not found".into(),
-            }),
-            Err(e) => failed.push(crate::routes::modules::assignments::common::FailedUpdate {
-                id: *id,
-                error: e.to_string(),
-            }),
+            Err(e) => {
+                failed.push(crate::routes::modules::assignments::common::FailedUpdate {
+                    id: *id,
+                    error: e.to_string(),
+                });
+            }
         }
     }
 
@@ -296,17 +267,9 @@ pub async fn bulk_update_assignments(
 ///
 /// Only works if current status is `Ready`, `Closed`, or `Archived`.
 pub async fn open_assignment(
-    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    Path((_, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
-    let assignment = assignment::Entity::find()
-        .filter(assignment::Column::Id.eq(assignment_id))
-        .filter(assignment::Column::ModuleId.eq(module_id))
-        .one(db)
-        .await;
-
-    match assignment {
+    match AssignmentService::find_by_id(assignment_id).await {
         Ok(Some(model)) => {
             if !matches!(
                 model.status,
@@ -320,11 +283,17 @@ pub async fn open_assignment(
                 );
             }
 
-            let mut active = model.into_active_model();
-            active.status = Set(Status::Open);
-            active.updated_at = Set(Utc::now());
-
-            if active.update(db).await.is_ok() {
+            if AssignmentService::update(
+                UpdateAssignment {
+                    id: assignment_id,
+                    name: None,
+                    description: None,
+                    assignment_type: None,
+                    status: Some(Status::Open),
+                    available_from: None,
+                    due_date: None,
+                }
+            ).await.is_ok() {
                 (
                     StatusCode::OK,
                     Json(ApiResponse::<()>::success(
@@ -359,16 +328,9 @@ pub async fn open_assignment(
 ///
 /// Only works if current status is `Open`.
 pub async fn close_assignment(
-    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    Path((_, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-    let assignment = assignment::Entity::find()
-        .filter(assignment::Column::Id.eq(assignment_id))
-        .filter(assignment::Column::ModuleId.eq(module_id))
-        .one(db)
-        .await;
-
-    match assignment {
+    match AssignmentService::find_by_id(assignment_id).await {
         Ok(Some(model)) => {
             if model.status != Status::Open {
                 return (
@@ -379,11 +341,17 @@ pub async fn close_assignment(
                 );
             }
 
-            let mut active = model.into_active_model();
-            active.status = Set(Status::Closed);
-            active.updated_at = Set(Utc::now());
-
-            if active.update(db).await.is_ok() {
+            if AssignmentService::update(
+                UpdateAssignment {
+                    id: assignment_id,
+                    name: None,
+                    description: None,
+                    assignment_type: None,
+                    status: Some(Status::Closed),
+                    available_from: None,
+                    due_date: None,
+                }
+            ).await.is_ok() {
                 (
                     StatusCode::OK,
                     Json(ApiResponse::<()>::success(

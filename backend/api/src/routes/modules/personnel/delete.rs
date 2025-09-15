@@ -9,6 +9,10 @@ use crate::{
     auth::AuthUser,
     response::ApiResponse,
 };
+use util::filters::FilterParam;
+use services::service::Service;
+use services::user::UserService;
+use services::user_module_role::UserModuleRoleService;
 
 #[derive(Debug, Deserialize)]
 pub struct RemovePersonnelRequest {
@@ -118,31 +122,29 @@ pub async fn remove_personnel(
     // === Permission Check ===
     if !claims.admin {
         // Disallow lecturers from removing other lecturers
-        if *role_to_remove == Role::Lecturer {
+        if *role_to_remove == "lecturer" {
             return (
                 StatusCode::FORBIDDEN,
                 Json(ApiResponse::<()>::error("Only admins can remove lecturers")),
             );
         }
 
-        // Check if requester is a lecturer for this module
-        let is_lecturer = RoleEntity::find()
-            .filter(
-                Condition::all()
-                    .add(RoleCol::UserId.eq(requester_id))
-                    .add(RoleCol::ModuleId.eq(module_id))
-                    .add(RoleCol::Role.eq(Role::Lecturer)),
-            )
-            .one(db)
-            .await
-            .map(|res| res.is_some())
-            .unwrap_or(false);
-
-        if !is_lecturer {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(ApiResponse::<()>::error("Lecturer access required for this module")),
-            );
+        match UserModuleRoleService::find_one(
+            &vec![
+                FilterParam::eq("user_id", requester_id),
+                FilterParam::eq("module_id", module_id),
+                FilterParam::eq("role", "lecturer".to_string()),
+            ],
+            &vec![],
+            None,
+        ).await {
+            Ok(Some(_)) => {},
+            Ok(None) | Err(_) => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(ApiResponse::<()>::error("Lecturer access required for this module")),
+                );
+            }
         }
     }
 
@@ -150,31 +152,31 @@ pub async fn remove_personnel(
     let mut not_assigned = Vec::new();
 
     for &target_user_id in &body.user_ids {
-        let user_exists = UserEntity::find_by_id(target_user_id)
-            .one(db)
-            .await
-            .map(|opt| opt.is_some())
-            .unwrap_or(false);
-
-        if !user_exists {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", target_user_id))),
-            );
+        match UserService::find_by_id(target_user_id).await {
+            Ok(Some(_)) => {},
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", target_user_id))),
+                );
+            },
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Failed to query user existence")),
+                );
+            }
         }
 
-        let delete_result = RoleEntity::delete_many()
-            .filter(
-                Condition::all()
-                    .add(RoleCol::UserId.eq(target_user_id))
-                    .add(RoleCol::ModuleId.eq(module_id))
-                    .add(RoleCol::Role.eq(role_to_remove.clone())),
-            )
-            .exec(db)
-            .await;
-
-        match delete_result {
-            Ok(res) if res.rows_affected == 0 => not_assigned.push(target_user_id),
+        match UserModuleRoleService::delete(
+            &vec![
+                FilterParam::eq("user_id", target_user_id),
+                FilterParam::eq("module_id", module_id),
+                FilterParam::eq("role", role_to_remove.clone()),
+            ],
+            &vec![],
+        ).await {
+            Ok(res) if res == 0 => not_assigned.push(target_user_id),
             Ok(_) => {}
             Err(_) => {
                 return (

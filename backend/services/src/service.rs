@@ -8,7 +8,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error("Database error: {0}")]
+    #[error("{0}")]
     Database(#[from] DbErr),
 
     #[error("Unexpected database error")]

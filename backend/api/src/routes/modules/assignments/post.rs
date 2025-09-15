@@ -21,7 +21,7 @@ use chrono::{DateTime, Utc};
 use crate::response::ApiResponse;
 use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
 use services::service::Service;
-use services::assignment::{AssignmentService, CreateAssignment};
+use services::assignment::{AssignmentService, AssignmentType, CreateAssignment};
 
 /// POST /api/modules/{module_id}/assignments
 ///
@@ -105,13 +105,23 @@ pub async fn create_assignment(
         }
     };
 
+    let assignment_type = match req.assignment_type.parse::<AssignmentType>() {
+        Ok(assignment_type) => assignment_type,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<AssignmentResponse>::error("assignment_type must be 'assignment' or 'practical'")),
+            );
+        }
+    };
+
     match AssignmentService::create(
         CreateAssignment {
             id: None,
             module_id,
             name: req.name,
             description: req.description,
-            assignment_type: req.assignment_type,
+            assignment_type,
             available_from,
             due_date,
         }
@@ -126,21 +136,12 @@ pub async fn create_assignment(
                 )),
             )
         }
-        Err(DbErr::Custom(msg)) => (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<AssignmentResponse>::error(&msg)),
-        ),
-        Err(DbErr::RecordNotInserted) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<AssignmentResponse>::error(
-                "Assignment could not be inserted",
-            )),
-        ),
         Err(e) => {
-            eprintln!("DB error: {:?}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<AssignmentResponse>::error("Database error")),
+                Json(ApiResponse::<AssignmentResponse>::error(
+                    format!("Database error: {}", e),
+                )),
             )
         }
     }

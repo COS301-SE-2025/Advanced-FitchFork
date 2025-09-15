@@ -1,7 +1,7 @@
 use crate::seed::Seeder;
 use services::service::{Service, AppError};
 use services::module::ModuleService;
-use services::assignment::{AssignmentService, CreateAssignment};
+use services::assignment::{AssignmentService, AssignmentType, CreateAssignment};
 use chrono::Utc;
 use std::pin::Pin;
 
@@ -28,7 +28,7 @@ impl Seeder for AssignmentSeeder {
                             module_id: m.id,
                             name: format!("Assignment {i}"),
                             description: Some("Auto seeded".to_string()),
-                            assignment_type: "practical".to_string(),
+                            assignment_type: AssignmentType::Practical,
                             available_from: now,
                             due_date: now,
                         }
@@ -42,7 +42,7 @@ impl Seeder for AssignmentSeeder {
                     module_id: 9999,
                     name: format!("Special Assignment"),
                     description: Some("Used for test zip execution".to_string()),
-                    assignment_type: "practical".to_string(),
+                    assignment_type: AssignmentType::Practical,
                     available_from: now,
                     due_date: now + chrono::Duration::days(7),
                 }
@@ -54,7 +54,7 @@ impl Seeder for AssignmentSeeder {
                     module_id: 9998,
                     name: format!("Special Assignment"),
                     description: Some("Used for test zip execution".to_string()),
-                    assignment_type: "practical".to_string(),
+                    assignment_type: AssignmentType::Practical,
                     available_from: now,
                     due_date: now + chrono::Duration::days(7),
                 }
@@ -66,7 +66,7 @@ impl Seeder for AssignmentSeeder {
                     module_id: 10003,
                     name: format!("Plagiarism Assignment"),
                     description: Some("Assignment used to show plagiarism cases".to_string()),
-                    assignment_type: "practical".to_string(),
+                    assignment_type: AssignmentType::Practical,
                     available_from: now,
                     due_date: now + chrono::Duration::days(7),
                 }
@@ -78,7 +78,7 @@ impl Seeder for AssignmentSeeder {
                     module_id: 10004,
                     name: format!("GATLAM Assignment"),
                     description: Some("Assignment used to show GATLAM".to_string()),
-                    assignment_type: "practical".to_string(),
+                    assignment_type: AssignmentType::Practical,
                     available_from: now,
                     due_date: now + chrono::Duration::days(7),
                 }
