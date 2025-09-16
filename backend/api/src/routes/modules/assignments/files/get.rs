@@ -5,17 +5,11 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
-use sea_orm::{
-    ColumnTrait,
-    EntityTrait,
-    QueryFilter,
-};
 use crate::response::ApiResponse;
-use db::models::assignment_file::{
-    Column as FileColumn,
-    Entity as FileEntity,
-};
 use crate::routes::modules::assignments::common::File;
+use util::filters::FilterParam;
+use services::service::Service;
+use services::assignment_file::AssignmentFileService;
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/files/{file_id}
 ///
@@ -46,15 +40,26 @@ use crate::routes::modules::assignments::common::File;
 /// ```
 ///
 pub async fn download_file(
-    Path((_module_id, assignment_id, file_id)): Path<(i64, i64, i64)>,
+    Path((_, _, file_id)): Path<(i64, i64, i64)>,
 ) -> Response {
-    let db = db::get_connection().await;
-
-    let file = FileEntity::find()
-        .filter(FileColumn::Id.eq(file_id as i32))
-        .filter(FileColumn::AssignmentId.eq(assignment_id as i32))
-        .one(db)
-        .await.unwrap().unwrap();
+    let file = match AssignmentFileService::find_by_id(file_id).await {
+        Ok(Some(f)) => f,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("File not found")),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            eprintln!("DB error fetching file: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error")),
+            )
+                .into_response();
+        }
+    };
 
     let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".to_string());
     let fs_path = PathBuf::from(storage_root).join(&file.path);
@@ -149,13 +154,13 @@ pub async fn download_file(
 pub async fn list_files(
     Path((_, assignment_id)): Path<(i64, i64)>
 ) -> Response {
-    let db = db::get_connection().await;
-
-    match FileEntity::find()
-        .filter(FileColumn::AssignmentId.eq(assignment_id as i32))
-        .all(db)
-        .await
-    {
+    match AssignmentFileService::find_all(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(files) => {
             let file_list: Vec<File> = files
                 .into_iter()

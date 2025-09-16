@@ -5,11 +5,9 @@ use axum::{
     Json,
 };
 use serde::Serialize;
-use db::models::assignment_file::{
-    FileType,
-    Model as FileModel,
-};
 use crate::response::ApiResponse;
+use services::service::Service;
+use services::assignment_file::{AssignmentFileService, FileType, CreateAssignmentFile};
 
 #[derive(Debug, Serialize)]
 pub struct UploadedFileMetadata {
@@ -90,8 +88,6 @@ pub async fn upload_files(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     let mut file_type: Option<FileType> = None;
     let mut file_name: Option<String> = None;
     let mut file_bytes: Option<Vec<u8>> = None;
@@ -174,16 +170,15 @@ pub async fn upload_files(
         }
     };
 
-    match FileModel::save_file(
-        db,
-        assignment_id,
-        module_id,
-        file_type.clone(),
-        &file_name,
-        &file_bytes,
-    )
-    .await
-    {
+    match AssignmentFileService::create(
+        CreateAssignmentFile {
+            assignment_id,
+            module_id,
+            file_type: file_type.to_string(),
+            filename: file_name,
+            bytes: file_bytes,
+        }
+    ).await {
         Ok(saved) => {
             let metadata = UploadedFileMetadata {
                 id: saved.id,

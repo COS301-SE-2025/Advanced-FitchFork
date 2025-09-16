@@ -1,6 +1,6 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::assignment_file::{Entity, Column, ActiveModel, FileType, Model},
+    models::assignment_file::{Entity, Column, ActiveModel, Model},
     repository::Repository,
 };
 use util::filters::FilterParam;
@@ -10,6 +10,7 @@ use std::{env, fs, path::PathBuf};
 use chrono::{Utc, DateTime};
 
 pub use db::models::assignment_file::Model as AssignmentFile;
+pub use db::models::assignment_file::FileType;
 
 #[derive(Debug, Clone)]
 pub struct CreateAssignmentFile {

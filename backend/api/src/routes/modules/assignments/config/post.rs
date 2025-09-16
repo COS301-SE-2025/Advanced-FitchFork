@@ -6,8 +6,8 @@ use axum::{
 use serde_json::Value;
 use crate::response::ApiResponse;
 use util::execution_config::ExecutionConfig;
-use services::{assignment_file::CreateAssignmentFile, service::Service};
-use services::assignment_file::AssignmentFileService;
+use services::service::Service;
+use services::assignment_file::{AssignmentFileService, CreateAssignmentFile};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
