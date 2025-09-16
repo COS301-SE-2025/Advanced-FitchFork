@@ -14,17 +14,13 @@
 //! - The endpoint validates that the submission belongs to the target assignment.
 
 use axum::{
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-
-use util::state::AppState;
 use crate::response::ApiResponse;
-use db::models::assignment_submission as submission;
 
 #[derive(Debug, Deserialize)]
 pub struct SetIgnoredReq {
@@ -76,12 +72,9 @@ struct SetIgnoredData {
 /// }
 /// ```
 pub async fn set_submission_ignored(
-    State(app_state): State<AppState>,
     Path((_module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
     Json(req): Json<SetIgnoredReq>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
     // Validate submission belongs to the assignment
     let sub = match submission::Entity::find()
         .filter(submission::Column::Id.eq(submission_id))

@@ -2,15 +2,12 @@ use crate::response::ApiResponse;
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
 };
 use chrono::Utc;
-use db::models::assignment_task::{ActiveModel, Column, Entity};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
-use util::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateTaskRequest {
@@ -138,8 +135,6 @@ pub async fn create_task(
     Path((_, assignment_id)): Path<(i64, i64)>,
     Json(payload): Json<CreateTaskRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     // Validation: task_number > 0, name non-empty, command non-empty
     if payload.task_number <= 0
         || payload.name.trim().is_empty()

@@ -5,13 +5,11 @@
 use crate::response::ApiResponse;
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
 use axum::{
-    extract::{Json, Path, State},
+    extract::{Json, Path},
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::assignment_task;
 use serde::Deserialize;
-use util::state::AppState;
 
 /// The request payload for editing a task's command.
 #[derive(Deserialize)]
@@ -162,8 +160,6 @@ pub async fn edit_task(
     Path((_, _, task_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<EditTaskRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if payload.command.trim().is_empty() || payload.name.trim().is_empty() {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,

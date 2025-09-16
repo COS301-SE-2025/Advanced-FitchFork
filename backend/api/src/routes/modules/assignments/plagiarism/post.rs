@@ -1,24 +1,20 @@
 use crate::{response::ApiResponse, services::moss::MossService};
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
 };
 use chrono::Utc;
-use db::models::{
-    assignment_file,
-    assignment_submission::{self, Entity as SubmissionEntity},
-    plagiarism_case,
-    user::Entity as UserEntity,
-};
 use moss_parser::{ParseOptions, parse_moss};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use util::{
-    execution_config::{ExecutionConfig, execution_config::Language},
-    state::AppState,
-};
+use util::execution_config::{ExecutionConfig, execution_config::Language};
+use util::filters::FilterParam;
+use services::service::Service;
+use services::user::UserService;
+use services::assignment_submission::AssignmentSubmissionService;
+use services::assignment_file::AssignmentFileService;
+use services::plagiarism_case::{PlagiarismCaseService, CreatePlagiarismCase};
 
 #[derive(Serialize, Deserialize)]
 pub struct CreatePlagiarismCasePayload {
@@ -147,40 +143,57 @@ pub async fn create_plagiarism_case(
             .into_response();
     }
 
-    let submission1 = SubmissionEntity::find_by_id(payload.submission_id_1)
-        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
-        .one(db::get_connection().await)
-        .await
-        .unwrap_or(None);
+    match AssignmentSubmissionService::find_one(
+        &vec![
+            FilterParam::eq("id", payload.submission_id_1),
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        &vec![],
+        None,
+    ).await {
+        Ok(Some(sub)) => sub,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(
+                    "One or both submissions do not exist or belong to a different assignment"
+                        .to_string(),
+                )),
+            )
+                .into_response();
+        }
+    };
 
-    let submission2 = SubmissionEntity::find_by_id(payload.submission_id_2)
-        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
-        .one(db::get_connection().await)
-        .await
-        .unwrap_or(None);
+    match AssignmentSubmissionService::find_one(
+        &vec![
+            FilterParam::eq("id", payload.submission_id_2),
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        &vec![],
+        None,
+    ).await {
+        Ok(Some(sub)) => sub,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(
+                    "One or both submissions do not exist or belong to a different assignment"
+                        .to_string(),
+                )),
+            )
+                .into_response();
+        }
+    };
 
-    if submission1.is_none() || submission2.is_none() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error(
-                "One or both submissions do not exist or belong to a different assignment"
-                    .to_string(),
-            )),
-        )
-            .into_response();
-    }
-
-    let new_case = plagiarism_case::Model::create_case(
-        db::get_connection().await,
-        assignment_id,
-        payload.submission_id_1,
-        payload.submission_id_2,
-        &payload.description,
-        payload.similarity, // required f32
-    )
-    .await;
-
-    match new_case {
+    match PlagiarismCaseService::create(
+        CreatePlagiarismCase {
+            assignment_id,
+            submission_id_1: payload.submission_id_1,
+            submission_id_2: payload.submission_id_2,
+            description: payload.description,
+            similarity: payload.similarity,
+        }
+    ).await {
         Ok(case) => (
             StatusCode::CREATED,
             Json(ApiResponse::success(
@@ -209,7 +222,6 @@ pub async fn create_plagiarism_case(
     }
 }
 
-// somewhere in your types for this route
 #[derive(serde::Deserialize)]
 pub struct MossRequest {
     pub language: String,
@@ -262,7 +274,6 @@ pub struct MossRequest {
 /// - `similarity` is stored as an `f32` percent, clamped to **0.0–100.0**.
 /// - Newly created cases start in `"review"` status and can be managed via the plagiarism cases API/UI.
 pub async fn run_moss_check(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
     // 0) Load assignment config to determine language
@@ -277,46 +288,39 @@ pub async fn run_moss_check(
         Language::Java => "java",
     };
 
-    // 1) Collect latest submissions
-    let submissions = assignment_submission::Model::get_latest_submissions_for_assignment(
-        app_state.db(),
+    match AssignmentSubmissionService::get_latest_submissions_for_assignment(
         assignment_id,
-    )
-    .await;
-
-    match submissions {
+    ).await {
         Ok(submissions) => {
             let mut submission_files = Vec::new();
             for submission in &submissions {
-                let user = UserEntity::find_by_id(submission.user_id)
-                    .one(app_state.db())
-                    .await
-                    .map_err(|_| "Failed to fetch user")
-                    .unwrap();
+                let user = match UserService::find_by_id(submission.user_id).await {
+                    Ok(Some(u)) => Some(u),
+                    _ => None,
+                };
 
                 // Optional username helps attribution in MOSS rows.
                 let username = user.map(|u| u.username);
-                submission_files.push((submission.full_path(), username, Some(submission.id)));
+                let path = match AssignmentSubmissionService::full_path(submission.id).await {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                };
+                submission_files.push((path, username, Some(submission.id)));
             }
 
-            let base_files =
-                match assignment_file::Model::get_base_files(app_state.db(), assignment_id).await {
-                    Ok(files) => files.into_iter().map(|f| f.full_path()).collect::<Vec<_>>(),
-                    Err(_) => vec![],
-                };
+            let base_files = match AssignmentFileService::get_base_files(assignment_id).await {
+                Ok(files) => files.into_iter().map(|f| AssignmentFileService::full_path(&f.path)).collect::<Vec<_>>(),
+                Err(_) => vec![],
+            };
 
-            let moss_user_id =
-                std::env::var("MOSS_USER_ID").unwrap_or_else(|_| "YOUR_MOSS_USER_ID".to_string());
+            let moss_user_id = std::env::var("MOSS_USER_ID").unwrap_or_else(|_| "YOUR_MOSS_USER_ID".to_string());
             let moss_service = MossService::new(&moss_user_id);
 
             // 🔁 Use language from config, not from request payload
-            match moss_service
-                .run(base_files, submission_files, moss_language)
-                .await
-            {
+            match moss_service.run(base_files, submission_files, moss_language).await {
                 Ok(report_url) => {
                     // 1) Persist a tiny text file (unchanged)
-                    let report_dir = assignment_submission::Model::storage_root()
+                    let report_dir = AssignmentSubmissionService::storage_root()
                         .join(format!("module_{}", module_id))
                         .join(format!("assignment_{}", assignment_id));
 
@@ -405,16 +409,15 @@ pub async fn run_moss_check(
                         let similarity: f32 =
                             r.total_percent.unwrap_or(0.0).max(0.0).min(100.0) as f32;
 
-                        match plagiarism_case::Model::create_case(
-                            app_state.db(),
-                            assignment_id,
-                            a,
-                            b,
-                            &description,
-                            similarity,
-                        )
-                        .await
-                        {
+                        match PlagiarismCaseService::create(
+                            CreatePlagiarismCase {
+                                assignment_id,
+                                submission_id_1: a,
+                                submission_id_2: b,
+                                description: description,
+                                similarity,
+                            }
+                        ).await {
                             Ok(_) => created_count += 1,
                             Err(_db_err) => {
                                 // Log if desired

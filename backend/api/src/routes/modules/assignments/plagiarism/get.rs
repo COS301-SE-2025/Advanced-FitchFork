@@ -1,22 +1,20 @@
 use axum::{extract::{Path, Query}, http::StatusCode, Json, response::IntoResponse};
-use db::models::{
-    assignment_submission::{self, Entity as SubmissionEntity},
-    plagiarism_case::{self, Entity as PlagiarismEntity, Status},
-    user::{self, Entity as UserEntity},
-};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Condition, QuerySelect, QueryTrait, QueryOrder, PaginatorTrait};
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use std::collections::HashMap;
 use crate::response::ApiResponse;
 use std::fs;
+use std::str::FromStr;
+use util::filters::{FilterParam, QueryParam};
+use services::service::Service;
+use services::assignment_submission::{AssignmentSubmissionService, AssignmentSubmission};
+use services::plagiarism_case::{PlagiarismCaseService, Status};
+use services::user::{UserService, User};
 
 #[derive(Serialize)]
 pub struct MossReportResponse {
     pub report_url: String,
     pub generated_at: String,
 }
-
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss
 ///
@@ -83,7 +81,7 @@ pub struct MossReportResponse {
 pub async fn get_moss_report(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let report_path = assignment_submission::Model::storage_root()
+    let report_path = AssignmentSubmissionService::storage_root()
         .join(format!("module_{}", module_id))
         .join(format!("assignment_{}", assignment_id))
         .join("reports.txt");
@@ -139,7 +137,6 @@ pub async fn get_moss_report(
         .into_response()
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct ListPlagiarismCaseQueryParams {
     page: Option<u64>,
@@ -170,7 +167,7 @@ pub struct PlagiarismCaseResponse {
     id: i64,
     status: String,
     description: String,
-    similarity: f32, // <-- NEW
+    similarity: f32,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
     submission_1: SubmissionResponse,
@@ -252,107 +249,113 @@ pub async fn list_plagiarism_cases(
     Query(params): Query<ListPlagiarismCaseQueryParams>,
 ) -> impl IntoResponse {
     let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).min(100);
+    let per_page = params.per_page.unwrap_or(20).min(100).max(1);
+    let sort = params.sort.clone();
 
-    // Limit cases to this assignment’s submissions
-    let submission_models = SubmissionEntity::find()
-        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
-        .all(db::get_connection().await)
-        .await
-        .unwrap_or_default();
-
-    let submission_ids: Vec<i64> = submission_models.iter().map(|s| s.id).collect();
-
-    let mut query = PlagiarismEntity::find().filter(
-        Condition::any()
-            .add(plagiarism_case::Column::SubmissionId1.is_in(submission_ids.clone()))
-            .add(plagiarism_case::Column::SubmissionId2.is_in(submission_ids)),
-    );
-
-    // Filter: status
-    if let Some(status_str) = params.status {
-        if let Ok(status) = Status::from_str(&status_str) {
-            query = query.filter(plagiarism_case::Column::Status.eq(status));
-        } else {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<PlagiarismCaseListResponse>::error("Invalid status parameter")),
-            );
-        }
-    }
-
-    // Search: username (fuzzy)
-    if let Some(search_query) = params.query {
-        let user_ids_subquery = UserEntity::find()
-            .select_only()
-            .column(user::Column::Id)
-            .filter(user::Column::Username.like(format!("%{}%", search_query.to_lowercase())))
-            .into_query();
-
-        let submission_ids_subquery = SubmissionEntity::find()
-            .select_only()
-            .column(assignment_submission::Column::Id)
-            .filter(assignment_submission::Column::UserId.in_subquery(user_ids_subquery))
-            .into_query();
-
-        query = query.filter(
-            Condition::any()
-                .add(plagiarism_case::Column::SubmissionId1.in_subquery(submission_ids_subquery.clone()))
-                .add(plagiarism_case::Column::SubmissionId2.in_subquery(submission_ids_subquery)),
-        );
-    }
-
-    // Sort: created_at, status, similarity
-    if let Some(sort) = params.sort {
-        for s in sort.split(',') {
-            let (order, column) = if s.starts_with('-') {
-                (sea_orm::Order::Desc, &s[1..])
-            } else {
-                (sea_orm::Order::Asc, s)
-            };
-            match column {
-                "created_at" => query = query.order_by(plagiarism_case::Column::CreatedAt, order),
-                "status" => query = query.order_by(plagiarism_case::Column::Status, order),
-                "similarity" => query = query.order_by(plagiarism_case::Column::Similarity, order),
-                _ => {} // silently ignore unknown sort fields
+    if let Some(sort_str) = &sort {
+        let valid_fields = ["created_at", "status", "similarity"];
+        for field in sort_str.split(',') {
+            let field = field.trim().trim_start_matches('-');
+            if !valid_fields.contains(&field) {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<PlagiarismCaseListResponse>::error("Invalid sort field")),
+                );
             }
         }
     }
 
-    let paginator = query.paginate(db::get_connection().await, per_page);
-    let total_items = paginator.num_items().await.unwrap_or(0);
-    let cases = paginator.fetch_page(page - 1).await.unwrap_or_default();
+    let mut filters = vec![FilterParam::eq("assignment_id", assignment_id)];
 
-    // Pull submissions & users for the cases we fetched
+    if let Some(status_str) = params.status {
+        match Status::from_str(&status_str) {
+            Ok(_) => {
+                filters.push(FilterParam::eq("status", status_str));
+            }
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<PlagiarismCaseListResponse>::error("Invalid status parameter")),
+                );
+            }
+        }
+    }
+
+    let mut queries = Vec::new();
+    if let Some(query_text) = params.query {
+        queries.push(QueryParam::new(
+            vec!["username".to_string()],
+            query_text,
+        ));
+    }
+
+    let (cases, total) = match PlagiarismCaseService::filter(
+        &filters,
+        &queries,
+        page,
+        per_page,
+        sort,
+    ).await {
+        Ok(result) => result,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<PlagiarismCaseListResponse>::error(
+                    format!("Failed to retrieve plagiarism cases: {}", e),
+                )),
+            );
+        }
+    };
+
     let submission_ids: Vec<i64> = cases
         .iter()
-        .flat_map(|c| [c.submission_id_1, c.submission_id_2])
+        .flat_map(|case| vec![case.submission_id_1, case.submission_id_2])
         .collect();
 
-    let submissions = SubmissionEntity::find()
-        .filter(assignment_submission::Column::Id.is_in(submission_ids))
-        .all(db::get_connection().await)
-        .await
-        .unwrap_or_default();
+    let submissions = match AssignmentSubmissionService::find_all(
+        &vec![FilterParam::eq("id", submission_ids)],
+        &vec![],
+        None,
+    ).await {
+        Ok(subs) => subs,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<PlagiarismCaseListResponse>::error(
+                    format!("Failed to retrieve submissions: {}", e),
+                )),
+            );
+        }
+    };
 
     let user_ids: Vec<i64> = submissions.iter().map(|s| s.user_id).collect();
-    let users = UserEntity::find()
-        .filter(user::Column::Id.is_in(user_ids))
-        .all(db::get_connection().await)
-        .await
-        .unwrap_or_default();
+    let users = match UserService::find_all(
+        &vec![FilterParam::eq("id", user_ids)],
+        &vec![],
+        None,
+    ).await {
+        Ok(us) => us,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<PlagiarismCaseListResponse>::error(
+                    format!("Failed to retrieve users: {}", e),
+                )),
+            );
+        }
+    };
 
-    let user_map: HashMap<i64, user::Model> = users.into_iter().map(|u| (u.id, u)).collect();
-    let submission_map: HashMap<i64, (assignment_submission::Model, user::Model)> = submissions
+    let user_map: HashMap<i64, User> = users.into_iter().map(|u| (u.id, u)).collect();
+    let submission_map: HashMap<i64, (AssignmentSubmission, User)> = submissions
         .into_iter()
         .filter_map(|s| user_map.get(&s.user_id).cloned().map(|u| (s.id, (s, u))))
         .collect();
 
-    let response_cases: Vec<PlagiarismCaseResponse> = cases
+    let case_responses: Vec<PlagiarismCaseResponse> = cases
         .into_iter()
         .filter_map(|case| {
-            let (s1, u1) = submission_map.get(&case.submission_id_1)?.clone();
-            let (s2, u2) = submission_map.get(&case.submission_id_2)?.clone();
+            let (sub1, user1) = submission_map.get(&case.submission_id_1)?.clone();
+            let (sub2, user2) = submission_map.get(&case.submission_id_2)?.clone();
 
             Some(PlagiarismCaseResponse {
                 id: case.id,
@@ -362,25 +365,25 @@ pub async fn list_plagiarism_cases(
                 created_at: case.created_at,
                 updated_at: case.updated_at,
                 submission_1: SubmissionResponse {
-                    id: s1.id,
-                    filename: s1.filename,
-                    created_at: s1.created_at,
+                    id: sub1.id,
+                    filename: sub1.filename,
+                    created_at: sub1.created_at,
                     user: UserResponse {
-                        id: u1.id,
-                        username: u1.username,
-                        email: u1.email,
-                        profile_picture_path: u1.profile_picture_path,
+                        id: user1.id,
+                        username: user1.username,
+                        email: user1.email,
+                        profile_picture_path: user1.profile_picture_path,
                     },
                 },
                 submission_2: SubmissionResponse {
-                    id: s2.id,
-                    filename: s2.filename,
-                    created_at: s2.created_at,
+                    id: sub2.id,
+                    filename: sub2.filename,
+                    created_at: sub2.created_at,
                     user: UserResponse {
-                        id: u2.id,
-                        username: u2.username,
-                        email: u2.email,
-                        profile_picture_path: u2.profile_picture_path,
+                        id: user2.id,
+                        username: user2.username,
+                        email: user2.email,
+                        profile_picture_path: user2.profile_picture_path,
                     },
                 },
             })
@@ -388,10 +391,10 @@ pub async fn list_plagiarism_cases(
         .collect();
 
     let response = PlagiarismCaseListResponse {
-        cases: response_cases,
+        cases: case_responses,
         page,
         per_page,
-        total: total_items,
+        total,
     };
 
     (
@@ -417,10 +420,8 @@ struct GraphLink {
     target: String,
     case_id: i64,
     similarity: f32,
-    status: String, // serialize as string for simplicity
+    status: String,
 }
-
-
 
 #[derive(Serialize)]
 struct LinksResponse {
@@ -521,21 +522,15 @@ struct LinksResponse {
 /// - Usernames are taken from the submissions’ authors at query time.
 // TODO: Testing @Aidan
 pub async fn get_graph(
-    State(app_state): State<AppState>,
     Path((_module_id, assignment_id)): Path<(i64, i64)>,
     Query(query): Query<PlagiarismQuery>,
 ) -> impl IntoResponse {
-    use sea_orm::{ColumnTrait, QueryFilter};
+    let mut filters = vec![FilterParam::eq("assignment_id", assignment_id)];
 
-    // 1) Base: assignment filter
-    let mut q = PlagiarismEntity::find()
-        .filter(plagiarism_case::Column::AssignmentId.eq(assignment_id));
-
-    // 2) Optional status (validated)
     if let Some(status_str) = query.status.as_deref() {
         match Status::try_from(status_str) {
-            Ok(status) => {
-                q = q.filter(plagiarism_case::Column::Status.eq(status));
+            Ok(_) => {
+                filters.push(FilterParam::eq("status", status_str));
             }
             Err(_) => {
                 return (
@@ -546,16 +541,18 @@ pub async fn get_graph(
         }
     }
 
-    // 3) Optional similarity (pushed down to SQL)
     if let Some(min) = query.min_similarity {
-        q = q.filter(plagiarism_case::Column::Similarity.gte(min));
+        filters.push(FilterParam::gte("similarity", min));
     }
     if let Some(max) = query.max_similarity {
-        q = q.filter(plagiarism_case::Column::Similarity.lte(max));
+        filters.push(FilterParam::lte("similarity", max));
     }
 
-    // 4) Fetch cases
-    let cases = match q.all(app_state.db()).await {
+    let cases = match PlagiarismCaseService::find_all(
+        &filters,
+        &[],
+        None,
+    ).await {
         Ok(cs) => cs,
         Err(_) => {
             return (
@@ -582,11 +579,13 @@ pub async fn get_graph(
         .flat_map(|c| [c.submission_id_1, c.submission_id_2])
         .collect();
 
-    let submissions = match SubmissionEntity::find()
-        .filter(assignment_submission::Column::Id.is_in(all_sub_ids.clone()))
-        .all(app_state.db())
-        .await
-    {
+    let submissions = match AssignmentSubmissionService::find_all(
+        &vec![
+            FilterParam::eq("id", all_sub_ids),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(ss) => ss,
         Err(_) => {
             return (
@@ -599,11 +598,13 @@ pub async fn get_graph(
 
     // 6) Load users
     let user_ids: Vec<i64> = sub_by_id.values().map(|s| s.user_id).collect();
-    let users = match UserEntity::find()
-        .filter(user::Column::Id.is_in(user_ids))
-        .all(app_state.db())
-        .await
-    {
+    let users = match UserService::find_all(
+        &vec![
+            FilterParam::eq("id", user_ids),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(us) => us,
         Err(_) => {
             return (

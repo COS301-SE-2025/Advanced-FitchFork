@@ -13,21 +13,14 @@
 //! **Responses:** JSON-wrapped `ApiResponse` indicating success, number of deletions, or detailed errors.
 
 use axum::{
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use serde::Deserialize;
 use serde_json::json;
-use sqlx::types::JsonValue;
-
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-
-use util::state::AppState;
 use crate::response::ApiResponse;
-
-use db::models::assignment_submission as submission;
 
 /// DELETE /api/modules/:module_id/assignments/:assignment_id/submissions/:submission_id
 ///
@@ -65,11 +58,8 @@ use db::models::assignment_submission as submission;
 /// }
 /// ```
 pub async fn delete_submission(
-    State(app_state): State<AppState>,
     Path((_module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
     // Ensure the submission exists and belongs to the assignment
     let sub = match submission::Entity::find()
         .filter(submission::Column::Id.eq(submission_id))
@@ -160,12 +150,9 @@ pub struct BulkDeleteSubmissionsRequest {
 /// }
 /// ```
 pub async fn bulk_delete_submissions(
-    State(app_state): State<AppState>,
     Path((_module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<BulkDeleteSubmissionsRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
     if req.submission_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,

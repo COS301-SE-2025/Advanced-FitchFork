@@ -5,10 +5,10 @@ use axum::{
     Json,
 };
 use chrono::Utc;
-use db::models::plagiarism_case::{Entity as PlagiarismEntity, Status, Column as PlagiarismColumn};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, ActiveModelTrait, IntoActiveModel};
 use serde::{Deserialize, Serialize};
 use crate::response::ApiResponse;
+use services::service::Service;
+use services::plagiarism_case::{PlagiarismCaseService, Status, UpdatePlagiarismCase};
 
 #[derive(Serialize, Deserialize)]
 pub struct UpdatePlagiarismCasePayload {
@@ -131,10 +131,9 @@ pub struct PlagiarismCaseResponse {
 /// }
 /// ```
 pub async fn update_plagiarism_case(
-    Path((_, assignment_id, case_id)): Path<(i64, i64, i64)>,
+    Path((_, _, case_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<UpdatePlagiarismCasePayload>,
 ) -> impl IntoResponse {
-    // Require at least one updatable field
     if payload.description.is_none() && payload.status.is_none() && payload.similarity.is_none() {
         return (
             StatusCode::BAD_REQUEST,
@@ -144,7 +143,6 @@ pub async fn update_plagiarism_case(
         );
     }
 
-    // Validate similarity, if provided
     if let Some(sim) = payload.similarity {
         if !(0.0..=100.0).contains(&sim) {
             return (
@@ -156,64 +154,33 @@ pub async fn update_plagiarism_case(
         }
     }
 
-    // Fetch the case
-    let case = match PlagiarismEntity::find_by_id(case_id)
-        .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
-        .one(db::get_connection().await)
-        .await
-    {
-        Ok(Some(case)) => case,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<PlagiarismCaseResponse>::error(
-                    "Plagiarism case not found",
-                )),
-            );
+    let status = match payload.status {
+        Some(status_str) => {
+            match status_str.as_str() {
+                "review" => Some(Status::Review),
+                "flagged" => Some(Status::Flagged),
+                "reviewed" => Some(Status::Reviewed),
+                _ => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiResponse::<PlagiarismCaseResponse>::error(
+                            "Invalid status value. Must be one of: 'review', 'flagged', 'reviewed'",
+                        )),
+                    );
+                }
+            }
         }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<PlagiarismCaseResponse>::error(format!(
-                    "Database error: {}",
-                    e
-                ))),
-            );
-        }
+        None => None,
     };
 
-    // Apply updates
-    let mut case = case.into_active_model();
-
-    if let Some(description) = payload.description {
-        case.description = sea_orm::ActiveValue::Set(description);
-    }
-
-    if let Some(status_str) = payload.status {
-        let status = match status_str.as_str() {
-            "review" => Status::Review,
-            "flagged" => Status::Flagged,
-            "reviewed" => Status::Reviewed,
-            _ => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<PlagiarismCaseResponse>::error(
-                        "Invalid status value. Must be one of: 'review', 'flagged', 'reviewed'",
-                    )),
-                );
-            }
-        };
-        case.status = sea_orm::ActiveValue::Set(status);
-    }
-
-    if let Some(sim) = payload.similarity {
-        case.similarity = sea_orm::ActiveValue::Set(sim);
-    }
-
-    case.updated_at = sea_orm::ActiveValue::Set(Utc::now());
-
-    // Persist
-    let updated_case = match case.update(app_state.db()).await {
+    let updated_case = match PlagiarismCaseService::update(
+        UpdatePlagiarismCase {
+            id: case_id,
+            description: payload.description,
+            status,
+            similarity: payload.similarity,
+        }
+     ).await {
         Ok(updated) => updated,
         Err(e) => {
             return (
@@ -226,7 +193,6 @@ pub async fn update_plagiarism_case(
         }
     };
 
-    // Respond
     let response = PlagiarismCaseResponse {
         id: updated_case.id,
         assignment_id: updated_case.assignment_id,
@@ -234,7 +200,7 @@ pub async fn update_plagiarism_case(
         submission_id_2: updated_case.submission_id_2,
         description: updated_case.description,
         status: updated_case.status.to_string(),
-        similarity: updated_case.similarity, // <- new
+        similarity: updated_case.similarity,
         created_at: updated_case.created_at,
         updated_at: updated_case.updated_at,
     };

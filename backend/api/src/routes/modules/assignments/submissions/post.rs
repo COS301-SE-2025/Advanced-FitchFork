@@ -8,28 +8,20 @@ use axum::{
 };
 use chrono::Utc;
 use code_runner;
-use db::models::assignment_memo_output;
-use db::models::assignment_memo_output::Model as MemoOutputModel;
-use db::models::assignment_task;
-use db::models::{
-    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-    assignment_submission::{self, Model as AssignmentSubmissionModel},
-    assignment_submission_output::Entity as AssignmentSubmissionOutputModel,
-    assignment_task::Entity as AssignmentTaskModel,
-};
 use marker::MarkingJob;
+use marker::comparators::{exact_comparator::ExactComparator, percentage_comparator::PercentageComparator, regex_comparator::RegexComparator};
+use marker::feedback::{auto_feedback::AutoFeedback, manual_feedback::ManualFeedback, ai_feedback::AiFeedback};
 use md5;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use tokio_util::bytes;
 use util::mark_allocator::mark_allocator::TaskInfo;
 use util::{
-    execution_config::{ExecutionConfig, execution_config::SubmissionMode},
+    execution_config::{ExecutionConfig, execution_config::{SubmissionMode, MarkingScheme, FeedbackScheme}},
     mark_allocator::mark_allocator::generate_allocator,
     mark_allocator::mark_allocator::load_allocator,
     scan_code_content::scan_code_content,
-    state::AppState,
 };
+
 #[derive(Debug, Deserialize)]
 pub struct RemarkRequest {
     #[serde(default)]
@@ -74,6 +66,24 @@ pub struct FailedOperation {
 // Helper Functions
 // ============================================================================
 
+/// Applies the appropriate comparator to a marking job based on the scheme
+fn apply_comparator<'a>(marking_job: MarkingJob<'a>, scheme: &MarkingScheme) -> MarkingJob<'a> {
+    match scheme {
+        MarkingScheme::Exact => marking_job.with_comparator(ExactComparator),
+        MarkingScheme::Percentage => marking_job.with_comparator(PercentageComparator),
+        MarkingScheme::Regex => marking_job.with_comparator(RegexComparator),
+    }
+}
+
+/// Applies the appropriate feedback to a marking job based on the scheme
+fn apply_feedback<'a>(marking_job: MarkingJob<'a>, scheme: &FeedbackScheme) -> MarkingJob<'a> {
+    match scheme {
+        FeedbackScheme::Auto => marking_job.with_feedback(AutoFeedback),
+        FeedbackScheme::Manual => marking_job.with_feedback(ManualFeedback),
+        FeedbackScheme::Ai => marking_job.with_feedback(AiFeedback),
+    }
+}
+
 /// Validates bulk operation request ensuring exactly one of submission_ids or all is provided
 fn validate_bulk_request(
     submission_ids: &Option<Vec<i64>>,
@@ -92,7 +102,6 @@ async fn resolve_submission_ids(
     submission_ids: Option<Vec<i64>>,
     all: Option<bool>,
     assignment_id: i64,
-    db: &sea_orm::DatabaseConnection,
 ) -> Result<Vec<i64>, String> {
     match (submission_ids, all) {
         (Some(ids), _) if !ids.is_empty() => Ok(ids),
@@ -107,7 +116,6 @@ async fn resolve_submission_ids(
 async fn load_assignment(
     module_id: i64,
     assignment_id: i64,
-    db: &sea_orm::DatabaseConnection,
 ) -> Result<db::models::assignment::Model, String> {
     AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id))
@@ -119,7 +127,10 @@ async fn load_assignment(
 }
 
 /// Loads the mark allocator for an assignment
-async fn load_assignment_allocator(module_id: i64, assignment_id: i64) -> Result<(), String> {
+async fn load_assignment_allocator(
+    module_id: i64,
+    assignment_id: i64
+) -> Result<(), String> {
     load_allocator(module_id, assignment_id)
         .await
         .map(|_| ())
@@ -161,7 +172,10 @@ fn get_assignment_paths(
 }
 
 /// Loads execution configuration for an assignment
-fn get_execution_config(module_id: i64, assignment_id: i64) -> Result<ExecutionConfig, String> {
+fn get_execution_config(
+    module_id: i64,
+    assignment_id: i64
+) -> Result<ExecutionConfig, String> {
     ExecutionConfig::get_execution_config(module_id, assignment_id)
         .map_err(|_| "Failed to load execution config".to_string())
 }
@@ -229,7 +243,6 @@ fn validate_file_upload(
 async fn get_next_attempt(
     assignment_id: i64,
     user_id: i64,
-    db: &sea_orm::DatabaseConnection,
 ) -> Result<i64, String> {
     let prev_attempt = assignment_submission::Entity::find()
         .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
@@ -252,7 +265,6 @@ async fn grade_submission(
     memo_outputs: &[std::path::PathBuf],
     mark_allocator_path: &std::path::Path,
     config: &util::execution_config::ExecutionConfig,
-    db: &sea_orm::DatabaseConnection,
 ) -> Result<SubmissionDetailResponse, String> {
     let student_output_dir = base_path
         .join("assignment_submissions")
@@ -324,17 +336,18 @@ async fn grade_submission(
     //for a student submission just submit the memo_files of the assignment
     student_output_code_coverage.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
-    let marking_job = MarkingJob::new(
+    let mut marking_job = MarkingJob::new(
         memo_outputs.to_vec(),
         student_outputs,
         mark_allocator_path.to_path_buf(),
         config.clone(),
     );
-
-    let mark_report = marking_job.mark().await.map_err(|e| {
-        eprintln!("MARKING ERROR: {:#?}", e);
-        format!("{:?}", e)
-    })?;
+    // if let Some(coverage) = coverage_report {
+    //     marking_job = marking_job.with_coverage(cov);
+    // }
+    marking_job = apply_comparator(marking_job, &config.marking.marking_scheme);
+    marking_job = apply_feedback(marking_job, &config.marking.feedback_scheme);
+    let mark_report = marking_job.mark().await.map_err(|e| format!("{:?}", e))?;
 
     let mark = MarkSummary {
         earned: mark_report.data.mark.earned,
@@ -416,18 +429,17 @@ async fn grade_submission(
 
 /// Processes code execution for a submission
 async fn process_submission_code(
-    db: &sea_orm::DatabaseConnection,
     submission_id: i64,
     config: ExecutionConfig,
     module_id: i64,
     assignment_id: i64,
 ) -> Result<(), String> {
     if config.project.submission_mode == SubmissionMode::Manual.clone() {
-        code_runner::create_submission_outputs_for_all_tasks(db, submission_id)
+        code_runner::create_submission_outputs_for_all_tasks(submission_id)
             .await
             .map_err(|e| format!("Code runner failed: {}", e))
     } else {
-        ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
+        ai::run_ga_job(submission_id, config, module_id, assignment_id)
             .await
             .map_err(|e| format!("GATLAM failed: {}", e))
     }
@@ -500,7 +512,6 @@ async fn update_submission_report_marks(
 async fn execute_bulk_operation<F, Fut>(
     submission_ids: Vec<i64>,
     assignment_id: i64,
-    db: &sea_orm::DatabaseConnection,
     operation: F,
 ) -> (usize, Vec<FailedOperation>)
 where
@@ -663,9 +674,7 @@ pub async fn submit_assignment(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
-    let assignment = match load_assignment(module_id, assignment_id, db).await {
+    let assignment = match load_assignment(module_id, assignment_id).await {
         Ok(assignment) => assignment,
         Err(_) => {
             return (
@@ -758,7 +767,7 @@ pub async fn submit_assignment(
 
     let file_hash = format!("{:x}", md5::compute(&file_bytes));
 
-    let attempt = match get_next_attempt(assignment_id, claims.sub, db).await {
+    let attempt = match get_next_attempt(assignment_id, claims.sub).await {
         Ok(attempt) => attempt,
         Err(e) => {
             eprintln!("Error getting next attempt: {}", e);
@@ -798,7 +807,7 @@ pub async fn submit_assignment(
     };
 
     if let Err(e) =
-        process_submission_code(db, submission.id, config.clone(), module_id, assignment_id).await
+        process_submission_code(submission.id, config.clone(), module_id, assignment_id).await
     {
         eprintln!("Code execution failed: {}", e);
         return (
@@ -899,7 +908,6 @@ pub async fn submit_assignment(
         &memo_outputs,
         &mark_allocator_path,
         &config,
-        db,
     )
     .await
     {
@@ -975,8 +983,6 @@ pub async fn remark_submissions(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<RemarkRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
     if let Err(e) = validate_bulk_request(&req.submission_ids, &req.all) {
         return (
             StatusCode::BAD_REQUEST,
@@ -984,7 +990,7 @@ pub async fn remark_submissions(
         );
     }
 
-    let assignment = match load_assignment(module_id, assignment_id, db).await {
+    let assignment = match load_assignment(module_id, assignment_id).await {
         Ok(assignment) => assignment,
         Err(_) => {
             return (
@@ -995,7 +1001,7 @@ pub async fn remark_submissions(
     };
 
     let submission_ids =
-        match resolve_submission_ids(req.submission_ids, req.all, assignment_id, db).await {
+        match resolve_submission_ids(req.submission_ids, req.all, assignment_id).await {
             Ok(ids) => ids,
             Err(e) => {
                 return (
@@ -1034,7 +1040,7 @@ pub async fn remark_submissions(
     };
 
     let (regraded, failed) =
-        execute_bulk_operation(submission_ids.clone(), assignment_id, db, |submission| {
+        execute_bulk_operation(submission_ids.clone(), assignment_id, |submission| {
             let assignment = assignment.clone();
             let base_path = base_path.clone();
             let memo_outputs = memo_outputs.clone();
@@ -1062,12 +1068,14 @@ pub async fn remark_submissions(
                 }
                 student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
-                let marking_job = MarkingJob::new(
+                let mut marking_job = MarkingJob::new(
                     memo_outputs.to_vec(),
                     student_outputs,
                     mark_allocator_path.to_path_buf(),
                     config.clone(),
                 );
+                marking_job = apply_comparator(marking_job, &config.marking.marking_scheme);
+                marking_job = apply_feedback(marking_job, &config.marking.feedback_scheme);
 
                 let mark_report = marking_job
                     .mark()
@@ -1088,7 +1096,6 @@ pub async fn remark_submissions(
                         &memo_outputs,
                         &mark_allocator_path,
                         &config,
-                        db,
                     )
                     .await
                     .map(|_| ()),

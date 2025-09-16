@@ -13,20 +13,11 @@ use super::common::{
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
-use db::models::{
-    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, 
-    assignment_submission::{self, Entity as SubmissionEntity}, assignment_submission_output::Model as SubmissionOutput, assignment_task, user, user_module_role::{self, Role},
-    assignment_submission::{Column as SubmissionColumn, Model as SubmissionModel},
-};
-use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, RelationTrait, sea_query::{Expr, Func}, QueryTrait,
-};
 use serde::Serialize;
 use serde_json::Value;
 use std::{fs, path::PathBuf};
@@ -71,7 +62,6 @@ fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
 /// ### Notes
 /// - No filtering on other students or usernames is possible in this endpoint.
 async fn get_user_submissions(
-    db: &DatabaseConnection,
     module_id: i64,
     assignment_id: i64,
     user_id: i64,
@@ -295,7 +285,6 @@ async fn get_user_submissions(
 /// - Late submissions are computed relative to assignment `due_date`.
 /// - Defaults to sorting by `created_at DESC`.
 async fn get_list_submissions(
-    db: &DatabaseConnection,
     module_id: i64,
     assignment_id: i64,
     params: ListSubmissionsQuery,
@@ -518,7 +507,7 @@ async fn get_list_submissions(
         .into_response()
 }
 
-async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bool {
+async fn is_student(module_id: i64, user_id: i64) -> bool {
     user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user_id))
         .filter(user_module_role::Column::ModuleId.eq(module_id))
@@ -552,10 +541,8 @@ pub async fn list_submissions(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Query(params): Query<ListSubmissionsQuery>,
 ) -> axum::response::Response {
-    let db = db::get_connection().await;
-
     let user_id = claims.sub;
-    if is_student(module_id, user_id, db).await {
+    if is_student(module_id, user_id).await {
         return get_user_submissions(db, module_id, assignment_id, user_id, Query(params))
             .await
             .into_response();
@@ -679,8 +666,6 @@ pub async fn get_submission(
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     let submission = SubmissionEntity::find_by_id(submission_id)
         .one(db)
         .await
@@ -772,7 +757,7 @@ pub async fn get_submission(
         }
     };
 
-    if !is_student(module_id, claims.sub, db).await {
+    if !is_student(module_id, claims.sub).await {
         if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(db).await {
             let user_value = serde_json::to_value(UserResponse {
                 id: u.id,
@@ -806,8 +791,6 @@ struct MemoResponse {
 pub async fn get_submission_output(
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     let output = match SubmissionOutput::get_output(db, module_id, assignment_id, submission_id).await {
         Ok(output) => output,
         Err(_) => {
@@ -877,12 +860,9 @@ pub async fn get_submission_output(
 /// Returns the original uploaded archive for a submission.
 /// Authorization: owner OR module staff (Lecturer/AssistantLecturer/Tutor) OR admin.
 pub async fn download_submission_file(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> Response {
-    let db = app_state.db();
-
     // Still load records we need for auth + filename/path.
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id))

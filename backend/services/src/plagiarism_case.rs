@@ -1,12 +1,13 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::plagiarism_case::{ActiveModel, Entity, Column, Status},
+    models::plagiarism_case::{ActiveModel, Entity, Column},
     repository::Repository,
 };
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
 
 pub use db::models::plagiarism_case::Model as PlagiarismCase;
+pub use db::models::plagiarism_case::Status;
 
 #[derive(Debug, Clone)]
 pub struct CreatePlagiarismCase {
@@ -20,6 +21,9 @@ pub struct CreatePlagiarismCase {
 #[derive(Debug, Clone)]
 pub struct UpdatePlagiarismCase {
     pub id: i64,
+    pub description: Option<String>,
+    pub status: Option<Status>,
+    pub similarity: Option<f32>,
 }
 
 impl ToActiveModel<Entity> for CreatePlagiarismCase {
@@ -49,6 +53,10 @@ impl ToActiveModel<Entity> for UpdatePlagiarismCase {
             Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = case.into();
+
+        if let Some(status) = self.status {
+            active.status = Set(status);
+        }
 
         active.updated_at = Set(Utc::now());
 

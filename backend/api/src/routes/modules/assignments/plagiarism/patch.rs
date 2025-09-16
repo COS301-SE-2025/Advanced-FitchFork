@@ -5,10 +5,10 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Utc};
-use db::models::plagiarism_case::{Entity as PlagiarismEntity, Status, Column as PlagiarismColumn};
-use sea_orm::{ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, ActiveModelTrait, Set};
 use serde::Serialize;
 use crate::response::ApiResponse;
+use services::service::Service;
+use services::plagiarism_case::{PlagiarismCaseService, Status, UpdatePlagiarismCase};
 
 #[derive(Debug, Serialize)]
 pub struct FlaggedCaseResponse {
@@ -76,34 +76,16 @@ pub struct FlaggedCaseResponse {
 /// - Only users with lecturer or assistant lecturer roles assigned to the module can perform this action
 /// - Considered an irreversible action indicating confirmed plagiarism
 pub async fn patch_plagiarism_flag(
-    Path((_, assignment_id, case_id)): Path<(i64, i64, i64)>,
+    Path((_, _, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let case = match PlagiarismEntity::find()
-        .filter(PlagiarismColumn::Id.eq(case_id))
-        .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
-        .one(db::get_connection().await)
-        .await
-    {
-        Ok(Some(case)) => case,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::error("Plagiarism case not found")),
-            )
+    let updated_case = match PlagiarismCaseService::update(
+        UpdatePlagiarismCase {
+            id: case_id,
+            description: None,
+            status: Some(Status::Flagged),
+            similarity: None,
         }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(format!("Database error: {}", e))),
-            )
-        }
-    };
-
-    let mut active_case = case.into_active_model();
-    active_case.status = Set(Status::Flagged);
-    active_case.updated_at = Set(Utc::now());
-
-    let updated_case = match active_case.update(db::get_connection().await).await {
+    ).await {
         Ok(case) => case,
         Err(e) => {
             return (
@@ -191,34 +173,16 @@ pub struct ReviewedCaseResponse {
 /// - Only users with lecturer or assistant lecturer roles assigned to the module can perform this action
 /// - Typically indicates the case was investigated and determined not to be plagiarism
 pub async fn patch_plagiarism_review(
-    Path((_, assignment_id, case_id)): Path<(i64, i64, i64)>,
+    Path((_, _, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let case = match PlagiarismEntity::find()
-        .filter(PlagiarismColumn::Id.eq(case_id))
-        .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
-        .one(db::get_connection().await)
-        .await
-    {
-        Ok(Some(case)) => case,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::error("Plagiarism case not found")),
-            )
+    let updated_case = match PlagiarismCaseService::update(
+        UpdatePlagiarismCase {
+            id: case_id,
+            description: None,
+            status: Some(Status::Reviewed),
+            similarity: None,
         }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(format!("Database error: {}", e))),
-            )
-        }
-    };
-
-    let mut active_case = case.into_active_model();
-    active_case.status = Set(Status::Reviewed);
-    active_case.updated_at = Set(Utc::now());
-
-    let updated_case = match active_case.update(db::get_connection().await).await {
+    ).await {
         Ok(case) => case,
         Err(e) => {
             return (

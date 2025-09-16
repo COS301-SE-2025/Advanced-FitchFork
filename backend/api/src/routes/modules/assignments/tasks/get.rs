@@ -10,13 +10,11 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::assignment_task::{Column, Entity};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
 use serde_json::Value;
 use std::{env, fs, path::PathBuf};
 use util::mark_allocator::mark_allocator::load_allocator;
-use util::{execution_config::ExecutionConfig, state::AppState};
+use util::execution_config::ExecutionConfig;
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
 #[derive(Serialize)]
@@ -105,12 +103,9 @@ pub struct TaskDetailResponse {
 pub async fn get_task_details(
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     let task = Entity::find_by_id(task_id).one(db).await.unwrap().unwrap();
 
-    let base_path =
-        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
+    let base_path = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
     let memo_path = PathBuf::from(&base_path)
         .join(format!("module_{}", module_id))
         .join(format!("assignment_{}", assignment_id))
@@ -344,8 +339,6 @@ pub async fn get_task_details(
 pub async fn list_tasks(
     Path((_, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     match Entity::find()
         .filter(Column::AssignmentId.eq(assignment_id))
         .order_by_asc(Column::TaskNumber)

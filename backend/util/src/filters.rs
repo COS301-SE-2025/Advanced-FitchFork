@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 pub enum FilterValue {
     String(Vec<String>),
     Int(Vec<i64>),  
+    Float(Vec<f32>),
     Bool(Vec<bool>),
     DateTime(Vec<DateTime<Utc>>),
 }
@@ -49,6 +50,12 @@ impl IntoFilterValue<i64> for i64 {
     }
 }
 
+impl IntoFilterValue<f32> for f32 {
+    fn into_filter_value(self) -> FilterValue {
+        FilterValue::Float(vec![self])
+    }
+}
+
 impl IntoFilterValue<bool> for bool {
     fn into_filter_value(self) -> FilterValue {
         FilterValue::Bool(vec![self])
@@ -80,6 +87,12 @@ impl IntoFilterValue<i64> for Vec<i64> {
     }
 }
 
+impl IntoFilterValue<f32> for Vec<f32> {
+    fn into_filter_value(self) -> FilterValue {
+        FilterValue::Float(self)
+    }
+}
+
 impl IntoFilterValue<bool> for Vec<bool> {
     fn into_filter_value(self) -> FilterValue {
         FilterValue::Bool(self)
@@ -105,6 +118,12 @@ impl<const N: usize> IntoFilterValue<i64> for [i64; N] {
     }
 }
 
+impl<const N: usize> IntoFilterValue<f32> for [f32; N] {
+    fn into_filter_value(self) -> FilterValue {
+        FilterValue::Float(self.to_vec())
+    }
+}
+
 impl<const N: usize> IntoFilterValue<bool> for [bool; N] {
     fn into_filter_value(self) -> FilterValue {
         FilterValue::Bool(self.to_vec())
@@ -116,6 +135,7 @@ impl FilterValue {
         match self {
             FilterValue::String(v) => v.len() == 1,
             FilterValue::Int(v) => v.len() == 1,
+            FilterValue::Float(v) => v.len() == 1,
             FilterValue::Bool(v) => v.len() == 1,
             FilterValue::DateTime(v) => v.len() == 1,
         }
@@ -125,6 +145,7 @@ impl FilterValue {
         match self {
             FilterValue::String(v) => v.is_empty(),
             FilterValue::Int(v) => v.is_empty(),
+            FilterValue::Float(v) => v.is_empty(),
             FilterValue::Bool(v) => v.is_empty(),
             FilterValue::DateTime(v) => v.is_empty(),
         }
@@ -134,6 +155,7 @@ impl FilterValue {
         match self {
             FilterValue::String(v) => v.len(),
             FilterValue::Int(v) => v.len(),
+            FilterValue::Float(v) => v.len(),
             FilterValue::Bool(v) => v.len(),
             FilterValue::DateTime(v) => v.len(),
         }

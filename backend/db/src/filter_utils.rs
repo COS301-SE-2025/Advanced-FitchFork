@@ -106,6 +106,50 @@ impl FilterUtils {
                 let pattern = format!("%{}%", values[0]);
                 Ok(condition.add(column.like(&pattern)))
             },
+
+            // Float operations
+            (FilterValue::Float(values), CompareOp::Eq) => {
+                if values.len() == 1 {
+                    Ok(condition.add(column.eq(values[0])))
+                } else {
+                    Ok(condition.add(column.is_in(values.clone())))
+                }
+            },
+            (FilterValue::Float(values), CompareOp::Ne) => {
+                if values.len() == 1 {
+                    Ok(condition.add(column.ne(values[0])))
+                } else {
+                    Ok(condition.add(column.is_not_in(values.clone())))
+                }
+            },
+            (FilterValue::Float(values), CompareOp::Gt) => {
+                if values.len() != 1 {
+                    return Err(DbErr::Custom("Greater than comparison requires exactly one value".to_string()));
+                }
+                Ok(condition.add(column.gt(values[0])))
+            },
+            (FilterValue::Float(values), CompareOp::Gte) => {
+                if values.len() != 1 {
+                    return Err(DbErr::Custom("Greater than or equal comparison requires exactly one value".to_string()));
+                }
+                Ok(condition.add(column.gte(values[0])))
+            },
+            (FilterValue::Float(values), CompareOp::Lt) => {
+                if values.len() != 1 {
+                    return Err(DbErr::Custom("Less than comparison requires exactly one value".to_string()));
+                }
+                Ok(condition.add(column.lt(values[0])))
+            },
+            (FilterValue::Float(values), CompareOp::Lte) => {
+                if values.len() != 1 {
+                    return Err(DbErr::Custom("Less than or equal comparison requires exactly one value".to_string()));
+                }
+                Ok(condition.add(column.lte(values[0])))
+            },
+            (FilterValue::Float(values), CompareOp::Like) => {
+                let pattern = format!("%{}%", values[0]);
+                Ok(condition.add(column.like(&pattern)))
+            },
             
             // Boolean operations
             (FilterValue::Bool(values), CompareOp::Eq) => {

@@ -36,7 +36,7 @@ pub mod patch;
 /// - `DELETE /assignments/plagiarism/bulk`            → Bulk delete plagiarism cases
 /// - `PATCH  /assignments/plagiarism/{case_id}/flag`  → Flag a plagiarism case
 /// - `PATCH  /assignments/plagiarism/{case_id}/review`→ Review a plagiarism case
-pub fn plagiarism_routes() -> Router<AppState> {
+pub fn plagiarism_routes() -> Router {
     Router::new()
         .route("/", get(list_plagiarism_cases))
         .route("/graph", get(get_graph))

@@ -1,13 +1,16 @@
+use std::vec;
+
 use axum::{
     extract::Path,
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-use db::models::{plagiarism_case::{Entity as PlagiarismEntity, Column as PlagiarismColumn}};
-use sea_orm::{TransactionTrait, EntityTrait, QueryFilter, ColumnTrait};
 use serde::Deserialize;
 use crate::response::ApiResponse;
+use util::filters::FilterParam;
+use services::service::Service;
+use services::plagiarism_case::PlagiarismCaseService;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/{case_id}
 ///
@@ -64,18 +67,8 @@ use crate::response::ApiResponse;
 pub async fn delete_plagiarism_case(
     Path((_, _, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    match PlagiarismEntity::delete_by_id(case_id)
-        .exec(db::get_connection().await)
-        .await
-    {
-        Ok(result) => {
-            if result.rows_affected == 0 {
-                return (
-                    StatusCode::NOT_FOUND,
-                    Json(ApiResponse::<()>::error("Plagiarism case not found")),
-                );
-            }
-            
+    match PlagiarismCaseService::delete_by_id(case_id).await {
+        Ok(_) => {
             (
                 StatusCode::OK,
                 Json(ApiResponse::success_without_data("Plagiarism case deleted successfully")),
@@ -180,25 +173,14 @@ pub async fn bulk_delete_plagiarism_cases(
         );
     }
 
-    let txn = match db::get_connection().await.begin().await {
-        Ok(txn) => txn,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(format!(
-                    "Failed to start transaction: {}",
-                    e
-                ))),
-            )
-        }
-    };
-
-    let existing_cases = match PlagiarismEntity::find()
-        .filter(PlagiarismColumn::Id.is_in(payload.case_ids.clone()))
-        .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
-        .all(&txn)
-        .await
-    {
+    let existing_cases = match PlagiarismCaseService::find_all(
+        &vec![
+            FilterParam::eq("id", payload.case_ids.clone()),
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(cases) => cases,
         Err(e) => {
             return (
@@ -228,11 +210,13 @@ pub async fn bulk_delete_plagiarism_cases(
         );
     }
 
-    let delete_result = match PlagiarismEntity::delete_many()
-        .filter(PlagiarismColumn::Id.is_in(payload.case_ids))
-        .exec(&txn)
-        .await
-    {
+    let delete_result = match PlagiarismCaseService::delete(
+        &vec![
+            FilterParam::eq("id", payload.case_ids),
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        &vec![],
+    ).await {
         Ok(result) => result,
         Err(e) => {
             return (
@@ -245,18 +229,8 @@ pub async fn bulk_delete_plagiarism_cases(
         }
     };
 
-    if let Err(e) = txn.commit().await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(format!(
-                "Transaction commit failed: {}",
-                e
-            ))),
-        );
-    }
-
     (
         StatusCode::OK,
-        Json(ApiResponse::success_without_data(&format!("{} plagiarism case{} deleted successfully", delete_result.rows_affected, if delete_result.rows_affected == 1 { "" } else { "s" }))),
+        Json(ApiResponse::success_without_data(&format!("{} plagiarism case{} deleted successfully", delete_result, if delete_result == 1 { "" } else { "s" }))),
     )
 }
