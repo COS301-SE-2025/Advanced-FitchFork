@@ -6,7 +6,6 @@
 //! Access control is enforced using `is_valid` and author checks for editing/deleting messages.
 
 use axum::{Router, routing::{post, put, delete, get}};
-use util::state::AppState;
 
 pub mod post;
 pub mod put;
@@ -30,7 +29,7 @@ use get::get_ticket_messages;
 /// ### Note
 /// - Routes expect the `AppState` extractor to provide the database connection.
 /// - Authorization is enforced per handler.
-pub fn ticket_message_routes(_app_state: AppState) -> Router<AppState> {
+pub fn ticket_message_routes() -> Router {
     Router::new()
         .route("/", post(create_message))
         .route("/", get(get_ticket_messages))

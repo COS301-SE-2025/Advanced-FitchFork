@@ -7,14 +7,14 @@
 
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::ticket_messages::Model as TicketMessageModel;
-use util::state::AppState;
-
 use crate::{auth::AuthUser, response::ApiResponse, ws::tickets::topics::ticket_chat_topic};
+use util::state::AppState;
+use services::service::Service;
+use services::ticket_message::TicketMessageService;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages/{message_id}
 ///
@@ -59,16 +59,13 @@ use crate::{auth::AuthUser, response::ApiResponse, ws::tickets::topics::ticket_c
 /// { "success": false, "message": "Failed to delete message" }
 /// ```
 pub async fn delete_ticket_message(
-    // Capture all ids so we can build the WS topic
     Path((_, _, ticket_id, message_id)): Path<(i64, i64, i64, i64)>,
-    State(app_state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
     let user_id = claims.sub;
 
     // Author check
-    let is_author = TicketMessageModel::is_author(message_id, user_id, db).await;
+    let is_author = TicketMessageService::is_author(message_id, user_id).await;
     if !is_author {
         return (
             StatusCode::FORBIDDEN,
@@ -78,7 +75,7 @@ pub async fn delete_ticket_message(
     }
 
     // Delete
-    if let Err(_) = TicketMessageModel::delete(db, message_id).await {
+    if let Err(_) = TicketMessageService::delete_by_id(message_id).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error("Failed to delete message")),
@@ -88,12 +85,11 @@ pub async fn delete_ticket_message(
 
     // Broadcast deletion to the per-ticket chat topic
     let topic = ticket_chat_topic(ticket_id);
-    let ws = app_state.ws_clone();
     let event = serde_json::json!({
         "event": "message_deleted",
         "payload": { "id": message_id }
     });
-    ws.broadcast(&topic, event.to_string()).await;
+    AppState::get().ws().broadcast(&topic, event.to_string()).await;
 
     // HTTP response
     (

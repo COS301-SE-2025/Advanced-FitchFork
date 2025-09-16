@@ -76,7 +76,7 @@ use services::assignment::{AssignmentService, AssignmentType, Status, UpdateAssi
 /// - The `status` field of the assignment cannot be updated with this endpoint.
 /// - Status is managed automatically by the system when all readiness checks pass.
 pub async fn edit_assignment(
-    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    Path((_, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
     let available_from = match DateTime::parse_from_rfc3339(&req.available_from)

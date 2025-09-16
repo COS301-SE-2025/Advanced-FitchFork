@@ -6,14 +6,12 @@
 //! - `is_valid`: checks whether a user is authorized to access or modify a ticket.
 //! - `TicketResponse`: a serializable response type for ticket API endpoints.
 
-use db::models::{
-    tickets::Model as TicketModel,
-    user_module_role::{Column, Role},
-    UserModuleRole as Entity,
-};
-use db::models::user::Model as UserModel;
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use services::service::Service;
+use services::user::User;
+use services::ticket::{TicketService, Ticket};
+use services::user_module_role::UserModuleRoleService;
+use util::filters::FilterParam;
 
 /// Returns whether `user_id` is allowed to view/post on a ticket in `module_id`.
 ///
@@ -28,7 +26,6 @@ pub async fn is_valid(
     ticket_id: i64,
     module_id: i64,
     is_admin: bool,
-    db: &DatabaseConnection,
 ) -> bool {
     // Admin override
     if is_admin {
@@ -36,20 +33,25 @@ pub async fn is_valid(
     }
 
     // Author of the ticket?
-    if TicketModel::is_author(ticket_id, user_id, db).await {
+    if TicketService::is_author(ticket_id, user_id).await {
         return true;
     }
 
     // Staff on this module?
-    let staff_roles = [Role::Lecturer, Role::AssistantLecturer, Role::Tutor];
-    Entity::find()
-        .filter(Column::UserId.eq(user_id))
-        .filter(Column::ModuleId.eq(module_id))
-        .filter(Column::Role.is_in(staff_roles))
-        .one(db)
-        .await
-        .unwrap_or(None)
-        .is_some()
+    let staff_roles = ["lecturer", "assistant_lecturer", "tutor"];
+    match UserModuleRoleService::find_one(
+        &vec![
+            FilterParam::eq("user_id", user_id),
+            FilterParam::eq("module_id", module_id),
+            FilterParam::eq("role", staff_roles),
+        ],
+        &vec![],
+        None,
+    ).await {
+        Ok(Some(_)) => true,
+        Ok(None) => false,
+        Err(_) => false,
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -64,8 +66,8 @@ pub struct TicketResponse {
     pub updated_at: String,
 }
 
-impl From<TicketModel> for TicketResponse {
-    fn from(ticket: TicketModel) -> Self {
+impl From<Ticket> for TicketResponse {
+    fn from(ticket: Ticket) -> Self {
         Self {
             id: ticket.id,
             assignment_id: ticket.assignment_id,
@@ -86,8 +88,8 @@ pub struct UserResponse {
     pub email: String,
 }
 
-impl From<UserModel> for UserResponse {
-    fn from(user: UserModel) -> Self {
+impl From<User> for UserResponse {
+    fn from(user: User) -> Self {
         Self {
             id: user.id,
             username: user.username,

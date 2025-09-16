@@ -6,7 +6,7 @@
 //! - `MessageResponse`: a serializable response type for ticket message API endpoints.
 //! - `UserResponse`: embedded user information for message responses.
 
-use db::models::ticket_messages::Model as TicketMessageModel;
+use services::ticket_message::TicketMessage;
 
 /// Represents a user in the context of a ticket message.
 #[derive(serde::Serialize)]
@@ -34,8 +34,8 @@ pub struct MessageResponse {
     pub user: Option<UserResponse>,
 }
 
-impl From<(TicketMessageModel, String)> for MessageResponse {
-    fn from((message, username): (TicketMessageModel, String)) -> Self {
+impl From<(TicketMessage, String)> for MessageResponse {
+    fn from((message, username): (TicketMessage, String)) -> Self {
         Self {
             id: message.id,
             ticket_id: message.ticket_id,

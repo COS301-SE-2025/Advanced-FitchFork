@@ -13,13 +13,13 @@ use crate::{
 };
 use axum::{
     Extension,
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use db::models::tickets::Model as TicketModel;
 use serde::Serialize;
-use util::state::AppState;
+use services::service::Service;
+use services::ticket::{TicketService, UpdateTicket};
 
 /// Response payload for ticket status updates.
 #[derive(Serialize)]
@@ -65,16 +65,13 @@ struct TicketStatusResponse {
 ///   "message": "Failed to open ticket"
 /// }
 /// ```
-
 pub async fn open_ticket(
-    State(app_state): State<AppState>,
     Path((module_id, _, ticket_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, module_id, claims.admin, db).await {
+    if !is_valid(user_id, ticket_id, module_id, claims.admin).await {
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error("Forbidden")),
@@ -87,7 +84,12 @@ pub async fn open_ticket(
         status: "open",
     };
 
-    match TicketModel::set_open(db, ticket_id).await {
+    match TicketService::update(
+        UpdateTicket {
+            id: ticket_id,
+            status: Some("open".to_string()),
+        }
+    ).await {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::<TicketStatusResponse>::success(
@@ -139,16 +141,13 @@ pub async fn open_ticket(
 ///   "message": "Failed to close ticket"
 /// }
 /// ```
-
 pub async fn close_ticket(
-    State(app_state): State<AppState>,
     Path((module_id, _, ticket_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, module_id, claims.admin, db).await {
+    if !is_valid(user_id, ticket_id, module_id, claims.admin).await {
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error("Forbidden")),
@@ -161,7 +160,12 @@ pub async fn close_ticket(
         status: "closed",
     };
 
-    match TicketModel::set_closed(db, ticket_id).await {
+    match TicketService::update(
+        UpdateTicket {
+            id: ticket_id,
+            status: Some("closed".to_string()),
+        }
+    ).await {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::<TicketStatusResponse>::success(

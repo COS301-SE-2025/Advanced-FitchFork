@@ -11,10 +11,10 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::tickets::Model as TicketModel;
 use serde::Deserialize;
-
 use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::tickets::common::TicketResponse};
+use services::service::Service;
+use services::ticket::{TicketService, CreateTicket};
 
 /// Request payload for creating a ticket.
 #[derive(Debug, Deserialize)]
@@ -70,10 +70,17 @@ pub async fn create_ticket(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(req): Json<TicketRequest>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
     let user_id = claims.sub;
 
-    match TicketModel::create(db, assignment_id, user_id, &req.title, &req.description).await {
+    match TicketService::create(
+        CreateTicket {
+            assignment_id: assignment_id,
+            user_id: user_id,
+            title: req.title,
+            description: req.description,
+            status: "open".to_string(),
+        }
+    ).await {
         Ok(ticket) => {
             let response = TicketResponse::from(ticket);
             (

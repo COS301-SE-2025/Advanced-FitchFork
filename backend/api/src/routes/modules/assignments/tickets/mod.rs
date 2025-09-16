@@ -42,5 +42,5 @@ pub fn ticket_routes() -> Router {
         .route("/{ticket_id}", delete(delete_ticket))
         .route("/{ticket_id}", get(get_ticket))
         .route("/", get(get_tickets))
-        .nest("/{ticket_id}/messages", ticket_message_routes(app_state.clone()))
+        .nest("/{ticket_id}/messages", ticket_message_routes())
 }

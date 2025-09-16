@@ -7,13 +7,14 @@
 
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::{IntoResponse, Json},
     Extension,
 };
-use db::models::tickets::Model as TicketModel;
 use crate::routes::modules::assignments::tickets::common::is_valid;
+use services::service::Service;
+use services::ticket::TicketService;
 
 /// Deletes an existing ticket.
 ///
@@ -51,18 +52,16 @@ use crate::routes::modules::assignments::tickets::common::is_valid;
 /// }
 /// ```
 pub async fn delete_ticket(
-    State(app_state): State<AppState>,
     Path((module_id, _, ticket_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, module_id,claims.admin, db).await {
+    if !is_valid(user_id, ticket_id, module_id,claims.admin).await {
         return (StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("Forbidden"))).into_response();
     }
 
-    match TicketModel::delete(db, ticket_id).await {
+    match TicketService::delete_by_id(ticket_id).await {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::<()>::success((), "Ticket deleted successfully")),

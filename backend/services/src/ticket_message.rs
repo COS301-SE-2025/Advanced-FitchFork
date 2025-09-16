@@ -65,7 +65,6 @@ impl<'a> Service<'a, Entity, Column, CreateTicketMessage, UpdateTicketMessage> f
 impl TicketMessageService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-
     pub async fn is_author(
         message_id: i64,
         user_id: i64,

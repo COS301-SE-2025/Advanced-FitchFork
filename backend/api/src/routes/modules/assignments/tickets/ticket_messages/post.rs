@@ -6,17 +6,10 @@
 
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::{
-    ticket_messages::Model as TicketMessageModel,
-    user::{Column as UserColumn, Entity as UserEntity, Model as UserModel},
-};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-use util::state::AppState;
-
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
@@ -25,6 +18,10 @@ use crate::{
         ticket_messages::common::{MessageResponse, UserResponse},
     }, ws::tickets::topics::ticket_chat_topic,
 };
+use util::state::AppState;
+use services::service::Service;
+use services::user::UserService;
+use services::ticket_message::{TicketMessageService, CreateTicketMessage};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages
 ///
@@ -91,14 +88,12 @@ use crate::{
 /// ```
 pub async fn create_message(
     Path((module_id, _, ticket_id)): Path<(i64, i64, i64)>,
-    State(app_state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(req): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, module_id, claims.admin, db).await {
+    if !is_valid(user_id, ticket_id, module_id, claims.admin).await {
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error("Forbidden")),
@@ -117,24 +112,31 @@ pub async fn create_message(
         }
     };
 
-    let user: Option<UserModel> = UserEntity::find()
-        .filter(UserColumn::Id.eq(user_id))
-        .one(db)
-        .await
-        .unwrap_or(None);
-
-    let user = match user {
-        Some(u) => u,
-        None => {
+    let user = match UserService::find_by_id(user_id).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::error("User not found")),
             )
                 .into_response();
         }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to fetch user")),
+            )
+                .into_response();
+        }
     };
 
-    let message = match TicketMessageModel::create(db, ticket_id, user_id, &content).await {
+    let message = match TicketMessageService::create(
+        CreateTicketMessage {
+            ticket_id,
+            user_id,
+            content: content,
+        }
+    ).await {
         Ok(msg) => msg,
         Err(_) => {
             return (
@@ -160,12 +162,11 @@ pub async fn create_message(
     // ---- WebSocket broadcast: notify subscribers on this ticket's topic ----
     // Topic: ws/tickets/{ticket_id}
     let topic = ticket_chat_topic(ticket_id);
-    let ws = app_state.ws_clone();
     let event_json = serde_json::json!({
         "event": "message_created",
         "payload": &response
     });
-    ws.broadcast(&topic, event_json.to_string()).await;
+    AppState::get().ws().broadcast(&topic, event_json.to_string()).await;
 
     (
         StatusCode::OK,

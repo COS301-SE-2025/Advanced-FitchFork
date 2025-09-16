@@ -7,18 +7,18 @@
 
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::ticket_messages::Model as TicketMessageModel;
-use util::state::AppState;
-
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
     routes::modules::assignments::tickets::ticket_messages::common::MessageResponse, ws::tickets::topics::ticket_chat_topic,
 };
+use util::state::AppState;
+use services::service::Service;
+use services::ticket_message::{TicketMessageService, UpdateTicketMessage};
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages/{message_id}
 ///
@@ -101,17 +101,14 @@ use crate::{
 /// { "content": "Updated message text" }
 /// ```
 pub async fn edit_ticket_message(
-    // NOTE: we now extract module_id, assignment_id, and ticket_id so we can build the WS topic
     Path((_, _, ticket_id, message_id)): Path<(i64, i64, i64, i64)>,
-    State(app_state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(req): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
     let user_id = claims.sub;
 
     // Only the author can edit
-    let is_author = TicketMessageModel::is_author(message_id, user_id, db).await;
+    let is_author = TicketMessageService::is_author(message_id, user_id).await;
     if !is_author {
         return (
             StatusCode::FORBIDDEN,
@@ -133,7 +130,12 @@ pub async fn edit_ticket_message(
     };
 
     // Update in DB
-    let message = match TicketMessageModel::update(db, message_id, &content).await {
+    let message = match TicketMessageService::update(
+        UpdateTicketMessage {
+            id: message_id,
+            content: Some(content),
+        }
+    ).await {
         Ok(msg) => msg,
         Err(_) => {
             return (
@@ -167,7 +169,7 @@ pub async fn edit_ticket_message(
             "user": null
         }
     });
-    app_state.ws_clone().broadcast(&topic, payload.to_string()).await;
+    AppState::get().ws().broadcast(&topic, payload.to_string()).await;
 
     (
         StatusCode::OK,

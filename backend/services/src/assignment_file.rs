@@ -4,6 +4,7 @@ use db::{
     repository::Repository,
 };
 use util::filters::FilterParam;
+use util::execution_config::ExecutionConfig;
 use sea_orm::{DbErr, Set};
 use std::{env, fs, path::PathBuf};
 use chrono::{Utc, DateTime};
@@ -124,13 +125,18 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentFile, UpdateAssignmentFile>
 impl AssignmentFileService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-    // pub fn load_execution_config(&self, module_id: i64) -> Result<ExecutionConfig, String> {
-    //     if self.file_type != FileType::Config {
-    //         return Err("File is not of type 'config'".to_string());
-    //     }
+    pub async fn load_execution_config(module_id: i64, assignment_id: i64) -> Result<ExecutionConfig, String> {
+        let file = match Repository::<Entity, Column>::find_by_id(assignment_id).await.map_err(|e| format!("DB error while fetching config file: {:?}", e))? {
+            Some(f) => f,
+            None => return Err("No configuration file found".to_string()),
+        };
 
-    //     ExecutionConfig::get_execution_config(module_id, self.assignment_id)
-    // }
+        if file.file_type != FileType::Config {
+            return Err("File is not of type 'config'".to_string());
+        }
+
+        ExecutionConfig::get_execution_config(module_id, assignment_id)
+    }
 
     pub fn storage_root() -> PathBuf {
         env::var("ASSIGNMENT_STORAGE_ROOT")

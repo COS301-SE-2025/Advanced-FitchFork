@@ -1,12 +1,14 @@
 use crate::service::{Service, AppError, ToActiveModel};
 use db::{
-    models::tickets::{ActiveModel, Entity, Column, TicketStatus},
+    models::tickets::{ActiveModel, Entity, Column},
     repository::Repository,
 };
 use sea_orm::{DbErr, Set};
 use chrono::Utc;
 
 pub use db::models::tickets::Model as Ticket;
+pub use db::models::tickets::TicketStatus;
+
 
 #[derive(Debug, Clone)]
 pub struct CreateTicket {

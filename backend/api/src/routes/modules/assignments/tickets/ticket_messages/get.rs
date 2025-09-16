@@ -14,19 +14,11 @@ use crate::{
 };
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     http::StatusCode,
     response::IntoResponse,
 };
-
-use db::models::{
-    ticket_messages::{Column as TicketMessageColumn, Entity as TicketMessageEntity},
-    user::Entity as UserEntity,
-};
-use migration::Expr;
-use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use util::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
@@ -134,14 +126,12 @@ pub struct FilterResponse {
 /// See the `200 OK` example above.
 pub async fn get_ticket_messages(
     Path((module_id, _, ticket_id)): Path<(i64, i64, i64)>,
-    State(app_state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Query(params): Query<FilterReq>,
 ) -> impl IntoResponse {
     let user_id: i64 = claims.sub;
-    let db = app_state.db();
 
-    if !is_valid(user_id, ticket_id, module_id, claims.admin, db).await {
+    if !is_valid(user_id, ticket_id, module_id, claims.admin).await {
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error("Forbidden")),
