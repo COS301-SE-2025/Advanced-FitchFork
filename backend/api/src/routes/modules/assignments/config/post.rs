@@ -1,15 +1,13 @@
-use db::models::assignment_file::{FileType, Model as AssignmentFile};
 use axum::{
     extract::{Json, Path},
     http::StatusCode,
     response::IntoResponse,
 };
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 use serde_json::Value;
 use crate::response::ApiResponse;
-use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
 use util::execution_config::ExecutionConfig;
-
+use services::{assignment_file::CreateAssignmentFile, service::Service};
+use services::assignment_file::AssignmentFileService;
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -61,8 +59,6 @@ pub async fn set_assignment_config(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(config_json): Json<Value>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     if !config_json.is_object() {
         return (
             StatusCode::BAD_REQUEST,
@@ -80,29 +76,6 @@ pub async fn set_assignment_config(
         }
     };
 
-    // Check assignment existence
-    let assignment = match AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(db)
-        .await
-    {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment or module not found")),
-            );
-        }
-        Err(e) => {
-            eprintln!("DB error: {:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error")),
-            );
-        }
-    };
-
     // Save as assignment file using `save_file`
     let bytes = match serde_json::to_vec_pretty(&config) {
         Ok(b) => b,
@@ -115,16 +88,15 @@ pub async fn set_assignment_config(
         }
     };
 
-    match AssignmentFile::save_file(
-        &db,
-        assignment.id.into(),
-        module_id,
-        FileType::Config,
-        "config.json",
-        &bytes,
-    )
-    .await
-    {
+    match AssignmentFileService::create(
+        CreateAssignmentFile {
+            assignment_id: assignment_id,
+            module_id,
+            file_type: "config".to_string(),
+            filename: "config.json".to_string(),
+            bytes,
+        }
+    ).await {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::success((), "Assignment configuration saved")),
@@ -154,34 +126,8 @@ pub async fn set_assignment_config(
 /// }
 /// ```
 pub async fn reset_assignment_config(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
-    // Ensure the assignment exists and belongs to the module
-    let assignment = match AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(db)
-        .await
-    {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<ExecutionConfig>::error("Assignment or module not found")),
-            );
-        }
-        Err(e) => {
-            eprintln!("DB error: {:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ExecutionConfig>::error("Database error")),
-            );
-        }
-    };
-
     // Build defaults
     let default_cfg = ExecutionConfig::default_config();
 
@@ -197,16 +143,15 @@ pub async fn reset_assignment_config(
         }
     };
 
-    match AssignmentFile::save_file(
-        &db,
-        assignment.id.into(),
-        module_id,
-        FileType::Config,
-        "config.json",
-        &bytes,
-    )
-    .await
-    {
+    match AssignmentFileService::create(
+        CreateAssignmentFile {
+            assignment_id: assignment_id,
+            module_id,
+            file_type: "config".to_string(),
+            filename: "config.json".to_string(),
+            bytes,
+        }
+    ).await {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::<ExecutionConfig>::success(

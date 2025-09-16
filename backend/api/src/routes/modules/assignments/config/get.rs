@@ -5,11 +5,12 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
-use db::models::assignment_file::{Entity as AssignmentFile, Column as AssignmentFileColumn, FileType, Model as AssignmentFileModel};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::to_value;
 use util::execution_config::ExecutionConfig;
+use util::filters::FilterParam;
+use services::service::Service;
+use services::assignment::AssignmentService;
+use services::assignment_file::AssignmentFileService;
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -71,15 +72,8 @@ use util::execution_config::ExecutionConfig;
 pub async fn get_assignment_config(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = db::get_connection().await;
-
     // Verify the assignment exists
-    match AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(db)
-        .await
-    {
+    match AssignmentService::find_by_id(assignment_id).await {
         Ok(Some(_)) => {}
         Ok(None) => {
             return (
@@ -99,13 +93,14 @@ pub async fn get_assignment_config(
     }
 
     // Look up the latest config assignment file
-    let config_file: Option<AssignmentFileModel> = match AssignmentFile::find()
-        .filter(AssignmentFileColumn::AssignmentId.eq(assignment_id))
-        .filter(AssignmentFileColumn::FileType.eq(FileType::Config))
-        .order_by_desc(AssignmentFileColumn::UpdatedAt)
-        .one(db)
-        .await
-    {
+    let config_file = match AssignmentFileService::find_one(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+            FilterParam::eq("file_type", "config".to_string()),
+        ],
+        &vec![],
+        Some("-updated_at".to_string()),
+    ).await {
         Ok(opt) => opt,
         Err(e) => {
             eprintln!("DB error while fetching config file: {:?}", e);
@@ -119,7 +114,7 @@ pub async fn get_assignment_config(
 
     // Load the config from the file model
     match config_file {
-        Some(file_model) => match file_model.load_execution_config(module_id) {
+        Some(_) => match AssignmentFileService::load_execution_config(module_id, assignment_id).await {
             Ok(cfg) => {
                 let json = to_value(cfg).unwrap_or_else(|_| serde_json::json!({}));
                 (
