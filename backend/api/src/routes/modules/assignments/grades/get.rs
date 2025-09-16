@@ -9,7 +9,7 @@
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     body::Body,
-    extract::{Extension, Path, Query, State},
+    extract::{Extension, Path, Query},
     http::{
         header::{CONTENT_DISPOSITION, CONTENT_TYPE},
         HeaderValue, StatusCode,
@@ -17,21 +17,13 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use db::models::{
-    assignment::{Column as AssignmentCol, Entity as AssignmentEntity, Model as AssignmentModel},
-    assignment_submission::{
-        Column as SubCol, Entity as SubmissionEntity, Model as SubModel, Relation as SubRel,
-    },
-    user::{Column as UserCol, Entity as UserEntity, Model as UserModel},
-};
-use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, JoinType, QueryFilter, QueryOrder,
-    QuerySelect, RelationTrait,
-};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use util::{execution_config::{execution_config::GradingPolicy, ExecutionConfig}, state::AppState};
+use util::execution_config::{execution_config::GradingPolicy, ExecutionConfig};
+use services::service::Service;
+use services::user::User;
+use services::assignment_submission::AssignmentSubmission;
 
 #[derive(Debug, Deserialize)]
 pub struct ListGradeQueryParams {
@@ -74,37 +66,22 @@ pub struct PaginatedGradeResponse {
 
 // Internal row after applying policy
 struct GradeRow {
-    submission: SubModel,
-    user: UserModel,
+    submission: AssignmentSubmission,
+    user: User,
     score_pct: f32,       // 0..100
 }
 
-async fn load_execution_config_for(
-    module_id: i64,
-    assignment_id: i64,
-) -> Result<ExecutionConfig, String> {
-    ExecutionConfig::get_execution_config(module_id, assignment_id)
-}
-
 async fn compute_grades_for_assignment(
-    db: &DatabaseConnection,
     module_id: i64,
     assignment_id: i64,
     username_filter: Option<&str>,
-) -> Result<(Vec<GradeRow>, ExecutionConfig), sea_orm::DbErr> {
-    // Ensure assignment exists under module (also lets you reuse dates later if needed)
-    let _assignment: AssignmentModel = AssignmentEntity::find()
-        .filter(AssignmentCol::Id.eq(assignment_id))
-        .filter(AssignmentCol::ModuleId.eq(module_id))
-        .one(db)
-        .await?
-        .ok_or_else(|| sea_orm::DbErr::Custom("Assignment not found".into()))?;
-
-        // Load execution config from disk (propagate as DbErr::Custom on failure)
-        let exec_cfg = load_execution_config_for(module_id, assignment_id)
-            .await
-            .map_err(|e| sea_orm::DbErr::Custom(format!("Execution config error: {e}")))?;
-
+) -> Result<(Vec<GradeRow>, ExecutionConfig), String> {
+    let exec_cfg = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            return Err(e);
+        }
+    };
 
     // Base query: submissions for assignment, joined with user
     // - Exclude practice submissions (adjust if you want to include them)
@@ -128,7 +105,7 @@ async fn compute_grades_for_assignment(
     let rows: Vec<(SubModel, Option<UserModel>)> = q.all(db).await?;
 
     // Group attempts by user
-    let mut per_user: HashMap<i64, Vec<(SubModel, UserModel)>> = HashMap::new();
+    let mut per_user: HashMap<i64, Vec<(AssignmentSubmission, User)>> = HashMap::new();
     for (s, u_opt) in rows {
         if let Some(u) = u_opt {
             per_user.entry(s.user_id).or_default().push((s, u));
@@ -263,18 +240,16 @@ async fn compute_grades_for_assignment(
 /// }
 /// ```
 pub async fn list_grades(
-    State(state): State<AppState>,
-    Extension(_user): Extension<AuthUser>, // route already protected
+    Extension(_): Extension<AuthUser>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Query(params): Query<ListGradeQueryParams>,
 ) -> Response {
-    let db = state.db();
     let page = params.page.max(1);
     let per_page = params.per_page.clamp(1, 100);
 
     let username_filter = params.query.as_deref();
 
-    let (mut grades, _cfg) = match compute_grades_for_assignment(db, module_id, assignment_id, username_filter).await {
+    let (mut grades, _cfg) = match compute_grades_for_assignment(module_id, assignment_id, username_filter).await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("list_grades: compute error: {e}");
@@ -420,37 +395,9 @@ pub async fn list_grades(
 /// }
 /// ```
 pub async fn export_grades(
-    State(state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> Response {
-    let db = state.db();
-
-    // Ensure assignment exists in the module (cheap guard)
-    match AssignmentEntity::find()
-        .filter(AssignmentCol::Id.eq(assignment_id))
-        .filter(AssignmentCol::ModuleId.eq(module_id))
-        .one(db)
-        .await
-    {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment not found")),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            eprintln!("export_grades: assignment lookup error: {e}");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving assignment")),
-            )
-                .into_response();
-        }
-    }
-
-    let (rows, _cfg) = match compute_grades_for_assignment(db, module_id, assignment_id, None).await {
+    let (rows, _cfg) = match compute_grades_for_assignment(module_id, assignment_id, None).await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("export_grades: compute error: {e}");

@@ -11,6 +11,9 @@ pub enum AppError {
     #[error("{0}")]
     Database(#[from] DbErr),
 
+    #[error("{0}")]
+    Message(String),
+
     #[error("Unexpected database error")]
     DatabaseUnknown,
 }
