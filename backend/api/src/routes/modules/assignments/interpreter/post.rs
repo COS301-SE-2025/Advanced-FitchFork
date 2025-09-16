@@ -1,13 +1,13 @@
 use crate::response::ApiResponse;
 use axum::{
     Json,
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path},
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::assignment_interpreter::Model as InterpreterModel;
 use serde::Serialize;
-use util::state::AppState;
+use services::service::Service;
+use services::assignment_interpreter::{AssignmentInterpreterService, CreateAssignmentInterpreter};
 
 #[derive(Debug, Serialize)]
 pub struct UploadedInterpreterMetadata {
@@ -39,12 +39,9 @@ pub struct UploadedInterpreterMetadata {
 /// - `500 Internal Server Error` → database or file write errors
 ///
 pub async fn upload_interpreter(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
     let mut command: Option<String> = None;
     let mut file_name: Option<String> = None;
     let mut file_bytes: Option<Vec<u8>> = None;
@@ -116,16 +113,15 @@ pub async fn upload_interpreter(
         }
     };
 
-    match InterpreterModel::save_file(
-        db,
-        assignment_id,
-        module_id,
-        &file_name,
-        &command,
-        &file_bytes,
-    )
-    .await
-    {
+    match AssignmentInterpreterService::create(
+        CreateAssignmentInterpreter {
+            assignment_id,
+            module_id,
+            filename: file_name,
+            command: command,
+            bytes: file_bytes,
+        }
+    ).await {
         Ok(saved) => {
             let metadata = UploadedInterpreterMetadata {
                 id: saved.id,

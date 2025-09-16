@@ -114,6 +114,7 @@ pub async fn delete_files(
     }
 
     for id in file_ids {
+        AssignmentFileService::delete_file_only(id).await;
         AssignmentFileService::delete_by_id(id).await;
     }
 

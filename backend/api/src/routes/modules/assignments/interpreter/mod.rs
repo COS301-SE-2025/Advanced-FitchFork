@@ -5,13 +5,12 @@
 use crate::{auth::guards::{require_lecturer}, routes::modules::assignments::interpreter::get::get_interpreter_info};
 use axum::{
     Router,
-    middleware::from_fn_with_state,
+    middleware::from_fn,
     routing::{delete, get, post},
 };
 use delete::delete_interpreter;
 use get::download_interpreter;
 use post::upload_interpreter;
-use util::state::AppState;
 
 pub mod delete;
 pub mod get;
@@ -34,8 +33,8 @@ pub mod post;
 /// An [`axum::Router`] with the file endpoints and their associated middleware.
 pub fn interpreter_routes() -> Router {
     Router::new()
-        .route("/",post(upload_interpreter).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)))
-        .route("/",get(download_interpreter).route_layer(from_fn_with_state(app_state.clone(),require_lecturer)))
-        .route("/info",get(get_interpreter_info).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)))
-        .route("/",delete(delete_interpreter).route_layer(from_fn_with_state(app_state.clone(), require_lecturer)))
+        .route("/",post(upload_interpreter).route_layer(from_fn(require_lecturer)))
+        .route("/",get(download_interpreter).route_layer(from_fn(require_lecturer)))
+        .route("/info",get(get_interpreter_info).route_layer(from_fn(require_lecturer)))
+        .route("/",delete(delete_interpreter).route_layer(from_fn(require_lecturer)))
 }

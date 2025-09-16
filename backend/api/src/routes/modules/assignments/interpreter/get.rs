@@ -1,17 +1,15 @@
 use crate::response::ApiResponse;
 use axum::{
-    extract::{Path, State},
+    extract::Path,
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Json, Response},
 };
-use db::models::assignment_interpreter::{
-    Column as InterpreterColumn, Entity as InterpreterEntity,
-};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::Serialize;
 use std::{env, path::PathBuf};
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
-use util::state::AppState;
+use util::filters::FilterParam;
+use services::service::Service;
+use services::assignment_interpreter::AssignmentInterpreterService;
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/interpreter
 ///
@@ -27,22 +25,21 @@ use util::state::AppState;
 /// - `500 Internal Server Error`: If DB or file read fails
 ///
 pub async fn download_interpreter(
-    State(app_state): State<AppState>,
     Path((_module_id, assignment_id)): Path<(i64, i64)>,
 ) -> Response {
-    let db = app_state.db();
-
     // There should be at most one interpreter per assignment
-    let interpreter = match InterpreterEntity::find()
-        .filter(InterpreterColumn::AssignmentId.eq(assignment_id))
-        .one(db)
-        .await
-    {
+    let interpreter = match AssignmentInterpreterService::find_one(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(Some(interpreter)) => interpreter,
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Interpreter not found")),
+                Json(ApiResponse::<()>::error("No interpreter found for assignment")),
             )
                 .into_response();
         }
@@ -56,8 +53,7 @@ pub async fn download_interpreter(
         }
     };
 
-    let storage_root =
-        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/interpreters".to_string());
+    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/interpreters".to_string());
     let fs_path = PathBuf::from(storage_root).join(&interpreter.path);
 
     if tokio::fs::metadata(&fs_path).await.is_err() {
@@ -126,21 +122,20 @@ pub struct InterpreterInfo {
 /// - 404 Not Found if no interpreter present
 /// - 500 on DB or other errors
 pub async fn get_interpreter_info(
-    State(app_state): State<AppState>,
     Path((_module_id, assignment_id)): Path<(i64, i64)>,
 ) -> Response {
-    let db = app_state.db();
-
-    let interpreter = match InterpreterEntity::find()
-        .filter(InterpreterColumn::AssignmentId.eq(assignment_id))
-        .one(db)
-        .await
-    {
-        Ok(Some(m)) => m,
+    let interpreter = match AssignmentInterpreterService::find_one(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        &vec![],
+        None,
+    ).await {
+        Ok(Some(interpreter)) => interpreter,
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Interpreter not found")),
+                Json(ApiResponse::<()>::error("No interpreter found for assignment")),
             )
                 .into_response();
         }

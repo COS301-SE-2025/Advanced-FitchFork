@@ -1,13 +1,13 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::assignment_interpreter;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::json;
-use util::state::AppState;
+use util::filters::FilterParam;
+use services::service::Service;
+use services::assignment_interpreter::AssignmentInterpreterService;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/interpreter
 ///
@@ -43,17 +43,16 @@ use util::state::AppState;
 /// }
 /// ```
 pub async fn delete_interpreter(
-    State(app_state): State<AppState>,
     Path((_module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
     // Find the interpreter(s) for this assignment
-    let interpreters = match assignment_interpreter::Entity::find()
-        .filter(assignment_interpreter::Column::AssignmentId.eq(assignment_id))
-        .all(db)
-        .await
-    {
+    let interpreters = match AssignmentInterpreterService::find_all(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(models) => models,
         Err(err) => {
             return (
@@ -76,11 +75,9 @@ pub async fn delete_interpreter(
         );
     }
 
-    // Delete each interpreter file and DB record
     for interpreter in interpreters {
-        let _ = interpreter.delete_file_only(); // ignore file deletion errors
-        let am: assignment_interpreter::ActiveModel = interpreter.into();
-        let _ = am.delete(db).await; // ignore DB deletion errors for now
+        AssignmentInterpreterService::delete_file_only(interpreter.id).await;
+        AssignmentInterpreterService::delete_by_id(interpreter.id).await;
     }
 
     (
