@@ -2,13 +2,12 @@ use crate::response::ApiResponse;
 use axum::{
     Json,
     body::Bytes,
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path},
     http::StatusCode,
     response::IntoResponse,
 };
-
-use db::models::assignment_overwrite_file::Model as OverwriteFileModel;
-use util::state::AppState;
+use services::service::Service;
+use services::assignment_overwrite_file::{AssignmentOverwriteFileService, CreateAssignmentOverwriteFile};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_id}
 ///
@@ -19,12 +18,9 @@ use util::state::AppState;
 /// - `assignment_id` (i64): Assignment ID
 /// - `task_id` (i64): Task id within the assignment
 pub async fn post_task_overwrite_files(
-    State(app_state): State<AppState>,
     Path((_module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
     let mut saved_files = Vec::new();
 
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
@@ -34,7 +30,14 @@ pub async fn post_task_overwrite_files(
             .unwrap_or_else(|| "file".into());
         let bytes = field.bytes().await.unwrap_or_else(|_| Bytes::new());
 
-        match OverwriteFileModel::save_file(db, assignment_id, task_id, &file_name, &bytes).await {
+        match AssignmentOverwriteFileService::create(
+            CreateAssignmentOverwriteFile {
+                assignment_id,
+                task_id,
+                filename: file_name,
+                bytes: bytes.to_vec(),
+            }
+        ).await {
             Ok(file_model) => saved_files.push(file_model.filename),
             Err(e) => {
                 eprintln!("Failed to save overwrite file: {:?}", e);

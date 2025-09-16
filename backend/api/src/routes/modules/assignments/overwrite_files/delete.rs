@@ -1,16 +1,13 @@
 use crate::response::ApiResponse;
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::Path,
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::assignment_overwrite_file::{
-    ActiveModel as OverwriteFileActiveModel, Column as OverwriteFileColumn,
-    Entity as OverwriteFileEntity, Model as OverwriteFileModel,
-};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
-use util::state::AppState;
+use util::filters::FilterParam;
+use services::service::Service;
+use services::assignment_overwrite_file::AssignmentOverwriteFileService;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_id}
 ///
@@ -21,17 +18,16 @@ use util::state::AppState;
 /// - `assignment_id` (i64): Assignment ID
 /// - `task_id` (i64): Task id within the assignment
 pub async fn delete_task_overwrite_files(
-    State(app_state): State<AppState>,
-    Path((_module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
+    Path((_, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
-    let files: Vec<OverwriteFileModel> = match OverwriteFileEntity::find()
-        .filter(OverwriteFileColumn::AssignmentId.eq(assignment_id))
-        .filter(OverwriteFileColumn::TaskId.eq(task_id))
-        .all(db)
-        .await
-    {
+    let files = match AssignmentOverwriteFileService::find_all(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+            FilterParam::eq("task_id", task_id),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(f) => f,
         Err(e) => {
             eprintln!("DB error fetching overwrite files: {:?}", e);
@@ -56,12 +52,10 @@ pub async fn delete_task_overwrite_files(
     }
 
     for file in files {
-        if let Err(e) = file.delete_file_only() {
+        if let Err(e) = AssignmentOverwriteFileService::delete_file_only(file.id).await {
             eprintln!("Failed to delete file from disk: {:?}", e);
         }
-
-        let active: OverwriteFileActiveModel = file.into();
-        if let Err(e) = active.delete(db).await {
+        if let Err(e) = AssignmentOverwriteFileService::delete_by_id(file.id).await {
             eprintln!("DB error deleting overwrite file: {:?}", e);
         }
     }

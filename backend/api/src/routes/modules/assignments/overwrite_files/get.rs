@@ -1,30 +1,26 @@
 use axum::{
-    extract::{Path, State},
+    extract::Path,
     http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
-use db::models::assignment_overwrite_file::{
-    Entity as OverwriteFileEntity, Model as OverwriteFileModel,
-};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
-use util::state::AppState;
+use util::filters::FilterParam;
+use services::service::Service;
+use services::assignment_overwrite_file::AssignmentOverwriteFileService;
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_id}
 ///
 /// Returns the first overwrite file for the task as a downloadable file
 pub async fn get_task_overwrite_files(
-    State(app_state): State<AppState>,
-    Path((_module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
+    Path((_, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
-    let file: Option<OverwriteFileModel> = match OverwriteFileEntity::find()
-        .filter(db::models::assignment_overwrite_file::Column::AssignmentId.eq(assignment_id))
-        .filter(db::models::assignment_overwrite_file::Column::TaskId.eq(task_id))
-        .order_by_desc(db::models::assignment_overwrite_file::Column::CreatedAt)
-        .one(db)
-        .await
-    {
+    let file = match AssignmentOverwriteFileService::find_one(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+            FilterParam::eq("task_id", task_id),
+        ],
+        &vec![],
+        Some("-created_at".to_string()),
+    ).await {
         Ok(f) => f,
         Err(e) => {
             eprintln!("DB error fetching overwrite files: {:?}", e);
@@ -41,7 +37,7 @@ pub async fn get_task_overwrite_files(
         None => return (StatusCode::NOT_FOUND, "Overwrite file not found").into_response(),
     };
 
-    let contents = match file.load_file() {
+    let contents = match AssignmentOverwriteFileService::load_file(file.id).await {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Failed to read file from disk: {:?}", e);
