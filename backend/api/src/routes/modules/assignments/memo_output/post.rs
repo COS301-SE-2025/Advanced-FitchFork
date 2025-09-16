@@ -96,10 +96,7 @@ use tracing::{error, info};
 pub async fn generate_memo_output(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    let db = db::get_connection().await;
-
-    let base_path =
-        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
+    let base_path = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
 
     let assignment_root = PathBuf::from(&base_path)
         .join(format!("module_{}", module_id))
@@ -141,7 +138,7 @@ pub async fn generate_memo_output(
         );
     }
 
-    match create_memo_outputs_for_all_tasks(db, assignment_id).await {
+    match create_memo_outputs_for_all_tasks(assignment_id).await {
         Ok(_) => {
             info!(
                 "Memo output generation complete for assignment {}",

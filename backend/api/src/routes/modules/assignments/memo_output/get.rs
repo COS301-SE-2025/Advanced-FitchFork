@@ -1,10 +1,14 @@
+use std::vec;
+
 use crate::response::ApiResponse;
-use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
 use tokio::fs as tokio_fs;
-use util::{execution_config::ExecutionConfig, state::AppState};
-use db::models::{assignment_memo_output, assignment_task};
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+use util::execution_config::ExecutionConfig;
+use util::filters::FilterParam;
+use services::service::Service;
+use services::assignment_memo_output::AssignmentMemoOutputService;
+use services::assignment_task::AssignmentTaskService;
 
 #[derive(Serialize)]
 struct MemoSubsection {
@@ -54,17 +58,16 @@ struct MemoTaskOutput {
 /// curl http://localhost:3000/api/modules/1/assignments/2/memo_output
 /// ```
 pub async fn get_all_memo_outputs(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
     // Fetch all memo output models for the given assignment
-    let memo_outputs = match assignment_memo_output::Entity::find()
-        .filter(assignment_memo_output::Column::AssignmentId.eq(assignment_id))
-        .all(db)
-        .await
-    {
+    let memo_outputs = match AssignmentMemoOutputService::find_all(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+        ],
+        &vec![],
+        None,
+    ).await {
         Ok(models) if !models.is_empty() => models,
         Ok(_) => {
             return (
@@ -89,7 +92,10 @@ pub async fn get_all_memo_outputs(
     let mut results = Vec::new();
 
     for memo in memo_outputs {
-        let full_path = memo.full_path();
+        let full_path = match AssignmentMemoOutputService::full_path(memo.id).await {
+            Ok(path) => path,
+            Err(_) => continue,
+        };
         if !full_path.is_file() {
             continue;
         }
@@ -114,13 +120,14 @@ pub async fn get_all_memo_outputs(
             .collect::<Vec<_>>();
 
         // Lookup the task number and name
-        let Some(task) = assignment_task::Entity::find_by_id(memo.task_id)
-            .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
-            .one(db)
-            .await
-            .ok()
-            .flatten()
-        else {
+        let Some(task) = AssignmentTaskService::find_one(
+            &vec![
+                FilterParam::eq("id", memo.task_id),
+                FilterParam::eq("assignment_id", assignment_id),
+            ],
+            &vec![],
+            None,
+        ).await.ok().flatten() else {
             continue;
         };
 
