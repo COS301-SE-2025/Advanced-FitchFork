@@ -100,7 +100,7 @@ pub async fn upsert_user(
 
     match UserService::find_one(
         &vec![
-            FilterParam::eq("username", req.username),
+            FilterParam::eq("username", req.username.clone()),
         ],
         &vec![],
         None,
@@ -137,9 +137,9 @@ pub async fn upsert_user(
             match UserService::create(
                 CreateUser{
                     id: None,
-                    username: req.username.clone(),
-                    email: req.email.clone(),
-                    password: req.password.clone(),
+                    username: req.username,
+                    email: req.email,
+                    password: req.password,
                     admin,
                 }
             ).await {
