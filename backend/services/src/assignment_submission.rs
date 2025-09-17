@@ -32,6 +32,8 @@ pub struct CreateAssignmentSubmission {
 pub struct UpdateAssignmentSubmission {
     pub id: i64,
     pub ignored: Option<bool>,
+    pub earned: Option<i64>,
+    pub total: Option<i64>,
 }
 
 impl ToActiveModel<AssignmentSubmissionEntity> for CreateAssignmentSubmission {

@@ -21,6 +21,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use crate::response::ApiResponse;
+use services::service::Service;
+use services::assignment_submission::{AssignmentSubmissionService, UpdateAssignmentSubmission};
 
 #[derive(Debug, Deserialize)]
 pub struct SetIgnoredReq {
@@ -72,36 +74,15 @@ struct SetIgnoredData {
 /// }
 /// ```
 pub async fn set_submission_ignored(
-    Path((_module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
+    Path((_, _, submission_id)): Path<(i64, i64, i64)>,
     Json(req): Json<SetIgnoredReq>,
 ) -> impl IntoResponse {
-    // Validate submission belongs to the assignment
-    let sub = match submission::Entity::find()
-        .filter(submission::Column::Id.eq(submission_id))
-        .filter(submission::Column::AssignmentId.eq(assignment_id))
-        .one(db)
-        .await
-    {
-        Ok(Some(s)) => s,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<SetIgnoredData>::error(format!(
-                    "No submission {} found for assignment {}",
-                    submission_id, assignment_id
-                ))),
-            )
+    match AssignmentSubmissionService::update(
+        UpdateAssignmentSubmission {
+            id: submission_id,
+            ignored: Some(req.ignored),
         }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SetIgnoredData>::error(format!("DB error: {}", e))),
-            )
-        }
-    };
-
-    // Update flag (using the model helper you added)
-    match submission::Model::set_ignored(db, sub.id, req.ignored).await {
+    ).await {
         Ok(updated) => {
             let data = SetIgnoredData {
                 id: updated.id,

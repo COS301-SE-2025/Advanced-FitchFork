@@ -20,7 +20,13 @@ use util::{
     mark_allocator::mark_allocator::generate_allocator,
     mark_allocator::mark_allocator::load_allocator,
     scan_code_content::scan_code_content,
+    filters::FilterParam,
 };
+use services::service::Service;
+use services::assignment::{AssignmentService, Assignment};
+use services::assignment_submission::{AssignmentSubmissionService, AssignmentSubmission, UpdateAssignmentSubmission};
+use services::assignment_submission_output::{AssignmentSubmissionOutputService, AssignmentSubmissionOutput};
+use services::assignment_task::{AssignmentTaskService, AssignmentTask};
 
 #[derive(Debug, Deserialize)]
 pub struct RemarkRequest {
@@ -105,7 +111,7 @@ async fn resolve_submission_ids(
 ) -> Result<Vec<i64>, String> {
     match (submission_ids, all) {
         (Some(ids), _) if !ids.is_empty() => Ok(ids),
-        (_, Some(true)) => AssignmentSubmissionModel::find_by_assignment(assignment_id, db)
+        (_, Some(true)) => AssignmentSubmissionService::find_by_assignment(assignment_id)
             .await
             .map_err(|e| format!("Failed to fetch submissions: {}", e)),
         _ => Err("Must provide either submission_ids or all=true".to_string()),
@@ -116,12 +122,15 @@ async fn resolve_submission_ids(
 async fn load_assignment(
     module_id: i64,
     assignment_id: i64,
-) -> Result<db::models::assignment::Model, String> {
-    AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id))
-        .filter(AssignmentColumn::ModuleId.eq(module_id))
-        .one(db)
-        .await
+) -> Result<Assignment, String> {
+    AssignmentService::find_one(
+        &vec![
+            FilterParam::eq("id", assignment_id),
+            FilterParam::eq("module_id", module_id),
+        ],
+        &vec![],
+        None,
+    ).await
         .map_err(|e| format!("Database error: {}", e))?
         .ok_or_else(|| "Assignment not found".to_string())
 }
@@ -244,12 +253,14 @@ async fn get_next_attempt(
     assignment_id: i64,
     user_id: i64,
 ) -> Result<i64, String> {
-    let prev_attempt = assignment_submission::Entity::find()
-        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
-        .filter(assignment_submission::Column::UserId.eq(user_id))
-        .order_by_desc(assignment_submission::Column::Attempt)
-        .one(db)
-        .await
+    let prev_attempt = AssignmentSubmissionService::find_one(
+        &vec![
+            FilterParam::eq("assignment_id", assignment_id),
+            FilterParam::eq("user_id", user_id),
+        ],
+        &vec![],
+        Some("-attempt".to_string()),
+    ).await
         .map_err(|e| format!("Database error: {}", e))?
         .map(|s| s.attempt)
         .unwrap_or(0);
@@ -259,8 +270,8 @@ async fn get_next_attempt(
 
 /// Core grading function that can be used for initial submissions, regrading, and resubmission
 async fn grade_submission(
-    submission: AssignmentSubmissionModel,
-    assignment: &db::models::assignment::Model,
+    submission: AssignmentSubmission,
+    assignment: Assignment,
     base_path: &std::path::Path,
     memo_outputs: &[std::path::PathBuf],
     mark_allocator_path: &std::path::Path,
@@ -301,16 +312,8 @@ async fn grade_submission(
                     if ext.eq_ignore_ascii_case("txt") {
                         if let Some(file_stem) = file_path.file_stem().and_then(|s| s.to_str()) {
                             if let Ok(output_id) = file_stem.parse::<i64>() {
-                                if let Ok(Some(output)) =
-                                    AssignmentSubmissionOutputModel::find_by_id(output_id)
-                                        .one(db)
-                                        .await
-                                {
-                                    if let Ok(Some(task)) =
-                                        AssignmentTaskModel::find_by_id(output.task_id)
-                                            .one(db)
-                                            .await
-                                    {
+                                if let Ok(Some(output)) = AssignmentSubmissionOutputService::find_by_id(output_id).await {
+                                    if let Ok(Some(task)) = AssignmentTaskService::find_by_id(output.task_id).await {
                                         if task.code_coverage {
                                             student_output_code_coverage.push(file_path.clone());
                                         } else {
@@ -395,6 +398,16 @@ async fn grade_submission(
     assignment_submission::Entity::update(active_model)
         .exec(db)
         .await
+        .map_err(|e| e.to_string())?;
+
+    AssignmentSubmissionService::update(
+        UpdateAssignmentSubmission {
+            id: submission.id,
+            earned: Some(mark.earned),
+            total: Some(mark.total),
+            ..Default::default()
+        }
+    ).await
         .map_err(|e| e.to_string())?;
 
     let now = Utc::now();
@@ -781,7 +794,6 @@ pub async fn submit_assignment(
     };
 
     let submission = match AssignmentSubmissionModel::save_file(
-        db,
         assignment_id,
         claims.sub,
         attempt,
@@ -1190,13 +1202,10 @@ pub async fn remark_submissions(
 /// - The endpoint is restricted to admin, module lecturer, and assistant lecturer roles
 /// - All errors are returned in a consistent JSON format with per-submission failure details
 pub async fn resubmit_submissions(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(_claims)): Extension<AuthUser>,
     Json(req): Json<ResubmitRequest>,
 ) -> impl IntoResponse {
-    let db = app_state.db();
-
     if let Err(e) = validate_bulk_request(&req.submission_ids, &req.all) {
         return (
             StatusCode::BAD_REQUEST,
@@ -1204,7 +1213,7 @@ pub async fn resubmit_submissions(
         );
     }
 
-    let assignment = match load_assignment(module_id, assignment_id, db).await {
+    let assignment = match load_assignment(module_id, assignment_id).await {
         Ok(assignment) => assignment,
         Err(_) => {
             return (
@@ -1217,7 +1226,7 @@ pub async fn resubmit_submissions(
     };
 
     let submission_ids =
-        match resolve_submission_ids(req.submission_ids, req.all, assignment_id, db).await {
+        match resolve_submission_ids(req.submission_ids, req.all, assignment_id).await {
             Ok(ids) => ids,
             Err(e) => {
                 return (
@@ -1256,8 +1265,7 @@ pub async fn resubmit_submissions(
     };
 
     let (resubmitted, failed) =
-        execute_bulk_operation(submission_ids.clone(), assignment_id, db, |submission| {
-            let db = db.clone();
+        execute_bulk_operation(submission_ids.clone(), assignment_id, |submission| {
             let assignment = assignment.clone();
             let base_path = base_path.clone();
             let memo_outputs = memo_outputs.clone();
@@ -1273,7 +1281,6 @@ pub async fn resubmit_submissions(
                     return Err(e);
                 }
                 if let Err(e) = process_submission_code(
-                    &db,
                     submission.id,
                     config.clone(),
                     module_id,
@@ -1291,7 +1298,6 @@ pub async fn resubmit_submissions(
                     &memo_outputs,
                     &mark_allocator_path,
                     &config,
-                    &db,
                 )
                 .await
                 .map(|_| ())

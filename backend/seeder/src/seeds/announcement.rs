@@ -106,7 +106,7 @@ impl Seeder for AnnouncementSeeder {
 }
 
 /// Build a rich, longer Markdown body with sections, lists, code, quotes, and a simple table.
-fn build_long_markdown(code: &str, year: i64, ts: chrono::DateTime<Utc>, rng: &mut StdRng) -> String {
+fn build_long_markdown(code: &str, year: i32, ts: chrono::DateTime<Utc>, rng: &mut StdRng) -> String {
     let when = ts.format("%Y-%m-%d %H:%M").to_string();
 
     let intros = [

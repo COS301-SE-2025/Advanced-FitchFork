@@ -22,6 +22,11 @@ use serde::Serialize;
 use serde_json::Value;
 use std::{fs, path::PathBuf};
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
+use util::filters::FilterParam;
+use services::service::Service;
+use services::user::UserService;
+use services::assignment::AssignmentService;
+use services::assignment_submission::AssignmentSubmissionService;
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
@@ -67,100 +72,91 @@ async fn get_user_submissions(
     user_id: i64,
     Query(params): Query<ListSubmissionsQuery>,
 ) -> impl IntoResponse {
-    let assignment = AssignmentEntity::find()
-        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
-        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
-        .one(db)
-        .await
-        .unwrap()
-        .unwrap();
-
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
-
-    let mut condition = Condition::all()
-        .add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
-        .add(assignment_submission::Column::UserId.eq(user_id));
-
-    // filename: fuzzy, case-insensitive
-    if let Some(query) = &params.query {
-        let pattern = format!("%{}%", query.to_lowercase());
-        condition = condition.add(
-            Expr::expr(Func::lower(Expr::col(assignment_submission::Column::Filename)))
-                .like(&pattern),
-        );
-    }
-
-    if let Some(late_status) = params.late {
-        condition = if late_status {
-            condition.add(assignment_submission::Column::CreatedAt.gt(assignment.due_date))
-        } else {
-            condition.add(assignment_submission::Column::CreatedAt.lte(assignment.due_date))
-        };
-    }
-
-    if let Some(ignored) = params.ignored {
-        condition = condition.add(assignment_submission::Column::Ignored.eq(ignored));
-    }
-
-    let mut query = assignment_submission::Entity::find().filter(condition);
-
-    if let Some(ref sort) = params.sort {
-        for field in sort.split(',') {
-            let (field, dir) = if field.starts_with('-') {
-                (&field[1..], sea_orm::Order::Desc)
-            } else {
-                (field, sea_orm::Order::Asc)
-            };
-
-            match field {
-                "created_at" => {
-                    query = query.order_by(assignment_submission::Column::CreatedAt, dir)
-                }
-                "filename" => query = query.order_by(assignment_submission::Column::Filename, dir),
-                "attempt" => query = query.order_by(assignment_submission::Column::Attempt, dir),
-                _ => {}
-            }
+    let assignment = match AssignmentService::find_one(
+        &vec![
+            FilterParam::eq("id", assignment_id),
+            FilterParam::eq("module_id", module_id),
+        ],
+        &vec![],
+        None,
+    ).await {
+        Ok(Some(assignment)) => assignment,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<SubmissionsListResponse>::error("Assignment not found")),
+            );
         }
-    } else {
-        query = query.order_by(
-            assignment_submission::Column::CreatedAt,
-            sea_orm::Order::Desc,
-        );
-    }
-
-    let paginator = query.paginate(db, per_page.into());
-    let total = paginator.num_items().await.unwrap_or(0);
-    let rows = paginator
-        .fetch_page((page - 1) as u64)
-        .await
-        .unwrap_or_default();
-
-    let base =
-        std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
-
-    let user_resp = {
-        let u = user::Entity::find_by_id(user_id)
-            .one(db)
-            .await
-            .ok()
-            .flatten();
-        if let Some(u) = u {
-            UserResponse {
-                id: u.id,
-                username: u.username,
-                email: u.email,
-            }
-        } else {
-            UserResponse {
-                id: user_id,
-                username: "unknown".to_string(),
-                email: "unknown".to_string(),
-            }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionsListResponse>::error(
+                    format!("Database error: {}", e),
+                )),
+            );
         }
     };
 
-    let mut items: Vec<SubmissionListItem> = rows
+    let page = params.page.unwrap_or(1).max(1);
+    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
+    let sort = params.sort.clone();
+
+    let mut filters = vec![
+        FilterParam::eq("assignment_id", assignment_id),
+        FilterParam::eq("user_id", user_id),
+    ];
+
+    if let Some(query) = params.query {
+        filters.push(FilterParam::like("filename", query));
+    }
+
+    if let Some(late_status) = params.late {
+        if late_status {
+            filters.push(FilterParam::gt("created_at", assignment.due_date));
+        } else {
+            filters.push(FilterParam::lte("created_at", assignment.due_date));
+        }
+    }
+
+    if let Some(ignored) = params.ignored {
+        filters.push(FilterParam::eq("ignored", ignored));
+    }
+
+    let (submissions, total) = match AssignmentSubmissionService::filter(
+        &filters,
+        &vec![],
+        page,
+        per_page,
+        sort.clone(),
+    ).await {
+        Ok(result) => result,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionsListResponse>::error(
+                    format!("Database error: {}", e),
+                )),
+            );
+        }
+    };
+
+    let user_resp = match UserService::find_by_id(user_id).await {
+        Ok(Some(user)) => UserResponse {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+        },
+        _ => UserResponse {
+            id: user_id,
+            username: "unknown".to_string(),
+            email: "unknown".to_string(),
+        },
+    };
+
+    let base = std::env::var("ASSIGNMENT_STORAGE_ROOT")
+        .unwrap_or_else(|_| "data/assignment_files".into());
+
+    let mut items: Vec<SubmissionListItem> = submissions
         .into_iter()
         .map(|s| {
             let report_path = PathBuf::from(&base)
@@ -204,24 +200,21 @@ async fn get_user_submissions(
         })
         .collect();
 
-    if let Some(ref sort) = params.sort {
-        for field in sort.split(',').rev() {
+    if let Some(sort_str) = &sort {
+        for field in sort_str.split(',').rev() {
             let (field, desc) = if field.starts_with('-') {
                 (&field[1..], true)
             } else {
                 (field, false)
             };
 
-            match field {
-                "mark" => {
-                    items.sort_by(|a, b| {
-                        let a_mark = a.mark.as_ref().map(|m| m.earned).unwrap_or(0);
-                        let b_mark = b.mark.as_ref().map(|m| m.earned).unwrap_or(0);
-                        let ord = a_mark.cmp(&b_mark);
-                        if desc { ord.reverse() } else { ord }
-                    });
-                }
-                _ => {}
+            if field == "mark" {
+                items.sort_by(|a, b| {
+                    let a_mark = a.mark.as_ref().map(|m| m.earned).unwrap_or(0);
+                    let b_mark = b.mark.as_ref().map(|m| m.earned).unwrap_or(0);
+                    let ord = a_mark.cmp(&b_mark);
+                    if desc { ord.reverse() } else { ord }
+                });
             }
         }
     }
@@ -238,7 +231,6 @@ async fn get_user_submissions(
             "Submissions retrieved successfully",
         )),
     )
-        .into_response()
 }
 
 /// GET /api/modules/:module_id/assignments/:assignment_id/submissions
@@ -543,12 +535,12 @@ pub async fn list_submissions(
 ) -> axum::response::Response {
     let user_id = claims.sub;
     if is_student(module_id, user_id).await {
-        return get_user_submissions(db, module_id, assignment_id, user_id, Query(params))
+        return get_user_submissions(module_id, assignment_id, user_id, Query(params))
             .await
             .into_response();
     }
 
-    get_list_submissions(db, module_id, assignment_id, params)
+    get_list_submissions(module_id, assignment_id, params)
         .await
         .into_response()
 }

@@ -155,7 +155,7 @@ pub struct BulkUpdateRequest {
     pub module_ids: Vec<i64>,
     
     #[validate(range(min = 2024, message = "Year must be at least 2024"))]
-    pub year: Option<i64>,
+    pub year: Option<i32>,
     
     #[validate(length(max = 1000, message = "Description must be at most 1000 characters"))]
     pub description: Option<String>,

@@ -18,9 +18,10 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 use crate::response::ApiResponse;
+use services::service::Service;
+use services::assignment_submission::AssignmentSubmissionService;
 
 /// DELETE /api/modules/:module_id/assignments/:assignment_id/submissions/:submission_id
 ///
@@ -58,59 +59,25 @@ use crate::response::ApiResponse;
 /// }
 /// ```
 pub async fn delete_submission(
-    Path((_module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
+    Path((_, _, submission_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    // Ensure the submission exists and belongs to the assignment
-    let sub = match submission::Entity::find()
-        .filter(submission::Column::Id.eq(submission_id))
-        .filter(submission::Column::AssignmentId.eq(assignment_id))
-        .one(db)
-        .await
-    {
-        Ok(Some(s)) => s,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({
-                    "success": false,
-                    "message": format!("No submission {} found for assignment {}", submission_id, assignment_id)
-                })),
-            );
-        }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "success": false,
-                    "message": e.to_string(),
-                })),
-            );
-        }
-    };
-
-    // Best-effort: remove stored file first (ignore failure, log if needed)
-    if let Err(e) = sub.delete_file_only() {
+    if let Err(e) = AssignmentSubmissionService::delete_file_only(submission_id).await {
         eprintln!(
             "delete_submission: failed to remove file for submission {}: {}",
             submission_id, e
         );
     }
 
-    // Delete DB row by primary key (we already validated assignment_id)
-    match submission::Entity::delete_by_id(submission_id).exec(db).await {
+    match AssignmentSubmissionService::delete_by_id(submission_id).await {
         Ok(_) => (
             StatusCode::OK,
-            Json(json!({
-                "success": true,
-                "message": format!("Submission {} deleted successfully", submission_id),
-            })),
+            Json(ApiResponse::success_without_data(
+                format!("Submission {} deleted successfully", submission_id)
+            )),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "success": false,
-                "message": e.to_string(),
-            })),
+            Json(ApiResponse::<()>::error(e.to_string())),
         ),
     }
 }
@@ -118,6 +85,18 @@ pub async fn delete_submission(
 #[derive(Debug, Deserialize)]
 pub struct BulkDeleteSubmissionsRequest {
     pub submission_ids: Vec<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BulkDeleteResponse {
+    pub deleted: usize,
+    pub failed: Vec<FailedDeletion>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FailedDeletion {
+    pub id: i64,
+    pub error: String,
 }
 
 /// DELETE /api/modules/:module_id/assignments/:assignment_id/submissions/bulk
@@ -150,44 +129,27 @@ pub struct BulkDeleteSubmissionsRequest {
 /// }
 /// ```
 pub async fn bulk_delete_submissions(
-    Path((_module_id, assignment_id)): Path<(i64, i64)>,
+    Path((_, _)): Path<(i64, i64)>,
     Json(req): Json<BulkDeleteSubmissionsRequest>,
 ) -> impl IntoResponse {
     if req.submission_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<JsonValue>::error("No submission IDs provided")),
+            Json(ApiResponse::<BulkDeleteResponse>::error("No submission IDs provided")),
         );
     }
 
     let mut deleted_count = 0;
-    let mut failed: Vec<JsonValue> = Vec::new();
+    let mut failed: Vec<FailedDeletion> = Vec::new();
 
     for &sid in &req.submission_ids {
-        // Lookup
-        match submission::Entity::find()
-            .filter(submission::Column::Id.eq(sid))
-            .filter(submission::Column::AssignmentId.eq(assignment_id))
-            .one(db)
-            .await
-        {
-            Ok(Some(sub)) => {
-                // Remove file best-effort
-                if let Err(e) = sub.delete_file_only() {
-                    eprintln!("bulk_delete_submissions: file removal failed for {}: {}", sid, e);
-                }
+        if let Err(e) = AssignmentSubmissionService::delete_file_only(sid).await {
+            eprintln!("bulk_delete_submissions: file removal failed for {}: {}", sid, e);
+        }
 
-                // Delete row
-                match submission::Entity::delete_by_id(sid).exec(db).await {
-                    Ok(_) => deleted_count += 1,
-                    Err(e) => failed.push(json!({ "id": sid, "error": e.to_string() })),
-                }
-            }
-            Ok(None) => failed.push(json!({
-                "id": sid,
-                "error": format!("No submission {} found for assignment {}", sid, assignment_id)
-            })),
-            Err(e) => failed.push(json!({ "id": sid, "error": e.to_string() })),
+        match AssignmentSubmissionService::delete_by_id(sid).await {
+            Ok(_) => deleted_count += 1,
+            Err(e) => failed.push(FailedDeletion { id: sid, error: e.to_string() }),
         }
     }
 
@@ -197,10 +159,10 @@ pub async fn bulk_delete_submissions(
         req.submission_ids.len()
     );
 
-    let data = json!({
-        "deleted": deleted_count,
-        "failed": failed
-    });
+    let data = BulkDeleteResponse {
+        deleted: deleted_count,
+        failed,
+    };
 
     let response = ApiResponse::success(data, message);
 

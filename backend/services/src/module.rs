@@ -16,7 +16,7 @@ pub use db::models::module::Model as Module;
 pub struct CreateModule {
     pub id: Option<i64>,
     pub code: String,
-    pub year: i64,
+    pub year: i32,
     pub description: Option<String>,
     pub credits: i64,
 }
@@ -25,7 +25,7 @@ pub struct CreateModule {
 pub struct UpdateModule {
     pub id: i64,
     pub code: Option<String>,
-    pub year:  Option<i64>,
+    pub year:  Option<i32>,
     pub description: Option<String>,
     pub credits:  Option<i64>,
 }

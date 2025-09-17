@@ -16,7 +16,7 @@ pub use db::models::user_module_role::Model as UserModuleRole;
 pub struct UserModuleRoleInfo {
     pub module_id: i64,
     pub module_code: String,
-    pub module_year: i64,
+    pub module_year: i32,
     pub module_description: Option<String>,
     pub module_credits: i64,
     pub module_created_at: String,

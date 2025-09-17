@@ -6,7 +6,7 @@ use services::user::User;
 pub struct UserModule {
     pub id: i64,
     pub code: String,
-    pub year: i64,
+    pub year: i32,
     pub description: String,
     pub credits: i64,
     pub role: String,

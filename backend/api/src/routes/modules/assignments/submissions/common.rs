@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 /// Query parameters for submissions listing endpoints.
 #[derive(Debug, Deserialize)]
 pub struct ListSubmissionsQuery {
-    pub page: Option<u32>,
-    pub per_page: Option<u32>,
+    pub page: Option<u64>,
+    pub per_page: Option<u64>,
     pub sort: Option<String>,
     pub query: Option<String>,
     pub username: Option<String>,
@@ -62,8 +62,8 @@ pub struct SubmissionListItem {
 #[derive(Debug, Serialize)]
 pub struct SubmissionsListResponse {
     pub submissions: Vec<SubmissionListItem>,
-    pub page: u32,
-    pub per_page: u32,
+    pub page: u64,
+    pub per_page: u64,
     pub total: u64,
 }
 

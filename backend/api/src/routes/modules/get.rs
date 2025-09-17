@@ -25,7 +25,7 @@ use services::user_module_role::UserModuleRoleService;
 pub struct ModuleResponse {
     pub id: i64,
     pub code: String,
-    pub year: i64,
+    pub year: i32,
     pub description: Option<String>,
     pub credits: i64,
     pub created_at: String,
@@ -253,7 +253,7 @@ pub struct FilterReq {
 pub struct ModuleDetailsResponse {
     pub id: i64,
     pub code: String,
-    pub year: i64,
+    pub year: i32,
     pub description: Option<String>,
     pub credits: i64,
     pub created_at: String,

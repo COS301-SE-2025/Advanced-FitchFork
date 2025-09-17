@@ -77,8 +77,8 @@ pub struct ModuleRequest {
     ))]
     pub code: String,
 
-    #[validate(range(min = Utc::now().year().into(), message = "Year must be current year or later"))]
-    pub year: i64,
+    #[validate(range(min = Utc::now().year(), message = "Year must be current year or later"))]
+    pub year: i32,
 
     #[validate(length(max = 1000, message = "Description must be at most 1000 characters"))]
     pub description: Option<String>,
@@ -91,7 +91,7 @@ pub struct ModuleRequest {
 pub struct ModuleResponse {
     pub id: i64,
     pub code: String,
-    pub year: i64,
+    pub year: i32,
     pub description: Option<String>,
     pub credits: i64,
     pub created_at: String,
