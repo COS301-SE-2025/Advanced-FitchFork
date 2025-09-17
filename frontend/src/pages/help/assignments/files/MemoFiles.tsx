@@ -1,16 +1,5 @@
 // src/pages/help/assignments/files/MemoFiles.tsx
-import {
-  Typography,
-  Card,
-  Descriptions,
-  Tag,
-  Collapse,
-  Tabs,
-  Timeline,
-  Space,
-  Steps,
-  Alert,
-} from 'antd';
+import { Typography, Card, Descriptions, Tag, Collapse, Tabs, Timeline, Space, Alert } from 'antd';
 import { FileZipOutlined, PlayCircleOutlined, DiffOutlined } from '@ant-design/icons';
 import { useEffect, useMemo } from 'react';
 import { useHelpToc } from '@/context/HelpContext';
@@ -20,10 +9,11 @@ import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 const { Title, Paragraph, Text } = Typography;
 
 const toc = [
-  { key: 'what', href: '#what', title: 'What are Memo Files?' },
-  { key: 'role', href: '#role', title: 'How They’re Used in Marking' },
-  { key: 'upload', href: '#upload', title: 'Where to Upload' },
-  { key: 'layout', href: '#layout', title: 'Archive & Examples' },
+  { key: 'overview', href: '#overview', title: 'Why Memo Files Matter' },
+  { key: 'lifecycle', href: '#lifecycle', title: 'How Fitchfork Uses Memo Files' },
+  { key: 'requirements', href: '#requirements', title: 'Archive Requirements' },
+  { key: 'storage', href: '#storage', title: 'After You Upload' },
+  { key: 'layout', href: '#layout', title: 'Archive Layout & Examples' },
   { key: 'best', href: '#best', title: 'Best Practices' },
   { key: 'trouble', href: '#trouble', title: 'Troubleshooting' },
 ];
@@ -95,14 +85,12 @@ export default function MemoFiles() {
     extra: (
       <Card className="mt-4" size="small" title="Quick facts" bordered>
         <ul className="list-disc pl-5">
-          <li>Archive is the official solution (reference implementation)</li>
           <li>
-            <b>Root-only files</b> — no folders
+            Upload under <Text code>Assignments → Config → Files</Text>
           </li>
-          <li>
-            <b>Do not include Main</b> (Main lives in its own archive)
-          </li>
-          <li>Students don’t see memo code; only results are used for marking</li>
+          <li>Archive is the official solution; place source files at root (no folders)</li>
+          <li>Exclude Main; Main has its own archive</li>
+          <li>Students never see memo code—only outputs generated from it</li>
         </ul>
       </Card>
     ),
@@ -115,56 +103,64 @@ export default function MemoFiles() {
         Memo Files
       </Title>
 
-      <section id="what" className="scroll-mt-24" />
-      <Title level={3}>What are Memo Files?</Title>
+      <section id="overview" className="scroll-mt-24" />
+      <Title level={3}>Why Memo Files Matter</Title>
       <Paragraph className="mb-0">
-        <b>Memo Files</b> are the fully implemented classes and helpers that define the correct
-        behaviour. The platform runs this archive alongside <b>Main</b> and <b>Makefile</b> to
-        produce reference results for marking.
+        The <strong>Memo</strong> archive is your authoritative solution. Fitchfork compiles and
+        runs it with Main and the Makefile to produce the <strong>Memo Output</strong> that anchors
+        every comparison. When students submit, their code is judged against the behaviour captured
+        from these memo classes, so keeping the archive accurate and deterministic is essential.
       </Paragraph>
+      <Paragraph className="mt-3 mb-0">
+        Upload memo files under <Text code>Assignments → Config → Files</Text>. Lecturers (or
+        assistant lecturers) own this upload. In Manual mode it is required; in GATLAM mode memo
+        files still provide reference behaviour even though the Interpreter handles code generation.
+      </Paragraph>
+
       <Alert
         type="warning"
         showIcon
         className="mt-3"
-        message="Do not include Main here"
-        description="The memo archive must not contain Main.java/Main.cpp. Main belongs to the Main archive."
+        message="Keep Main separate"
+        description="The memo archive must not contain Main.java/Main.cpp. Main belongs to the Main archive and is uploaded separately."
       />
+
       <Descriptions bordered size="middle" column={1} className="mt-3">
-        <Descriptions.Item label="Accepted formats">
-          <Tag>.zip</Tag> <Tag>.tar</Tag> <Tag>.tgz</Tag> <Tag>.gz</Tag> (≤ 50MB recommended)
+        <Descriptions.Item label="Formats">
+          <Tag>.zip</Tag> <Tag>.tar</Tag> <Tag>.tgz</Tag> <Tag>.gz</Tag> (≤50&nbsp;MB recommended)
         </Descriptions.Item>
-        <Descriptions.Item label="Must contain">
-          <b>Only files at the root</b> (no directories). Place all Java/C++ source files directly
-          in the archive root.
+        <Descriptions.Item label="Structure">
+          Source files only, placed at the archive root (no directories, binaries, or build
+          artefacts).
         </Descriptions.Item>
         <Descriptions.Item label="Visibility">
-          Students never see memo code; they see marks and feedback derived from it.
+          Students never access memo code; they only see marks and feedback derived from the
+          captured outputs.
         </Descriptions.Item>
       </Descriptions>
 
-      <section id="role" className="scroll-mt-24" />
-      <Title level={3}>How They’re Used in Marking</Title>
+      <section id="lifecycle" className="scroll-mt-24" />
+      <Title level={3}>How Fitchfork Uses Memo Files</Title>
       <Timeline
         className="mb-2"
         items={[
           {
             color: 'blue',
             dot: <FileZipOutlined />,
-            children: (
-              <>
-                Upload <b>Main</b>, <b>Makefile</b>, and <b>Memo</b> archives.
-              </>
-            ),
+            children:
+              'Upload Main, Makefile, and Memo archives. Fitchfork checks that each slot contains a supported archive.',
           },
           {
             color: 'green',
             dot: <PlayCircleOutlined />,
-            children: <>Generate Memo Output for each Task.</>,
+            children:
+              'Generate Memo Output: the runner compiles your memo classes via the Makefile and executes Main to capture reference output per task.',
           },
           {
             color: 'gray',
             dot: <DiffOutlined />,
-            children: <>Compare student outputs to the Memo Output using your Mark Allocator.</>,
+            children:
+              'Student submissions run through the same pipeline; their output is diffed against Memo Output using your Mark Allocator.',
           },
         ]}
       />
@@ -176,27 +172,28 @@ export default function MemoFiles() {
         <a href="/help/assignments/memo-output">Memo Output</a>.
       </Paragraph>
 
-      <section id="upload" className="scroll-mt-24" />
-      <Title level={3}>Where to Upload</Title>
-      <Card>
-        <Steps
-          direction="vertical"
-          items={[
-            {
-              title: 'Upload memo archive',
-              description: (
-                <>
-                  Go to <Text code>Assignments → Config → Files</Text> and upload the <b>Memo</b>{' '}
-                  archive.
-                </>
-              ),
-            },
-          ]}
-        />
-      </Card>
+      <section id="storage" className="scroll-mt-24" />
+      <Title level={3}>After You Upload</Title>
+      <Paragraph className="mb-2">
+        Memo files are stored in the assignment’s <Text code>memo/</Text> folder and recorded in the
+        assignment files list. Readiness checks and the Setup Checklist look for a memo archive
+        before marking the assignment ready. Uploading a new archive overwrites the stored copy and
+        affects the next memo generation or student run, so keep earlier versions in source control
+        if you might need to roll back.
+      </Paragraph>
+      <Descriptions bordered size="middle" column={1}>
+        <Descriptions.Item label="Validation">
+          Missing or empty memo directories trigger “Required memo directory is missing or empty” or
+          “Memo archive (.zip) not found” during memo generation and student attempts.
+        </Descriptions.Item>
+        <Descriptions.Item label="Regeneration">
+          After updating memo code, regenerate Memo Output so comparison files reflect the new
+          behaviour.
+        </Descriptions.Item>
+      </Descriptions>
 
       <section id="layout" className="scroll-mt-24" />
-      <Title level={3}>Archive & Examples</Title>
+      <Title level={3}>Archive Layout &amp; Examples</Title>
       <Card>
         <Tabs
           items={[
@@ -307,19 +304,24 @@ export default function MemoFiles() {
       <Title level={3}>Best Practices</Title>
       <ul className="list-disc pl-5">
         <li>
-          <b>Root-only</b>: keep all source files at the archive root (no directories).
+          <b>Root-only</b>: keep source files at the archive root. Nested folders are ignored when
+          memo generation runs.
         </li>
         <li>
-          <b>No Main here</b>: Main belongs in the Main archive.
+          <b>Exclude Main</b>: Main belongs in its own archive. Memo files should compile cleanly
+          without it.
         </li>
         <li>
-          <b>Deterministic behaviour</b>: avoid timestamps, randomness, or machine paths.
+          <b>Deterministic behaviour</b>: avoid timestamps, randomness, or environment-dependent
+          output.
         </li>
         <li>
-          <b>Quiet output</b>: print only what’s relevant for marking.
+          <b>Lean dependencies</b>: vendor helper code in the archive; do not rely on network
+          downloads.
         </li>
         <li>
-          <b>Match Tasks</b>: ensure behaviour aligns with your Task commands.
+          <b>Short, consistent output</b>: print only what your allocators expect so diffs stay
+          stable.
         </li>
       </ul>
 
@@ -329,36 +331,61 @@ export default function MemoFiles() {
         items={[
           {
             key: 't1',
-            label: 'Memo generation fails',
-            children: (
-              <ul className="list-disc pl-5">
-                <li>
-                  Verify each Task’s command under <Text>Assignments → Tasks</Text>.
-                </li>
-                <li>Ensure files are at the archive root; remove folders.</li>
-                <li>Adjust time/memory/CPU in Execution settings if needed.</li>
-              </ul>
-            ),
-          },
-          {
-            key: 't2',
-            label: 'Outputs change between runs',
+            label: '“Required memo directory is missing or empty”',
             children: (
               <Paragraph>
-                Remove non-determinism (RNG, time, absolute paths). Stable outputs are required.
+                Upload a supported archive to the Memo slot and ensure it contains at least one
+                source file at the root. Generating Memo Output immediately checks for this and
+                fails fast if the archive is missing.
               </Paragraph>
             ),
           },
           {
+            key: 't2',
+            label: 'Memo generation fails inside your code',
+            children: (
+              <ul className="list-disc pl-5">
+                <li>
+                  Verify each Task command in <Text>Assignments → Tasks</Text> matches the targets
+                  your Makefile exposes.
+                </li>
+                <li>
+                  Ensure memo files compile cleanly when combined with Main and Makefile locally.
+                </li>
+                <li>
+                  Adjust execution limits under Assignment Config → Execution if builds legitimately
+                  need more time or memory.
+                </li>
+              </ul>
+            ),
+          },
+          {
             key: 't3',
+            label: 'Outputs differ between memo runs and student runs',
+            children: (
+              <Paragraph>
+                Remove nondeterminism—avoid random seeds, system time, or environment-dependent
+                paths. Memo Output must stay stable for comparisons to pass.
+              </Paragraph>
+            ),
+          },
+          {
+            key: 't4',
             label: 'Students score unexpectedly low',
             children: (
               <ul className="list-disc pl-5">
-                <li>Re-check the Memo Output text formatting.</li>
                 <li>
-                  Confirm sections/subsections and points in the allocator match expectations.
+                  Inspect Memo Output under <Text code>memo_output/</Text> to confirm formatting
+                  matches your expectations.
                 </li>
-                <li>Use a more forgiving comparator where appropriate.</li>
+                <li>
+                  Check the Mark Allocator to ensure subsections and point weights align with what
+                  Main prints.
+                </li>
+                <li>
+                  Consider a more tolerant comparator if whitespace or ordering differences are
+                  acceptable.
+                </li>
               </ul>
             ),
           },

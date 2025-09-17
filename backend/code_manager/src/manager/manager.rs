@@ -90,4 +90,14 @@ impl ContainerManager {
             language, files
         )
     }
+
+    pub async fn get_stats(&self) -> (usize, usize, usize) {
+        let q = self.queue.lock().await;
+        q.stats()
+    }
+
+    pub async fn set_max_concurrent(&self, new_max: usize) {
+        let mut q = self.queue.lock().await;
+        q.set_max_concurrent(new_max);
+    }
 }

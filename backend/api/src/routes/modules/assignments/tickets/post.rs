@@ -15,7 +15,10 @@ use db::models::tickets::Model as TicketModel;
 use serde::Deserialize;
 use util::state::AppState;
 
-use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::tickets::common::TicketResponse};
+use crate::{
+    auth::AuthUser, response::ApiResponse,
+    routes::modules::assignments::tickets::common::TicketResponse,
+};
 
 /// Request payload for creating a ticket.
 #[derive(Debug, Deserialize)]

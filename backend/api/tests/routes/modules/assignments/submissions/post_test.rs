@@ -15,28 +15,31 @@ mod tests {
             Model as AssignmentModel,
         },
         assignment_submission::{self, Model as AssignmentSubmissionModel},
-        assignment_submission_output,
+        assignment_submission_output, assignment_task,
         assignment_task::Model as AssignmentTaskModel,
         module::Model as ModuleModel,
         user::Model as UserModel,
-        assignment_task,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use flate2::{Compression, write::GzEncoder};
     use sea_orm::{
-        ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, QueryOrder
+        ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
+        Set,
     };
     use serde_json::{Value, json};
     use serial_test::serial;
-    use util::execution_config::execution_config::{GradingPolicy, SubmissionMode};
-    use util::execution_config::ExecutionConfig;
-    use util::languages::Language;
-    use util::paths::{storage_root, config_dir, main_dir, makefile_dir, mark_allocator_dir, mark_allocator_path, memo_output_dir, submission_output_dir, submission_output_path};
     use std::convert::Infallible;
     use std::{fs, io::Write};
     use tar::Builder as TarBuilder;
     use tower::ServiceExt;
     use tower::util::BoxCloneService;
+    use util::execution_config::ExecutionConfig;
+    use util::execution_config::{GradingPolicy, SubmissionMode};
+    use util::languages::Language;
+    use util::paths::{
+        config_dir, main_dir, makefile_dir, mark_allocator_dir, mark_allocator_path,
+        memo_output_dir, storage_root, submission_output_dir, submission_output_path,
+    };
     use zip::write::SimpleFileOptions;
 
     struct TestData {
@@ -121,7 +124,11 @@ mod tests {
             ]
         }"#;
         fs::create_dir_all(mark_allocator_dir(module_id, assignment_id)).unwrap();
-        fs::write(mark_allocator_path(module_id, assignment_id), allocator_content).unwrap();
+        fs::write(
+            mark_allocator_path(module_id, assignment_id),
+            allocator_content,
+        )
+        .unwrap();
     }
 
     fn create_memo_outputs(module_id: i64, assignment_id: i64) {
@@ -134,19 +141,20 @@ mod tests {
     fn create_execution_config(module_id: i64, assignment_id: i64) {
         let mut cfg = ExecutionConfig::default_config();
         // Only override what the tests require:
-        cfg.project.language = Language::Java;               // because we ship .java files
+        cfg.project.language = Language::Java; // because we ship .java files
         cfg.project.submission_mode = SubmissionMode::Manual;
-        cfg.marking.deliminator = "&-=-&".to_string();       // your parser expects this exact token
+        cfg.marking.deliminator = "&-=-&".to_string(); // your parser expects this exact token
         // (Other defaults: pass_mark=50, grading_policy=Last, etc.)
 
-        cfg.save(module_id, assignment_id).expect("write config.json");
+        cfg.save(module_id, assignment_id)
+            .expect("write config.json");
     }
-
 
     fn create_makefile_zip(module_id: i64, assignment_id: i64) {
         let mut buf = Vec::new();
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
-        zip.start_file("Makefile", SimpleFileOptions::default()).unwrap();
+        zip.start_file("Makefile", SimpleFileOptions::default())
+            .unwrap();
         zip.write_all(&create_makefile_content()).unwrap();
         zip.finish().unwrap();
 
@@ -369,10 +377,11 @@ mod tests {
         cfg.marking.max_attempts = max_attempts;
         cfg.marking.allow_practice_submissions = allow_practice;
         cfg.marking.pass_mark = 50;
-        cfg.marking.grading_policy = GradingPolicy::Last;     // same as your previous JSON
+        cfg.marking.grading_policy = GradingPolicy::Last; // same as your previous JSON
         cfg.marking.deliminator = "&-=-&".to_string();
 
-        cfg.save(module_id, assignment_id).expect("write config.json");
+        cfg.save(module_id, assignment_id)
+            .expect("write config.json");
     }
 
     /// Seed a submission row that does *not* count (ignored or practice).
@@ -569,14 +578,19 @@ mod tests {
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["is_practice"], true);
@@ -668,7 +682,10 @@ mod tests {
                 .method("POST")
                 .uri(&uri)
                 .header(AUTHORIZATION, format!("Bearer {}", token))
-                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body))
                 .unwrap();
             let resp = app.clone().oneshot(req).await.unwrap();
@@ -682,16 +699,24 @@ mod tests {
                 .method("POST")
                 .uri(&uri)
                 .header(AUTHORIZATION, format!("Bearer {}", token))
-                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body))
                 .unwrap();
             let resp = app.clone().oneshot(req).await.unwrap();
             assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
-            let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+            let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap();
             let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
             assert_eq!(json["success"], false);
-            assert_eq!(json["message"], "Maximum attempts reached: used 1 of 1 (remaining 0).");
+            assert_eq!(
+                json["message"],
+                "Maximum attempts reached: used 1 of 1 (remaining 0)."
+            );
         }
     }
 
@@ -723,17 +748,25 @@ mod tests {
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Practice submissions are disabled for this assignment.");
+        assert_eq!(
+            json["message"],
+            "Practice submissions are disabled for this assignment."
+        );
     }
 
     #[tokio::test]
@@ -759,7 +792,8 @@ mod tests {
             1,
             /*is_practice*/ false,
             /*ignored*/ true,
-        ).await;
+        )
+        .await;
 
         let file = create_submission_zip();
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -773,14 +807,19 @@ mod tests {
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
         // Should be allowed because prior attempt is ignored
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
     }
@@ -822,7 +861,10 @@ mod tests {
                 .method("POST")
                 .uri(&uri)
                 .header(AUTHORIZATION, format!("Bearer {}", token))
-                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body))
                 .unwrap();
             let resp = app.clone().oneshot(req).await.unwrap();
@@ -836,14 +878,16 @@ mod tests {
                 .method("POST")
                 .uri(&uri)
                 .header(AUTHORIZATION, format!("Bearer {}", token))
-                .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body))
                 .unwrap();
             let resp = app.clone().oneshot(req).await.unwrap();
             assert_eq!(resp.status(), StatusCode::OK);
         }
     }
-
 
     // TODO: Once coverage and complexity have been implemented, uncomment this test.
     //
@@ -1076,19 +1120,23 @@ mod tests {
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "No file provided");
     }
-
 
     #[tokio::test]
     #[serial]
@@ -1522,7 +1570,6 @@ mod tests {
 
         submission
     }
-
 
     // Helper to send remark request
     async fn send_remark_request(
@@ -2083,12 +2130,11 @@ mod tests {
         serde_json::from_slice(&body).unwrap()
     }
 
-
     // Create a submission that also writes the submission archive to disk
     // using the centralized save_file (stores as {attempt}/{submission_id}.zip).
     async fn create_resubmitable_submission(
         db: &DatabaseConnection,
-        _module_id: i64,      // kept for signature parity; not used here
+        _module_id: i64, // kept for signature parity; not used here
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
@@ -2103,9 +2149,9 @@ mod tests {
             /* earned */ 10,
             /* total  */ 10,
             /* is_practice */ false,
-            "test_submission.zip",                  // original filename (what users see)
-            "d41d8cd98f00b204e9800998ecf8427e",     // dummy hash
-            &create_submission_zip(),               // actual bytes
+            "test_submission.zip", // original filename (what users see)
+            "d41d8cd98f00b204e9800998ecf8427e", // dummy hash
+            &create_submission_zip(), // actual bytes
         )
         .await
         .unwrap();
@@ -2130,8 +2176,6 @@ mod tests {
 
         submission
     }
-
-
 
     #[tokio::test]
     #[serial]
@@ -2362,23 +2406,37 @@ mod tests {
         // no attests_ownership field
         let (boundary, body) = multipart_body("solution.zip", &file, None, None);
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
 
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap_or_default().to_lowercase().contains("ownership"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap_or_default()
+                .to_lowercase()
+                .contains("ownership")
+        );
     }
 
     #[tokio::test]
@@ -2402,23 +2460,37 @@ mod tests {
         body.extend(format!("--{}--\r\n", boundary).as_bytes());
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
 
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap_or_default().to_lowercase().contains("ownership"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap_or_default()
+                .to_lowercase()
+                .contains("ownership")
+        );
     }
 
     #[tokio::test]
@@ -2443,13 +2515,19 @@ mod tests {
         body.extend(format!("--{}--\r\n", boundary).as_bytes());
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
 
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
@@ -2470,5 +2548,4 @@ mod tests {
         assert_eq!(saved.user_id, data.student_user.id);
         assert_eq!(saved.filename, "solution.zip");
     }
-
 }

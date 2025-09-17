@@ -4,7 +4,7 @@
 //! specific pattern appears in the student's output at the same position as in the memo (solution) output. **Lines are compared in order; only lines at the same position are considered a match.**
 
 use crate::traits::comparator::OutputComparator;
-use crate::types::{TaskResult, Subsection};
+use crate::types::{Subsection, TaskResult};
 
 /// A comparator that awards full marks if the student's output matches the memo output exactly, line by line and in order.
 ///
@@ -39,7 +39,7 @@ impl OutputComparator for ExactComparator {
             for i in student_lines.len()..memo_lines.len() {
                 missed_patterns.push(memo_lines[i].clone());
             }
-            
+
             return TaskResult {
                 name: section.name.clone(),
                 awarded: 0,
@@ -161,4 +161,4 @@ mod tests {
         let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 0);
     }
-} 
+}

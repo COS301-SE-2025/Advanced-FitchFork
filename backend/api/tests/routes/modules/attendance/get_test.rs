@@ -2,33 +2,33 @@
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
-    use tower::ServiceExt;
+    use chrono::{Datelike, TimeZone, Utc};
     use serde_json::Value;
-    use chrono::{Utc, TimeZone, Datelike};
-    use api::auth::generate_jwt;
+    use tower::ServiceExt;
 
     use db::models::{
-        user::Model as UserModel,
-        module::Model as ModuleModel,
-        user_module_role::{Model as UserModuleRoleModel, Role},
-        attendance_session::{Model as SessionModel},
         attendance_record,
+        attendance_session::Model as SessionModel,
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use sea_orm::{ActiveModelTrait, Set};
 
     use crate::helpers::app::make_test_app_with_storage;
 
     struct TestCtx {
-        _admin: UserModel,        // not assigned to the module
-        forbidden: UserModel,    // not assigned to the module
-        lecturer: UserModel,     // assigned (Lecturer)
-        tutor: UserModel,        // assigned (Tutor) -> should be 403 for attendance GETs
-        student1: UserModel,     // assigned (Student) -> should be 403 for attendance GETs
-        _student2: UserModel,     // assigned (Student)
+        _admin: UserModel,    // not assigned to the module
+        forbidden: UserModel, // not assigned to the module
+        lecturer: UserModel,  // assigned (Lecturer)
+        tutor: UserModel,     // assigned (Tutor) -> should be 403 for attendance GETs
+        student1: UserModel,  // assigned (Student) -> should be 403 for attendance GETs
+        _student2: UserModel, // assigned (Student)
         module: ModuleModel,
         sess_active: SessionModel,
         sess_inactive: SessionModel,
@@ -38,28 +38,61 @@ mod tests {
         dotenvy::dotenv().ok();
 
         // --- module & users
-        let module = ModuleModel::create(
+        let module =
+            ModuleModel::create(db, "ATT101", Utc::now().year(), Some("Attendance Test"), 8)
+                .await
+                .expect("create module");
+
+        let _admin = UserModel::create(db, "att_admin", "att_admin@test.com", "password", true)
+            .await
+            .unwrap();
+        let forbidden = UserModel::create(
             db,
-            "ATT101",
-            Utc::now().year(),
-            Some("Attendance Test"),
-            8,
+            "att_forbidden",
+            "att_forbidden@test.com",
+            "password",
+            false,
         )
         .await
-        .expect("create module");
-
-        let _admin     = UserModel::create(db, "att_admin",     "att_admin@test.com",     "password", true ).await.unwrap();
-        let forbidden = UserModel::create(db, "att_forbidden", "att_forbidden@test.com", "password", false).await.unwrap();
-        let lecturer  = UserModel::create(db, "att_lect",      "att_lect@test.com",      "password", false).await.unwrap();
-        let tutor     = UserModel::create(db, "att_tutor",     "att_tutor@test.com",     "password", false).await.unwrap();
-        let student1  = UserModel::create(db, "att_student1",  "att_student1@test.com",  "password", false).await.unwrap();
-        let _student2  = UserModel::create(db, "att_student2",  "att_student2@test.com",  "password", false).await.unwrap();
+        .unwrap();
+        let lecturer = UserModel::create(db, "att_lect", "att_lect@test.com", "password", false)
+            .await
+            .unwrap();
+        let tutor = UserModel::create(db, "att_tutor", "att_tutor@test.com", "password", false)
+            .await
+            .unwrap();
+        let student1 = UserModel::create(
+            db,
+            "att_student1",
+            "att_student1@test.com",
+            "password",
+            false,
+        )
+        .await
+        .unwrap();
+        let _student2 = UserModel::create(
+            db,
+            "att_student2",
+            "att_student2@test.com",
+            "password",
+            false,
+        )
+        .await
+        .unwrap();
 
         // Assign roles used by router guards
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, tutor.id,    module.id, Role::Tutor).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student1.id, module.id, Role::Student).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, _student2.id, module.id, Role::Student).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, tutor.id, module.id, Role::Tutor)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student1.id, module.id, Role::Student)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, _student2.id, module.id, Role::Student)
+            .await
+            .unwrap();
 
         // --- sessions
         let secret_hex_a = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
@@ -70,9 +103,9 @@ mod tests {
             module.id,
             lecturer.id,
             "Lec A (active)",
-            true,   // active
-            30,     // rotation_seconds
-            false,  // restrict_by_ip
+            true,  // active
+            30,    // rotation_seconds
+            false, // restrict_by_ip
             None,
             None,
             Some(secret_hex_a),
@@ -85,7 +118,7 @@ mod tests {
             module.id,
             lecturer.id,
             "Lec B (inactive)",
-            false,  // not active
+            false, // not active
             30,
             false,
             None,
@@ -151,7 +184,9 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);
@@ -261,7 +296,9 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);
@@ -324,7 +361,6 @@ mod tests {
         );
     }
 
-
     #[tokio::test]
     async fn test_get_session_not_found_as_lecturer_yields_404() {
         // Lecturer passes guards -> handler should return 404 with a specific message
@@ -349,7 +385,9 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], false);
@@ -388,7 +426,9 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);
@@ -419,7 +459,9 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Session is not currently active");
@@ -474,7 +516,9 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);
@@ -540,13 +584,17 @@ mod tests {
                 .and_then(|v| v.to_str().ok()),
             Some("text/csv; charset=utf-8")
         );
-        let cd = headers.get(axum::http::header::CONTENT_DISPOSITION).unwrap();
+        let cd = headers
+            .get(axum::http::header::CONTENT_DISPOSITION)
+            .unwrap();
         let cd_s = cd.to_str().unwrap();
         assert!(cd_s.contains("attachment"));
         assert!(cd_s.contains("attendance_session_"));
 
         // body
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let csv = String::from_utf8(body.to_vec()).unwrap();
 
         let mut lines = csv.lines();

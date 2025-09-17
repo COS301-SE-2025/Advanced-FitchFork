@@ -1,20 +1,17 @@
+use crate::routes::common::UserModule;
+use crate::{auth::claims::AuthUser, response::ApiResponse};
 use axum::{
-    extract::{State, Query, Path},
-    http::{StatusCode, header, HeaderMap, HeaderValue},
-    response::IntoResponse,
     Json,
+    extract::{Path, Query, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    response::IntoResponse,
 };
+use db::models::{module, user, user_module_role, user_module_role::Role};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-use tokio::fs::File as FsFile;
 use serde::{Deserialize, Serialize};
+use tokio::fs::File as FsFile;
 use tokio::io::AsyncReadExt;
 use util::{paths::user_profile_path, state::AppState};
-use crate::{
-    auth::claims::AuthUser,
-    response::ApiResponse,
-};
-use db::models::{user, module, user_module_role, user_module_role::Role};
-use crate::routes::common::UserModule;
 
 #[derive(Debug, Serialize)]
 pub struct MeResponse {
@@ -87,7 +84,7 @@ pub struct HasRoleResponse {
 /// - `500 Internal Server Error` – Database failure
 pub async fn get_me(
     State(app_state): State<AppState>,
-    AuthUser(claims): AuthUser
+    AuthUser(claims): AuthUser,
 ) -> impl IntoResponse {
     let db = app_state.db();
     let user_id = claims.sub;
@@ -111,7 +108,7 @@ pub async fn get_me(
             );
         }
     };
-    
+
     let roles = match user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user.id))
         .find_also_related(module::Entity)
@@ -122,7 +119,9 @@ pub async fn get_me(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<MeResponse>::error("Failed to load module roles")),
+                Json(ApiResponse::<MeResponse>::error(
+                    "Failed to load module roles",
+                )),
             );
         }
     };
@@ -155,7 +154,10 @@ pub async fn get_me(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response_data, "User data retrieved successfully")),
+        Json(ApiResponse::success(
+            response_data,
+            "User data retrieved successfully",
+        )),
     )
 }
 
@@ -205,11 +207,15 @@ pub async fn get_me(
 /// ```
 pub async fn get_avatar(
     State(app_state): State<AppState>,
-    Path(user_id): Path<i64>
+    Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    let user = user::Entity::find_by_id(user_id).one(db).await.unwrap().unwrap();
+    let user = user::Entity::find_by_id(user_id)
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap();
 
     let Some(path) = user.profile_picture_path else {
         return (
@@ -256,7 +262,8 @@ pub async fn get_avatar(
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_str(&mime).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+        HeaderValue::from_str(&mime)
+            .unwrap_or(HeaderValue::from_static("application/octet-stream")),
     );
 
     (StatusCode::OK, headers, buffer).into_response()
@@ -290,7 +297,7 @@ pub async fn get_avatar(
 pub async fn has_role_in_module(
     State(app_state): State<AppState>,
     AuthUser(claims): AuthUser,
-    Query(params): Query<HasRoleQuery>
+    Query(params): Query<HasRoleQuery>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
@@ -302,8 +309,10 @@ pub async fn has_role_in_module(
         _ => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<HasRoleResponse>::error("Invalid role specified")),
-            )
+                Json(ApiResponse::<HasRoleResponse>::error(
+                    "Invalid role specified",
+                )),
+            );
         }
     };
 
@@ -320,7 +329,7 @@ pub async fn has_role_in_module(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<HasRoleResponse>::error("Database error")),
-            )
+            );
         }
     };
 

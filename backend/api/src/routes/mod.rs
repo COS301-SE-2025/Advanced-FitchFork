@@ -13,24 +13,22 @@
 
 use crate::auth::guards::{require_admin, require_authenticated};
 use crate::routes::auth::get::get_avatar;
-use crate::routes::{
-    auth::auth_routes,
-    health::health_routes,
-    modules::modules_routes,
-    users::users_routes,
-    test::test_routes,
-};
-use axum::{middleware::from_fn, routing::get, Router};
-use util::{config, state::AppState};
 use crate::routes::me::me_routes;
+use crate::routes::{
+    auth::auth_routes, health::health_routes, modules::modules_routes, system::system_routes,
+    test::test_routes, users::users_routes,
+};
+use axum::{Router, middleware::from_fn, routing::get};
+use util::{config, state::AppState};
 
 pub mod auth;
 pub mod common;
 pub mod health;
-pub mod modules;
-pub mod users;
-pub mod test;
 pub mod me;
+pub mod modules;
+pub mod system;
+pub mod test;
+pub mod users;
 
 /// Builds the complete application router for all HTTP endpoints.
 ///
@@ -56,8 +54,15 @@ pub fn routes(app_state: AppState) -> Router<AppState> {
         .nest("/auth", auth_routes())
         .nest("/users", users_routes().route_layer(from_fn(require_admin)))
         .route("/users/{user_id}/avatar", get(get_avatar))
-        .nest("/modules",modules_routes(app_state.clone()).route_layer(from_fn(require_authenticated)),)
-        .nest("/me", me_routes().route_layer(from_fn(require_authenticated)))
+        .nest(
+            "/modules",
+            modules_routes(app_state.clone()).route_layer(from_fn(require_authenticated)),
+        )
+        .nest(
+            "/me",
+            me_routes().route_layer(from_fn(require_authenticated)),
+        )
+        .nest("/system", system_routes())
         .with_state(app_state.clone());
 
     // Conditionally mount the `/test` route group if *not* in production.

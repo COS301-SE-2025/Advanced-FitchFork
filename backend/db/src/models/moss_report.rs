@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
-    QueryFilter, QueryOrder, IntoActiveModel,
+    IntoActiveModel, QueryFilter, QueryOrder,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -78,7 +78,9 @@ pub enum Relation {
 }
 
 impl Related<super::assignment::Entity> for Entity {
-    fn to() -> RelationDef { Relation::Assignment.def() }
+    fn to() -> RelationDef {
+        Relation::Assignment.def()
+    }
 }
 
 impl ActiveModelBehavior for ActiveModel {}
@@ -98,7 +100,9 @@ impl Entity {
         match filter_mode {
             FilterMode::All => {
                 if patterns_len > 0 {
-                    return Err(DbErr::Custom("filter_mode=all does not accept filter_patterns".into()));
+                    return Err(DbErr::Custom(
+                        "filter_mode=all does not accept filter_patterns".into(),
+                    ));
                 }
             }
             FilterMode::Whitelist | FilterMode::Blacklist => {

@@ -1,15 +1,15 @@
 use crate::models::assignment;
+use crate::models::assignment::Model as AssignmentModel;
+use crate::models::user;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
-use util::execution_config::execution_config::GradingPolicy;
-use util::execution_config::ExecutionConfig;
-use util::paths::{ensure_parent_dir, storage_root};
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
-use crate::models::user;
-use crate::models::assignment::Model as AssignmentModel;
+use util::execution_config::ExecutionConfig;
+use util::execution_config::GradingPolicy;
+use util::paths::{ensure_parent_dir, storage_root};
 
 /// Represents a user's submission for a specific assignment.
 ///
@@ -85,7 +85,7 @@ impl Model {
         storage_root().join(&self.path)
     }
 
-     /// Saves a file to disk and creates or updates its metadata in the database.
+    /// Saves a file to disk and creates or updates its metadata in the database.
     ///
     /// This method:
     /// 1. Creates a temporary DB entry.
@@ -105,7 +105,9 @@ impl Model {
         bytes: &[u8],
     ) -> Result<Self, DbErr> {
         if earned > total {
-            return Err(DbErr::Custom("Earned score cannot be greater than total score".into()));
+            return Err(DbErr::Custom(
+                "Earned score cannot be greater than total score".into(),
+            ));
         }
 
         let now = Utc::now();
@@ -199,9 +201,9 @@ impl Model {
             .all(db)
             .await?;
 
-        Ok(submissions.into_iter().map(|s| s.id as i64).collect())
+        Ok(submissions.into_iter().map(|s| s.id).collect())
     }
-    
+
     pub async fn get_latest_submissions_for_assignment(
         db: &DatabaseConnection,
         assignment_id: i64,
@@ -209,7 +211,7 @@ impl Model {
         let all = Entity::find()
             .filter(Column::AssignmentId.eq(assignment_id))
             .order_by_asc(Column::UserId)
-            .order_by_desc(Column:: Attempt)
+            .order_by_desc(Column::Attempt)
             .all(db)
             .await?;
 
@@ -234,7 +236,7 @@ impl Model {
         let existing = Entity::find_by_id(submission_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Submission {} not found", submission_id)))?;
+            .ok_or_else(|| DbErr::Custom(format!("Submission {submission_id} not found")))?;
 
         let mut am: ActiveModel = existing.into();
         am.ignored = Set(ignored);
@@ -275,7 +277,6 @@ impl Model {
             }
         }
     }
-
 }
 
 #[cfg(test)]
@@ -356,9 +357,20 @@ mod tests {
 
         // Save file via submission
         let content = fake_bytes();
-        let file = Model::save_file(&db, assignment.id, user.id, 6, 10, 10, false,   "solution.zip", "hash123#", &content)
-            .await
-            .expect("Failed to save file");
+        let file = Model::save_file(
+            &db,
+            assignment.id,
+            user.id,
+            6,
+            10,
+            10,
+            false,
+            "solution.zip",
+            "hash123#",
+            &content,
+        )
+        .await
+        .expect("Failed to save file");
 
         assert_eq!(file.assignment_id, assignment.id);
         assert_eq!(file.user_id, user.id);

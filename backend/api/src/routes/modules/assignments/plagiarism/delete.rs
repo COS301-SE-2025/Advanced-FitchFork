@@ -1,10 +1,10 @@
 use std::fs;
 
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use db::models::{
     moss_report::{Column as MossReportColumn, Entity as MossReportEntity},
@@ -83,10 +83,12 @@ pub async fn delete_plagiarism_case(
                     Json(ApiResponse::<()>::error("Plagiarism case not found")),
                 );
             }
-            
+
             (
                 StatusCode::OK,
-                Json(ApiResponse::success_without_data("Plagiarism case deleted successfully")),
+                Json(ApiResponse::success_without_data(
+                    "Plagiarism case deleted successfully",
+                )),
             )
         }
         Err(e) => (
@@ -198,7 +200,7 @@ pub async fn bulk_delete_plagiarism_cases(
                     "Failed to start transaction: {}",
                     e
                 ))),
-            )
+            );
         }
     };
 
@@ -212,17 +214,15 @@ pub async fn bulk_delete_plagiarism_cases(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(format!(
-                    "Database error: {}",
-                    e
-                ))),
-            )
+                Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+            );
         }
     };
 
     if existing_cases.len() != payload.case_ids.len() {
         let existing_ids: Vec<i64> = existing_cases.iter().map(|c| c.id).collect();
-        let missing_ids: Vec<i64> = payload.case_ids
+        let missing_ids: Vec<i64> = payload
+            .case_ids
             .iter()
             .filter(|id| !existing_ids.contains(id))
             .map(|&id| id as i64)
@@ -250,7 +250,7 @@ pub async fn bulk_delete_plagiarism_cases(
                     "Failed to delete plagiarism cases: {}",
                     e
                 ))),
-            )
+            );
         }
     };
 
@@ -266,7 +266,15 @@ pub async fn bulk_delete_plagiarism_cases(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success_without_data(&format!("{} plagiarism case{} deleted successfully", delete_result.rows_affected, if delete_result.rows_affected == 1 { "" } else { "s" }))),
+        Json(ApiResponse::success_without_data(&format!(
+            "{} plagiarism case{} deleted successfully",
+            delete_result.rows_affected,
+            if delete_result.rows_affected == 1 {
+                ""
+            } else {
+                "s"
+            }
+        ))),
     )
 }
 
@@ -329,10 +337,15 @@ pub async fn delete_moss_report(
     }
 
     // 3) Delete the DB row
-    match MossReportEntity::delete_by_id(report.id).exec(app_state.db()).await {
+    match MossReportEntity::delete_by_id(report.id)
+        .exec(app_state.db())
+        .await
+    {
         Ok(res) if res.rows_affected > 0 => (
             StatusCode::OK,
-            Json(ApiResponse::<()>::success_without_data("Report deleted successfully")),
+            Json(ApiResponse::<()>::success_without_data(
+                "Report deleted successfully",
+            )),
         )
             .into_response(),
         Ok(_) => (
@@ -342,7 +355,9 @@ pub async fn delete_moss_report(
             .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(format!("Failed to delete report: {e}"))),
+            Json(ApiResponse::<()>::error(format!(
+                "Failed to delete report: {e}"
+            ))),
         )
             .into_response(),
     }

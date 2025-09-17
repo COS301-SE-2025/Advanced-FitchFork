@@ -88,7 +88,8 @@ impl Seeder for AssignmentSubmissionSeeder {
                         dummy_filename,
                         "hash123#",
                         dummy_content.as_bytes(),
-                    ).await;
+                    )
+                    .await;
                 }
             }
         }
@@ -276,7 +277,8 @@ struct HelperThree {
             filename_java,
             "hash123#",
             &content_java,
-        ).await
+        )
+        .await
         {
             Ok(_) => {}
             Err(e) => {
@@ -302,7 +304,8 @@ struct HelperThree {
             filename_cpp,
             "hash123#",
             &content_cpp,
-        ).await
+        )
+        .await
         {
             Ok(_) => {}
             Err(e) => {
@@ -357,43 +360,66 @@ struct HelperThree {
 
             // (name, rett, args, body_lines)
             let base: Vec<(&str, &str, &str, Vec<&str>)> = vec![
-                ("sumArray", "int", "const std::vector<int>& arr", vec![
-                    "int s = 0;",
-                    "for (int n : arr) s += n;",
-                    "return s;"
-                ]),
-                ("factorial", "int", "int n", vec![
-                    "int f = 1;",
-                    "for (int i = 1; i <= n; ++i) f *= i;",
-                    "return f;"
-                ]),
-                ("isPrime", "bool", "int n", vec![
-                    "if (n <= 1) return false;",
-                    "for (int i = 2; i * i <= n; ++i) if (n % i == 0) return false;",
-                    "return true;"
-                ]),
-                ("fibonacci", "int", "int n", vec![
-                    "int a = 0, b = 1;",
-                    "for (int i = 2; i <= n; ++i) { int t = b; b = a + b; a = t; }",
-                    "return n == 0 ? 0 : b;"
-                ]),
-                ("reverseString", "std::string", "const std::string& s", vec![
-                    "std::string r(s.rbegin(), s.rend());",
-                    "return r;"
-                ]),
-                ("printPattern", "std::string", "int n", vec![
-                    "std::ostringstream out;",
-                    "for (int i = 1; i <= n; ++i) {",
-                    "  for (int j = 0; j < i; ++j) out << '*';",
-                    "  out << '\\n';",
-                    "}",
-                    "return out.str();"
-                ]),
+                (
+                    "sumArray",
+                    "int",
+                    "const std::vector<int>& arr",
+                    vec!["int s = 0;", "for (int n : arr) s += n;", "return s;"],
+                ),
+                (
+                    "factorial",
+                    "int",
+                    "int n",
+                    vec![
+                        "int f = 1;",
+                        "for (int i = 1; i <= n; ++i) f *= i;",
+                        "return f;",
+                    ],
+                ),
+                (
+                    "isPrime",
+                    "bool",
+                    "int n",
+                    vec![
+                        "if (n <= 1) return false;",
+                        "for (int i = 2; i * i <= n; ++i) if (n % i == 0) return false;",
+                        "return true;",
+                    ],
+                ),
+                (
+                    "fibonacci",
+                    "int",
+                    "int n",
+                    vec![
+                        "int a = 0, b = 1;",
+                        "for (int i = 2; i <= n; ++i) { int t = b; b = a + b; a = t; }",
+                        "return n == 0 ? 0 : b;",
+                    ],
+                ),
+                (
+                    "reverseString",
+                    "std::string",
+                    "const std::string& s",
+                    vec!["std::string r(s.rbegin(), s.rend());", "return r;"],
+                ),
+                (
+                    "printPattern",
+                    "std::string",
+                    "int n",
+                    vec![
+                        "std::ostringstream out;",
+                        "for (int i = 1; i <= n; ++i) {",
+                        "  for (int j = 0; j < i; ++j) out << '*';",
+                        "  out << '\\n';",
+                        "}",
+                        "return out.str();",
+                    ],
+                ),
             ];
 
             let mut rng = rand::thread_rng();
             let method_count = match group {
-                0 => base.len(),                // identical: use all
+                0 => base.len(), // identical: use all
                 1 => rng.gen_range(3..=base.len()),
                 2 => rng.gen_range(2..=3),
                 _ => 3,
@@ -406,10 +432,10 @@ struct HelperThree {
 
             // Maybe rename for group 1 to introduce partial similarity
             let mut protos = Vec::new();
-            let mut impls  = Vec::new();
+            let mut impls = Vec::new();
 
             let cls = "StudentSolution";
-            let ns  = "student";
+            let ns = "student";
 
             for (_, (name, rett, args, body)) in chosen.iter().enumerate() {
                 let mut fn_name = name.to_string();
@@ -438,15 +464,24 @@ struct HelperThree {
                     }
                 }
 
-                impls.push(format!(
-                    "{} {}::{}::{}({}) {{\n    {}\n}}\n",
-                    rett,
-                    ns,
-                    cls,
-                    fn_name,
-                    args,
-                    body_lines.join("\n    ")
-                ).replace(&format!("{} {}::", rett, ns), &format!("#include \"{}{}.h\"\nnamespace {} {{\n{} {}::", cls, "", ns, rett, cls)));
+                impls.push(
+                    format!(
+                        "{} {}::{}::{}({}) {{\n    {}\n}}\n",
+                        rett,
+                        ns,
+                        cls,
+                        fn_name,
+                        args,
+                        body_lines.join("\n    ")
+                    )
+                    .replace(
+                        &format!("{} {}::", rett, ns),
+                        &format!(
+                            "#include \"{}{}.h\"\nnamespace {} {{\n{} {}::",
+                            cls, "", ns, rett, cls
+                        ),
+                    ),
+                );
                 // Fix include placement later (we'll build whole files below)
             }
 
@@ -458,7 +493,7 @@ struct HelperThree {
                 protos.push(helper_b.clone());
 
                 impls.push(format!(
-        r#"int {ns}::{cls}::helperMultiply{u}(int a, int b) {{
+                    r#"int {ns}::{cls}::helperMultiply{u}(int a, int b) {{
             return a * b + {k};
         }}
 
@@ -466,13 +501,17 @@ struct HelperThree {
             return std::string("Extra:") + "{tok}";
         }}
         "#,
-                    ns=ns, cls=cls, u=user_id, k=rng.gen_range(0..10), tok=random_token(8)
+                    ns = ns,
+                    cls = cls,
+                    u = user_id,
+                    k = rng.gen_range(0..10),
+                    tok = random_token(8)
                 ));
             }
 
             // Build header + impl strings
             let header = format!(
-        r#"#pragma once
+                r#"#pragma once
         #include <string>
         #include <vector>
         #include <sstream>
@@ -489,7 +528,7 @@ struct HelperThree {
             );
 
             let impl_src = format!(
-        r#"#include "{cls}.h"
+                r#"#include "{cls}.h"
 
         namespace {ns} {{
 
@@ -510,50 +549,80 @@ struct HelperThree {
 
             // (name, rett, args, body_lines)
             let base: Vec<(&str, &str, &str, Vec<&str>)> = vec![
-                ("minArray", "int", "const std::vector<int>& arr", vec![
-                    "if (arr.empty()) return 0;",
-                    "int m = arr[0];",
-                    "for (int v : arr) if (v < m) m = v;",
-                    "return m;"
-                ]),
-                ("maxArray", "int", "const std::vector<int>& arr", vec![
-                    "if (arr.empty()) return 0;",
-                    "int m = arr[0];",
-                    "for (int v : arr) if (v > m) m = v;",
-                    "return m;"
-                ]),
-                ("avgArray", "int", "const std::vector<int>& arr", vec![
-                    "if (arr.empty()) return 0;",
-                    "long long s = 0;",
-                    "for (int v : arr) s += v;",
-                    "return static_cast<int>(s / (long long)arr.size());"
-                ]),
-                ("countVowels", "int", "const std::string& s", vec![
-                    "int c = 0;",
-                    "for (unsigned char ch : s) {",
-                    "  char t = static_cast<char>(::tolower(ch));",
-                    "  if (t=='a'||t=='e'||t=='i'||t=='o'||t=='u') ++c;",
-                    "}",
-                    "return c;"
-                ]),
-                ("isPalindrome", "bool", "const std::string& s", vec![
-                    "int i = 0, j = (int)s.size()-1;",
-                    "while (i < j) {",
-                    "  if (s[i] != s[j]) return false;",
-                    "  ++i; --j;",
-                    "}",
-                    "return true;"
-                ]),
-                ("wordReverse", "std::string", "const std::string& s", vec![
-                    "std::istringstream iss(s);",
-                    "std::vector<std::string> w;",
-                    "for (std::string p; iss >> p; ) w.push_back(p);",
-                    "std::ostringstream out;",
-                    "for (int i = (int)w.size()-1; i >= 0; --i) {",
-                    "  out << w[i]; if (i) out << ' ';",
-                    "}",
-                    "return out.str();"
-                ]),
+                (
+                    "minArray",
+                    "int",
+                    "const std::vector<int>& arr",
+                    vec![
+                        "if (arr.empty()) return 0;",
+                        "int m = arr[0];",
+                        "for (int v : arr) if (v < m) m = v;",
+                        "return m;",
+                    ],
+                ),
+                (
+                    "maxArray",
+                    "int",
+                    "const std::vector<int>& arr",
+                    vec![
+                        "if (arr.empty()) return 0;",
+                        "int m = arr[0];",
+                        "for (int v : arr) if (v > m) m = v;",
+                        "return m;",
+                    ],
+                ),
+                (
+                    "avgArray",
+                    "int",
+                    "const std::vector<int>& arr",
+                    vec![
+                        "if (arr.empty()) return 0;",
+                        "long long s = 0;",
+                        "for (int v : arr) s += v;",
+                        "return static_cast<int>(s / (long long)arr.size());",
+                    ],
+                ),
+                (
+                    "countVowels",
+                    "int",
+                    "const std::string& s",
+                    vec![
+                        "int c = 0;",
+                        "for (unsigned char ch : s) {",
+                        "  char t = static_cast<char>(::tolower(ch));",
+                        "  if (t=='a'||t=='e'||t=='i'||t=='o'||t=='u') ++c;",
+                        "}",
+                        "return c;",
+                    ],
+                ),
+                (
+                    "isPalindrome",
+                    "bool",
+                    "const std::string& s",
+                    vec![
+                        "int i = 0, j = (int)s.size()-1;",
+                        "while (i < j) {",
+                        "  if (s[i] != s[j]) return false;",
+                        "  ++i; --j;",
+                        "}",
+                        "return true;",
+                    ],
+                ),
+                (
+                    "wordReverse",
+                    "std::string",
+                    "const std::string& s",
+                    vec![
+                        "std::istringstream iss(s);",
+                        "std::vector<std::string> w;",
+                        "for (std::string p; iss >> p; ) w.push_back(p);",
+                        "std::ostringstream out;",
+                        "for (int i = (int)w.size()-1; i >= 0; --i) {",
+                        "  out << w[i]; if (i) out << ' ';",
+                        "}",
+                        "return out.str();",
+                    ],
+                ),
             ];
 
             let mut rng = rand::thread_rng();
@@ -570,10 +639,10 @@ struct HelperThree {
             let chosen = &pool[..method_count];
 
             let mut protos = Vec::new();
-            let mut impls  = Vec::new();
+            let mut impls = Vec::new();
 
             let cls = "StudentUtils";
-            let ns  = "student";
+            let ns = "student";
 
             for (_, (name, rett, args, body)) in chosen.iter().enumerate() {
                 let mut fn_name = name.to_string();
@@ -591,7 +660,7 @@ struct HelperThree {
                 }
 
                 impls.push(format!(
-        r#"{rett} {ns}::{cls}::{fname}({args}) {{
+                    r#"{rett} {ns}::{cls}::{fname}({args}) {{
             {body}
         }}
         "#,
@@ -607,17 +676,19 @@ struct HelperThree {
             if group != 2 {
                 protos.push(format!("    static std::string bucketize(int n);"));
                 impls.push(
-        r#"std::string student::StudentUtils::bucketize(int n) {
+                    r#"std::string student::StudentUtils::bucketize(int n) {
             if (n >= 90) return "A";
             if (n >= 75) return "B";
             if (n >= 60) return "C";
             return "D";
         }
-        "#.to_string());
+        "#
+                    .to_string(),
+                );
             }
 
             let header = format!(
-        r#"#pragma once
+                r#"#pragma once
         #include <string>
         #include <vector>
         #include <sstream>
@@ -634,7 +705,7 @@ struct HelperThree {
             );
 
             let impl_src = format!(
-        r#"#include "{cls}.h"
+                r#"#include "{cls}.h"
 
         namespace {ns} {{
 
@@ -649,8 +720,6 @@ struct HelperThree {
 
             (header, impl_src)
         }
-
-
 
         fn random_token(len: usize) -> String {
             rand::thread_rng()

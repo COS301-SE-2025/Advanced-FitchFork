@@ -74,7 +74,7 @@ const filesRows: Row[] = [
     purpose:
       'Skeleton code for students and base files for plagiarism checks. Must be a flat archive.',
     required: 'Optional (recommended)',
-    where: 'Assignments → Files → Specification',
+    where: 'Assignments → Files → Specification (files at archive root)',
   },
 ];
 
@@ -91,17 +91,10 @@ export default function AssignmentSetupHelp() {
     extra: (
       <Card className="mt-4" size="small" title="Quick facts" bordered>
         <ul className="list-disc pl-5">
-          <li>
-            Status flow: <b>Setup → Ready → Open → Closed</b>
-          </li>
-          <li>
-            “Ready” requires: <b>Config</b>, <b>Files</b>, <b>Tasks</b>, <b>Memo Output</b>,
-            <b> Mark Allocator</b>
-          </li>
-          <li>
-            In <b>GATLAM</b>, you need an <b>Interpreter</b>; a Main file is not required
-          </li>
-          <li>Specification archives must be flat: no nested folders</li>
+          <li>Status flow: <b>Setup → Ready → Open → Closed</b>. The Setup panel tells you what’s missing.</li>
+          <li>Ready means you’ve saved Config, uploaded required files, created Tasks/Subsections, generated Memo Output, and set Mark Allocation.</li>
+          <li>Manual submissions need a <b>Main</b>; <Tag color="purple">gatlam</Tag> needs an <b>Interpreter</b> instead.</li>
+          <li>Specification ZIPs must be flat (no nested folders); memo generation and MOSS rely on that layout.</li>
         </ul>
       </Card>
     ),
@@ -117,10 +110,9 @@ export default function AssignmentSetupHelp() {
       <section id="overview" className="scroll-mt-24" />
       <Title level={3}>What “setup” means</Title>
       <Paragraph className="mb-0">
-        An assignment leaves <b>Setup</b> when all required parts are in place: configuration, files
-        for building and reference output, tasks and their subsections, and mark allocations. Once
-        those are present and you’ve generated the <b>Memo Output</b>, the assignment can move to{' '}
-        <b>Ready</b> and later open on schedule.
+        “Setup” is the stage where you assemble everything the grader needs: configuration, build/run files, memo
+        references, tasks, and marks. When each piece is present and memo output has been generated, the status flips to
+        <b>Ready</b>; from there the assignment can open and close on schedule without further intervention.
       </Paragraph>
 
       <section id="workflow" className="scroll-mt-24" />
@@ -131,32 +123,32 @@ export default function AssignmentSetupHelp() {
           {
             title: 'Configure the assignment',
             description:
-              'Set Language & Mode, Execution, Output, Marking, Security. (Help → Assignment Config)',
+              'Review config.json (Language & Mode, Execution, Output, Marking, Security) so the runner knows how to build and compare.',
           },
           {
             title: 'Upload files',
             description:
-              'Makefile, Main (or Interpreter for GATLAM), Memo files, and optionally a flat Specification archive.',
+              'Provide Makefile, Main (or Interpreter for Gatlam), Memo files, and optionally a flat Specification archive for students.',
           },
           {
             title: 'Create Tasks & Subsections',
             description:
-              'Define tasks, then add subsection labels that match what your program prints using the delimiter (&-=-&).',
+              'Add tasks and their subsections so each command produces labeled blocks that align with your outputs.',
           },
           {
             title: 'Generate Memo Output',
             description:
-              'From the assignment page (top-right button). Each task’s memo output is stored as a separate text file.',
+              'Use the top-right button to capture reference output per task. The Setup panel will stay red until this succeeds.',
           },
           {
             title: 'Set Mark Allocation',
             description:
-              'Go to Tasks → pick a task → pick a subsection → set the Marks for that label.',
+              'Assign points to each subsection (Tasks → subsection → Marks) so scoring matches your rubric.',
           },
           {
             title: 'Schedule & status',
             description:
-              'Verify Available From / Due Date. When everything is present, the assignment becomes Ready and will open on schedule.',
+              'Set Available From/Due Date. Once the checklist is green, change status to Ready and let the schedule open it automatically.',
           },
         ]}
       />
@@ -164,8 +156,9 @@ export default function AssignmentSetupHelp() {
       <section id="readiness" className="scroll-mt-24" />
       <Title level={3}>Readiness Checklist</Title>
       <Paragraph className="mb-2">
-        The platform computes readiness from a few concrete checks. Use this as your mental map —
-        it mirrors the “Setup incomplete” panel you see in the assignment layout.
+        The “Setup incomplete” panel in the assignment layout checks these exact items. Use the list below as a quick map
+        to the problem: if the panel highlights something in red, fix the matching row here and re-run Memo Output if
+        necessary.
       </Paragraph>
       <Table
         className="mt-2"
@@ -228,6 +221,10 @@ export default function AssignmentSetupHelp() {
 
       <section id="files" className="scroll-mt-24" />
       <Title level={3}>Files you need</Title>
+      <Paragraph className="mb-2">
+        Upload these under <b>Assignments → Files</b>. Manual mode needs Makefile + Main + Memo; GATLAM replaces Main with an
+        Interpreter. The Specification archive is optional but strongly recommended as the starter pack and plagiarism base files.
+      </Paragraph>
       <Table
         className="mt-2"
         size="small"
@@ -272,6 +269,9 @@ export default function AssignmentSetupHelp() {
           <Text code>&-=-&</Text>.
         </li>
         <li>
+          Need per-task fixtures? Upload an <b>overwrite</b> archive on the task; those files are merged before the command runs.
+        </li>
+        <li>
           You can refine subsections later, but renaming labels creates new buckets and may require
           regenerating Memo Output.
         </li>
@@ -286,11 +286,14 @@ export default function AssignmentSetupHelp() {
         <Descriptions.Item label="What happens">
           The platform builds and runs your <Tag>Memo files</Tag> (or Interpreter in GATLAM) to
           produce the expected output for each task. Each task’s memo output is saved as a separate
-          text file.
+          text file alongside the assignment.
         </Descriptions.Item>
         <Descriptions.Item label="How to view">
           Go to <b>Tasks</b> → choose a <b>task</b> → choose a <b>subsection</b> to view the memo
           lines for that label.
+        </Descriptions.Item>
+        <Descriptions.Item label="Self-check">
+          After generating, open a few tasks to confirm outputs look correct before opening the assignment to students.
         </Descriptions.Item>
       </Descriptions>
 
@@ -299,7 +302,8 @@ export default function AssignmentSetupHelp() {
       <Paragraph className="mb-0">
         Weights live at the subsection (label) level and roll up to task totals. To edit: go to{' '}
         <b>Tasks</b> → pick the <b>task</b> → pick a <b>subsection</b>, then set the <b>Marks</b>.
-        See <a href="/help/assignments/mark-allocator">Mark Allocation</a>.
+        You can also generate the allocator from memo output to seed default weights. See
+        <a href="/help/assignments/mark-allocator">Mark Allocation</a> for examples.
       </Paragraph>
 
       <section id="ready" className="scroll-mt-24" />
@@ -316,41 +320,29 @@ export default function AssignmentSetupHelp() {
           </ul>
         </Descriptions.Item>
         <Descriptions.Item label="Open/Close schedule">
-          Set <b>Available From</b> and <b>Due Date</b>. The system may move between{' '}
-          <Tag color="green">Ready</Tag> and <Tag color="blue">Open</Tag> on schedule, and to{' '}
-          <Tag color="red">Closed</Tag> at the due date. It won’t jump directly from Ready to
-          Closed.
+          Set <b>Available From</b> and <b>Due Date</b>.
+          <ul className="list-disc pl-5 mt-1">
+            <li><Tag color="gold">Setup</Tag>: one or more checklist items are missing.</li>
+            <li><Tag color="green">Ready</Tag>: checklist complete; waiting to open.</li>
+            <li><Tag color="blue">Open</Tag>: students can submit between the availability window.</li>
+            <li><Tag color="red">Closed</Tag>: due date passed; submission button disabled.</li>
+          </ul>
+          The system transitions Ready → Open → Closed automatically based on dates; it never jumps directly from Ready to Closed.
         </Descriptions.Item>
       </Descriptions>
 
       <section id="tips" className="scroll-mt-24" />
       <Title level={3}>Tips</Title>
       <ul className="list-disc pl-5">
-        <li>Start with default execution limits; raise only if your tasks truly need it.</li>
-        <li>
-          Capture only what you need in <a href="/help/assignments/config/output">Output</a> to keep
-          comparisons clean.
-        </li>
-        <li>
-          Pick a marking scheme (
-          <a href="/help/assignments/config/marking">Exact, Percentage, Regex</a>) that matches your
-          outputs.
-        </li>
-        <li>
-          Keep labels stable; renaming labels creates new subsections and may require regenerating
-          Memo Output.
-        </li>
-        <li>
-          Specification ZIPs and student submissions should be flat archives with all files at the
-          root.
-        </li>
-        <li>
-          Using GATLAM? See <a href="/help/assignments/gatlam">GATLAM & Interpreter</a> and{' '}
-          <a href="/help/assignments/config/gatlam">GATLAM Config</a>.
-        </li>
-        <li>
-          Makefile tip: targets may be auto-detected to seed tasks — review and adjust.
-        </li>
+        <li>Start with default execution limits; only raise CPU/time/memory if a task consistently needs it.</li>
+        <li>Capture only the streams you compare in <a href="/help/assignments/config/output">Output settings</a> to keep diffs tidy.</li>
+        <li>Pick a marking comparator (
+          <a href="/help/assignments/config/marking">Exact, Percentage, Regex</a>) that matches your memo output style.</li>
+        <li>Keep subsection labels stable — renaming them creates new buckets and usually means regenerating Memo Output.</li>
+        <li>Ensure Specification ZIPs and student submissions remain flat archives (no folders); the grader expects that shape.</li>
+        <li>If you’re using GATLAM, review <a href="/help/assignments/gatlam">GATLAM & Interpreter</a> and
+          <a href="/help/assignments/config/gatlam">GATLAM Config</a> so the generated programs print the labels you need.</li>
+        <li>When Tasks auto-detect targets from the Makefile, double-check the generated commands before relying on them.</li>
       </ul>
 
       {/* Troubleshooting LAST */}
@@ -364,8 +356,7 @@ export default function AssignmentSetupHelp() {
             children: (
               <ul className="list-disc pl-5">
                 <li>
-                  Check the checklist: Config, Files, Tasks/Subsections, Memo Output (generated),
-                  Mark Allocator.
+                  Open the Setup panel and verify each checklist item: Config saved, required files uploaded, tasks/subsections defined, memo output generated, marks set.
                 </li>
                 <li>
                   In GATLAM mode, ensure the <b>Interpreter</b> is uploaded (Main is not required).
@@ -383,7 +374,7 @@ export default function AssignmentSetupHelp() {
               <ul className="list-disc pl-5">
                 <li>
                   Confirm your Main (or Interpreter) prints labels using the delimiter{' '}
-                  <Text code>&-=-&</Text>.
+                  <Text code>&-=-&</Text> and that each label appears at least once in memo output.
                 </li>
                 <li>
                   Re-run <b>Generate Memo Output</b> after changing code, labels, or config.

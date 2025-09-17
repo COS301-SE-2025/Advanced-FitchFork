@@ -1,13 +1,13 @@
+use crate::response::ApiResponse;
 use axum::{
-    extract::{State, Path},
+    Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
-use sea_orm::DbErr;
 use db::models::assignment_task;
+use sea_orm::DbErr;
 use util::state::AppState;
-use crate::response::ApiResponse;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}
 ///

@@ -13,11 +13,11 @@ import HeaderBar from '@/components/layout/HeaderBar';
 
 const { Header, Sider, Content } = Layout;
 
-const notifications = [
-  { id: 1, title: 'New submission in COS344', time: '2m ago' },
-  { id: 2, title: 'Assignment marked in COS332', time: '5m ago' },
-  { id: 3, title: 'System updated successfully', time: '10m ago' },
-];
+// const notifications = [
+//   { id: 1, title: 'New submission in COS344', time: '2m ago' },
+//   { id: 2, title: 'Assignment marked in COS332', time: '5m ago' },
+//   { id: 3, title: 'System updated successfully', time: '10m ago' },
+// ];
 
 const AppLayout = () => {
   const [collapsed, setCollapsed] = useState(
@@ -127,7 +127,6 @@ const AppLayout = () => {
       <Layout className="!bg-transparent flex flex-col flex-1 min-h-0">
         <Header className="border-b !bg-white dark:!bg-gray-900 dark:!bg-gray border-gray-200 dark:border-gray-800 !px-4 sm:px-6">
           <HeaderBar
-            notifications={notifications}
             profileMenuItems={profileMenuItems}
             onMenuClick={() => setMobileSidebarVisible(true)}
           />

@@ -1,9 +1,9 @@
-use rand::{seq::SliceRandom, Rng, SeedableRng};
-use rand::rngs::{StdRng, OsRng};
-use sea_orm::{ActiveModelTrait, EntityTrait, Set, DatabaseConnection};
-use db::models::user_module_role::{self, Role};
-use db::models::{user, module};
 use crate::seed::Seeder;
+use db::models::user_module_role::{self, Role};
+use db::models::{module, user};
+use rand::rngs::{OsRng, StdRng};
+use rand::{Rng, SeedableRng, seq::SliceRandom};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 pub struct UserRoleSeeder;
 
@@ -48,14 +48,24 @@ impl Seeder for UserRoleSeeder {
 
             match u.username.as_str() {
                 // Existing single-role fixtures
-                "lecturer" => { assign_all_as(db, &modules, u.id, Role::Lecturer).await; }
-                "assistant_lecturer" => { assign_all_as(db, &modules, u.id, Role::AssistantLecturer).await; }
-                "tutor" => { assign_all_as(db, &modules, u.id, Role::Tutor).await; }
-                "student" => { assign_all_as(db, &modules, u.id, Role::Student).await; }
+                "lecturer" => {
+                    assign_all_as(db, &modules, u.id, Role::Lecturer).await;
+                }
+                "assistant_lecturer" => {
+                    assign_all_as(db, &modules, u.id, Role::AssistantLecturer).await;
+                }
+                "tutor" => {
+                    assign_all_as(db, &modules, u.id, Role::Tutor).await;
+                }
+                "student" => {
+                    assign_all_as(db, &modules, u.id, Role::Student).await;
+                }
 
                 // student_tutor => split half Student, half Tutor
                 "student_tutor" => {
-                    if modules.is_empty() { continue; }
+                    if modules.is_empty() {
+                        continue;
+                    }
                     let mut shuffled = modules.clone();
                     shuffled.shuffle(&mut rng);
                     let mid = shuffled.len() / 2;
@@ -84,8 +94,12 @@ impl Seeder for UserRoleSeeder {
 
                 // all_staff => round-robin Lecturer -> AssistantLecturer -> Tutor
                 "all_staff" => {
-                    if modules.is_empty() { continue; }
-                    let mut rr = [Role::Lecturer, Role::AssistantLecturer, Role::Tutor].iter().cycle();
+                    if modules.is_empty() {
+                        continue;
+                    }
+                    let mut rr = [Role::Lecturer, Role::AssistantLecturer, Role::Tutor]
+                        .iter()
+                        .cycle();
                     for m in &modules {
                         let r = rr.next().unwrap().clone();
                         let _ = user_module_role::ActiveModel {
@@ -101,7 +115,9 @@ impl Seeder for UserRoleSeeder {
 
                 // lecturer_assistant => round-robin Lecturer -> AssistantLecturer
                 "lecturer_assistant" => {
-                    if modules.is_empty() { continue; }
+                    if modules.is_empty() {
+                        continue;
+                    }
                     let mut rr = [Role::Lecturer, Role::AssistantLecturer].iter().cycle();
                     for m in &modules {
                         let r = rr.next().unwrap().clone();
@@ -118,7 +134,9 @@ impl Seeder for UserRoleSeeder {
 
                 // NEW: all => round-robin Student -> Tutor -> AssistantLecturer -> Lecturer
                 "all" => {
-                    if modules.is_empty() { continue; }
+                    if modules.is_empty() {
+                        continue;
+                    }
                     let mut rr = [
                         Role::Student,
                         Role::Tutor,
@@ -142,7 +160,9 @@ impl Seeder for UserRoleSeeder {
 
                 // Everyone else: random 3–6 modules as Student
                 _ => {
-                    if modules.is_empty() { continue; }
+                    if modules.is_empty() {
+                        continue;
+                    }
                     let count = rng.gen_range(3..=6).min(modules.len());
                     let assigned = modules
                         .choose_multiple(&mut rng, count)

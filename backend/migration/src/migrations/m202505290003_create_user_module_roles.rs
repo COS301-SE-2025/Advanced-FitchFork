@@ -14,10 +14,12 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Alias::new("user_module_roles")).if_not_exists()
+                    .table(Alias::new("user_module_roles"))
+                    .if_not_exists()
                     .col(ColumnDef::new(Alias::new("user_id")).integer().not_null())
                     .col(ColumnDef::new(Alias::new("module_id")).integer().not_null())
-                    .col(ColumnDef::new(Alias::new("role"))
+                    .col(
+                        ColumnDef::new(Alias::new("role"))
                             .enumeration(
                                 Alias::new("user_module_role_type"),
                                 vec![
@@ -27,7 +29,7 @@ impl MigrationTrait for Migration {
                                     Alias::new("student"),
                                 ],
                             )
-                            .not_null()
+                            .not_null(),
                     )
                     .primary_key(
                         Index::create()
@@ -53,7 +55,11 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(Alias::new("user_module_roles")).to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(Alias::new("user_module_roles"))
+                    .to_owned(),
+            )
             .await
     }
 }

@@ -7,9 +7,7 @@
 //! authorized users can perform these actions.
 
 use crate::{
-    auth::AuthUser,
-    response::ApiResponse,
-    routes::modules::assignments::tickets::common::is_valid,
+    auth::AuthUser, response::ApiResponse, routes::modules::assignments::tickets::common::is_valid,
 };
 use axum::{
     Extension,

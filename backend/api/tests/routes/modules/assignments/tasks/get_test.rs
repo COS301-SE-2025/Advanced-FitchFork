@@ -19,7 +19,7 @@ mod tests {
     use serial_test::serial;
     use std::fs;
     use tower::ServiceExt;
-    use util::{mark_allocator::mark_allocator::save_allocator, paths::memo_output_dir};
+    use util::{mark_allocator::save_allocator, paths::memo_output_dir};
 
     struct TestData {
         admin_user: UserModel,

@@ -1,20 +1,20 @@
-use axum::{
-    extract::{State, Path, Query},
-    http::{StatusCode, Response},
-    response::IntoResponse,
-    Json,
-};
-use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
-use serde::{Deserialize, Serialize};
-use util::{paths::user_profile_path, state::AppState};
-use validator::Validate;
 use crate::response::ApiResponse;
 use crate::routes::common::UserModule;
-use db::models::user::{Entity as UserEntity, Model as UserModel, Column as UserColumn};
+use axum::body::Body;
+use axum::{
+    Json,
+    extract::{Path, Query, State},
+    http::{Response, StatusCode},
+    response::IntoResponse,
+};
+use db::models::user::{Column as UserColumn, Entity as UserEntity, Model as UserModel};
+use mime_guess::from_path;
+use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
+use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
-use axum::body::Body;
-use mime_guess::from_path;
+use util::{paths::user_profile_path, state::AppState};
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct ListUsersQuery {
@@ -116,10 +116,10 @@ impl From<UserModel> for UserListItem {
 /// - `500 Internal Server Error` - Database error
 pub async fn list_users(
     State(app_state): State<AppState>,
-    Query(query): Query<ListUsersQuery>
+    Query(query): Query<ListUsersQuery>,
 ) -> impl IntoResponse {
     let db = app_state.db();
-    
+
     if let Err(e) = query.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -234,7 +234,7 @@ pub async fn list_users(
 /// - `500 Internal Server Error`: DB error
 pub async fn get_user(
     State(app_state): State<AppState>,
-    Path(user_id): Path<i64>
+    Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
@@ -243,7 +243,10 @@ pub async fn get_user(
             let user_item = UserListItem::from(user);
             (
                 StatusCode::OK,
-                Json(ApiResponse::success(user_item, "User retrieved successfully")),
+                Json(ApiResponse::success(
+                    user_item,
+                    "User retrieved successfully",
+                )),
             )
         }
         Ok(None) => (
@@ -252,7 +255,10 @@ pub async fn get_user(
         ),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<UserListItem>::error(format!("Database error: {}", err))),
+            Json(ApiResponse::<UserListItem>::error(format!(
+                "Database error: {}",
+                err
+            ))),
         ),
     }
 }
@@ -313,7 +319,7 @@ pub async fn get_user(
 /// ```
 pub async fn get_user_modules(
     State(app_state): State<AppState>,
-    Path(user_id): Path<i64>
+    Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
@@ -322,7 +328,10 @@ pub async fn get_user_modules(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<UserModule>>::error(format!("Database error: {}", e))),
+                Json(ApiResponse::<Vec<UserModule>>::error(format!(
+                    "Database error: {}",
+                    e
+                ))),
             );
         }
     };

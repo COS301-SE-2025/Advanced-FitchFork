@@ -31,6 +31,7 @@ import SubmissionView from './pages/modules/assignments/submissions/SubmissionVi
 import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
 import MemoOutput from './pages/modules/assignments/MemoOutput';
 import MarkAllocator from './pages/modules/assignments/MarkAllocator';
+import SetupChecklistPage from './pages/modules/assignments/SetupChecklistPage';
 import HelpPageLayout from './layouts/HelpPageLayout';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
@@ -75,6 +76,7 @@ import AssignmentVerifyPage from './pages/modules/assignments/AssignmentVerifyPa
 import AccessDeniedPage from './pages/modules/assignments/AccessDeniedPage';
 import TaskView from './pages/modules/assignments/tasks/TaskView';
 import TasksPage from './pages/modules/assignments/tasks';
+import TasksMobileMenu from './pages/modules/assignments/tasks/TasksMobileMenu';
 import MakefileHelp from './pages/help/assignments/files/Makefile';
 import MainFile from './pages/help/assignments/files/MainFile';
 import MemoFiles from './pages/help/assignments/files/MemoFiles';
@@ -90,9 +92,11 @@ import ConceptCodeCoverage from './pages/help/assignments/coverage/ConceptCodeCo
 import ConfigOverviewHelp from './pages/help/assignments/config/ConfigOverviewHelp';
 import MemoOutputHelp from './pages/help/assignments/MemoOutputHelp';
 import MarkAllocatorHelp from './pages/help/assignments/MarkAllocatorHelp';
+import PlagiarismMossHelp from './pages/help/assignments/plagiarism/PlagiarismMossHelp';
 import HowToSubmitHelp from './pages/help/assignments/submissions/HowToSubmitHelp';
 import AssignmentSetupHelp from './pages/help/assignments/AssignmentSetupHelp';
 import TasksHelp from './pages/help/assignments/TasksHelp';
+import SystemMonitoringHelp from './pages/help/system/SystemMonitoring';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -184,11 +188,15 @@ export default function App() {
                         isMobile ? <AssignmentMobileMenu /> : <Navigate to="submissions" replace />
                       }
                     />
+                    <Route path="setup" element={<SetupChecklistPage />} />
                     <Route path="files" element={<AssignmentFiles />} />
                     <Route path="submissions" element={<SubmissionsList />} />
                     <Route path="submissions/:submission_id" element={<SubmissionView />} />
                     <Route path="tasks" element={<TasksPage />}>
-                      <Route index element={<TaskView />} />
+                      <Route
+                        index
+                        element={isMobile ? <TasksMobileMenu /> : <TaskView />}
+                      />
                       <Route path=":task_id" element={<TaskView />} />
                     </Route>
                     <Route path="tickets" element={<Tickets />} />
@@ -298,6 +306,10 @@ export default function App() {
                 path="assignments/submissions"
                 element={<Navigate to="assignments/submissions/how-to-submit" replace />}
               />
+              <Route
+                path="assignments/plagiarism"
+                element={<Navigate to="assignments/plagiarism/moss" replace />}
+              />
               {/* Grading wasn't a clickable key, but support a direct path anyway */}
               <Route
                 path="assignments/grading"
@@ -341,11 +353,9 @@ export default function App() {
 
               {/* Assignments → Submissions */}
               <Route path="assignments/submissions/how-to-submit" element={<HowToSubmitHelp />} />
-              <Route path="assignments/submissions/policy" element={<UnderConstruction />} />
-              <Route
-                path="assignments/submissions/understanding-results"
-                element={<UnderConstruction />}
-              />
+
+              {/* Assignments → Plagiarism */}
+              <Route path="assignments/plagiarism/moss" element={<PlagiarismMossHelp />} />
 
               {/* Assignments → Grading */}
               <Route path="assignments/memo-output" element={<MemoOutputHelp />} />
@@ -354,6 +364,7 @@ export default function App() {
               {/* Support */}
               <Route path="support/troubleshooting" element={<UnderConstruction />} />
               <Route path="support/contact" element={<UnderConstruction />} />
+              <Route path="support/system-monitoring" element={<SystemMonitoringHelp />} />
             </Route>
 
             {/* Explicit Unauthorized Fallbacks */}

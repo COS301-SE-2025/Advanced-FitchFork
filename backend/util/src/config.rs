@@ -56,6 +56,8 @@ pub struct AppConfig {
     pub code_manager_host: String,
     pub code_manager_port: u16,
     pub max_number_containers: usize,
+    pub system_health_broadcast_ms: u64,
+    pub system_health_persist_seconds: u64,
     pub jwt_secret: String,
     pub jwt_duration_minutes: u64,
     pub reset_token_expiry_minutes: u64,
@@ -84,6 +86,8 @@ impl AppConfig {
             code_manager_host: code_manager_host(),
             code_manager_port: code_manager_port(),
             max_number_containers: max_number_containers(),
+            system_health_broadcast_ms: system_health_broadcast_ms(),
+            system_health_persist_seconds: system_health_persist_seconds(),
             jwt_secret: jwt_secret(),
             jwt_duration_minutes: jwt_duration_minutes(),
             reset_token_expiry_minutes: reset_token_expiry_minutes(),
@@ -102,41 +106,123 @@ impl AppConfig {
 // Each getter loads only the specific variable (plus a once-only .env load).
 // All of these REQUIRE the env var to be set.
 
-pub fn env() -> String { ensure_dotenv(); require("APP_ENV") }
-pub fn project_name() -> String { ensure_dotenv(); require("PROJECT_NAME") }
-pub fn log_level() -> String { ensure_dotenv(); require("LOG_LEVEL") }
-pub fn log_file() -> String { ensure_dotenv(); require("LOG_FILE") }
-pub fn log_to_stdout() -> bool { ensure_dotenv(); parse_bool(require("LOG_TO_STDOUT"), "LOG_TO_STDOUT") }
+pub fn env() -> String {
+    ensure_dotenv();
+    require("APP_ENV")
+}
+pub fn project_name() -> String {
+    ensure_dotenv();
+    require("PROJECT_NAME")
+}
+pub fn log_level() -> String {
+    ensure_dotenv();
+    require("LOG_LEVEL")
+}
+pub fn log_file() -> String {
+    ensure_dotenv();
+    require("LOG_FILE")
+}
+pub fn log_to_stdout() -> bool {
+    ensure_dotenv();
+    parse_bool(require("LOG_TO_STDOUT"), "LOG_TO_STDOUT")
+}
 
-pub fn database_path() -> String { ensure_dotenv(); require("DATABASE_PATH") }
-pub fn storage_root() -> String { ensure_dotenv(); require("STORAGE_ROOT") }
+pub fn database_path() -> String {
+    ensure_dotenv();
+    require("DATABASE_PATH")
+}
+pub fn storage_root() -> String {
+    ensure_dotenv();
+    require("STORAGE_ROOT")
+}
 
-pub fn host() -> String { ensure_dotenv(); require("HOST") }
-pub fn port() -> u16 { ensure_dotenv(); parse(require("PORT"), "PORT") }
-pub fn code_manager_host() -> String { ensure_dotenv(); require("CODE_MANAGER_HOST") }
-pub fn code_manager_port() -> u16 { ensure_dotenv(); parse(require("CODE_MANAGER_PORT"), "CODE_MANAGER_PORT") }
+pub fn host() -> String {
+    ensure_dotenv();
+    require("HOST")
+}
+pub fn port() -> u16 {
+    ensure_dotenv();
+    parse(require("PORT"), "PORT")
+}
+pub fn code_manager_host() -> String {
+    ensure_dotenv();
+    require("CODE_MANAGER_HOST")
+}
+pub fn code_manager_port() -> u16 {
+    ensure_dotenv();
+    parse(require("CODE_MANAGER_PORT"), "CODE_MANAGER_PORT")
+}
 
 pub fn max_number_containers() -> usize {
-    ensure_dotenv(); parse(require("MAX_NUM_CONTAINERS"), "MAX_NUM_CONTAINERS")
+    ensure_dotenv();
+    parse(require("MAX_NUM_CONTAINERS"), "MAX_NUM_CONTAINERS")
 }
 
-pub fn jwt_secret() -> String { ensure_dotenv(); require("JWT_SECRET") }
+/// Interval for system health broadcast over WebSockets in milliseconds.
+pub fn system_health_broadcast_ms() -> u64 {
+    ensure_dotenv();
+    parse(
+        require("SYSTEM_HEALTH_BROADCAST_MS"),
+        "SYSTEM_HEALTH_BROADCAST_MS",
+    )
+}
+
+/// Interval in seconds for persisting system health metrics to the database.
+pub fn system_health_persist_seconds() -> u64 {
+    ensure_dotenv();
+    parse(
+        require("SYSTEM_HEALTH_PERSIST_SECONDS"),
+        "SYSTEM_HEALTH_PERSIST_SECONDS",
+    )
+}
+
+pub fn jwt_secret() -> String {
+    ensure_dotenv();
+    require("JWT_SECRET")
+}
 pub fn jwt_duration_minutes() -> u64 {
-    ensure_dotenv(); parse(require("JWT_DURATION_MINUTES"), "JWT_DURATION_MINUTES")
+    ensure_dotenv();
+    parse(require("JWT_DURATION_MINUTES"), "JWT_DURATION_MINUTES")
 }
 pub fn reset_token_expiry_minutes() -> u64 {
-    ensure_dotenv(); parse(require("RESET_TOKEN_EXPIRY_MINUTES"), "RESET_TOKEN_EXPIRY_MINUTES")
+    ensure_dotenv();
+    parse(
+        require("RESET_TOKEN_EXPIRY_MINUTES"),
+        "RESET_TOKEN_EXPIRY_MINUTES",
+    )
 }
 pub fn max_password_reset_requests_per_hour() -> u32 {
-    ensure_dotenv(); parse(require("MAX_PASSWORD_RESET_REQUESTS_PER_HOUR"), "MAX_PASSWORD_RESET_REQUESTS_PER_HOUR")
+    ensure_dotenv();
+    parse(
+        require("MAX_PASSWORD_RESET_REQUESTS_PER_HOUR"),
+        "MAX_PASSWORD_RESET_REQUESTS_PER_HOUR",
+    )
 }
 
-pub fn gmail_username() -> String { ensure_dotenv(); require("GMAIL_USERNAME") }
-pub fn gmail_app_password() -> String { ensure_dotenv(); require("GMAIL_APP_PASSWORD") }
-pub fn frontend_url() -> String { ensure_dotenv(); require("FRONTEND_URL") }
-pub fn email_from_name() -> String { ensure_dotenv(); require("EMAIL_FROM_NAME") }
-pub fn gemini_api_key() -> String { ensure_dotenv(); require("GEMINI_API_KEY") }
-pub fn moss_user_id() -> String { ensure_dotenv(); require("MOSS_USER_ID") }
+pub fn gmail_username() -> String {
+    ensure_dotenv();
+    require("GMAIL_USERNAME")
+}
+pub fn gmail_app_password() -> String {
+    ensure_dotenv();
+    require("GMAIL_APP_PASSWORD")
+}
+pub fn frontend_url() -> String {
+    ensure_dotenv();
+    require("FRONTEND_URL")
+}
+pub fn email_from_name() -> String {
+    ensure_dotenv();
+    require("EMAIL_FROM_NAME")
+}
+pub fn gemini_api_key() -> String {
+    ensure_dotenv();
+    require("GEMINI_API_KEY")
+}
+pub fn moss_user_id() -> String {
+    ensure_dotenv();
+    require("MOSS_USER_ID")
+}
 
 #[cfg(test)]
 mod tests {
@@ -158,6 +244,8 @@ mod tests {
         "CODE_MANAGER_HOST",
         "CODE_MANAGER_PORT",
         "MAX_NUM_CONTAINERS",
+        "SYSTEM_HEALTH_BROADCAST_MS",
+        "SYSTEM_HEALTH_PERSIST_SECONDS",
         "JWT_SECRET",
         "JWT_DURATION_MINUTES",
         "RESET_TOKEN_EXPIRY_MINUTES",
@@ -195,6 +283,8 @@ mod tests {
             std::env::set_var("CODE_MANAGER_PORT", "5050");
 
             std::env::set_var("MAX_NUM_CONTAINERS", "42");
+            std::env::set_var("SYSTEM_HEALTH_BROADCAST_MS", "2000");
+            std::env::set_var("SYSTEM_HEALTH_PERSIST_SECONDS", "60");
 
             std::env::set_var("JWT_SECRET", "sekret");
             std::env::set_var("JWT_DURATION_MINUTES", "120");
@@ -215,70 +305,124 @@ mod tests {
     fn getters_individual_ok() {
         clear_all_env();
 
-        unsafe { std::env::set_var("APP_ENV", "foo"); }
+        unsafe {
+            std::env::set_var("APP_ENV", "foo");
+        }
         assert_eq!(super::env(), "foo");
 
-        unsafe { std::env::set_var("PROJECT_NAME", "p"); }
+        unsafe {
+            std::env::set_var("PROJECT_NAME", "p");
+        }
         assert_eq!(super::project_name(), "p");
 
-        unsafe { std::env::set_var("LOG_LEVEL", "api=info"); }
+        unsafe {
+            std::env::set_var("LOG_LEVEL", "api=info");
+        }
         assert_eq!(super::log_level(), "api=info");
 
-        unsafe { std::env::set_var("LOG_FILE", "api.log"); }
+        unsafe {
+            std::env::set_var("LOG_FILE", "api.log");
+        }
         assert_eq!(super::log_file(), "api.log");
 
-        unsafe { std::env::set_var("LOG_TO_STDOUT", "yes"); }
-        assert_eq!(super::log_to_stdout(), true);
+        unsafe {
+            std::env::set_var("LOG_TO_STDOUT", "yes");
+        }
+        assert!(super::log_to_stdout());
 
-        unsafe { std::env::set_var("HOST", "127.0.0.1"); }
+        unsafe {
+            std::env::set_var("HOST", "127.0.0.1");
+        }
         assert_eq!(super::host(), "127.0.0.1");
 
-        unsafe { std::env::set_var("PORT", "3001"); }
+        unsafe {
+            std::env::set_var("PORT", "3001");
+        }
         assert_eq!(super::port(), 3001);
 
-        unsafe { std::env::set_var("CODE_MANAGER_HOST", "127.0.0.2"); }
+        unsafe {
+            std::env::set_var("CODE_MANAGER_HOST", "127.0.0.2");
+        }
         assert_eq!(super::code_manager_host(), "127.0.0.2");
 
-        unsafe { std::env::set_var("CODE_MANAGER_PORT", "5001"); }
+        unsafe {
+            std::env::set_var("CODE_MANAGER_PORT", "5001");
+        }
         assert_eq!(super::code_manager_port(), 5001);
 
-        unsafe { std::env::set_var("MAX_NUM_CONTAINERS", "5"); }
+        unsafe {
+            std::env::set_var("MAX_NUM_CONTAINERS", "5");
+        }
         assert_eq!(super::max_number_containers(), 5);
 
-        unsafe { std::env::set_var("JWT_SECRET", "abc"); }
+        unsafe {
+            std::env::set_var("SYSTEM_HEALTH_BROADCAST_MS", "1500");
+        }
+        assert_eq!(super::system_health_broadcast_ms(), 1500);
+
+        unsafe {
+            std::env::set_var("SYSTEM_HEALTH_PERSIST_SECONDS", "45");
+        }
+        assert_eq!(super::system_health_persist_seconds(), 45);
+
+        unsafe {
+            std::env::set_var("JWT_SECRET", "abc");
+        }
         assert_eq!(super::jwt_secret(), "abc");
 
-        unsafe { std::env::set_var("JWT_DURATION_MINUTES", "10"); }
+        unsafe {
+            std::env::set_var("JWT_DURATION_MINUTES", "10");
+        }
         assert_eq!(super::jwt_duration_minutes(), 10);
 
-        unsafe { std::env::set_var("RESET_TOKEN_EXPIRY_MINUTES", "99"); }
+        unsafe {
+            std::env::set_var("RESET_TOKEN_EXPIRY_MINUTES", "99");
+        }
         assert_eq!(super::reset_token_expiry_minutes(), 99);
 
-        unsafe { std::env::set_var("MAX_PASSWORD_RESET_REQUESTS_PER_HOUR", "2"); }
+        unsafe {
+            std::env::set_var("MAX_PASSWORD_RESET_REQUESTS_PER_HOUR", "2");
+        }
         assert_eq!(super::max_password_reset_requests_per_hour(), 2);
 
-        unsafe { std::env::set_var("DATABASE_PATH", "/tmp/x.db"); }
+        unsafe {
+            std::env::set_var("DATABASE_PATH", "/tmp/x.db");
+        }
         assert_eq!(super::database_path(), "/tmp/x.db");
 
-        unsafe { std::env::set_var("STORAGE_ROOT", "/tmp/s"); }
+        unsafe {
+            std::env::set_var("STORAGE_ROOT", "/tmp/s");
+        }
         assert_eq!(super::storage_root(), "/tmp/s");
 
-        unsafe { std::env::set_var("GMAIL_USERNAME", "u"); }
+        unsafe {
+            std::env::set_var("GMAIL_USERNAME", "u");
+        }
         assert_eq!(super::gmail_username(), "u");
 
-        unsafe { std::env::set_var("GMAIL_APP_PASSWORD", "pw"); }
+        unsafe {
+            std::env::set_var("GMAIL_APP_PASSWORD", "pw");
+        }
         assert_eq!(super::gmail_app_password(), "pw");
 
-        unsafe { std::env::set_var("FRONTEND_URL", "https://x"); }
+        unsafe {
+            std::env::set_var("FRONTEND_URL", "https://x");
+        }
         assert_eq!(super::frontend_url(), "https://x");
 
-        unsafe { std::env::set_var("EMAIL_FROM_NAME", "X"); }
+        unsafe {
+            std::env::set_var("EMAIL_FROM_NAME", "X");
+        }
         assert_eq!(super::email_from_name(), "X");
 
-        unsafe { std::env::set_var("GEMINI_API_KEY", "g"); }
+        unsafe {
+            std::env::set_var("GEMINI_API_KEY", "g");
+        }
         assert_eq!(super::gemini_api_key(), "g");
 
-        unsafe { std::env::set_var("MOSS_USER_ID", "mid"); }
+        unsafe {
+            std::env::set_var("MOSS_USER_ID", "mid");
+        }
         assert_eq!(super::moss_user_id(), "mid");
     }
 
@@ -287,16 +431,24 @@ mod tests {
     fn log_to_stdout_boolean_parsing() {
         clear_all_env();
 
-        unsafe { std::env::set_var("LOG_TO_STDOUT", "on"); }
+        unsafe {
+            std::env::set_var("LOG_TO_STDOUT", "on");
+        }
         assert!(super::log_to_stdout());
 
-        unsafe { std::env::set_var("LOG_TO_STDOUT", "off"); }
+        unsafe {
+            std::env::set_var("LOG_TO_STDOUT", "off");
+        }
         assert!(!super::log_to_stdout());
 
-        unsafe { std::env::set_var("LOG_TO_STDOUT", "TRUE"); }
+        unsafe {
+            std::env::set_var("LOG_TO_STDOUT", "TRUE");
+        }
         assert!(super::log_to_stdout());
 
-        unsafe { std::env::set_var("LOG_TO_STDOUT", "0"); }
+        unsafe {
+            std::env::set_var("LOG_TO_STDOUT", "0");
+        }
         assert!(!super::log_to_stdout());
     }
 
@@ -304,7 +456,9 @@ mod tests {
     #[serial]
     fn invalid_boolean_panics() {
         clear_all_env();
-        unsafe { std::env::set_var("LOG_TO_STDOUT", "maybe"); }
+        unsafe {
+            std::env::set_var("LOG_TO_STDOUT", "maybe");
+        }
         let res = panic::catch_unwind(|| {
             let _ = super::log_to_stdout();
         });
@@ -316,16 +470,36 @@ mod tests {
     fn invalid_numeric_panics() {
         clear_all_env();
 
-        unsafe { std::env::set_var("PORT", "not-a-number"); }
-        let res = panic::catch_unwind(|| { let _ = super::port(); });
+        unsafe {
+            std::env::set_var("PORT", "not-a-number");
+        }
+        let res = panic::catch_unwind(|| {
+            let _ = super::port();
+        });
         assert!(res.is_err());
 
-        unsafe { std::env::set_var("CODE_MANAGER_PORT", "NaN"); }
-        let res = panic::catch_unwind(|| { let _ = super::code_manager_port(); });
+        unsafe {
+            std::env::set_var("CODE_MANAGER_PORT", "NaN");
+        }
+        let res = panic::catch_unwind(|| {
+            let _ = super::code_manager_port();
+        });
         assert!(res.is_err());
 
-        unsafe { std::env::set_var("MAX_NUM_CONTAINERS", "forty-two"); }
-        let res = panic::catch_unwind(|| { let _ = super::max_number_containers(); });
+        unsafe {
+            std::env::set_var("MAX_NUM_CONTAINERS", "forty-two");
+        }
+        let res = panic::catch_unwind(|| {
+            let _ = super::max_number_containers();
+        });
+        assert!(res.is_err());
+
+        unsafe {
+            std::env::set_var("SYSTEM_HEALTH_BROADCAST_MS", "bad");
+        }
+        let res = panic::catch_unwind(|| {
+            let _ = super::system_health_broadcast_ms();
+        });
         assert!(res.is_err());
     }
 
@@ -335,13 +509,19 @@ mod tests {
         clear_all_env();
 
         // Each getter should panic if its var is missing.
-        let res = panic::catch_unwind(|| { let _ = super::jwt_secret(); });
+        let res = panic::catch_unwind(|| {
+            let _ = super::jwt_secret();
+        });
         assert!(res.is_err());
 
-        let res = panic::catch_unwind(|| { let _ = super::database_path(); });
+        let res = panic::catch_unwind(|| {
+            let _ = super::database_path();
+        });
         assert!(res.is_err());
 
-        let res = panic::catch_unwind(|| { let _ = super::storage_root(); });
+        let res = panic::catch_unwind(|| {
+            let _ = super::storage_root();
+        });
         assert!(res.is_err());
     }
 
@@ -357,7 +537,7 @@ mod tests {
         assert_eq!(cfg.project_name, "proj");
         assert_eq!(cfg.log_level, "debug");
         assert_eq!(cfg.log_file, "server.log");
-        assert_eq!(cfg.log_to_stdout, true);
+        assert!(cfg.log_to_stdout);
 
         assert_eq!(cfg.database_path, "/tmp/app.db");
         assert_eq!(cfg.storage_root, "/tmp/storage");
@@ -369,6 +549,8 @@ mod tests {
         assert_eq!(cfg.code_manager_port, 5050);
 
         assert_eq!(cfg.max_number_containers, 42);
+        assert_eq!(cfg.system_health_broadcast_ms, 2000);
+        assert_eq!(cfg.system_health_persist_seconds, 60);
 
         assert_eq!(cfg.jwt_secret, "sekret");
         assert_eq!(cfg.jwt_duration_minutes, 120);
@@ -405,6 +587,8 @@ mod tests {
             std::env::set_var("CODE_MANAGER_PORT", "5050");
 
             std::env::set_var("MAX_NUM_CONTAINERS", "42");
+            std::env::set_var("SYSTEM_HEALTH_BROADCAST_MS", "2000");
+            std::env::set_var("SYSTEM_HEALTH_PERSIST_SECONDS", "60");
 
             std::env::set_var("JWT_SECRET", "sekret");
             std::env::set_var("JWT_DURATION_MINUTES", "120");
@@ -422,6 +606,9 @@ mod tests {
         let res = panic::catch_unwind(|| {
             let _ = AppConfig::from_env();
         });
-        assert!(res.is_err(), "from_env() should panic when any var is missing");
+        assert!(
+            res.is_err(),
+            "from_env() should panic when any var is missing"
+        );
     }
 }

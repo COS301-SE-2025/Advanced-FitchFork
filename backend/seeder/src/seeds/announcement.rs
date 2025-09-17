@@ -2,12 +2,11 @@ use crate::seed::Seeder;
 use chrono::{Duration, Utc};
 use db::models::{
     announcements::{ActiveModel as AnnouncementActiveModel, Entity as AnnouncementEntity},
-    module,
-    user,
+    module, user,
     user_module_role::{self, Role as ModuleRole},
 };
 use rand::rngs::{OsRng, StdRng};
-use rand::{seq::SliceRandom, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, seq::SliceRandom};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
 pub struct AnnouncementSeeder;
@@ -44,13 +43,11 @@ impl Seeder for AnnouncementSeeder {
             // Prefer module staff as authors
             let staff_user_ids: Vec<i64> = user_module_role::Entity::find()
                 .filter(user_module_role::Column::ModuleId.eq(m.id))
-                .filter(
-                    user_module_role::Column::Role.is_in(vec![
-                        ModuleRole::Lecturer,
-                        ModuleRole::AssistantLecturer,
-                        ModuleRole::Tutor,
-                    ]),
-                )
+                .filter(user_module_role::Column::Role.is_in(vec![
+                    ModuleRole::Lecturer,
+                    ModuleRole::AssistantLecturer,
+                    ModuleRole::Tutor,
+                ]))
                 .all(db)
                 .await
                 .unwrap_or_default()
@@ -102,7 +99,12 @@ impl Seeder for AnnouncementSeeder {
 }
 
 /// Build a rich, longer Markdown body with sections, lists, code, quotes, and a simple table.
-fn build_long_markdown(code: &str, year: i32, ts: chrono::DateTime<Utc>, rng: &mut StdRng) -> String {
+fn build_long_markdown(
+    code: &str,
+    year: i32,
+    ts: chrono::DateTime<Utc>,
+    rng: &mut StdRng,
+) -> String {
     let when = ts.format("%Y-%m-%d %H:%M").to_string();
 
     let intros = [
@@ -155,13 +157,18 @@ fn build_long_markdown(code: &str, year: i32, ts: chrono::DateTime<Utc>, rng: &m
     ];
 
     let code_blocks = [
-        ("bash", r#"# Run tests locally
+        (
+            "bash",
+            r#"# Run tests locally
 cargo test -- --nocapture
 
 # Format and lint
 cargo fmt
-cargo clippy -- -D warnings"#),
-        ("rust", r#"fn main() {
+cargo clippy -- -D warnings"#,
+        ),
+        (
+            "rust",
+            r#"fn main() {
     println!("Hello, COS!");
 }
 
@@ -171,12 +178,16 @@ mod tests {
     fn it_works() {
         assert_eq!(2 + 2, 4);
     }
-}"#),
-        ("json", r#"{
+}"#,
+        ),
+        (
+            "json",
+            r#"{
   "name": "example",
   "version": "1.0.0",
   "private": true
-}"#),
+}"#,
+        ),
     ];
 
     // Pick random slices
@@ -234,7 +245,7 @@ mod tests {
     };
 
     format!(
-r#"{intro}
+        r#"{intro}
 
 ### Action Items
 {bullets}
@@ -257,7 +268,11 @@ _Updated at {when}_ in **{code} {year}**."#,
         numbered = numbered,
         maybe_quote = maybe_quote,
         maybe_table = maybe_table,
-        maybe_links = if maybe_links.is_empty() { "- (none)" .to_string() } else { maybe_links },
+        maybe_links = if maybe_links.is_empty() {
+            "- (none)".to_string()
+        } else {
+            maybe_links
+        },
         maybe_code = maybe_code,
         when = when,
         code = code,

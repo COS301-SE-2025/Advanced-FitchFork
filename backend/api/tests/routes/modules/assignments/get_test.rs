@@ -12,12 +12,12 @@ mod tests {
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use serde_json::{Value};
+    use serde_json::Value;
     use tower::ServiceExt;
 
-    use api::auth::generate_jwt;
-    use util::execution_config::{execution_config::GradingPolicy, ExecutionConfig};
     use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
+    use util::execution_config::{ExecutionConfig, GradingPolicy};
 
     struct TestData {
         admin_user: UserModel,
@@ -30,35 +30,28 @@ mod tests {
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module =
-            ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let empty_module =
-            ModuleModel::create(db, "EMPTY101", 2024, Some("Empty Module"), 16).await.unwrap();
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
+            .await
+            .unwrap();
+        let empty_module = ModuleModel::create(db, "EMPTY101", 2024, Some("Empty Module"), 16)
+            .await
+            .unwrap();
 
-        let admin_user =
-            UserModel::create(db, "admin1", "admin1@test.com", "password", true).await.unwrap();
-        let lecturer_user = UserModel::create(
-            db,
-            "lecturer1",
-            "lecturer1@test.com",
-            "password1",
-            false,
-        )
-        .await
-        .unwrap();
+        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true)
+            .await
+            .unwrap();
+        let lecturer_user =
+            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
+                .await
+                .unwrap();
         let student_user =
             UserModel::create(db, "student1", "student1@test.com", "password2", false)
                 .await
                 .unwrap();
-        let forbidden_user = UserModel::create(
-            db,
-            "forbidden",
-            "forbidden@test.com",
-            "password3",
-            false,
-        )
-        .await
-        .unwrap();
+        let forbidden_user =
+            UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false)
+                .await
+                .unwrap();
 
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
@@ -130,7 +123,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["total"], 3);
@@ -161,7 +156,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["total"], 3);
@@ -219,7 +216,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         let names: Vec<_> = json["data"]["assignments"]
@@ -237,7 +236,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments?page=2&per_page=2", data.module.id);
+        let uri = format!(
+            "/api/modules/{}/assignments?page=2&per_page=2",
+            data.module.id
+        );
         let req = Request::builder()
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
@@ -247,7 +249,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["page"], 2);
@@ -312,7 +316,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["total"], 0);
@@ -352,7 +358,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["assignment"]["id"], data.assignments[0].id);
@@ -379,7 +387,9 @@ mod tests {
         let response: axum::http::Response<Body> = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert!(json["data"].get("best_mark").is_none());
     }
@@ -404,7 +414,9 @@ mod tests {
         let response: axum::http::Response<Body> = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert!(json["data"].get("best_mark").is_none());
     }
@@ -498,10 +510,14 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
-        let bm = json["data"]["best_mark"].as_object().expect("best_mark missing");
+        let bm = json["data"]["best_mark"]
+            .as_object()
+            .expect("best_mark missing");
         assert_eq!(bm["earned"], 15);
         assert_eq!(bm["total"], 20);
         assert_eq!(bm["attempt"], 2);
@@ -577,10 +593,14 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
-        let bm = json["data"]["best_mark"].as_object().expect("best_mark missing");
+        let bm = json["data"]["best_mark"]
+            .as_object()
+            .expect("best_mark missing");
         assert_eq!(bm["earned"], 11);
         assert_eq!(bm["total"], 20);
         assert_eq!(bm["attempt"], 2);

@@ -10,6 +10,6 @@
 //! - [`manual_feedback`]: Allows instructors to specify custom/manual feedback for each task.
 //! - [`ai_feedback`]: Uses an LLM (Large Language Model) to generate advanced, context-aware feedback.
 
+pub mod ai_feedback;
 pub mod auto_feedback;
 pub mod manual_feedback;
-pub mod ai_feedback;

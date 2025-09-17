@@ -11,27 +11,20 @@
 //!
 //! Responses include standard `200 OK`, `400 Bad Request` for validation errors, and `500 Internal Server Error` for database issues.
 
+use crate::response::ApiResponse;
+use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
 use axum::{
-    extract::{State, Path},
+    Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use chrono::{DateTime, Utc};
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, DbErr};
+use db::models::assignment::{AssignmentType, Model as AssignmentModel};
+use db::models::assignment::{Column as AssignmentCol, Entity as AssignmentEntity};
+use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
 use serde::Deserialize;
 use util::state::AppState;
-use crate::response::ApiResponse;
-use db::{
-    models::{
-        assignment::{
-            AssignmentType,
-            Model as AssignmentModel,
-        }
-    },
-};
-use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
-use db::models::assignment::{Entity as AssignmentEntity, Column as AssignmentCol};
 
 /// POST /api/modules/{module_id}/assignments
 ///
@@ -92,31 +85,31 @@ pub async fn create_assignment(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
-        .map(|dt| dt.with_timezone(&Utc)) {
-        Ok(date) => date,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error(
-                    "Invalid available_from datetime",
-                )),
-            );
-        }
-    };
+    let available_from =
+        match DateTime::parse_from_rfc3339(&req.available_from).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(date) => date,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid available_from datetime",
+                    )),
+                );
+            }
+        };
 
-    let due_date = match DateTime::parse_from_rfc3339(&req.due_date)
-        .map(|dt| dt.with_timezone(&Utc)) {
-        Ok(date) => date,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error(
-                    "Invalid due_date datetime",
-                )),
-            );
-        }
-    };
+    let due_date =
+        match DateTime::parse_from_rfc3339(&req.due_date).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(date) => date,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid due_date datetime",
+                    )),
+                );
+            }
+        };
 
     let assignment_type = match req.assignment_type.parse::<AssignmentType>() {
         Ok(t) => t,

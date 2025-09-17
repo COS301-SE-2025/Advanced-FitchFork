@@ -33,7 +33,14 @@ impl Seeder for UserSeeder {
         // Composite-role users
         let _ = Model::create(db, "student_tutor", "student_tutor@example.com", "1", false).await;
         let _ = Model::create(db, "all_staff", "all_staff@example.com", "1", false).await;
-        let _ = Model::create(db, "lecturer_assistant", "lecturer_assistant@example.com", "1", false).await;
+        let _ = Model::create(
+            db,
+            "lecturer_assistant",
+            "lecturer_assistant@example.com",
+            "1",
+            false,
+        )
+        .await;
 
         // User with every role (distributed across modules)
         let _ = Model::create(db, "all", "all@example.com", "1", false).await;

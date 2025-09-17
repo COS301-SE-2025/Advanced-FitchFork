@@ -1,21 +1,17 @@
+// helpers/ws.rs
 use axum::{
     body::Body,
     http::{Request, Response},
 };
 use std::convert::Infallible;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{
-    connect_async,
-    tungstenite::{client::IntoClientRequest},
-    MaybeTlsStream,
-    WebSocketStream
+    MaybeTlsStream, WebSocketStream, connect_async, tungstenite::client::IntoClientRequest,
 };
-use tower::util::BoxCloneService;
 use tower::make::Shared;
+use tower::util::BoxCloneService;
 use url::Url;
-use tokio::net::TcpStream;
 
-/// Spawns the Axum app on a random local port
 pub async fn spawn_server(
     app: BoxCloneService<Request<Body>, Response<Body>, Infallible>,
 ) -> std::net::SocketAddr {
@@ -31,11 +27,11 @@ pub async fn spawn_server(
     addr
 }
 
-/// Connects to a WebSocket route at `/{topic_path}?token=...`
+/// Connects to a WebSocket route at `/ws/{topic}` with an optional `?token=...`
 pub async fn connect_ws(
     addr: &str,
     topic: &str,
-    token: &str,
+    token: Option<&str>, // <— accept Option<&str>
 ) -> Result<
     (
         WebSocketStream<MaybeTlsStream<TcpStream>>,
@@ -43,11 +39,12 @@ pub async fn connect_ws(
     ),
     tokio_tungstenite::tungstenite::Error,
 > {
-    let url = Url::parse(&format!(
-        "ws://{}/ws/{}?token={}",
-        addr, topic, token
-    ))
-    .unwrap();
+    let base = format!("ws://{}/ws/{}", addr, topic);
+    let url = if let Some(tok) = token {
+        Url::parse(&format!("{base}?token={tok}")).unwrap()
+    } else {
+        Url::parse(&base).unwrap()
+    };
 
     let req = url.to_string().into_client_request().unwrap();
     connect_async(req).await

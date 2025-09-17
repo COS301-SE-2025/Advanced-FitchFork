@@ -10,22 +10,19 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use db::models::assignment::Entity as AssignmentEntity;
+use db::models::assignment_memo_output::{Column as MemoCol, Entity as MemoEntity};
+use db::models::assignment_overwrite_file::{
+    Column as OverwriteFileColumn, Entity as OverwriteFileEntity,
+};
 use db::models::assignment_task::{Column, Entity};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, PaginatorTrait};
+use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
-use util::{mark_allocator::mark_allocator::load_allocator, paths::storage_root};
-use util::{execution_config::ExecutionConfig, state::AppState};
-use db::models::assignment_overwrite_file::{
-    Entity as OverwriteFileEntity,
-    Column as OverwriteFileColumn,
-};
-use db::models::assignment::{Entity as AssignmentEntity};
-use db::models::assignment_memo_output::{
-    Entity as MemoEntity, Column as MemoCol
-};
 use util::paths::memo_output_dir;
+use util::{execution_config::ExecutionConfig, state::AppState};
+use util::{mark_allocator::load_allocator, paths::storage_root};
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
 #[derive(Serialize)]
@@ -54,7 +51,7 @@ pub struct TaskDetailResponse {
     pub created_at: String,
     /// The last update timestamp of the task (RFC3339 format).
     pub updated_at: String,
-    pub has_overwrite_files: bool,       
+    pub has_overwrite_files: bool,
     /// The list of subsections for this task, with details and memo outputs.
     pub subsections: Vec<SubsectionDetail>,
 }
@@ -214,7 +211,9 @@ pub async fn get_task_details(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving assignment")),
+                Json(ApiResponse::<()>::error(
+                    "Database error retrieving assignment",
+                )),
             )
                 .into_response();
         }
@@ -222,14 +221,18 @@ pub async fn get_task_details(
     if assignment.module_id != module_id {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Assignment does not belong to this module")),
+            Json(ApiResponse::<()>::error(
+                "Assignment does not belong to this module",
+            )),
         )
             .into_response();
     }
     if task.assignment_id != assignment_id {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Task does not belong to this assignment")),
+            Json(ApiResponse::<()>::error(
+                "Task does not belong to this assignment",
+            )),
         )
             .into_response();
     }
@@ -286,7 +289,11 @@ pub async fn get_task_details(
         memo.split(&separator)
             .map(|s| {
                 let t = s.trim();
-                if t.is_empty() { None } else { Some(t.to_string()) }
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
             })
             .collect()
     } else {
@@ -308,7 +315,11 @@ pub async fn get_task_details(
                 obj.get(&desired_key).and_then(|inner| {
                     inner.as_object().map(|o| {
                         let val = o.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
-                        let subs = o.get("subsections").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                        let subs = o
+                            .get("subsections")
+                            .and_then(|v| v.as_array())
+                            .cloned()
+                            .unwrap_or_default();
                         (val, subs)
                     })
                 })
@@ -335,7 +346,6 @@ pub async fn get_task_details(
                     }
                 })
                 .unwrap_or((0, vec![]))
-
         }
     } else {
         (0, vec![])
@@ -352,10 +362,18 @@ pub async fn get_task_details(
         .enumerate()
         .filter_map(|(i, v)| {
             let o = v.as_object()?;
-            let name = o.get("name").and_then(|n| n.as_str()).unwrap_or("<unnamed>").to_string();
+            let name = o
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("<unnamed>")
+                .to_string();
             let value = o.get("value").and_then(|x| x.as_i64()).unwrap_or(0);
             let memo_output = subsection_outputs.get(i).cloned().flatten();
-            Some(SubsectionDetail { name, value, memo_output })
+            Some(SubsectionDetail {
+                name,
+                value,
+                memo_output,
+            })
         })
         .collect();
 
@@ -387,11 +405,13 @@ pub async fn get_task_details(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(resp, "Task details retrieved successfully")),
+        Json(ApiResponse::success(
+            resp,
+            "Task details retrieved successfully",
+        )),
     )
         .into_response()
 }
-
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/tasks
 ///

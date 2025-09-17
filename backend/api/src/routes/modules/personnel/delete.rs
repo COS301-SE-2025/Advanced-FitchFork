@@ -1,23 +1,18 @@
 use axum::{
-    extract::{Path, State, Extension},
+    Json,
+    extract::{Extension, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
+use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter};
 use serde::Deserialize;
-use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, QueryFilter,
-};
 
+use crate::{auth::AuthUser, response::ApiResponse};
 use db::models::{
     user::Entity as UserEntity,
-    user_module_role::{Entity as RoleEntity, Column as RoleCol, Role},
+    user_module_role::{Column as RoleCol, Entity as RoleEntity, Role},
 };
 use util::state::AppState;
-use crate::{
-    auth::AuthUser,
-    response::ApiResponse,
-};
 
 #[derive(Debug, Deserialize)]
 pub struct RemovePersonnelRequest {
@@ -152,7 +147,9 @@ pub async fn remove_personnel(
         if !is_lecturer {
             return (
                 StatusCode::FORBIDDEN,
-                Json(ApiResponse::<()>::error("Lecturer access required for this module")),
+                Json(ApiResponse::<()>::error(
+                    "Lecturer access required for this module",
+                )),
             );
         }
     }
@@ -170,7 +167,10 @@ pub async fn remove_personnel(
         if !user_exists {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", target_user_id))),
+                Json(ApiResponse::<()>::error(&format!(
+                    "User with ID {} does not exist",
+                    target_user_id
+                ))),
             );
         }
 
@@ -199,12 +199,17 @@ pub async fn remove_personnel(
     if not_assigned.is_empty() {
         (
             StatusCode::OK,
-            Json(ApiResponse::<()>::success((), "Users removed from role successfully")),
+            Json(ApiResponse::<()>::success(
+                (),
+                "Users removed from role successfully",
+            )),
         )
     } else {
         (
             StatusCode::CONFLICT,
-            Json(ApiResponse::<()>::error("Some users are not assigned with this role")),
+            Json(ApiResponse::<()>::error(
+                "Some users are not assigned with this role",
+            )),
         )
     }
 }

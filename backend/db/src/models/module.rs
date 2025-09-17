@@ -1,9 +1,9 @@
-use sea_orm::entity::prelude::*;
-use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, Set};
 use chrono::{DateTime, Utc};
 use log::{info, warn};
-use util::paths::module_dir;
+use sea_orm::entity::prelude::*;
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 use std::fs;
+use util::paths::module_dir;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "modules")]
@@ -53,14 +53,14 @@ impl Model {
     /// # Returns
     /// A fully populated `Model` after insertion.
     pub async fn create<C>(
-      db: &C,
+        db: &C,
         code: &str,
         year: i32,
         description: Option<&str>,
         credits: i32,
     ) -> Result<Self, DbErr>
-        where
-        C: ConnectionTrait, 
+    where
+        C: ConnectionTrait,
     {
         let active = ActiveModel {
             code: Set(code.to_owned()),
@@ -90,7 +90,6 @@ impl Model {
             warn!("Expected module directory {} does not exist", dir.display());
         }
 
-
         // Step 3: Delete the module
         Entity::delete_by_id(self.id).exec(db).await?;
         info!("Deleted module {}", self.id);
@@ -110,7 +109,7 @@ impl Model {
         credits: i32,
     ) -> Result<Self, DbErr> {
         let Some(module) = Entity::find_by_id(id).one(db).await? else {
-            return Err(DbErr::RecordNotFound(format!("Module ID {} not found", id)));
+            return Err(DbErr::RecordNotFound(format!("Module ID {id} not found")));
         };
 
         let mut active: ActiveModel = module.into();
@@ -122,7 +121,6 @@ impl Model {
         active.update(db).await
     }
 }
-
 
 #[cfg(test)]
 mod tests {

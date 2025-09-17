@@ -23,26 +23,10 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(
-                        ColumnDef::new(Alias::new("module_id"))
-                            .integer()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(Alias::new("user_id"))
-                            .integer()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(Alias::new("title"))
-                            .text()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(Alias::new("body"))
-                            .text()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(Alias::new("module_id")).integer().not_null())
+                    .col(ColumnDef::new(Alias::new("user_id")).integer().not_null())
+                    .col(ColumnDef::new(Alias::new("title")).text().not_null())
+                    .col(ColumnDef::new(Alias::new("body")).text().not_null())
                     .col(
                         ColumnDef::new(Alias::new("pinned"))
                             .boolean()
@@ -80,11 +64,7 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(
-                Table::drop()
-                    .table(Alias::new("announcements"))
-                    .to_owned(),
-            )
+            .drop_table(Table::drop().table(Alias::new("announcements")).to_owned())
             .await
     }
 }

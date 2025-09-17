@@ -4,10 +4,18 @@
 //!
 //! **Permissions:** Only authorized users (lecturer/assistant) can create announcements.
 
-use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Extension, Json};
-use util::state::AppState;
-use crate::{auth::AuthUser, response::ApiResponse, routes::modules::announcements::common::AnnouncementRequest};
+use crate::{
+    auth::AuthUser, response::ApiResponse,
+    routes::modules::announcements::common::AnnouncementRequest,
+};
+use axum::{
+    Extension, Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use db::models::announcements::Model as AnnouncementModel;
+use util::state::AppState;
 
 /// POST /api/modules/{module_id}/announcements
 ///
@@ -109,7 +117,8 @@ pub async fn create_announcement(
     let db = app_state.db();
     let user_id = claims.sub;
 
-    match AnnouncementModel::create(db, module_id, user_id, &req.title, &req.body, req.pinned).await {
+    match AnnouncementModel::create(db, module_id, user_id, &req.title, &req.body, req.pinned).await
+    {
         Ok(announcement) => (
             StatusCode::OK,
             Json(ApiResponse::success(
@@ -119,9 +128,10 @@ pub async fn create_announcement(
         ),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::error(
-                format!("Failed to create announcement: {}", err),
-            )),
+            Json(ApiResponse::error(format!(
+                "Failed to create announcement: {}",
+                err
+            ))),
         ),
     }
 }

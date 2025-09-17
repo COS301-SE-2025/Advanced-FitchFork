@@ -1,16 +1,16 @@
-use std::sync::Arc;
 use axum::{
+    Extension,
     extract::{Path, State, WebSocketUpgrade},
     response::IntoResponse,
-    Extension,
 };
+use std::sync::Arc;
 use util::state::AppState;
 use util::ws::axum_adapter::ws_route;
 use util::ws::serve::WsServerOptions;
 
-use crate::auth::AuthUser;
 use super::topics::attendance_session_topic;
 use super::ws_handlers::AttendanceWsHandler;
+use crate::auth::AuthUser;
 
 pub async fn attendance_session_ws_handler(
     ws: WebSocketUpgrade,
@@ -31,5 +31,13 @@ pub async fn attendance_session_ws_handler(
     let opts = WsServerOptions::default();
 
     // Hand off to the adapter (same as tickets)
-    ws_route(ws, State(app_state), Extension(uid_opt), topic, handler, opts).await
+    ws_route(
+        ws,
+        State(app_state),
+        Extension(uid_opt),
+        topic,
+        handler,
+        opts,
+    )
+    .await
 }

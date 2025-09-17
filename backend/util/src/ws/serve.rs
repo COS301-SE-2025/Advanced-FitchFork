@@ -1,14 +1,14 @@
-use std::sync::Arc;
 use axum::extract::ws::{Message, WebSocket};
-use futures::{SinkExt, StreamExt};
-use tokio::{sync::{mpsc}, time};
 use bytes::Bytes;
-use serde_json::Value;
 use chrono::Utc;
+use futures::{SinkExt, StreamExt};
+use serde_json::Value;
+use std::sync::Arc;
+use tokio::{sync::mpsc, time};
 
 use super::WebSocketManager;
-use super::runtime::WsContext;
 use super::handler_trait::WsHandler;
+use super::runtime::WsContext;
 
 pub struct WsServerOptions {
     pub ws_ping_sec: u64,
@@ -18,7 +18,11 @@ pub struct WsServerOptions {
 
 impl Default for WsServerOptions {
     fn default() -> Self {
-        Self { ws_ping_sec: 30, enable_app_ping: true, _unused: () }
+        Self {
+            ws_ping_sec: 30,
+            enable_app_ping: true,
+            _unused: (),
+        }
     }
 }
 
@@ -31,7 +35,9 @@ pub async fn serve_topic<H: WsHandler>(
     opts: WsServerOptions,
 ) {
     let mut rx = manager.subscribe(&topic).await;
-    if let Some(uid) = user_id { manager.register(&topic, uid).await; }
+    if let Some(uid) = user_id {
+        manager.register(&topic, uid).await;
+    }
 
     // Split the socket according to *your* axum version.
     // If your version has inherent split:
@@ -91,14 +97,17 @@ pub async fn serve_topic<H: WsHandler>(
                     Message::Text(text) => {
                         let raw = text.as_str();
                         if opts.enable_app_ping && is_app_ping(raw) {
-                            let _ = ctx.reply_text(
-                                serde_json::json!({
-                                    "event": "pong",
-                                    "topic": ctx.topic,
-                                    "payload": {},
-                                    "ts": Utc::now().to_rfc3339(),
-                                }).to_string()
-                            ).await;
+                            let _ = ctx
+                                .reply_text(
+                                    serde_json::json!({
+                                        "event": "pong",
+                                        "topic": ctx.topic,
+                                        "payload": {},
+                                        "ts": Utc::now().to_rfc3339(),
+                                    })
+                                    .to_string(),
+                                )
+                                .await;
                             continue;
                         }
                         match serde_json::from_str::<H::In>(raw) {
@@ -109,7 +118,9 @@ pub async fn serve_topic<H: WsHandler>(
                             ),
                         }
                     }
-                    Message::Ping(payload) => { let _ = ctx.reply_pong(payload).await; }
+                    Message::Ping(payload) => {
+                        let _ = ctx.reply_pong(payload).await;
+                    }
                     Message::Pong(_) => {}
                     Message::Binary(_) => {
                         tracing::warn!("Ignoring binary on topic '{}'", ctx.topic);
@@ -124,13 +135,17 @@ pub async fn serve_topic<H: WsHandler>(
     };
 
     let _ = tokio::join!(forward_task, receive_task, ping_task, writer_task);
-    if let Some(uid) = user_id { manager.unregister(&topic, uid).await; }
+    if let Some(uid) = user_id {
+        manager.unregister(&topic, uid).await;
+    }
     tracing::info!("WS session ended for topic '{topic}'");
 }
 
 fn is_app_ping(raw: &str) -> bool {
     if let Ok(Value::Object(map)) = serde_json::from_str::<Value>(raw) {
-        if let Some(Value::String(t)) = map.get("type") { return t == "ping"; }
+        if let Some(Value::String(t)) = map.get("type") {
+            return t == "ping";
+        }
     }
     false
 }

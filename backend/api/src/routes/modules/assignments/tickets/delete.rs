@@ -7,10 +7,10 @@
 
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
+    Extension,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Json},
-    Extension,
 };
 use db::models::tickets::Model as TicketModel;
 use util::state::AppState;
@@ -60,14 +60,21 @@ pub async fn delete_ticket(
     let db = app_state.db();
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, module_id,claims.admin, db).await {
-        return (StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("Forbidden"))).into_response();
+    if !is_valid(user_id, ticket_id, module_id, claims.admin, db).await {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("Forbidden")),
+        )
+            .into_response();
     }
 
     match TicketModel::delete(db, ticket_id).await {
         Ok(_) => (
             StatusCode::OK,
-            Json(ApiResponse::<()>::success((), "Ticket deleted successfully")),
+            Json(ApiResponse::<()>::success(
+                (),
+                "Ticket deleted successfully",
+            )),
         )
             .into_response(),
         Err(_) => (

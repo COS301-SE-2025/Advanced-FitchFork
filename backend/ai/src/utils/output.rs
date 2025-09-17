@@ -90,8 +90,7 @@ impl Output {
         attempt_number: i64,
         code_coverage: bool,
     ) -> io::Result<Vec<(i64, String)>> {
-        let dir_path =
-            submission_output_dir(module_id, assignment_id, user_id, attempt_number);
+        let dir_path = submission_output_dir(module_id, assignment_id, user_id, attempt_number);
 
         if !dir_path.exists() {
             return Err(io::Error::new(
@@ -119,8 +118,9 @@ impl Output {
                         SubmissionOutputEntity::find_by_id(output_id).one(db).await
                     {
                         // Look up the task to check code_coverage
-                        if let Ok(Some(task)) =
-                            AssignmentTaskEntity::find_by_id(output.task_id).one(db).await
+                        if let Ok(Some(task)) = AssignmentTaskEntity::find_by_id(output.task_id)
+                            .one(db)
+                            .await
                         {
                             if task.code_coverage == code_coverage {
                                 let content = fs::read_to_string(&path)?;
