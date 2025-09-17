@@ -7,22 +7,25 @@ mod tests {
     use chrono::{DateTime, Duration, TimeZone, Utc};
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
-        assignment_submission::{Model as AssignmentSubmissionModel},
+        assignment_submission::Model as AssignmentSubmissionModel,
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tower::ServiceExt;
 
-    use api::auth::generate_jwt;
-    use util::{execution_config::{execution_config::GradingPolicy, ExecutionConfig}, paths::submission_report_path};
     use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
+    use util::{
+        execution_config::{ExecutionConfig, GradingPolicy},
+        paths::submission_report_path,
+    };
 
     use sea_orm::{ActiveModelTrait, Set};
     use serial_test::serial;
     use std::fs;
-    
+
     struct TestData {
         admin_user: UserModel,
         lecturer_user: UserModel,
@@ -219,33 +222,32 @@ mod tests {
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         // Users & module
-        let admin_user =
-            UserModel::create(db, "admin1", "admin1@test.com", "password", true).await.unwrap();
+        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true)
+            .await
+            .unwrap();
         let lecturer_user =
             UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
                 .await
                 .unwrap();
 
-        let student1 =
-            UserModel::create(db, "student1", "student1@test.com", "password2", false)
-                .await
-                .unwrap();
-        let student2 =
-            UserModel::create(db, "student2", "student2@test.com", "password3", false)
-                .await
-                .unwrap();
-        let student3 =
-            UserModel::create(db, "student3", "student3@test.com", "password4", false)
-                .await
-                .unwrap();
+        let student1 = UserModel::create(db, "student1", "student1@test.com", "password2", false)
+            .await
+            .unwrap();
+        let student2 = UserModel::create(db, "student2", "student2@test.com", "password3", false)
+            .await
+            .unwrap();
+        let student3 = UserModel::create(db, "student3", "student3@test.com", "password4", false)
+            .await
+            .unwrap();
 
         let outsider_user =
             UserModel::create(db, "outsider", "outsider@test.com", "password5", false)
                 .await
                 .unwrap();
 
-        let module =
-            ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
+            .await
+            .unwrap();
 
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
@@ -282,8 +284,8 @@ mod tests {
         .unwrap();
 
         // Write configs
-        write_config_json( module.id, a_best.id, GradingPolicy::Best, 50);
-        write_config_json( module.id, a_last.id, GradingPolicy::Last, 50);
+        write_config_json(module.id, a_best.id, GradingPolicy::Best, 50);
+        write_config_json(module.id, a_last.id, GradingPolicy::Last, 50);
 
         TestData {
             admin_user,
@@ -376,7 +378,10 @@ mod tests {
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
 
         // wrong module id
-        let uri = format!("/api/modules/{}/assignments/{}/stats", 9999, data.assignment_best.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/stats",
+            9999, data.assignment_best.id
+        );
         let req = Request::builder()
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
@@ -386,7 +391,10 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
         // wrong assignment id
-        let uri = format!("/api/modules/{}/assignments/{}/stats", data.module.id, 999999);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/stats",
+            data.module.id, 999999
+        );
         let req = Request::builder()
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
@@ -452,7 +460,9 @@ mod tests {
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
 
@@ -486,7 +496,6 @@ mod tests {
         // total_marks is sum of per-row totals: 7 * 100
         assert_eq!(d["total_marks"], 700);
         assert_eq!(d["num_students_submitted"], 3);
-
     }
 
     // --- Functional math: LAST policy with 3 users, multi-attempts ---
@@ -545,7 +554,9 @@ mod tests {
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
 
@@ -577,7 +588,6 @@ mod tests {
         // total_marks = 7 * 100
         assert_eq!(d["total_marks"], 700);
         assert_eq!(d["num_students_submitted"], 3);
-
     }
 
     // --- Staff submissions shouldn't affect stats (BEST & LAST policies) ---
@@ -590,15 +600,22 @@ mod tests {
         let db = app_state.db();
 
         // Add extra staff users: assistant lecturer & tutor
-        let assistant =
-            UserModel::create(db, "assist1", "assist1@test.com", "pw", false).await.unwrap();
-        let tutor =
-            UserModel::create(db, "tutor1", "tutor1@test.com", "pw", false).await.unwrap();
-
-        // Assign them to the module with their roles
-        UserModuleRoleModel::assign_user_to_module(db, assistant.id, data.module.id, Role::AssistantLecturer)
+        let assistant = UserModel::create(db, "assist1", "assist1@test.com", "pw", false)
             .await
             .unwrap();
+        let tutor = UserModel::create(db, "tutor1", "tutor1@test.com", "pw", false)
+            .await
+            .unwrap();
+
+        // Assign them to the module with their roles
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            assistant.id,
+            data.module.id,
+            Role::AssistantLecturer,
+        )
+        .await
+        .unwrap();
         UserModuleRoleModel::assign_user_to_module(db, tutor.id, data.module.id, Role::Tutor)
             .await
             .unwrap();
@@ -606,31 +623,61 @@ mod tests {
         // ----- Seed student data (3 users, multi-attempts) -----
         // BEST assignment
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_best, &data.student1,
-            &[(80, 100), (60, 100), (90, 100)], &[-120, 10, -30],
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student1,
+            &[(80, 100), (60, 100), (90, 100)],
+            &[-120, 10, -30],
+        )
+        .await;
         let _ = seed_for_user(
-            db,  data.module.id, &data.assignment_best, &data.student2,
-            &[(30, 100), (50, 100)], &[-240, -60],
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student2,
+            &[(30, 100), (50, 100)],
+            &[-240, -60],
+        )
+        .await;
         let _ = seed_for_user(
-            db,  data.module.id, &data.assignment_best, &data.student3,
-            &[(100, 100), (100, 100)], &[-10, 120],
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student3,
+            &[(100, 100), (100, 100)],
+            &[-10, 120],
+        )
+        .await;
 
         // LAST assignment
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_last, &data.student1,
-            &[(40, 100), (65, 100), (70, 100)], &[-120, -110, 10],
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student1,
+            &[(40, 100), (65, 100), (70, 100)],
+            &[-120, -110, 10],
+        )
+        .await;
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_last, &data.student2,
-            &[(55, 100), (45, 100)], &[-60, 30],
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student2,
+            &[(55, 100), (45, 100)],
+            &[-60, 30],
+        )
+        .await;
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_last, &data.student3,
-            &[(80, 100), (90, 100)], &[-5, -1],
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student3,
+            &[(80, 100), (90, 100)],
+            &[-5, -1],
+        )
+        .await;
 
         // ----- Seed STAFF submissions that should be ignored in stats -----
         let staff_marks = &[(1, 100), (100, 100)];
@@ -638,43 +685,83 @@ mod tests {
 
         // admin (already in data.admin_user)
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_best, &data.admin_user,
-            staff_marks, staff_offsets,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.admin_user,
+            staff_marks,
+            staff_offsets,
+        )
+        .await;
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_last, &data.admin_user,
-            staff_marks, staff_offsets,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.admin_user,
+            staff_marks,
+            staff_offsets,
+        )
+        .await;
 
         // lecturer (already in data.lecturer_user)
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_best, &data.lecturer_user,
-            staff_marks, staff_offsets,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.lecturer_user,
+            staff_marks,
+            staff_offsets,
+        )
+        .await;
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_last, &data.lecturer_user,
-            staff_marks, staff_offsets,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.lecturer_user,
+            staff_marks,
+            staff_offsets,
+        )
+        .await;
 
         // assistant lecturer
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_best, &assistant,
-            staff_marks, staff_offsets,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &assistant,
+            staff_marks,
+            staff_offsets,
+        )
+        .await;
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_last, &assistant,
-            staff_marks, staff_offsets,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &assistant,
+            staff_marks,
+            staff_offsets,
+        )
+        .await;
 
         // tutor
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_best, &tutor,
-            staff_marks, staff_offsets,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &tutor,
+            staff_marks,
+            staff_offsets,
+        )
+        .await;
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_last, &tutor,
-            staff_marks, staff_offsets,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &tutor,
+            staff_marks,
+            staff_offsets,
+        )
+        .await;
 
         // ----- Assert BEST stats unchanged (i.e., staff ignored) -----
         let (token_lect, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -689,7 +776,9 @@ mod tests {
             .unwrap();
         let resp_best = app.clone().oneshot(req_best).await.unwrap();
         assert_eq!(resp_best.status(), StatusCode::OK);
-        let body_best = axum::body::to_bytes(resp_best.into_body(), usize::MAX).await.unwrap();
+        let body_best = axum::body::to_bytes(resp_best.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json_best: Value = serde_json::from_slice(&body_best).unwrap();
         let d = &json_best["data"];
         assert_eq!(d["total"], 7);
@@ -723,7 +812,9 @@ mod tests {
             .unwrap();
         let resp_last = app.clone().oneshot(req_last).await.unwrap();
         assert_eq!(resp_last.status(), StatusCode::OK);
-        let body_last = axum::body::to_bytes(resp_last.into_body(), usize::MAX).await.unwrap();
+        let body_last = axum::body::to_bytes(resp_last.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json_last: Value = serde_json::from_slice(&body_last).unwrap();
         let d = &json_last["data"];
         assert_eq!(d["total"], 7);
@@ -743,7 +834,6 @@ mod tests {
         assert_eq!(d["num_full_marks"], 0);
         assert_eq!(d["total_marks"], 700);
         assert_eq!(d["num_students_submitted"], 3);
-
     }
 
     // --- NEW: Practice and Ignored submissions are excluded from stats (but 'ignored' is reported) ---
@@ -758,47 +848,116 @@ mod tests {
         // Baseline (counted) student attempts on BEST assignment:
         // s1: 80, 90; s2: 50; s3: 100, 100  → totals=5 counted attempts
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_best, &data.student1,
-            &[(80, 100), (90, 100)], &[-60, -30],
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student1,
+            &[(80, 100), (90, 100)],
+            &[-60, -30],
+        )
+        .await;
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_best, &data.student2,
-            &[(50, 100)], &[-40],
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student2,
+            &[(50, 100)],
+            &[-40],
+        )
+        .await;
         let _ = seed_for_user(
-            db, data.module.id, &data.assignment_best, &data.student3,
-            &[(100, 100), (100, 100)], &[-10, 10],
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student3,
+            &[(100, 100), (100, 100)],
+            &[-10, 10],
+        )
+        .await;
 
         // Add extra PRACTICE attempts (should NOT affect metrics)
         // s1 practice 5%, s2 practice 100% (tempting!), s3 practice 0%
         let _p1 = seed_one_with_flags(
-            db, data.module.id, &data.assignment_best, &data.student1,
-            99, 5, 100, -5, true, false,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student1,
+            99,
+            5,
+            100,
+            -5,
+            true,
+            false,
+        )
+        .await;
         let _p2 = seed_one_with_flags(
-            db, data.module.id, &data.assignment_best, &data.student2,
-            98, 100, 100, -3, true, false,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student2,
+            98,
+            100,
+            100,
+            -3,
+            true,
+            false,
+        )
+        .await;
         let _p3 = seed_one_with_flags(
-            db, data.module.id, &data.assignment_best, &data.student3,
-            97, 0, 100, -1, true, false,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student3,
+            97,
+            0,
+            100,
+            -1,
+            true,
+            false,
+        )
+        .await;
 
         // Add extra IGNORED attempts (not practice, but ignored flag) → count only toward 'ignored' metric
         // s1 ignored 0%, s2 ignored 100%, s3 ignored 100%
         let _ig1 = seed_one_with_flags(
-            db, data.module.id, &data.assignment_best, &data.student1,
-            96, 0, 100, -2, false, true,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student1,
+            96,
+            0,
+            100,
+            -2,
+            false,
+            true,
+        )
+        .await;
         let _ig2 = seed_one_with_flags(
-            db, data.module.id, &data.assignment_best, &data.student2,
-            95, 100, 100, -2, false, true,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student2,
+            95,
+            100,
+            100,
+            -2,
+            false,
+            true,
+        )
+        .await;
         let _ig3 = seed_one_with_flags(
-            db, data.module.id, &data.assignment_best, &data.student3,
-            94, 100, 100, -2, false, true,
-        ).await;
+            db,
+            data.module.id,
+            &data.assignment_best,
+            &data.student3,
+            94,
+            100,
+            100,
+            -2,
+            false,
+            true,
+        )
+        .await;
 
         // Call as lecturer
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -814,7 +973,9 @@ mod tests {
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         let d = &json["data"];
@@ -843,6 +1004,5 @@ mod tests {
         // totals computed only over counted attempts (5 * 100)
         assert_eq!(d["total_marks"], 500);
         assert_eq!(d["num_students_submitted"], 3);
-
     }
 }

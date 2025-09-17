@@ -1,27 +1,29 @@
 #[cfg(test)]
 mod create_plagiarism_tests {
-    use db::models::{
-        assignment::{Model as AssignmentModel, AssignmentType},
-        assignment_submission::Model as SubmissionModel,
-        module::Model as ModuleModel,
-        plagiarism_case::{Status, Entity as PlagiarismCaseEntity},
-        user::Model as UserModel,
-        user_module_role::{Model as UserModuleRoleModel, Role},
-    };
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
+    use api::routes::modules::assignments::plagiarism::post::CreatePlagiarismCasePayload;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
-    use sea_orm::{EntityTrait, DatabaseConnection};
-    use tower::ServiceExt;
-    use serde_json::{Value, json};
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app_with_storage;
     use chrono::{Datelike, TimeZone, Utc};
-    use api::routes::modules::assignments::plagiarism::post::CreatePlagiarismCasePayload;
+    use db::models::{
+        assignment::{AssignmentType, Model as AssignmentModel},
+        assignment_submission::Model as SubmissionModel,
+        module::Model as ModuleModel,
+        plagiarism_case::{Entity as PlagiarismCaseEntity, Status},
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
+    };
+    use sea_orm::{DatabaseConnection, EntityTrait};
+    use serde_json::{Value, json};
+    use tower::ServiceExt;
 
     // Small helper for float compare
-    fn approx_eq_f64(a: f64, b: f64, eps: f64) -> bool { (a - b).abs() <= eps }
+    fn approx_eq_f64(a: f64, b: f64, eps: f64) -> bool {
+        (a - b).abs() <= eps
+    }
 
     struct TestData {
         lecturer_user: UserModel,
@@ -40,64 +42,89 @@ mod create_plagiarism_tests {
         let module = ModuleModel::create(db, "CS101", Utc::now().year(), Some("Intro to CS"), 5)
             .await
             .expect("Failed to create test module");
-    
-        let lecturer_user = UserModel::create(db, "lecturer", "lecturer@test.com", "password", false)
-            .await
-            .expect("Failed to create lecturer user");
-        let assistant_user = UserModel::create(db, "assistant", "assistant@test.com", "password", false)
-            .await
-            .expect("Failed to create assistant user");
+
+        let lecturer_user =
+            UserModel::create(db, "lecturer", "lecturer@test.com", "password", false)
+                .await
+                .expect("Failed to create lecturer user");
+        let assistant_user =
+            UserModel::create(db, "assistant", "assistant@test.com", "password", false)
+                .await
+                .expect("Failed to create assistant user");
         let tutor_user = UserModel::create(db, "tutor", "tutor@test.com", "password", false)
             .await
             .expect("Failed to create tutor user");
-        let student_user1 = UserModel::create(db, "student1", "student1@test.com", "password", false)
+        let student_user1 =
+            UserModel::create(db, "student1", "student1@test.com", "password", false)
+                .await
+                .expect("Failed to create student1 user");
+        let student_user2 =
+            UserModel::create(db, "student2", "student2@test.com", "password", false)
+                .await
+                .expect("Failed to create student2 user");
+
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
-            .expect("Failed to create student1 user");
-        let student_user2 = UserModel::create(db, "student2", "student2@test.com", "password", false)
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            assistant_user.id,
+            module.id,
+            Role::AssistantLecturer,
+        )
+        .await
+        .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor)
             .await
-            .expect("Failed to create student2 user");
-        
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, assistant_user.id, module.id, Role::AssistantLecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user1.id, module.id, Role::Student).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user2.id, module.id, Role::Student).await.unwrap();
-        
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student_user1.id, module.id, Role::Student)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student_user2.id, module.id, Role::Student)
+            .await
+            .unwrap();
+
         let assignment = AssignmentModel::create(
-            db, 
-            module.id, 
-            "Assignment 1", 
-            Some("Desc 1"), 
-            AssignmentType::Assignment, 
-            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(), 
-            Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap()
-        ).await.unwrap();
-        
+            db,
+            module.id,
+            "Assignment 1",
+            Some("Desc 1"),
+            AssignmentType::Assignment,
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
+        )
+        .await
+        .unwrap();
+
         let submission1 = SubmissionModel::save_file(
-            db, 
-            assignment.id, 
-            student_user1.id, 
-            1, 
+            db,
+            assignment.id,
+            student_user1.id,
+            1,
             10,
             10,
-            false, 
-            "sub1.txt", 
-            "hash123#", 
-            b"ontime"
-        ).await.unwrap();
-        
+            false,
+            "sub1.txt",
+            "hash123#",
+            b"ontime",
+        )
+        .await
+        .unwrap();
+
         let submission2 = SubmissionModel::save_file(
-            db, 
-            assignment.id, 
-            student_user2.id, 
-            1, 
+            db,
+            assignment.id,
+            student_user2.id,
+            1,
             10,
             10,
-            false, 
-            "sub2.txt", 
-            "hash123#", 
-            b"ontime"
-        ).await.unwrap();
+            false,
+            "sub2.txt",
+            "hash123#",
+            b"ontime",
+        )
+        .await
+        .unwrap();
 
         TestData {
             lecturer_user,
@@ -118,9 +145,12 @@ mod create_plagiarism_tests {
         payload: CreatePlagiarismCasePayload,
     ) -> Request<AxumBody> {
         let (token, _) = generate_jwt(user.id, user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/plagiarism", module_id, assignment_id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/plagiarism",
+            module_id, assignment_id
+        );
         let body = AxumBody::from(serde_json::to_string(&payload).unwrap());
-        
+
         Request::builder()
             .method("POST")
             .uri(&uri)
@@ -151,16 +181,18 @@ mod create_plagiarism_tests {
             data.assignment.id,
             payload,
         );
-        
+
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
-        
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Plagiarism case created successfully");
-        
+
         let case_data = &json["data"];
         assert!(case_data["id"].is_i64());
         assert_eq!(case_data["assignment_id"], data.assignment.id);
@@ -171,9 +203,13 @@ mod create_plagiarism_tests {
         assert!(case_data["created_at"].is_string());
         assert!(case_data["updated_at"].is_string());
         assert!(case_data["similarity"].is_number());
-        assert!(approx_eq_f64(case_data["similarity"].as_f64().unwrap(), 67.5, 1e-6));
-        assert_eq!(case_data["lines_matched"], 0);       // server defaults to 0
-        assert!(case_data["report_id"].is_null());       // manually created case has no report
+        assert!(approx_eq_f64(
+            case_data["similarity"].as_f64().unwrap(),
+            67.5,
+            1e-6
+        ));
+        assert_eq!(case_data["lines_matched"], 0); // server defaults to 0
+        assert!(case_data["report_id"].is_null()); // manually created case has no report
 
         // Verify DB row
         let case = PlagiarismCaseEntity::find_by_id(case_data["id"].as_i64().unwrap())
@@ -206,14 +242,20 @@ mod create_plagiarism_tests {
             data.assignment.id,
             payload,
         );
-        
+
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let case_data = &json["data"];
-        assert!(approx_eq_f64(case_data["similarity"].as_f64().unwrap(), 0.0, 1e-6));
+        assert!(approx_eq_f64(
+            case_data["similarity"].as_f64().unwrap(),
+            0.0,
+            1e-6
+        ));
     }
 
     /// Test Case: Forbidden Access for Tutor
@@ -237,7 +279,7 @@ mod create_plagiarism_tests {
             data.assignment.id,
             payload,
         );
-        
+
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
@@ -263,11 +305,13 @@ mod create_plagiarism_tests {
             data.assignment.id,
             payload,
         );
-        
+
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Submissions cannot be the same");
@@ -294,15 +338,17 @@ mod create_plagiarism_tests {
             data.assignment.id,
             payload,
         );
-        
+
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(
-            json["message"], 
+            json["message"],
             "One or both submissions do not exist or belong to a different assignment"
         );
     }
@@ -322,8 +368,10 @@ mod create_plagiarism_tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 2, 28, 23, 59, 59).unwrap(),
-        ).await.unwrap();
-        
+        )
+        .await
+        .unwrap();
+
         let other_submission = SubmissionModel::save_file(
             app_state.db(),
             other_assignment.id,
@@ -335,7 +383,9 @@ mod create_plagiarism_tests {
             "other.txt",
             "hash456#",
             b"ontime",
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         let payload = CreatePlagiarismCasePayload {
             submission_id_1: data.submission1.id,
@@ -352,15 +402,17 @@ mod create_plagiarism_tests {
             data.assignment.id, // Current assignment
             payload,
         );
-        
+
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(
-            json["message"], 
+            json["message"],
             "One or both submissions do not exist or belong to a different assignment"
         );
     }
@@ -384,7 +436,7 @@ mod create_plagiarism_tests {
             "/api/modules/{}/assignments/{}/plagiarism",
             data.module.id, data.assignment.id
         );
-        
+
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
@@ -414,7 +466,7 @@ mod create_plagiarism_tests {
             "/api/modules/{}/assignments/{}/plagiarism",
             data.module.id, data.assignment.id
         );
-        
+
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
@@ -472,12 +524,23 @@ mod create_plagiarism_tests {
             lines_matched: 0,
             report_id: None,
         };
-        let req0 = make_post_request(&data.lecturer_user, data.module.id, data.assignment.id, payload0);
+        let req0 = make_post_request(
+            &data.lecturer_user,
+            data.module.id,
+            data.assignment.id,
+            payload0,
+        );
         let resp0 = app.clone().oneshot(req0).await.unwrap();
         assert_eq!(resp0.status(), StatusCode::CREATED);
-        let body0 = axum::body::to_bytes(resp0.into_body(), usize::MAX).await.unwrap();
+        let body0 = axum::body::to_bytes(resp0.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json0: Value = serde_json::from_slice(&body0).unwrap();
-        assert!(approx_eq_f64(json0["data"]["similarity"].as_f64().unwrap(), 0.0, 1e-6));
+        assert!(approx_eq_f64(
+            json0["data"]["similarity"].as_f64().unwrap(),
+            0.0,
+            1e-6
+        ));
 
         // 100.0
         let payload100 = CreatePlagiarismCasePayload {
@@ -488,12 +551,23 @@ mod create_plagiarism_tests {
             lines_matched: 0,
             report_id: None,
         };
-        let req100 = make_post_request(&data.lecturer_user, data.module.id, data.assignment.id, payload100);
+        let req100 = make_post_request(
+            &data.lecturer_user,
+            data.module.id,
+            data.assignment.id,
+            payload100,
+        );
         let resp100 = app.oneshot(req100).await.unwrap();
         assert_eq!(resp100.status(), StatusCode::CREATED);
-        let body100 = axum::body::to_bytes(resp100.into_body(), usize::MAX).await.unwrap();
+        let body100 = axum::body::to_bytes(resp100.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json100: Value = serde_json::from_slice(&body100).unwrap();
-        assert!(approx_eq_f64(json100["data"]["similarity"].as_f64().unwrap(), 100.0, 1e-6));
+        assert!(approx_eq_f64(
+            json100["data"]["similarity"].as_f64().unwrap(),
+            100.0,
+            1e-6
+        ));
     }
 
     /// Test Case: Similarity out of range (negative) -> 400
@@ -511,7 +585,12 @@ mod create_plagiarism_tests {
             report_id: None,
         };
 
-        let req = make_post_request(&data.lecturer_user, data.module.id, data.assignment.id, payload);
+        let req = make_post_request(
+            &data.lecturer_user,
+            data.module.id,
+            data.assignment.id,
+            payload,
+        );
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
@@ -531,7 +610,12 @@ mod create_plagiarism_tests {
             report_id: None,
         };
 
-        let req = make_post_request(&data.lecturer_user, data.module.id, data.assignment.id, payload);
+        let req = make_post_request(
+            &data.lecturer_user,
+            data.module.id,
+            data.assignment.id,
+            payload,
+        );
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
@@ -552,11 +636,18 @@ mod create_plagiarism_tests {
             report_id: None,
         };
 
-        let req = make_post_request(&data.lecturer_user, data.module.id, data.assignment.id, payload);
+        let req = make_post_request(
+            &data.lecturer_user,
+            data.module.id,
+            data.assignment.id,
+            payload,
+        );
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::CREATED);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let v = json["data"]["similarity"].as_f64().unwrap();
         assert!(approx_eq_f64(v, sim as f64, 1e-3)); // allow small float error

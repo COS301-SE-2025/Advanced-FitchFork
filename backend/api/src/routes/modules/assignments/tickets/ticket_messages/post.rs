@@ -23,7 +23,8 @@ use crate::{
     routes::modules::assignments::tickets::{
         common::is_valid,
         ticket_messages::common::{MessageResponse, UserResponse},
-    }, ws::tickets::topics::ticket_chat_topic,
+    },
+    ws::tickets::topics::ticket_chat_topic,
 };
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages
@@ -39,9 +40,9 @@ use crate::{
 /// ### Request Body (JSON)
 ///
 /// { "content": "Can someone review my latest attempt?" }
-/// 
+///
 /// ### Responses
-/// 
+///
 /// - `200 OK` → Message created successfully
 /// ```json
 /// {

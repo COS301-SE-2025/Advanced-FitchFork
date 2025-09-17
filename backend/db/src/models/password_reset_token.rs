@@ -1,10 +1,10 @@
-use sea_orm::entity::prelude::*;
-use sea_orm::ActiveValue::{Set, NotSet};
-use sea_orm::IntoActiveModel;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
-use rand::{thread_rng, Rng};
+use chrono::{DateTime, Duration, Utc};
 use rand::distributions::Alphanumeric;
+use rand::{Rng, thread_rng};
+use sea_orm::ActiveValue::{NotSet, Set};
+use sea_orm::IntoActiveModel;
+use sea_orm::entity::prelude::*;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "password_reset_tokens")]
@@ -85,4 +85,4 @@ impl Model {
         active_model.update(db).await?;
         Ok(())
     }
-} 
+}

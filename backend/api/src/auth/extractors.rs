@@ -1,12 +1,12 @@
+use crate::auth::claims::{AuthUser, Claims};
 use axum::{
-    extract::{FromRequestParts},
-    http::{request::Parts, StatusCode},
+    extract::FromRequestParts,
+    http::{StatusCode, request::Parts},
 };
 use axum_extra::extract::TypedHeader;
 use headers::{Authorization, authorization::Bearer};
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use std::collections::HashMap;
-use crate::auth::claims::{Claims, AuthUser};
 use util::config;
 
 /// Implements extraction of `AuthUser` from request headers.
@@ -53,7 +53,10 @@ where
             }
         }
 
-        Err((StatusCode::UNAUTHORIZED, "Missing or invalid Authorization header"))
+        Err((
+            StatusCode::UNAUTHORIZED,
+            "Missing or invalid Authorization header",
+        ))
     }
 }
 

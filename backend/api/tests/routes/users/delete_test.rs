@@ -1,16 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use db::{
-        models::user::Model as UserModel,
-    };
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
-    use tower::ServiceExt;
+    use db::models::user::Model as UserModel;
     use serde_json::Value;
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app_with_storage;
+    use tower::ServiceExt;
 
     struct TestData {
         admin_user: UserModel,
@@ -21,9 +19,33 @@ mod tests {
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let admin_user = UserModel::create(db, "delete_admin", "delete_admin@test.com", "adminpass", true).await.expect("Failed to create admin user for DELETE tests");
-        let non_admin_user = UserModel::create(db, "delete_regular", "delete_regular@test.com", "userpass", false).await.expect("Failed to create regular user for DELETE tests");
-        let user_to_delete = UserModel::create(db, "target_for_deletion", "target_delete@test.com", "deletepass", false).await.expect("Failed to create target user for deletion");
+        let admin_user = UserModel::create(
+            db,
+            "delete_admin",
+            "delete_admin@test.com",
+            "adminpass",
+            true,
+        )
+        .await
+        .expect("Failed to create admin user for DELETE tests");
+        let non_admin_user = UserModel::create(
+            db,
+            "delete_regular",
+            "delete_regular@test.com",
+            "userpass",
+            false,
+        )
+        .await
+        .expect("Failed to create regular user for DELETE tests");
+        let user_to_delete = UserModel::create(
+            db,
+            "target_for_deletion",
+            "target_delete@test.com",
+            "deletepass",
+            false,
+        )
+        .await
+        .expect("Failed to create target user for deletion");
 
         TestData {
             admin_user,
@@ -33,7 +55,9 @@ mod tests {
     }
 
     async fn get_json_body(response: axum::response::Response) -> Value {
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         serde_json::from_slice(&body).unwrap()
     }
 
@@ -99,7 +123,7 @@ mod tests {
         assert_eq!(json["message"], "You cannot delete your own account");
     }
 
-     /// Test Case: Attempt to Delete Own Account as Non-Admin
+    /// Test Case: Attempt to Delete Own Account as Non-Admin
     #[tokio::test]
     async fn test_delete_user_forbidden_delete_self_as_non_admin() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;

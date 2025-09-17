@@ -1,122 +1,909 @@
-import React, { type PropsWithChildren } from 'react';
-import { Row, Col, Card, Statistic } from 'antd';
-import { TeamOutlined, CloudServerOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+// AdminDashboard.tsx
+import React, { useCallback, useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react';
+import {
+  Card,
+  Space,
+  DatePicker,
+  Select,
+  Typography,
+  theme,
+  InputNumber,
+  Button,
+  Statistic,
+  Modal,
+} from 'antd';
+import { DownloadOutlined, TeamOutlined } from '@ant-design/icons';
+import dayjs, { Dayjs } from 'dayjs';
+import { Column, type ColumnConfig } from '@ant-design/plots';
+import { useTheme } from '@/context/ThemeContext';
+import { useUI } from '@/context/UIContext';
+import { useSystemHealthAdminWs } from '@/hooks/useSystemHealthAdminWs';
+import {
+  getSystemMetrics,
+  exportSystemMetrics,
+  type MetricsPoint,
+} from '@/services/system/metrics/get';
+import {
+  getSubmissionsOverTime,
+  exportSubmissionsOverTime,
+  type SubmissionsPoint,
+} from '@/services/system/submissions/get';
+import { scaleColor } from '@/utils/color';
 
-type PlaceholderProps = PropsWithChildren<{ title: string }>;
+const { Text } = Typography;
 
-const PlaceholderPanel: React.FC<PlaceholderProps> = ({ title, children }) => (
-  <Card
-    className="h-full rounded-2xl flex flex-col"
-    styles={{ body: { display: 'flex', flexDirection: 'column', minHeight: 0, padding: 12 } }}
-    title={<span className="font-semibold">{title}</span>}
-  >
-    <div className="flex-1 min-h-0">
-      <div className="h-full rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-4 text-center text-gray-500 overflow-auto">
-        {children ?? 'Coming soon'}
-      </div>
+const PercentBar: React.FC<{
+  percent: number | null | undefined;
+  height?: number;
+  ariaLabel?: string;
+}> = ({ percent, height = 6, ariaLabel }) => {
+  const v = Math.max(0, Math.min(100, percent ?? 0));
+  const color = scaleColor(v, 'green-red');
+  return (
+    <div
+      className="relative w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"
+      style={{ height }}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(v)}
+      aria-label={ariaLabel}
+    >
+      <div
+        className="absolute inset-y-0 left-0 rounded-full will-change-[width,background-color]"
+        style={{
+          width: `${v}%`,
+          background: color,
+          transition: 'width 280ms ease, background-color 160ms linear',
+        }}
+      />
     </div>
-  </Card>
+  );
+};
+
+const MeterRow: React.FC<{
+  label: React.ReactNode;
+  valueText?: string;
+  percent: number | null | undefined;
+}> = ({ label, valueText, percent }) => (
+  <div className="flex flex-col gap-1">
+    <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+      <span className="truncate">{label}</span>
+      {valueText ? <span className="tabular-nums">{valueText}</span> : null}
+    </div>
+    <PercentBar percent={percent} />
+  </div>
 );
 
-/** Simple Statistic tile that expands to its grid cell */
-const StatsTile: React.FC<{
-  title: string;
-  value: number;
-  icon: React.ReactNode;
+type UiBucket = 'day' | 'week' | 'month' | 'year';
+
+const naturalRange = (b: UiBucket): [Dayjs, Dayjs] => {
+  const now = dayjs();
+  switch (b) {
+    case 'day':
+      return [now.startOf('day'), now.endOf('day')];
+    case 'week': {
+      const weekday = (now.day() + 6) % 7;
+      const s = now.subtract(weekday, 'day').startOf('day');
+      return [s, s.add(6, 'day').endOf('day')];
+    }
+    case 'month':
+      return [now.startOf('month'), now.endOf('month')];
+    case 'year':
+      return [now.startOf('year'), now.endOf('year')];
+  }
+};
+
+const metricsLabel = (iso: string, b: UiBucket) => {
+  const d = dayjs(iso);
+  if (b === 'day') return d.format('HH:00');
+  if (b === 'week' || b === 'month') return d.format('MMM D');
+  return d.format('MMM');
+};
+
+const subsLabel = (period: string, b: UiBucket) => {
+  if (b === 'day') {
+    const d = dayjs(period, 'YYYY-MM-DD HH:mm:ss', true);
+    return d.isValid() ? d.format('HH:00') : period;
+  }
+  if (b === 'week' || b === 'month') {
+    const d = dayjs(period, 'YYYY-MM-DD', true);
+    return d.isValid() ? d.format('MMM D') : period;
+  }
+  const d = dayjs(period, 'YYYY-MM', true);
+  return d.isValid() ? d.format('MMM') : period;
+};
+
+const formatBytes = (n?: number | null) => {
+  if (!n || n <= 0) return '0 B';
+  const k = 1024;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'] as const;
+  const i = Math.floor(Math.log(n) / Math.log(k));
+  const v = n / Math.pow(k, i);
+  return `${v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 2)} ${units[i]}`;
+};
+
+const radiusFor = (b: UiBucket) => ({ day: 4, week: 6, month: 8, year: 10 })[b];
+
+function useViewportClamp(pad = 16) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [height, setHeight] = useState<number>(480);
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const top = el.getBoundingClientRect().top;
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const h = Math.max(320, Math.floor(vh - top - pad));
+    setHeight(h);
+  }, [pad]);
+  useLayoutEffect(() => {
+    const onResize = () => requestAnimationFrame(measure);
+    requestAnimationFrame(measure);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [measure]);
+  return { ref, height };
+}
+
+const StatCell: React.FC<{
+  title: React.ReactNode;
+  value: number | string | null | undefined;
   suffix?: React.ReactNode;
-}> = ({ title, value, icon, suffix }) => (
-  <Card className="h-full rounded-2xl" styles={{ body: { height: '100%', padding: 16 } }}>
-    <div className="h-full flex items-start gap-3 min-w-0">
-      <div className="shrink-0">{icon}</div>
-      <div className="flex-1 min-w-0">
-        <Statistic
-          title={<span className="text-sm text-gray-500">{title}</span>}
-          value={value}
-          suffix={suffix}
-        />
-      </div>
+  precision?: number;
+  extra?: React.ReactNode;
+}> = ({ title, value, suffix, precision, extra }) => {
+  const isEmpty =
+    value === null ||
+    value === undefined ||
+    value === '—' ||
+    (typeof value === 'number' && Number.isNaN(value));
+  const p = typeof value === 'number' ? precision : undefined;
+  return (
+    <div className="min-w-0">
+      {isEmpty ? (
+        <>
+          <div className="text-xs font-medium opacity-70">{title}</div>
+          <div className="text-lg font-semibold mt-1">—</div>
+        </>
+      ) : (
+        <>
+          <Statistic
+            title={<span className="text-xs opacity-70">{title}</span>}
+            value={value as any}
+            precision={p}
+            suffix={suffix}
+            valueStyle={{ fontSize: 20 }}
+          />
+          {extra ? <div className="text-xs opacity-60 -mt-1">{extra}</div> : null}
+        </>
+      )}
     </div>
-  </Card>
-);
+  );
+};
 
 const AdminDashboard: React.FC = () => {
-  // placeholder numbers for now
-  const activeUsers: number = 124;
-  const runningServices: number = 18;
-  const openIncidents: number = 2;
+  const { isDarkMode } = useTheme();
+  const { token } = theme.useToken();
+  const { isXl, isMobile } = useUI();
+
+  const {
+    data: live,
+    maxConcurrent,
+    saving,
+    refreshMaxConcurrent,
+    updateMaxConcurrent,
+  } = useSystemHealthAdminWs();
+
+  const [mBucket, setMBucket] = useState<UiBucket>('day');
+  const [mRange, setMRange] = useState<[Dayjs, Dayjs]>(() => naturalRange('day'));
+  const [metrics, setMetrics] = useState<MetricsPoint[]>([]);
+
+  const [sBucket, setSBucket] = useState<UiBucket>('day');
+  const [sRange, setSRange] = useState<[Dayjs, Dayjs]>(() => naturalRange('day'));
+  const [subs, setSubs] = useState<SubmissionsPoint[]>([]);
+
+  const unwrap = <T,>(res: any): T[] =>
+    !res
+      ? []
+      : 'success' in res
+        ? res.success
+          ? (res.data?.points ?? [])
+          : []
+        : (res.points ?? []);
+
+  const reload = useCallback(async () => {
+    const [ms, me] = [mRange[0].toDate().toISOString(), mRange[1].toDate().toISOString()];
+    const [ss, se] = [sRange[0].toDate().toISOString(), sRange[1].toDate().toISOString()];
+    try {
+      const [mr, sr] = await Promise.all([
+        getSystemMetrics({ start: ms, end: me, bucket: mBucket }),
+        getSubmissionsOverTime({ start: ss, end: se, bucket: sBucket }),
+      ]);
+      setMetrics(unwrap<MetricsPoint>(mr));
+      setSubs(unwrap<SubmissionsPoint>(sr));
+    } catch {
+      setMetrics([]);
+      setSubs([]);
+    }
+  }, [mRange, mBucket, sRange, sBucket]);
+
+  useEffect(() => void reload(), [reload]);
+
+  const metricsSeries = useMemo(() => {
+    const rows: { x: string; series: string; value: number }[] = [];
+    for (const p of metrics) {
+      const x = metricsLabel(p.ts, mBucket);
+      rows.push({ x, series: 'CPU', value: (p as any).cpu_avg as number });
+      rows.push({ x, series: 'RAM', value: ((p as any).mem_pct ?? 0) as number });
+    }
+    return rows;
+  }, [metrics, mBucket]);
+
+  const subsSeries = useMemo(
+    () => subs.map((p) => ({ x: subsLabel(p.period, sBucket), count: (p as any).count as number })),
+    [subs, sBucket],
+  );
+
+  const metricsCats = useMemo(() => {
+    const seen = new Set<string>();
+    const arr: string[] = [];
+    for (const p of metrics) {
+      const x = metricsLabel(p.ts, mBucket);
+      if (!seen.has(x)) {
+        seen.add(x);
+        arr.push(x);
+      }
+    }
+    return arr;
+  }, [metrics, mBucket]);
+
+  const subsCats = useMemo(() => {
+    const seen = new Set<string>();
+    const arr: string[] = [];
+    for (const p of subs) {
+      const x = subsLabel(p.period, sBucket);
+      if (!seen.has(x)) {
+        seen.add(x);
+        arr.push(x);
+      }
+    }
+    return arr;
+  }, [subs, sBucket]);
+
+  const makeEverySecondFormatter = (bucket: UiBucket, cats: string[]) => {
+    if (bucket === 'day' || bucket === 'month') {
+      const keep = new Set<string>();
+      cats.forEach((label, idx) => {
+        if (idx % 2 === 0) keep.add(label);
+      });
+      return ((text: string) => (keep.has(text) ? text : '')) as any;
+    }
+    return ((text: string) => text) as any;
+  };
+
+  const renderItems = (items: any[], unit: string) => (
+    <div>
+      {items.map((item: any, i: number) => {
+        const raw =
+          item?.value ??
+          item?.data?.value ??
+          item?.datum?.value ??
+          item?.data?.count ??
+          item?.datum?.count ??
+          0;
+        const value = typeof raw === 'number' ? raw : Number(raw) || 0;
+        return (
+          <div
+            key={i}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              margin: '2px 0',
+            }}
+          >
+            <Text
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                color: token.colorTextSecondary,
+              }}
+            >
+              <i
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: item?.color || token.colorPrimary,
+                  display: 'inline-block',
+                }}
+              />
+              {item?.name ?? item?.series ?? 'Value'}
+            </Text>
+            <Text strong style={{ color: token.colorText }}>
+              {unit === '%' ? `${Math.round(value)}%` : String(value)}
+            </Text>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const metricsRadius = radiusFor(mBucket);
+  const subsRadius = radiusFor(sBucket);
+
+  const metricsCfg: ColumnConfig = {
+    theme: isDarkMode ? 'dark' : 'light',
+    data: metricsSeries,
+    xField: 'x',
+    yField: 'value',
+    seriesField: 'series',
+    isGroup: true,
+    autoFit: true,
+    minColumnWidth: 2,
+    maxColumnWidth: 18,
+    xAxis: {
+      label: {
+        autoHide: false,
+        autoRotate: false,
+        formatter: makeEverySecondFormatter(mBucket, metricsCats),
+      } as any,
+    },
+    yAxis: {
+      min: 0,
+      max: 100,
+      nice: false,
+      title: { text: 'CPU / RAM (%)' },
+      label: { formatter: (v: any) => `${Math.round(Number(v))}%` },
+    },
+    style: { radiusTopLeft: metricsRadius, radiusTopRight: metricsRadius },
+    padding: [12, 8, 32, 56],
+    legend: { position: 'top' },
+    animation: false,
+    interaction: {
+      tooltip: {
+        render: (_e: unknown, { title, items }: { title?: string; items: any[] }) => (
+          <div style={{ minWidth: 120 }}>
+            {title ? (
+              <Text strong style={{ display: 'block', marginBottom: 4, color: token.colorText }}>
+                {title}
+              </Text>
+            ) : null}
+            {renderItems(items, '%')}
+          </div>
+        ),
+      },
+    },
+  };
+
+  const subsCfg: ColumnConfig = {
+    theme: isDarkMode ? 'dark' : 'light',
+    data: subsSeries,
+    xField: 'x',
+    yField: 'count',
+    autoFit: true,
+    minColumnWidth: 2,
+    maxColumnWidth: 18,
+    xAxis: {
+      label: {
+        autoHide: false,
+        autoRotate: false,
+        formatter: makeEverySecondFormatter(sBucket, subsCats),
+      } as any,
+    },
+    yAxis: { min: 0, nice: true, title: { text: 'Submissions' } },
+    style: { radiusTopLeft: subsRadius, radiusTopRight: subsRadius },
+    padding: [12, 8, 32, 56],
+    legend: false,
+    animation: false,
+    interaction: {
+      tooltip: {
+        render: (_e: unknown, { title, items }: { title?: string; items: any[] }) => (
+          <div style={{ minWidth: 120 }}>
+            {title ? (
+              <Text strong style={{ display: 'block', marginBottom: 4, color: token.colorText }}>
+                {title}
+              </Text>
+            ) : null}
+            {renderItems(items, '')}
+          </div>
+        ),
+      },
+    },
+  };
+
+  // clamp page + chart boxes (UNCHANGED)
+  const { ref: pageRef, height: pageH } = useViewportClamp(16);
+  const chartsColumnRef = useRef<HTMLDivElement | null>(null);
+  const [chartHeight, setChartHeight] = useState<number>(240);
+  const measureCharts = useCallback(() => {
+    const container = chartsColumnRef.current;
+    if (!container) return;
+    const gap = 16;
+    const bounds = container.getBoundingClientRect();
+    const total = bounds.height;
+    const available = Math.max(0, total - gap);
+    const next = Math.max(180, Math.floor((available - 164) / 2));
+    setChartHeight((prev) => (Math.abs(prev - next) > 4 ? next : prev));
+  }, []);
+  const metricsChartHeight = chartHeight;
+  const subsChartHeight = chartHeight;
+
+  // live values (no toNumber)
+  const { cpuPerCore, cpuCoreCount, cpuAvgNum } = useMemo(() => {
+    const perCore: number[] = Array.isArray(live?.cpu?.per_core)
+      ? (live!.cpu!.per_core as number[]).map((v) => Math.min(100, Math.max(0, v ?? 0)))
+      : [];
+    const countFromPayload =
+      typeof live?.cpu?.cores === 'number' ? (live!.cpu!.cores as number) : null;
+    const coreCount = countFromPayload ?? (perCore.length ? perCore.length : null);
+    const avgFromCores = perCore.length
+      ? perCore.reduce((sum, value) => sum + value, 0) / perCore.length
+      : null;
+    const avg =
+      typeof live?.cpu?.avg_usage === 'number' ? (live!.cpu!.avg_usage as number) : avgFromCores;
+    return { cpuPerCore: perCore, cpuCoreCount: coreCount, cpuAvgNum: avg ?? null };
+  }, [live?.cpu]);
+
+  useLayoutEffect(() => {
+    measureCharts();
+  }, [measureCharts, pageH, cpuPerCore.length]);
+
+  useEffect(() => {
+    const handler = () => measureCharts();
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, [measureCharts]);
+
+  const memUsed = typeof live?.memory?.used === 'number' ? live!.memory!.used : null;
+  const memTotal = typeof live?.memory?.total === 'number' ? live!.memory!.total : null;
+  const memUsedStr = formatBytes(memUsed ?? undefined);
+  const memTotalStr = formatBytes(memTotal ?? undefined);
+  const memPctNum =
+    memUsed != null && memTotal != null && memTotal > 0
+      ? Math.round((memUsed / memTotal) * 100)
+      : null;
+
+  const swapTotal = typeof live?.memory?.swap_total === 'number' ? live!.memory!.swap_total : null;
+  const swapUsed = typeof live?.memory?.swap_used === 'number' ? live!.memory!.swap_used : null;
+  const swapUsedStr = formatBytes(swapUsed ?? undefined);
+  const swapPctNum =
+    swapTotal != null && swapTotal > 0 ? Math.round(((swapUsed ?? 0) / swapTotal) * 100) : null;
+
+  type DiskRow = {
+    name?: string;
+    total?: number;
+    available?: number;
+    file_system?: string;
+    mount_point?: string;
+  };
+  const rawDisks: DiskRow[] = Array.isArray(live?.disks) ? (live!.disks as any) : [];
+  const disks = useMemo((): DiskRow[] => {
+    const map = new Map<string, DiskRow>();
+    for (const d of rawDisks) {
+      const key = `${d.file_system ?? ''}|${d.total ?? 0}|${d.name ?? ''}`;
+      const prev = map.get(key);
+      if (!prev) {
+        map.set(key, d);
+        continue;
+      }
+      const curMp = `${d.mount_point ?? ''}`;
+      const prevMp = `${prev.mount_point ?? ''}`;
+      const preferCur =
+        (curMp === '/' && prevMp !== '/') ||
+        (prevMp !== '/' && curMp.length > 0 && curMp.length < prevMp.length);
+      if (preferCur) map.set(key, d);
+    }
+    return Array.from(map.values());
+  }, [rawDisks]);
+
+  const diskCount = disks.length;
+  const { totalBytes, availBytes } = disks.reduce(
+    (acc, d) => ({
+      totalBytes: acc.totalBytes + (d.total ?? 0),
+      availBytes: acc.availBytes + (d.available ?? 0),
+    }),
+    { totalBytes: 0, availBytes: 0 },
+  );
+  const freePctNum = totalBytes > 0 ? Math.round((availBytes / totalBytes) * 100) : null;
+
+  const effectiveMax =
+    typeof maxConcurrent === 'number'
+      ? maxConcurrent
+      : typeof live?.code_manager?.max_concurrent === 'number'
+        ? live.code_manager.max_concurrent
+        : null;
+
+  const [maxModalOpen, setMaxModalOpen] = useState(false);
+  const [maxDraft, setMaxDraft] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (!maxModalOpen) return;
+    setMaxDraft(typeof effectiveMax === 'number' ? effectiveMax : undefined);
+  }, [effectiveMax, maxModalOpen]);
+  const handleOpenMaxModal = useCallback(() => {
+    setMaxDraft(typeof effectiveMax === 'number' ? effectiveMax : undefined);
+    setMaxModalOpen(true);
+  }, [effectiveMax]);
+  const maxDraftValid = typeof maxDraft === 'number' && maxDraft > 0;
+  const handleSaveMax = useCallback(async () => {
+    if (!maxDraftValid || typeof maxDraft !== 'number' || maxDraft <= 0) return;
+    const res = await updateMaxConcurrent(maxDraft);
+    if (res.success) {
+      await refreshMaxConcurrent();
+      setMaxModalOpen(false);
+    }
+  }, [maxDraft, maxDraftValid, refreshMaxConcurrent, updateMaxConcurrent]);
+
+  const handleExportMetrics = useCallback(() => {
+    void exportSystemMetrics({
+      start: mRange?.[0]?.toDate().toISOString(),
+      end: mRange?.[1]?.toDate().toISOString(),
+      bucket: mBucket,
+    });
+  }, [mBucket, mRange]);
+  const handleExportSubmissions = useCallback(() => {
+    void exportSubmissionsOverTime({
+      start: sRange?.[0]?.toDate().toISOString(),
+      end: sRange?.[1]?.toDate().toISOString(),
+      bucket: sBucket,
+    });
+  }, [sBucket, sRange]);
+
+  const cpuCoresDisplay = cpuCoreCount != null ? `${cpuCoreCount} cores` : 'Core count unavailable';
 
   return (
-    <div className="h-full min-h-0">
-      <Row gutter={[16, 16]} className="h-full">
-        {/* Top-left: Platform Health */}
-        <Col xs={24} md={12} className="min-h-0">
-          <div className="h-full min-h-0 flex flex-col">
-            <div className="flex-1 min-h-0">
-              <PlaceholderPanel title="Platform Health" />
-            </div>
-          </div>
-        </Col>
+    <div ref={pageRef} style={{ height: pageH }} className="h-full">
+      <div
+        className="grid h-full gap-4"
+        style={isXl ? { gridTemplateColumns: 'minmax(0,0.85fr) minmax(0,1.15fr)' } : undefined}
+      >
+        <div className="h-full flex flex-col">
+          <Card
+            className="flex-1 rounded-2xl !border-gray-200 dark:!border-gray-800"
+            styles={{
+              body: {
+                padding: 16,
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 16,
+                minHeight: 0,
+              },
+            }}
+            title={<span className="font-semibold">System health</span>}
+            extra={
+              typeof live?.ts === 'string' ? (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Updated {dayjs(live.ts).format('HH:mm:ss')}
+                </span>
+              ) : null
+            }
+          >
+            {/* --- CPU section (top) --- */}
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <div className="text-xs font-medium opacity-70">CPU average</div>
+                  <div className="text-3xl font-semibold">
+                    {cpuAvgNum != null ? cpuAvgNum.toFixed(1) : '—'}
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  {cpuCoreCount != null ? `${cpuCoreCount} cores reporting` : cpuCoresDisplay}
+                </div>
+              </div>
 
-        {/* Top-right: Submission Statistics (renamed) */}
-        <Col xs={24} md={12} className="min-h-0">
-          <div className="h-full min-h-0 flex flex-col">
-            <div className="flex-1 min-h-0">
-              <PlaceholderPanel title="Submission Statistics" />
-            </div>
-          </div>
-        </Col>
+              {/* MOBILE: Load averages */}
+              {isMobile && (
+                <div className="grid grid-cols-3 gap-3 mt-2">
+                  <StatCell
+                    title="Load 1m"
+                    value={typeof live?.load?.one === 'number' ? live.load.one : null}
+                    precision={2}
+                  />
+                  <StatCell
+                    title="Load 5m"
+                    value={typeof live?.load?.five === 'number' ? live.load.five : null}
+                    precision={2}
+                  />
+                  <StatCell
+                    title="Load 15m"
+                    value={typeof live?.load?.fifteen === 'number' ? live.load.fifteen : null}
+                    precision={2}
+                  />
+                </div>
+              )}
 
-        {/* Bottom-left: split vertically → Audit Log (top) + Environments (bottom) */}
-        <Col xs={24} md={12} className="min-h-0">
-          <div className="h-full min-h-0 flex flex-col gap-3">
-            <div className="flex-1 min-h-0">
-              <PlaceholderPanel title="Audit Log" />
-            </div>
-            <div className="flex-1 min-h-0">
-              <PlaceholderPanel title="Environments" />
-            </div>
-          </div>
-        </Col>
+              <MeterRow
+                label="Avg utilisation"
+                valueText={cpuAvgNum != null ? cpuAvgNum.toFixed(1) : '—'}
+                percent={cpuAvgNum ?? null}
+              />
 
-        {/* Bottom-right: split into 2 columns → left stats, right quick actions + user management */}
-        <Col xs={24} md={12} className="min-h-0">
-          <div className="h-full min-h-0 grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Left column: vertical stats strip */}
-            <div className="min-h-0">
-              <div className="h-full grid grid-rows-3 gap-3">
-                <StatsTile
-                  title="Active users"
-                  value={activeUsers}
-                  icon={<TeamOutlined />}
-                  suffix={activeUsers === 1 ? 'user' : 'users'}
+              {cpuPerCore.length > 0 ? (
+                <div
+                  className="grid gap-2 pr-1"
+                  style={{
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                    maxHeight: 220,
+                    overflowY: 'auto',
+                  }}
+                >
+                  {cpuPerCore.map((pct, idx) => (
+                    <MeterRow
+                      key={idx}
+                      label={`Core ${idx + 1}`}
+                      valueText={`${pct.toFixed(1)}`}
+                      percent={pct}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Waiting for per-core telemetry…
+                </div>
+              )}
+            </div>
+
+            {/* --- Other metrics (middle) --- */}
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-2">
+                  <StatCell
+                    title="Memory used"
+                    value={memPctNum}
+                    suffix="%"
+                    extra={
+                      <>
+                        {memUsedStr} / {memTotalStr}
+                      </>
+                    }
+                  />
+                  <PercentBar percent={memPctNum} ariaLabel="Memory used percent" />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <StatCell
+                    title="Swap used"
+                    value={swapUsedStr}
+                    extra={
+                      swapTotal ? (
+                        <>
+                          {formatBytes(swapUsed ?? 0)} / {formatBytes(swapTotal)}
+                        </>
+                      ) : undefined
+                    }
+                  />
+                  {swapPctNum != null ? (
+                    <PercentBar percent={swapPctNum} ariaLabel="Swap used percent" />
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium opacity-70">Disks</div>
+                  <div className="text-xs opacity-70">
+                    {diskCount} {diskCount === 1 ? 'disk' : 'disks'}
+                    {typeof freePctNum === 'number' ? <> • Free {freePctNum}%</> : null}
+                  </div>
+                </div>
+
+                <PercentBar
+                  percent={freePctNum == null ? null : 100 - freePctNum}
+                  ariaLabel="Disk used percent (aggregate)"
                 />
-                <StatsTile
-                  title="Running services"
-                  value={runningServices}
-                  icon={<CloudServerOutlined />}
-                  suffix={runningServices === 1 ? 'service' : 'services'}
-                />
-                <StatsTile
-                  title="Open incidents"
-                  value={openIncidents}
-                  icon={<SafetyCertificateOutlined />}
-                  suffix={openIncidents === 1 ? 'incident' : 'incidents'}
-                />
+
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {disks.slice(0, 6).map((d, i) => {
+                    const total = d?.total ?? 0;
+                    const avail = d?.available ?? 0;
+                    const used = Math.max(0, total - avail);
+                    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
+                    const mp = (d?.mount_point ?? '') as string;
+                    const mpHint = mp && mp !== '/' ? ` — ${mp}` : '';
+                    return (
+                      <div key={i} className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+                          <span className="truncate">
+                            {d?.name ?? 'disk'}
+                            {d?.file_system ? (
+                              <span className="opacity-60"> ({d.file_system})</span>
+                            ) : null}
+                            {mpHint ? <span className="opacity-50">{mpHint}</span> : null}
+                          </span>
+                          <span className="tabular-nums">
+                            {formatBytes(used)} / {formatBytes(total)}
+                          </span>
+                        </div>
+                        <PercentBar percent={pct} ariaLabel={`Disk ${d?.name ?? i} used percent`} />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
-            {/* Right column: Quick Actions (top) + User Management (bottom) */}
-            <div className="min-h-0 flex flex-col gap-3">
-              <div className="flex-1 min-h-0">
-                <PlaceholderPanel title="Quick Actions" />
+            {/* MOBILE: Code manager block above the button */}
+            {isMobile && (
+              <div className="flex flex-col gap-2 mt-2">
+                <div className="text-xs font-medium opacity-70">Code manager</div>
+                <div className="grid grid-cols-3 gap-3">
+                  <StatCell
+                    title="Running"
+                    value={
+                      typeof live?.code_manager?.running === 'number'
+                        ? live.code_manager.running
+                        : null
+                    }
+                  />
+                  <StatCell
+                    title="Waiting"
+                    value={
+                      typeof live?.code_manager?.waiting === 'number'
+                        ? live.code_manager.waiting
+                        : null
+                    }
+                  />
+                  <StatCell
+                    title="Max"
+                    value={
+                      typeof effectiveMax === 'number'
+                        ? effectiveMax
+                        : typeof live?.code_manager?.max_concurrent === 'number'
+                          ? live.code_manager.max_concurrent
+                          : null
+                    }
+                  />
+                </div>
               </div>
-              <div className="flex-1 min-h-0">
-                <PlaceholderPanel title="User Management" />
-              </div>
+            )}
+
+            <div className="pt-2">
+              <Button
+                block
+                type="primary"
+                icon={<TeamOutlined />}
+                onClick={handleOpenMaxModal}
+                loading={saving}
+              >
+                Update code manager capacity
+              </Button>
             </div>
+          </Card>
+        </div>
+
+        {isXl && (
+          <div ref={chartsColumnRef} className="min-h-0 flex flex-col gap-4 h-full">
+            <Card
+              className="flex-1 rounded-2xl !border-gray-200 dark:!border-gray-800"
+              styles={{
+                body: { padding: 12, height: '100%', display: 'flex', flexDirection: 'column' },
+              }}
+              title={<span className="font-semibold">Metrics</span>}
+              extra={
+                <Space wrap>
+                  <DatePicker.RangePicker
+                    value={mRange}
+                    onChange={(v) => {
+                      if (!v || v.length !== 2) return;
+                      setMRange([v[0] as Dayjs, v[1] as Dayjs]);
+                    }}
+                  />
+                  <Select
+                    value={mBucket}
+                    options={[
+                      { value: 'day', label: 'Day' },
+                      { value: 'week', label: 'Week' },
+                      { value: 'month', label: 'Month' },
+                      { value: 'year', label: 'Year' },
+                    ]}
+                    onChange={(v: UiBucket) => {
+                      setMBucket(v);
+                      setMRange(naturalRange(v));
+                    }}
+                    style={{ minWidth: 120 }}
+                  />
+                  <Button
+                    icon={<DownloadOutlined />}
+                    onClick={handleExportMetrics}
+                    disabled={metricsSeries.length === 0}
+                  >
+                    Export CSV
+                  </Button>
+                </Space>
+              }
+            >
+              <div className="flex-1 min-h-0 overflow-hidden">
+                {metricsSeries.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                    No data in selected range.
+                  </div>
+                ) : (
+                  <Column {...metricsCfg} height={metricsChartHeight} />
+                )}
+              </div>
+            </Card>
+
+            <Card
+              className="flex-1 rounded-2xl !border-gray-200 dark:!border-gray-800"
+              styles={{
+                body: { padding: 12, height: '100%', display: 'flex', flexDirection: 'column' },
+              }}
+              title={<span className="font-semibold">Submissions</span>}
+              extra={
+                <Space wrap>
+                  <DatePicker.RangePicker
+                    value={sRange}
+                    onChange={(v) => {
+                      if (!v || v.length !== 2) return;
+                      setSRange([v[0] as Dayjs, v[1] as Dayjs]);
+                    }}
+                  />
+                  <Select
+                    value={sBucket}
+                    options={[
+                      { value: 'day', label: 'Day' },
+                      { value: 'week', label: 'Week' },
+                      { value: 'month', label: 'Month' },
+                      { value: 'year', label: 'Year' },
+                    ]}
+                    onChange={(v: UiBucket) => {
+                      setSBucket(v);
+                      setSRange(naturalRange(v));
+                    }}
+                    style={{ minWidth: 120 }}
+                  />
+                  <Button
+                    icon={<DownloadOutlined />}
+                    onClick={handleExportSubmissions}
+                    disabled={subsSeries.length === 0}
+                  >
+                    Export CSV
+                  </Button>
+                </Space>
+              }
+            >
+              <div className="flex-1 min-h-0 overflow-hidden">
+                {subsSeries.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                    No data in selected range.
+                  </div>
+                ) : (
+                  <Column {...subsCfg} height={subsChartHeight} />
+                )}
+              </div>
+            </Card>
           </div>
-        </Col>
-      </Row>
+        )}
+      </div>
+
+      <Modal
+        title="Update code manager capacity"
+        open={maxModalOpen}
+        onCancel={() => setMaxModalOpen(false)}
+        onOk={handleSaveMax}
+        okText="Save"
+        okButtonProps={{ disabled: !maxDraftValid }}
+        confirmLoading={saving}
+        destroyOnClose
+      >
+        <Space direction="vertical" size={12} className="w-full">
+          <div className="text-sm text-gray-600 dark:text-gray-300">
+            Choose the maximum number of code runs that can execute concurrently.
+          </div>
+          <InputNumber
+            min={1}
+            style={{ width: '100%' }}
+            value={maxDraft}
+            onChange={(v) => setMaxDraft(typeof v === 'number' ? v : undefined)}
+          />
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Current effective limit: {typeof effectiveMax === 'number' ? effectiveMax : '—'}
+          </div>
+        </Space>
+      </Modal>
     </div>
   );
 };

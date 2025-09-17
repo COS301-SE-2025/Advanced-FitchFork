@@ -1,7 +1,7 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-use serde_json::json;
-use util::mark_allocator::mark_allocator::{load_allocator, SaveError};
 use crate::response::ApiResponse;
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use serde_json::json;
+use util::mark_allocator::{SaveError, load_allocator};
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
@@ -95,9 +95,7 @@ use crate::response::ApiResponse;
 /// - Task weights should sum to 1.0 across all tasks in the assignment
 /// - Criteria weights within each task should also sum to 1.0
 /// - Mark allocator loading is restricted to users with appropriate module permissions
-pub async fn load(
-    Path((module_id, assignment_id)): Path<(i64, i64)>
-) -> impl IntoResponse {
+pub async fn load(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
     match load_allocator(module_id, assignment_id).await {
         Ok(json) => (
             StatusCode::OK,

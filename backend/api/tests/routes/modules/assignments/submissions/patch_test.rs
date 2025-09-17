@@ -4,10 +4,10 @@ mod patch_submission_ignore_tests {
         body::Body,
         http::{Request, StatusCode},
     };
-    use tower::ServiceExt;
-    use serde_json::{json, Value};
-    use serial_test::serial;
     use chrono::Utc;
+    use serde_json::{Value, json};
+    use serial_test::serial;
+    use tower::ServiceExt;
 
     use api::auth::generate_jwt;
 
@@ -19,12 +19,12 @@ mod patch_submission_ignore_tests {
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
 
-    use crate::helpers::app:: make_test_app_with_storage;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         lecturer: UserModel,
         assistant: UserModel,
-        tutor: UserModel,   
+        tutor: UserModel,
         student: UserModel,
         module: ModuleModel,
         assignment: AssignmentModel,
@@ -35,17 +35,40 @@ mod patch_submission_ignore_tests {
 
     async fn setup_data(db: &sea_orm::DatabaseConnection) -> TestData {
         // users
-        let lecturer = UserModel::create(db, "lect1", "lect1@test.com", "pw", false).await.unwrap();
-        let assistant = UserModel::create(db, "al1", "al1@test.com", "pw", false).await.unwrap();
-        let tutor = UserModel::create(db, "tutor1", "tutor1@test.com", "pw", false).await.unwrap();
-        let student = UserModel::create(db, "stud1", "stud1@test.com", "pw", false).await.unwrap();
+        let lecturer = UserModel::create(db, "lect1", "lect1@test.com", "pw", false)
+            .await
+            .unwrap();
+        let assistant = UserModel::create(db, "al1", "al1@test.com", "pw", false)
+            .await
+            .unwrap();
+        let tutor = UserModel::create(db, "tutor1", "tutor1@test.com", "pw", false)
+            .await
+            .unwrap();
+        let student = UserModel::create(db, "stud1", "stud1@test.com", "pw", false)
+            .await
+            .unwrap();
 
         // module + roles
-        let module = ModuleModel::create(db, "COS777", 2025, Some("Test"), 16).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, assistant.id, module.id, Role::AssistantLecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, tutor.id, module.id, Role::Tutor).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student.id, module.id, Role::Student).await.unwrap();
+        let module = ModuleModel::create(db, "COS777", 2025, Some("Test"), 16)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            assistant.id,
+            module.id,
+            Role::AssistantLecturer,
+        )
+        .await
+        .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, tutor.id, module.id, Role::Tutor)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student.id, module.id, Role::Student)
+            .await
+            .unwrap();
 
         // assignments
         let now = Utc::now();
@@ -141,7 +164,9 @@ mod patch_submission_ignore_tests {
             .unwrap();
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let v: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(v["success"], true);
         assert_eq!(v["data"]["id"], data.sub1.id);
@@ -158,7 +183,9 @@ mod patch_submission_ignore_tests {
             .unwrap();
         let resp2 = app.clone().oneshot(req2).await.unwrap();
         assert_eq!(resp2.status(), StatusCode::OK);
-        let body2 = axum::body::to_bytes(resp2.into_body(), usize::MAX).await.unwrap();
+        let body2 = axum::body::to_bytes(resp2.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let v2: Value = serde_json::from_slice(&body2).unwrap();
         assert_eq!(v2["success"], true);
         assert_eq!(v2["data"]["id"], data.sub1.id);
@@ -187,7 +214,9 @@ mod patch_submission_ignore_tests {
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let v: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(v["success"], true);
         assert_eq!(v["data"]["id"], data.sub2.id);
@@ -211,7 +240,9 @@ mod patch_submission_ignore_tests {
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
-            .body(Body::from(serde_json::json!({ "ignored": true }).to_string()))
+            .body(Body::from(
+                serde_json::json!({ "ignored": true }).to_string(),
+            ))
             .unwrap();
 
         let resp = app.clone().oneshot(req).await.unwrap();

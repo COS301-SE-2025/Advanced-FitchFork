@@ -16,10 +16,6 @@ import type { AssignmentFile } from '@/types/modules/assignments';
 import type { InterpreterInfo } from '@/types/modules/assignments/interpreter';
 import Tip from '@/components/common/Tip';
 
-import {
-  parseTargetsFromMakefileZip,
-  createTasksFromMakefileTargets,
-} from '@/utils/makefile_tasks';
 
 const { Title, Paragraph } = Typography;
 
@@ -65,20 +61,20 @@ const StepFilesResources = () => {
             key: 'interpreter',
             title: 'Interpreter',
             present: !!readiness?.interpreter_present,
-            desc: 'Upload interpreter file and set its command.',
+            desc: 'Upload the interpreter archive and command used to execute generated programs.',
           },
           {
             key: 'memo',
             title: 'Memo Files',
             present: !!readiness?.memo_present,
-            desc: 'Official memo archive.',
+            desc: 'Reference implementation zipped at the root; drives memo output.',
             fileType: '.zip',
           },
           {
             key: 'makefile',
             title: 'Makefile',
             present: !!readiness?.makefile_present,
-            desc: 'Zip containing Makefile. Tasks parsed automatically (best effort).',
+            desc: 'Archive with a root-level Makefile defining build/run targets.',
             fileType: '.zip',
           },
         ]
@@ -87,21 +83,21 @@ const StepFilesResources = () => {
             key: 'main',
             title: 'Main Files',
             present: !!readiness?.main_present,
-            desc: 'Starter code for students.',
+            desc: 'Zipped entry file at archive root; orchestrates execution & prints labels.',
             fileType: '.zip',
           },
           {
             key: 'memo',
             title: 'Memo Files',
             present: !!readiness?.memo_present,
-            desc: 'Official memo archive.',
+            desc: 'Reference implementation zipped at the root; drives memo output.',
             fileType: '.zip',
           },
           {
             key: 'makefile',
             title: 'Makefile',
             present: !!readiness?.makefile_present,
-            desc: 'Zip containing Makefile. Tasks parsed automatically.',
+            desc: 'Archive with a root-level Makefile defining build/run targets.',
             fileType: '.zip',
           },
         ];
@@ -115,11 +111,20 @@ const StepFilesResources = () => {
   const primaryHelpFor = (k: RowKey): { label: string; href: string } | null => {
     switch (k) {
       case 'main':
-        return { label: 'Main files help', href: '/help/assignments/files/main-files' };
+        return {
+          label: 'Main file requirements',
+          href: '/help/assignments/files/main-files#requirements',
+        };
       case 'memo':
-        return { label: 'Memo files help', href: '/help/assignments/files/memo-files' };
+        return {
+          label: 'Memo files requirements',
+          href: '/help/assignments/files/memo-files#requirements',
+        };
       case 'makefile':
-        return { label: 'Makefile help', href: '/help/assignments/files/makefile' };
+        return {
+          label: 'Makefile requirements',
+          href: '/help/assignments/files/makefile#requirements',
+        };
       case 'interpreter':
         return { label: 'GATLAM & Interpreter', href: '/help/assignments/gatlam' };
       default:
@@ -133,20 +138,6 @@ const StepFilesResources = () => {
     const res = await uploadAssignmentFile(module.id, assignmentId, key as any, file);
     if (res.success) {
       await refreshAssignment?.();
-      if (key === 'makefile') {
-        // silent best-effort task seeding
-        try {
-          const targets = await parseTargetsFromMakefileZip(file);
-          if (targets.length) {
-            await createTasksFromMakefileTargets(
-              module.id,
-              assignmentId,
-              targets,
-              async () => await refreshAssignment?.(),
-            );
-          }
-        } catch {}
-      }
     }
     return false;
   };

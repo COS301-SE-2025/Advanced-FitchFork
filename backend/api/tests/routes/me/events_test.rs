@@ -12,8 +12,8 @@ mod tests {
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use serial_test::serial;
     use serde_json::Value;
+    use serial_test::serial;
     use tower::ServiceExt;
 
     use crate::helpers::app::make_test_app_with_storage;
@@ -55,7 +55,7 @@ mod tests {
             .unwrap();
 
         let now = Utc::now();
-        
+
         let _assignment1 = AssignmentModel::create(
             db,
             module1.id,
@@ -92,10 +92,7 @@ mod tests {
         .await
         .unwrap();
 
-        TestData {
-            student1,
-            student2,
-        }
+        TestData { student1, student2 }
     }
 
     #[tokio::test]
@@ -122,7 +119,7 @@ mod tests {
 
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Events retrieved successfully");
-        
+
         let events = json["data"]["events"].as_object().unwrap();
         // Should have 6 events total: 3 assignments × 2 events each (available + due)
         assert_eq!(events.len(), 6);
@@ -156,13 +153,13 @@ mod tests {
 
         assert_eq!(json["success"], true);
         let events = json["data"]["events"].as_object().unwrap();
-        
+
         // Should include:
         // - Assignment 1 due date (day 7)
         // - Assignment 2 available date (day 3)
         // Should exclude events outside the date range
         assert!(events.len() >= 2);
-        
+
         // Verify all events are within the date range
         for (date_key, _) in events {
             let event_date = chrono::DateTime::parse_from_rfc3339(&format!("{}Z", date_key))
@@ -200,7 +197,7 @@ mod tests {
 
         assert_eq!(json["success"], true);
         let events = json["data"]["events"].as_object().unwrap();
-        
+
         // Should only include future events (from day 5 onwards)
         // Assignment 1 due (day 7) and Assignment 2 due (day 10)
         assert!(events.len() >= 2);
@@ -231,7 +228,7 @@ mod tests {
 
         assert_eq!(json["success"], true);
         let events = json["data"]["events"].as_object().unwrap();
-        
+
         // Should include past events and near-future events up to day 5
         // Assignment 3 events (past), Assignment 1 available (now), Assignment 2 available (day 3)
         assert!(events.len() >= 3);
@@ -244,13 +241,20 @@ mod tests {
         let data = setup_events_test_data(app_state.db()).await;
 
         let now = Utc::now();
-        let from_datetime = (now + Duration::days(2)).format("%Y-%m-%dT%H:%M:%S").to_string();
-        let to_datetime = (now + Duration::days(8)).format("%Y-%m-%dT%H:%M:%S").to_string();
+        let from_datetime = (now + Duration::days(2))
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string();
+        let to_datetime = (now + Duration::days(8))
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string();
 
         let (token, _) = generate_jwt(data.student1.id, false);
         let req = Request::builder()
             .method("GET")
-            .uri(&format!("/api/me/events?from={}&to={}", from_datetime, to_datetime))
+            .uri(&format!(
+                "/api/me/events?from={}&to={}",
+                from_datetime, to_datetime
+            ))
             .header("Authorization", format!("Bearer {}", token))
             .body(AxumBody::empty())
             .unwrap();
@@ -332,7 +336,7 @@ mod tests {
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         let events = json["data"]["events"].as_object().unwrap();
-        
+
         let mut found_warning = false;
         let mut found_error = false;
 
@@ -341,7 +345,7 @@ mod tests {
             for event in events_list {
                 let event_type = event["type"].as_str().unwrap();
                 let content = event["content"].as_str().unwrap();
-                
+
                 if event_type == "warning" {
                     found_warning = true;
                     assert!(content.contains("available"));
@@ -380,10 +384,12 @@ mod tests {
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], false);
-        assert!(json["message"]
-            .as_str()
-            .unwrap()
-            .contains("Invalid date format"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Invalid date format")
+        );
     }
 
     #[tokio::test]
@@ -413,17 +419,19 @@ mod tests {
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], false);
-        assert!(json["message"]
-            .as_str()
-            .unwrap()
-            .contains("'from' date must be before 'to' date"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("'from' date must be before 'to' date")
+        );
     }
 
     #[tokio::test]
     #[serial]
     async fn test_get_events_unauthorized() {
         let (app, _app_state, _tmp) = make_test_app_with_storage().await;
-        
+
         let req = Request::builder()
             .method("GET")
             .uri("/api/me/events")

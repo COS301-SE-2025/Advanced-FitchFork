@@ -15,9 +15,9 @@ use db::models::ticket_messages::Model as TicketMessageModel;
 use util::state::AppState;
 
 use crate::{
-    auth::AuthUser,
-    response::ApiResponse,
-    routes::modules::assignments::tickets::ticket_messages::common::MessageResponse, ws::tickets::topics::ticket_chat_topic,
+    auth::AuthUser, response::ApiResponse,
+    routes::modules::assignments::tickets::ticket_messages::common::MessageResponse,
+    ws::tickets::topics::ticket_chat_topic,
 };
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages/{message_id}
@@ -167,7 +167,10 @@ pub async fn edit_ticket_message(
             "user": null
         }
     });
-    app_state.ws_clone().broadcast(&topic, payload.to_string()).await;
+    app_state
+        .ws_clone()
+        .broadcast(&topic, payload.to_string())
+        .await;
 
     (
         StatusCode::OK,

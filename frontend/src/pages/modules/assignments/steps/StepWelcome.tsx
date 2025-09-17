@@ -20,6 +20,7 @@ import { message } from '@/utils/message';
 
 import { getStarterPacks, createStarter } from '@/services/modules/assignments/starter';
 import type { StarterPack, StarterId } from '@/types/modules/assignments/starter';
+import Tip from '@/components/common/Tip';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -105,9 +106,17 @@ const StepWelcome = ({ onManual }: Props) => {
       <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 rounded-xl">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <Title level={3} className="!mb-1 !text-gray-900 dark:!text-gray-100">
-              Set up your assignment
-            </Title>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Title level={3} className="!mb-1 !text-gray-900 dark:!text-gray-100">
+                Set up your assignment
+              </Title>
+              <Tip
+                iconOnly
+                newTab
+                to="/help/assignments/setup#overview"
+                text="Full setup guide"
+              />
+            </div>
             <Paragraph type="secondary" className="!mb-0">
               Start with a <b>starter pack</b> (recommended) or proceed with a <b>manual</b> setup.
             </Paragraph>

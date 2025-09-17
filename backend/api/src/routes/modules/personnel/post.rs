@@ -1,24 +1,22 @@
 use axum::{
-    extract::{Path, State, Extension},
+    Json,
+    extract::{Extension, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, EntityTrait, IntoActiveModel, QueryFilter, Set,
 };
 use serde::Deserialize;
-use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, QueryFilter, Set, ActiveModelTrait,
-    IntoActiveModel,
-};
 
+use crate::{auth::AuthUser, response::ApiResponse};
 use db::models::{
     user::Entity as UserEntity,
-    user_module_role::{Entity as RoleEntity, ActiveModel as RoleActiveModel, Column as RoleCol, Role},
+    user_module_role::{
+        ActiveModel as RoleActiveModel, Column as RoleCol, Entity as RoleEntity, Role,
+    },
 };
 use util::state::AppState;
-use crate::{
-    auth::AuthUser,
-    response::{ApiResponse},
-};
 
 /// Request body for assigning or updating users in a module with a role
 #[derive(Debug, Deserialize)]
@@ -147,7 +145,9 @@ pub async fn assign_personnel(
         if !is_module_lecturer {
             return (
                 StatusCode::FORBIDDEN,
-                Json(ApiResponse::<()>::error("Lecturer access required for this module")),
+                Json(ApiResponse::<()>::error(
+                    "Lecturer access required for this module",
+                )),
             );
         }
     }
@@ -163,7 +163,10 @@ pub async fn assign_personnel(
         if !user_exists {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", target_user_id))),
+                Json(ApiResponse::<()>::error(&format!(
+                    "User with ID {} does not exist",
+                    target_user_id
+                ))),
             );
         }
 
@@ -207,7 +210,9 @@ pub async fn assign_personnel(
             Err(_) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error("Database error while checking existing assignment")),
+                    Json(ApiResponse::<()>::error(
+                        "Database error while checking existing assignment",
+                    )),
                 );
             }
         }
@@ -215,6 +220,9 @@ pub async fn assign_personnel(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success((), "Users assigned/updated successfully")),
+        Json(ApiResponse::success(
+            (),
+            "Users assigned/updated successfully",
+        )),
     )
 }

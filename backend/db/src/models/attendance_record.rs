@@ -1,6 +1,6 @@
-use sea_orm::entity::prelude::*;
-use sea_orm::{Set, ActiveModelTrait, ConnectionTrait, QueryFilter, ColumnTrait};
 use chrono::{DateTime, Utc};
+use sea_orm::entity::prelude::*;
+use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, QueryFilter, Set};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize)]
 #[sea_orm(table_name = "attendance_records")]
@@ -18,19 +18,35 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(belongs_to = "super::attendance_session::Entity", from = "Column::SessionId", to = "super::attendance_session::Column::Id")]
+    #[sea_orm(
+        belongs_to = "super::attendance_session::Entity",
+        from = "Column::SessionId",
+        to = "super::attendance_session::Column::Id"
+    )]
     Session,
-    #[sea_orm(belongs_to = "super::user::Entity", from = "Column::UserId", to = "super::user::Column::Id")]
+    #[sea_orm(
+        belongs_to = "super::user::Entity",
+        from = "Column::UserId",
+        to = "super::user::Column::Id"
+    )]
     User,
 }
 
 impl Related<super::attendance_session::Entity> for Entity {
-    fn to() -> RelationDef { Relation::Session.def() }
-    fn via() -> Option<RelationDef> { None }
+    fn to() -> RelationDef {
+        Relation::Session.def()
+    }
+    fn via() -> Option<RelationDef> {
+        None
+    }
 }
 impl Related<super::user::Entity> for Entity {
-    fn to() -> RelationDef { Relation::User.def() }
-    fn via() -> Option<RelationDef> { None }
+    fn to() -> RelationDef {
+        Relation::User.def()
+    }
+    fn via() -> Option<RelationDef> {
+        None
+    }
 }
 
 impl ActiveModelBehavior for ActiveModel {}
@@ -122,14 +138,14 @@ mod tests {
         // session must reference real module + creator user
         let sess = attendance_session::Model::create(
             &db,
-            m.id,                          // module_id FK
-            lecturer.id,                  // created_by / owner FK
+            m.id,        // module_id FK
+            lecturer.id, // created_by / owner FK
             "Lec",
-            true,                         // manual/active flag (as per your signature)
-            30,                           // rotation seconds
-            false,                        // restrict IP?
-            None,                         // ip subnet / prefix
-            None,                         // location / whatever the option is
+            true,  // manual/active flag (as per your signature)
+            30,    // rotation seconds
+            false, // restrict IP?
+            None,  // ip subnet / prefix
+            None,  // location / whatever the option is
             Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), // salt
         )
         .await

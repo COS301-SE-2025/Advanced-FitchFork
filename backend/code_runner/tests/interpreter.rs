@@ -12,12 +12,9 @@ use db::test_utils::setup_test_db;
 use sea_orm::ColumnTrait;
 use sea_orm::QueryFilter;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
-use util::paths::{
-    interpreter_dir, makefile_dir, memo_dir, storage_root, submission_file_path
-};
 use util::execution_config::ExecutionConfig;
+use util::paths::{interpreter_dir, makefile_dir, memo_dir, storage_root, submission_file_path};
 use util::test_helpers::setup_test_storage_root;
-
 
 fn write_zip(path: &std::path::Path, entries: &[(&str, &[u8])]) -> std::io::Result<()> {
     use std::io::Write;
@@ -32,10 +29,11 @@ fn write_zip(path: &std::path::Path, entries: &[(&str, &[u8])]) -> std::io::Resu
         }
         zip.finish()?;
     }
-    if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     std::fs::write(path, &buf)
 }
-
 
 async fn seed_user(db: &DatabaseConnection) -> i64 {
     let user_id = 1;
@@ -125,10 +123,7 @@ async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
     }
 }
 
-async fn seed_submission(
-    db: &DatabaseConnection,
-    assignment_id: i64,
-) -> SubmissionModel {
+async fn seed_submission(db: &DatabaseConnection, assignment_id: i64) -> SubmissionModel {
     let user_id = seed_user(db).await;
     let attempt = 1;
 
@@ -188,9 +183,11 @@ async fn seed_submission(
     update.path = Set(rel);
     update.updated_at = Set(Utc::now());
 
-    update.update(db).await.expect("Failed to update submission")
+    update
+        .update(db)
+        .await
+        .expect("Failed to update submission")
 }
-
 
 async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, interpreter_id: i64) {
     use db::models::assignment_interpreter::{
@@ -214,10 +211,12 @@ async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, inte
     let interp_dir = interpreter_dir(module_id, assignment_id);
     let interp_path = interp_dir.join(&filename);
 
-
     // Minimal interpreter payload (content won't be used in compile stopgap case)
-    write_zip(&interp_path, &[("interpreter.cpp", b"int main(){return 0;}")])
-        .expect("write interpreter zip");
+    write_zip(
+        &interp_path,
+        &[("interpreter.cpp", b"int main(){return 0;}")],
+    )
+    .expect("write interpreter zip");
 
     // Relative DB path:
     let relative_path = interp_path
@@ -225,7 +224,6 @@ async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, inte
         .expect("strip prefix")
         .to_string_lossy()
         .to_string();
-
 
     // The command; choose something that triggers the compile stopgap if desired
     let command = "g++ Main.cpp -o main && ./main".to_string();
@@ -246,7 +244,10 @@ async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, inte
             updated_at: Set(now),
             ..Default::default()
         };
-        interpreter.insert(db).await.expect("Failed to insert interpreter");
+        interpreter
+            .insert(db)
+            .await
+            .expect("Failed to insert interpreter");
     }
 }
 
@@ -285,7 +286,6 @@ async fn setup_test_db_for_run_interpreter(
     (db, submission.id)
 }
 
-
 #[tokio::test]
 #[ignore]
 async fn test_run_interpreter_9998_cpp() {
@@ -298,12 +298,8 @@ async fn test_run_interpreter_9998_cpp() {
 
     let gene_string = "01234";
 
-    let (db, submission_id) = setup_test_db_for_run_interpreter(
-        assignment_id,
-        module_id,
-        interpreter_id,
-    )
-    .await;
+    let (db, submission_id) =
+        setup_test_db_for_run_interpreter(assignment_id, module_id, interpreter_id).await;
 
     // run_interpreter will:
     // 1) synthesize main zip (compile stopgap)
@@ -316,4 +312,3 @@ async fn test_run_interpreter_9998_cpp() {
 
     // keep `tmp` in scope until here
 }
-

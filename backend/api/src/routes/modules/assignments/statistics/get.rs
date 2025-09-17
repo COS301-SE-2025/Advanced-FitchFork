@@ -1,21 +1,23 @@
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
+    Json,
     extract::{Path, State},
     response::IntoResponse,
-    Json,
 };
 use chrono::{DateTime, Utc};
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-    assignment_submission::{self, Entity as SubmissionEntity},
     assignment_submission::Model as SubmissionModel,
+    assignment_submission::{self, Entity as SubmissionEntity},
     user_module_role::{Column as UMRCol, Entity as UMREntity, Role as UMRRole},
 };
 use sea_orm::{ColumnTrait, EntityTrait, Order, QueryFilter, QueryOrder};
 use serde::Serialize;
 use serde_json::Value;
 use util::{
-    execution_config::{execution_config::GradingPolicy, ExecutionConfig}, paths::submission_report_path, state::AppState
+    execution_config::{ExecutionConfig, GradingPolicy},
+    paths::submission_report_path,
+    state::AppState,
 };
 
 // ---------- Response DTO ----------
@@ -196,16 +198,20 @@ pub async fn get_assignment_stats(
         Ok(None) => {
             return (
                 axum::http::StatusCode::NOT_FOUND,
-                Json(ApiResponse::<AssignmentStatsResponse>::error("Assignment not found")),
+                Json(ApiResponse::<AssignmentStatsResponse>::error(
+                    "Assignment not found",
+                )),
             )
-                .into_response()
+                .into_response();
         }
         Err(_) => {
             return (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<AssignmentStatsResponse>::error("Database error")),
+                Json(ApiResponse::<AssignmentStatsResponse>::error(
+                    "Database error",
+                )),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -220,9 +226,11 @@ pub async fn get_assignment_stats(
         Err(_) => {
             return (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<AssignmentStatsResponse>::error("Database error")),
+                Json(ApiResponse::<AssignmentStatsResponse>::error(
+                    "Database error",
+                )),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -266,9 +274,11 @@ pub async fn get_assignment_stats(
         Err(_) => {
             return (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<AssignmentStatsResponse>::error("Database error")),
+                Json(ApiResponse::<AssignmentStatsResponse>::error(
+                    "Database error",
+                )),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -288,9 +298,11 @@ pub async fn get_assignment_stats(
         Err(_) => {
             return (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<AssignmentStatsResponse>::error("Database error")),
+                Json(ApiResponse::<AssignmentStatsResponse>::error(
+                    "Database error",
+                )),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -316,17 +328,28 @@ pub async fn get_assignment_stats(
 
         if let Ok(content) = std::fs::read_to_string(&report_path) {
             if let Ok(json) = serde_json::from_str::<Value>(&content) {
-                let earned = json.get("mark").and_then(|m| m.get("earned")).and_then(|v| v.as_i64());
-                let total = json.get("mark").and_then(|m| m.get("total")).and_then(|v| v.as_i64());
+                let earned = json
+                    .get("mark")
+                    .and_then(|m| m.get("earned"))
+                    .and_then(|v| v.as_i64());
+                let total = json
+                    .get("mark")
+                    .and_then(|m| m.get("total"))
+                    .and_then(|v| v.as_i64());
                 if let Some(p) = to_pct(earned, total) {
-                    user_marks.entry(s.user_id).or_default().push((s.created_at, p));
+                    user_marks
+                        .entry(s.user_id)
+                        .or_default()
+                        .push((s.created_at, p));
                 }
             }
         }
     }
 
     // Effective mark per student by grading policy
-    let cfg = assignment.config().unwrap_or_else(ExecutionConfig::default_config);
+    let cfg = assignment
+        .config()
+        .unwrap_or_else(ExecutionConfig::default_config);
     let grading_policy = cfg.marking.grading_policy;
     let pass_mark_threshold = cfg.marking.pass_mark as i64;
 
@@ -345,7 +368,10 @@ pub async fn get_assignment_stats(
     let pending = total.saturating_sub(graded);
 
     // pass/fail
-    let num_passed = effective_marks.iter().filter(|&&p| p >= pass_mark_threshold).count();
+    let num_passed = effective_marks
+        .iter()
+        .filter(|&&p| p >= pass_mark_threshold)
+        .count();
     let num_failed = graded.saturating_sub(num_passed);
     let num_full_marks = effective_marks.iter().filter(|&&p| p == 100).count();
 
@@ -368,9 +394,9 @@ pub async fn get_assignment_stats(
     let worst = effective_marks.iter().copied().min().unwrap_or(0);
 
     let resp = AssignmentStatsResponse {
-        total,                    // counted attempts only (non-practice, non-ignored)
-        graded,                   // students with an effective mark among counted rows
-        pending,                  // counted attempts minus graded
+        total,   // counted attempts only (non-practice, non-ignored)
+        graded,  // students with an effective mark among counted rows
+        pending, // counted attempts minus graded
         pass_rate: (pass_rate * 10.0).round() / 10.0,
         avg_mark: (avg_mark * 10.0).round() / 10.0,
         median: (median_mark * 10.0).round() / 10.0,
@@ -378,14 +404,14 @@ pub async fn get_assignment_stats(
         stddev: (stddev_mark * 10.0).round() / 10.0,
         best,
         worst,
-        total_marks,              // sum over counted rows
-        num_students_submitted,   // students with at least one counted row
+        total_marks,            // sum over counted rows
+        num_students_submitted, // students with at least one counted row
         num_passed,
         num_failed,
         num_full_marks,
-        late,                     // from counted rows only
-        on_time,                  // from counted rows only
-        ignored,                  // visibility from ALL student rows
+        late,    // from counted rows only
+        on_time, // from counted rows only
+        ignored, // visibility from ALL student rows
     };
 
     (

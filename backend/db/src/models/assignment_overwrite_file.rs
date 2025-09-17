@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait};
-use util::paths::{storage_root, overwrite_task_dir, ensure_dir};
 use std::fs;
 use std::path::PathBuf;
+use util::paths::{ensure_dir, overwrite_task_dir, storage_root};
 
 /// Represents a file used to overwrite specific parts of an assignment during evaluation.
 /// Includes metadata such as its related assignment, task, filename, and storage path.
@@ -73,7 +73,7 @@ impl Model {
         let assignment = super::assignment::Entity::find_by_id(assignment_id)
             .one(db)
             .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding assignment: {}", e)))?
+            .map_err(|e| DbErr::Custom(format!("DB error finding assignment: {e}")))?
             .ok_or_else(|| DbErr::Custom("Assignment not found".to_string()))?;
 
         let module_id = assignment.module_id;
@@ -81,7 +81,7 @@ impl Model {
         let task = super::assignment_task::Entity::find_by_id(task_id)
             .one(db)
             .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding task: {}", e)))?
+            .map_err(|e| DbErr::Custom(format!("DB error finding task: {e}")))?
             .ok_or_else(|| DbErr::Custom("Task not found".to_string()))?;
 
         let task_number = task.task_number;

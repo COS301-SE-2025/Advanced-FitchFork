@@ -1,7 +1,7 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use crate::response::ApiResponse;
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use serde_json::Value;
-use util::mark_allocator::mark_allocator::{save_allocator, SaveError};
+use util::mark_allocator::{SaveError, save_allocator};
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
@@ -76,13 +76,8 @@ pub async fn save(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<Value>,
 ) -> impl IntoResponse {
-    let bad = |msg: &str| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error(msg)),
-        )
-            .into_response()
-    };
+    let bad =
+        |msg: &str| (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::error(msg))).into_response();
 
     // Root must be an object with "tasks" array and "total_value" integer
     let root = match req.as_object() {
@@ -110,7 +105,7 @@ pub async fn save(
                 return bad(&format!(
                     "tasks[{}] must be an object with exactly one key (e.g., \"task1\")",
                     idx
-                ))
+                ));
             }
             None => return bad(&format!("tasks[{}] must be an object", idx)),
         };
@@ -131,7 +126,7 @@ pub async fn save(
                 return bad(&format!(
                     "tasks[{}] invalid key '{}': expected positive integer after 'task'",
                     idx, task_key
-                ))
+                ));
             }
         };
 
@@ -142,7 +137,7 @@ pub async fn save(
                 return bad(&format!(
                     "tasks[{}].{} value must be an object",
                     idx, task_key
-                ))
+                ));
             }
         };
 
@@ -153,7 +148,7 @@ pub async fn save(
                 return bad(&format!(
                     "tasks[{}].{}.name must be a non-empty string",
                     idx, task_key
-                ))
+                ));
             }
         };
 
@@ -164,7 +159,7 @@ pub async fn save(
                 return bad(&format!(
                     "tasks[{}].{}.task_number must be a positive integer",
                     idx, task_key
-                ))
+                ));
             }
         };
         if task_number != key_task_num {
@@ -181,7 +176,7 @@ pub async fn save(
                 return bad(&format!(
                     "tasks[{}].{}.value must be an integer >= 0",
                     idx, task_key
-                ))
+                ));
             }
         };
 
@@ -192,7 +187,7 @@ pub async fn save(
                 return bad(&format!(
                     "tasks[{}].{}.subsections must be an array (can be empty)",
                     idx, task_key
-                ))
+                ));
             }
         };
 
@@ -205,7 +200,7 @@ pub async fn save(
                     return bad(&format!(
                         "tasks[{}].{}.subsections[{}] must be an object",
                         idx, task_key, sidx
-                    ))
+                    ));
                 }
             };
 
@@ -215,7 +210,7 @@ pub async fn save(
                     return bad(&format!(
                         "tasks[{}].{}.subsections[{}].name must be a non-empty string",
                         idx, task_key, sidx
-                    ))
+                    ));
                 }
             }
 
@@ -225,7 +220,7 @@ pub async fn save(
                     return bad(&format!(
                         "tasks[{}].{}.subsections[{}].value must be an integer >= 0",
                         idx, task_key, sidx
-                    ))
+                    ));
                 }
             };
 
@@ -252,7 +247,10 @@ pub async fn save(
     match save_allocator(module_id, assignment_id, req).await {
         Ok(_) => (
             StatusCode::OK,
-            Json(ApiResponse::success("{}", "Mark allocator successfully saved.")),
+            Json(ApiResponse::success(
+                "{}",
+                "Mark allocator successfully saved.",
+            )),
         )
             .into_response(),
         Err(SaveError::DirectoryNotFound) => (

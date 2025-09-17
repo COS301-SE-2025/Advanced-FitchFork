@@ -1,12 +1,12 @@
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, DbErr, DatabaseConnection};
+use sea_orm::{ActiveValue::Set, DatabaseConnection, DbErr};
 use std::fs;
 use std::path::PathBuf;
 use strum::{Display, EnumIter, EnumString};
 use util::execution_config::ExecutionConfig;
 use util::paths::{
-    storage_root, config_dir, main_dir, makefile_dir, mark_allocator_dir, memo_dir, spec_dir,
+    config_dir, main_dir, makefile_dir, mark_allocator_dir, memo_dir, spec_dir, storage_root,
 };
 
 /// Represents a file associated with an assignment, such as a spec, main file, memo, or submission.
@@ -84,7 +84,11 @@ impl Model {
     }
 
     /// Computes the full directory path using path utilities.
-    pub fn full_directory_path(module_id: i64, assignment_id: i64, file_type: &FileType) -> PathBuf {
+    pub fn full_directory_path(
+        module_id: i64,
+        assignment_id: i64,
+        file_type: &FileType,
+    ) -> PathBuf {
         match file_type {
             FileType::Config => config_dir(module_id, assignment_id),
             FileType::Main => main_dir(module_id, assignment_id),
@@ -137,11 +141,13 @@ impl Model {
                         .join("config.json");
                 if canonical != tracked_full {
                     if let Some(parent) = canonical.parent() {
-                        fs::create_dir_all(parent)
-                            .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
+                        fs::create_dir_all(parent).map_err(|e| {
+                            DbErr::Custom(format!("Failed to create directory: {e}"))
+                        })?;
                     }
-                    fs::write(&canonical, bytes)
-                        .map_err(|e| DbErr::Custom(format!("Failed to write canonical file: {e}")))?;
+                    fs::write(&canonical, bytes).map_err(|e| {
+                        DbErr::Custom(format!("Failed to write canonical file: {e}"))
+                    })?;
                 }
             }
 

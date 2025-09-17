@@ -1,7 +1,7 @@
 use axum::{
-    extract::{Path, State, ConnectInfo},
-    http::StatusCode,
     Extension, Json,
+    extract::{ConnectInfo, Path, State},
+    http::StatusCode,
 };
 use chrono::Utc;
 use serde::Deserialize;
@@ -23,7 +23,7 @@ pub async fn create_session(
 ) -> (StatusCode, Json<ApiResponse<AttendanceSessionResponse>>) {
     let db = state.db();
 
-    let active   = body.active.unwrap_or(false);
+    let active = body.active.unwrap_or(false);
     let rotation = body.rotation_seconds.unwrap_or(30).clamp(5, 300);
     let restrict = body.restrict_by_ip.unwrap_or(false);
 
@@ -66,8 +66,8 @@ pub async fn create_session(
 }
 
 use db::models::{
-    attendance_session::{Entity as SessionEntity, Column as SessionCol},
     attendance_record,
+    attendance_session::{Column as SessionCol, Entity as SessionEntity},
 };
 use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
 
@@ -98,7 +98,9 @@ pub async fn mark_attendance(
     if !is_student {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::error("Only students are allowed to mark attendance")),
+            Json(ApiResponse::error(
+                "Only students are allowed to mark attendance",
+            )),
         );
     }
 
@@ -170,7 +172,10 @@ pub async fn mark_attendance(
             });
             ws.broadcast(&topic, event.to_string()).await;
 
-            (StatusCode::OK, Json(ApiResponse::success((), "Attendance recorded")))
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success((), "Attendance recorded")),
+            )
         }
         Err(DbErr::Custom(m)) => (StatusCode::BAD_REQUEST, Json(ApiResponse::error(m))),
         Err(_) => (

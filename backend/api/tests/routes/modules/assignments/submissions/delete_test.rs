@@ -7,7 +7,7 @@ mod delete_submission_tests {
         http::{Request, StatusCode},
     };
     use chrono::Utc;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use serial_test::serial;
     use tower::ServiceExt;
 
@@ -22,7 +22,7 @@ mod delete_submission_tests {
     };
     use sea_orm::EntityTrait;
 
-    use crate::helpers::app::{make_test_app_with_storage};
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         lecturer: UserModel,
@@ -38,14 +38,18 @@ mod delete_submission_tests {
 
     async fn setup_data(db: &sea_orm::DatabaseConnection) -> TestData {
         // users
-        let lecturer =
-            UserModel::create(db, "lect_del", "lect_del@test.com", "pw", false).await.unwrap();
-        let assistant =
-            UserModel::create(db, "al_del", "al_del@test.com", "pw", false).await.unwrap();
-        let tutor =
-            UserModel::create(db, "tutor_del", "tutor_del@test.com", "pw", false).await.unwrap();
-        let student =
-            UserModel::create(db, "stud_del", "stud_del@test.com", "pw", false).await.unwrap();
+        let lecturer = UserModel::create(db, "lect_del", "lect_del@test.com", "pw", false)
+            .await
+            .unwrap();
+        let assistant = UserModel::create(db, "al_del", "al_del@test.com", "pw", false)
+            .await
+            .unwrap();
+        let tutor = UserModel::create(db, "tutor_del", "tutor_del@test.com", "pw", false)
+            .await
+            .unwrap();
+        let student = UserModel::create(db, "stud_del", "stud_del@test.com", "pw", false)
+            .await
+            .unwrap();
 
         // module + roles
         let module = ModuleModel::create(db, "COSDEL", 2025, Some("DeleteTests"), 16)
@@ -148,11 +152,13 @@ mod delete_submission_tests {
         let data = setup_data(app_state.db()).await;
 
         // Ensure present
-        assert!(SubmissionEntity::find_by_id(data.sub1.id)
-            .one(app_state.db())
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            SubmissionEntity::find_by_id(data.sub1.id)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .is_some()
+        );
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
         let uri = format!(
@@ -170,16 +176,20 @@ mod delete_submission_tests {
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let v: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(v["success"], true);
 
         // gone
-        assert!(SubmissionEntity::find_by_id(data.sub1.id)
-            .one(app_state.db())
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            SubmissionEntity::find_by_id(data.sub1.id)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -205,11 +215,13 @@ mod delete_submission_tests {
         assert_eq!(resp.status(), StatusCode::OK);
 
         // gone
-        assert!(SubmissionEntity::find_by_id(data.sub2.id)
-            .one(app_state.db())
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            SubmissionEntity::find_by_id(data.sub2.id)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -235,11 +247,13 @@ mod delete_submission_tests {
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
         // still there
-        assert!(SubmissionEntity::find_by_id(data.sub1.id)
-            .one(app_state.db())
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            SubmissionEntity::find_by_id(data.sub1.id)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -265,11 +279,13 @@ mod delete_submission_tests {
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
         // still there
-        assert!(SubmissionEntity::find_by_id(data.sub1.id)
-            .one(app_state.db())
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            SubmissionEntity::find_by_id(data.sub1.id)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -296,11 +312,13 @@ mod delete_submission_tests {
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 
         // still there
-        assert!(SubmissionEntity::find_by_id(data.sub1.id)
-            .one(app_state.db())
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            SubmissionEntity::find_by_id(data.sub1.id)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     // ---------------- BULK DELETE: /submissions/bulk ----------------
@@ -346,23 +364,33 @@ mod delete_submission_tests {
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let b = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let b = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let v: Value = serde_json::from_slice(&b).unwrap();
         assert_eq!(v["success"], true);
         assert_eq!(v["data"]["deleted"], 3);
         assert!(v["data"]["failed"].as_array().unwrap().is_empty());
 
         for id in [data.sub1.id, data.sub2.id, sub3.id] {
-            assert!(SubmissionEntity::find_by_id(id)
-                .one(app_state.db())
-                .await
-                .unwrap()
-                .is_none());
+            assert!(
+                SubmissionEntity::find_by_id(id)
+                    .one(app_state.db())
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
         }
 
         // refresh sub1/sub2 in struct not to use stale ids in later tests
-        data.sub1 = SubmissionModel { id: -1, ..data.sub1 };
-        data.sub2 = SubmissionModel { id: -1, ..data.sub2 };
+        data.sub1 = SubmissionModel {
+            id: -1,
+            ..data.sub1
+        };
+        data.sub2 = SubmissionModel {
+            id: -1,
+            ..data.sub2
+        };
         let _ = data; // silence warning
     }
 
@@ -407,7 +435,9 @@ mod delete_submission_tests {
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let b = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let b = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let v: Value = serde_json::from_slice(&b).unwrap();
         assert_eq!(v["success"], true);
         assert_eq!(v["data"]["deleted"], 1);
@@ -417,16 +447,20 @@ mod delete_submission_tests {
         assert_eq!(failed[0]["id"], wrong_sub.id);
 
         // sub1 removed, wrong_sub remains (belongs to other assignment)
-        assert!(SubmissionEntity::find_by_id(data.sub1.id)
-            .one(app_state.db())
-            .await
-            .unwrap()
-            .is_none());
-        assert!(SubmissionEntity::find_by_id(wrong_sub.id)
-            .one(app_state.db())
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            SubmissionEntity::find_by_id(data.sub1.id)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            SubmissionEntity::find_by_id(wrong_sub.id)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -470,18 +504,22 @@ mod delete_submission_tests {
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
-            .body(Body::from(json!({ "submission_ids": [data.sub1.id] }).to_string()))
+            .body(Body::from(
+                json!({ "submission_ids": [data.sub1.id] }).to_string(),
+            ))
             .unwrap();
 
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
         // still there
-        assert!(SubmissionEntity::find_by_id(data.sub1.id)
-            .one(app_state.db())
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            SubmissionEntity::find_by_id(data.sub1.id)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -501,17 +539,21 @@ mod delete_submission_tests {
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("content-type", "application/json")
-            .body(Body::from(json!({ "submission_ids": [data.sub2.id] }).to_string()))
+            .body(Body::from(
+                json!({ "submission_ids": [data.sub2.id] }).to_string(),
+            ))
             .unwrap();
 
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
         // still there
-        assert!(SubmissionEntity::find_by_id(data.sub2.id)
-            .one(app_state.db())
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            SubmissionEntity::find_by_id(data.sub2.id)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 }

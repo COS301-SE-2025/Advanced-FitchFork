@@ -6,19 +6,21 @@ mod tests {
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
-    use tower::ServiceExt;
+    use chrono::{Datelike, Utc};
     use serde_json::Value;
-    use chrono::{Utc, Datelike};
+    use tower::ServiceExt;
 
     use api::auth::generate_jwt;
 
     use db::models::{
-        user::Model as UserModel,
+        attendance_session::{
+            Column as SessionCol, Entity as SessionEntity, Model as SessionModel,
+        },
         module::Model as ModuleModel,
+        user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
-        attendance_session::{Model as SessionModel, Entity as SessionEntity, Column as SessionCol},
     };
-    use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     use crate::helpers::app::make_test_app_with_storage;
 
@@ -44,13 +46,26 @@ mod tests {
         .await
         .expect("create module");
 
-        let lecturer = UserModel::create(db, "put_lect", "put_lect@test.com", "password", false).await.unwrap();
-        let student  = UserModel::create(db, "put_student", "put_student@test.com", "password", false).await.unwrap();
-        let tutor    = UserModel::create(db, "put_tutor", "put_tutor@test.com", "password", false).await.unwrap();
+        let lecturer = UserModel::create(db, "put_lect", "put_lect@test.com", "password", false)
+            .await
+            .unwrap();
+        let student =
+            UserModel::create(db, "put_student", "put_student@test.com", "password", false)
+                .await
+                .unwrap();
+        let tutor = UserModel::create(db, "put_tutor", "put_tutor@test.com", "password", false)
+            .await
+            .unwrap();
 
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student.id,  module.id, Role::Student ).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, tutor.id,    module.id, Role::Tutor   ).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student.id, module.id, Role::Student)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, tutor.id, module.id, Role::Tutor)
+            .await
+            .unwrap();
 
         // seed a session we will edit
         let session = SessionModel::create(
@@ -58,15 +73,23 @@ mod tests {
             module.id,
             lecturer.id,
             "Original Title",
-            false,    // inactive
-            30,       // rotation
-            false,    // restrict_by_ip
+            false, // inactive
+            30,    // rotation
+            false, // restrict_by_ip
             None,
             None,
             Some("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
-        TestCtx { lecturer, student, tutor, module, session }
+        TestCtx {
+            lecturer,
+            student,
+            tutor,
+            module,
+            session,
+        }
     }
 
     // -----------------------------------
@@ -90,7 +113,10 @@ mod tests {
         });
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
-        let uri = format!("/api/modules/{}/attendance/sessions/{}", ctx.module.id, ctx.session.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}",
+            ctx.module.id, ctx.session.id
+        );
 
         let req = Request::builder()
             .method("PUT")
@@ -103,7 +129,9 @@ mod tests {
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Attendance session updated");
@@ -142,7 +170,10 @@ mod tests {
 
         for uid in [ctx.student.id, ctx.tutor.id] {
             let (token, _) = generate_jwt(uid, false);
-            let uri = format!("/api/modules/{}/attendance/sessions/{}", ctx.module.id, ctx.session.id);
+            let uri = format!(
+                "/api/modules/{}/attendance/sessions/{}",
+                ctx.module.id, ctx.session.id
+            );
             let body = serde_json::json!({ "title": "Should Not Update" });
 
             let req = Request::builder()
@@ -185,14 +216,18 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         assert_eq!(json["success"], false);
-        let msg = json["message"].as_str().unwrap_or_default().to_ascii_lowercase();
+        let msg = json["message"]
+            .as_str()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
         assert!(msg.contains("not found")); // middleware or handler message variants
     }
-
 
     // --------------------
     // Missing authorization
@@ -203,7 +238,10 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
-        let uri = format!("/api/modules/{}/attendance/sessions/{}", ctx.module.id, ctx.session.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}",
+            ctx.module.id, ctx.session.id
+        );
 
         let req = Request::builder()
             .method("PUT")
@@ -226,7 +264,10 @@ mod tests {
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
-        let uri = format!("/api/modules/{}/attendance/sessions/{}", ctx.module.id, ctx.session.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}",
+            ctx.module.id, ctx.session.id
+        );
 
         let body = serde_json::json!({ "rotation_seconds": 9999 });
 

@@ -1,11 +1,12 @@
 import { useEffect, useCallback } from 'react';
-import { Form, InputNumber, Typography } from 'antd';
+import { Form, InputNumber, Typography, Space } from 'antd';
 import SettingsGroup from '@/components/SettingsGroup';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import { useAssignment } from '@/context/AssignmentContext';
 import { message } from '@/utils/message';
 import type { AssignmentExecutionConfig } from '@/types/modules/assignments/config';
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
+import Tip from '@/components/common/Tip';
 
 const toMB = (bytes: number) => Math.round(bytes / (1024 * 1024));
 const toBytes = (mb: number) => Math.round(mb * 1024 * 1024);
@@ -17,9 +18,17 @@ export default function ExecutionPage() {
 
   useEffect(() => {
     setValue(
-      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
-        Execution Configuration
-      </Typography.Text>,
+      <Space align="center" size={6} className="flex-wrap">
+        <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+          Execution Configuration
+        </Typography.Text>
+        <Tip
+          iconOnly
+          newTab
+          to="/help/assignments/config/execution#what"
+          text="Execution help"
+        />
+      </Space>,
     );
   }, [setValue]);
 

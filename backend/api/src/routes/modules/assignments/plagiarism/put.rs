@@ -1,15 +1,15 @@
+use crate::response::ApiResponse;
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use chrono::Utc;
-use db::models::plagiarism_case::{Entity as PlagiarismEntity, Status, Column as PlagiarismColumn};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, ActiveModelTrait, IntoActiveModel};
+use db::models::plagiarism_case::{Column as PlagiarismColumn, Entity as PlagiarismEntity, Status};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter};
 use serde::{Deserialize, Serialize};
 use util::state::AppState;
-use crate::response::ApiResponse;
 
 #[derive(Serialize, Deserialize)]
 pub struct UpdatePlagiarismCasePayload {

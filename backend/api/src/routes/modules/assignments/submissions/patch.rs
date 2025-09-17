@@ -14,17 +14,17 @@
 //! - The endpoint validates that the submission belongs to the target assignment.
 
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 
-use util::state::AppState;
 use crate::response::ApiResponse;
 use db::models::assignment_submission as submission;
+use util::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct SetIgnoredReq {
@@ -97,13 +97,16 @@ pub async fn set_submission_ignored(
                     "No submission {} found for assignment {}",
                     submission_id, assignment_id
                 ))),
-            )
+            );
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SetIgnoredData>::error(format!("DB error: {}", e))),
-            )
+                Json(ApiResponse::<SetIgnoredData>::error(format!(
+                    "DB error: {}",
+                    e
+                ))),
+            );
         }
     };
 
@@ -119,13 +122,20 @@ pub async fn set_submission_ignored(
                 StatusCode::OK,
                 Json(ApiResponse::<SetIgnoredData>::success(
                     data,
-                    if req.ignored { "Submission ignored" } else { "Submission unignored" },
+                    if req.ignored {
+                        "Submission ignored"
+                    } else {
+                        "Submission unignored"
+                    },
                 )),
             )
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<SetIgnoredData>::error(format!("Failed to update: {}", e))),
+            Json(ApiResponse::<SetIgnoredData>::error(format!(
+                "Failed to update: {}",
+                e
+            ))),
         ),
     }
 }

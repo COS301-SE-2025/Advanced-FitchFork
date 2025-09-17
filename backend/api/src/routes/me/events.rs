@@ -1,21 +1,20 @@
+use crate::{auth::claims::AuthUser, response::ApiResponse};
 use axum::{
+    Json,
     extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use validator::Validate;
-use crate::{
-    auth::claims::AuthUser,
-    response::ApiResponse,
-};
 use common::format_validation_errors;
 use db::models::{assignment, module, user_module_role};
-use sea_orm::{ColumnTrait, Condition, EntityTrait, JoinType, QueryFilter, RelationTrait, QuerySelect};
+use sea_orm::{
+    ColumnTrait, Condition, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait,
+};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use util::state::AppState;
+use validator::Validate;
 
 /// Query parameters for filtering events.
 #[derive(Debug, Deserialize, Validate)]
@@ -23,7 +22,7 @@ pub struct GetEventsQuery {
     /// Start date filter in ISO 8601 (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm:ss`)
     #[serde(default)]
     pub from: Option<String>,
-    
+
     /// End date filter in ISO 8601 (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm:ss`)
     #[serde(default)]
     pub to: Option<String>,
@@ -70,7 +69,7 @@ fn parse_optional_datetime(s: Option<&str>) -> Result<Option<DateTime<Utc>>, Str
 }
 
 /// GET handler for `/api/me/events`
-/// 
+///
 /// Retrieves calendar events for the authenticated user within an optional date range.
 /// Events include assignment availability dates and due dates, grouped by their timestamps.
 ///
@@ -93,7 +92,8 @@ pub async fn get_my_events(
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::error(format_validation_errors(&e))),
-        ).into_response();
+        )
+            .into_response();
     }
 
     let user_id = user.0.sub;
@@ -101,31 +101,26 @@ pub async fn get_my_events(
     let from_dt = match parse_optional_datetime(query.from.as_deref()) {
         Ok(dt) => dt,
         Err(msg) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(msg)),
-            ).into_response();
+            return (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::error(msg))).into_response();
         }
     };
-    
+
     let to_dt = match parse_optional_datetime(query.to.as_deref()) {
         Ok(dt) => dt,
         Err(msg) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(msg)),
-            ).into_response();
+            return (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::error(msg))).into_response();
         }
     };
-    
+
     if let (Some(from), Some(to)) = (from_dt, to_dt) {
         if from > to {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<()>::error(
-                    "'from' date must be before 'to' date".to_string()
+                    "'from' date must be before 'to' date".to_string(),
                 )),
-            ).into_response();
+            )
+                .into_response();
         }
     }
 
@@ -133,27 +128,24 @@ pub async fn get_my_events(
 
     let mut assignment_query = assignment::Entity::find()
         .join(JoinType::InnerJoin, assignment::Relation::Module.def())
-        .join(
-            JoinType::InnerJoin,
-            module::Relation::UserModuleRole.def(),
-        )
+        .join(JoinType::InnerJoin, module::Relation::UserModuleRole.def())
         .filter(user_module_role::Column::UserId.eq(user_id));
 
     let mut date_conditions = Condition::all();
-    
+
     if let Some(from) = from_dt {
         date_conditions = date_conditions.add(
             Condition::any()
                 .add(assignment::Column::AvailableFrom.gte(from))
-                .add(assignment::Column::DueDate.gte(from))
+                .add(assignment::Column::DueDate.gte(from)),
         );
     }
-    
+
     if let Some(to) = to_dt {
         date_conditions = date_conditions.add(
             Condition::any()
                 .add(assignment::Column::AvailableFrom.lte(to))
-                .add(assignment::Column::DueDate.lte(to))
+                .add(assignment::Column::DueDate.lte(to)),
         );
     }
 
@@ -165,13 +157,16 @@ pub async fn get_my_events(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
     for assignment in assignments {
         let available_in_range = match (from_dt, to_dt) {
-            (Some(from), Some(to)) => assignment.available_from >= from && assignment.available_from <= to,
+            (Some(from), Some(to)) => {
+                assignment.available_from >= from && assignment.available_from <= to
+            }
             (Some(from), None) => assignment.available_from >= from,
             (None, Some(to)) => assignment.available_from <= to,
             (None, None) => true,
@@ -197,13 +192,10 @@ pub async fn get_my_events(
 
         if due_in_range {
             let due_key = format_iso_datetime(assignment.due_date);
-            events_map
-                .entry(due_key)
-                .or_default()
-                .push(EventItem {
-                    r#type: "error".to_string(),
-                    content: format!("{} due", assignment.name),
-                });
+            events_map.entry(due_key).or_default().push(EventItem {
+                r#type: "error".to_string(),
+                content: format!("{} due", assignment.name),
+            });
         }
     }
 
@@ -213,5 +205,6 @@ pub async fn get_my_events(
             EventsResponse { events: events_map },
             "Events retrieved successfully",
         )),
-    ).into_response()
+    )
+        .into_response()
 }

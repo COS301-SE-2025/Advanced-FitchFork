@@ -2,23 +2,25 @@
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use api::{auth::generate_jwt, ws::attendance::topics::attendance_session_topic};
     use axum::{
         body::Body as AxumBody,
-        http::{Request, StatusCode},
         extract::ConnectInfo,
+        http::{Request, StatusCode},
     };
-    use tower::ServiceExt;
+    use chrono::{Datelike, Utc};
     use serde_json::Value;
-    use chrono::{Utc, Datelike};
-    use api::{auth::generate_jwt, ws::attendance::topics::attendance_session_topic};
+    use tower::ServiceExt;
 
     use db::models::{
-        user::Model as UserModel,
+        attendance_session::{
+            Column as SessionCol, Entity as SessionEntity, Model as SessionModel,
+        },
         module::Model as ModuleModel,
+        user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
-        attendance_session::{Model as SessionModel, Entity as SessionEntity, Column as SessionCol},
     };
-    use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
     use crate::helpers::app::make_test_app_with_storage;
 
@@ -32,7 +34,7 @@ mod tests {
         tutor: UserModel,
         _forbidden: UserModel,
         module: ModuleModel,
-        sess_active: SessionModel,   // seeded, active
+        sess_active: SessionModel, // seeded, active
     }
 
     async fn setup(db: &sea_orm::DatabaseConnection) -> TestCtx {
@@ -48,14 +50,40 @@ mod tests {
         .await
         .expect("create module");
 
-        let lecturer = UserModel::create(db, "post_lect", "post_lect@test.com", "password", false).await.unwrap();
-        let student  = UserModel::create(db, "post_student", "post_student@test.com", "password", false).await.unwrap();
-        let tutor    = UserModel::create(db, "post_tutor", "post_tutor@test.com", "password", false).await.unwrap();
-        let _forbidden= UserModel::create(db, "post_forbidden", "post_forbidden@test.com", "password", false).await.unwrap();
+        let lecturer = UserModel::create(db, "post_lect", "post_lect@test.com", "password", false)
+            .await
+            .unwrap();
+        let student = UserModel::create(
+            db,
+            "post_student",
+            "post_student@test.com",
+            "password",
+            false,
+        )
+        .await
+        .unwrap();
+        let tutor = UserModel::create(db, "post_tutor", "post_tutor@test.com", "password", false)
+            .await
+            .unwrap();
+        let _forbidden = UserModel::create(
+            db,
+            "post_forbidden",
+            "post_forbidden@test.com",
+            "password",
+            false,
+        )
+        .await
+        .unwrap();
 
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student.id,  module.id, Role::Student ).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, tutor.id,    module.id, Role::Tutor   ).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student.id, module.id, Role::Student)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, tutor.id, module.id, Role::Tutor)
+            .await
+            .unwrap();
 
         // seed an active session for mark-attendance tests
         let secret_hex = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
@@ -64,15 +92,24 @@ mod tests {
             module.id,
             lecturer.id,
             "Seeded Active",
-            true,   // active
-            30,     // rotation
-            false,  // restrict_by_ip
+            true,  // active
+            30,    // rotation
+            false, // restrict_by_ip
             None,
             None,
             Some(secret_hex),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
-        TestCtx { lecturer, student, tutor, _forbidden, module, sess_active }
+        TestCtx {
+            lecturer,
+            student,
+            tutor,
+            _forbidden,
+            module,
+            sess_active,
+        }
     }
 
     // Utility: attach a ConnectInfo<SocketAddr> to a Request after building.
@@ -110,12 +147,14 @@ mod tests {
             .unwrap();
 
         // attach client ip -> 198.51.100.9
-        let req = with_connect_info(req, [198,51,100,9]);
+        let req = with_connect_info(req, [198, 51, 100, 9]);
 
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::CREATED);
 
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Attendance session created");
@@ -150,7 +189,7 @@ mod tests {
             .body(AxumBody::from(body.to_string()))
             .unwrap();
 
-        let req = with_connect_info(req, [203,0,113,10]);
+        let req = with_connect_info(req, [203, 0, 113, 10]);
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
@@ -161,7 +200,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_student_ok_and_broadcast_received() {
-
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
@@ -177,7 +215,9 @@ mod tests {
             None,
             None,
             None, // random secret ok
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         // Subscribe to the topic BEFORE marking
         let topic = attendance_session_topic(fresh.id);
@@ -187,7 +227,10 @@ mod tests {
         let (token, _) = generate_jwt(ctx.student.id, ctx.student.admin);
         let code = fresh.current_code(Utc::now());
 
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, fresh.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, fresh.id
+        );
         let body = serde_json::json!({ "code": code });
 
         let req = Request::builder()
@@ -198,12 +241,12 @@ mod tests {
             .body(AxumBody::from(body.to_string()))
             .unwrap();
 
-        let req = with_connect_info(req, [198,51,100,7]);
+        let req = with_connect_info(req, [198, 51, 100, 7]);
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
         // Ensure broadcast arrived
-        use tokio::time::{timeout, Duration};
+        use tokio::time::{Duration, timeout};
         let msg = timeout(Duration::from_millis(300), rx.recv())
             .await
             .expect("broadcast not timed out")
@@ -222,7 +265,10 @@ mod tests {
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, ctx.sess_active.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, ctx.sess_active.id
+        );
         let body = serde_json::json!({ "code": "000000" });
 
         let req = Request::builder()
@@ -233,11 +279,13 @@ mod tests {
             .body(AxumBody::from(body.to_string()))
             .unwrap();
 
-        let req = with_connect_info(req, [203,0,113,20]);
+        let req = with_connect_info(req, [203, 0, 113, 20]);
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(json["success"], false);
         assert!(json["message"].as_str().unwrap().contains("Only students"));
@@ -249,7 +297,10 @@ mod tests {
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.student.id, ctx.student.admin);
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, ctx.sess_active.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, ctx.sess_active.id
+        );
 
         let body = serde_json::json!({ "code": "999999" }); // intentionally wrong
 
@@ -261,14 +312,19 @@ mod tests {
             .body(AxumBody::from(body.to_string()))
             .unwrap();
 
-        let req = with_connect_info(req, [198,51,100,8]);
+        let req = with_connect_info(req, [198, 51, 100, 8]);
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Invalid") || json["message"].as_str().unwrap().contains("expired"));
+        assert!(
+            json["message"].as_str().unwrap().contains("Invalid")
+                || json["message"].as_str().unwrap().contains("expired")
+        );
     }
 
     #[tokio::test]
@@ -284,15 +340,20 @@ mod tests {
             "IP Restricted",
             true,
             30,
-            true,                     // restrict_by_ip = true
+            true, // restrict_by_ip = true
             None,
-            Some("198.51.100.50"),    // created_from_ip pinned
+            Some("198.51.100.50"), // created_from_ip pinned
             None,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         let (token, _) = generate_jwt(ctx.student.id, ctx.student.admin);
         let code = restricted.current_code(Utc::now());
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, restricted.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, restricted.id
+        );
         let body = serde_json::json!({ "code": code });
 
         let req = Request::builder()
@@ -304,14 +365,21 @@ mod tests {
             .unwrap();
 
         // different IP -> should be rejected by ip_permitted
-        let req = with_connect_info(req, [203,0,113,77]);
+        let req = with_connect_info(req, [203, 0, 113, 77]);
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("IP not permitted"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("IP not permitted")
+        );
     }
 
     #[tokio::test]
@@ -331,11 +399,16 @@ mod tests {
             None,
             None,
             None,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         let (token, _) = generate_jwt(ctx.student.id, ctx.student.admin);
         let code = sess.current_code(Utc::now());
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, sess.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, sess.id
+        );
         let body = serde_json::json!({ "code": code });
 
         // first mark OK
@@ -346,7 +419,7 @@ mod tests {
             .header("Content-Type", "application/json")
             .body(AxumBody::from(body.to_string()))
             .unwrap();
-        let req1 = with_connect_info(req1, [198,51,100,10]);
+        let req1 = with_connect_info(req1, [198, 51, 100, 10]);
         let resp1 = app.clone().oneshot(req1).await.unwrap();
         assert_eq!(resp1.status(), StatusCode::OK);
 
@@ -358,14 +431,21 @@ mod tests {
             .header("Content-Type", "application/json")
             .body(AxumBody::from(body.to_string()))
             .unwrap();
-        let req2 = with_connect_info(req2, [198,51,100,10]);
+        let req2 = with_connect_info(req2, [198, 51, 100, 10]);
         let resp2 = app.oneshot(req2).await.unwrap();
         assert_eq!(resp2.status(), StatusCode::BAD_REQUEST);
 
-        let bytes = axum::body::to_bytes(resp2.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp2.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("already recorded"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("already recorded")
+        );
     }
 
     #[tokio::test]
@@ -385,24 +465,33 @@ mod tests {
             None,
             None,
             None,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         let (token, _) = generate_jwt(ctx.student.id, ctx.student.admin);
         let code = sess.current_code(Utc::now());
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, sess.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, sess.id
+        );
         let body = serde_json::json!({ "code": code });
 
         let req = Request::builder()
-            .method("POST").uri(&uri)
+            .method("POST")
+            .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(AxumBody::from(body.to_string())).unwrap();
-        let req = with_connect_info(req, [198,51,100,21]);
+            .body(AxumBody::from(body.to_string()))
+            .unwrap();
+        let req = with_connect_info(req, [198, 51, 100, 21]);
 
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&bytes).unwrap();
         assert!(json["message"].as_str().unwrap().contains("not active"));
     }
@@ -413,23 +502,42 @@ mod tests {
         let ctx = setup(app_state.db()).await;
 
         // Create a second module + student not assigned to ctx.module
-        let _ = ModuleModel::create(app_state.db(), "ATT202", Utc::now().year(), Some("Other"), 8)
-            .await.unwrap();
-        let stranger = UserModel::create(app_state.db(), "stranger", "stranger@test.com", "pwd", false)
-            .await.unwrap();
+        let _ = ModuleModel::create(
+            app_state.db(),
+            "ATT202",
+            Utc::now().year(),
+            Some("Other"),
+            8,
+        )
+        .await
+        .unwrap();
+        let stranger = UserModel::create(
+            app_state.db(),
+            "stranger",
+            "stranger@test.com",
+            "pwd",
+            false,
+        )
+        .await
+        .unwrap();
         // (No role assignment for stranger on ctx.module)
 
         let (token, _) = generate_jwt(stranger.id, false);
         let code = ctx.sess_active.current_code(Utc::now());
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, ctx.sess_active.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, ctx.sess_active.id
+        );
         let body = serde_json::json!({ "code": code });
 
         let req = Request::builder()
-            .method("POST").uri(&uri)
+            .method("POST")
+            .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(AxumBody::from(body.to_string())).unwrap();
-        let req = with_connect_info(req, [203,0,113,31]);
+            .body(AxumBody::from(body.to_string()))
+            .unwrap();
+        let req = with_connect_info(req, [203, 0, 113, 31]);
 
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
@@ -441,27 +549,49 @@ mod tests {
         let ctx = setup(app_state.db()).await;
 
         // Make another module and put a session there
-        let other_mod = ModuleModel::create(app_state.db(), "ATT203", Utc::now().year(), Some("Mismatched"), 8)
-            .await.unwrap();
+        let other_mod = ModuleModel::create(
+            app_state.db(),
+            "ATT203",
+            Utc::now().year(),
+            Some("Mismatched"),
+            8,
+        )
+        .await
+        .unwrap();
 
         let sess_other = SessionModel::create(
-            app_state.db(), other_mod.id, ctx.lecturer.id,
-            "Elsewhere", true, 30, false, None, None, None
-        ).await.unwrap();
+            app_state.db(),
+            other_mod.id,
+            ctx.lecturer.id,
+            "Elsewhere",
+            true,
+            30,
+            false,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
         let (token, _) = generate_jwt(ctx.student.id, ctx.student.admin);
         let code = sess_other.current_code(Utc::now());
 
         // Path uses ctx.module.id but session_id from other module → handler should 404
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, sess_other.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, sess_other.id
+        );
         let body = serde_json::json!({ "code": code });
 
         let req = Request::builder()
-            .method("POST").uri(&uri)
+            .method("POST")
+            .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(AxumBody::from(body.to_string())).unwrap();
-        let req = with_connect_info(req, [198,51,100,33]);
+            .body(AxumBody::from(body.to_string()))
+            .unwrap();
+        let req = with_connect_info(req, [198, 51, 100, 33]);
 
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
@@ -474,9 +604,19 @@ mod tests {
 
         // Fresh session with rotation=30s
         let sess = SessionModel::create(
-            app_state.db(), ctx.module.id, ctx.lecturer.id,
-            "Tolerance", true, 30, false, None, None, None
-        ).await.unwrap();
+            app_state.db(),
+            ctx.module.id,
+            ctx.lecturer.id,
+            "Tolerance",
+            true,
+            30,
+            false,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
         let (token, _) = generate_jwt(ctx.student.id, ctx.student.admin);
 
@@ -486,34 +626,56 @@ mod tests {
         let code_prev = sess.code_for_window(w - 1);
 
         // submit code for previous window with tolerance=1 -> accepted by handler (uses 1)
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, sess.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, sess.id
+        );
         let body_ok = serde_json::json!({ "code": code_prev });
 
         let req_ok = Request::builder()
-            .method("POST").uri(&uri)
+            .method("POST")
+            .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(AxumBody::from(body_ok.to_string())).unwrap();
-        let req_ok = with_connect_info(req_ok, [198,51,100,40]);
+            .body(AxumBody::from(body_ok.to_string()))
+            .unwrap();
+        let req_ok = with_connect_info(req_ok, [198, 51, 100, 40]);
         let resp_ok = app.clone().oneshot(req_ok).await.unwrap();
         assert_eq!(resp_ok.status(), StatusCode::OK);
 
         // Now try w-2 (outside tolerance) -> BAD_REQUEST
         let (_token2, _) = generate_jwt(ctx.tutor.id, ctx.tutor.admin); // use another user to avoid duplicate
         // but tutor is not allowed to mark; use new student:
-        let student2 = UserModel::create(app_state.db(), "post_student2", "post_student2@test.com", "pwd", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(app_state.db(), student2.id, ctx.module.id, Role::Student).await.unwrap();
+        let student2 = UserModel::create(
+            app_state.db(),
+            "post_student2",
+            "post_student2@test.com",
+            "pwd",
+            false,
+        )
+        .await
+        .unwrap();
+        UserModuleRoleModel::assign_user_to_module(
+            app_state.db(),
+            student2.id,
+            ctx.module.id,
+            Role::Student,
+        )
+        .await
+        .unwrap();
         let (token2, _) = generate_jwt(student2.id, false);
 
         let code_too_old = sess.code_for_window(w - 2);
         let body_bad = serde_json::json!({ "code": code_too_old });
 
         let req_bad = Request::builder()
-            .method("POST").uri(&uri)
+            .method("POST")
+            .uri(&uri)
             .header("Authorization", format!("Bearer {}", token2))
             .header("Content-Type", "application/json")
-            .body(AxumBody::from(body_bad.to_string())).unwrap();
-        let req_bad = with_connect_info(req_bad, [198,51,100,41]);
+            .body(AxumBody::from(body_bad.to_string()))
+            .unwrap();
+        let req_bad = with_connect_info(req_bad, [198, 51, 100, 41]);
         let resp_bad = app.oneshot(req_bad).await.unwrap();
         assert_eq!(resp_bad.status(), StatusCode::BAD_REQUEST);
     }
@@ -524,10 +686,19 @@ mod tests {
         let ctx = setup(app_state.db()).await;
 
         let sess = SessionModel::create(
-            app_state.db(), ctx.module.id, ctx.lecturer.id,
-            "Zeros", true, 30, false, None, None,
-            Some("0000000000000000000000000000000000000000000000000000000000000000")
-        ).await.unwrap();
+            app_state.db(),
+            ctx.module.id,
+            ctx.lecturer.id,
+            "Zeros",
+            true,
+            30,
+            false,
+            None,
+            None,
+            Some("0000000000000000000000000000000000000000000000000000000000000000"),
+        )
+        .await
+        .unwrap();
 
         let (token, _) = generate_jwt(ctx.student.id, ctx.student.admin);
 
@@ -535,16 +706,21 @@ mod tests {
         let code = sess.current_code(now);
         assert_eq!(code.len(), 6); // could start with zeros
 
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, sess.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, sess.id
+        );
         // add whitespace around code in payload -> mark() trims internally
         let body = serde_json::json!({ "code": format!("  {code}  ") });
 
         let req = Request::builder()
-            .method("POST").uri(&uri)
+            .method("POST")
+            .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(AxumBody::from(body.to_string())).unwrap();
-        let req = with_connect_info(req, [198,51,100,60]);
+            .body(AxumBody::from(body.to_string()))
+            .unwrap();
+        let req = with_connect_info(req, [198, 51, 100, 60]);
 
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -556,13 +732,38 @@ mod tests {
         let ctx = setup(app_state.db()).await;
 
         let sess = SessionModel::create(
-            app_state.db(), ctx.module.id, ctx.lecturer.id,
-            "Multi", true, 30, false, None, None, None
-        ).await.unwrap();
+            app_state.db(),
+            ctx.module.id,
+            ctx.lecturer.id,
+            "Multi",
+            true,
+            30,
+            false,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
         // second student
-        let student2 = UserModel::create(app_state.db(), "post_student2b", "post_student2b@test.com", "pwd", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(app_state.db(), student2.id, ctx.module.id, Role::Student).await.unwrap();
+        let student2 = UserModel::create(
+            app_state.db(),
+            "post_student2b",
+            "post_student2b@test.com",
+            "pwd",
+            false,
+        )
+        .await
+        .unwrap();
+        UserModuleRoleModel::assign_user_to_module(
+            app_state.db(),
+            student2.id,
+            ctx.module.id,
+            Role::Student,
+        )
+        .await
+        .unwrap();
 
         let topic = attendance_session_topic(sess.id);
         let mut rx = app_state.ws().subscribe(&topic).await;
@@ -570,33 +771,46 @@ mod tests {
         // first mark
         let (t1, _) = generate_jwt(ctx.student.id, false);
         let code = sess.current_code(Utc::now());
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, sess.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, sess.id
+        );
         let body = serde_json::json!({ "code": code });
 
         let req1 = Request::builder()
-            .method("POST").uri(&uri)
+            .method("POST")
+            .uri(&uri)
             .header("Authorization", format!("Bearer {}", t1))
             .header("Content-Type", "application/json")
-            .body(AxumBody::from(body.to_string())).unwrap();
-        let req1 = with_connect_info(req1, [198,51,100,70]);
+            .body(AxumBody::from(body.to_string()))
+            .unwrap();
+        let req1 = with_connect_info(req1, [198, 51, 100, 70]);
         let _ = app.clone().oneshot(req1).await.unwrap();
 
-        use tokio::time::{timeout, Duration};
-        let msg1 = timeout(Duration::from_millis(300), rx.recv()).await.unwrap().unwrap();
+        use tokio::time::{Duration, timeout};
+        let msg1 = timeout(Duration::from_millis(300), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
         let v1: Value = serde_json::from_str(&msg1).unwrap();
         assert_eq!(v1["payload"]["count"], 1);
 
         // second mark
         let (t2, _) = generate_jwt(student2.id, false);
         let req2 = Request::builder()
-            .method("POST").uri(&uri)
+            .method("POST")
+            .uri(&uri)
             .header("Authorization", format!("Bearer {}", t2))
             .header("Content-Type", "application/json")
-            .body(AxumBody::from(body.to_string())).unwrap();
-        let req2 = with_connect_info(req2, [198,51,100,71]);
+            .body(AxumBody::from(body.to_string()))
+            .unwrap();
+        let req2 = with_connect_info(req2, [198, 51, 100, 71]);
         let _ = app.clone().oneshot(req2).await.unwrap();
 
-        let msg2 = timeout(Duration::from_millis(300), rx.recv()).await.unwrap().unwrap();
+        let msg2 = timeout(Duration::from_millis(300), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
         let v2: Value = serde_json::from_str(&msg2).unwrap();
         assert_eq!(v2["payload"]["count"], 2);
     }
@@ -607,15 +821,20 @@ mod tests {
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.student.id, false);
-        let uri = format!("/api/modules/{}/attendance/sessions/{}/mark", ctx.module.id, ctx.sess_active.id);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}/mark",
+            ctx.module.id, ctx.sess_active.id
+        );
 
         // Empty JSON object -> missing required "code" -> Axum JSON extractor returns 422
         let req = Request::builder()
-            .method("POST").uri(&uri)
+            .method("POST")
+            .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(AxumBody::from("{}")).unwrap();
-        let req = with_connect_info(req, [198,51,100,88]);
+            .body(AxumBody::from("{}"))
+            .unwrap();
+        let req = with_connect_info(req, [198, 51, 100, 88]);
 
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
@@ -627,7 +846,10 @@ mod tests {
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
-        let uri = format!("/ws/attendance/sessions/{}?token={}", ctx.sess_active.id, token);
+        let uri = format!(
+            "/ws/attendance/sessions/{}?token={}",
+            ctx.sess_active.id, token
+        );
 
         // No Authorization header on purpose; guard should accept ?token=
         let req = Request::builder()

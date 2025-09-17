@@ -9,7 +9,7 @@ use db::models::assignment_interpreter::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::Serialize;
-use std::{path::PathBuf};
+use std::path::PathBuf;
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
 use util::{paths::storage_root, state::AppState};
 
@@ -106,7 +106,6 @@ pub async fn download_interpreter(
     (StatusCode::OK, headers, buffer).into_response()
 }
 
-
 #[derive(Debug, Serialize)]
 pub struct InterpreterInfo {
     pub id: i64,
@@ -119,7 +118,7 @@ pub struct InterpreterInfo {
 }
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/interpreter/info
-/// 
+///
 /// Returns metadata about the current interpreter (if any).
 /// - 200 OK with metadata
 /// - 404 Not Found if no interpreter present

@@ -1,9 +1,9 @@
 // api/src/routes/modules/attendance/put.rs
 
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
-    Json,
 };
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use util::state::AppState;

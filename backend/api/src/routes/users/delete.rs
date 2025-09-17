@@ -1,16 +1,13 @@
+use crate::{auth::claims::AuthUser, response::ApiResponse};
 use axum::{
-    extract::{State, Extension, Path},
+    Json,
+    extract::{Extension, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
-use sea_orm::{EntityTrait};
+use db::models::user::Entity as UserEntity;
+use sea_orm::EntityTrait;
 use util::state::AppState;
-use crate::{
-    auth::claims::AuthUser,
-    response::ApiResponse,
-};
-use db::models::user::{Entity as UserEntity};
 
 /// DELETE /users/{user_id}
 ///
@@ -71,14 +68,18 @@ pub async fn delete_user(
     if user_id == claims.sub {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("You cannot delete your own account")),
+            Json(ApiResponse::<()>::error(
+                "You cannot delete your own account",
+            )),
         );
     }
 
     match UserEntity::delete_by_id(user_id).exec(db).await {
         Ok(_) => (
             StatusCode::OK,
-            Json(ApiResponse::success_without_data("User deleted successfully")),
+            Json(ApiResponse::success_without_data(
+                "User deleted successfully",
+            )),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,

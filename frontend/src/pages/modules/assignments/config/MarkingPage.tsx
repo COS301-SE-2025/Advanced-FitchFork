@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { Form, Input, Select, Typography, Switch, InputNumber } from 'antd';
+import { Form, Input, Select, Typography, Switch, InputNumber, Space } from 'antd';
 import SettingsGroup from '@/components/SettingsGroup';
 import {
   FEEDBACK_SCHEME_OPTIONS,
@@ -11,6 +11,7 @@ import { useViewSlot } from '@/context/ViewSlotContext';
 import { useAssignment } from '@/context/AssignmentContext';
 import { message } from '@/utils/message';
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
+import Tip from '@/components/common/Tip';
 
 type FormShape = AssignmentMarkingConfig;
 
@@ -21,9 +22,17 @@ export default function MarkingPage() {
 
   useEffect(() => {
     setValue(
-      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
-        Marking Configuration
-      </Typography.Text>,
+      <Space align="center" size={6} className="flex-wrap">
+        <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+          Marking Configuration
+        </Typography.Text>
+        <Tip
+          iconOnly
+          newTab
+          to="/help/assignments/config/marking#what"
+          text="Marking help"
+        />
+      </Space>,
     );
   }, [setValue]);
 

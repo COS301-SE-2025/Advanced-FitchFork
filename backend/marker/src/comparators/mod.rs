@@ -13,6 +13,6 @@
 //! - [`exact_comparator`]: Compares two strings and ensures that they match exactly.
 //! - [`regex_comparator`]: Uses regular expressions to match patterns in the student's output.
 
-pub mod percentage_comparator;
 pub mod exact_comparator;
+pub mod percentage_comparator;
 pub mod regex_comparator;

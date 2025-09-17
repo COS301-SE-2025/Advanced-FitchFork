@@ -1,25 +1,28 @@
+use crate::auth::AuthUser;
+use crate::{auth::generate_jwt, response::ApiResponse, services::email::EmailService};
 use axum::{
-    extract::{State, Multipart},
+    Json,
+    extract::{Multipart, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, PaginatorTrait, ActiveModelTrait, ActiveValue::Set, IntoActiveModel};
-use serde::{Deserialize, Serialize};
-use util::{config, paths::{ensure_parent_dir, user_profile_path}, state::AppState};
-use validator::Validate;
-use chrono::{Utc, Duration};
-use tokio::io::AsyncWriteExt;
-use crate::{
-    auth::generate_jwt,
-    response::ApiResponse,
-    services::email::EmailService,
-};
+use chrono::{Duration, Utc};
 use db::models::{
+    password_reset_token::{self, Model as PasswordResetTokenModel},
     user::{self, Model as UserModel},
-    password_reset_token::{self, Model as PasswordResetTokenModel}
 };
-use crate::auth::AuthUser;
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, IntoActiveModel, PaginatorTrait,
+    QueryFilter,
+};
+use serde::{Deserialize, Serialize};
+use tokio::io::AsyncWriteExt;
+use util::{
+    config,
+    paths::{ensure_parent_dir, user_profile_path},
+    state::AppState,
+};
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -30,7 +33,6 @@ pub struct RegisterRequest {
 
     #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
     pub password: String,
-
     // TODO: Add some more password validation later
 }
 
@@ -100,7 +102,7 @@ pub struct UserResponse {
 /// ```
 pub async fn register(
     State(app_state): State<AppState>,
-    Json(req): Json<RegisterRequest>
+    Json(req): Json<RegisterRequest>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
@@ -121,7 +123,9 @@ pub async fn register(
     if email_exists.is_some() {
         return (
             StatusCode::CONFLICT,
-            Json(ApiResponse::<UserResponse>::error("A user with this email already exists")),
+            Json(ApiResponse::<UserResponse>::error(
+                "A user with this email already exists",
+            )),
         );
     }
 
@@ -134,25 +138,25 @@ pub async fn register(
     if sn_exists.is_some() {
         return (
             StatusCode::CONFLICT,
-            Json(ApiResponse::<UserResponse>::error("A user with this student number already exists")),
+            Json(ApiResponse::<UserResponse>::error(
+                "A user with this student number already exists",
+            )),
         );
     }
 
-    let inserted_user = match UserModel::create(
-        &db,
-        &req.username,
-        &req.email,
-        &req.password,
-        false,
-    ).await {
-        Ok(user) => user,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
-            );
-        }
-    };
+    let inserted_user =
+        match UserModel::create(&db, &req.username, &req.email, &req.password, false).await {
+            Ok(user) => user,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<UserResponse>::error(format!(
+                        "Database error: {}",
+                        e
+                    ))),
+                );
+            }
+        };
 
     let (token, expiry) = generate_jwt(inserted_user.id, inserted_user.admin);
     let user_response = UserResponse {
@@ -166,10 +170,12 @@ pub async fn register(
 
     (
         StatusCode::CREATED,
-        Json(ApiResponse::success(user_response, "User registered successfully")),
+        Json(ApiResponse::success(
+            user_response,
+            "User registered successfully",
+        )),
     )
 }
-
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct LoginRequest {
@@ -224,7 +230,7 @@ pub struct LoginRequest {
 /// ```
 pub async fn login(
     State(app_state): State<AppState>,
-    Json(req): Json<LoginRequest>
+    Json(req): Json<LoginRequest>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
@@ -241,13 +247,18 @@ pub async fn login(
         Ok(None) => {
             return (
                 StatusCode::UNAUTHORIZED,
-                Json(ApiResponse::<UserResponse>::error("Invalid student number or password")),
+                Json(ApiResponse::<UserResponse>::error(
+                    "Invalid student number or password",
+                )),
             );
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
+                Json(ApiResponse::<UserResponse>::error(format!(
+                    "Database error: {}",
+                    e
+                ))),
             );
         }
     };
@@ -321,7 +332,7 @@ pub struct RequestPasswordResetRequest {
 /// ```
 pub async fn request_password_reset(
     State(app_state): State<AppState>,
-    Json(req): Json<RequestPasswordResetRequest>
+    Json(req): Json<RequestPasswordResetRequest>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
@@ -399,12 +410,10 @@ pub async fn request_password_reset(
                 }
             }
         }
-        Err(e) => {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
-            )
-        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+        ),
     }
 }
 
@@ -460,7 +469,7 @@ pub struct VerifyResetTokenResponse {
 /// ```
 pub async fn verify_reset_token(
     State(app_state): State<AppState>,
-    Json(req): Json<VerifyResetTokenRequest>
+    Json(req): Json<VerifyResetTokenRequest>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
@@ -468,46 +477,56 @@ pub async fn verify_reset_token(
         let error_message = common::format_validation_errors(&validation_errors);
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<VerifyResetTokenResponse>::error(error_message)),
+            Json(ApiResponse::<VerifyResetTokenResponse>::error(
+                error_message,
+            )),
         );
     }
 
     match PasswordResetTokenModel::find_valid_token(db, &req.token).await {
-        Ok(Some(token)) => {
-            match user::Entity::find_by_id(token.user_id).one(db).await {
-                Ok(Some(user)) => {
-                    let email_parts: Vec<&str> = user.email.split('@').collect();
-                    let username = email_parts[0];
-                    let domain = email_parts[1];
-                    let masked_username = format!("{}***", &username[0..1]);
-                    let email_hint = format!("{}@{}", masked_username, domain);
+        Ok(Some(token)) => match user::Entity::find_by_id(token.user_id).one(db).await {
+            Ok(Some(user)) => {
+                let email_parts: Vec<&str> = user.email.split('@').collect();
+                let username = email_parts[0];
+                let domain = email_parts[1];
+                let masked_username = format!("{}***", &username[0..1]);
+                let email_hint = format!("{}@{}", masked_username, domain);
 
-                    let response = VerifyResetTokenResponse { email_hint };
-                    (
-                        StatusCode::OK,
-                        Json(ApiResponse::success(
-                            response,
-                            "Token verified. You may now reset your password.",
-                        )),
-                    )
-                }
-                Ok(None) => (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<VerifyResetTokenResponse>::error("Invalid or expired token.")),
-                ),
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<VerifyResetTokenResponse>::error(format!("Database error: {}", e))),
-                ),
+                let response = VerifyResetTokenResponse { email_hint };
+                (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(
+                        response,
+                        "Token verified. You may now reset your password.",
+                    )),
+                )
             }
-        }
+            Ok(None) => (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<VerifyResetTokenResponse>::error(
+                    "Invalid or expired token.",
+                )),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<VerifyResetTokenResponse>::error(format!(
+                    "Database error: {}",
+                    e
+                ))),
+            ),
+        },
         Ok(None) => (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<VerifyResetTokenResponse>::error("Invalid or expired token.")),
+            Json(ApiResponse::<VerifyResetTokenResponse>::error(
+                "Invalid or expired token.",
+            )),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<VerifyResetTokenResponse>::error(format!("Database error: {}", e))),
+            Json(ApiResponse::<VerifyResetTokenResponse>::error(format!(
+                "Database error: {}",
+                e
+            ))),
         ),
     }
 }
@@ -561,7 +580,7 @@ pub struct ResetPasswordRequest {
 /// ```
 pub async fn reset_password(
     State(app_state): State<AppState>,
-    Json(req): Json<ResetPasswordRequest>
+    Json(req): Json<ResetPasswordRequest>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
@@ -574,51 +593,54 @@ pub async fn reset_password(
     }
 
     match PasswordResetTokenModel::find_valid_token(db, &req.token).await {
-        Ok(Some(token)) => {
-            match user::Entity::find_by_id(token.user_id).one(db).await {
-                Ok(Some(user)) => {
-                    let user_email = user.email.clone();
-                    
-                    let mut active_model: user::ActiveModel = user.into();
-                    active_model.password_hash = Set(UserModel::hash_password(&req.new_password));
-                    
-                    match active_model.update(db).await {
-                        Ok(_) => {
-                            if let Err(e) = token.mark_as_used(db).await {
-                                eprintln!("Failed to mark token as used: {}", e);
-                            }
+        Ok(Some(token)) => match user::Entity::find_by_id(token.user_id).one(db).await {
+            Ok(Some(user)) => {
+                let user_email = user.email.clone();
 
-                            if let Err(e) = EmailService::send_password_changed_email(&user_email).await {
-                                eprintln!("Failed to send password change confirmation email: {}", e);
-                            }
+                let mut active_model: user::ActiveModel = user.into();
+                active_model.password_hash = Set(UserModel::hash_password(&req.new_password));
 
-                            (
-                                StatusCode::OK,
-                                Json(ApiResponse::success(
-                                    (),
-                                    "Password has been reset successfully.",
-                                )),
-                            )
+                match active_model.update(db).await {
+                    Ok(_) => {
+                        if let Err(e) = token.mark_as_used(db).await {
+                            eprintln!("Failed to mark token as used: {}", e);
                         }
-                        Err(e) => (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
-                        ),
+
+                        if let Err(e) = EmailService::send_password_changed_email(&user_email).await
+                        {
+                            eprintln!("Failed to send password change confirmation email: {}", e);
+                        }
+
+                        (
+                            StatusCode::OK,
+                            Json(ApiResponse::success(
+                                (),
+                                "Password has been reset successfully.",
+                            )),
+                        )
                     }
+                    Err(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+                    ),
                 }
-                Ok(None) => (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<()>::error("Reset failed. The token may be invalid or expired.")),
-                ),
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
-                ),
             }
-        }
+            Ok(None) => (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error(
+                    "Reset failed. The token may be invalid or expired.",
+                )),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+            ),
+        },
         Ok(None) => (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error("Reset failed. The token may be invalid or expired.")),
+            Json(ApiResponse::<()>::error(
+                "Reset failed. The token may be invalid or expired.",
+            )),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -748,14 +770,20 @@ pub async fn upload_profile_picture(
     // Store only the file name; path is derived with user_profile_path(user_id, filename)
     let stored_filename = filename.clone();
 
-    let current = user::Entity::find_by_id(claims.sub).one(db).await.unwrap().unwrap();
+    let current = user::Entity::find_by_id(claims.sub)
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap();
     let mut model = current.into_active_model();
     model.profile_picture_path = Set(Some(stored_filename.clone()));
     model.update(db).await.unwrap();
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success_without_data("Profile picture uploaded.")),
+        Json(ApiResponse::success_without_data(
+            "Profile picture uploaded.",
+        )),
     )
 }
 
@@ -854,7 +882,7 @@ pub async fn change_password(
 
     let mut active_user = user.into_active_model();
     active_user.password_hash = Set(UserModel::hash_password(&req.new_password));
-    
+
     match active_user.update(db).await {
         Ok(_) => (
             StatusCode::OK,

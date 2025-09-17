@@ -2,15 +2,15 @@
 mod tests {
     use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
     use db::models::{
         announcements::Model as AnnouncementModel,
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRole, Role},
-    };
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode},
     };
     use tower::ServiceExt;
 
@@ -141,10 +141,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
-        let uri = format!(
-            "/api/modules/{}/announcements/999",
-            data.module.id
-        );
+        let uri = format!("/api/modules/{}/announcements/999", data.module.id);
 
         let req = Request::builder()
             .method("DELETE")

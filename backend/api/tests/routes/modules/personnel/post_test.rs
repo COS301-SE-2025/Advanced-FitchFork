@@ -1,17 +1,18 @@
 #[cfg(test)]
 mod tests {
-    use axum::{body::Body, http::{Request, StatusCode}};
-    use tower::ServiceExt;
-    use serde_json::json;
-    use api::auth::generate_jwt;
-    use db::{
-        models::{
-            user::Model as UserModel,
-            module::Model as ModuleModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-    };
     use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use db::models::{
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
+    };
+    use serde_json::json;
+    use tower::ServiceExt;
 
     struct TestData {
         admin: UserModel,
@@ -22,14 +23,34 @@ mod tests {
     }
 
     async fn setup_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS999", 2025, Some("Test Module"), 12).await.unwrap();
-        let admin = UserModel::create(db, "admin", "admin@test.com", "pw", true).await.unwrap();
-        let lecturer = UserModel::create(db, "lect1", "lect@test.com", "pw", false).await.unwrap();
-        let student = UserModel::create(db, "stud1", "stud@test.com", "pw", false).await.unwrap();
-        let outsider = UserModel::create(db, "outsider", "out@test.com", "pw", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student.id, module.id, Role::Student).await.unwrap();
-        TestData { admin, lecturer, student, outsider, module }
+        let module = ModuleModel::create(db, "COS999", 2025, Some("Test Module"), 12)
+            .await
+            .unwrap();
+        let admin = UserModel::create(db, "admin", "admin@test.com", "pw", true)
+            .await
+            .unwrap();
+        let lecturer = UserModel::create(db, "lect1", "lect@test.com", "pw", false)
+            .await
+            .unwrap();
+        let student = UserModel::create(db, "stud1", "stud@test.com", "pw", false)
+            .await
+            .unwrap();
+        let outsider = UserModel::create(db, "outsider", "out@test.com", "pw", false)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student.id, module.id, Role::Student)
+            .await
+            .unwrap();
+        TestData {
+            admin,
+            lecturer,
+            student,
+            outsider,
+            module,
+        }
     }
 
     #[tokio::test]
@@ -55,7 +76,9 @@ mod tests {
 
         let res = app.oneshot(req).await.unwrap();
         let status = res.status();
-        let _ = axum::body::to_bytes(res.into_body(), 1024 * 1024).await.unwrap(); // consume body for completeness
+        let _ = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+            .await
+            .unwrap(); // consume body for completeness
 
         assert_eq!(status, StatusCode::OK);
     }
@@ -73,7 +96,9 @@ mod tests {
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(Body::from(json!({ "user_ids": [data.outsider.id], "role": "assistant_lecturer" }).to_string()))
+            .body(Body::from(
+                json!({ "user_ids": [data.outsider.id], "role": "assistant_lecturer" }).to_string(),
+            ))
             .unwrap();
 
         let res = app.oneshot(req).await.unwrap();
@@ -93,7 +118,9 @@ mod tests {
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(Body::from(json!({ "user_ids": [data.outsider.id], "role": "lecturer" }).to_string()))
+            .body(Body::from(
+                json!({ "user_ids": [data.outsider.id], "role": "lecturer" }).to_string(),
+            ))
             .unwrap();
 
         let res = app.oneshot(req).await.unwrap();
@@ -113,7 +140,9 @@ mod tests {
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(Body::from(json!({ "user_ids": [data.lecturer.id], "role": "tutor" }).to_string()))
+            .body(Body::from(
+                json!({ "user_ids": [data.lecturer.id], "role": "tutor" }).to_string(),
+            ))
             .unwrap();
 
         let res = app.oneshot(req).await.unwrap();
@@ -134,7 +163,9 @@ mod tests {
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(Body::from(json!({ "user_ids": [data.outsider.id], "role": "tutor" }).to_string()))
+            .body(Body::from(
+                json!({ "user_ids": [data.outsider.id], "role": "tutor" }).to_string(),
+            ))
             .unwrap();
 
         let res = app.oneshot(req).await.unwrap();
@@ -154,7 +185,9 @@ mod tests {
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(Body::from(json!({ "user_ids": [9999999], "role": "student" }).to_string()))
+            .body(Body::from(
+                json!({ "user_ids": [9999999], "role": "student" }).to_string(),
+            ))
             .unwrap();
 
         let res = app.oneshot(req).await.unwrap();
@@ -174,7 +207,9 @@ mod tests {
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(Body::from(json!({ "user_ids": [], "role": "student" }).to_string()))
+            .body(Body::from(
+                json!({ "user_ids": [], "role": "student" }).to_string(),
+            ))
             .unwrap();
 
         let res = app.oneshot(req).await.unwrap();

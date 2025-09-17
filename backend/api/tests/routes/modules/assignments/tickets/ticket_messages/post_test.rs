@@ -3,9 +3,7 @@ mod tests {
     use std::convert::Infallible;
 
     use crate::helpers::app::make_test_app_with_storage;
-    use api::{
-        auth::generate_jwt,
-    };
+    use api::auth::generate_jwt;
     use axum::{
         body::Body,
         http::{Request, Response, StatusCode},
