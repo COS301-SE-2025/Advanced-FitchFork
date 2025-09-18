@@ -26,6 +26,7 @@ pub struct SystemMetrics {
     pub swap_total: u64,
     pub swap_used: u64,
     pub disks: Vec<DiskSummary>,
+    pub uptime_seconds: u64,
 }
 
 /// De-duplicate disks across all OSes by (name, total, fs).
@@ -62,9 +63,8 @@ fn dedupe_disks(disks: Vec<DiskSummary>) -> Vec<DiskSummary> {
 pub fn sample_system_metrics() -> SystemMetrics {
     let mut sys = System::new();
 
-    // First refresh to initialize internal counters
+    // CPU & memory refresh (these are fine)
     sys.refresh_cpu_specifics(CpuRefreshKind::everything());
-    // Small delay and a second refresh to get real usage deltas
     std::thread::sleep(Duration::from_millis(200));
     sys.refresh_cpu();
     sys.refresh_memory();
@@ -93,6 +93,9 @@ pub fn sample_system_metrics() -> SystemMetrics {
 
     let disk_summaries = dedupe_disks(collected);
 
+    // ✔ sysinfo (this version): uptime is a static/associated fn
+    let uptime_seconds = System::uptime();
+
     SystemMetrics {
         load_one: System::load_average().one,
         load_five: System::load_average().five,
@@ -105,6 +108,7 @@ pub fn sample_system_metrics() -> SystemMetrics {
         swap_total: sys.total_swap(),
         swap_used: sys.used_swap(),
         disks: disk_summaries,
+        uptime_seconds,
     }
 }
 
@@ -124,12 +128,15 @@ pub fn build_health_payloads(
         "ts": now,
         "load": {"one": metrics.load_one, "five": metrics.load_five, "fifteen": metrics.load_fifteen},
         "code_manager": {"running": cm_running, "waiting": cm_waiting},
+        // (optional) include here too if you want:
+        // "uptime_seconds": metrics.uptime_seconds,
     });
 
     let admin = json!({
         "ts": now,
         "env": env,
         "host": host,
+        "uptime_seconds": metrics.uptime_seconds,
         "load": {"one": metrics.load_one, "five": metrics.load_five, "fifteen": metrics.load_fifteen},
         "cpu": {
             "cores": metrics.cpu_cores,

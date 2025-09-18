@@ -7,10 +7,17 @@ export type AdminPayload = {
   ts: string;
   env: string;
   host: string;
+  uptime_seconds: number;
   load: { one: number; five: number; fifteen: number };
   cpu: { cores: number; avg_usage: number; per_core?: number[] };
   memory: { total: number; used: number; swap_total: number; swap_used: number };
-  disks: { name: string; total: number; available: number; file_system: string; mount_point?: string }[];
+  disks: {
+    name: string;
+    total: number;
+    available: number;
+    file_system: string;
+    mount_point?: string;
+  }[];
   code_manager: { running: number; waiting: number; max_concurrent: number | null };
 };
 
@@ -22,6 +29,7 @@ export function useSystemHealthAdminWs() {
   const [maxConcurrent, setMaxConcurrentState] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+
   const url = useMemo(() => {
     if (!token) return null;
     return `${WS_BASE_URL}/system/health/admin?token=${encodeURIComponent(token)}`;
@@ -40,7 +48,11 @@ export function useSystemHealthAdminWs() {
       return;
     }
 
-    if (urlRef.current === url && wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+    if (
+      urlRef.current === url &&
+      wsRef.current &&
+      (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
 
@@ -53,38 +65,53 @@ export function useSystemHealthAdminWs() {
       try {
         const ws = new WebSocket(urlRef.current);
         wsRef.current = ws;
+
         ws.onopen = () => {
           setConnected(true);
           setError(null);
           backoffRef.current = 0;
           try { ws.send(JSON.stringify({ type: 'ping' })); } catch {}
         };
+
         ws.onmessage = (ev) => {
           try {
-            const msg = JSON.parse(ev.data) as AdminPayload;
-            if ((msg as any)?.type === 'pong') return;
-            setData(msg);
-            if (typeof msg?.code_manager?.max_concurrent === 'number') {
-              setMaxConcurrentState(msg.code_manager.max_concurrent);
+            const raw = JSON.parse(ev.data) as any;
+            if (raw?.type === 'pong') return;
+
+            // Force uptime_seconds to be a number (required by type)
+            const payload: AdminPayload = {
+              ...raw,
+              uptime_seconds: Number(raw?.uptime_seconds) || 0,
+            };
+
+            setData(payload);
+
+            if (typeof payload?.code_manager?.max_concurrent === 'number') {
+              setMaxConcurrentState(payload.code_manager.max_concurrent);
             }
-          } catch {}
+          } catch {
+            // ignore malformed messages
+          }
         };
+
         ws.onclose = () => {
           setConnected(false);
           const n = Math.min(backoffRef.current++, 4);
-          const delay = Math.floor((500 * Math.pow(2, n)) + Math.random() * 200);
+          const delay = Math.floor(500 * Math.pow(2, n) + Math.random() * 200);
           reconnectRef.current = window.setTimeout(connect, delay);
         };
+
         ws.onerror = () => { try { ws.close(); } catch {} };
       } catch (e: any) {
         const n = Math.min(backoffRef.current++, 4);
-        const delay = Math.floor((500 * Math.pow(2, n)) + Math.random() * 200);
+        const delay = Math.floor(500 * Math.pow(2, n) + Math.random() * 200);
         reconnectRef.current = window.setTimeout(connect, delay);
         setError(e?.message || 'Failed to open WebSocket');
       }
     };
 
     connect();
+
     return () => {
       if (reconnectRef.current) { window.clearTimeout(reconnectRef.current); reconnectRef.current = undefined; }
       try { wsRef.current?.close(); } catch {}

@@ -2,8 +2,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { Button, Card, Descriptions, Space, Tag, Typography } from 'antd';
-import { EyeOutlined, ReloadOutlined, EditOutlined, DownloadOutlined } from '@ant-design/icons';
+import { Button, Card, Descriptions, Space, Tag, Typography, Modal, Form, Input } from 'antd';
+import {
+  EyeOutlined,
+  ReloadOutlined,
+  EditOutlined,
+  DownloadOutlined,
+  UserAddOutlined,
+} from '@ant-design/icons';
 
 import PageHeader from '@/components/PageHeader';
 import { message } from '@/utils/message';
@@ -23,11 +29,13 @@ import {
   downloadAttendanceSessionRecordsCsv,
 } from '@/services/modules/attendance/get';
 import { editAttendanceSession } from '@/services/modules/attendance/put';
+import { markAttendanceByUsername } from '@/services/modules/attendance/post';
 
 import EditModal from '@/components/common/EditModal';
 import { EntityList, type EntityListHandle } from '@/components/EntityList';
 import { IdTag } from '@/components/common';
 import { useViewSlot } from '@/context/ViewSlotContext';
+import { AttendanceRecordsEmptyState } from '@/components/attendance';
 
 const fmt = (s: string) => dayjs(s).format('YYYY-MM-DD HH:mm');
 
@@ -48,6 +56,11 @@ export default function AttendanceSessionView() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editDefaults, setEditDefaults] = useState<Record<string, any>>();
+
+  // Manual mark modal state
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [form] = Form.useForm<{ username: string }>();
 
   const listRef = useRef<EntityListHandle>(null);
 
@@ -138,10 +151,7 @@ export default function AttendanceSessionView() {
       setEditOpen(false);
       setEditDefaults(undefined);
       await load();
-      // refresh the records list if visible
-      if (!isMobile) {
-        listRef.current?.refresh();
-      }
+      if (!isMobile) listRef.current?.refresh();
     } else {
       message.error(res.message || 'Failed to update session');
     }
@@ -153,6 +163,39 @@ export default function AttendanceSessionView() {
       await downloadAttendanceSessionRecordsCsv(moduleId, session.id);
     } catch (e: any) {
       message.error(e?.message || 'Export failed');
+    }
+  };
+
+  // Manual mark handlers
+  const openManual = () => {
+    form.resetFields();
+    setManualOpen(true);
+  };
+
+  const submitManual = async () => {
+    if (!session) return;
+    try {
+      const { username } = await form.validateFields();
+      setManualSubmitting(true);
+      const res = await markAttendanceByUsername(moduleId, session.id, username);
+      setManualSubmitting(false);
+
+      if (res.success) {
+        message.success(res.message || 'Attendance recorded');
+        setManualOpen(false);
+        // Refresh details and records list
+        await load();
+        if (!isMobile) listRef.current?.refresh();
+      } else {
+        message.error(res.message || 'Failed to record attendance');
+      }
+    } catch (e: any) {
+      setManualSubmitting(false);
+      if (e?.errorFields) {
+        // antd form validation error; already shown inline
+        return;
+      }
+      message.error(e?.message || 'Failed to record attendance');
     }
   };
 
@@ -227,6 +270,15 @@ export default function AttendanceSessionView() {
                   >
                     Projector
                   </Button>
+                  {/* NEW: Mark by username (staff only) */}
+                  <Button
+                    type="dashed"
+                    icon={<UserAddOutlined />}
+                    onClick={openManual}
+                    disabled={!session}
+                  >
+                    Mark by username
+                  </Button>
                 </>
               )}
             </Space>
@@ -284,7 +336,23 @@ export default function AttendanceSessionView() {
                   },
                 ]}
                 emptyNoEntities={
-                  <div className="p-8 text-center text-sm text-gray-500">No records yet.</div>
+                  <AttendanceRecordsEmptyState
+                    isStaff={isStaff}
+                    onOpenProjector={openProjector}
+                    onManualMark={() => {
+                      // opens the modal you already added on this page
+                      // expose openManual via local function or inline set state if defined here
+                      // if openManual is defined above:
+                      // openManual();
+                      const evt = new Event('open-manual-mark'); // fallback example if you centralize
+                      window.dispatchEvent(evt);
+                    }}
+                    onRefresh={async () => {
+                      await load();
+                      listRef.current?.refresh();
+                    }}
+                    loading={loading}
+                  />
                 }
               />
             </div>
@@ -345,6 +413,39 @@ export default function AttendanceSessionView() {
           { name: 'created_from_ip', label: 'Creator IP', type: 'text' },
         ]}
       />
+
+      {/* NEW: Manual mark modal */}
+      <Modal
+        open={manualOpen}
+        title="Mark attendance by username"
+        okText="Mark"
+        cancelText="Cancel"
+        onOk={submitManual}
+        onCancel={() => setManualOpen(false)}
+        confirmLoading={manualSubmitting}
+        destroyOnClose
+      >
+        <Form form={form} layout="vertical" name="manual_mark_form" preserve={false}>
+          <Form.Item
+            label="Username"
+            name="username"
+            rules={[
+              { required: true, message: 'Please enter a username' },
+              {
+                validator: (_, v) =>
+                  typeof v === 'string' && v.trim().length > 0
+                    ? Promise.resolve()
+                    : Promise.reject(new Error('Username cannot be empty')),
+              },
+            ]}
+          >
+            <Input placeholder="e.g. student123" autoFocus />
+          </Form.Item>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+            This action immediately records attendance for the specified student in this session.
+          </Typography.Paragraph>
+        </Form>
+      </Modal>
     </div>
   );
 }
