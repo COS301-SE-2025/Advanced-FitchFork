@@ -291,4 +291,76 @@ mod tests {
             .expect("row exists");
         assert_eq!(row.rotation_seconds, 300);
     }
+
+    #[tokio::test]
+    async fn test_edit_session_emits_session_updated_broadcast() {
+        use api::ws::attendance::topics::attendance_session_topic;
+        use tokio::time::{Duration, timeout};
+
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let ctx = setup(app_state.db()).await;
+
+        // Subscribe to this session’s topic BEFORE updating
+        let topic = attendance_session_topic(ctx.session.id);
+        let mut rx = app_state.ws().subscribe(&topic).await;
+
+        // Prepare updates
+        let body = serde_json::json!({
+            "title": "Broadcasted Title",
+            "active": true,
+            "rotation_seconds": 17,
+            "restrict_by_ip": true,
+            "allowed_ip_cidr": "203.0.113.0/24",
+            "created_from_ip": "203.0.113.77"
+        });
+
+        // Perform PUT as lecturer
+        let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}",
+            ctx.module.id, ctx.session.id
+        );
+
+        let req = Request::builder()
+            .method("PUT")
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(AxumBody::from(body.to_string()))
+            .unwrap();
+
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Expect a "session_updated" WS event that mirrors the changed fields
+        let msg = timeout(Duration::from_millis(300), rx.recv())
+            .await
+            .expect("broadcast not timed out")
+            .expect("broadcast ok");
+
+        let v: Value = serde_json::from_str(&msg).unwrap();
+        assert_eq!(v["event"], "session_updated");
+        // payload may be partial, but for our emitter we expect at least these fields:
+        assert_eq!(v["payload"]["session_id"], ctx.session.id);
+        assert_eq!(v["payload"]["title"], "Broadcasted Title");
+        assert_eq!(v["payload"]["active"], true);
+        assert_eq!(v["payload"]["rotation_seconds"], 17);
+        assert_eq!(v["payload"]["restrict_by_ip"], true);
+        assert_eq!(v["payload"]["allowed_ip_cidr"], "203.0.113.0/24");
+        assert_eq!(v["payload"]["created_from_ip"], "203.0.113.77");
+
+        // Also verify persistence just to be safe
+        let row = SessionEntity::find()
+            .filter(SessionCol::Id.eq(ctx.session.id))
+            .one(app_state.db())
+            .await
+            .unwrap()
+            .expect("row exists");
+        assert_eq!(row.title, "Broadcasted Title");
+        assert!(row.active);
+        assert_eq!(row.rotation_seconds, 17);
+        assert!(row.restrict_by_ip);
+        assert_eq!(row.allowed_ip_cidr.as_deref(), Some("203.0.113.0/24"));
+        assert_eq!(row.created_from_ip.as_deref(), Some("203.0.113.77"));
+    }
 }

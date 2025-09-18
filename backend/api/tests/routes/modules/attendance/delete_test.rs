@@ -295,4 +295,45 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
+
+    #[tokio::test]
+    async fn test_delete_session_emits_session_deleted_broadcast() {
+        use api::ws::attendance::topics::attendance_session_topic;
+        use tokio::time::{Duration, timeout};
+
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let ctx = setup(app_state.db()).await;
+
+        // Subscribe to the WS topic BEFORE the delete
+        let topic = attendance_session_topic(ctx.session.id);
+        let mut rx = app_state.ws().subscribe(&topic).await;
+
+        // Perform delete as lecturer
+        let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
+        let uri = format!(
+            "/api/modules/{}/attendance/sessions/{}",
+            ctx.module.id, ctx.session.id
+        );
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(AxumBody::empty())
+            .unwrap();
+
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Expect a "session_deleted" broadcast with matching session_id
+        let msg = timeout(Duration::from_millis(300), rx.recv())
+            .await
+            .expect("broadcast not timed out")
+            .expect("broadcast ok");
+
+        let v: Value = serde_json::from_str(&msg).unwrap();
+        assert_eq!(v["event"], "session_deleted");
+        assert_eq!(v["payload"]["session_id"], ctx.session.id);
+        // (Optional) If you broadcast more fields (e.g., title), assert them here:
+        // assert_eq!(v["payload"]["title"], ctx.session.title);
+    }
 }

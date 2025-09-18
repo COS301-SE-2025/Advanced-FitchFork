@@ -5,14 +5,16 @@ import {
   Space,
   DatePicker,
   Select,
-  Typography,
-  theme,
   InputNumber,
   Button,
   Statistic,
   Modal,
+  Progress,
+  Divider,
+  Tooltip,
+  Tag,
 } from 'antd';
-import { DownloadOutlined, TeamOutlined } from '@ant-design/icons';
+import { DownloadOutlined, InfoCircleOutlined, TeamOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { Column, type ColumnConfig } from '@ant-design/plots';
 import { useTheme } from '@/context/ThemeContext';
@@ -30,13 +32,11 @@ import {
 } from '@/services/system/submissions/get';
 import { scaleColor } from '@/utils/color';
 
-const { Text } = Typography;
-
 const PercentBar: React.FC<{
   percent: number | null | undefined;
   height?: number;
   ariaLabel?: string;
-}> = ({ percent, height = 6, ariaLabel }) => {
+}> = ({ percent, height = 5, ariaLabel }) => {
   const v = Math.max(0, Math.min(100, percent ?? 0));
   const color = scaleColor(v, 'green-red');
   return (
@@ -54,7 +54,7 @@ const PercentBar: React.FC<{
         style={{
           width: `${v}%`,
           background: color,
-          transition: 'width 280ms ease, background-color 160ms linear',
+          transition: 'width 240ms ease, background-color 160ms linear',
         }}
       />
     </div>
@@ -74,6 +74,49 @@ const MeterRow: React.FC<{
     <PercentBar percent={percent} />
   </div>
 );
+
+const MiniBars: React.FC<{
+  values: number[];
+  /** total pixel height of the strip (bars scale within this) */
+  containerHeight?: number;
+  ariaLabel?: string;
+}> = ({ values, containerHeight = 96, ariaLabel }) => {
+  const safe = values.map((v) => Math.max(0, Math.min(100, v ?? 0)));
+  const barBase = Math.max(2, Math.floor((containerHeight - 20) * 0.04)); // min bar height baseline
+
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className="rounded-lg bg-gray-100 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 p-2"
+      style={{ height: containerHeight }}
+    >
+      <div
+        className="h-full grid gap-[3px] items-end"
+        style={{
+          // One column per core → bars take the FULL width evenly
+          gridTemplateColumns: `repeat(${Math.max(1, safe.length)}, 1fr)`,
+        }}
+      >
+        {safe.map((v, i) => {
+          const h = Math.max(barBase, Math.round((v / 100) * (containerHeight - 24)));
+          return (
+            <div
+              key={i}
+              className="w-full rounded-[2px]"
+              style={{
+                height: h,
+                background: scaleColor(v, 'green-red'),
+                transition: 'height 160ms ease',
+              }}
+              title={`Core ${i + 1}: ${v.toFixed(1)}%`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 type UiBucket = 'day' | 'week' | 'month' | 'year';
 
@@ -183,7 +226,6 @@ const StatCell: React.FC<{
 
 const AdminDashboard: React.FC = () => {
   const { isDarkMode } = useTheme();
-  const { token } = theme.useToken();
   const { isXl, isMobile } = useUI();
 
   const {
@@ -233,16 +275,24 @@ const AdminDashboard: React.FC = () => {
     const rows: { x: string; series: string; value: number }[] = [];
     for (const p of metrics) {
       const x = metricsLabel(p.ts, mBucket);
-      rows.push({ x, series: 'CPU', value: (p as any).cpu_avg as number });
-      rows.push({ x, series: 'RAM', value: ((p as any).mem_pct ?? 0) as number });
+      const cpu = Number((p as any).cpu_avg);
+      const ram = Number((p as any).mem_pct);
+
+      if (Number.isFinite(cpu)) rows.push({ x, series: 'CPU', value: cpu });
+      if (Number.isFinite(ram)) rows.push({ x, series: 'RAM', value: ram });
     }
     return rows;
   }, [metrics, mBucket]);
 
-  const subsSeries = useMemo(
-    () => subs.map((p) => ({ x: subsLabel(p.period, sBucket), count: (p as any).count as number })),
-    [subs, sBucket],
-  );
+  const subsSeries = useMemo(() => {
+    const rows: { x: string; count: number }[] = [];
+    for (const p of subs) {
+      const x = subsLabel(p.period, sBucket);
+      const count = Number((p as any).count);
+      if (Number.isFinite(count)) rows.push({ x, count });
+    }
+    return rows;
+  }, [subs, sBucket]);
 
   const metricsCats = useMemo(() => {
     const seen = new Set<string>();
@@ -281,56 +331,6 @@ const AdminDashboard: React.FC = () => {
     return ((text: string) => text) as any;
   };
 
-  const renderItems = (items: any[], unit: string) => (
-    <div>
-      {items.map((item: any, i: number) => {
-        const raw =
-          item?.value ??
-          item?.data?.value ??
-          item?.datum?.value ??
-          item?.data?.count ??
-          item?.datum?.count ??
-          0;
-        const value = typeof raw === 'number' ? raw : Number(raw) || 0;
-        return (
-          <div
-            key={i}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              margin: '2px 0',
-            }}
-          >
-            <Text
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                color: token.colorTextSecondary,
-              }}
-            >
-              <i
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  background: item?.color || token.colorPrimary,
-                  display: 'inline-block',
-                }}
-              />
-              {item?.name ?? item?.series ?? 'Value'}
-            </Text>
-            <Text strong style={{ color: token.colorText }}>
-              {unit === '%' ? `${Math.round(value)}%` : String(value)}
-            </Text>
-          </div>
-        );
-      })}
-    </div>
-  );
-
   const metricsRadius = radiusFor(mBucket);
   const subsRadius = radiusFor(sBucket);
 
@@ -356,26 +356,18 @@ const AdminDashboard: React.FC = () => {
       max: 100,
       nice: false,
       title: { text: 'CPU / RAM (%)' },
-      label: { formatter: (v: any) => `${Math.round(Number(v))}%` },
+      label: {
+        formatter: (v: any) => {
+          const n = Number(v);
+          if (!Number.isFinite(n)) return '';
+          return n >= 10 ? `${n.toFixed(0)}%` : `${n.toFixed(1)}%`;
+        },
+      },
     },
     style: { radiusTopLeft: metricsRadius, radiusTopRight: metricsRadius },
     padding: [12, 8, 32, 56],
     legend: { position: 'top' },
     animation: false,
-    interaction: {
-      tooltip: {
-        render: (_e: unknown, { title, items }: { title?: string; items: any[] }) => (
-          <div style={{ minWidth: 120 }}>
-            {title ? (
-              <Text strong style={{ display: 'block', marginBottom: 4, color: token.colorText }}>
-                {title}
-              </Text>
-            ) : null}
-            {renderItems(items, '%')}
-          </div>
-        ),
-      },
-    },
   };
 
   const subsCfg: ColumnConfig = {
@@ -398,20 +390,6 @@ const AdminDashboard: React.FC = () => {
     padding: [12, 8, 32, 56],
     legend: false,
     animation: false,
-    interaction: {
-      tooltip: {
-        render: (_e: unknown, { title, items }: { title?: string; items: any[] }) => (
-          <div style={{ minWidth: 120 }}>
-            {title ? (
-              <Text strong style={{ display: 'block', marginBottom: 4, color: token.colorText }}>
-                {title}
-              </Text>
-            ) : null}
-            {renderItems(items, '')}
-          </div>
-        ),
-      },
-    },
   };
 
   // clamp page + chart boxes (UNCHANGED)
@@ -468,7 +446,6 @@ const AdminDashboard: React.FC = () => {
 
   const swapTotal = typeof live?.memory?.swap_total === 'number' ? live!.memory!.swap_total : null;
   const swapUsed = typeof live?.memory?.swap_used === 'number' ? live!.memory!.swap_used : null;
-  const swapUsedStr = formatBytes(swapUsed ?? undefined);
   const swapPctNum =
     swapTotal != null && swapTotal > 0 ? Math.round(((swapUsed ?? 0) / swapTotal) * 100) : null;
 
@@ -500,14 +477,6 @@ const AdminDashboard: React.FC = () => {
   }, [rawDisks]);
 
   const diskCount = disks.length;
-  const { totalBytes, availBytes } = disks.reduce(
-    (acc, d) => ({
-      totalBytes: acc.totalBytes + (d.total ?? 0),
-      availBytes: acc.availBytes + (d.available ?? 0),
-    }),
-    { totalBytes: 0, availBytes: 0 },
-  );
-  const freePctNum = totalBytes > 0 ? Math.round((availBytes / totalBytes) * 100) : null;
 
   const effectiveMax =
     typeof maxConcurrent === 'number'
@@ -552,6 +521,18 @@ const AdminDashboard: React.FC = () => {
   }, [sBucket, sRange]);
 
   const cpuCoresDisplay = cpuCoreCount != null ? `${cpuCoreCount} cores` : 'Core count unavailable';
+  const [showPerCoreDetails, setShowPerCoreDetails] = useState(false);
+  // right above the return (inside component)
+  const uptimeSeconds = Number(live?.uptime_seconds) || 0;
+  // "3 hours", "a minute", etc (no "ago" suffix)
+  const uptimeLabel =
+    uptimeSeconds > 0 ? dayjs().subtract(uptimeSeconds, 'second').fromNow(true) : null;
+  // optional exact tooltip text like "up since 2025-09-18 12:34:56"
+  const uptimeExact =
+    uptimeSeconds > 0
+      ? dayjs().subtract(uptimeSeconds, 'second').format('YYYY-MM-DD HH:mm:ss')
+      : null;
+  const updatedStr = typeof live?.ts === 'string' ? dayjs(live.ts).format('HH:mm:ss') : null;
 
   return (
     <div ref={pageRef} style={{ height: pageH }} className="h-full">
@@ -561,7 +542,8 @@ const AdminDashboard: React.FC = () => {
       >
         <div className="h-full flex flex-col">
           <Card
-            className="flex-1 rounded-2xl !border-gray-200 dark:!border-gray-800"
+            className="flex-1 rounded-2xl !border-gray-200 dark:!border-gray-800 !shadow-none"
+            style={{ boxShadow: 'none' }}
             styles={{
               body: {
                 padding: 16,
@@ -571,161 +553,223 @@ const AdminDashboard: React.FC = () => {
                 gap: 16,
                 minHeight: 0,
               },
+              header: { padding: '12px 16px' },
             }}
             title={<span className="font-semibold">System health</span>}
             extra={
-              typeof live?.ts === 'string' ? (
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Updated {dayjs(live.ts).format('HH:mm:ss')}
-                </span>
-              ) : null
+              <Space size={8} wrap>
+                {uptimeLabel ? (
+                  <Tooltip
+                    title={
+                      <div className="text-xs">
+                        {uptimeExact ? <div>Up since {uptimeExact}</div> : null}
+                        {updatedStr ? <div>Updated {updatedStr}</div> : null}
+                      </div>
+                    }
+                  >
+                    <Tag color={isDarkMode ? 'geekblue' : 'blue'} style={{ marginRight: 0 }}>
+                      Up {uptimeLabel}
+                    </Tag>
+                  </Tooltip>
+                ) : null}
+              </Space>
             }
           >
-            {/* --- CPU section (top) --- */}
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <div className="text-xs font-medium opacity-70">CPU average</div>
-                  <div className="text-3xl font-semibold">
-                    {cpuAvgNum != null ? cpuAvgNum.toFixed(1) : '—'}
+            {/* === Top: CPU & RAM side-by-side (50/50) with AntD Divider === */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              {/* CPU column */}
+              <div className="sm:flex-1 flex flex-col gap-3">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="text-xs font-medium opacity-70">CPU</div>
+                    <div className="text-3xl font-semibold">
+                      {cpuAvgNum != null ? `${cpuAvgNum.toFixed(1)}%` : '—'}
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {cpuCoreCount != null ? `${cpuCoreCount} cores` : cpuCoresDisplay}
                   </div>
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {cpuCoreCount != null ? `${cpuCoreCount} cores reporting` : cpuCoresDisplay}
-                </div>
+
+                {cpuPerCore.length > 0 ? (
+                  <MiniBars
+                    values={cpuPerCore}
+                    ariaLabel="CPU per-core utilisation"
+                    containerHeight={96}
+                  />
+                ) : (
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    Waiting for per-core telemetry…
+                  </div>
+                )}
+
+                {cpuPerCore.length > 0 && (
+                  <>
+                    <div className="flex items-center justify-end">
+                      <button
+                        className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
+                        onClick={() => setShowPerCoreDetails((s) => !s)}
+                      >
+                        {showPerCoreDetails ? 'Hide details' : 'Show details'}
+                      </button>
+                    </div>
+                    {showPerCoreDetails && (
+                      <div
+                        className="grid gap-2 pr-1"
+                        style={{
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                          maxHeight: 220,
+                          overflowY: 'auto',
+                        }}
+                      >
+                        {cpuPerCore.map((pct, idx) => (
+                          <MeterRow
+                            key={idx}
+                            label={`Core ${idx + 1}`}
+                            valueText={`${pct.toFixed(1)}%`}
+                            percent={pct}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {isMobile && (
+                  <div className="grid grid-cols-3 gap-3">
+                    <StatCell
+                      title="Load 1m"
+                      value={typeof live?.load?.one === 'number' ? live.load.one : null}
+                      precision={2}
+                    />
+                    <StatCell
+                      title="Load 5m"
+                      value={typeof live?.load?.five === 'number' ? live.load.five : null}
+                      precision={2}
+                    />
+                    <StatCell
+                      title="Load 15m"
+                      value={typeof live?.load?.fifteen === 'number' ? live.load.fifteen : null}
+                      precision={2}
+                    />
+                  </div>
+                )}
               </div>
 
-              {/* MOBILE: Load averages */}
-              {isMobile && (
-                <div className="grid grid-cols-3 gap-3 mt-2">
-                  <StatCell
-                    title="Load 1m"
-                    value={typeof live?.load?.one === 'number' ? live.load.one : null}
-                    precision={2}
-                  />
-                  <StatCell
-                    title="Load 5m"
-                    value={typeof live?.load?.five === 'number' ? live.load.five : null}
-                    precision={2}
-                  />
-                  <StatCell
-                    title="Load 15m"
-                    value={typeof live?.load?.fifteen === 'number' ? live.load.fifteen : null}
-                    precision={2}
-                  />
-                </div>
-              )}
-
-              <MeterRow
-                label="Avg utilisation"
-                valueText={cpuAvgNum != null ? cpuAvgNum.toFixed(1) : '—'}
-                percent={cpuAvgNum ?? null}
+              {/* Vertical divider only on sm+ */}
+              <Divider
+                type="vertical"
+                className="hidden sm:block self-stretch m-0"
+                style={{ height: 'auto' }}
               />
 
-              {cpuPerCore.length > 0 ? (
-                <div
-                  className="grid gap-2 pr-1"
-                  style={{
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-                    maxHeight: 220,
-                    overflowY: 'auto',
-                  }}
-                >
-                  {cpuPerCore.map((pct, idx) => (
-                    <MeterRow
-                      key={idx}
-                      label={`Core ${idx + 1}`}
-                      valueText={`${pct.toFixed(1)}`}
-                      percent={pct}
+              {/* RAM column */}
+              <div className="sm:flex-1 flex flex-col gap-3">
+                <div className="text-xs font-medium opacity-70">RAM</div>
+                <div className="flex items-center gap-4">
+                  <Progress
+                    type="dashboard"
+                    percent={memPctNum ?? 0}
+                    size={128}
+                    format={(p) => (p != null ? `${p}%` : '—')}
+                  />
+
+                  {/* stack vertically */}
+                  <div className="flex-1 flex flex-col gap-3">
+                    <StatCell
+                      title={
+                        <span className="inline-flex items-center gap-1">
+                          Used
+                          <Tooltip
+                            placement="top"
+                            title={
+                              <div className="text-xs">
+                                <div>
+                                  <strong>Memory:</strong> {memUsedStr} / {memTotalStr}
+                                </div>
+                              </div>
+                            }
+                          >
+                            <InfoCircleOutlined className="text-gray-400 hover:text-gray-500 dark:text-gray-400 dark:hover:text-gray-300 cursor-help" />
+                          </Tooltip>
+                        </span>
+                      }
+                      value={memPctNum}
+                      suffix="%"
                     />
-                  ))}
-                </div>
-              ) : (
-                <div className="text-xs text-gray-500 dark:text-gray-400">
-                  Waiting for per-core telemetry…
-                </div>
-              )}
-            </div>
 
-            {/* --- Other metrics (middle) --- */}
-            <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex flex-col gap-2">
-                  <StatCell
-                    title="Memory used"
-                    value={memPctNum}
-                    suffix="%"
-                    extra={
-                      <>
-                        {memUsedStr} / {memTotalStr}
-                      </>
-                    }
-                  />
-                  <PercentBar percent={memPctNum} ariaLabel="Memory used percent" />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <StatCell
-                    title="Swap used"
-                    value={swapUsedStr}
-                    extra={
-                      swapTotal ? (
-                        <>
-                          {formatBytes(swapUsed ?? 0)} / {formatBytes(swapTotal)}
-                        </>
-                      ) : undefined
-                    }
-                  />
-                  {swapPctNum != null ? (
-                    <PercentBar percent={swapPctNum} ariaLabel="Swap used percent" />
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-medium opacity-70">Disks</div>
-                  <div className="text-xs opacity-70">
-                    {diskCount} {diskCount === 1 ? 'disk' : 'disks'}
-                    {typeof freePctNum === 'number' ? <> • Free {freePctNum}%</> : null}
+                    <StatCell
+                      title={
+                        <span className="inline-flex items-center gap-1">
+                          Swap used
+                          <Tooltip
+                            placement="top"
+                            title={
+                              typeof swapTotal === 'number' ? (
+                                <div className="text-xs">
+                                  <div>
+                                    <strong>Swap:</strong> {formatBytes(swapUsed ?? 0)} /{' '}
+                                    {formatBytes(swapTotal)}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-xs">Swap not available</div>
+                              )
+                            }
+                          >
+                            <InfoCircleOutlined className="text-gray-400 hover:text-gray-500 dark:text-gray-400 dark:hover:text-gray-300 cursor-help" />
+                          </Tooltip>
+                        </span>
+                      }
+                      value={typeof swapPctNum === 'number' ? swapPctNum : null}
+                      suffix="%"
+                    />
                   </div>
                 </div>
-
-                <PercentBar
-                  percent={freePctNum == null ? null : 100 - freePctNum}
-                  ariaLabel="Disk used percent (aggregate)"
-                />
-
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {disks.slice(0, 6).map((d, i) => {
-                    const total = d?.total ?? 0;
-                    const avail = d?.available ?? 0;
-                    const used = Math.max(0, total - avail);
-                    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
-                    const mp = (d?.mount_point ?? '') as string;
-                    const mpHint = mp && mp !== '/' ? ` — ${mp}` : '';
-                    return (
-                      <div key={i} className="flex flex-col gap-1">
-                        <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
-                          <span className="truncate">
-                            {d?.name ?? 'disk'}
-                            {d?.file_system ? (
-                              <span className="opacity-60"> ({d.file_system})</span>
-                            ) : null}
-                            {mpHint ? <span className="opacity-50">{mpHint}</span> : null}
-                          </span>
-                          <span className="tabular-nums">
-                            {formatBytes(used)} / {formatBytes(total)}
-                          </span>
-                        </div>
-                        <PercentBar percent={pct} ariaLabel={`Disk ${d?.name ?? i} used percent`} />
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             </div>
 
-            {/* MOBILE: Code manager block above the button */}
+            <Divider className="my-2" />
+
+            {/* === Disks (individual only, no aggregate) === */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium opacity-70">Disks</div>
+                <div className="text-xs opacity-70">
+                  {diskCount} {diskCount === 1 ? 'disk' : 'disks'}
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {disks.slice(0, 6).map((d, i) => {
+                  const total = d?.total ?? 0;
+                  const avail = d?.available ?? 0;
+                  const used = Math.max(0, total - avail);
+                  const pct = total > 0 ? Math.round((used / total) * 100) : 0;
+                  const mp = (d?.mount_point ?? '') as string;
+                  const mpHint = mp && mp !== '/' ? ` — ${mp}` : '';
+                  return (
+                    <div key={i} className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+                        <span className="truncate">
+                          {d?.name ?? 'disk'}
+                          {d?.file_system ? (
+                            <span className="opacity-60"> ({d.file_system})</span>
+                          ) : null}
+                          {mpHint ? <span className="opacity-50">{mpHint}</span> : null}
+                        </span>
+                        <span className="tabular-nums">
+                          {formatBytes(used)} / {formatBytes(total)}
+                        </span>
+                      </div>
+                      <PercentBar percent={pct} ariaLabel={`Disk ${d?.name ?? i} used percent`} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* === Code manager (mobile shown above button) === */}
             {isMobile && (
               <div className="flex flex-col gap-2 mt-2">
                 <div className="text-xs font-medium opacity-70">Code manager</div>
@@ -821,7 +865,14 @@ const AdminDashboard: React.FC = () => {
                     No data in selected range.
                   </div>
                 ) : (
-                  <Column {...metricsCfg} height={metricsChartHeight} />
+                  <Column
+                    {...metricsCfg}
+                    height={metricsChartHeight}
+                    onReady={(plot) => {
+                      plot.on('plot:mouseleave', () => plot.chart?.hideTooltip());
+                      plot.on('element:mouseleave', () => plot.chart?.hideTooltip());
+                    }}
+                  />
                 )}
               </div>
             </Card>
@@ -871,7 +922,14 @@ const AdminDashboard: React.FC = () => {
                     No data in selected range.
                   </div>
                 ) : (
-                  <Column {...subsCfg} height={subsChartHeight} />
+                  <Column
+                    {...subsCfg}
+                    height={subsChartHeight}
+                    onReady={(plot) => {
+                      plot.on('plot:mouseleave', () => plot.chart?.hideTooltip());
+                      plot.on('element:mouseleave', () => plot.chart?.hideTooltip());
+                    }}
+                  />
                 )}
               </div>
             </Card>
@@ -887,7 +945,7 @@ const AdminDashboard: React.FC = () => {
         okText="Save"
         okButtonProps={{ disabled: !maxDraftValid }}
         confirmLoading={saving}
-        destroyOnClose
+        destroyOnHidden
       >
         <Space direction="vertical" size={12} className="w-full">
           <div className="text-sm text-gray-600 dark:text-gray-300">

@@ -18,3 +18,13 @@ export const createAttendanceSession = async (
 // services/modules/attendance/post.ts
 export const markAttendance = (moduleId: number, sessionId: number, code: string, method: 'qr'|'manual' = 'manual') =>
   api.post<void>(`/modules/${moduleId}/attendance/sessions/${sessionId}/mark`, { code, method });
+
+export const markAttendanceByUsername = (
+  moduleId: number,
+  sessionId: number,
+  username: string,
+) =>
+  api.post<void>(
+    `/modules/${moduleId}/attendance/sessions/${sessionId}/mark/by-username`,
+    { username }
+  );

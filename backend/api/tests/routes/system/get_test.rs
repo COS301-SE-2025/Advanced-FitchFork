@@ -235,7 +235,7 @@ mod tests {
             .unwrap();
         let csv_str = String::from_utf8(csv.to_vec()).unwrap();
         assert!(csv_str.contains("timestamp,cpu_avg,mem_pct"));
-        assert!(csv_str.contains("2024-01-01T12:00:00+00:00,42.0000,75.0000"));
+        assert!(csv_str.contains("2024-01-01T12:00:00+00:00,42,75"));
     }
 
     #[serial]
