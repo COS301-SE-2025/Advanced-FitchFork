@@ -220,4 +220,4 @@ mod tests {
         ];
         assert_eq!(compute_overall_score(&results).unwrap(), 115);
     }
-} 
+}

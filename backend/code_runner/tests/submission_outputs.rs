@@ -11,7 +11,7 @@ use db::models::user::{ActiveModel as UserActiveModel, Entity as UserEntity};
 use db::test_utils::setup_test_db;
 use sea_orm::DatabaseConnection;
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
-use util::paths::{storage_root, attempt_dir};
+use util::paths::{attempt_dir, storage_root};
 
 async fn seed_user(db: &DatabaseConnection) -> i64 {
     let user_id = 1;

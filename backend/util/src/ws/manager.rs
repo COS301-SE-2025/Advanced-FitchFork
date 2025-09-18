@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 
 /// Type alias for topic name.
 type Topic = String;
@@ -21,7 +21,7 @@ type Receiver = broadcast::Receiver<String>;
 /// - Lazily creates broadcast channels per topic on first subscription
 /// - Removes topics when their subscriber count drops to zero after sending
 /// - Tracks user presence per topic using a refcount (supports multiple tabs)
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct WebSocketManager {
     /// Map of topics to broadcast senders.
     pub inner: Arc<RwLock<HashMap<Topic, Sender>>>,
@@ -32,10 +32,7 @@ pub struct WebSocketManager {
 impl WebSocketManager {
     /// Creates a new, empty `WebSocketManager`.
     pub fn new() -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(HashMap::new())),
-            presence: Arc::new(RwLock::new(HashMap::new())),
-        }
+        Self::default()
     }
 
     /// Subscribes to the given topic, creating it if necessary.
@@ -99,7 +96,7 @@ impl WebSocketManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{timeout, Duration};
+    use tokio::time::{Duration, timeout};
 
     #[tokio::test]
     async fn it_broadcasts_to_all_subscribers() {
@@ -111,8 +108,14 @@ mod tests {
 
         manager.broadcast(topic, "hello world").await;
 
-        let msg1 = timeout(Duration::from_millis(50), r1.recv()).await.unwrap().unwrap();
-        let msg2 = timeout(Duration::from_millis(50), r2.recv()).await.unwrap().unwrap();
+        let msg1 = timeout(Duration::from_millis(50), r1.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let msg2 = timeout(Duration::from_millis(50), r2.recv())
+            .await
+            .unwrap()
+            .unwrap();
 
         assert_eq!(msg1, "hello world");
         assert_eq!(msg2, "hello world");
@@ -137,7 +140,9 @@ mod tests {
     async fn topic_is_removed_after_broadcast_if_no_subscribers() {
         let manager = WebSocketManager::new();
         let topic = "ephemeral-topic";
-        { let _ = manager.subscribe(topic).await; } // drop receiver
+        {
+            let _ = manager.subscribe(topic).await;
+        } // drop receiver
         manager.broadcast(topic, "cleanup").await;
         let map = manager.inner.read().await;
         assert!(!map.contains_key(topic));

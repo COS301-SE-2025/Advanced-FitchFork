@@ -6,6 +6,7 @@ import { useAssignment } from '@/context/AssignmentContext';
 import { message } from '@/utils/message';
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
 import type { AssignmentSecurityConfig } from '@/types/modules/assignments/config';
+import Tip from '@/components/common/Tip';
 
 type FormShape = {
   password_enabled: boolean;
@@ -40,9 +41,17 @@ export default function SecurityPage() {
 
   useEffect(() => {
     setValue(
-      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
-        Security
-      </Typography.Text>,
+      <Space align="center" size={6} className="flex-wrap">
+        <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+          Security
+        </Typography.Text>
+        <Tip
+          iconOnly
+          newTab
+          to="/help/assignments/config/security#what"
+          text="Security help"
+        />
+      </Space>,
     );
   }, [setValue]);
 

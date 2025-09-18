@@ -22,6 +22,11 @@ import { updateMarkAllocator } from '@/services/modules/assignments/mark-allocat
 import { message } from '@/utils/message';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
+import { fetchAssignmentFileBlob } from '@/services/modules/assignments';
+import {
+  parseTargetsFromMakefileZip,
+  createTasksFromMakefileTargets,
+} from '@/utils/makefile_tasks';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 
 function normalizeSubsections(subs: any[]) {
@@ -61,6 +66,9 @@ type Ctx = {
   createNewTask: () => Promise<void>;
   saveTask: () => Promise<void>;
   deleteTask: (id: number) => Promise<void>;
+  hasMakefile: boolean;
+  generateTasksFromMakefile: () => Promise<void>;
+  generatingFromMakefile: boolean;
 
   // assessment
   setSelectedTask: React.Dispatch<React.SetStateAction<TaskDetail | null>>;
@@ -82,7 +90,7 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const isMobile = !screens.md;
 
   const module = useModule();
-  const { assignment } = useAssignment();
+  const { assignment, assignmentFiles, readiness, refreshAssignment } = useAssignment();
   const moduleId = module.id!;
   const assignmentId = assignment.id!;
 
@@ -134,7 +142,7 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setTaskDetails(map);
 
       const endsWithTasks = location.pathname.endsWith('/tasks');
-      if (endsWithTasks && sorted.length > 0) {
+      if (!isMobile && endsWithTasks && sorted.length > 0) {
         setSelectedId(sorted[0].id);
       }
     } catch (e) {
@@ -143,7 +151,7 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } finally {
       setLoading(false);
     }
-  }, [moduleId, assignmentId, location.pathname, setSelectedId]);
+  }, [moduleId, assignmentId, location.pathname, setSelectedId, isMobile]);
 
   // initial + dependency refresh
   useEffect(() => {
@@ -206,6 +214,63 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       message.error('Failed to create task');
     }
   }, [moduleId, assignmentId, tasks, refreshTasks, setSelectedId]);
+
+  const makefileFile = useMemo(
+    () => assignmentFiles?.find((f) => f.file_type === 'makefile') ?? null,
+    [assignmentFiles],
+  );
+  const hasMakefile = Boolean(readiness?.makefile_present && makefileFile);
+  const [generatingFromMakefile, setGeneratingFromMakefile] = useState(false);
+
+  const generateTasksFromMakefile = useCallback(async () => {
+    if (!moduleId || !assignmentId || !makefileFile) {
+      message.info('Upload a Makefile in Files & Config before generating tasks.');
+      return;
+    }
+
+    if (generatingFromMakefile) return;
+
+    setGeneratingFromMakefile(true);
+    try {
+      const blob = await fetchAssignmentFileBlob(moduleId, assignmentId, makefileFile.id);
+      const file = new File([blob], makefileFile.filename, {
+        type: blob.type || 'application/zip',
+      });
+
+      const targets = await parseTargetsFromMakefileZip(file);
+      if (!targets.length) {
+        message.info('No runnable targets were detected in the Makefile.');
+        return;
+      }
+
+      const created = await createTasksFromMakefileTargets(
+        moduleId,
+        assignmentId,
+        targets,
+        refreshAssignment,
+      );
+
+      if (created > 0) {
+        await refreshTasks();
+        message.success(`Generated ${created} task${created === 1 ? '' : 's'} from the Makefile.`);
+      } else {
+        message.info('No new tasks were created from the Makefile.');
+      }
+    } catch (err) {
+      message.error('Failed to generate tasks from the Makefile.');
+      // eslint-disable-next-line no-console
+      console.error(err);
+    } finally {
+      setGeneratingFromMakefile(false);
+    }
+  }, [
+    moduleId,
+    assignmentId,
+    makefileFile,
+    generatingFromMakefile,
+    refreshTasks,
+    refreshAssignment,
+  ]);
 
   const saveTask = useCallback(async () => {
     if (!selectedTask) return;
@@ -346,6 +411,9 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       createNewTask,
       saveTask,
       deleteTask,
+      hasMakefile,
+      generateTasksFromMakefile,
+      generatingFromMakefile,
       setSelectedTask,
       saveAllocatorAllTasks,
       taskDetails,
@@ -366,8 +434,17 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       createNewTask,
       saveTask,
       deleteTask,
+      hasMakefile,
+      generateTasksFromMakefile,
+      generatingFromMakefile,
       saveAllocatorAllTasks,
       taskDetails,
+      setSelectedId,
+      setEditedName,
+      setEditedCommand,
+      setEditedCoverage,
+      setSelectedTask,
+      setTaskDetails,
     ],
   );
 

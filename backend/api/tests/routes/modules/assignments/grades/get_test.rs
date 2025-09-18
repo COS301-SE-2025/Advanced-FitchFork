@@ -7,19 +7,19 @@ mod tests {
     use chrono::{Duration, TimeZone, Utc};
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
-        assignment_submission::{Model as AssignmentSubmissionModel},
+        assignment_submission::Model as AssignmentSubmissionModel,
         assignment_task::Model as AssignmentTaskModel,
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use serde_json::{json, Value};
-    use util::paths::{config_dir, submission_report_path};
+    use serde_json::{Value, json};
     use std::{collections::HashMap, fs};
     use tower::ServiceExt;
+    use util::paths::{config_dir, submission_report_path};
 
-    use api::auth::generate_jwt;
     use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
 
     use sea_orm::{ActiveModelTrait, Set};
     use serial_test::serial;
@@ -64,8 +64,11 @@ mod tests {
             "gatlam": {}
         });
 
-        fs::write(config_dir.join("config.json"), serde_json::to_string_pretty(&cfg).unwrap())
-            .unwrap();
+        fs::write(
+            config_dir.join("config.json"),
+            serde_json::to_string_pretty(&cfg).unwrap(),
+        )
+        .unwrap();
     }
 
     async fn mark_submission_ignored(
@@ -111,7 +114,12 @@ mod tests {
         mark_earned: i64,
         mark_total: i64,
         is_practice: bool,
-        tasks_payload: Vec<(i64 /* task_id */, i64 /* task_number */, i64 /* earned */, i64 /* total */)>,
+        tasks_payload: Vec<(
+            i64, /* task_id */
+            i64, /* task_number */
+            i64, /* earned */
+            i64, /* total */
+        )>,
     ) {
         let path = submission_report_path(module_id, assignment_id, user_id, attempt);
 
@@ -145,8 +153,7 @@ mod tests {
           "tasks": tasks_json
         });
 
-        fs::write(path, serde_json::to_string_pretty(&report).unwrap())
-            .unwrap();
+        fs::write(path, serde_json::to_string_pretty(&report).unwrap()).unwrap();
     }
 
     /// Simple seeder (non-practice, non-ignored).
@@ -159,7 +166,12 @@ mod tests {
         earned: i64,
         total: i64,
         created_offset_min: i64,
-        task_rows: Vec<(i64 /* task_id */, i64 /* task_number */, i64 /* earned */, i64 /* total */)>,
+        task_rows: Vec<(
+            i64, /* task_id */
+            i64, /* task_number */
+            i64, /* earned */
+            i64, /* total */
+        )>,
     ) -> AssignmentSubmissionModel {
         let created = assignment.due_date + Duration::minutes(created_offset_min);
         let filename = format!("u{}_a{}.zip", user.id, attempt);
@@ -172,7 +184,7 @@ mod tests {
             attempt,
             earned,
             total,
-            false,           // is_practice
+            false, // is_practice
             &filename,
             &hash,
             b"dummy",
@@ -192,7 +204,7 @@ mod tests {
             created,
             earned,
             total,
-            false,          // is_practice in report
+            false, // is_practice in report
             task_rows,
         );
 
@@ -268,30 +280,33 @@ mod tests {
                 .await
                 .unwrap();
 
-        let tutor_user =
-            UserModel::create(db, "tutor1", "tutor1@test.com", "passwordT", false)
-                .await
-                .unwrap();
+        let tutor_user = UserModel::create(db, "tutor1", "tutor1@test.com", "passwordT", false)
+            .await
+            .unwrap();
 
-        let student1 =
-            UserModel::create(db, "student1", "student1@test.com", "password2", false)
-                .await
-                .unwrap();
-        let student2 =
-            UserModel::create(db, "student2", "student2@test.com", "password3", false)
-                .await
-                .unwrap();
+        let student1 = UserModel::create(db, "student1", "student1@test.com", "password2", false)
+            .await
+            .unwrap();
+        let student2 = UserModel::create(db, "student2", "student2@test.com", "password3", false)
+            .await
+            .unwrap();
 
-        let module =
-            ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
+            .await
+            .unwrap();
 
         // Roles
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
             .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, assistant_user.id, module.id, Role::AssistantLecturer)
-            .await
-            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            assistant_user.id,
+            module.id,
+            Role::AssistantLecturer,
+        )
+        .await
+        .unwrap();
         UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor)
             .await
             .unwrap();
@@ -318,9 +333,18 @@ mod tests {
         // assignment_tasks (task_number → name). IDs are auto; we capture them.
         let mut t_ids_by_num = HashMap::new();
 
-        let t1 = AssignmentTaskModel::create(db, assignment_last.id, 1, "FizzBuzz", "run fizz", false).await.unwrap();
-        let t2 = AssignmentTaskModel::create(db, assignment_last.id, 2, "Palindrome", "run pal", false).await.unwrap();
-        let t3 = AssignmentTaskModel::create(db, assignment_last.id, 3, "Sorting", "run sort", false).await.unwrap();
+        let t1 =
+            AssignmentTaskModel::create(db, assignment_last.id, 1, "FizzBuzz", "run fizz", false)
+                .await
+                .unwrap();
+        let t2 =
+            AssignmentTaskModel::create(db, assignment_last.id, 2, "Palindrome", "run pal", false)
+                .await
+                .unwrap();
+        let t3 =
+            AssignmentTaskModel::create(db, assignment_last.id, 3, "Sorting", "run sort", false)
+                .await
+                .unwrap();
         t_ids_by_num.insert(1, t1.id);
         t_ids_by_num.insert(2, t2.id);
         t_ids_by_num.insert(3, t3.id);
@@ -350,16 +374,35 @@ mod tests {
 
         // Seed a minimal submission so the handler has something to chew on
         let _ = seed_submission(
-            db, data.module.id, &data.assignment_last, &data.student1,
-            1, 10, 20, -10,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student1,
+            1,
+            10,
+            20,
+            -10,
             vec![(data.t_ids_by_num[&1], 1, 5, 10)],
-        ).await;
+        )
+        .await;
 
         // Check role-based access for the list endpoint
         let cases = vec![
-            (data.lecturer_user.id, data.lecturer_user.admin, StatusCode::OK),
-            (data.assistant_user.id, data.assistant_user.admin, StatusCode::OK),
-            (data.tutor_user.id, data.tutor_user.admin, StatusCode::FORBIDDEN),
+            (
+                data.lecturer_user.id,
+                data.lecturer_user.admin,
+                StatusCode::OK,
+            ),
+            (
+                data.assistant_user.id,
+                data.assistant_user.admin,
+                StatusCode::OK,
+            ),
+            (
+                data.tutor_user.id,
+                data.tutor_user.admin,
+                StatusCode::FORBIDDEN,
+            ),
             (data.student1.id, data.student1.admin, StatusCode::FORBIDDEN),
         ];
 
@@ -397,15 +440,34 @@ mod tests {
 
         // Minimal seed
         let _ = seed_submission(
-            db, data.module.id, &data.assignment_last, &data.student2,
-            1, 18, 20, -5,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student2,
+            1,
+            18,
+            20,
+            -5,
             vec![(data.t_ids_by_num[&2], 2, 9, 10)],
-        ).await;
+        )
+        .await;
 
         let cases = vec![
-            (data.lecturer_user.id, data.lecturer_user.admin, StatusCode::OK),
-            (data.assistant_user.id, data.assistant_user.admin, StatusCode::OK),
-            (data.tutor_user.id, data.tutor_user.admin, StatusCode::FORBIDDEN),
+            (
+                data.lecturer_user.id,
+                data.lecturer_user.admin,
+                StatusCode::OK,
+            ),
+            (
+                data.assistant_user.id,
+                data.assistant_user.admin,
+                StatusCode::OK,
+            ),
+            (
+                data.tutor_user.id,
+                data.tutor_user.admin,
+                StatusCode::FORBIDDEN,
+            ),
             (data.student1.id, data.student1.admin, StatusCode::FORBIDDEN),
         ];
 
@@ -444,33 +506,54 @@ mod tests {
         // student1 → attempt 1 older, attempt 2 newer → LAST picks attempt 2
         // Report has "name" = task_id string; handler must map to real names.
         let _s1a1 = seed_submission(
-            db, data.module.id, &data.assignment_last, &data.student1,
-            1, 10, 27, -200,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student1,
+            1,
+            10,
+            27,
+            -200,
             vec![
                 (data.t_ids_by_num[&1], 1, 3, 9),
                 (data.t_ids_by_num[&2], 2, 4, 9),
             ],
-        ).await;
+        )
+        .await;
 
         let _s1a2 = seed_submission(
-            db, data.module.id, &data.assignment_last, &data.student1,
-            2, 21, 27, -100,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student1,
+            2,
+            21,
+            27,
+            -100,
             vec![
                 (data.t_ids_by_num[&1], 1, 8, 9),
                 (data.t_ids_by_num[&2], 2, 8, 9),
                 (data.t_ids_by_num[&3], 3, 5, 9),
             ],
-        ).await;
+        )
+        .await;
 
         // student2 → one attempt
         let _s2a1 = seed_submission(
-            db, data.module.id, &data.assignment_last, &data.student2,
-            1, 24, 27, -50,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student2,
+            1,
+            24,
+            27,
+            -50,
             vec![
                 (data.t_ids_by_num[&1], 1, 9, 9),
                 (data.t_ids_by_num[&2], 2, 7, 9),
             ],
-        ).await;
+        )
+        .await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -486,7 +569,9 @@ mod tests {
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true, "response should be success=true");
 
@@ -501,9 +586,16 @@ mod tests {
 
         // task names resolved
         let tasks1 = row1["tasks"].as_array().unwrap();
-        let names1: Vec<String> = tasks1.iter().map(|t| t["name"].as_str().unwrap_or("").to_string()).collect();
+        let names1: Vec<String> = tasks1
+            .iter()
+            .map(|t| t["name"].as_str().unwrap_or("").to_string())
+            .collect();
         for expected in ["FizzBuzz", "Palindrome", "Sorting"] {
-            assert!(names1.contains(&expected.to_string()), "expected task name {} in tasks", expected);
+            assert!(
+                names1.contains(&expected.to_string()),
+                "expected task name {} in tasks",
+                expected
+            );
         }
 
         // student2
@@ -513,9 +605,16 @@ mod tests {
         assert!((s2_score - (24.0 * 100.0 / 27.0)).abs() < 0.2);
 
         let tasks2 = row2["tasks"].as_array().unwrap();
-        let names2: Vec<String> = tasks2.iter().map(|t| t["name"].as_str().unwrap_or("").to_string()).collect();
+        let names2: Vec<String> = tasks2
+            .iter()
+            .map(|t| t["name"].as_str().unwrap_or("").to_string())
+            .collect();
         for expected in ["FizzBuzz", "Palindrome"] {
-            assert!(names2.contains(&expected.to_string()), "expected task name {} in tasks", expected);
+            assert!(
+                names2.contains(&expected.to_string()),
+                "expected task name {} in tasks",
+                expected
+            );
         }
     }
 
@@ -531,37 +630,65 @@ mod tests {
         //  a2: practice (excluded)
         //  a3: ignored (excluded)
         let _s1a1_valid = seed_submission_with_flags(
-            db, data.module.id, &data.assignment_last, &data.student1,
-            1, 10, 20, -300,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student1,
+            1,
+            10,
+            20,
+            -300,
             false, /* is_practice */
             false, /* ignored */
             vec![(data.t_ids_by_num[&1], 1, 5, 10)],
-        ).await;
+        )
+        .await;
 
         let _s1a2_practice = seed_submission_with_flags(
-            db, data.module.id, &data.assignment_last, &data.student1,
-            2, 18, 20, -200,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student1,
+            2,
+            18,
+            20,
+            -200,
             true,  /* is_practice */
             false, /* ignored */
             vec![(data.t_ids_by_num[&2], 2, 9, 10)],
-        ).await;
+        )
+        .await;
 
         let _s1a3_ignored = seed_submission_with_flags(
-            db, data.module.id, &data.assignment_last, &data.student1,
-            3, 19, 20, -100,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student1,
+            3,
+            19,
+            20,
+            -100,
             false, /* is_practice */
             true,  /* ignored */
             vec![(data.t_ids_by_num[&3], 3, 9, 10)],
-        ).await;
+        )
+        .await;
 
         // student2: only ignored → should not appear in final list
         let _s2a1_ignored = seed_submission_with_flags(
-            db, data.module.id, &data.assignment_last, &data.student2,
-            1, 20, 20, -50,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student2,
+            1,
+            20,
+            20,
+            -50,
             false, /* is_practice */
             true,  /* ignored */
             vec![(data.t_ids_by_num[&1], 1, 10, 10)],
-        ).await;
+        )
+        .await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -577,7 +704,9 @@ mod tests {
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
 
@@ -589,13 +718,16 @@ mod tests {
 
         // Chosen submission must be the non-practice, non-ignored one (attempt 1)
         let s1_score = grades[0]["score"].as_f64().unwrap();
-        assert!((s1_score - 50.0).abs() < 0.2, "expected ≈50, got {}", s1_score);
+        assert!(
+            (s1_score - 50.0).abs() < 0.2,
+            "expected ≈50, got {}",
+            s1_score
+        );
 
         // Task-name mapping still OK (FizzBuzz only; the others belonged to excluded attempts)
         let tasks = grades[0]["tasks"].as_array().unwrap();
-        let names: std::collections::HashSet<_> = tasks.iter()
-            .filter_map(|t| t["name"].as_str())
-            .collect();
+        let names: std::collections::HashSet<_> =
+            tasks.iter().filter_map(|t| t["name"].as_str()).collect();
         assert!(names.contains("FizzBuzz"));
         assert!(!names.contains("Palindrome"));
         assert!(!names.contains("Sorting"));
@@ -624,7 +756,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial] 
+    #[serial]
     async fn list_grades_username_query_filters() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
@@ -632,16 +764,30 @@ mod tests {
 
         // minimal: one submission each + reports
         let _ = seed_submission(
-            db,  data.module.id, &data.assignment_last, &data.student1,
-            1, 10, 20, -10,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student1,
+            1,
+            10,
+            20,
+            -10,
             vec![(data.t_ids_by_num[&1], 1, 5, 10)],
-        ).await;
+        )
+        .await;
 
         let _ = seed_submission(
-            db, data.module.id, &data.assignment_last, &data.student2,
-            1, 18, 20, -5,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student2,
+            1,
+            18,
+            20,
+            -5,
             vec![(data.t_ids_by_num[&2], 2, 9, 10)],
-        ).await;
+        )
+        .await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         // filter only student2
@@ -658,7 +804,9 @@ mod tests {
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let grades = json["data"]["grades"].as_array().unwrap();
         assert_eq!(grades.len(), 1);
@@ -674,29 +822,50 @@ mod tests {
 
         // student1 (last attempt is #2)
         let _s1a1 = seed_submission(
-            db,  data.module.id, &data.assignment_last, &data.student1,
-            1, 10, 27, -200,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student1,
+            1,
+            10,
+            27,
+            -200,
             vec![(data.t_ids_by_num[&1], 1, 5, 9)],
-        ).await;
+        )
+        .await;
         let _s1a2 = seed_submission(
-            db, data.module.id, &data.assignment_last, &data.student1,
-            2, 21, 27, -100,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student1,
+            2,
+            21,
+            27,
+            -100,
             vec![
                 (data.t_ids_by_num[&1], 1, 8, 9), // 88.888…
                 (data.t_ids_by_num[&2], 2, 8, 9), // 88.888…
                 (data.t_ids_by_num[&3], 3, 5, 9), // 55.555…
             ],
-        ).await;
+        )
+        .await;
 
         // student2 (only attempt). Leave out task 3 to test empty cells.
         let _s2a1 = seed_submission(
-            db, data.module.id, &data.assignment_last, &data.student2,
-            1, 24, 27, -50,
+            db,
+            data.module.id,
+            &data.assignment_last,
+            &data.student2,
+            1,
+            24,
+            27,
+            -50,
             vec![
                 (data.t_ids_by_num[&1], 1, 9, 9), // 100
                 (data.t_ids_by_num[&2], 2, 7, 9), // 77.777…
             ],
-        ).await;
+        )
+        .await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -712,10 +881,16 @@ mod tests {
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         // content-type text/csv
-        let ct = resp.headers().get("content-type").and_then(|h| h.to_str().ok()).unwrap_or("");
+        let ct = resp
+            .headers()
+            .get("content-type")
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("");
         assert!(ct.starts_with("text/csv"));
 
-        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let csv = String::from_utf8(body.to_vec()).unwrap();
 
         // Parse CSV roughly (no quoted commas expected in our test)
@@ -728,18 +903,29 @@ mod tests {
 
         // The remaining headers should be the union of task names.
         let header_tasks: Vec<&str> = headers[2..].to_vec();
-        let set = header_tasks.iter().cloned().collect::<std::collections::HashSet<_>>();
+        let set = header_tasks
+            .iter()
+            .cloned()
+            .collect::<std::collections::HashSet<_>>();
         for expected in ["FizzBuzz", "Palindrome", "Sorting"] {
             assert!(set.contains(expected), "missing task column {}", expected);
         }
 
         // Index lookup
-        let idx_of = |name: &str| header_tasks.iter().position(|h| *h == name).map(|i| i + 2).unwrap();
+        let idx_of = |name: &str| {
+            header_tasks
+                .iter()
+                .position(|h| *h == name)
+                .map(|i| i + 2)
+                .unwrap()
+        };
 
         // Read rows into a map username -> Vec<String>
         let mut rows: HashMap<String, Vec<String>> = HashMap::new();
         for line in lines {
-            if line.trim().is_empty() { continue; }
+            if line.trim().is_empty() {
+                continue;
+            }
             let cols: Vec<String> = line.split(',').map(|s| s.to_string()).collect();
             rows.insert(cols[0].clone(), cols);
         }
@@ -761,13 +947,16 @@ mod tests {
         let i_sort = idx_of("Sorting");
 
         // student1 has all three: 88.888.., 88.888.., 55.555..
-        assert!((f(&r1[i_fb])  - (8.0 * 100.0 / 9.0)).abs() < 0.2);
+        assert!((f(&r1[i_fb]) - (8.0 * 100.0 / 9.0)).abs() < 0.2);
         assert!((f(&r1[i_pal]) - (8.0 * 100.0 / 9.0)).abs() < 0.2);
         assert!((f(&r1[i_sort]) - (5.0 * 100.0 / 9.0)).abs() < 0.2);
 
         // student2 has only first two; Sorting should be empty → ensure the cell is actually empty string.
-        assert!(r2[i_sort].is_empty(), "expected empty cell for missing Sorting");
-        assert!((f(&r2[i_fb])  - 100.0).abs() < 0.2);
+        assert!(
+            r2[i_sort].is_empty(),
+            "expected empty cell for missing Sorting"
+        );
+        assert!((f(&r2[i_fb]) - 100.0).abs() < 0.2);
         assert!((f(&r2[i_pal]) - (7.0 * 100.0 / 9.0)).abs() < 0.2);
     }
 }

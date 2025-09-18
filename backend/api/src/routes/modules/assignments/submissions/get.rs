@@ -14,23 +14,27 @@ use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     Extension, Json,
     extract::{Path, Query, State},
-    http::{header, HeaderMap, HeaderValue, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
 use db::models::{
-    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, 
-    assignment_submission::{self, Entity as SubmissionEntity}, assignment_submission_output::Model as SubmissionOutput, assignment_task, user, user_module_role::{self, Role},
+    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
+    assignment_submission::{self, Entity as SubmissionEntity},
     assignment_submission::{Column as SubmissionColumn, Model as SubmissionModel},
+    assignment_submission_output::Model as SubmissionOutput,
+    assignment_task, user,
+    user_module_role::{self, Role},
 };
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, RelationTrait, sea_query::{Expr, Func}, QueryTrait,
+    QueryOrder, QuerySelect, QueryTrait, RelationTrait,
+    sea_query::{Expr, Func},
 };
 use serde::Serialize;
 use serde_json::Value;
-use util::state::AppState;
 use std::{collections::HashMap, fs, path::PathBuf};
+use util::state::AppState;
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
@@ -98,8 +102,10 @@ async fn get_user_submissions(
     if let Some(query) = &params.query {
         let pattern = format!("%{}%", query.to_lowercase());
         condition = condition.add(
-            Expr::expr(Func::lower(Expr::col(assignment_submission::Column::Filename)))
-                .like(&pattern),
+            Expr::expr(Func::lower(Expr::col(
+                assignment_submission::Column::Filename,
+            )))
+            .like(&pattern),
         );
     }
 
@@ -173,12 +179,8 @@ async fn get_user_submissions(
         .into_iter()
         .map(|s| {
             // Centralized report path
-            let report_path = submission_report_path(
-                module_id,
-                assignment_id,
-                s.user_id,
-                s.attempt,
-            );
+            let report_path =
+                submission_report_path(module_id, assignment_id, s.user_id, s.attempt);
 
             let (mark, is_practice) = match fs::read_to_string(&report_path) {
                 Ok(content) => {
@@ -346,8 +348,10 @@ async fn get_list_submissions(
         // LOWER(filename) LIKE %pattern% OR user_id IN (subquery)
         let or_condition = Condition::any()
             .add(
-                Expr::expr(Func::lower(Expr::col(assignment_submission::Column::Filename)))
-                    .like(&pattern),
+                Expr::expr(Func::lower(Expr::col(
+                    assignment_submission::Column::Filename,
+                )))
+                .like(&pattern),
             )
             .add(assignment_submission::Column::UserId.in_subquery(user_ids_subq));
 
@@ -430,7 +434,8 @@ async fn get_list_submissions(
                 }
             };
 
-            let report_path = submission_report_path(module_id, assignment_id, s.user_id, s.attempt);
+            let report_path =
+                submission_report_path(module_id, assignment_id, s.user_id, s.attempt);
 
             let (mark, is_practice) = match fs::read_to_string(&report_path) {
                 Ok(content) => {
@@ -742,45 +747,45 @@ pub async fn get_submission(
     // Enrich task names: replace numeric task IDs or task_numbers with real names
     // ─────────────────────────────────────────────────────────────────────────────
 
-    let (by_id, by_num): (HashMap<i64, String>, HashMap<i64, String>) = match assignment_task::Entity::find()
-        .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
-        .all(db)
-        .await
-    {
-        Ok(rows) => {
-            let mut id_map = HashMap::with_capacity(rows.len());
-            let mut num_map = HashMap::with_capacity(rows.len());
-            for t in rows {
-                id_map.insert(t.id, t.name.clone());
-                num_map.insert(t.task_number, t.name);
+    let (by_id, by_num): (HashMap<i64, String>, HashMap<i64, String>) =
+        match assignment_task::Entity::find()
+            .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
+            .all(db)
+            .await
+        {
+            Ok(rows) => {
+                let mut id_map = HashMap::with_capacity(rows.len());
+                let mut num_map = HashMap::with_capacity(rows.len());
+                for t in rows {
+                    id_map.insert(t.id, t.name.clone());
+                    num_map.insert(t.task_number, t.name);
+                }
+                (id_map, num_map)
             }
-            (id_map, num_map)
-        }
-        Err(err) => {
-            eprintln!("get_submission: failed to load tasks for enrichment: {:?}", err);
-            (HashMap::new(), HashMap::new())
-        }
-    };
+            Err(err) => {
+                eprintln!(
+                    "get_submission: failed to load tasks for enrichment: {:?}",
+                    err
+                );
+                (HashMap::new(), HashMap::new())
+            }
+        };
 
     if let Some(tasks) = parsed.get_mut("tasks").and_then(|v| v.as_array_mut()) {
         for task_val in tasks.iter_mut() {
             // Capture current name as owned string (may be string or number)
-            let name_str_owned: Option<String> = task_val
-                .get("name")
-                .and_then(|v| {
-                    if let Some(s) = v.as_str() {
-                        Some(s.to_string())
-                    } else if let Some(n) = v.as_i64() {
-                        Some(n.to_string())
-                    } else {
-                        None
-                    }
-                });
+            let name_str_owned: Option<String> = task_val.get("name").and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s.to_string())
+                } else if let Some(n) = v.as_i64() {
+                    Some(n.to_string())
+                } else {
+                    None
+                }
+            });
 
             // Also capture task_number (if present)
-            let task_number_opt: Option<i64> = task_val
-                .get("task_number")
-                .and_then(|v| v.as_i64());
+            let task_number_opt: Option<i64> = task_val.get("task_number").and_then(|v| v.as_i64());
 
             // Decide on the best replacement
             let replacement: Option<String> = (|| {
@@ -830,7 +835,7 @@ pub async fn get_submission(
             "Submission details retrieved successfully",
         )),
     )
-    .into_response()
+        .into_response()
 }
 
 #[derive(Serialize)]
@@ -845,23 +850,26 @@ pub async fn get_submission_output(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    let output = match SubmissionOutput::get_output(db, module_id, assignment_id, submission_id).await {
-        Ok(output) => output,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Failed to retrieve submission output")),
-            )
-            .into_response();
-        }
-    };
+    let output =
+        match SubmissionOutput::get_output(db, module_id, assignment_id, submission_id).await {
+            Ok(output) => output,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error(
+                        "Failed to retrieve submission output",
+                    )),
+                )
+                    .into_response();
+            }
+        };
 
     if output.is_empty() {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Submission output not found")),
         )
-        .into_response();
+            .into_response();
     }
 
     let mut memo_data = Vec::new();
@@ -887,14 +895,16 @@ pub async fn get_submission_output(
                         task_id, assignment_id
                     ))),
                 )
-                .into_response();
+                    .into_response();
             }
             Err(_) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error("Database error while fetching task info")),
+                    Json(ApiResponse::<()>::error(
+                        "Database error while fetching task info",
+                    )),
                 )
-                .into_response();
+                    .into_response();
             }
         }
     }
@@ -906,7 +916,7 @@ pub async fn get_submission_output(
             "Fetched memo output successfully",
         )),
     )
-    .into_response()
+        .into_response()
 }
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}/download
@@ -933,14 +943,14 @@ pub async fn download_submission_file(
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::error("Assignment not found")),
             )
-                .into_response()
+                .into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Database error")),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -957,14 +967,14 @@ pub async fn download_submission_file(
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::error("Submission not found")),
             )
-                .into_response()
+                .into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Database error")),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -976,16 +986,24 @@ pub async fn download_submission_file(
     } else {
         let uid = claims.sub;
         let mid = assignment.module_id;
-        let lect = user::Model::is_in_role(db, uid, mid, "Lecturer").await.unwrap_or(false);
-        let al   = user::Model::is_in_role(db, uid, mid, "AssistantLecturer").await.unwrap_or(false);
-        let tut  = user::Model::is_in_role(db, uid, mid, "Tutor").await.unwrap_or(false);
+        let lect = user::Model::is_in_role(db, uid, mid, "Lecturer")
+            .await
+            .unwrap_or(false);
+        let al = user::Model::is_in_role(db, uid, mid, "AssistantLecturer")
+            .await
+            .unwrap_or(false);
+        let tut = user::Model::is_in_role(db, uid, mid, "Tutor")
+            .await
+            .unwrap_or(false);
         lect || al || tut
     };
 
     if !(is_owner || is_staff || is_admin) {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("Not authorized to download this submission")),
+            Json(ApiResponse::<()>::error(
+                "Not authorized to download this submission",
+            )),
         )
             .into_response();
     }
@@ -1009,7 +1027,7 @@ pub async fn download_submission_file(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Failed to read file")),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -1020,7 +1038,10 @@ pub async fn download_submission_file(
         HeaderValue::from_str(&format!("attachment; filename=\"{}\"", submission.filename))
             .unwrap_or_else(|_| HeaderValue::from_static("attachment")),
     );
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
 
     (StatusCode::OK, headers, buffer).into_response()
 }

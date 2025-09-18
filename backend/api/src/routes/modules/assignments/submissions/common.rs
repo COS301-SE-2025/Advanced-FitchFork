@@ -53,7 +53,7 @@ pub struct SubmissionListItem {
     pub is_practice: bool,
     pub is_late: bool,
     pub mark: Option<Mark>,
-    pub ignored: bool,   
+    pub ignored: bool,
 }
 
 /// Paginated response of submissions list.
@@ -76,7 +76,7 @@ pub struct SubmissionResponse {
     pub is_late: bool,
     pub is_practice: bool,
     pub mark: Option<Mark>,
-    pub ignored: bool,   
+    pub ignored: bool,
 }
 
 /// Represents a summary of earned vs total marks.

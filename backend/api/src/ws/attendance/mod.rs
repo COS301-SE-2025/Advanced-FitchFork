@@ -1,16 +1,19 @@
-use axum::{routing::get, middleware::from_fn_with_state, Router};
+use axum::{Router, middleware::from_fn_with_state, routing::get};
 use util::state::AppState;
 
-pub mod topics;
-pub mod handlers;
-pub mod ws_handlers;
 pub mod common;
+pub mod handlers;
+pub mod topics;
+pub mod ws_handlers;
 
-use crate::auth::guards::{require_attendance_ws_access};
+use crate::auth::guards::require_attendance_ws_access;
 use handlers::attendance_session_ws_handler;
 
 pub fn ws_attendance_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route("/sessions/{session_id}", get(attendance_session_ws_handler))
-        .route_layer(from_fn_with_state(app_state.clone(), require_attendance_ws_access))
+        .route_layer(from_fn_with_state(
+            app_state.clone(),
+            require_attendance_ws_access,
+        ))
 }

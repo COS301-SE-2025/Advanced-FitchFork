@@ -1,11 +1,12 @@
 import { useEffect, useCallback } from 'react';
-import { Form, Switch, Typography } from 'antd';
+import { Form, Switch, Typography, Space } from 'antd';
 import SettingsGroup from '@/components/SettingsGroup';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import { useAssignment } from '@/context/AssignmentContext';
 import { message } from '@/utils/message';
 import type { AssignmentOutputConfig } from '@/types/modules/assignments/config';
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
+import Tip from '@/components/common/Tip';
 
 export default function OutputPage() {
   const { setValue } = useViewSlot();
@@ -14,9 +15,17 @@ export default function OutputPage() {
 
   useEffect(() => {
     setValue(
-      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
-        Output Settings
-      </Typography.Text>,
+      <Space align="center" size={6} className="flex-wrap">
+        <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+          Output Settings
+        </Typography.Text>
+        <Tip
+          iconOnly
+          newTab
+          to="/help/assignments/config/output#what"
+          text="Output help"
+        />
+      </Space>,
     );
   }, [setValue]);
 

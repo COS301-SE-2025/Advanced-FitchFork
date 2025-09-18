@@ -40,4 +40,25 @@ impl Queue {
             waiting_task.notify_one();
         }
     }
+
+    /// Returns current queue statistics
+    pub fn stats(&self) -> (usize, usize, usize) {
+        (self.running, self.waiting.len(), self.max_concurrent)
+    }
+
+    /// Updates the maximum concurrent slots allowed. If the new limit is higher
+    /// than current running, this will immediately notify up to the difference
+    /// worth of waiting tasks.
+    pub fn set_max_concurrent(&mut self, new_max: usize) {
+        self.max_concurrent = new_max.max(1);
+        // Wake up waiting tasks if we have spare capacity now
+        while self.running < self.max_concurrent {
+            if let Some(waiting_task) = self.waiting.pop_front() {
+                self.running += 1;
+                waiting_task.notify_one();
+            } else {
+                break;
+            }
+        }
+    }
 }

@@ -39,4 +39,4 @@ pub enum MarkerError {
     ParseAllocatorError(String),
     /// Error parsing output file format (invalid structure or content).
     ParseOutputError(String),
-} 
+}

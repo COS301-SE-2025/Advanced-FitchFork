@@ -1,4 +1,4 @@
-use crate::types::{TaskResult, Subsection};
+use crate::types::{Subsection, TaskResult};
 
 /// OutputComparator is a strategy trait for comparing outputs.
 /// Each implementation provides a specific logic for comparing a single subsection
@@ -15,6 +15,6 @@ pub trait OutputComparator: Send + Sync {
         &self,
         section: &Subsection,
         memo_lines: &[String],
-        student_lines: &[String]
+        student_lines: &[String],
     ) -> TaskResult;
-} 
+}

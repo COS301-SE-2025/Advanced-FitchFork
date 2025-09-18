@@ -1,6 +1,6 @@
 // src/pages/modules/assignments/Tasks/TaskList.tsx
 import React from 'react';
-import { Button, Dropdown, Menu } from 'antd';
+import { Button, Dropdown, Menu, Modal } from 'antd';
 import { MoreOutlined } from '@ant-design/icons';
 import { useTasksPage } from './context';
 
@@ -10,8 +10,10 @@ const TaskList: React.FC = () => {
   const items = tasks.map((task) => ({
     key: task.id.toString(),
     label: (
-      <div className="flex justify-between items-center">
-        <span>{task.name || `Task ${task.task_number}`}</span>
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <span className="truncate text-left">
+          {task.name || `Task ${task.task_number}`}
+        </span>
         <Dropdown
           trigger={['click']}
           menu={{
@@ -23,7 +25,14 @@ const TaskList: React.FC = () => {
                   <span
                     onClick={(e) => {
                       e.stopPropagation();
-                      deleteTask(task.id);
+                      Modal.confirm({
+                        title: 'Delete this task?',
+                        content: 'This task and its configuration will be removed.',
+                        okText: 'Delete',
+                        okButtonProps: { danger: true },
+                        cancelText: 'Cancel',
+                        onOk: () => deleteTask(task.id),
+                      });
                     }}
                   >
                     Delete
@@ -38,6 +47,7 @@ const TaskList: React.FC = () => {
             size="small"
             icon={<MoreOutlined />}
             onClick={(e) => e.stopPropagation()}
+            className="flex-shrink-0"
           />
         </Dropdown>
       </div>

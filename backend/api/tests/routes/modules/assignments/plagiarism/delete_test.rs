@@ -1,21 +1,18 @@
 #[cfg(test)]
 mod common {
     use api::auth::generate_jwt;
-    use axum::{
-        body::Body as AxumBody,
-        http::Request,
-    };
+    use axum::{body::Body as AxumBody, http::Request};
     use chrono::{Datelike, TimeZone, Utc};
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
         assignment_submission::Model as SubmissionModel,
         module::Model as ModuleModel,
-        plagiarism_case::{Model as PlagiarismCaseModel},
+        plagiarism_case::Model as PlagiarismCaseModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use sea_orm::{DatabaseConnection};
-    
+    use sea_orm::DatabaseConnection;
+
     pub struct TestData {
         pub lecturer_user: UserModel,
         pub assistant_user: UserModel,
@@ -47,10 +44,9 @@ mod common {
         let tutor_user = UserModel::create(db, "tutor", "tutor@test.com", "password", false)
             .await
             .expect("Failed to create tutor user");
-        let student_user =
-            UserModel::create(db, "student", "student@test.com", "password", false)
-                .await
-                .expect("Failed to create student user");
+        let student_user = UserModel::create(db, "student", "student@test.com", "password", false)
+            .await
+            .expect("Failed to create student user");
 
         // Assign roles
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
@@ -122,10 +118,12 @@ mod common {
             submission1.id,
             submission2.id,
             "Initial description",
-            0.0,       // similarity
-            0,     // lines_matched
-            None,      // report_id
-        ).await.unwrap();
+            0.0,  // similarity
+            0,    // lines_matched
+            None, // report_id
+        )
+        .await
+        .unwrap();
 
         TestData {
             lecturer_user,
@@ -159,7 +157,6 @@ mod common {
             .unwrap()
     }
 }
-
 
 #[cfg(test)]
 mod delete_plagiarism_tests {
@@ -275,7 +272,10 @@ mod delete_plagiarism_tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Plagiarism case 999999 in Assignment 1 not found.");
+        assert_eq!(
+            json["message"],
+            "Plagiarism case 999999 in Assignment 1 not found."
+        );
     }
 
     /// Test Case: Unauthorized Access
@@ -325,12 +325,10 @@ mod bulk_delete_plagiarism_tests {
         user::Model as UserModel,
     };
     use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tower::ServiceExt;
 
-    async fn setup_bulk_test_data(
-        db: &DatabaseConnection,
-    ) -> (TestData, Vec<PlagiarismCaseModel>) {
+    async fn setup_bulk_test_data(db: &DatabaseConnection) -> (TestData, Vec<PlagiarismCaseModel>) {
         let data = setup_test_data(db).await;
         let mut extra_cases = Vec::new();
 
@@ -370,10 +368,12 @@ mod bulk_delete_plagiarism_tests {
             submission3.id,
             submission4.id,
             "Case 2",
-            0.0,       // similarity
-            0,     // lines_matched
-            None,      // report_id
-        ).await.unwrap();
+            0.0,  // similarity
+            0,    // lines_matched
+            None, // report_id
+        )
+        .await
+        .unwrap();
 
         let case3 = PlagiarismCaseModel::create_case(
             db,
@@ -381,11 +381,12 @@ mod bulk_delete_plagiarism_tests {
             data.submission1.id,
             submission3.id,
             "Case 3",
-            0.0,       // similarity
-            0_i64,     // lines_matched
-            None,      // report_id
-        ).await.unwrap();
-
+            0.0,   // similarity
+            0_i64, // lines_matched
+            None,  // report_id
+        )
+        .await
+        .unwrap();
 
         extra_cases.push(case2);
         extra_cases.push(case3);
@@ -441,11 +442,13 @@ mod bulk_delete_plagiarism_tests {
         assert_eq!(json["message"], "3 plagiarism cases deleted successfully");
 
         let remaining_cases = PlagiarismCaseEntity::find()
-            .filter(<PlagiarismCaseEntity as EntityTrait>::Column::Id.is_in(vec![
-                data.plagiarism_case.id,
-                extra_cases[0].id,
-                extra_cases[1].id,
-            ]))
+            .filter(
+                <PlagiarismCaseEntity as EntityTrait>::Column::Id.is_in(vec![
+                    data.plagiarism_case.id,
+                    extra_cases[0].id,
+                    extra_cases[1].id,
+                ]),
+            )
             .all(app_state.db())
             .await
             .unwrap();

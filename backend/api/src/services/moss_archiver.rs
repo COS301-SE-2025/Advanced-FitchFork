@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
 use regex::Regex;
-use reqwest::{redirect, Client, Url};
+use reqwest::{Client, Url, redirect};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -165,7 +165,9 @@ pub async fn archive_moss_to_fs(
     write_text(&index_path, &index_html_rewritten).await?;
 
     // 6) Minimal manifest
-    Ok(MossArchive { root_rel: ".".to_string() })
+    Ok(MossArchive {
+        root_rel: ".".to_string(),
+    })
 }
 
 /* ---------------- ZIP HELPERS ---------------- */
@@ -195,7 +197,11 @@ pub fn zip_dir_sync(src_dir: &Path, zip_path: &Path) -> Result<()> {
         let rel_str = rel.to_string_lossy().replace('\\', "/");
 
         if entry.file_type().is_dir() {
-            let dir_name = if rel_str.ends_with('/') { rel_str.clone() } else { format!("{}/", rel_str) };
+            let dir_name = if rel_str.ends_with('/') {
+                rel_str.clone()
+            } else {
+                format!("{}/", rel_str)
+            };
             zip.add_directory(dir_name, options.clone())
                 .with_context(|| format!("add dir {}", rel.display()))?;
         } else {
@@ -233,7 +239,9 @@ pub async fn archive_moss_to_fs_and_zip(
     let abs = if zip_path.is_absolute() {
         zip_path.to_path_buf()
     } else {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join(zip_path)
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(zip_path)
     };
     Ok((manifest, abs.to_string_lossy().to_string()))
 }
@@ -252,7 +260,9 @@ fn ensure_local_base(mut html: String) -> String {
     // insert one after <head> if no base exists
     let re_head = Regex::new(r"(?is)<head\s*>").unwrap();
     if re_head.is_match(&html) {
-        return re_head.replace(&html, r#"<head><base href="./">"#).to_string();
+        return re_head
+            .replace(&html, r#"<head><base href="./">"#)
+            .to_string();
     }
 
     // frameset-only pages (no <head>): inject before first <frameset>
@@ -312,7 +322,7 @@ async fn read_to_string(path: &Path) -> Result<String> {
 
 fn sanitize_file_component(s: &str) -> String {
     let replaced = s.replace('\\', "/");
-    let trimmed  = replaced.trim_matches('/');
+    let trimmed = replaced.trim_matches('/');
 
     let mut out = String::with_capacity(trimmed.len());
     for ch in trimmed.chars() {
@@ -340,7 +350,7 @@ fn url_basename_sanitized(u: &Url) -> String {
         .unwrap_or("match.html");
 
     let replaced = seg.replace('\\', "/");
-    let trimmed  = replaced.trim_matches('/');
+    let trimmed = replaced.trim_matches('/');
     let mut out = String::with_capacity(trimmed.len());
     for ch in trimmed.chars() {
         match ch {
@@ -385,7 +395,11 @@ fn extract_index_links(index_url: &Url, html: &str) -> Result<(Vec<Url>, Vec<Url
     let mut img_urls = Vec::<Url>::new();
     for img in doc.select(&img_sel) {
         if let Some(src) = img.value().attr("src") {
-            let abs = if let Ok(u) = Url::parse(src) { u } else { index_url.join(src)? };
+            let abs = if let Ok(u) = Url::parse(src) {
+                u
+            } else {
+                index_url.join(src)?
+            };
             img_urls.push(abs);
         }
     }
@@ -396,7 +410,7 @@ fn extract_index_links(index_url: &Url, html: &str) -> Result<(Vec<Url>, Vec<Url
 fn rewrite_index_links(
     index_url: &Url,
     original_html: &str,
-    match_map: &BTreeMap<String, String>,       // remote match URL -> local rel
+    match_map: &BTreeMap<String, String>, // remote match URL -> local rel
     url_to_rel_asset: &BTreeMap<String, String>, // remote asset URL -> local rel
 ) -> Result<String> {
     let doc = Html::parse_document(original_html);
@@ -420,7 +434,11 @@ fn rewrite_index_links(
     // img[src] on the INDEX page → local assets (index is at root, so "assets/...")
     for img in doc.select(&img_sel) {
         if let Some(src) = img.value().attr("src") {
-            let abs = if let Ok(u) = Url::parse(src) { u } else { index_url.join(src)? };
+            let abs = if let Ok(u) = Url::parse(src) {
+                u
+            } else {
+                index_url.join(src)?
+            };
             if let Some(local_rel) = url_to_rel_asset.get(abs.as_str()) {
                 out = out.replace(src, local_rel); // e.g., "assets/<hash>.gif"
             }
@@ -449,7 +467,7 @@ pub async fn download_one_match(
     //    - html_name: basename only (used inside match page)
     //    - save_rel : "matches/<basename>" (actual saved path)
     let mut frame_url_to_html_name: BTreeMap<String, String> = BTreeMap::new();
-    let mut frame_url_to_save_rel:  BTreeMap<String, String> = BTreeMap::new();
+    let mut frame_url_to_save_rel: BTreeMap<String, String> = BTreeMap::new();
 
     for furl in &frame_urls {
         let base = url_basename_sanitized(furl); // e.g. "match0-0.html"
@@ -476,8 +494,15 @@ pub async fn download_one_match(
                     out = out.replace(src, html_name);
                 } else {
                     // If it was "matches/foo.html" → "foo.html"
-                    if let Some(last) = Url::parse("https://dummy/").unwrap().join(src).ok()
-                        .and_then(|u| u.path_segments().and_then(|p| p.last()).map(|s| s.to_string()))
+                    if let Some(last) = Url::parse("https://dummy/")
+                        .unwrap()
+                        .join(src)
+                        .ok()
+                        .and_then(|u| {
+                            u.path_segments()
+                                .and_then(|p| p.last())
+                                .map(|s| s.to_string())
+                        })
                     {
                         out = out.replace(src, &last);
                     }
@@ -488,7 +513,11 @@ pub async fn download_one_match(
         // <img src> inside a match page (saved under /matches) must point to ../assets/...
         for im in doc.select(&img_sel) {
             if let Some(src) = im.value().attr("src") {
-                let abs = if let Ok(u) = Url::parse(src) { u } else { murl.join(src)? };
+                let abs = if let Ok(u) = Url::parse(src) {
+                    u
+                } else {
+                    murl.join(src)?
+                };
                 let local_name = asset_filename_for_url(&abs);
                 out = out.replace(src, &format!("../{}/{}", assets_rel_dir(), local_name));
             }
@@ -586,7 +615,11 @@ fn extract_frames_and_images(match_url: &Url, match_html: &str) -> Result<(Vec<U
     let mut imgs = Vec::<Url>::new();
     for im in doc.select(&img_sel) {
         if let Some(src) = im.value().attr("src") {
-            let abs = if let Ok(u) = Url::parse(src) { u } else { match_url.join(src)? };
+            let abs = if let Ok(u) = Url::parse(src) {
+                u
+            } else {
+                match_url.join(src)?
+            };
             imgs.push(abs);
         }
     }
@@ -605,7 +638,11 @@ fn rewrite_frame_html(frame_url: &Url, html: &str) -> Result<(String, Vec<Url>)>
 
     for img in doc.select(&img_sel) {
         if let Some(src) = img.value().attr("src") {
-            let abs = if let Ok(u) = Url::parse(src) { u } else { frame_url.join(src)? };
+            let abs = if let Ok(u) = Url::parse(src) {
+                u
+            } else {
+                frame_url.join(src)?
+            };
             let local_name = asset_filename_for_url(&abs);
             out = out.replace(src, &format!("../{}/{}", assets_rel_dir(), local_name));
             imgs.push(abs);

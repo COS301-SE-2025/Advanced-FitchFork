@@ -2,8 +2,10 @@
 ///
 /// This module defines HTTP routes for generating, loading, and saving mark allocator data.
 /// Each route is protected with middleware that ensures only lecturers can access them.
-
-use axum::{Router, routing::{get, post, put}};
+use axum::{
+    Router,
+    routing::{get, post, put},
+};
 use get::load;
 use post::generate;
 use put::save;

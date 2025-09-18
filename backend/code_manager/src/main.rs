@@ -1,6 +1,8 @@
 //main.rs
 use axum::{routing::get, Router};
-use code_manager::api::api::{health, init_manager, run_code};
+use code_manager::api::api::{
+    get_max_concurrent, health, init_manager, run_code, set_max_concurrent, stats,
+};
 use dotenv::dotenv;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
@@ -24,7 +26,12 @@ async fn main() {
     // Build API routes
     let app = Router::new()
         .route("/health", get(health))
-        .route("/run", axum::routing::post(run_code));
+        .route("/run", axum::routing::post(run_code))
+        .route("/stats", get(stats))
+        .route(
+            "/max_concurrent",
+            get(get_max_concurrent).post(set_max_concurrent),
+        );
 
     // Define address to listen on
     let host = config::code_manager_host();

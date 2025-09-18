@@ -4,10 +4,15 @@
 //!
 //! **Permissions:** Only users with the proper roles (e.g., lecturer/assistant) can delete announcements.
 
-use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
+use crate::response::ApiResponse;
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use db::models::announcements::Model as AnnouncementModel;
 use util::state::AppState;
-use crate::response::ApiResponse;
 
 /// DELETE /api/modules/{module_id}/announcements/{announcement_id}
 ///
@@ -78,9 +83,10 @@ pub async fn delete_announcement(
         ),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::error(
-                format!("Failed to delete announcement: {}", err),
-            )),
+            Json(ApiResponse::error(format!(
+                "Failed to delete announcement: {}",
+                err
+            ))),
         ),
     }
 }

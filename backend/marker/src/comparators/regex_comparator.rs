@@ -5,7 +5,7 @@
 //! and awards marks based on this percentage. **Lines are compared in order; only lines at the same position are considered a match.**
 
 use crate::traits::comparator::OutputComparator;
-use crate::types::{TaskResult, Subsection};
+use crate::types::{Subsection, TaskResult};
 use regex::Regex;
 
 /// A comparator that uses a regular expression to match patterns and awards marks proportionally.
@@ -38,7 +38,11 @@ impl OutputComparator for RegexComparator {
         if memo_lines.is_empty() {
             return TaskResult {
                 name: section.name.clone(),
-                awarded: if student_lines.is_empty() { section.value } else { 0 },
+                awarded: if student_lines.is_empty() {
+                    section.value
+                } else {
+                    0
+                },
                 possible: section.value,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
@@ -131,7 +135,7 @@ mod tests {
         let memo_lines = to_string_vec(&[r"number: \d+", r"item: \w+"]);
         let student_lines = to_string_vec(&["number: 123", "item: abc"]);
         let section = mock_subsection(10);
-        
+
         let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 10);
     }
@@ -195,7 +199,12 @@ mod tests {
         let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 5);
         assert!(!result.missed_patterns.is_empty());
-        assert!(result.missed_patterns.iter().any(|p| p.starts_with("Invalid regex pattern")));
+        assert!(
+            result
+                .missed_patterns
+                .iter()
+                .any(|p| p.starts_with("Invalid regex pattern"))
+        );
     }
 
     #[test]
@@ -219,4 +228,4 @@ mod tests {
         assert!(result.awarded < 10);
         assert!(result.awarded > 0);
     }
-} 
+}

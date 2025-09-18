@@ -3,18 +3,13 @@
 //! Provides the `POST /api/modules` endpoint for creating new university modules.  
 //! Only accessible by admin users. Responses follow the standard `ApiResponse` format.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
-use chrono::{Datelike, Utc};
-use util::state::AppState;
-use validator::Validate;
-use db::models::module::{Model as Module};
 use crate::response::ApiResponse;
 use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use chrono::{Datelike, Utc};
+use db::models::module::Model as Module;
+use util::state::AppState;
+use validator::Validate;
 
 /// POST /api/modules
 ///
@@ -88,7 +83,7 @@ use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
 /// ```
 pub async fn create(
     State(state): State<AppState>,
-    Json(req): Json<ModuleRequest>
+    Json(req): Json<ModuleRequest>,
 ) -> impl IntoResponse {
     let db = state.db();
 
@@ -124,12 +119,18 @@ pub async fn create(
             let response = ModuleResponse::from(module);
             (
                 StatusCode::CREATED,
-                Json(ApiResponse::success(response, "Module created successfully")),
+                Json(ApiResponse::success(
+                    response,
+                    "Module created successfully",
+                )),
             )
         }
         Err(e) => {
             if let sea_orm::DbErr::Exec(err) = &e {
-                if err.to_string().contains("UNIQUE constraint failed: modules.code") {
+                if err
+                    .to_string()
+                    .contains("UNIQUE constraint failed: modules.code")
+                {
                     return (
                         StatusCode::CONFLICT,
                         Json(ApiResponse::<ModuleResponse>::error(

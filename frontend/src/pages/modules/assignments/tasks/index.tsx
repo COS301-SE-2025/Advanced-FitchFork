@@ -1,39 +1,56 @@
 import React, { useEffect } from 'react';
-import { Button, Empty, Typography } from 'antd';
+import { Outlet } from 'react-router-dom';
 import { useViewSlot } from '@/context/ViewSlotContext';
-import TaskView from './TaskView';
 import { TasksPageProvider, useTasksPage } from './context';
 import TaskList from './TaskList';
+import { TasksEmptyState } from '@/components/tasks';
+import { Typography } from 'antd';
 
 const DesktopLayout: React.FC = () => {
-  const { loading, tasks, createNewTask } = useTasksPage();
+  const {
+    loading,
+    tasks,
+    createNewTask,
+    hasMakefile,
+    generateTasksFromMakefile,
+    generatingFromMakefile,
+  } = useTasksPage();
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-gray-500">
+        Loading tasks...
+      </div>
+    );
+  }
+
+  if (tasks.length === 0) {
+    return (
+      <TasksEmptyState
+        onCreate={createNewTask}
+        onGenerateFromMakefile={generateTasksFromMakefile}
+        canGenerateFromMakefile={hasMakefile}
+        generatingFromMakefile={generatingFromMakefile}
+      />
+    );
+  }
+
   return (
-    <div className="bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 flex h-full min-h-0 overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 flex">
       <TaskList />
-      <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-6">
-        <div className="w-full max-w-6xl">
-          {loading ? (
-            <div className="text-gray-400">Loading tasks...</div>
-          ) : tasks.length === 0 ? (
-            <Empty
-              description={<div className="text-gray-700 dark:text-gray-300">No Tasks Found</div>}
-            >
-              <Button type="primary" onClick={createNewTask}>
-                + New Task
-              </Button>
-            </Empty>
-          ) : (
-            <TaskView />
-          )}
+      <div className="flex-1 min-w-0 overflow-y-auto p-6">
+        <div className="max-w-6xl">
+          <Outlet />
         </div>
       </div>
     </div>
   );
 };
 
+const MobileLayout: React.FC = () => <Outlet />;
+
 const TasksPageBody: React.FC = () => {
-  // (Optional) You can implement a Mobile layout later using the same context
-  return <DesktopLayout />;
+  const { isMobile } = useTasksPage();
+  return isMobile ? <MobileLayout /> : <DesktopLayout />;
 };
 
 const TasksPage: React.FC = () => {
@@ -52,7 +69,9 @@ const TasksPage: React.FC = () => {
 
   return (
     <TasksPageProvider>
-      <TasksPageBody />
+      <div className="flex-1 flex flex-col h-full">
+        <TasksPageBody />
+      </div>
     </TasksPageProvider>
   );
 };

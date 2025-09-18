@@ -14,9 +14,9 @@ mod tests {
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use serial_test::serial;
-    use util::paths::memo_output_dir;
     use std::fs;
     use tower::ServiceExt;
+    use util::paths::memo_output_dir;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -97,7 +97,6 @@ mod tests {
         assert!(memo_output_dir.exists(), "Memo output folder not created!");
 
         assert_eq!(response.status(), StatusCode::OK);
-
     }
 
     //Commented out due to change in mark_allocator functionality - test no longer applies

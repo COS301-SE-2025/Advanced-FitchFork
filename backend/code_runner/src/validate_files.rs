@@ -21,8 +21,8 @@ pub fn validate_memo_files(module_id: i64, assignment_id: i64) -> Result<(), Str
         makefile_dir(module_id, assignment_id),
         main_dir(module_id, assignment_id),
     ] {
-        let entries = fs::read_dir(&dir)
-            .map_err(|_| format!("Failed to read directory {:?}", dir))?;
+        let entries =
+            fs::read_dir(&dir).map_err(|_| format!("Failed to read directory {:?}", dir))?;
 
         let has_zip = entries
             .filter_map(Result::ok)
@@ -30,7 +30,10 @@ pub fn validate_memo_files(module_id: i64, assignment_id: i64) -> Result<(), Str
 
         if !has_zip {
             // Figure out which name to show (memo/makefile/main)
-            let name = dir.file_name().and_then(|s| s.to_str()).unwrap_or("<unknown>");
+            let name = dir
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("<unknown>");
             return Err(format!(
                 "Required directory '{}' does not contain any .zip file at {:?}",
                 name, dir
@@ -65,15 +68,18 @@ pub fn validate_submission_files(
         makefile_dir(module_id, assignment_id),
         main_dir(module_id, assignment_id),
     ] {
-        let entries = fs::read_dir(&dir)
-            .map_err(|_| format!("Failed to read directory {:?}", dir))?;
+        let entries =
+            fs::read_dir(&dir).map_err(|_| format!("Failed to read directory {:?}", dir))?;
 
         let has_zip = entries
             .filter_map(Result::ok)
             .any(|e| e.path().extension().and_then(|s| s.to_str()) == Some("zip"));
 
         if !has_zip {
-            let name = dir.file_name().and_then(|s| s.to_str()).unwrap_or("<unknown>");
+            let name = dir
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("<unknown>");
             return Err(format!(
                 "Required directory '{}' does not contain any .zip file at {:?}",
                 name, dir
@@ -110,7 +116,10 @@ pub fn write_config_json(module_id: i64, assignment_id: i64) {
 mod tests {
     use super::*;
     use std::fs;
-    use util::{paths::{attempt_dir, config_dir, main_dir, makefile_dir, memo_dir}, test_helpers::setup_test_storage_root};
+    use util::{
+        paths::{attempt_dir, config_dir, main_dir, makefile_dir, memo_dir},
+        test_helpers::setup_test_storage_root,
+    };
 
     fn write_required_file_zip(module_id: i64, assignment_id: i64, which: &str, filename: &str) {
         let dir = match which {
@@ -203,8 +212,7 @@ mod tests {
         fs::create_dir_all(&submission_dir).unwrap();
         fs::write(submission_dir.join("482.txt"), b"submission").unwrap();
 
-        let result =
-            validate_submission_files(module_id, assignment_id, user_id, attempt_number);
+        let result = validate_submission_files(module_id, assignment_id, user_id, attempt_number);
 
         assert!(result.is_ok());
     }
@@ -224,12 +232,13 @@ mod tests {
         write_required_file_zip(module_id, assignment_id, "main", "main.zip");
 
         // Missing submission dir (or empty) → should error
-        let result =
-            validate_submission_files(module_id, assignment_id, user_id, attempt_number);
+        let result = validate_submission_files(module_id, assignment_id, user_id, attempt_number);
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Failed to read submission directory"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Failed to read submission directory")
+        );
     }
 }

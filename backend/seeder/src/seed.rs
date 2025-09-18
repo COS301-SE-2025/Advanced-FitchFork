@@ -1,7 +1,7 @@
 use async_trait::async_trait;
-use sea_orm::DatabaseConnection;
 use colored::*;
 use futures::FutureExt;
+use sea_orm::DatabaseConnection;
 use std::io::{self, Write};
 use std::time::Instant;
 
@@ -19,7 +19,10 @@ pub async fn run_seeder<S: Seeder + ?Sized>(seeder: &S, name: &str, db: &Databas
     io::stdout().flush().unwrap();
 
     let start = Instant::now();
-    let duration = match std::panic::AssertUnwindSafe(seeder.seed(db)).catch_unwind().await {
+    let duration = match std::panic::AssertUnwindSafe(seeder.seed(db))
+        .catch_unwind()
+        .await
+    {
         Ok(_) => Some(start.elapsed()),
         Err(_) => {
             println!("{}", "failed".red());

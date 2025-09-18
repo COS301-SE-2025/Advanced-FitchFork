@@ -11,36 +11,32 @@ use axum::{
 use chrono::Utc;
 use code_runner;
 use db::models::assignment_memo_output;
+use db::models::assignment_submission_output;
 use db::models::assignment_task;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
     assignment_submission::{self, Model as AssignmentSubmissionModel},
-    assignment_submission_output::Entity as AssignmentSubmissionOutputModel,
-    assignment_task::Entity as AssignmentTaskModel,
 };
 use marker::MarkingJob;
 use marker::comparators::{exact_comparator::ExactComparator, percentage_comparator::PercentageComparator, regex_comparator::RegexComparator};
 use marker::feedback::{auto_feedback::AutoFeedback, manual_feedback::ManualFeedback, ai_feedback::AiFeedback};
 use md5;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{ColumnTrait, EntityTrait, Order, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use tokio_util::bytes;
-use util::{mark_allocator::mark_allocator::TaskInfo, paths::storage_root};
+use util::paths::{
+    assignment_dir, attempt_dir, mark_allocator_path as allocator_path, memo_output_dir,
+    submission_report_path,
+};
+use util::paths::{storage_root as storage_root_path, submission_output_dir};
 use util::{
-    execution_config::{ExecutionConfig, execution_config::{SubmissionMode, MarkingScheme, FeedbackScheme}},
-    mark_allocator::mark_allocator::generate_allocator,
-    mark_allocator::mark_allocator::load_allocator,
-    scan_code_content::scan_code_content,
+    execution_config::{ExecutionConfig, {SubmissionMode, MarkingScheme, FeedbackScheme}},
+    mark_allocator::generate_allocator,
+    mark_allocator::load_allocator,
+    scan_code_content,
     state::AppState,
 };
-use util::paths::{
-    assignment_dir,
-    memo_output_dir,
-    mark_allocator_path as allocator_path,
-    submission_output_dir,
-    submission_report_path,
-    attempt_dir,
-};
+use util::{mark_allocator::TaskInfo, paths::storage_root};
 
 #[derive(Debug, Deserialize)]
 pub struct RemarkRequest {
@@ -310,41 +306,125 @@ async fn get_next_attempt(
 async fn grade_submission(
     submission: AssignmentSubmissionModel,
     assignment: &db::models::assignment::Model,
-    memo_outputs: &[std::path::PathBuf],
+    _memo_outputs: &[std::path::PathBuf],
     mark_allocator_path: &std::path::Path,
     config: &util::execution_config::ExecutionConfig,
     db: &sea_orm::DatabaseConnection,
+    strict_mismatch_error: bool,
 ) -> Result<SubmissionDetailResponse, String> {
-    let student_output_dir = submission_output_dir(
-        assignment.module_id,
-        assignment.id,
-        submission.user_id,
-        submission.attempt,
-    );
+    // Fetch tasks ordered by task_number
+    let tasks = assignment_task::Entity::find()
+        .filter(assignment_task::Column::AssignmentId.eq(assignment.id))
+        .order_by(assignment_task::Column::TaskNumber, Order::Asc)
+        .all(db)
+        .await
+        .map_err(|e| format!("Failed to load tasks: {}", e))?;
 
-    let mut student_outputs = Vec::new();
+    let mut ordered_memo_paths: Vec<std::path::PathBuf> = Vec::new();
+    let mut ordered_student_paths: Vec<std::path::PathBuf> = Vec::new();
+    let mut db_pairing_ok = true;
 
-    //family reunion of if statments
-    if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
-        for entry in entries.flatten() {
-            let file_path = entry.path();
-            if file_path.is_file() {
-                if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-                    if ext.eq_ignore_ascii_case("txt") {
-                        if let Some(file_stem) = file_path.file_stem().and_then(|s| s.to_str()) {
-                            if let Ok(output_id) = file_stem.parse::<i64>() {
-                                if let Ok(Some(output)) =
-                                    AssignmentSubmissionOutputModel::find_by_id(output_id)
-                                        .one(db)
-                                        .await
-                                {
-                                    if let Ok(Some(task)) =
-                                        AssignmentTaskModel::find_by_id(output.task_id)
+    for task in tasks.iter().filter(|t| !t.code_coverage) {
+        // Memo output for this task
+        match assignment_memo_output::Entity::find()
+            .filter(assignment_memo_output::Column::AssignmentId.eq(assignment.id))
+            .filter(assignment_memo_output::Column::TaskId.eq(task.id))
+            .one(db)
+            .await
+        {
+            Ok(Some(mo)) => ordered_memo_paths.push(storage_root_path().join(&mo.path)),
+            _ => {
+                db_pairing_ok = false;
+                break;
+            }
+        }
+
+        // Student output for this task (for this submission). Pick newest that exists on disk.
+        let outputs_res = assignment_submission_output::Entity::find()
+            .filter(assignment_submission_output::Column::SubmissionId.eq(submission.id))
+            .filter(assignment_submission_output::Column::TaskId.eq(task.id))
+            .order_by_desc(assignment_submission_output::Column::UpdatedAt)
+            .all(db)
+            .await;
+        match outputs_res {
+            Ok(outputs) => {
+                let mut found = None;
+                for so in outputs {
+                    let path = storage_root_path().join(&so.path);
+                    if path.exists() {
+                        found = Some(path);
+                        break;
+                    }
+                }
+                if let Some(p) = found {
+                    ordered_student_paths.push(p);
+                } else {
+                    db_pairing_ok = false;
+                    break;
+                }
+            }
+            Err(_) => {
+                db_pairing_ok = false;
+                break;
+            }
+        }
+    }
+
+    // Fallback: if DB-based pairing failed, scan directory and pair by task_id
+    if !db_pairing_ok {
+        ordered_memo_paths.clear();
+        ordered_student_paths.clear();
+
+        let mut pairs: Vec<(i32, std::path::PathBuf, std::path::PathBuf)> = Vec::new();
+        let out_dir = submission_output_dir(
+            assignment.module_id,
+            assignment.id,
+            submission.user_id,
+            submission.attempt,
+        );
+        // Collect memo files from disk (no DB rows required)
+        let mut memo_files_disk: Vec<std::path::PathBuf> = Vec::new();
+        if let Ok(memo_entries) =
+            std::fs::read_dir(memo_output_dir(assignment.module_id, assignment.id))
+        {
+            for me in memo_entries.flatten() {
+                let mp = me.path();
+                if mp.is_file() {
+                    memo_files_disk.push(mp);
+                }
+            }
+        }
+        memo_files_disk.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+        if let Ok(entries) = std::fs::read_dir(&out_dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() {
+                    if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                        if ext.eq_ignore_ascii_case("txt") {
+                            if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                                if let Ok(output_id) = stem.parse::<i64>() {
+                                    if let Ok(Some(output)) =
+                                        assignment_submission_output::Entity::find_by_id(output_id)
                                             .one(db)
                                             .await
                                     {
-                                        if !task.code_coverage {
-                                            student_outputs.push(file_path.clone());
+                                        if let Ok(Some(task)) =
+                                            assignment_task::Entity::find_by_id(output.task_id)
+                                                .one(db)
+                                                .await
+                                        {
+                                            if !task.code_coverage {
+                                                // Map task_number to memo file index (task_number is 1-based)
+                                                if let Some(mp) = memo_files_disk
+                                                    .get((task.task_number.max(1) as usize) - 1)
+                                                {
+                                                    pairs.push((
+                                                        task.task_number as i32,
+                                                        mp.clone(),
+                                                        p.clone(),
+                                                    ));
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -354,12 +434,34 @@ async fn grade_submission(
                 }
             }
         }
+
+        pairs.sort_by_key(|(tn, _, _)| *tn);
+        for (_tn, mp, sp) in pairs {
+            ordered_memo_paths.push(mp);
+            ordered_student_paths.push(sp);
+        }
+
+        // If still unmatched, proceed with zero-mark fallback by leaving both lists empty.
+        if ordered_memo_paths.is_empty()
+            || ordered_student_paths.is_empty()
+            || ordered_memo_paths.len() != ordered_student_paths.len()
+        {
+            if strict_mismatch_error {
+                return Err(format!(
+                    "memo_paths.len() != student_paths.len(): {} != {}",
+                    ordered_memo_paths.len(),
+                    ordered_student_paths.len()
+                ));
+            } else {
+                ordered_memo_paths.clear();
+                ordered_student_paths.clear();
+            }
+        }
     }
-    student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
     let mut marking_job = MarkingJob::new(
-        memo_outputs.to_vec(),
-        student_outputs,
+        ordered_memo_paths,
+        ordered_student_paths,
         mark_allocator_path.to_path_buf(),
         config.clone(),
     );
@@ -474,14 +576,24 @@ fn clear_submission_output(
     module_id: i64,
     assignment_id: i64,
 ) -> Result<(), String> {
-    let attempt = attempt_dir(module_id, assignment_id, submission.user_id, submission.attempt);
+    let attempt = attempt_dir(
+        module_id,
+        assignment_id,
+        submission.user_id,
+        submission.attempt,
+    );
     let output_dir = attempt.join("submission_output");
     if output_dir.exists() {
         fs::remove_dir_all(&output_dir)
             .map_err(|e| format!("Failed to clear output directory: {}", e))?;
     }
 
-    let report_path = submission_report_path(module_id, assignment_id, submission.user_id, submission.attempt);
+    let report_path = submission_report_path(
+        module_id,
+        assignment_id,
+        submission.user_id,
+        submission.attempt,
+    );
     if report_path.exists() {
         fs::remove_file(&report_path)
             .map_err(|e| format!("Failed to remove existing report: {}", e))?;
@@ -507,11 +619,13 @@ async fn update_submission_report_marks(
     let content = fs::read_to_string(&report_path)
         .map_err(|e| format!("Failed to read existing report: {}", e))?;
 
-    let mut resp: SubmissionDetailResponse =
-        serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to deserialize report: {}", e))?;
+    let mut resp: SubmissionDetailResponse = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to deserialize report: {}", e))?;
 
-    resp.mark = MarkSummary { earned: new_mark.earned, total: new_mark.total };
+    resp.mark = MarkSummary {
+        earned: new_mark.earned,
+        total: new_mark.total,
+    };
     if let Some(tasks) = new_tasks {
         resp.tasks = tasks.clone();
     }
@@ -519,8 +633,7 @@ async fn update_submission_report_marks(
 
     let output = serde_json::to_string_pretty(&resp)
         .map_err(|e| format!("Failed to serialize updated report: {}", e))?;
-    fs::write(&report_path, output)
-        .map_err(|e| format!("Failed to write report: {}", e))?;
+    fs::write(&report_path, output).map_err(|e| format!("Failed to write report: {}", e))?;
 
     Ok(())
 }
@@ -692,7 +805,9 @@ pub async fn submit_assignment(
         Err(_) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<SubmissionDetailResponse>::error("Assignment not found")),
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Assignment not found",
+                )),
             );
         }
     };
@@ -868,16 +983,32 @@ pub async fn submit_assignment(
         }
     };
 
-    if let Err(e) =
-        process_submission_code(db, submission.id, config.clone(), module_id, assignment_id).await
-    {
-        eprintln!("Code execution failed: {}", e);
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<SubmissionDetailResponse>::error(
-                "Failed to run code for submission",
-            )),
+    if let Err(e) = process_submission_code(db, submission.id, config.clone(), module_id, assignment_id).await {
+        // If no student outputs exist yet, surface as 500; otherwise continue to grading.
+        let out_dir = submission_output_dir(
+            module_id,
+            assignment_id,
+            submission.user_id,
+            submission.attempt,
         );
+        let have_outputs = std::fs::read_dir(&out_dir)
+            .ok()
+            .and_then(|iter| Some(iter.flatten().any(|entry| entry.path().is_file())))
+            .unwrap_or(false);
+        if !have_outputs {
+            eprintln!("Code execution failed: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Failed to run code for submission",
+                )),
+            );
+        } else {
+            eprintln!(
+                "Code execution failed but existing outputs found; proceeding to grading: {}",
+                e
+            );
+        }
     }
 
     if config.project.submission_mode != SubmissionMode::Manual {
@@ -969,6 +1100,7 @@ pub async fn submit_assignment(
         &mark_allocator_path,
         &config,
         db,
+        false,
     )
     .await
     {
@@ -1136,117 +1268,19 @@ pub async fn remark_submissions(
             let mark_allocator_path = mark_allocator_path.clone();
             let config = config.clone();
             async move {
-                let disallowed_present = scan_disallowed_best_effort(submission.full_path(), &config);
-                let student_output_dir = submission_output_dir(
-                    assignment.module_id,
-                    assignment.id,
-                    submission.user_id,
-                    submission.attempt,
-                );
-
-                let mut student_outputs = Vec::new();
-                if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
-                    for entry in entries.flatten() {
-                        let file_path = entry.path();
-                        if file_path.is_file() {
-                            if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-                                if ext.eq_ignore_ascii_case("txt") {
-                                    student_outputs.push(file_path);
-                                }
-                            }
-                        }
-                    }
-                }
-                student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
-
-                let mut marking_job = MarkingJob::new(
-                    memo_outputs.to_vec(),
-                    student_outputs,
-                    mark_allocator_path.to_path_buf(),
-                    config.clone(),
-                );
-                marking_job = apply_comparator(marking_job, &config.marking.marking_scheme);
-                marking_job = apply_feedback(marking_job, &config.marking.feedback_scheme);
-
-                let coverage_path = attempt_dir(
-                    assignment.module_id,
-                    assignment.id,
-                    submission.user_id,
-                    submission.attempt,
+                // Reuse robust grading which pulls ordered memo/student outputs via DB and
+                // excludes coverage tasks to avoid mismatches
+                grade_submission(
+                    submission,
+                    &assignment,
+                    &memo_outputs,
+                    &mark_allocator_path,
+                    &config,
+                    db,
+                    true,
                 )
-                .join("coverage_report.json");
-                if coverage_path.exists() {
-                    marking_job = marking_job.with_coverage(coverage_path);
-                }
-
-                let mark_report = marking_job.mark().await.map_err(|e| format!("Marking Error: {:?}", e))?;
-
-                let mark = MarkSummary {
-                    earned: mark_report.data.mark.earned,
-                    total: mark_report.data.mark.total,
-                };
-
-                let applied_mark = if disallowed_present {
-                    if let Err(e) = enforce_zero_mark(
-                        assignment.module_id,
-                        assignment.id,
-                        &submission,
-                        mark.total,
-                        None,
-                        db,
-                    )
-                    .await
-                    {
-                        eprintln!("Failed to enforce zero mark (remark): {}", e);
-                    }
-                    MarkSummary { earned: 0, total: mark.total }
-                } else {
-                    mark
-                };
-
-                let tasks = serde_json::to_value(&mark_report.data.tasks)
-                    .unwrap_or_default()
-                    .as_array()
-                    .cloned()
-                    .unwrap_or_default();
-
-                match update_submission_report_marks(
-                    assignment.module_id,
-                    assignment.id,
-                    &submission,
-                    &applied_mark,
-                    Some(&tasks),
-                ).await {
-                    Ok(_) => Ok(()),
-                    Err(_err) => {
-                        let resp = grade_submission(
-                            submission.clone(),
-                            &assignment,
-                            &memo_outputs,
-                            &mark_allocator_path,
-                            &config,
-                            db,
-                        )
-                        .await?;
-
-                        if disallowed_present {
-                            if let Err(e) = enforce_zero_mark(
-                                assignment.module_id,
-                                assignment.id,
-                                &submission,
-                                resp.mark.total,
-                                None,
-                                db,
-                            )
-                            .await
-                            {
-                                eprintln!("Failed to enforce zero mark (remark fallback): {}", e);
-                            }
-                        }
-
-                        Ok(())
-                    },
-                }
+                .await
+                .map(|_| ())
             }
         })
         .await;
@@ -1402,60 +1436,101 @@ pub async fn resubmit_submissions(
         }
     };
 
-    let (resubmitted, failed) =
-        execute_bulk_operation(submission_ids.clone(), assignment_id, db, |submission| {
-            let db = db.clone();
-            let assignment = assignment.clone();
-            let memo_outputs = memo_outputs.clone();
-            let mark_allocator_path = mark_allocator_path.clone();
-            let config = config.clone();
-            async move {
-                let disallowed_present = scan_disallowed_best_effort(submission.full_path(), &config);
+    // Run resubmissions concurrently per submission, with bounded concurrency
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+    use tokio::task::JoinSet;
 
-                if let Err(e) = clear_submission_output(&submission, assignment.module_id, assignment.id) {
-                    return Err(e);
-                }
-                if let Err(e) = process_submission_code(
-                    &db,
-                    submission.id,
-                    config.clone(),
-                    module_id,
-                    assignment_id,
-                )
+    let max_concurrency = std::cmp::max(
+        1,
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            / 2,
+    );
+    let semaphore = Arc::new(Semaphore::new(max_concurrency));
+    let mut join_set = JoinSet::new();
+
+    for sid in submission_ids.clone() {
+        let db = db.clone();
+        let assignment = assignment.clone();
+        let memo_outputs = memo_outputs.clone();
+        let mark_allocator_path = mark_allocator_path.clone();
+        let config = config.clone();
+        let sem = semaphore.clone();
+
+        join_set.spawn(async move {
+            let _permit = sem.acquire_owned().await.ok();
+
+            // Fetch submission and validate
+            let submission = match assignment_submission::Entity::find_by_id(sid)
+                .one(&db)
                 .await
-                {
-                    return Err(format!("Failed to run code for submission: {}", e));
-                }
-
-                let resp = grade_submission(
-                    submission.clone(),
-                    &assignment,
-                    &memo_outputs,
-                    &mark_allocator_path,
-                    &config,
-                    &db,
-                )
-                .await?;
-
-                if disallowed_present {
-                    if let Err(e) = enforce_zero_mark(
-                        assignment.module_id,
-                        assignment.id,
-                        &submission,
-                        resp.mark.total,
-                        None,
-                        &db,
-                    )
-                    .await
-                    {
-                        eprintln!("Failed to enforce zero mark (resubmit): {}", e);
-                    }
-                }
-
-                Ok(())
+            {
+                Ok(Some(s)) => s,
+                Ok(None) => return (sid, Err("Submission not found".to_string())),
+                Err(e) => return (sid, Err(format!("Database error: {}", e))),
+            };
+            if submission.assignment_id != assignment.id {
+                return (
+                    sid,
+                    Err("Submission does not belong to this assignment".to_string()),
+                );
             }
-        })
-        .await;
+
+            if let Err(e) =
+                clear_submission_output(&submission, assignment.module_id, assignment.id)
+            {
+                return (sid, Err(e));
+            }
+
+            if let Err(e) = process_submission_code(
+                &db,
+                submission.id,
+                config.clone(),
+                module_id,
+                assignment_id,
+            )
+            .await
+            {
+                return (
+                    sid,
+                    Err(format!("Failed to run code for submission: {}", e)),
+                );
+            }
+
+            match grade_submission(
+                submission,
+                &assignment,
+                &memo_outputs,
+                &mark_allocator_path,
+                &config,
+                &db,
+                true,
+            )
+            .await
+            {
+                Ok(_) => (sid, Ok(())),
+                Err(e) => (sid, Err(e)),
+            }
+        });
+    }
+
+    let mut resubmitted = 0usize;
+    let mut failed: Vec<FailedOperation> = Vec::new();
+    while let Some(res) = join_set.join_next().await {
+        match res {
+            Ok((_sid, Ok(()))) => resubmitted += 1,
+            Ok((sid, Err(e))) => failed.push(FailedOperation {
+                id: Some(sid),
+                error: e,
+            }),
+            Err(e) => failed.push(FailedOperation {
+                id: None,
+                error: format!("Join error: {}", e),
+            }),
+        }
+    }
 
     let response = ResubmitResponse {
         resubmitted,

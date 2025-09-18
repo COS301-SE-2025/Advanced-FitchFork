@@ -1,14 +1,18 @@
-use sea_orm::entity::prelude::*;
-use sea_orm::FromQueryResult;
-use sea_orm::{Set, ActiveModelTrait, ConnectionTrait, ColumnTrait, EntityTrait, QueryFilter, QuerySelect, sea_query::{Expr, Func}, QueryTrait};
 use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
+use sea_orm::FromQueryResult;
+use sea_orm::entity::prelude::*;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect,
+    QueryTrait, Set,
+    sea_query::{Expr, Func},
+};
 use sha2::Sha256;
 use std::collections::HashMap;
 
 use super::{
     attendance_record,
-    user_module_role::{Entity as UmrEntity, Column as UmrCol, Role as UmrRole},
+    user_module_role::{Column as UmrCol, Entity as UmrEntity, Role as UmrRole},
 };
 
 type HmacSha256 = Hmac<Sha256>;
@@ -33,29 +37,47 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(belongs_to = "super::module::Entity", from = "Column::ModuleId", to = "super::module::Column::Id")]
+    #[sea_orm(
+        belongs_to = "super::module::Entity",
+        from = "Column::ModuleId",
+        to = "super::module::Column::Id"
+    )]
     Module,
-    #[sea_orm(belongs_to = "super::user::Entity", from = "Column::CreatedBy", to = "super::user::Column::Id")]
+    #[sea_orm(
+        belongs_to = "super::user::Entity",
+        from = "Column::CreatedBy",
+        to = "super::user::Column::Id"
+    )]
     Creator,
     #[sea_orm(has_many = "super::attendance_record::Entity")]
     Records,
 }
 
 impl Related<super::module::Entity> for Entity {
-    fn to() -> RelationDef { Relation::Module.def() }
-    fn via() -> Option<RelationDef> { None }
+    fn to() -> RelationDef {
+        Relation::Module.def()
+    }
+    fn via() -> Option<RelationDef> {
+        None
+    }
 }
 
 impl Related<super::attendance_record::Entity> for Entity {
-    fn to() -> RelationDef { Relation::Records.def() }
-    fn via() -> Option<RelationDef> { None }
+    fn to() -> RelationDef {
+        Relation::Records.def()
+    }
+    fn via() -> Option<RelationDef> {
+        None
+    }
 }
 
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
     #[inline]
-    pub fn is_active(&self) -> bool { self.active }
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
 
     pub fn window(&self, now: DateTime<Utc>) -> i64 {
         let secs = now.timestamp();
@@ -74,10 +96,12 @@ impl Model {
         let val = u32::from_be_bytes([slice[0], slice[1], slice[2], slice[3]]) & 0x7fff_ffff;
 
         let modulus = 10u32.pow(DIGITS);
-        let num = (val % modulus) as u32;
+        let num = val % modulus;
 
         let mut s = num.to_string();
-        while s.len() < DIGITS as usize { s.insert(0, '0'); }
+        while s.len() < DIGITS as usize {
+            s.insert(0, '0');
+        }
         s
     }
 
@@ -127,8 +151,12 @@ impl Model {
     }
 
     pub fn ip_permitted(&self, client_ip: Option<&str>) -> bool {
-        if !self.restrict_by_ip { return true; }
-        let Some(ip) = client_ip else { return false; };
+        if !self.restrict_by_ip {
+            return true;
+        }
+        let Some(ip) = client_ip else {
+            return false;
+        };
         if let Some(exact) = &self.created_from_ip {
             return ip == exact;
         }
@@ -140,7 +168,9 @@ impl Model {
 
     // --- utilities unchanged (student counts) ---
     pub async fn student_count_for_module<C>(db: &C, module_id: i64) -> Result<i64, DbErr>
-    where C: ConnectionTrait {
+    where
+        C: ConnectionTrait,
+    {
         let c = UmrEntity::find()
             .filter(UmrCol::ModuleId.eq(module_id))
             .filter(UmrCol::Role.eq(UmrRole::Student))
@@ -149,8 +179,14 @@ impl Model {
         Ok(c as i64)
     }
 
-    pub async fn attended_student_count<C>(db: &C, module_id: i64, session_id: i64) -> Result<i64, DbErr>
-    where C: ConnectionTrait {
+    pub async fn attended_student_count<C>(
+        db: &C,
+        module_id: i64,
+        session_id: i64,
+    ) -> Result<i64, DbErr>
+    where
+        C: ConnectionTrait,
+    {
         let student_ids_subq = UmrEntity::find()
             .select_only()
             .column(UmrCol::UserId)
@@ -166,12 +202,23 @@ impl Model {
         Ok(c as i64)
     }
 
-    pub async fn attended_student_counts_for<C>(db: &C, module_id: i64, session_ids: &[i64]) -> Result<HashMap<i64, i64>, DbErr>
-    where C: ConnectionTrait {
-        if session_ids.is_empty() { return Ok(HashMap::new()); }
+    pub async fn attended_student_counts_for<C>(
+        db: &C,
+        module_id: i64,
+        session_ids: &[i64],
+    ) -> Result<HashMap<i64, i64>, DbErr>
+    where
+        C: ConnectionTrait,
+    {
+        if session_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
 
         #[derive(FromQueryResult)]
-        struct Row { session_id: i64, cnt: i64 }
+        struct Row {
+            session_id: i64,
+            cnt: i64,
+        }
 
         let student_ids_subq = UmrEntity::find()
             .select_only()
@@ -183,7 +230,10 @@ impl Model {
         let rows: Vec<Row> = attendance_record::Entity::find()
             .select_only()
             .column(attendance_record::Column::SessionId)
-            .column_as(Expr::expr(Func::count(Expr::col(attendance_record::Column::UserId))), "cnt")
+            .column_as(
+                Expr::expr(Func::count(Expr::col(attendance_record::Column::UserId))),
+                "cnt",
+            )
             .filter(attendance_record::Column::UserId.in_subquery(student_ids_subq))
             .filter(attendance_record::Column::SessionId.is_in(session_ids.iter().cloned()))
             .group_by(attendance_record::Column::SessionId)
@@ -198,9 +248,9 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{module, user};
     use crate::test_utils::setup_test_db;
     use chrono::{TimeZone, Utc};
-    use crate::models::{module, user};
 
     #[tokio::test]
     async fn test_session_code_rotates() {
@@ -217,14 +267,14 @@ mod tests {
         // --- create the session using real FK ids ---
         let s = Model::create(
             &db,
-            m.id,                      // module_id
-            lecturer.id,               // created_by
+            m.id,        // module_id
+            lecturer.id, // created_by
             "Lecture 5",
-            true,                      // active
-            30,                        // rotation_seconds
-            false,                     // restrict_by_ip
-            None,                      // allowed_ip_cidr
-            None,                      // created_from_ip
+            true,  // active
+            30,    // rotation_seconds
+            false, // restrict_by_ip
+            None,  // allowed_ip_cidr
+            None,  // created_from_ip
             Some("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"),
         )
         .await
@@ -236,4 +286,3 @@ mod tests {
         assert_ne!(s.current_code(t1), s.current_code(t2));
     }
 }
-

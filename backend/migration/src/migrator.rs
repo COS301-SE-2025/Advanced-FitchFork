@@ -26,6 +26,7 @@ impl MigratorTrait for Migrator {
             Box::new(migrations::m202509080001_create_attendance::Migration),
             Box::new(migrations::m202509120001_create_moss_reports::Migration),
             Box::new(migrations::m202509120002_create_plagiarism_cases::Migration),
+            Box::new(migrations::m202509150003_create_system_metrics::Migration),
         ]
     }
 }

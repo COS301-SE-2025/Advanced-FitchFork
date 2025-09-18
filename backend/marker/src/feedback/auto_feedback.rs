@@ -13,7 +13,7 @@
 //! This strategy is useful for providing immediate, objective feedback to students based on their output.
 
 use crate::error::MarkerError;
-use crate::traits::feedback::{FeedbackEntry, Feedback};
+use crate::traits::feedback::{Feedback, FeedbackEntry};
 use crate::types::TaskResult;
 use async_trait::async_trait;
 
@@ -27,7 +27,10 @@ pub struct AutoFeedback;
 
 #[async_trait]
 impl Feedback for AutoFeedback {
-    async fn assemble_feedback(&self, results: &[TaskResult]) -> Result<Vec<FeedbackEntry>, MarkerError> {
+    async fn assemble_feedback(
+        &self,
+        results: &[TaskResult],
+    ) -> Result<Vec<FeedbackEntry>, MarkerError> {
         let mut feedback_entries = Vec::new();
 
         for result in results {
@@ -205,10 +208,13 @@ mod tests {
     async fn test_empty_patterns() {
         let task = make_task("Task4", &[], &[], 0, 0, &vec![], &vec![], None, None);
         let feedback = AutoFeedback.assemble_feedback(&[task]).await.unwrap();
-        assert_eq!(feedback, vec![FeedbackEntry {
-            task: "Task4".to_string(),
-            message: "".to_string(),
-        }]);
+        assert_eq!(
+            feedback,
+            vec![FeedbackEntry {
+                task: "Task4".to_string(),
+                message: "".to_string(),
+            }]
+        );
     }
 
     #[tokio::test]

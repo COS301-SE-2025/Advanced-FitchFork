@@ -4,13 +4,13 @@ mod tests {
     use crate::helpers::{connect_ws, make_test_app, spawn_server};
     use api::auth::generate_jwt;
     use db::models::user::Model as UserModel;
-    use tokio_tungstenite::connect_async;
-    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-    use tokio_tungstenite::{tungstenite::{Error}};
-    use tokio_tungstenite::tungstenite::protocol::Message;
-    use serde_json::json;
     use futures_util::sink::SinkExt;
     use futures_util::stream::StreamExt;
+    use serde_json::json;
+    use tokio_tungstenite::connect_async;
+    use tokio_tungstenite::tungstenite::Error;
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    use tokio_tungstenite::tungstenite::protocol::Message;
 
     pub struct TestData {
         pub user1: UserModel,
@@ -18,12 +18,13 @@ mod tests {
     }
 
     pub async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let user1 = UserModel::create(db, "chat1", "chat1@test.com", "password123", false).await.unwrap();
-        let user2 = UserModel::create(db, "chat2", "chat2@test.com", "password123", false).await.unwrap();
-        TestData {
-            user1,
-            user2,
-        }
+        let user1 = UserModel::create(db, "chat1", "chat1@test.com", "password123", false)
+            .await
+            .unwrap();
+        let user2 = UserModel::create(db, "chat2", "chat2@test.com", "password123", false)
+            .await
+            .unwrap();
+        TestData { user1, user2 }
     }
 
     #[ignore]
@@ -34,7 +35,9 @@ mod tests {
         let addr = spawn_server(app).await;
         let (token, _) = generate_jwt(data.user1.id, data.user1.admin);
 
-        let (mut ws, _) = connect_ws(&addr.to_string(), "chat", &token).await.unwrap();
+        let (mut ws, _) = connect_ws(&addr.to_string(), "chat", Some(token.as_str()))
+            .await
+            .unwrap();
         ws.close(None).await.unwrap();
     }
 
@@ -70,8 +73,12 @@ mod tests {
         let (token1, _) = generate_jwt(data.user1.id, data.user1.admin);
         let (token2, _) = generate_jwt(data.user2.id, data.user2.admin);
 
-        let (mut ws1, _) = connect_ws(&addr.to_string(), "chat", &token1).await.unwrap();
-        let (mut ws2, _) = connect_ws(&addr.to_string(), "chat", &token2).await.unwrap();
+        let (mut ws1, _) = connect_ws(&addr.to_string(), "chat", Some(token1.as_str()))
+            .await
+            .unwrap();
+        let (mut ws2, _) = connect_ws(&addr.to_string(), "chat", Some(token2.as_str()))
+            .await
+            .unwrap();
 
         let msg = json!({
             "type": "chat",
@@ -79,7 +86,9 @@ mod tests {
             "sender": "chat1"
         });
 
-        ws1.send(Message::Text(msg.to_string().into())).await.unwrap();
+        ws1.send(Message::Text(msg.to_string().into()))
+            .await
+            .unwrap();
 
         if let Some(Ok(Message::Text(received))) = ws2.next().await {
             let parsed: serde_json::Value = serde_json::from_str(&received).unwrap();
@@ -101,10 +110,14 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
         let addr = spawn_server(app).await;
         let (token, _) = generate_jwt(data.user1.id, data.user1.admin);
-        let (mut ws, _) = connect_ws(&addr.to_string(), "chat", &token).await.unwrap();
+        let (mut ws, _) = connect_ws(&addr.to_string(), "chat", Some(token.as_str()))
+            .await
+            .unwrap();
 
         let ping = json!({ "type": "ping" });
-        ws.send(Message::Text(ping.to_string().into())).await.unwrap();
+        ws.send(Message::Text(ping.to_string().into()))
+            .await
+            .unwrap();
 
         if let Some(Ok(Message::Text(received))) = ws.next().await {
             let parsed: serde_json::Value = serde_json::from_str(&received).unwrap();
