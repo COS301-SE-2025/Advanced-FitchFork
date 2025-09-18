@@ -312,8 +312,16 @@ pub mod metrics {
             let cpu = round_pct(p.cpu_avg);
             let mem = round_pct(p.mem_pct);
             // format with 0 or 1 decimals according to our rule
-            let cpu_s = if cpu >= 10.0 { format!("{:.0}", cpu) } else { format!("{:.1}", cpu) };
-            let mem_s = if mem >= 10.0 { format!("{:.0}", mem) } else { format!("{:.1}", mem) };
+            let cpu_s = if cpu >= 10.0 {
+                format!("{:.0}", cpu)
+            } else {
+                format!("{:.1}", cpu)
+            };
+            let mem_s = if mem >= 10.0 {
+                format!("{:.0}", mem)
+            } else {
+                format!("{:.1}", mem)
+            };
             csv.push_str(&format!("{},{},{}\n", p.ts.to_rfc3339(), cpu_s, mem_s));
         }
 
