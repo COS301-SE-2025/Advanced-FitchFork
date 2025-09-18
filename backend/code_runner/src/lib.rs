@@ -17,6 +17,7 @@ use reqwest::Client;
 use serde_json::json;
 use util::execution_config::ExecutionConfig;
 use util::config;
+use util::code_coverage_report::code_coverage_report::CoverageProcessor;
 pub mod validate_files;
 
 /// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
@@ -367,19 +368,37 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
 
         let output_combined = output_vec.join("\n");
 
-        if let Err(e) = SubmissionOutputModel::save_file(
-            db,
-            task.id,
-            submission_id,
-            &filename,
-            output_combined.as_bytes(),
-        )
-        .await
-        {
-            println!("Failed to save submission output: {}", e);
-        }
+        if task.code_coverage {
+            match CoverageProcessor::process_report(config.project.language, &output_combined) {
+                Ok(coverage_json) => {
+                    let coverage_report_path = submission_path.join("coverage_report.json");
+                    if let Err(e) = std::fs::write(&coverage_report_path, &coverage_json) {
+                        println!("Failed to save coverage report to attempt directory: {}", e);
+                    } else {
+                        println!("Coverage report saved to: {:?}", coverage_report_path);
+                    }
+                }
+                Err(e) => {
+                    println!("Failed to process coverage report for task {}: {}", task.task_number, e);
+                }
+            }
+            
+            collected.push((task.id, output_combined));
+        } else {
+            if let Err(e) = SubmissionOutputModel::save_file(
+                db,
+                task.id,
+                submission_id,
+                &filename,
+                output_combined.as_bytes(),
+            )
+            .await
+            {
+                println!("Failed to save submission output: {}", e);
+            }
 
-        collected.push((task.id, output_combined));
+            collected.push((task.id, output_combined));
+        }
     }
 
     Ok(collected)
@@ -537,16 +556,30 @@ pub async fn create_submission_outputs_for_all_tasks(
 
         let output_combined = output_vec.join("\n");
 
-        if let Err(e) = SubmissionOutputModel::save_file(
-            db,
-            task.id,
-            submission_id,
-            &filename,
-            output_combined.as_bytes(),
-        )
-        .await
-        {
-            println!("Failed to save submission output: {}", e);
+        if task.code_coverage {
+            match CoverageProcessor::process_report(config.project.language, &output_combined) {
+                Ok(coverage_json) => {
+                    let coverage_report_path = submission_path.join("coverage_report.json");
+                    if let Err(e) = std::fs::write(&coverage_report_path, &coverage_json) {
+                        println!("Failed to save coverage report to attempt directory: {}", e);
+                    }
+                }
+                Err(e) => {
+                    println!("Failed to process coverage report for task {}: {}", task.task_number, e);
+                }
+            }
+        } else {
+            if let Err(e) = SubmissionOutputModel::save_file(
+                db,
+                task.id,
+                submission_id,
+                &filename,
+                output_combined.as_bytes(),
+            )
+            .await
+            {
+                println!("Failed to save submission output: {}", e);
+            }
         }
     }
 
@@ -745,13 +778,11 @@ pub async fn create_main_from_interpreter(
         return Err("Interpreter did not return plausible source code".to_string());
     }
 
-    if config.output.retcode == true {
-        combined_output = combined_output
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("Retcode:"))
-            .collect::<Vec<_>>()
-            .join("\n");
-    }
+    combined_output = combined_output
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("Retcode:"))
+        .collect::<Vec<_>>()
+        .join("\n");
 
     // Zip the generated source as Main.*
     let zip_ext = std::path::Path::new(main_file_name)

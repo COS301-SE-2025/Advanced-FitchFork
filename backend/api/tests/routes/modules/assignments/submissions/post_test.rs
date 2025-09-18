@@ -845,11 +845,11 @@ mod tests {
     }
 
 
-    // TODO: Once coverage and complexity have been implemented, uncomment this test.
+    // TODO: Once coverage has been implemented, uncomment this test.
     //
     // #[tokio::test]
     // #[serial]
-    // async fn test_submission_with_code_coverage_and_complexity_fields() {
+    // async fn test_submission_with_code_coverage_field() {
     //     let db = setup_test_db().await;
     //     let data = setup_test_data(&db).await;
     //     let app = make_app(db.clone());
@@ -870,7 +870,6 @@ mod tests {
     //     let json: Value = serde_json::from_slice(&body).unwrap();
     //     assert_eq!(json["success"], true);
     //     assert!(json["data"].get("code_coverage").is_some());
-    //     assert!(json["data"].get("code_complexity").is_some());
     // }
 
     #[tokio::test]

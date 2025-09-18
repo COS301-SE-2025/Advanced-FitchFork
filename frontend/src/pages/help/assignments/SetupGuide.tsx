@@ -41,7 +41,7 @@ const anchorItems = [
   { key: 'memo-allocator', href: '#memo-allocator', title: 'Memo Output & Mark Allocator' },
   { key: 'submissions', href: '#submissions', title: 'Submissions & Grading' },
   { key: 'security', href: '#security', title: 'Security (PIN & IP)' },
-  { key: 'coverage-complexity', href: '#coverage-complexity', title: 'Code Coverage / Complexity' },
+  { key: 'coverage', href: '#coverage', title: 'Code Coverage' },
   { key: 'ops', href: '#ops', title: 'Maintenance (Remark/Resubmit)' },
   { key: 'faq', href: '#faq', title: 'FAQ & Tips' },
 ];
@@ -558,15 +558,15 @@ Buzz`}
 
           <Divider />
 
-          <div id="coverage-complexity" />
-          <Title level={3}>Code Coverage & Complexity</Title>
+          <div id="coverage" />
+          <Title level={3}>Code Coverage</Title>
           <Alert
             type="info"
             showIcon
             message="Optional extras"
             description={
               <>
-                Coverage and complexity are parsed into the report when present. Coverage tasks do
+                Coverage is are parsed into the report when present. Coverage tasks do
                 not contribute points via allocator but appear in the report for visibility.
               </>
             }

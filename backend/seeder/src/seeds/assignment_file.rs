@@ -217,8 +217,7 @@ task3:
   },
   "output": {
     "stdout": true,
-    "stderr": true,
-    "retcode": true
+    "stderr": true
   }
 }
 "#;
@@ -469,8 +468,7 @@ task4: main
   },
   "output": {
     "stdout": true,
-    "stderr": true,
-    "retcode": true
+    "stderr": true
   }
 }
 "#;
@@ -631,8 +629,7 @@ task4: main
         },
         "output": {
             "stdout": true,
-            "stderr": true,
-            "retcode": true
+            "stderr": true
         }
         }
         "#;
@@ -802,7 +799,6 @@ task1:
     "marking_scheme": "exact"
   },
   "output": {
-    "retcode": true,
     "stderr": true,
     "stdout": true
   },

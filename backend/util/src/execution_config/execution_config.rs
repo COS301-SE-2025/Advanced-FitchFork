@@ -134,26 +134,6 @@ impl Default for ProjectSetup {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ExecutionOutputOptions {
-    #[serde(default = "default_stdout")]
-    pub stdout: bool,
-    #[serde(default)]
-    pub stderr: bool,
-    #[serde(default)]
-    pub retcode: bool,
-}
-
-impl Default for ExecutionOutputOptions {
-    fn default() -> Self {
-        Self {
-            stdout: true,
-            stderr: false,
-            retcode: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CodeCoverage {
     #[serde(default = "default_code_coverage_required")]
     pub code_coverage_required: u8, // percentage 0-100
@@ -328,9 +308,6 @@ pub struct ExecutionConfig {
     pub project: ProjectSetup,
 
     #[serde(default)]
-    pub output: ExecutionOutputOptions,
-
-    #[serde(default)]
     pub gatlam: GATLAM,
 
     #[serde(default)]
@@ -346,11 +323,26 @@ impl ExecutionConfig {
             execution: ExecutionLimits::default(),
             marking: MarkingOptions::default(),
             project: ProjectSetup::default(),
-            output: ExecutionOutputOptions::default(),
             gatlam: GATLAM::default(),
             security: SecurityOptions::default(),  
             code_coverage: CodeCoverage::default(),
         }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if self.marking.deliminator.starts_with("&FITCHFORK&") {
+            return Err("Delimiter cannot be with &FITCHFORK& (reserved for system use)".to_string());
+        }
+
+        if self.execution.timeout_secs <= 0 {
+            return Err("Timeout must be greater than 0 seconds".to_string());
+        }
+
+        if self.execution.max_memory <= 0 {
+            return Err("Max memory must be greater than 0 bytes".to_string());
+        }
+
+        Ok(())
     }
 
     pub fn get_execution_config(
@@ -385,6 +377,8 @@ impl ExecutionConfig {
     }
 
     pub fn save(&self, module_id: i64, assignment_id: i64) -> Result<(), String> {
+        self.validate()?;
+
         let cfg_dir = config_dir(module_id, assignment_id);
 
         // Ensure directory exists
@@ -459,10 +453,6 @@ fn default_allow_practice_submissions() -> bool {
 
 fn default_language() -> Language {
     Language::Cpp
-}
-
-fn default_stdout() -> bool {
-    true
 }
 
 fn default_population_size() -> usize {

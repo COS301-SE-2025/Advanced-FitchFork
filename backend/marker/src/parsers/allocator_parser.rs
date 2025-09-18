@@ -187,9 +187,23 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
                     }
                 };
 
+                let feedback = sub_obj.get("feedback")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                let regex = sub_obj.get("regex")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect::<Vec<String>>()
+                    });
+
                 subsections.push(Subsection {
                     name: sub_name,
                     value: sub_value as i64,
+                    feedback,
+                    regex,
                 });
             }
 
@@ -200,10 +214,22 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
                 )));
             }
 
+            let code_coverage = match task_map.get("code_coverage") {
+                Some(Value::Bool(b)) => *b,
+                Some(_) => {
+                    return Err(MarkerError::ParseAllocatorError(format!(
+                        "Task '{}' has invalid 'code_coverage' field (must be boolean)",
+                        task_id
+                    )));
+                }
+                None => false,
+            };
+
             tasks.push(TaskEntry {
                 id: task_id.clone(),
                 name,
                 value: value as i64,
+                code_coverage,
                 subsections,
             });
         }
@@ -239,8 +265,10 @@ mod tests {
         assert_eq!(task.subsections.len(), 2);
         assert_eq!(task.subsections[0].name, "Constructor");
         assert_eq!(task.subsections[0].value, 6);
+        assert_eq!(task.subsections[0].feedback, None);
         assert_eq!(task.subsections[1].name, "Setup Globals");
         assert_eq!(task.subsections[1].value, 4);
+        assert_eq!(task.subsections[1].feedback, None);
     }
 
     /// Test parsing a valid report with multiple tasks, including a task with no subsections.

@@ -29,8 +29,8 @@ use crate::types::TaskResult;
 /// use marker::scorer::compute_overall_score;
 ///
 /// let results = vec![
-///     TaskResult { name: "Task 1".to_string(), awarded: 10, possible: 10, matched_patterns: vec![], missed_patterns: vec![] },
-///     TaskResult { name: "Task 2".to_string(), awarded: 5, possible: 10, matched_patterns: vec![], missed_patterns: vec![] },
+///     TaskResult { name: "Task 1".to_string(), awarded: 10, possible: 10, matched_patterns: vec![], missed_patterns: vec![], student_output: vec![], memo_output: vec![] },
+///     TaskResult { name: "Task 2".to_string(), awarded: 5, possible: 10, matched_patterns: vec![], missed_patterns: vec![], student_output: vec![], memo_output: vec![] },
 /// ];
 ///
 /// // Total awarded: 15
@@ -42,8 +42,6 @@ use crate::types::TaskResult;
 /// let score = compute_overall_score(&empty_results).unwrap();
 /// assert_eq!(score, 0);
 /// ```
-/// 
-/// TODO: Implement score weighting.
 pub fn compute_overall_score(results: &[TaskResult]) -> Result<i64, MarkerError> {
     let mut total_awarded = 0;
     for result in results {
@@ -67,6 +65,11 @@ mod tests {
                 possible: 10,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: vec![],
+                memo_output: vec![],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
             TaskResult {
                 name: "Task 2".to_string(),
@@ -74,9 +77,13 @@ mod tests {
                 possible: 10,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: vec![],
+                memo_output: vec![],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
         ];
-        // Total awarded: 15
         assert_eq!(compute_overall_score(&results).unwrap(), 15);
     }
 
@@ -97,6 +104,11 @@ mod tests {
                 possible: 10,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: vec![],
+                memo_output: vec![],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
             TaskResult {
                 name: "Task 2".to_string(),
@@ -104,9 +116,13 @@ mod tests {
                 possible: 0,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: vec![],
+                memo_output: vec![],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
         ];
-        // Total awarded: 15
         assert_eq!(compute_overall_score(&results).unwrap(), 15);
     }
 
@@ -119,6 +135,11 @@ mod tests {
                 possible: 3,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: vec![],
+                memo_output: vec![],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
             TaskResult {
                 name: "Task 2".to_string(),
@@ -126,9 +147,13 @@ mod tests {
                 possible: 2,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: vec![],
+                memo_output: vec![],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
         ];
-        // Total awarded: 3
         assert_eq!(compute_overall_score(&results).unwrap(), 3);
     }
 
@@ -142,6 +167,11 @@ mod tests {
                 possible: 10,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: vec![],
+                memo_output: vec![],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
             TaskResult {
                 name: "Task 2".to_string(),
@@ -149,6 +179,11 @@ mod tests {
                 possible: 20,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: vec![],
+                memo_output: vec![],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
         ];
         assert_eq!(compute_overall_score(&results).unwrap(), 0);
@@ -164,6 +199,11 @@ mod tests {
                 possible: 15,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: vec![],
+                memo_output: vec![],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
             TaskResult {
                 name: "Task 2".to_string(),
@@ -171,6 +211,11 @@ mod tests {
                 possible: 100,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: vec![],
+                memo_output: vec![],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
         ];
         assert_eq!(compute_overall_score(&results).unwrap(), 115);

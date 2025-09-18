@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf};
 
-use super::common::{CodeComplexity, CodeComplexitySummary, MarkSummary, SubmissionDetailResponse};
+use super::common::{MarkSummary, SubmissionDetailResponse};
 use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late};
 use axum::{
     Json,
@@ -19,13 +19,15 @@ use db::models::{
     assignment_task::Entity as AssignmentTaskModel,
 };
 use marker::MarkingJob;
+use marker::comparators::{exact_comparator::ExactComparator, percentage_comparator::PercentageComparator, regex_comparator::RegexComparator};
+use marker::feedback::{auto_feedback::AutoFeedback, manual_feedback::ManualFeedback, ai_feedback::AiFeedback};
 use md5;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use tokio_util::bytes;
 use util::{mark_allocator::mark_allocator::TaskInfo, paths::storage_root};
 use util::{
-    execution_config::{ExecutionConfig, execution_config::SubmissionMode},
+    execution_config::{ExecutionConfig, execution_config::{SubmissionMode, MarkingScheme, FeedbackScheme}},
     mark_allocator::mark_allocator::generate_allocator,
     mark_allocator::mark_allocator::load_allocator,
     scan_code_content::scan_code_content,
@@ -83,6 +85,69 @@ pub struct FailedOperation {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/// Applies the appropriate comparator to a marking job based on the scheme
+fn apply_comparator<'a>(marking_job: MarkingJob<'a>, scheme: &MarkingScheme) -> MarkingJob<'a> {
+    match scheme {
+        MarkingScheme::Exact => marking_job.with_comparator(ExactComparator),
+        MarkingScheme::Percentage => marking_job.with_comparator(PercentageComparator),
+        MarkingScheme::Regex => marking_job.with_comparator(RegexComparator),
+    }
+}
+
+/// Applies the appropriate feedback to a marking job based on the scheme
+fn apply_feedback<'a>(marking_job: MarkingJob<'a>, scheme: &FeedbackScheme) -> MarkingJob<'a> {
+    match scheme {
+        FeedbackScheme::Auto => marking_job.with_feedback(AutoFeedback),
+        FeedbackScheme::Manual => marking_job.with_feedback(ManualFeedback),
+        FeedbackScheme::Ai => marking_job.with_feedback(AiFeedback),
+    }
+}
+
+/// Best-effort scan for disallowed code; logs errors and returns false on failure
+fn scan_disallowed_best_effort<P: AsRef<std::path::Path>>(
+    path: P,
+    config: &ExecutionConfig,
+) -> bool {
+    match scan_code_content::contains_dissalowed_code(path, config) {
+        Ok(result) => result,
+        Err(e) => {
+            eprintln!("Disallowed scan error: {}", e);
+            false
+        }
+    }
+}
+
+/// Set earned=0 in DB and update the submission report to reflect the zero mark.
+async fn enforce_zero_mark(
+    module_id: i64,
+    assignment_id: i64,
+    submission: &AssignmentSubmissionModel,
+    total: i64,
+    tasks: Option<&Vec<serde_json::Value>>,
+    db: &sea_orm::DatabaseConnection,
+) -> Result<(), String> {
+    // Update DB mark to 0
+    if let Ok(Some(existing)) = assignment_submission::Entity::find_by_id(submission.id).one(db).await {
+        let mut am: assignment_submission::ActiveModel = existing.into();
+        am.earned = sea_orm::ActiveValue::Set(0);
+        am.updated_at = sea_orm::ActiveValue::Set(Utc::now());
+        if let Err(e) = assignment_submission::Entity::update(am).exec(db).await {
+            eprintln!("Failed to zero mark in DB: {}", e);
+        }
+    }
+
+    // Update report JSON atomically
+    let new_mark = MarkSummary { earned: 0, total };
+    update_submission_report_marks(
+        module_id,
+        assignment_id,
+        submission,
+        &new_mark,
+        tasks,
+    )
+    .await
+}
 
 /// Validates bulk operation request ensuring exactly one of submission_ids or all is provided
 fn validate_bulk_request(
@@ -257,25 +322,7 @@ async fn grade_submission(
         submission.attempt,
     );
 
-    //Old system before code-coverage
-
-    // let mut student_outputs = Vec::new();
-    // if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
-    //     for entry in entries.flatten() {
-    //         let file_path = entry.path();
-    //         if file_path.is_file() {
-    //             if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-    //                 if ext.eq_ignore_ascii_case("txt") {
-    //                     student_outputs.push(file_path);
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-    // student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
-
     let mut student_outputs = Vec::new();
-    let mut student_output_code_coverage = Vec::new();
 
     //family reunion of if statments
     if let Ok(entries) = std::fs::read_dir(&student_output_dir) {
@@ -296,9 +343,7 @@ async fn grade_submission(
                                             .one(db)
                                             .await
                                     {
-                                        if task.code_coverage {
-                                            student_output_code_coverage.push(file_path.clone());
-                                        } else {
+                                        if !task.code_coverage {
                                             student_outputs.push(file_path.clone());
                                         }
                                     }
@@ -310,28 +355,29 @@ async fn grade_submission(
             }
         }
     }
-
     student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
-    //TODO - Reece here is your student_output code_coverage
-    //use util/src/code_coverage_report/code_coverage_report.rs to transform it to json
-
-    //If you want to test it run the frontend - module 9998
-    //it has 4 tasks - the 4th one is the code_coverage
-    //for a student submission just submit the memo_files of the assignment
-    student_output_code_coverage.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
-
-    let marking_job = MarkingJob::new(
+    let mut marking_job = MarkingJob::new(
         memo_outputs.to_vec(),
         student_outputs,
         mark_allocator_path.to_path_buf(),
         config.clone(),
     );
+    marking_job = apply_comparator(marking_job, &config.marking.marking_scheme);
+    marking_job = apply_feedback(marking_job, &config.marking.feedback_scheme);
 
-    let mark_report = marking_job.mark().await.map_err(|e| {
-        eprintln!("MARKING ERROR: {:#?}", e);
-        format!("{:?}", e)
-    })?;
+    let coverage_path = attempt_dir(
+        assignment.module_id,
+        assignment.id,
+        submission.user_id,
+        submission.attempt,
+    )
+    .join("coverage_report.json");
+    if coverage_path.exists() {
+        marking_job = marking_job.with_coverage(coverage_path);
+    }
+
+    let mark_report = marking_job.mark().await.map_err(|e| format!("Marking Error: {:?}", e))?;
 
     let mark = MarkSummary {
         earned: mark_report.data.mark.earned,
@@ -342,36 +388,27 @@ async fn grade_submission(
         .as_array()
         .cloned()
         .unwrap_or_default();
-    let code_coverage = match &mark_report.data.code_coverage {
-        Some(cov) => {
-            let arr = serde_json::to_value(cov)
-                .unwrap_or_default()
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            if !arr.is_empty() { Some(arr) } else { None }
-        }
-        None => None,
-    };
-    let code_complexity = match &mark_report.data.code_complexity {
-        Some(c) => {
-            let metrics = serde_json::to_value(&c.metrics)
-                .unwrap_or_default()
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            let summary = CodeComplexitySummary {
-                earned: c.summary.as_ref().map(|s| s.earned).unwrap_or(0),
-                total: c.summary.as_ref().map(|s| s.total).unwrap_or(0),
-            };
-            if !metrics.is_empty() || summary.earned != 0 || summary.total != 0 {
-                Some(CodeComplexity { summary, metrics })
-            } else {
-                None
-            }
-        }
-        None => None,
-    };
+    let code_coverage = mark_report
+        .data
+        .code_coverage
+        .as_ref()
+        .map(|cov| {
+            let summary = cov.summary.as_ref().map(|s| MarkSummary { earned: s.earned, total: s.total });
+            let files: Vec<serde_json::Value> = cov
+                .files
+                .iter()
+                .map(|f| serde_json::json!({
+                    "path": f.path,
+                    "earned": f.earned,
+                    "total": f.total,
+                }))
+                .collect();
+            serde_json::json!({
+                "summary": summary,
+                "files": files,
+            })
+        })
+        .and_then(|v| serde_json::from_value::<super::common::CodeCoverage>(v).ok());
 
     let mut active_model: assignment_submission::ActiveModel = submission.clone().into();
     active_model.earned = sea_orm::ActiveValue::Set(mark.earned);
@@ -394,7 +431,6 @@ async fn grade_submission(
         is_late: is_late(submission.created_at, assignment.due_date),
         tasks,
         code_coverage,
-        code_complexity,
     };
 
     let report_path = submission_report_path(
@@ -453,13 +489,13 @@ fn clear_submission_output(
     Ok(())
 }
 
-
 /// Read JSON into `SubmissionDetailResponse`, mutate, and write atomically.
 async fn update_submission_report_marks(
     module_id: i64,
     assignment_id: i64,
     submission: &AssignmentSubmissionModel,
     new_mark: &MarkSummary,
+    new_tasks: Option<&Vec<serde_json::Value>>,
 ) -> Result<(), String> {
     let report_path = submission_report_path(
         module_id,
@@ -476,6 +512,9 @@ async fn update_submission_report_marks(
             .map_err(|e| format!("Failed to deserialize report: {}", e))?;
 
     resp.mark = MarkSummary { earned: new_mark.earned, total: new_mark.total };
+    if let Some(tasks) = new_tasks {
+        resp.tasks = tasks.clone();
+    }
     resp.updated_at = Utc::now().to_rfc3339();
 
     let output = serde_json::to_string_pretty(&resp)
@@ -485,7 +524,6 @@ async fn update_submission_report_marks(
 
     Ok(())
 }
-
 
 /// Executes bulk operation on submissions (remark or resubmit)
 async fn execute_bulk_operation<F, Fut>(
@@ -553,7 +591,7 @@ where
 ///
 /// This endpoint accepts a multipart form upload containing the assignment file and optional flags.
 /// The file is saved, graded, and a detailed grading report is returned. The grading process includes
-/// code execution, mark allocation, and optional code coverage/complexity analysis.
+/// code execution, mark allocation, and optional code coverage analysis.
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): The ID of the module containing the assignment
@@ -588,10 +626,6 @@ where
 ///     "is_late": false,
 ///     "tasks": [ ... ],
 ///     "code_coverage": [ ... ],
-///     "code_complexity": {
-///       "summary": { "earned": 10, "total": 15 },
-///       "metrics": [ ... ]
-///     }
 ///   }
 /// }
 /// ```
@@ -642,7 +676,7 @@ where
 /// - Each submission increments the attempt number for the user/assignment
 /// - Only one file per submission is accepted
 /// - Practice submissions are marked and reported but may not count toward final grade
-/// - The returned report includes detailed per-task grading, code coverage, and complexity if available
+/// - The returned report includes detailed per-task grading and code coverage if available
 /// - The endpoint is restricted to authenticated students assigned to the module
 /// - All errors are returned in a consistent JSON format
 pub async fn submit_assignment(
@@ -664,7 +698,7 @@ pub async fn submit_assignment(
     };
 
     let mut is_practice: bool = false;
-    let mut attests_ownership: bool = false; // NEW: require this
+    let mut attests_ownership: bool = false;
     let mut file_name: Option<String> = None;
     let mut file_bytes: Option<bytes::Bytes> = None;
 
@@ -764,9 +798,8 @@ pub async fn submit_assignment(
         }
     };
 
-    // Scan for disallowed code (best-effort; failure just logs)
-    let mut disallowed_present = false;
-    {
+    // Scan for disallowed code (best-effort; failure just logs). Write to a temp file first.
+    let disallowed_present = {
         use std::io::Write;
         use tempfile::NamedTempFile;
 
@@ -792,18 +825,9 @@ pub async fn submit_assignment(
             );
         }
         let temp_path = temp_file.into_temp_path();
-        match scan_code_content::contains_dissalowed_code(&temp_path, &config) {
-            Ok(result) => disallowed_present = result,
-            Err(e) => eprintln!("Disallowed scan error: {}", e),
-        }
-    }
+        scan_disallowed_best_effort(&temp_path, &config)
+    };
 
-        /*
-    TODO
-    Reece this dissalowed_present boolean - if its true then they have dissalowed imports - they need to be given a mark of 0
-     */
-
-    // Hash + attempt
     let file_hash = format!("{:x}", md5::compute(&file_bytes));
     let attempt = match get_next_attempt(assignment_id, claims.sub, db).await {
         Ok(attempt) => attempt,
@@ -818,7 +842,6 @@ pub async fn submit_assignment(
         }
     };
 
-    // Persist file + attestation
     let submission = match AssignmentSubmissionModel::save_file(
         db,
         assignment_id,
@@ -845,7 +868,6 @@ pub async fn submit_assignment(
         }
     };
 
-    // Run the pipeline (manual vs GA)
     if let Err(e) =
         process_submission_code(db, submission.id, config.clone(), module_id, assignment_id).await
     {
@@ -858,7 +880,6 @@ pub async fn submit_assignment(
         );
     }
 
-    // Ensure allocator (non-manual may need (re)generation)
     if config.project.submission_mode != SubmissionMode::Manual {
         let tasks_res = assignment_task::Entity::find()
             .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
@@ -941,7 +962,6 @@ pub async fn submit_assignment(
             }
         };
 
-    // Mark
     match grade_submission(
         submission.clone(),
         &assignment,
@@ -953,38 +973,20 @@ pub async fn submit_assignment(
     .await
     {
         Ok(mut resp) => {
-            // If disallowed imports, force mark to 0 and persist/report it
             if disallowed_present {
-                // Update DB mark to 0
-                if let Ok(Some(existing)) =
-                    assignment_submission::Entity::find_by_id(submission.id).one(db).await
-                {
-                    let mut am: assignment_submission::ActiveModel = existing.into();
-                    am.earned = sea_orm::ActiveValue::Set(0);
-                    am.updated_at = sea_orm::ActiveValue::Set(Utc::now());
-                    if let Err(e) = assignment_submission::Entity::update(am).exec(db).await {
-                        eprintln!("Failed to zero mark in DB: {}", e);
-                    }
-                }
-
-                // Update report JSON atomically
-                let new_mark = MarkSummary {
-                    earned: 0,
-                    total: resp.mark.total,
-                };
-                if let Err(e) = update_submission_report_marks(
+                if let Err(e) = enforce_zero_mark(
                     assignment.module_id,
                     assignment.id,
                     &submission,
-                    &new_mark,
+                    resp.mark.total,
+                    None,
+                    db,
                 )
                 .await
                 {
-                    eprintln!("Failed to zero mark in report: {}", e);
+                    eprintln!("Failed to enforce zero mark: {}", e);
                 }
-
-                // Mutate response
-                resp.mark = new_mark;
+                resp.mark = MarkSummary { earned: 0, total: resp.mark.total };
 
                 return (
                     StatusCode::OK,
@@ -1006,7 +1008,6 @@ pub async fn submit_assignment(
         ),
     }
 }
-
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions/remark
 ///
@@ -1135,6 +1136,7 @@ pub async fn remark_submissions(
             let mark_allocator_path = mark_allocator_path.clone();
             let config = config.clone();
             async move {
+                let disallowed_present = scan_disallowed_best_effort(submission.full_path(), &config);
                 let student_output_dir = submission_output_dir(
                     assignment.module_id,
                     assignment.id,
@@ -1157,40 +1159,93 @@ pub async fn remark_submissions(
                 }
                 student_outputs.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
-                let marking_job = MarkingJob::new(
+                let mut marking_job = MarkingJob::new(
                     memo_outputs.to_vec(),
                     student_outputs,
                     mark_allocator_path.to_path_buf(),
                     config.clone(),
                 );
+                marking_job = apply_comparator(marking_job, &config.marking.marking_scheme);
+                marking_job = apply_feedback(marking_job, &config.marking.feedback_scheme);
 
-                let mark_report = marking_job
-                    .mark()
-                    .await
-                    .map_err(|e| format!("Marking error: {:?}", e))?;
+                let coverage_path = attempt_dir(
+                    assignment.module_id,
+                    assignment.id,
+                    submission.user_id,
+                    submission.attempt,
+                )
+                .join("coverage_report.json");
+                if coverage_path.exists() {
+                    marking_job = marking_job.with_coverage(coverage_path);
+                }
+
+                let mark_report = marking_job.mark().await.map_err(|e| format!("Marking Error: {:?}", e))?;
 
                 let mark = MarkSummary {
                     earned: mark_report.data.mark.earned,
                     total: mark_report.data.mark.total,
                 };
 
+                let applied_mark = if disallowed_present {
+                    if let Err(e) = enforce_zero_mark(
+                        assignment.module_id,
+                        assignment.id,
+                        &submission,
+                        mark.total,
+                        None,
+                        db,
+                    )
+                    .await
+                    {
+                        eprintln!("Failed to enforce zero mark (remark): {}", e);
+                    }
+                    MarkSummary { earned: 0, total: mark.total }
+                } else {
+                    mark
+                };
+
+                let tasks = serde_json::to_value(&mark_report.data.tasks)
+                    .unwrap_or_default()
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+
                 match update_submission_report_marks(
                     assignment.module_id,
                     assignment.id,
                     &submission,
-                    &mark,
+                    &applied_mark,
+                    Some(&tasks),
                 ).await {
                     Ok(_) => Ok(()),
-                    Err(_err) => grade_submission(
-                        submission,
-                        &assignment,
-                        &memo_outputs,
-                        &mark_allocator_path,
-                        &config,
-                        db,
-                    )
-                    .await
-                    .map(|_| ()),
+                    Err(_err) => {
+                        let resp = grade_submission(
+                            submission.clone(),
+                            &assignment,
+                            &memo_outputs,
+                            &mark_allocator_path,
+                            &config,
+                            db,
+                        )
+                        .await?;
+
+                        if disallowed_present {
+                            if let Err(e) = enforce_zero_mark(
+                                assignment.module_id,
+                                assignment.id,
+                                &submission,
+                                resp.mark.total,
+                                None,
+                                db,
+                            )
+                            .await
+                            {
+                                eprintln!("Failed to enforce zero mark (remark fallback): {}", e);
+                            }
+                        }
+
+                        Ok(())
+                    },
                 }
             }
         })
@@ -1355,10 +1410,7 @@ pub async fn resubmit_submissions(
             let mark_allocator_path = mark_allocator_path.clone();
             let config = config.clone();
             async move {
-                /*
-                TODO
-                Here you need to check for dissalowed imports as well - refer to the submit_assignment method
-                */
+                let disallowed_present = scan_disallowed_best_effort(submission.full_path(), &config);
 
                 if let Err(e) = clear_submission_output(&submission, assignment.module_id, assignment.id) {
                     return Err(e);
@@ -1375,16 +1427,32 @@ pub async fn resubmit_submissions(
                     return Err(format!("Failed to run code for submission: {}", e));
                 }
 
-                grade_submission(
-                    submission,
+                let resp = grade_submission(
+                    submission.clone(),
                     &assignment,
                     &memo_outputs,
                     &mark_allocator_path,
                     &config,
                     &db,
                 )
-                .await
-                .map(|_| ())
+                .await?;
+
+                if disallowed_present {
+                    if let Err(e) = enforce_zero_mark(
+                        assignment.module_id,
+                        assignment.id,
+                        &submission,
+                        resp.mark.total,
+                        None,
+                        &db,
+                    )
+                    .await
+                    {
+                        eprintln!("Failed to enforce zero mark (resubmit): {}", e);
+                    }
+                }
+
+                Ok(())
             }
         })
         .await;

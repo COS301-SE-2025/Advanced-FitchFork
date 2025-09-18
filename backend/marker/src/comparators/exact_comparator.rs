@@ -46,6 +46,11 @@ impl OutputComparator for ExactComparator {
                 possible: section.value,
                 matched_patterns,
                 missed_patterns,
+                student_output: student_lines.to_vec(),
+                memo_output: memo_lines.to_vec(),
+                stderr: None,
+                return_code: None,
+                manual_feedback: section.feedback.clone(),
             };
         }
         let mut all_match = true;
@@ -64,6 +69,11 @@ impl OutputComparator for ExactComparator {
             possible: section.value,
             matched_patterns,
             missed_patterns,
+            student_output: student_lines.to_vec(),
+            memo_output: memo_lines.to_vec(),
+            stderr: None,
+            return_code: None,
+            manual_feedback: section.feedback.clone(),
         }
     }
 }
@@ -82,6 +92,8 @@ mod tests {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,
+            feedback: None,
+            regex: None,
         }
     }
 
@@ -157,7 +169,6 @@ mod tests {
         let memo_lines = to_string_vec(&["a", "b"]);
         let student_lines = to_string_vec(&["a", "b", "extra"]);
         let section = mock_subsection(10);
-        // Extra line should result in 0 marks.
         let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 0);
     }

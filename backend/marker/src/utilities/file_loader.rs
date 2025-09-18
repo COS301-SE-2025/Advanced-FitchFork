@@ -8,7 +8,7 @@
 //!
 //! - Checks the existence and type of memo and student files.
 //! - Ensures the number of memo and student files match.
-//! - Loads and validates the allocator, coverage, and complexity JSON files, enforcing a maximum size.
+//! - Loads and validates the allocator and coverage JSON files, enforcing a maximum size.
 //! - Returns a [`LoadedFiles`] struct containing all loaded data and paths.
 //!
 //! # Error Handling
@@ -35,8 +35,6 @@ pub struct LoadedFiles {
     pub allocator_raw: Value,
     /// Raw JSON value for the coverage report.
     pub coverage_raw: Option<Value>,
-    /// Raw JSON value for the complexity report.
-    pub complexity_raw: Option<Value>,
 }
 
 /// Maximum allowed size for JSON files.
@@ -70,7 +68,7 @@ fn check_file(path: &Path, max_size: Option<u64>) -> Result<(), MarkerError> {
 ///
 /// - Checks that all memo and student files exist.
 /// - Ensures the number of memo and student files match.
-/// - Loads and validates the allocator, coverage, and complexity JSON files, enforcing a maximum size.
+/// - Loads and validates the allocator and coverage JSON files, enforcing a maximum size.
 ///
 /// # Errors
 ///
@@ -84,7 +82,6 @@ pub fn load_files(
     student_paths: Vec<PathBuf>,
     allocator_path: PathBuf,
     coverage_path: Option<PathBuf>,
-    complexity_path: Option<PathBuf>,
 ) -> Result<LoadedFiles, MarkerError> {
     for p in &memo_paths {
         check_file(p, None)?;
@@ -99,13 +96,6 @@ pub fn load_files(
     let allocator_bytes = fs::read(&allocator_path).map_err(|e| MarkerError::IoError(format!("{}: {}", allocator_path.display(), e)))?;
     let allocator_raw = serde_json::from_slice(&allocator_bytes).map_err(|_| MarkerError::InvalidJson(allocator_path.display().to_string()))?;
     let coverage_raw = if let Some(path) = coverage_path {
-        check_file(&path, Some(MAX_JSON_SIZE))?;
-        let bytes = fs::read(&path).map_err(|e| MarkerError::IoError(format!("{}: {}", path.display(), e)))?;
-        Some(serde_json::from_slice(&bytes).map_err(|_| MarkerError::InvalidJson(path.display().to_string()))?)
-    } else {
-        None
-    };
-    let complexity_raw = if let Some(path) = complexity_path {
         check_file(&path, Some(MAX_JSON_SIZE))?;
         let bytes = fs::read(&path).map_err(|e| MarkerError::IoError(format!("{}: {}", path.display(), e)))?;
         Some(serde_json::from_slice(&bytes).map_err(|_| MarkerError::InvalidJson(path.display().to_string()))?)
@@ -129,7 +119,6 @@ pub fn load_files(
         student_contents,
         allocator_raw,
         coverage_raw,
-        complexity_raw,
     })
 }
 
@@ -148,13 +137,11 @@ mod tests {
         let student_paths = vec![PathBuf::from(format!("{}/student1.txt", dir))];
         let allocator_path = PathBuf::from(format!("{}/allocator.json", dir));
         let coverage_path = PathBuf::from(format!("{}/coverage.json", dir));
-        let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
         let result = load_files(
             memo_paths.clone(),
             student_paths.clone(),
             allocator_path.clone(),
             Some(coverage_path.clone()),
-            Some(complexity_path.clone()),
         );
         assert!(result.is_ok(), "Expected Ok for happy path, got: {:?}", result);
         let loaded = result.unwrap();
@@ -162,7 +149,6 @@ mod tests {
         assert_eq!(loaded.student_contents.len(), student_paths.len());
         assert!(loaded.allocator_raw.is_object(), "allocator_raw should be a JSON object");
         assert!(loaded.coverage_raw.is_some(), "coverage_raw should be Some");
-        assert!(loaded.complexity_raw.is_some(), "complexity_raw should be Some");
     }
 
     /// Test error handling for a missing memo file.
@@ -173,13 +159,11 @@ mod tests {
         let student_paths = vec![PathBuf::from(format!("{}/student1.txt", dir))];
         let allocator_path = PathBuf::from(format!("{}/allocator.json", dir));
         let coverage_path = PathBuf::from(format!("{}/coverage.json", dir));
-        let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
         let result = load_files(
             memo_paths,
             student_paths,
             allocator_path,
             Some(coverage_path),
-            Some(complexity_path),
         );
         match result {
             Err(MarkerError::IoError(msg)) => {
@@ -200,13 +184,11 @@ mod tests {
         let student_paths = vec![PathBuf::from(format!("{}/student1.txt", dir))];
         let allocator_path = PathBuf::from(format!("{}/allocator.json", dir));
         let coverage_path = PathBuf::from(format!("{}/coverage.json", dir));
-        let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
         let result = load_files(
             memo_paths,
             student_paths,
             allocator_path,
             Some(coverage_path),
-            Some(complexity_path),
         );
         match result {
             Err(MarkerError::InputMismatch(msg)) => {
@@ -224,13 +206,11 @@ mod tests {
         let student_paths = vec![PathBuf::from(format!("{}/student1.txt", dir))];
         let allocator_path = PathBuf::from(format!("{}/allocator.json", dir)); // >2MB
         let coverage_path = PathBuf::from(format!("{}/coverage.json", dir));
-        let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
         let result = load_files(
             memo_paths,
             student_paths,
             allocator_path,
             Some(coverage_path),
-            Some(complexity_path),
         );
         match result {
             Err(MarkerError::IoError(msg)) => {
@@ -248,13 +228,11 @@ mod tests {
         let student_paths = vec![PathBuf::from(format!("{}/student1.txt", dir))];
         let allocator_path = PathBuf::from(format!("{}/allocator.json", dir)); // invalid json
         let coverage_path = PathBuf::from(format!("{}/coverage.json", dir));
-        let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
         let result = load_files(
             memo_paths,
             student_paths,
             allocator_path,
             Some(coverage_path),
-            Some(complexity_path),
         );
         match result {
             Err(MarkerError::InvalidJson(path)) => {
@@ -262,29 +240,6 @@ mod tests {
             },
             other => panic!("Expected InvalidJson for invalid json content, got: {:?}", other),
         }
-    }
-
-    /// Test loading with optional complexity report but no coverage report.
-    #[test]
-    fn test_with_complexity_no_coverage() {
-        let dir = "src/test_files/file_loader/case1";
-        let memo_paths = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-        let student_paths = vec![PathBuf::from(format!("{}/student1.txt", dir))];
-        let allocator_path = PathBuf::from(format!("{}/allocator.json", dir));
-        let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
-        
-        let result = load_files(
-            memo_paths,
-            student_paths,
-            allocator_path,
-            None,
-            Some(complexity_path),
-        );
-
-        assert!(result.is_ok());
-        let loaded = result.unwrap();
-        assert!(loaded.coverage_raw.is_none());
-        assert!(loaded.complexity_raw.is_some());
     }
 
     /// Test loading with no optional reports.
@@ -300,12 +255,10 @@ mod tests {
             student_paths,
             allocator_path,
             None,
-            None,
         );
 
         assert!(result.is_ok());
         let loaded = result.unwrap();
         assert!(loaded.coverage_raw.is_none());
-        assert!(loaded.complexity_raw.is_none());
     }
 }
