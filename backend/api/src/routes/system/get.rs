@@ -67,6 +67,18 @@ pub mod metrics {
     use serde_json::json;
     use util::state::AppState;
 
+    fn round_pct(v: f64) -> f64 {
+        if !v.is_finite() {
+            return 0.0;
+        }
+        let v = v.clamp(0.0, 100.0);
+        if v >= 10.0 {
+            v.round() // 0 decimals
+        } else {
+            (v * 10.0).round() / 10.0 // 1 decimal
+        }
+    }
+
     #[derive(Debug, Deserialize)]
     pub struct MetricsQuery {
         pub start: Option<String>,
@@ -261,8 +273,8 @@ pub mod metrics {
             .map(|p| {
                 json!({
                     "ts": p.ts.to_rfc3339(),
-                    "cpu_avg": p.cpu_avg,
-                    "mem_pct": p.mem_pct,
+                    "cpu_avg": round_pct(p.cpu_avg),
+                    "mem_pct": round_pct(p.mem_pct),
                 })
             })
             .collect();
@@ -297,12 +309,20 @@ pub mod metrics {
         let points = aggregate_points(rows, start, end, unit);
         let mut csv = String::from("timestamp,cpu_avg,mem_pct\n");
         for p in points {
-            csv.push_str(&format!(
-                "{},{:.4},{:.4}\n",
-                p.ts.to_rfc3339(),
-                p.cpu_avg,
-                p.mem_pct
-            ));
+            let cpu = round_pct(p.cpu_avg);
+            let mem = round_pct(p.mem_pct);
+            // format with 0 or 1 decimals according to our rule
+            let cpu_s = if cpu >= 10.0 {
+                format!("{:.0}", cpu)
+            } else {
+                format!("{:.1}", cpu)
+            };
+            let mem_s = if mem >= 10.0 {
+                format!("{:.0}", mem)
+            } else {
+                format!("{:.1}", mem)
+            };
+            csv.push_str(&format!("{},{},{}\n", p.ts.to_rfc3339(), cpu_s, mem_s));
         }
 
         let mut headers = HeaderMap::new();

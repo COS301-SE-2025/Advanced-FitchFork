@@ -18,7 +18,10 @@ pub use get::{
 pub use post::{create_session, mark_attendance};
 pub use put::edit_session;
 
-use crate::auth::guards::require_lecturer_or_assistant_lecturer;
+use crate::{
+    auth::guards::require_lecturer_or_assistant_lecturer,
+    routes::modules::attendance::post::mark_attendance_by_username,
+};
 
 pub fn attendance_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
@@ -65,6 +68,13 @@ pub fn attendance_routes(app_state: AppState) -> Router<AppState> {
             )),
         )
         .route("/sessions/{session_id}/mark", post(mark_attendance))
+        .route(
+            "/sessions/{session_id}/mark/by-username",
+            post(mark_attendance_by_username).route_layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
         .route(
             "/sessions/{session_id}/records",
             get(list_session_records).route_layer(from_fn_with_state(
