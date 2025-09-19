@@ -1,16 +1,16 @@
-pub mod manager;
-pub mod handler;
-pub mod runtime;
-pub mod handler_trait;
-pub mod serve;
 pub mod axum_adapter;
 pub mod default;
+pub mod handler;
+pub mod handler_trait;
+pub mod manager;
+pub mod runtime;
+pub mod serve;
 
 use chrono::Utc;
 use serde::Serialize;
 
-pub use manager::WebSocketManager;
 pub use handler::default_websocket_handler;
+pub use manager::WebSocketManager;
 
 /// Standard event envelope sent over WebSocket topics.
 #[derive(Serialize)]

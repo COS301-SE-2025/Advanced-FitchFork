@@ -5,6 +5,7 @@ import {
   FileTextOutlined,
   UserOutlined,
   NotificationOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import { useMediaQuery } from 'react-responsive';
 import { useAuth } from '@/context/AuthContext';
@@ -24,6 +25,8 @@ const ModuleLayout = () => {
 
   const auth = useAuth();
   const showPersonnel = auth.isAdmin || auth.isLecturer(Number(moduleId));
+  const showAttendance =
+    auth.isAdmin || auth.isLecturer(Number(moduleId)) || auth.isAssistantLecturer(Number(moduleId));
 
   const moduleMenu = [
     { key: `/modules/${moduleId}`, icon: <HomeOutlined />, label: 'Overview' },
@@ -33,6 +36,15 @@ const ModuleLayout = () => {
       label: 'Announcements',
     },
     { key: `/modules/${moduleId}/assignments`, icon: <FileTextOutlined />, label: 'Assignments' },
+    ...(showAttendance
+      ? [
+          {
+            key: `/modules/${moduleId}/attendance`,
+            icon: <CalendarOutlined />,
+            label: 'Attendance',
+          },
+        ]
+      : []),
     // { key: `/modules/${moduleId}/grades`, icon: <BarChartOutlined />, label: 'Grades' },
     // { key: `/modules/${moduleId}/resources`, icon: <BookOutlined />, label: 'Resources' },
     ...(showPersonnel

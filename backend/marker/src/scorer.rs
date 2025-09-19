@@ -42,7 +42,7 @@ use crate::types::TaskResult;
 /// let score = compute_overall_score(&empty_results).unwrap();
 /// assert_eq!(score, 0);
 /// ```
-/// 
+///
 /// TODO: Implement score weighting.
 pub fn compute_overall_score(results: &[TaskResult]) -> Result<i64, MarkerError> {
     let mut total_awarded = 0;
@@ -175,4 +175,4 @@ mod tests {
         ];
         assert_eq!(compute_overall_score(&results).unwrap(), 115);
     }
-} 
+}

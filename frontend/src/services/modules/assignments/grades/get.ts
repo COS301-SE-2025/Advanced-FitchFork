@@ -6,6 +6,14 @@ import type {
 } from "@/types/common";
 import { api, apiDownload } from "@/utils/api";
 
+export interface TaskBreakdown {
+  task_number?: number | null;
+  name?: string | null;
+  earned: number;
+  total: number;
+  score: number;
+}
+
 export interface GradeResponse extends Timestamp {
   id: number;
   assignment_id: number;
@@ -13,6 +21,7 @@ export interface GradeResponse extends Timestamp {
   submission_id?: number | null;
   score: number;
   username: string;
+  tasks: TaskBreakdown[];
 }
 
 export interface ListGradesResponse extends PaginationResponse {
@@ -21,6 +30,7 @@ export interface ListGradesResponse extends PaginationResponse {
 
 /**
  * List grades for an assignment (with pagination, search, sort).
+ * NOTE: `PaginationRequest.sort` is SortOption[]; `buildQuery` converts it.
  */
 export const listGrades = async (
   moduleId: number,

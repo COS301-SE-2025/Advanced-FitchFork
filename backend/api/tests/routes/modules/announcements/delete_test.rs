@@ -1,16 +1,16 @@
 #[cfg(test)]
 mod tests {
-    use crate::helpers::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
     use db::models::{
         announcements::Model as AnnouncementModel,
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRole, Role},
-    };
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode},
     };
     use tower::ServiceExt;
 
@@ -71,7 +71,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_announcement_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
@@ -93,7 +93,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_announcement_forbidden_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student.id, data.student.admin);
@@ -115,7 +115,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_announcement_forbidden_invalid_user() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.invalid_user.id, data.invalid_user.admin);
@@ -137,14 +137,11 @@ mod tests {
 
     #[tokio::test]
     async fn delete_nonexistent_announcement() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
-        let uri = format!(
-            "/api/modules/{}/announcements/999",
-            data.module.id
-        );
+        let uri = format!("/api/modules/{}/announcements/999", data.module.id);
 
         let req = Request::builder()
             .method("DELETE")

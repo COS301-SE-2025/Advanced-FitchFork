@@ -1,17 +1,18 @@
 #[cfg(test)]
 mod tests {
-    use axum::{body::Body, http::{Request, StatusCode}};
-    use tower::ServiceExt;
-    use serde_json::Value;
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
-    use db::{
-        models::{
-            user::Model as UserModel,
-            module::Model as ModuleModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
     };
-    use crate::helpers::app::make_test_app;
+    use db::models::{
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
+    };
+    use serde_json::Value;
+    use tower::ServiceExt;
 
     struct TestData {
         admin: UserModel,
@@ -22,21 +23,41 @@ mod tests {
     }
 
     async fn setup_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS999", 2025, Some("Test Module"), 12).await.unwrap();
-        let admin = UserModel::create(db, "admin", "admin@test.com", "pw", true).await.unwrap();
-        let lecturer = UserModel::create(db, "lect1", "lect@test.com", "pw", false).await.unwrap();
-        let tutor = UserModel::create(db, "tut1", "tut@test.com", "pw", false).await.unwrap();
-        let outsider = UserModel::create(db, "out", "out@test.com", "pw", false).await.unwrap();
+        let module = ModuleModel::create(db, "COS999", 2025, Some("Test Module"), 12)
+            .await
+            .unwrap();
+        let admin = UserModel::create(db, "admin", "admin@test.com", "pw", true)
+            .await
+            .unwrap();
+        let lecturer = UserModel::create(db, "lect1", "lect@test.com", "pw", false)
+            .await
+            .unwrap();
+        let tutor = UserModel::create(db, "tut1", "tut@test.com", "pw", false)
+            .await
+            .unwrap();
+        let outsider = UserModel::create(db, "out", "out@test.com", "pw", false)
+            .await
+            .unwrap();
 
-        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, tutor.id, module.id, Role::Tutor).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, tutor.id, module.id, Role::Tutor)
+            .await
+            .unwrap();
 
-        TestData { admin, lecturer, tutor, outsider, module }
+        TestData {
+            admin,
+            lecturer,
+            tutor,
+            outsider,
+            module,
+        }
     }
 
     #[tokio::test]
     async fn get_personnel_as_admin_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
@@ -52,15 +73,23 @@ mod tests {
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(res.into_body(), 1024 * 1024).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        assert!(json["data"]["users"].as_array().unwrap().iter().any(|u| u["id"] == data.tutor.id));
+        assert!(
+            json["data"]["users"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|u| u["id"] == data.tutor.id)
+        );
     }
 
     #[tokio::test]
     async fn get_personnel_as_lecturer_for_tutors_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -79,7 +108,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_personnel_as_lecturer_for_lecturer_role_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -98,7 +127,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_personnel_as_non_member_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.outsider.id, false);
@@ -117,7 +146,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_eligible_users_as_admin_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
@@ -133,13 +162,16 @@ mod tests {
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(res.into_body(), 1024 * 1024).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Eligible users fetched");
         let user_ids: Vec<i64> = json["data"]["users"]
-            .as_array().unwrap()
+            .as_array()
+            .unwrap()
             .iter()
             .map(|u| u["id"].as_i64().unwrap())
             .collect();
@@ -150,11 +182,14 @@ mod tests {
 
     #[tokio::test]
     async fn get_eligible_users_pagination_and_filtering() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
-        let uri = format!("/api/modules/{}/personnel/eligible?page=1&per_page=1&username=out", data.module.id);
+        let uri = format!(
+            "/api/modules/{}/personnel/eligible?page=1&per_page=1&username=out",
+            data.module.id
+        );
 
         let req = Request::builder()
             .method("GET")
@@ -166,14 +201,19 @@ mod tests {
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(res.into_body(), 1024 * 1024).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["data"]["page"], 1);
         assert_eq!(json["data"]["per_page"], 1);
-        assert!(json["data"]["users"]
-            .as_array().unwrap()
-            .iter()
-            .any(|u| u["username"] == "out"));
+        assert!(
+            json["data"]["users"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|u| u["username"] == "out")
+        );
     }
 }

@@ -1,13 +1,21 @@
 #[cfg(test)]
 mod tests {
-    use db::{models::{user::Model as UserModel, module::Model as ModuleModel, assignment::{Model as AssignmentModel, AssignmentType}, user_module_role::{Model as UserModuleRoleModel, Role}}};
-    use axum::{body::Body, http::{Request, StatusCode}};
-    use tower::ServiceExt;
-    use serde_json::{Value};
+    use crate::helpers::{app::make_test_app_with_storage, config_assert::assert_default_config};
     use api::auth::generate_jwt;
-    use chrono::{Utc, TimeZone};
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use chrono::{TimeZone, Utc};
     use db::models::assignment_file::{FileType, Model as AssignmentFile};
-    use crate::helpers::app::make_test_app;
+    use db::models::{
+        assignment::{AssignmentType, Model as AssignmentModel},
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
+    };
+    use serde_json::Value;
+    use tower::ServiceExt;
 
     struct TestData {
         admin_user: UserModel,
@@ -19,13 +27,30 @@ mod tests {
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true).await.unwrap();
-        let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
-        let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
-        let forbidden_user = UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
+            .await
+            .unwrap();
+        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true)
+            .await
+            .unwrap();
+        let lecturer_user =
+            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
+                .await
+                .unwrap();
+        let student_user =
+            UserModel::create(db, "student1", "student1@test.com", "password2", false)
+                .await
+                .unwrap();
+        let forbidden_user =
+            UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false)
+                .await
+                .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
+            .await
+            .unwrap();
         let a1 = AssignmentModel::create(
             db,
             module.id,
@@ -34,7 +59,9 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         let a2 = AssignmentModel::create(
             db,
             module.id,
@@ -43,7 +70,9 @@ mod tests {
             AssignmentType::Practical,
             Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 2, 28, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         TestData {
             admin_user,
@@ -57,7 +86,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let config = serde_json::json!({
@@ -116,7 +145,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Save a valid config using disk-backed storage
@@ -174,14 +203,16 @@ mod tests {
         assert_eq!(json["data"]["marking"]["feedback_scheme"], "auto");
     }
 
-
     #[tokio::test]
     async fn test_get_config_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
         let req = Request::builder()
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
@@ -194,11 +225,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_forbidden_for_unassigned_user() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
         let req = Request::builder()
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
@@ -211,7 +245,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -228,44 +262,52 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_unauthorized() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
-        let req = Request::builder()
-            .uri(&uri)
-            .body(Body::empty())
-            .unwrap();
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
+        let req = Request::builder().uri(&uri).body(Body::empty()).unwrap();
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
-    async fn test_get_config_no_config_set() {
-        let (app, app_state) = make_test_app().await;
+    async fn test_get_config_defaults_exact() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
+        // call GET as admin against an assignment created by setup_test_data()
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
         let req = Request::builder()
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .body(Body::empty())
             .unwrap();
 
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        assert!(json["data"].as_object().unwrap().is_empty());
+
+        // verify exact defaults via the shared helper
+        assert_default_config(&json["data"]);
     }
 
     #[tokio::test]
     async fn test_get_config_invalid_config_format() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         // Intentionally save invalid JSON (e.g., a primitive instead of object)
@@ -297,14 +339,18 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK); // No longer 400
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);
-        assert!(json["message"]
-            .as_str()
-            .unwrap()
-            .contains("No configuration set for this assignment"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("No configuration set for this assignment")
+        );
         assert!(json["data"].as_object().unwrap().is_empty());
     }
 }

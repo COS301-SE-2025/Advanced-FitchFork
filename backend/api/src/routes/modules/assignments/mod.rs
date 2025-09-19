@@ -6,12 +6,16 @@
 //! - Create, read, update, delete assignments (single and bulk)
 //! - Open/close assignments
 //! - Assignment stats and readiness checks
-//! - Nested routes for tasks, config, memo output, mark allocation, submissions, files, interpreter, tickets, plagiarism, and grades
+//! - Nested routes for tasks, config, memo output, mark allocation, submissions, files, interpreter, tickets, plagiarism, grades, and starter packs
 //!
 //! Access control is enforced via middleware guards for lecturers, assistants, and assigned users.
 
-use crate::auth::guards::{
-    require_assigned_to_module, require_lecturer_or_assistant_lecturer, require_ready_assignment,
+use crate::{
+    auth::guards::{
+        require_assigned_to_module, require_assignment_access,
+        require_lecturer_or_assistant_lecturer, require_ready_assignment,
+    },
+    routes::modules::assignments::{post::verify_assignment_pin, statistics::statistics_routes},
 };
 use axum::{
     Router,
@@ -21,7 +25,7 @@ use axum::{
 use config::config_routes;
 use delete::{bulk_delete_assignments, delete_assignment};
 use files::files_routes;
-use get::{get_assignment, get_assignment_readiness, get_assignment_stats, get_assignments};
+use get::{get_assignment, get_assignment_readiness, get_assignments};
 use grades::grade_routes;
 use interpreter::interpreter_routes;
 use mark_allocator::mark_allocator_routes;
@@ -48,6 +52,8 @@ pub mod overwrite_files;
 pub mod plagiarism;
 pub mod post;
 pub mod put;
+pub mod starter;
+pub mod statistics;
 pub mod submissions;
 pub mod tasks;
 pub mod tickets;
@@ -67,7 +73,6 @@ pub mod tickets;
 /// - `PUT    /assignments/:assignment_id/open`           → Open assignment (requires lecturer, only if currently Ready, Closed, or Archived)
 /// - `PUT    /assignments/:assignment_id/close`          → Close assignment (requires lecturer, only if currently Open)
 /// - `DELETE /assignments/:assignment_id`                → Delete assignment (requires lecturer)
-/// - `GET    /assignments/:assignment_id/stats`          → Assignment statistics (lecturer only)
 /// - `GET    /assignments/:assignment_id/readiness`      → Assignment readiness (lecturer or admin only)
 ///
 /// Nested routes:
@@ -77,9 +82,13 @@ pub mod tickets;
 /// - Mark allocator routes         → `mark_allocator_routes`
 /// - Submissions routes            → `submission_routes`
 /// - Files routes                  → `files_routes`
+/// - Interpreter routes            → `interpreter_routes`
 /// - Tickets routes                → `ticket_routes`
 /// - Plagiarism routes             → `plagiarism_routes`
 /// - Grades routes                 → `grade_routes`
+/// - Overwrite files routes        → `overwrite_file_routes`
+/// - Statistics routes             → `statistics_routes`
+/// - Starter routes                → `starter_routes`
 pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route(
@@ -98,10 +107,15 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         )
         .route(
             "/{assignment_id}",
-            get(get_assignment).route_layer(from_fn_with_state(
-                app_state.clone(),
-                require_assigned_to_module,
-            )),
+            get(get_assignment)
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_assigned_to_module,
+                ))
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_assignment_access,
+                )),
         )
         .route(
             "/{assignment_id}",
@@ -156,18 +170,16 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
             )),
         )
         .route(
-            "/{assignment_id}/stats",
-            get(get_assignment_stats).route_layer(from_fn_with_state(
-                app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
-            )),
-        )
-        .route(
             "/{assignment_id}/readiness",
-            get(get_assignment_readiness).route_layer(from_fn_with_state(
-                app_state.clone(),
-                require_assigned_to_module,
-            )),
+            get(get_assignment_readiness)
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_assigned_to_module,
+                ))
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_assignment_access,
+                )),
         )
         .nest(
             "/{assignment_id}/tasks",
@@ -199,10 +211,15 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         )
         .nest(
             "/{assignment_id}/submissions",
-            submission_routes(app_state.clone()).route_layer(from_fn_with_state(
-                app_state.clone(),
-                require_assigned_to_module,
-            )),
+            submission_routes(app_state.clone())
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_assigned_to_module,
+                ))
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_assignment_access,
+                )),
         )
         .nest("/{assignment_id}/files", files_routes(app_state.clone()))
         .nest(
@@ -211,10 +228,15 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         )
         .nest(
             "/{assignment_id}/tickets",
-            ticket_routes(app_state.clone()).route_layer(from_fn_with_state(
-                app_state.clone(),
-                require_assigned_to_module,
-            )),
+            ticket_routes(app_state.clone())
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_assigned_to_module,
+                ))
+                .route_layer(from_fn_with_state(
+                    app_state.clone(),
+                    require_assignment_access,
+                )),
         )
         .nest(
             "/{assignment_id}/plagiarism",
@@ -232,6 +254,18 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .nest(
             "/{assignment_id}/overwrite_files",
             overwrite_file_routes(app_state.clone()).layer(from_fn_with_state(
+                app_state.clone(),
+                require_lecturer_or_assistant_lecturer,
+            )),
+        )
+        .nest(
+            "/{assignment_id}/stats",
+            statistics_routes(app_state.clone()),
+        )
+        .route("/{assignment_id}/verify", post(verify_assignment_pin))
+        .nest(
+            "/{assignment_id}/starter",
+            starter::routes().route_layer(from_fn_with_state(
                 app_state.clone(),
                 require_lecturer_or_assistant_lecturer,
             )),

@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, DeleteResult};
-use strum::{Display, EnumString};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DeleteResult, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
+use strum::{Display, EnumString};
 
 /// The central table for user-module-role relationships.
 /// Replaces old `module_lecturers`, `module_tutors`, and `module_students`.
@@ -22,9 +22,15 @@ pub struct Model {
 
 /// Enum representing user roles within a module.
 /// Backed by a `user_module_role_type` enum in the database.
-#[derive(Debug, Clone, PartialEq, EnumIter, DeriveActiveEnum, Display, EnumString, Deserialize, Serialize)]
+#[derive(
+    Debug, Clone, PartialEq, EnumIter, DeriveActiveEnum, Display, EnumString, Deserialize, Serialize,
+)]
 #[serde(rename_all = "snake_case")]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "user_module_role_type")]
+#[sea_orm(
+    rs_type = "String",
+    db_type = "Enum",
+    enum_name = "user_module_role_type"
+)]
 #[strum(serialize_all = "lowercase", ascii_case_insensitive)]
 pub enum Role {
     #[sea_orm(string_value = "lecturer")]
@@ -135,7 +141,6 @@ impl Model {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,14 +171,21 @@ mod tests {
             description: Set(Some("Capstone".to_string())),
             credits: Set(30),
             ..Default::default()
-        }.insert(&db).await.unwrap();
+        }
+        .insert(&db)
+        .await
+        .unwrap();
 
-        let assigned = Model::assign_user_to_module(&db, 1, 1, Role::Lecturer).await.unwrap();
+        let assigned = Model::assign_user_to_module(&db, 1, 1, Role::Lecturer)
+            .await
+            .unwrap();
         assert_eq!(assigned.user_id, 1);
         assert_eq!(assigned.module_id, 1);
         assert_eq!(assigned.role, Role::Lecturer);
 
-        let fetched = Model::get_users_by_module_role(&db, 1, Role::Lecturer).await.unwrap();
+        let fetched = Model::get_users_by_module_role(&db, 1, Role::Lecturer)
+            .await
+            .unwrap();
         assert_eq!(fetched.len(), 1);
         assert_eq!(fetched[0].user_id, 1);
     }
@@ -202,9 +214,14 @@ mod tests {
             description: Set(Some("Networks".to_string())),
             credits: Set(16),
             ..Default::default()
-        }.insert(&db).await.unwrap();
+        }
+        .insert(&db)
+        .await
+        .unwrap();
 
-        Model::assign_user_to_module(&db, 2, 2, Role::Tutor).await.unwrap();
+        Model::assign_user_to_module(&db, 2, 2, Role::Tutor)
+            .await
+            .unwrap();
         let result = Model::remove_user_from_module(&db, 2, 2).await.unwrap();
         assert_eq!(result.rows_affected, 1);
     }

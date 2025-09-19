@@ -12,18 +12,18 @@
 //!
 //! **Responses:** JSON-wrapped `ApiResponse` indicating success, number of deletions, or detailed errors.
 
+use super::common::BulkDeleteRequest;
+use crate::response::ApiResponse;
 use axum::{
-    extract::{State, Path},
+    Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
-use sqlx::types::JsonValue;
-use serde_json::json;
 use db::models::assignment;
+use serde_json::json;
+use sqlx::types::JsonValue;
 use util::state::AppState;
-use crate::response::ApiResponse;
-use super::common::BulkDeleteRequest;
 
 /// DELETE /api/modules/:module_id/assignments/:assignment_id
 ///
@@ -121,7 +121,9 @@ pub async fn bulk_delete_assignments(
     if req.assignment_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<JsonValue>::error("No assignment IDs provided")),
+            Json(ApiResponse::<JsonValue>::error(
+                "No assignment IDs provided",
+            )),
         );
     }
 
@@ -153,8 +155,5 @@ pub async fn bulk_delete_assignments(
 
     let response = ApiResponse::success(data, message);
 
-    (
-        StatusCode::OK,
-        Json(response),
-    )
+    (StatusCode::OK, Json(response))
 }

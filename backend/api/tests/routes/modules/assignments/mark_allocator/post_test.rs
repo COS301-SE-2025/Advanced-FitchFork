@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use axum::{
         body::Body,
@@ -14,8 +14,9 @@ mod tests {
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use serial_test::serial;
-    use std::{fs, path::PathBuf};
+    use std::fs;
     use tower::ServiceExt;
+    use util::paths::memo_output_dir;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -23,12 +24,6 @@ mod tests {
         forbidden_user: UserModel,
         module: ModuleModel,
         assignment: AssignmentModel,
-    }
-
-    fn setup_assignment_storage_root() {
-        unsafe {
-            std::env::set_var("ASSIGNMENT_STORAGE_ROOT", "./tmp");
-        }
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
@@ -77,14 +72,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_post_mark_allocator_success_as_lecturer() {
-        setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let memo_output_dir = PathBuf::from("./tmp")
-            .join(format!("module_{}", data.module.id))
-            .join(format!("assignment_{}", data.assignment.id))
-            .join("memo_output");
+        let memo_output_dir = memo_output_dir(data.module.id, data.assignment.id);
         fs::create_dir_all(&memo_output_dir).unwrap();
         fs::write(memo_output_dir.join("task_1.txt"), "Test memo output").unwrap();
 
@@ -106,8 +97,6 @@ mod tests {
         assert!(memo_output_dir.exists(), "Memo output folder not created!");
 
         assert_eq!(response.status(), StatusCode::OK);
-
-        let _ = fs::remove_dir_all("./tmp");
     }
 
     //Commented out due to change in mark_allocator functionality - test no longer applies
@@ -138,8 +127,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_post_mark_allocator_forbidden_for_student() {
-        setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -161,8 +149,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_post_mark_allocator_forbidden_for_unassigned_user() {
-        setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
@@ -184,8 +171,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_post_mark_allocator_unauthorized() {
-        setup_assignment_storage_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let uri = format!(

@@ -1,15 +1,15 @@
 use crate::models::assignment;
+use crate::models::assignment::Model as AssignmentModel;
+use crate::models::user;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
-use util::execution_config::execution_config::GradingPolicy;
-use util::execution_config::ExecutionConfig;
 use std::collections::HashSet;
-use std::env;
 use std::fs;
 use std::path::PathBuf;
-use crate::models::user;
-use crate::models::assignment::Model as AssignmentModel;
+use util::execution_config::ExecutionConfig;
+use util::execution_config::GradingPolicy;
+use util::paths::{ensure_parent_dir, storage_root};
 
 /// Represents a user's submission for a specific assignment.
 ///
@@ -77,48 +77,12 @@ impl Related<user::Entity> for Entity {
 }
 
 impl Model {
-    /// Returns the root directory used for storing assignment submissions on disk.
-    ///
-    /// # Returns
-    /// - `PathBuf` pointing to the base directory.
-    ///
-    /// Uses the `ASSIGNMENT_STORAGE_ROOT` environment variable if set,
-    /// otherwise defaults to `data/assignment_files`.
-    pub fn storage_root() -> PathBuf {
-        env::var("ASSIGNMENT_STORAGE_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("data/assignment_files"))
-    }
-
-    /// Constructs the full directory path for a submission based on
-    /// its module and assignment identifiers.
-    ///
-    /// # Arguments
-    /// - `module_id`: ID of the module containing the assignment.
-    /// - `assignment_id`: ID of the specific assignment.
-    ///
-    /// # Returns
-    /// - `PathBuf` with the complete directory path.
-    pub fn full_directory_path(
-        module_id: i64,
-        assignment_id: i64,
-        user_id: i64,
-        attempt: i64,
-    ) -> PathBuf {
-        Self::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join("assignment_submissions")
-            .join(format!("user_{user_id}"))
-            .join(format!("attempt_{attempt}"))
-    }
-
     /// Computes the absolute path to the stored file on disk.
     ///
     /// # Returns
     /// - `PathBuf` pointing to the file location.
-    pub fn full_path(&self) -> PathBuf {
-        Self::storage_root().join(&self.path)
+    pub fn full_path(&self) -> std::path::PathBuf {
+        storage_root().join(&self.path)
     }
 
     /// Saves a file to disk and creates or updates its metadata in the database.
@@ -127,19 +91,7 @@ impl Model {
     /// 1. Creates a temporary DB entry.
     /// 2. Looks up the associated assignment and module.
     /// 3. Saves the file with a generated name on disk.
-    /// 4. Updates the DB entry with the file path.
-    ///
-    /// # Arguments
-    /// - `db`: Reference to the active database connection.
-    /// - `assignment_id`: ID of the assignment this submission is for.
-    /// - `user_id`: ID of the user submitting.
-    /// - `attempt`: Attempt number,
-    /// - `filename`: The original filename as submitted.
-    /// - `bytes`: The file content as a byte slice.
-    ///
-    /// # Returns
-    /// - `Ok(Model)`: The complete, updated `Model` representing the saved file.
-    /// - `Err(DbErr)`: If any database or filesystem operation fails.
+    /// 4. Updates the DB entry with the file path (relative to STORAGE_ROOT).
     pub async fn save_file(
         db: &DatabaseConnection,
         assignment_id: i64,
@@ -153,7 +105,9 @@ impl Model {
         bytes: &[u8],
     ) -> Result<Self, DbErr> {
         if earned > total {
-            return Err(DbErr::Custom("Earned score cannot be greater than total score".into()));
+            return Err(DbErr::Custom(
+                "Earned score cannot be greater than total score".into(),
+            ));
         }
 
         let now = Utc::now();
@@ -169,7 +123,7 @@ impl Model {
             total: Set(total),
             filename: Set(filename.to_string()),
             file_hash: Set(file_hash.to_string()),
-            path: Set("".to_string()),
+            path: Set(String::new()),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
@@ -182,33 +136,34 @@ impl Model {
             .one(db)
             .await?
             .ok_or_else(|| DbErr::Custom("Assignment not found".into()))?;
-
         let module_id = assignment.module_id;
 
-        // Step 3: Construct stored filename
+        // Step 3: Derive extension from the *uploaded filename* (no content sniffing)
         let ext = PathBuf::from(filename)
             .extension()
             .map(|e| e.to_string_lossy().to_string());
 
-        let stored_filename = match ext {
-            Some(ext) => format!("{}.{}", inserted.id, ext),
-            None => inserted.id.to_string(),
-        };
-
-        // Step 4: Write file to disk
-        let dir_path = Self::full_directory_path(module_id, assignment_id, user_id, attempt);
-        fs::create_dir_all(&dir_path)
+        // Step 4: Build target path via utilities and write file
+        let file_path = util::paths::submission_file_path(
+            module_id,
+            assignment_id,
+            user_id,
+            attempt,
+            inserted.id,
+            ext.as_deref(),
+        );
+        ensure_parent_dir(&file_path)
             .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
-
-        let file_path = dir_path.join(&stored_filename);
-        let relative_path = file_path
-            .strip_prefix(Self::storage_root())
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
 
         fs::write(&file_path, bytes)
             .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
+
+        // Compute relative path from STORAGE_ROOT and persist
+        let relative_path = file_path
+            .strip_prefix(storage_root())
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
 
         // Step 5: Update DB with path
         let mut model: ActiveModel = inserted.into();
@@ -246,9 +201,9 @@ impl Model {
             .all(db)
             .await?;
 
-        Ok(submissions.into_iter().map(|s| s.id as i64).collect())
+        Ok(submissions.into_iter().map(|s| s.id).collect())
     }
-    
+
     pub async fn get_latest_submissions_for_assignment(
         db: &DatabaseConnection,
         assignment_id: i64,
@@ -281,7 +236,7 @@ impl Model {
         let existing = Entity::find_by_id(submission_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Submission {} not found", submission_id)))?;
+            .ok_or_else(|| DbErr::Custom(format!("Submission {submission_id} not found")))?;
 
         let mut am: ActiveModel = existing.into();
         am.ignored = Set(ignored);
@@ -307,11 +262,8 @@ impl Model {
             return Ok(None);
         }
 
-        // get grading policy from config
         let cfg = assignment
-            .config
-            .as_ref()
-            .and_then(|j| serde_json::from_value::<ExecutionConfig>(j.clone()).ok())
+            .config()
             .unwrap_or_else(ExecutionConfig::default_config);
 
         match cfg.marking.grading_policy {
@@ -334,23 +286,16 @@ mod tests {
     use crate::test_utils::setup_test_db;
     use chrono::Utc;
     use sea_orm::{ActiveModelTrait, Set};
-    use std::env;
-    use tempfile::TempDir;
+    use util::paths::storage_root;
+    use util::test_helpers::setup_test_storage_root;
 
     fn fake_bytes() -> Vec<u8> {
         vec![0x50, 0x4B, 0x03, 0x04] // ZIP header (PK...)
     }
 
-    fn override_storage_dir(temp: &TempDir) {
-        unsafe {
-            env::set_var("ASSIGNMENT_STORAGE_ROOT", temp.path());
-        }
-    }
-
     #[tokio::test]
     async fn test_save_load_delete_submission_file() {
-        let temp_dir = TempDir::new().unwrap();
-        override_storage_dir(&temp_dir);
+        let _tmp = setup_test_storage_root();
         let db = setup_test_db().await;
 
         // Create dummy user
@@ -391,7 +336,7 @@ mod tests {
         .expect("Failed to insert assignment");
 
         // Create dummy assignment_submission
-        let submission = crate::models::assignment_submission::ActiveModel {
+        let _ = crate::models::assignment_submission::ActiveModel {
             assignment_id: Set(assignment.id),
             user_id: Set(user.id),
             attempt: Set(1),
@@ -412,16 +357,27 @@ mod tests {
 
         // Save file via submission
         let content = fake_bytes();
-        let file = Model::save_file(&db, submission.id, user.id, 6, 10, 10, false, "solution.zip", "hash123#", &content)
-            .await
-            .expect("Failed to save file");
+        let file = Model::save_file(
+            &db,
+            assignment.id,
+            user.id,
+            6,
+            10,
+            10,
+            false,
+            "solution.zip",
+            "hash123#",
+            &content,
+        )
+        .await
+        .expect("Failed to save file");
 
         assert_eq!(file.assignment_id, assignment.id);
         assert_eq!(file.user_id, user.id);
         assert!(file.path.contains("assignment_submissions"));
 
         // Confirm file written
-        let full_path = Model::storage_root().join(&file.path);
+        let full_path = storage_root().join(&file.path);
         assert!(full_path.exists());
 
         // Load content and verify

@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait};
-use std::env;
 use std::fs;
 use std::path::PathBuf;
+use util::paths::{ensure_dir, overwrite_task_dir, storage_root};
 
 /// Represents a file used to overwrite specific parts of an assignment during evaluation.
 /// Includes metadata such as its related assignment, task, filename, and storage path.
@@ -40,24 +40,6 @@ pub enum Relation {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
-    pub fn storage_root() -> PathBuf {
-        env::var("ASSIGNMENT_STORAGE_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("data/assignment_files"))
-    }
-
-    pub fn full_directory_path(module_id: i64, assignment_id: i64, task_number: i64) -> PathBuf {
-        Self::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join("overwrite_files")
-            .join(format!("task_{task_number}"))
-    }
-
-    pub fn full_path(&self) -> PathBuf {
-        Self::storage_root().join(&self.path)
-    }
-
     pub async fn save_file(
         db: &DatabaseConnection,
         assignment_id: i64,
@@ -91,7 +73,7 @@ impl Model {
         let assignment = super::assignment::Entity::find_by_id(assignment_id)
             .one(db)
             .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding assignment: {}", e)))?
+            .map_err(|e| DbErr::Custom(format!("DB error finding assignment: {e}")))?
             .ok_or_else(|| DbErr::Custom("Assignment not found".to_string()))?;
 
         let module_id = assignment.module_id;
@@ -99,18 +81,18 @@ impl Model {
         let task = super::assignment_task::Entity::find_by_id(task_id)
             .one(db)
             .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding task: {}", e)))?
+            .map_err(|e| DbErr::Custom(format!("DB error finding task: {e}")))?
             .ok_or_else(|| DbErr::Custom("Task not found".to_string()))?;
 
         let task_number = task.task_number;
 
-        let dir_path = Self::full_directory_path(module_id, assignment_id, task_number);
-        fs::create_dir_all(&dir_path)
+        let dir_path = overwrite_task_dir(module_id, assignment_id, task_number);
+        ensure_dir(&dir_path)
             .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
 
         let file_path = dir_path.join(&stored_filename);
         let relative_path = file_path
-            .strip_prefix(Self::storage_root())
+            .strip_prefix(storage_root())
             .unwrap()
             .to_string_lossy()
             .to_string();
@@ -127,13 +109,13 @@ impl Model {
 
     /// Loads the file contents from disk based on the path stored in the model.
     pub fn load_file(&self) -> Result<Vec<u8>, std::io::Error> {
-        let full_path = Self::storage_root().join(&self.path);
+        let full_path = storage_root().join(&self.path);
         fs::read(full_path)
     }
 
     /// Deletes the file from disk (but not the DB record).
     pub fn delete_file_only(&self) -> Result<(), std::io::Error> {
-        let full_path = Self::storage_root().join(&self.path);
+        let full_path = storage_root().join(&self.path);
         fs::remove_file(full_path)
     }
 }

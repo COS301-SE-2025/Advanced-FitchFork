@@ -2,7 +2,7 @@ import type {
   PostAssignmentRequest, 
   PostAssignmentResponse, 
   PostUploadAssignmentFileResonse } from "@/types/modules/assignments";
-import { apiFetch, apiUpload } from "@/utils/api";
+import { api, apiFetch, apiUpload } from "@/utils/api";
 
 export const createAssignment = async (
   moduleId: number,
@@ -26,3 +26,19 @@ export const uploadAssignmentFile = async (
 
   return apiUpload(`/modules/${moduleId}/assignments/${assignmentId}/files`, form);
 };
+
+export type VerifyAssignmentResponse = {
+  /** Optional short tag (useful if you want to show “PIN updated” UI, etc.) */
+  password_tag?: string | null;
+};
+
+export async function verifyAssignment(
+  moduleId: number,
+  assignmentId: number,
+  pin: string
+) {
+  return await api.post<VerifyAssignmentResponse>(
+    `/modules/${moduleId}/assignments/${assignmentId}/verify`,
+    { pin }
+  );
+}

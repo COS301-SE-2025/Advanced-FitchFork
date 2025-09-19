@@ -1,38 +1,40 @@
+use std::path::Path;
 // Core dependencies
-use std::{env, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 // use db::models::AssignmentSubmissionOutput;
 // External crates
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use util::paths::{
+    attempt_dir, main_dir, makefile_dir, memo_dir, memo_output_dir, overwrite_task_dir,
+};
 // Your own modules
 use crate::validate_files::validate_memo_files;
 
 // Models
 use db::models::assignment::Entity as Assignment;
 use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as MemoOutputEntity};
-use db::models::assignment_overwrite_file::Model as OverwriteFile;
 use db::models::assignment_task::Model as AssignmentTask;
 use reqwest::Client;
 use serde_json::json;
+use util::config;
 use util::execution_config::ExecutionConfig;
 pub mod validate_files;
 
 /// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
 /// Returns an error if the directory does not exist or if no supported archive file is found.
-fn first_archive_in(dir: &PathBuf) -> Result<PathBuf, String> {
+fn first_archive_in<P: AsRef<Path>>(dir: P) -> Result<PathBuf, String> {
     let allowed_exts = ["zip", "tar", "tgz", "gz"];
+    let dir = dir.as_ref();
     std::fs::read_dir(dir)
         .map_err(|_| format!("Missing directory: {}", dir.display()))?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .find(|p| {
-            if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-                let ext = ext.to_ascii_lowercase();
-                if allowed_exts.contains(&ext.as_str()) {
-                    return true;
-                }
-            }
-            false
+            p.extension()
+                .and_then(|e| e.to_str())
+                .map(|ext| allowed_exts.contains(&ext.to_ascii_lowercase().as_str()))
+                .unwrap_or(false)
         })
         .ok_or_else(|| {
             format!(
@@ -40,17 +42,6 @@ fn first_archive_in(dir: &PathBuf) -> Result<PathBuf, String> {
                 dir.display()
             )
         })
-}
-
-/// Resolves a potentially relative storage root path to an absolute path,
-/// assuming the current working directory is the root of the project.
-fn resolve_storage_root(storage_root: &str) -> PathBuf {
-    let path = PathBuf::from(storage_root);
-    if path.is_relative() {
-        env::current_dir().unwrap().join(path)
-    } else {
-        path
-    }
 }
 
 /// Runs all configured tasks for a given assignment ID by:
@@ -71,39 +62,34 @@ pub async fn create_memo_outputs_for_all_tasks(
 
     let module_id = assignment.module_id;
 
-    // Validate required input files
+    // Validate required input files (unchanged)
     validate_memo_files(module_id, assignment_id)?;
 
+    // Load config (unchanged; uses util::execution_config under the hood)
     let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
-    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-        .map_err(|_| "ASSIGNMENT_STORAGE_ROOT not set".to_string())?;
+    // Base and subdirs via helpers
+    let memo_out_dir = memo_output_dir(module_id, assignment_id);
 
-    let base_path = resolve_storage_root(&storage_root)
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id));
-
-    let memo_output_dir = base_path.join("memo_output");
-
-    // Delete old files from disk
-    if memo_output_dir.exists() {
-        fs::remove_dir_all(&memo_output_dir)
+    // Delete old files on disk
+    if memo_out_dir.exists() {
+        fs::remove_dir_all(&memo_out_dir)
             .map_err(|e| format!("Failed to delete old memo_output dir: {}", e))?;
     }
 
-    // Delete old entries from DB
+    // Delete old entries from DB (unchanged)
     MemoOutputEntity::delete_many()
         .filter(MemoOutputColumn::AssignmentId.eq(assignment_id))
         .exec(db)
         .await
         .map_err(|e| format!("Failed to delete old memo outputs: {}", e))?;
 
-    // Load archives
+    // Load archives with helpers
     let archive_paths = vec![
-        first_archive_in(&base_path.join("memo"))?,
-        first_archive_in(&base_path.join("makefile"))?,
-        first_archive_in(&base_path.join("main"))?,
+        first_archive_in(memo_dir(module_id, assignment_id))?,
+        first_archive_in(makefile_dir(module_id, assignment_id))?,
+        first_archive_in(main_dir(module_id, assignment_id))?,
     ];
 
     let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
@@ -111,121 +97,191 @@ pub async fn create_memo_outputs_for_all_tasks(
         .map_err(|e| format!("DB error loading tasks: {}", e))?;
 
     if tasks.is_empty() {
-        println!("No tasks found for assignment {}", assignment_id);
-        return Ok(());
+        return Err("No tasks are defined for this assignment. Add at least one task before generating memo output.".to_string());
     }
 
     // Prepare HTTP client
     let client = Client::new();
 
-    let host = env::var("CODE_MANAGER_HOST")
-        .map_err(|_| "CODE_MANAGER_HOST env var not set".to_string())?;
+    let host = config::code_manager_host();
 
-    let port = env::var("CODE_MANAGER_PORT")
-        .map_err(|_| "CODE_MANAGER_PORT env var not set".to_string())?;
+    let port = config::code_manager_port();
 
     let code_manager_url = format!("http://{}:{}", host, port);
 
-    for task in tasks {
+    // Read common archives once to avoid repeated disk IO
+    let mut base_files: Vec<(String, Vec<u8>)> = Vec::new();
+    for archive_path in &archive_paths {
+        let content = std::fs::read(archive_path)
+            .map_err(|e| format!("Failed to read archive file {:?}: {}", archive_path, e))?;
+        let file_name = archive_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| format!("Invalid archive filename: {:?}", archive_path))?
+            .to_string();
+        base_files.push((file_name, content));
+    }
+
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+    use tokio::task::JoinSet;
+    use tokio::time::{Duration, sleep};
+
+    let max_concurrency = std::cmp::max(
+        1,
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            / 2,
+    );
+    let semaphore = Arc::new(Semaphore::new(max_concurrency));
+    let mut join_set = JoinSet::new();
+
+    for task in tasks.into_iter() {
         if task.code_coverage {
-            // println!(
-            //     "Skipping task {} because code_coverage is true",
-            //     task.task_number
-            // );
             continue;
         }
+
         let filename = format!("task_{}_output.txt", task.task_number);
+        let task_files_base = base_files.clone();
+        let client_cloned = client.clone();
+        let cm_url = code_manager_url.clone();
+        let config_value = serde_json::to_value(&config)
+            .map_err(|e| format!("Failed to serialize ExecutionConfig: {}", e))?;
+        let db_cloned = db.clone();
+        let sem = semaphore.clone();
+        join_set.spawn(async move {
+            let _permit = sem.acquire_owned().await.ok();
+            // Apply overwrites for this task
+            let mut files = task_files_base;
+            let overwrite_dir = overwrite_task_dir(module_id, assignment_id, task.task_number);
+            if overwrite_dir.exists() {
+                if let Ok(entries) = std::fs::read_dir(&overwrite_dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_file() {
+                            if let Ok(content) = std::fs::read(&path) {
+                                if let Some(file_name) = path
+                                    .file_name()
+                                    .and_then(|s| s.to_str())
+                                    .map(|s| s.to_string())
+                                {
+                                    files.retain(|(name, _)| name != &file_name);
+                                    files.push((file_name, content));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
-        let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+            let request_body = serde_json::json!({
+                "config": config_value,
+                "commands": [task.command.clone()],
+                "files": files,
+            });
 
-        for archive_path in &archive_paths {
-            let content = std::fs::read(archive_path)
-                .map_err(|e| format!("Failed to read archive file {:?}: {}", archive_path, e))?;
-            let file_name = archive_path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .ok_or_else(|| format!("Invalid archive filename: {:?}", archive_path))?
-                .to_string();
-            files.push((file_name, content));
-        }
+            // Fire request
+            let resp_res = client_cloned
+                .post(format!("{}/run", cm_url))
+                .json(&request_body)
+                .send()
+                .await;
+            let response = match resp_res {
+                Ok(r) => r,
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to send request to code_manager (task {}): {}",
+                        task.task_number, e
+                    ));
+                }
+            };
 
-        let overwrite_dir =
-            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
-        if overwrite_dir.exists() {
-            let entries = std::fs::read_dir(&overwrite_dir)
-                .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
+            if !response.status().is_success() {
+                let status = response.status();
+                let text = response.text().await.unwrap_or_default();
+                return Err(format!(
+                    "code_manager error for task {}: {} {}",
+                    task.task_number, status, text
+                ));
+            }
 
-            for entry in entries {
-                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-                let path = entry.path();
-                if path.is_file() {
-                    let content = std::fs::read(&path)
-                        .map_err(|e| format!("Failed to read overwrite file {:?}: {}", path, e))?;
-                    let file_name = path
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .ok_or_else(|| format!("Invalid overwrite filename: {:?}", path))?
-                        .to_string();
+            let resp_json: serde_json::Value = match response.json().await {
+                Ok(v) => v,
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to parse response JSON for task {}: {}",
+                        task.task_number, e
+                    ));
+                }
+            };
 
-                    files.retain(|(name, _)| name != &file_name);
-                    files.push((file_name, content));
+            let output_vec = resp_json
+                .get("output")
+                .and_then(|v| v.as_array())
+                .ok_or_else(|| {
+                    format!(
+                        "Response missing 'output' array for task {}",
+                        task.task_number
+                    )
+                })?
+                .iter()
+                .map(|val| val.as_str().unwrap_or("").to_string())
+                .collect::<Vec<String>>();
+            let output_combined = output_vec.join("\n");
+
+            // Save with retries to mitigate transient locks
+            for attempt in 0..5 {
+                match db::models::assignment_memo_output::Model::save_file(
+                    &db_cloned,
+                    assignment_id,
+                    task.id,
+                    &filename,
+                    output_combined.as_bytes(),
+                )
+                .await
+                {
+                    Ok(_) => return Ok::<(), String>(()),
+                    Err(e) => {
+                        let backoff_ms = 20u64 * (1 << attempt);
+                        println!(
+                            "Retry {}/5 saving memo output for task {} ({} ms): {}",
+                            attempt + 1,
+                            task.task_number,
+                            backoff_ms,
+                            e
+                        );
+                        sleep(Duration::from_millis(backoff_ms)).await;
+                    }
+                }
+            }
+            Err(format!(
+                "Failed to save memo output for task {} after retries",
+                task.task_number
+            ))
+        });
+    }
+
+    // Collect errors if any
+    let mut first_err: Option<String> = None;
+    while let Some(res) = join_set.join_next().await {
+        match res {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                if first_err.is_none() {
+                    first_err = Some(e);
+                }
+            }
+            Err(e) => {
+                if first_err.is_none() {
+                    first_err = Some(format!("Join error: {}", e));
                 }
             }
         }
+    }
 
-        let commands = vec![task.command.clone()];
-
-        let config_value = serde_json::to_value(&config)
-            .map_err(|e| format!("Failed to serialize ExecutionConfig: {}", e))?;
-
-        let request_body = serde_json::json!({
-            "config": config_value,
-            "commands": commands,
-            "files": files,
-        });
-
-        let response = client
-            .post(format!("{}/run", code_manager_url))
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| format!("Failed to send request to code_manager: {}", e))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(format!(
-                "code_manager responded with error {}: {}",
-                status, text
-            ));
-        }
-
-        let resp_json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response JSON: {}", e))?;
-
-        let output_vec = resp_json
-            .get("output")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| "Response missing 'output' array".to_string())?
-            .iter()
-            .map(|val| val.as_str().unwrap_or("").to_string())
-            .collect::<Vec<String>>();
-
-        let output_combined = output_vec.join("\n");
-
-        if let Err(e) = db::models::assignment_memo_output::Model::save_file(
-            db,
-            assignment_id,
-            task.id,
-            &filename,
-            output_combined.as_bytes(),
-        )
-        .await
-        {
-            println!("Failed to save output: {}", e);
-        }
+    if let Some(e) = first_err {
+        return Err(e);
     }
 
     Ok(())
@@ -248,7 +304,6 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
     use reqwest::Client;
     use sea_orm::EntityTrait;
     use serde_json::json;
-    use std::env;
     use tokio::fs::read;
 
     SubmissionOutputModel::delete_for_submission(db, submission_id)
@@ -275,29 +330,21 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
 
     let module_id = assignment.module_id;
 
-    // Validate files
+    // Validate files (unchanged)
     validate_submission_files(module_id, assignment_id, user_id, attempt_number)?;
 
+    // Load config (unchanged)
     let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
-    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-        .map_err(|_| "ASSIGNMENT_STORAGE_ROOT not set".to_string())?;
+    // Helper-based dirs
+    let submission_path = attempt_dir(module_id, assignment_id, user_id, attempt_number);
 
-    let base_path = resolve_storage_root(&storage_root)
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id));
-
-    let submission_path = base_path
-        .join("assignment_submissions")
-        .join(format!("user_{}", user_id))
-        .join(format!("attempt_{}", attempt_number));
-
-    // Load archives
+    // Archives
     let archive_paths = vec![
-        first_archive_in(&submission_path)?,
-        first_archive_in(&base_path.join("makefile"))?,
-        first_archive_in(&base_path.join("main"))?,
+        first_archive_in(&submission_path)?, // submission archive in attempt dir
+        first_archive_in(makefile_dir(module_id, assignment_id))?,
+        first_archive_in(main_dir(module_id, assignment_id))?,
     ];
 
     let mut files = Vec::new();
@@ -324,100 +371,177 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
     }
 
     // HTTP client setup
-    let host =
-        env::var("CODE_MANAGER_HOST").map_err(|_| "CODE_MANAGER_HOST not set".to_string())?;
-    let port =
-        env::var("CODE_MANAGER_PORT").map_err(|_| "CODE_MANAGER_PORT not set".to_string())?;
+    let host = config::code_manager_host();
+    let port = config::code_manager_port();
     let code_manager_url = format!("http://{}:{}/run", host, port);
     let client = Client::new();
 
     // Serialize config
     let config_value = serde_json::to_value(&config)
         .map_err(|e| format!("Failed to serialize execution config: {}", e))?;
+    // Run all tasks concurrently while preserving original order by index
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+    use tokio::task::JoinSet;
+    use tokio::time::{Duration, sleep};
+    let mut join_set = JoinSet::new();
 
-    let mut collected: Vec<(i64, String)> = Vec::new();
+    // Bounded concurrency to avoid DB locking or overwhelming code manager
+    let max_concurrency = std::cmp::max(
+        1,
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            / 2,
+    );
+    let semaphore = Arc::new(Semaphore::new(max_concurrency));
 
-    for task in tasks {
+    // enumerate to preserve order
+    for (idx, task) in tasks.into_iter().enumerate() {
         let filename = format!(
             "submission_task_{}_user_{}_attempt_{}.txt",
             task.task_number, user_id, attempt_number
         );
 
-        let mut task_files = files.clone();
+        let task_files_base = files.clone();
+        let cm_url = code_manager_url.clone();
+        let client_cloned = client.clone();
+        let config_value_cloned = config_value.clone();
+        let db_cloned = db.clone();
+        let module_id_cloned = module_id;
+        let assignment_id_cloned = assignment_id;
 
-        let overwrite_dir =
-            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
-        if overwrite_dir.exists() {
-            let entries = std::fs::read_dir(&overwrite_dir)
-                .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
-
-            for entry in entries {
-                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-                let path = entry.path();
-                if path.is_file() {
-                    let content = std::fs::read(&path)
-                        .map_err(|e| format!("Failed to read overwrite file {:?}: {}", path, e))?;
-                    let file_name = path
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .ok_or_else(|| format!("Invalid overwrite filename: {:?}", path))?
-                        .to_string();
-
-                    task_files.retain(|(name, _)| name != &file_name);
-                    task_files.push((file_name, content));
+        let sem = semaphore.clone();
+        join_set.spawn(async move {
+            let _permit = sem.acquire_owned().await.ok();
+            // Prepare task-specific files (apply overwrites)
+            let mut task_files = task_files_base;
+            let overwrite_dir =
+                overwrite_task_dir(module_id_cloned, assignment_id_cloned, task.task_number);
+            if overwrite_dir.exists() {
+                if let Ok(entries) = std::fs::read_dir(&overwrite_dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_file() {
+                            if let Ok(content) = std::fs::read(&path) {
+                                if let Some(file_name) = path
+                                    .file_name()
+                                    .and_then(|s| s.to_str())
+                                    .map(|s| s.to_string())
+                                {
+                                    task_files.retain(|(name, _)| name != &file_name);
+                                    task_files.push((file_name, content));
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        }
 
-        // Compose request
-        let request_body = json!({
-            "config": config_value,
-            "commands": [task.command],
-            "files": task_files,
+            // Compose request
+            let request_body = json!({
+                "config": config_value_cloned,
+                "commands": [task.command.clone()],
+                "files": task_files,
+            });
+
+            // Send request
+            let response_res = client_cloned.post(&cm_url).json(&request_body).send().await;
+            match response_res {
+                Err(e) => {
+                    println!("HTTP request failed for task {}: {}", task.task_number, e);
+                    return None as Option<(usize, i64, String, String)>;
+                }
+                Ok(response) => {
+                    if !response.status().is_success() {
+                        let text = response.text().await.unwrap_or_default();
+                        println!("Code manager error for task {}: {}", task.task_number, text);
+                        return None;
+                    }
+
+                    let resp_json: serde_json::Value = match response.json().await {
+                        Ok(v) => v,
+                        Err(e) => {
+                            println!(
+                                "Failed to parse response JSON for task {}: {}",
+                                task.task_number, e
+                            );
+                            return None;
+                        }
+                    };
+
+                    let output_vec = match resp_json.get("output").and_then(|v| v.as_array()) {
+                        Some(arr) => arr
+                            .iter()
+                            .map(|val| val.as_str().unwrap_or("").to_string())
+                            .collect::<Vec<String>>(),
+                        None => {
+                            println!(
+                                "Response missing 'output' array for task {}",
+                                task.task_number
+                            );
+                            Vec::new()
+                        }
+                    };
+
+                    let output_combined = output_vec.join("\n");
+
+                    // Save file with simple retry (helps with SQLite write locks)
+                    let mut saved = false;
+                    for attempt in 0..5 {
+                        match SubmissionOutputModel::save_file(
+                            &db_cloned,
+                            task.id,
+                            submission_id,
+                            &filename,
+                            output_combined.as_bytes(),
+                        )
+                        .await
+                        {
+                            Ok(_) => {
+                                saved = true;
+                                break;
+                            }
+                            Err(e) => {
+                                let backoff_ms = 20u64 * (1 << attempt);
+                                println!(
+                                    "Retry {}/5 saving output for task {} ({} ms): {}",
+                                    attempt + 1,
+                                    task.task_number,
+                                    backoff_ms,
+                                    e
+                                );
+                                sleep(Duration::from_millis(backoff_ms)).await;
+                            }
+                        }
+                    }
+                    if !saved {
+                        println!(
+                            "Failed to save submission output for task {} after retries",
+                            task.task_number
+                        );
+                    }
+
+                    Some((idx, task.id, filename, output_combined))
+                }
+            }
         });
-
-        let response = client
-            .post(&code_manager_url)
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| format!("HTTP request failed for task {}: {}", task.task_number, e))?;
-
-        if !response.status().is_success() {
-            let text = response.text().await.unwrap_or_default();
-            println!("Code manager error for task {}: {}", task.task_number, text);
-            continue;
-        }
-
-        let resp_json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response JSON: {}", e))?;
-
-        let output_vec = resp_json
-            .get("output")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| "Response missing 'output' array".to_string())?
-            .iter()
-            .map(|val| val.as_str().unwrap_or("").to_string())
-            .collect::<Vec<String>>();
-
-        let output_combined = output_vec.join("\n");
-
-        if let Err(e) = SubmissionOutputModel::save_file(
-            db,
-            task.id,
-            submission_id,
-            &filename,
-            output_combined.as_bytes(),
-        )
-        .await
-        {
-            println!("Failed to save submission output: {}", e);
-        }
-
-        collected.push((task.id, output_combined));
     }
+
+    // Collect results preserving order by idx
+    let mut results: Vec<(usize, i64, String, String)> = Vec::new();
+    while let Some(res) = join_set.join_next().await {
+        if let Ok(Some(tuple)) = res {
+            results.push(tuple);
+        }
+    }
+    results.sort_by_key(|(idx, _, _, _)| *idx);
+
+    // Return collected outputs in original order (task_id, output)
+    let collected: Vec<(i64, String)> = results
+        .into_iter()
+        .map(|(_, task_id, _fname, output)| (task_id, output))
+        .collect();
 
     Ok(collected)
 }
@@ -437,8 +561,12 @@ pub async fn create_submission_outputs_for_all_tasks(
     use reqwest::Client;
     use sea_orm::EntityTrait;
     use serde_json::json;
-    use std::env;
     use tokio::fs::read;
+
+    // Remove any existing outputs for this submission to avoid stale DB rows
+    SubmissionOutputModel::delete_for_submission(db, submission_id)
+        .await
+        .map_err(|e| format!("Failed to clear old submission outputs: {}", e))?;
 
     // Fetch submission
     let submission = AssignmentSubmission::find_by_id(submission_id)
@@ -460,29 +588,20 @@ pub async fn create_submission_outputs_for_all_tasks(
 
     let module_id = assignment.module_id;
 
-    // Validate files
+    // Validate files (unchanged)
     validate_submission_files(module_id, assignment_id, user_id, attempt_number)?;
 
+    // Load config (unchanged)
     let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
-    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-        .map_err(|_| "ASSIGNMENT_STORAGE_ROOT not set".to_string())?;
+    // Paths via helpers
+    let submission_path = attempt_dir(module_id, assignment_id, user_id, attempt_number);
 
-    let base_path = resolve_storage_root(&storage_root)
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id));
-
-    let submission_path = base_path
-        .join("assignment_submissions")
-        .join(format!("user_{}", user_id))
-        .join(format!("attempt_{}", attempt_number));
-
-    // Load archives
     let archive_paths = vec![
         first_archive_in(&submission_path)?,
-        first_archive_in(&base_path.join("makefile"))?,
-        first_archive_in(&base_path.join("main"))?,
+        first_archive_in(makefile_dir(module_id, assignment_id))?,
+        first_archive_in(main_dir(module_id, assignment_id))?,
     ];
 
     let mut files = Vec::new();
@@ -509,10 +628,8 @@ pub async fn create_submission_outputs_for_all_tasks(
     }
 
     // HTTP client setup
-    let host =
-        env::var("CODE_MANAGER_HOST").map_err(|_| "CODE_MANAGER_HOST not set".to_string())?;
-    let port =
-        env::var("CODE_MANAGER_PORT").map_err(|_| "CODE_MANAGER_PORT not set".to_string())?;
+    let host = config::code_manager_host();
+    let port = config::code_manager_port();
     let code_manager_url = format!("http://{}:{}/run", host, port);
     let client = Client::new();
 
@@ -520,84 +637,159 @@ pub async fn create_submission_outputs_for_all_tasks(
     let config_value = serde_json::to_value(&config)
         .map_err(|e| format!("Failed to serialize execution config: {}", e))?;
 
+    // Run tasks concurrently
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+    use tokio::task::JoinSet;
+    use tokio::time::{Duration, sleep};
+    let mut join_set = JoinSet::new();
+
+    // Bounded concurrency to avoid DB write contention
+    let max_concurrency = std::cmp::max(
+        1,
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            / 2,
+    );
+    let semaphore = Arc::new(Semaphore::new(max_concurrency));
+
     for task in tasks {
         let filename = format!(
             "submission_task_{}_user_{}_attempt_{}.txt",
             task.task_number, user_id, attempt_number
         );
+        let task_files_base = files.clone();
+        let cm_url = code_manager_url.clone();
+        let client_cloned = client.clone();
+        let config_value_cloned = config_value.clone();
+        let db_cloned = db.clone();
+        let module_id_cloned = module_id;
+        let assignment_id_cloned = assignment_id;
 
-        let mut task_files = files.clone();
-
-        let overwrite_dir =
-            OverwriteFile::full_directory_path(module_id, assignment_id, task.task_number);
-        if overwrite_dir.exists() {
-            let entries = std::fs::read_dir(&overwrite_dir)
-                .map_err(|e| format!("Failed to read overwrite dir: {}", e))?;
-
-            for entry in entries {
-                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-                let path = entry.path();
-                if path.is_file() {
-                    let content = std::fs::read(&path)
-                        .map_err(|e| format!("Failed to read overwrite file {:?}: {}", path, e))?;
-                    let file_name = path
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .ok_or_else(|| format!("Invalid overwrite filename: {:?}", path))?
-                        .to_string();
-
-                    task_files.retain(|(name, _)| name != &file_name);
-                    task_files.push((file_name, content));
+        let sem = semaphore.clone();
+        join_set.spawn(async move {
+            let _permit = sem.acquire_owned().await.ok();
+            // Prepare task-specific files (apply overwrites)
+            let mut task_files = task_files_base;
+            let overwrite_dir =
+                overwrite_task_dir(module_id_cloned, assignment_id_cloned, task.task_number);
+            if overwrite_dir.exists() {
+                if let Ok(entries) = std::fs::read_dir(&overwrite_dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_file() {
+                            if let Ok(content) = std::fs::read(&path) {
+                                if let Some(file_name) = path
+                                    .file_name()
+                                    .and_then(|s| s.to_str())
+                                    .map(|s| s.to_string())
+                                {
+                                    task_files.retain(|(name, _)| name != &file_name);
+                                    task_files.push((file_name, content));
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        }
 
-        // Compose request
-        let request_body = json!({
-            "config": config_value,
-            "commands": [task.command],
-            "files": task_files,
+            // Compose request
+            let request_body = json!({
+                "config": config_value_cloned,
+                "commands": [task.command.clone()],
+                "files": task_files,
+            });
+
+            let response_res = client_cloned.post(&cm_url).json(&request_body).send().await;
+            match response_res {
+                Err(e) => {
+                    println!("HTTP request failed for task {}: {}", task.task_number, e);
+                    return false;
+                }
+                Ok(response) => {
+                    if !response.status().is_success() {
+                        let text = response.text().await.unwrap_or_default();
+                        println!("Code manager error for task {}: {}", task.task_number, text);
+                        return false;
+                    }
+
+                    let resp_json: serde_json::Value = match response.json().await {
+                        Ok(v) => v,
+                        Err(e) => {
+                            println!(
+                                "Failed to parse response JSON for task {}: {}",
+                                task.task_number, e
+                            );
+                            return false;
+                        }
+                    };
+
+                    let output_vec = match resp_json.get("output").and_then(|v| v.as_array()) {
+                        Some(arr) => arr
+                            .iter()
+                            .map(|val| val.as_str().unwrap_or("").to_string())
+                            .collect::<Vec<String>>(),
+                        None => {
+                            println!(
+                                "Response missing 'output' array for task {}",
+                                task.task_number
+                            );
+                            Vec::new()
+                        }
+                    };
+
+                    let output_combined = output_vec.join("\n");
+
+                    // Save with retry to mitigate transient DB locks
+                    for attempt in 0..5 {
+                        match SubmissionOutputModel::save_file(
+                            &db_cloned,
+                            task.id,
+                            submission_id,
+                            &filename,
+                            output_combined.as_bytes(),
+                        )
+                        .await
+                        {
+                            Ok(_) => {
+                                return true;
+                            }
+                            Err(e) => {
+                                let backoff_ms = 20u64 * (1 << attempt);
+                                println!(
+                                    "Retry {}/5 saving output for task {} ({} ms): {}",
+                                    attempt + 1,
+                                    task.task_number,
+                                    backoff_ms,
+                                    e
+                                );
+                                sleep(Duration::from_millis(backoff_ms)).await;
+                            }
+                        }
+                    }
+                    println!(
+                        "Failed to save submission output for task {} after retries",
+                        task.task_number
+                    );
+                    false
+                }
+            }
         });
+    }
 
-        let response = client
-            .post(&code_manager_url)
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| format!("HTTP request failed for task {}: {}", task.task_number, e))?;
-
-        if !response.status().is_success() {
-            let text = response.text().await.unwrap_or_default();
-            println!("Code manager error for task {}: {}", task.task_number, text);
-            continue;
+    // Drain all tasks
+    let mut saved_any = 0usize;
+    while let Some(res) = join_set.join_next().await {
+        if let Ok(saved) = res {
+            if saved {
+                saved_any += 1;
+            }
         }
+    }
 
-        let resp_json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse response JSON: {}", e))?;
-
-        let output_vec = resp_json
-            .get("output")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| "Response missing 'output' array".to_string())?
-            .iter()
-            .map(|val| val.as_str().unwrap_or("").to_string())
-            .collect::<Vec<String>>();
-
-        let output_combined = output_vec.join("\n");
-
-        if let Err(e) = SubmissionOutputModel::save_file(
-            db,
-            task.id,
-            submission_id,
-            &filename,
-            output_combined.as_bytes(),
-        )
-        .await
-        {
-            println!("Failed to save submission output: {}", e);
-        }
+    if saved_any == 0 {
+        return Err("No submission outputs were generated".to_string());
     }
 
     Ok(())
@@ -620,7 +812,7 @@ pub async fn create_main_from_interpreter(
     use std::env;
     use std::io::Write;
     use util::execution_config::ExecutionConfig;
-    use util::execution_config::execution_config::Language;
+    use util::languages::LanguageExt;
     use zip::write::{FileOptions, ZipWriter};
 
     // --- Fetch submission, assignment, interpreter rows ---
@@ -650,7 +842,7 @@ pub async fn create_main_from_interpreter(
     // // Debug: show the interpreter command & payload
     // eprintln!("Using interpreter: {}", interpreter.command);
     // eprintln!("Assignment name: {}", assignment.name);
-    // if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
+    // if config::ga_debug_print() == Some("1") {
     //     eprintln!("[DEBUG] generated_string = {}", generated_string);
     // }
 
@@ -659,53 +851,30 @@ pub async fn create_main_from_interpreter(
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
     // Determine main file name from language
-    let main_file_name = match config.project.language {
-        Language::Cpp => "Main.cpp",
-        Language::Java => "Main.java",
-        // Language::Python => "Main.py",
-    };
+    let lang = config.project.language;
+    let main_file_name = lang.main_filename();
 
     // Heuristic: if the "interpreter" is actually a compile/run line (e.g., g++ Main.cpp),
     // then there's no source to compile yet. Synthesize a Main.cpp (or Main.*)
     // from the generated_string and save it as the main archive locally.
-    let looks_like_compile: bool = {
-        let cmd = interpreter.command.to_lowercase();
-        // very basic detection; expand as needed
-        (cmd.contains("g++")
-            || cmd.contains("clang++")
-            || cmd.contains("javac")
-            || cmd.contains("python "))
-            && cmd.contains("Main.")
-    };
+    let looks_like_compile = lang.is_compile_cmd(&interpreter.command);
 
     if looks_like_compile {
         // --- STOPGAP BRANCH ---
         // Build a simple source file from `generated_string`.
         // Adjust templates per language as needed.
-        let synthesized = match config.project.language {
-            Language::Cpp => format!(
-                r#"#include <bits/stdc++.h>
-                int main() {{
-                    std::cout << "{}" << std::endl;
-                    return 0;
-                }}
-                "#,
-                generated_string.replace('"', "\\\"")
-            ),
-            Language::Java => format!(
-                r#"public class Main {{
-                public static void main(String[] args) {{
-                    System.out.println("{}");
-                }}
-            }}
-            "#,
-                generated_string.replace('"', "\\\"")
-            ),
-            // Language::Python => format!(r#"print("{}")"#, generated_string.replace('"', "\\\"")),
-        };
+        let synthesized = lang
+            .synthesize_program(generated_string)
+            .unwrap_or_else(|| {
+                // very safe fallback (keeps old behavior working even if a new lang lacks a template)
+                format!("// synthesized stub\n// {}\n", generated_string)
+            });
 
         // Zip and save as the "main" archive
-        let zip_ext = main_file_name.rsplit('.').next().unwrap_or("txt");
+        let zip_ext = std::path::Path::new(main_file_name)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("txt");
         let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
 
         let mut zip_data = Vec::new();
@@ -755,10 +924,8 @@ pub async fn create_main_from_interpreter(
     // e.g., "python3 interpreter.py <args>"
     let command = format!("{} \"{}\"", interpreter.command, generated_string);
 
-    let host =
-        env::var("CODE_MANAGER_HOST").map_err(|_| "CODE_MANAGER_HOST not set".to_string())?;
-    let port =
-        env::var("CODE_MANAGER_PORT").map_err(|_| "CODE_MANAGER_PORT not set".to_string())?;
+    let host = config::code_manager_host();
+    let port = config::code_manager_port();
     let url = format!("http://{}:{}/run", host, port);
 
     let config_value = serde_json::to_value(&config)
@@ -808,13 +975,7 @@ pub async fn create_main_from_interpreter(
     }
 
     // Sanity-check: generator should produce plausible source
-    let looks_like_source = match config.project.language {
-        Language::Cpp => {
-            combined_output.contains("int main") || combined_output.contains("#include")
-        }
-        Language::Java => combined_output.contains("class Main"),
-        // Language::Python => combined_output.contains("def ") || combined_output.contains("print("),
-    };
+    let looks_like_source = lang.looks_like_source(&combined_output);
 
     if !looks_like_source {
         println!(
@@ -833,7 +994,10 @@ pub async fn create_main_from_interpreter(
     }
 
     // Zip the generated source as Main.*
-    let zip_ext = main_file_name.rsplit('.').next().unwrap_or("txt");
+    let zip_ext = std::path::Path::new(main_file_name)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("txt");
     let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
 
     let mut zip_data = Vec::new();

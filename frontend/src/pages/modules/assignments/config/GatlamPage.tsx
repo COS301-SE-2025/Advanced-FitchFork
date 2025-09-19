@@ -27,6 +27,7 @@ import {
 
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
 import { useUI } from '@/context/UIContext';
+import Tip from '@/components/common/Tip';
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -39,9 +40,12 @@ export default function GatlamPage() {
 
   useEffect(() => {
     setValue(
-      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
-        GA / TLAM Configuration
-      </Typography.Text>,
+      <Space align="center" size={6} className="flex-wrap">
+        <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+          GA / TLAM Configuration
+        </Typography.Text>
+        <Tip iconOnly newTab to="/help/assignments/config/gatlam#what" text="GATLAM config help" />
+      </Space>,
     );
   }, [setValue]);
 

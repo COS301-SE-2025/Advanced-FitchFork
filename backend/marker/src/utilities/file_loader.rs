@@ -19,10 +19,10 @@
 //!
 //! This module includes comprehensive tests for valid and invalid file sets, covering edge cases and error reporting.
 
+use crate::error::MarkerError;
+use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
-use serde_json::Value;
-use crate::error::MarkerError;
 
 /// Represents all files loaded for a submission, including their paths and parsed JSON content.
 #[derive(Debug)]
@@ -49,17 +49,28 @@ const MAX_JSON_SIZE: u64 = 2 * 1024 * 1024; // 2MB
 /// Returns [`MarkerError::IoError`] if the file is missing, not a file, unreadable, or too large.
 fn check_file(path: &Path, max_size: Option<u64>) -> Result<(), MarkerError> {
     if !path.exists() {
-        return Err(MarkerError::IoError(format!("File not found: {}", path.display())));
+        return Err(MarkerError::IoError(format!(
+            "File not found: {}",
+            path.display()
+        )));
     }
 
     if !path.is_file() {
-        return Err(MarkerError::IoError(format!("Not a file: {}", path.display())));
+        return Err(MarkerError::IoError(format!(
+            "Not a file: {}",
+            path.display()
+        )));
     }
 
-    let metadata = fs::metadata(path).map_err(|_| MarkerError::IoError(format!("File unreadable: {}", path.display())))?;
+    let metadata = fs::metadata(path)
+        .map_err(|_| MarkerError::IoError(format!("File unreadable: {}", path.display())))?;
     if let Some(max) = max_size {
         if metadata.len() > max {
-            return Err(MarkerError::IoError(format!("File too large: {} ({} bytes)", path.display(), metadata.len())));
+            return Err(MarkerError::IoError(format!(
+                "File too large: {} ({} bytes)",
+                path.display(),
+                metadata.len()
+            )));
         }
     }
 
@@ -93,35 +104,59 @@ pub fn load_files(
         check_file(p, None)?;
     }
     if memo_paths.len() != student_paths.len() {
-        return Err(MarkerError::InputMismatch(format!("memo_paths.len() != student_paths.len(): {} != {}", memo_paths.len(), student_paths.len())));
+        return Err(MarkerError::InputMismatch(format!(
+            "memo_paths.len() != student_paths.len(): {} != {}",
+            memo_paths.len(),
+            student_paths.len()
+        )));
     }
     check_file(&allocator_path, Some(MAX_JSON_SIZE))?;
-    let allocator_bytes = fs::read(&allocator_path).map_err(|e| MarkerError::IoError(format!("{}: {}", allocator_path.display(), e)))?;
-    let allocator_raw = serde_json::from_slice(&allocator_bytes).map_err(|_| MarkerError::InvalidJson(allocator_path.display().to_string()))?;
+    let allocator_bytes = fs::read(&allocator_path)
+        .map_err(|e| MarkerError::IoError(format!("{}: {}", allocator_path.display(), e)))?;
+    let allocator_raw = serde_json::from_slice(&allocator_bytes)
+        .map_err(|_| MarkerError::InvalidJson(allocator_path.display().to_string()))?;
     let coverage_raw = if let Some(path) = coverage_path {
         check_file(&path, Some(MAX_JSON_SIZE))?;
-        let bytes = fs::read(&path).map_err(|e| MarkerError::IoError(format!("{}: {}", path.display(), e)))?;
-        Some(serde_json::from_slice(&bytes).map_err(|_| MarkerError::InvalidJson(path.display().to_string()))?)
+        let bytes = fs::read(&path)
+            .map_err(|e| MarkerError::IoError(format!("{}: {}", path.display(), e)))?;
+        Some(
+            serde_json::from_slice(&bytes)
+                .map_err(|_| MarkerError::InvalidJson(path.display().to_string()))?,
+        )
     } else {
         None
     };
     let complexity_raw = if let Some(path) = complexity_path {
         check_file(&path, Some(MAX_JSON_SIZE))?;
-        let bytes = fs::read(&path).map_err(|e| MarkerError::IoError(format!("{}: {}", path.display(), e)))?;
-        Some(serde_json::from_slice(&bytes).map_err(|_| MarkerError::InvalidJson(path.display().to_string()))?)
+        let bytes = fs::read(&path)
+            .map_err(|e| MarkerError::IoError(format!("{}: {}", path.display(), e)))?;
+        Some(
+            serde_json::from_slice(&bytes)
+                .map_err(|_| MarkerError::InvalidJson(path.display().to_string()))?,
+        )
     } else {
         None
     };
     let mut memo_contents = Vec::new();
     for path in &memo_paths {
-        let content = fs::read_to_string(path)
-            .map_err(|e| MarkerError::IoError(format!("Failed to read memo file {}: {}", path.display(), e)))?;
+        let content = fs::read_to_string(path).map_err(|e| {
+            MarkerError::IoError(format!(
+                "Failed to read memo file {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
         memo_contents.push(content);
     }
     let mut student_contents = Vec::new();
     for path in &student_paths {
-        let content = fs::read_to_string(path)
-            .map_err(|e| MarkerError::IoError(format!("Failed to read student file {}: {}", path.display(), e)))?;
+        let content = fs::read_to_string(path).map_err(|e| {
+            MarkerError::IoError(format!(
+                "Failed to read student file {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
         student_contents.push(content);
     }
     Ok(LoadedFiles {
@@ -156,13 +191,23 @@ mod tests {
             Some(coverage_path.clone()),
             Some(complexity_path.clone()),
         );
-        assert!(result.is_ok(), "Expected Ok for happy path, got: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Expected Ok for happy path, got: {:?}",
+            result
+        );
         let loaded = result.unwrap();
         assert_eq!(loaded.memo_contents.len(), memo_paths.len());
         assert_eq!(loaded.student_contents.len(), student_paths.len());
-        assert!(loaded.allocator_raw.is_object(), "allocator_raw should be a JSON object");
+        assert!(
+            loaded.allocator_raw.is_object(),
+            "allocator_raw should be a JSON object"
+        );
         assert!(loaded.coverage_raw.is_some(), "coverage_raw should be Some");
-        assert!(loaded.complexity_raw.is_some(), "complexity_raw should be Some");
+        assert!(
+            loaded.complexity_raw.is_some(),
+            "complexity_raw should be Some"
+        );
     }
 
     /// Test error handling for a missing memo file.
@@ -183,8 +228,12 @@ mod tests {
         );
         match result {
             Err(MarkerError::IoError(msg)) => {
-                assert!(msg.contains("File not found"), "Error message should mention file not found, got: {}", msg);
-            },
+                assert!(
+                    msg.contains("File not found"),
+                    "Error message should mention file not found, got: {}",
+                    msg
+                );
+            }
             other => panic!("Expected IoError for missing memo file, got: {:?}", other),
         }
     }
@@ -210,9 +259,16 @@ mod tests {
         );
         match result {
             Err(MarkerError::InputMismatch(msg)) => {
-                assert!(msg.contains("memo_paths.len() != student_paths.len()"), "Error message should mention length mismatch, got: {}", msg);
-            },
-            other => panic!("Expected InputMismatch for length mismatch, got: {:?}", other),
+                assert!(
+                    msg.contains("memo_paths.len() != student_paths.len()"),
+                    "Error message should mention length mismatch, got: {}",
+                    msg
+                );
+            }
+            other => panic!(
+                "Expected InputMismatch for length mismatch, got: {:?}",
+                other
+            ),
         }
     }
 
@@ -234,8 +290,12 @@ mod tests {
         );
         match result {
             Err(MarkerError::IoError(msg)) => {
-                assert!(msg.contains("File too large"), "Error message should mention file too large, got: {}", msg);
-            },
+                assert!(
+                    msg.contains("File too large"),
+                    "Error message should mention file too large, got: {}",
+                    msg
+                );
+            }
             other => panic!("Expected IoError for file too large, got: {:?}", other),
         }
     }
@@ -258,9 +318,16 @@ mod tests {
         );
         match result {
             Err(MarkerError::InvalidJson(path)) => {
-                assert!(path.contains("allocator.json"), "Error path should mention allocator.json, got: {}", path);
-            },
-            other => panic!("Expected InvalidJson for invalid json content, got: {:?}", other),
+                assert!(
+                    path.contains("allocator.json"),
+                    "Error path should mention allocator.json, got: {}",
+                    path
+                );
+            }
+            other => panic!(
+                "Expected InvalidJson for invalid json content, got: {:?}",
+                other
+            ),
         }
     }
 
@@ -272,7 +339,7 @@ mod tests {
         let student_paths = vec![PathBuf::from(format!("{}/student1.txt", dir))];
         let allocator_path = PathBuf::from(format!("{}/allocator.json", dir));
         let complexity_path = PathBuf::from(format!("{}/complexity.json", dir));
-        
+
         let result = load_files(
             memo_paths,
             student_paths,
@@ -294,14 +361,8 @@ mod tests {
         let memo_paths = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
         let student_paths = vec![PathBuf::from(format!("{}/student1.txt", dir))];
         let allocator_path = PathBuf::from(format!("{}/allocator.json", dir));
-        
-        let result = load_files(
-            memo_paths,
-            student_paths,
-            allocator_path,
-            None,
-            None,
-        );
+
+        let result = load_files(memo_paths, student_paths, allocator_path, None, None);
 
         assert!(result.is_ok());
         let loaded = result.unwrap();

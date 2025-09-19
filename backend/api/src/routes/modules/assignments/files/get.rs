@@ -1,22 +1,15 @@
-use std::{env, path::PathBuf};
+use crate::response::ApiResponse;
+use crate::routes::modules::assignments::common::File;
 use axum::{
-    extract::{State, Path},
-    http::{header, HeaderMap, HeaderValue, StatusCode},
+    extract::{Path, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Json, Response},
 };
+use db::models::assignment_file::{Column as FileColumn, Entity as FileEntity};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use std::path::PathBuf;
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
-use sea_orm::{
-    ColumnTrait,
-    EntityTrait,
-    QueryFilter,
-};
-use util::state::AppState;
-use crate::response::ApiResponse;
-use db::models::assignment_file::{
-    Column as FileColumn,
-    Entity as FileEntity,
-};
-use crate::routes::modules::assignments::common::File;
+use util::{paths::storage_root, state::AppState};
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/files/{file_id}
 ///
@@ -56,9 +49,11 @@ pub async fn download_file(
         .filter(FileColumn::Id.eq(file_id as i32))
         .filter(FileColumn::AssignmentId.eq(assignment_id as i32))
         .one(db)
-        .await.unwrap().unwrap();
+        .await
+        .unwrap()
+        .unwrap();
 
-    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".to_string());
+    let storage_root = storage_root();
     let fs_path = PathBuf::from(storage_root).join(&file.path);
 
     if tokio::fs::metadata(&fs_path).await.is_err() {
@@ -150,7 +145,7 @@ pub async fn download_file(
 ///
 pub async fn list_files(
     State(app_state): State<AppState>,
-    Path((_, assignment_id)): Path<(i64, i64)>
+    Path((_, assignment_id)): Path<(i64, i64)>,
 ) -> Response {
     let db = app_state.db();
 

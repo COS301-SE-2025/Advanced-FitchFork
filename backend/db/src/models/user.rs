@@ -157,7 +157,7 @@ impl Model {
 
         if let Some(user) = Self::get_by_username(db, username).await? {
             let parsed = PasswordHash::new(&user.password_hash)
-                .map_err(|e| DbErr::Custom(format!("Invalid hash: {}", e)))?;
+                .map_err(|e| DbErr::Custom(format!("Invalid hash: {e}")))?;
 
             if Argon2::default()
                 .verify_password(password.as_bytes(), &parsed)
@@ -222,7 +222,7 @@ impl Model {
         role: &str,
     ) -> Result<bool, DbErr> {
         let parsed_role = Role::from_str(role)
-            .map_err(|_| DbErr::Custom(format!("Invalid role string: '{}'", role)))?;
+            .map_err(|_| DbErr::Custom(format!("Invalid role string: '{role}'")))?;
 
         let exists = RoleEntity::find()
             .filter(RoleColumn::UserId.eq(user_id))
@@ -287,7 +287,7 @@ mod tests {
         let found = found.unwrap();
         assert_eq!(found.email, email);
         assert_eq!(found.username, username);
-        assert_eq!(found.admin, false);
+        assert!(!found.admin);
     }
 
     #[tokio::test]
@@ -343,7 +343,6 @@ mod tests {
             user_id: Set(user.id),
             module_id: Set(module.id),
             role: Set(UserRole::Lecturer),
-            ..Default::default()
         }
         .insert(&db)
         .await

@@ -2,7 +2,7 @@ use rand::seq::SliceRandom;
 use rand::{Rng, thread_rng};
 use std::collections::HashSet;
 use util::execution_config::ExecutionConfig;
-use util::execution_config::execution_config::{
+use util::execution_config::{
     CrossoverType as ExecCrossoverType, MutationType as ExecMutationType,
 };
 

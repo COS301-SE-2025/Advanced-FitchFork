@@ -95,13 +95,13 @@ const hasAllowedExtension = (filename: string, acceptList?: string) => {
 };
 
 const AssignmentFiles = () => {
-  const { assignment, refreshAssignment } = useAssignment();
+  const { assignment, assignmentFiles, refreshAssignment } = useAssignment();
   const module = useModule();
   const { setValue } = useViewSlot();
 
   // Start on a visible type
   const [selectedType, setSelectedType] = useState<VisibleFileType>('main');
-  const [files, setFiles] = useState<AssignmentFile[]>(assignment.files ?? []);
+  const [files, setFiles] = useState<AssignmentFile[]>(assignmentFiles ?? []);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
@@ -113,8 +113,8 @@ const AssignmentFiles = () => {
   }, [setValue]);
 
   useEffect(() => {
-    setFiles(assignment.files ?? []);
-  }, [assignment.files]);
+    setFiles(assignmentFiles ?? []);
+  }, [assignmentFiles]);
 
   const filesForSelectedType = useMemo(
     () => files.filter((f) => f.file_type === selectedType),
@@ -222,7 +222,7 @@ const AssignmentFiles = () => {
               icon={<ReloadOutlined />}
               onClick={async () => {
                 await refreshAssignment();
-                setFiles(assignment.files ?? []);
+                setFiles(assignmentFiles ?? []);
               }}
               disabled={uploading}
             />

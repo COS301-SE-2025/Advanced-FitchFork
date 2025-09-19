@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod tests {
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
     use chrono::{Datelike, Utc};
-    use db::{models::user::Model as UserModel};
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use db::models::user::Model as UserModel;
     use serde_json::json;
     use tower::ServiceExt;
 
@@ -17,10 +17,14 @@ mod tests {
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        dotenvy::dotenv().expect("Failed to load .env"); 
+        dotenvy::dotenv().expect("Failed to load .env");
 
-        let admin_user = UserModel::create(db, "admin", "admin@test.com", "password", true).await.expect("Failed to create admin user");
-        let regular_user = UserModel::create(db, "regular", "regular@test.com", "password", false).await.expect("Failed to create regular user");
+        let admin_user = UserModel::create(db, "admin", "admin@test.com", "password", true)
+            .await
+            .expect("Failed to create admin user");
+        let regular_user = UserModel::create(db, "regular", "regular@test.com", "password", false)
+            .await
+            .expect("Failed to create regular user");
 
         TestData {
             admin_user,
@@ -31,7 +35,7 @@ mod tests {
     /// Test Case: Admin creates module successfully
     #[tokio::test]
     async fn test_create_module_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -47,9 +51,11 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Module created successfully");
         let data = &json["data"];
@@ -64,7 +70,7 @@ mod tests {
     /// Test Case: Non-admin user attempts to create module
     #[tokio::test]
     async fn test_create_module_forbidden() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
@@ -80,7 +86,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Admin access required");
@@ -89,7 +97,7 @@ mod tests {
     /// Test Case: Invalid module code format
     #[tokio::test]
     async fn test_create_module_invalid_code() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -105,16 +113,23 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Module code must be in format ABC123"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Module code must be in format ABC123")
+        );
     }
 
     /// Test Case: Year in the past
     #[tokio::test]
     async fn test_create_module_year_in_past() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -131,16 +146,23 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Year must be current year or later"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Year must be current year or later")
+        );
     }
 
     /// Test Case: Invalid credits value
     #[tokio::test]
     async fn test_create_module_invalid_credits() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -156,16 +178,23 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Credits must be a positive number"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Credits must be a positive number")
+        );
     }
 
     /// Test Case: Description too long
     #[tokio::test]
     async fn test_create_module_description_too_long() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -182,16 +211,23 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Description must be at most 1000 characters"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Description must be at most 1000 characters")
+        );
     }
 
     /// Test Case: Duplicate module code
     #[tokio::test]
     async fn test_create_module_duplicate_code() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -219,7 +255,9 @@ mod tests {
         let response2 = app.oneshot(req2).await.unwrap();
         assert_eq!(response2.status(), StatusCode::CONFLICT);
 
-        let body = axum::body::to_bytes(response2.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response2.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "A module with this code already exists");
@@ -228,7 +266,7 @@ mod tests {
     /// Test Case: Multiple validation errors
     #[tokio::test]
     async fn test_create_module_multiple_errors() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -244,7 +282,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let message = json["message"].as_str().unwrap();
         assert!(message.contains("Module code must be in format ABC123"));
@@ -255,7 +295,7 @@ mod tests {
     /// Test Case: Missing required fields
     #[tokio::test]
     async fn test_create_module_missing_fields() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);

@@ -2,11 +2,11 @@ use crate::response::ApiResponse;
 use axum::extract::State;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use db::models::assignment_memo_output;
-use db::models::assignment_memo_output::Model as MemoOutputModel;
 use db::models::assignment_task;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-use util::mark_allocator::mark_allocator::TaskInfo;
-use util::mark_allocator::mark_allocator::{SaveError, generate_allocator};
+use util::mark_allocator::TaskInfo;
+use util::mark_allocator::{SaveError, generate_allocator};
+use util::paths::{memo_output_dir, storage_root};
 use util::state::AppState;
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
@@ -103,7 +103,7 @@ pub async fn generate(
         }
     };
 
-    let memo_dir = MemoOutputModel::full_directory_path(module_id, assignment_id);
+    let memo_dir = memo_output_dir(module_id, assignment_id);
     let mut task_file_pairs = vec![];
 
     for task in &tasks {
@@ -125,7 +125,7 @@ pub async fn generate(
             .await;
 
         let memo_path = match memo_output_res {
-            Ok(Some(memo_output)) => MemoOutputModel::storage_root().join(&memo_output.path),
+            Ok(Some(memo_output)) => storage_root().join(&memo_output.path),
             Ok(None) => memo_dir.join(format!("no_memo_for_task_{}", task.id)),
             Err(_) => {
                 return (

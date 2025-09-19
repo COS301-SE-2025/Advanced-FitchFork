@@ -9,6 +9,6 @@
 //!
 //! Implement these traits to extend or customize the marker's behavior for new data types or comparison strategies.
 
-pub mod comparator; 
-pub mod parser;
+pub mod comparator;
 pub mod feedback;
+pub mod parser;

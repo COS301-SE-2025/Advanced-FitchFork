@@ -16,6 +16,7 @@ import {
   Typography,
   Radio,
   Result,
+  Select,
 } from 'antd';
 import {
   CloseOutlined,
@@ -29,8 +30,10 @@ import {
 import * as THREE from 'three';
 import { useTheme } from '@/context/ThemeContext';
 import { scaleColor } from '@/utils/color';
-import { getPlagiarismGraph } from '@/services/modules/assignments/plagiarism';
+import { getPlagiarismGraph, listMossReports } from '@/services/modules/assignments/plagiarism/get';
+import type { MossReport, PlagiarismGraphLink } from '@/types/modules/assignments/plagiarism';
 
+// ---------- small tips ----------
 const Tips: React.FC = () => (
   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
     <span className="opacity-70">
@@ -48,14 +51,11 @@ export type PlagiarismGraphProps = {
 };
 
 type Mode = '2d' | '3d';
-type GraphLink = {
-  source: string;
-  target: string;
-  case_id: number;
-  similarity: number;
-  status: string;
-  _orig?: any;
-};
+
+const LABEL_2D_PX = 16; // keep as your knob
+const LABEL_3D_PX = 22; // your screen-fixed height in px
+const FIT_PAD_PX_2D = 8;
+const FIT_PAD_PX_3D = 12;
 
 // ---------- helpers ----------
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -67,22 +67,66 @@ const withAlpha = (rgb: string, a: number) =>
   rgb.trim().startsWith('rgb(')
     ? rgb.replace(/^rgb\(([^)]+)\)$/, (_: any, inner: string) => `rgba(${inner}, ${a})`)
     : rgb;
-const getSim = (l: any) => {
-  const v = Number(l.similarity ?? l._orig?.similarity ?? 0);
-  return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 0;
-};
-const idOf = (v: any) => {
-  if (v == null) return '';
-  if (typeof v === 'string' || typeof v === 'number') return String(v);
-  if (v.id != null) return String(v.id);
-  if (v.username != null) return String(v.username);
-  if (v.value != null) return String(v.value);
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
-};
+const getSim = (l: { similarity?: number }) =>
+  Math.max(0, Math.min(100, Number(l.similarity ?? 0)));
+
+const nodeIdFrom = (username: string, reportId?: number | null) =>
+  `${username}::${reportId ?? 'no_report'}`;
+
+const usernameFromNodeId = (id: string) => (id.includes('::') ? id.split('::')[0] : id);
+
+// cached sprite maker for 3D text
+const spriteCache = new Map<string, THREE.Sprite>();
+function makeTextSprite(
+  key: string,
+  text: string,
+  opts: { bg: string; fg: string; pad?: number; fontSize?: number } = {
+    bg: 'rgba(0,0,0,0.6)',
+    fg: '#fff',
+  },
+) {
+  const pad = opts.pad ?? 24;
+  const fontSize = opts.fontSize ?? 64;
+  const cacheKey = `${key}|${text}|${opts.bg}|${opts.fg}|${fontSize}`;
+  const cached = spriteCache.get(cacheKey);
+  if (cached) return cached.clone();
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  const font = `${fontSize}px Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI"`;
+  ctx.font = font;
+  const m = ctx.measureText(text);
+  const ascent = (m as any).actualBoundingBoxAscent ?? fontSize * 0.8;
+  const descent = (m as any).actualBoundingBoxDescent ?? fontSize * 0.2;
+
+  canvas.width = Math.ceil(m.width + pad * 2);
+  canvas.height = Math.ceil(ascent + descent + pad * 2);
+
+  const ctx2 = canvas.getContext('2d')!;
+  ctx2.font = font;
+  ctx2.fillStyle = opts.bg;
+  ctx2.fillRect(0, 0, canvas.width, canvas.height);
+  ctx2.fillStyle = opts.fg;
+  ctx2.textBaseline = 'middle';
+  ctx2.fillText(text, pad, canvas.height / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+  material.depthTest = false; // keep labels visible on top
+  material.depthWrite = false;
+
+  const sprite = new THREE.Sprite(material);
+  sprite.userData.isLabelSprite = true;
+  sprite.userData.labelAspect = canvas.width / canvas.height;
+
+  // give it a visible initial size (will be overridden each frame)
+  sprite.scale.set(3 * sprite.userData.labelAspect, 3, 1);
+
+  spriteCache.set(cacheKey, sprite.clone());
+  return sprite;
+}
 
 // ---------- component ----------
 const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
@@ -104,26 +148,33 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
   const [status, setStatus] = useState<'all' | 'review' | 'flagged' | 'reviewed'>('all');
   const [simRange, setSimRange] = useState<[number, number]>([0, 100]);
   const [username, setUsername] = useState('');
+  const [reportId, setReportId] = useState<number | 'all'>('all');
+
+  // reports list
+  const [reports, setReports] = useState<MossReport[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
 
   // state
   const [panelOpen, setPanelOpen] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [rawLinks, setRawLinks] = useState<GraphLink[]>([]);
+  const [rawLinks, setRawLinks] = useState<PlagiarismGraphLink[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // derived graph
-  const normLinks = useMemo<GraphLink[]>(
+  const normLinks = useMemo<PlagiarismGraphLink[]>(
     () =>
       rawLinks.map((l) => ({
-        source: idOf(l.source),
-        target: idOf(l.target),
-        case_id: l.case_id,
+        ...l,
+        // make node ids unique per report, keep all other fields
+        source: nodeIdFrom(String(l.source), l.report_id),
+        target: nodeIdFrom(String(l.target), l.report_id),
+        // defensively coerce numerics
         similarity: Number(l.similarity) || 0,
-        status: l.status,
-        _orig: l,
+        lines_matched: Number(l.lines_matched) || 0,
       })),
     [rawLinks],
   );
+
   const nodes = useMemo(() => {
     const ids = new Set<string>();
     normLinks.forEach((l) => {
@@ -144,7 +195,7 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
         return;
       }
       const nset = new Set<string>([nodeId]);
-      const kept: GraphLink[] = [];
+      const kept: PlagiarismGraphLink[] = [];
       normLinks.forEach((l) => {
         const a = String(l.source),
           b = String(l.target);
@@ -164,7 +215,60 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
     setFilteredLinks(normLinks);
   }, [nodes, normLinks]);
 
-  // fetch
+  // fetch reports when opened / assignment changes
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      setReportsLoading(true);
+      try {
+        const res = await listMossReports(moduleId, assignmentId);
+        setReports(res.success ? (res.data?.reports ?? []) : []);
+      } catch {
+        setReports([]);
+      } finally {
+        setReportsLoading(false);
+      }
+    })();
+  }, [open, moduleId, assignmentId]);
+
+  useEffect(() => {
+    if (!open || mode !== '3d') return;
+
+    let raf = 0;
+    const tmp = new THREE.Vector3();
+
+    const tick = () => {
+      const fg = fg3dRef.current;
+      if (fg) {
+        const cam = fg.camera?.() as THREE.PerspectiveCamera | undefined;
+        const renderer = fg.renderer?.();
+        const scene = fg.scene?.();
+
+        if (cam && (cam as any).isPerspectiveCamera && renderer && scene) {
+          const viewportHpx = renderer.domElement.clientHeight;
+          const vFovRad = THREE.MathUtils.degToRad(cam.fov);
+
+          scene.traverse((obj: any) => {
+            if (!obj?.isSprite || !obj.userData?.isLabelSprite) return;
+
+            obj.getWorldPosition(tmp);
+            const dist = cam.position.distanceTo(tmp);
+            const worldViewportH = 2 * Math.tan(vFovRad / 2) * dist;
+            const desiredWorldH = (LABEL_3D_PX / viewportHpx) * worldViewportH;
+
+            const aspect = obj.userData.labelAspect || 2;
+            obj.scale.set(desiredWorldH * aspect, desiredWorldH, 1);
+          });
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [open, mode]);
+
+  // fetch graph
   const fetchGraph = useCallback(
     async (overrides?: { user?: string }) => {
       setLoading(true);
@@ -174,13 +278,14 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
         if (status !== 'all') params.status = status;
         params.min_similarity = simRange[0];
         params.max_similarity = simRange[1];
+        if (reportId !== 'all') params.report_id = reportId;
         const userParam = overrides?.user ?? username.trim();
         if (userParam) params.user = userParam;
 
         const res = await getPlagiarismGraph(moduleId, assignmentId, params);
         if (res.success) {
-          setRawLinks((res.data?.links ?? []) as GraphLink[]);
-          shouldAutoFit.current = true; // <- ask to auto-fit after layout
+          setRawLinks((res.data?.links ?? []) as unknown as PlagiarismGraphLink[]);
+          shouldAutoFit.current = true;
           setPanelOpen(false);
           applyNodeFilter(null);
         } else {
@@ -194,7 +299,7 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
         setLoading(false);
       }
     },
-    [moduleId, assignmentId, status, simRange, username, applyNodeFilter],
+    [moduleId, assignmentId, status, simRange, username, reportId, applyNodeFilter],
   );
 
   // canvas size
@@ -206,10 +311,29 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // graph controls
+  // precompute degree (on the *currently displayed* graph)
+  const deg = useMemo(() => {
+    const m = new Map<string, number>();
+    filteredLinks.forEach((l) => {
+      const a = String(l.source),
+        b = String(l.target);
+      m.set(a, (m.get(a) || 0) + 1);
+      m.set(b, (m.get(b) || 0) + 1);
+    });
+    return m;
+  }, [filteredLinks]);
+
+  // zoom to fit: ignore isolates (degree 0) if there are any edges
   const handleZoomToFit = useCallback(() => {
-    (mode === '2d' ? fg2dRef.current : fg3dRef.current)?.zoomToFit?.(500, mode === '2d' ? 40 : 60);
-  }, [mode]);
+    const fg = mode === '2d' ? fg2dRef.current : fg3dRef.current;
+    if (!fg) return;
+
+    const pad = mode === '2d' ? FIT_PAD_PX_2D : FIT_PAD_PX_3D;
+    const hasEdges = filteredLinks.length > 0;
+
+    fg.zoomToFit(500, pad, hasEdges ? (n: any) => (deg.get(String(n.id)) || 0) > 0 : undefined);
+  }, [mode, filteredLinks, deg]);
+
   const handleReheat = useCallback(() => {
     (mode === '2d' ? fg2dRef.current : fg3dRef.current)?.d3ReheatSimulation?.();
   }, [mode]);
@@ -269,8 +393,16 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
     const base3D = isDarkMode ? 0.25 : 0.3;
     return mode === '2d'
       ? base2D + (sim / 100) * (5 - base2D)
-      : base3D + (sim / 100) * (2.5 - base3D);
+      : base3D + (sim / 100) * (0.5 - base3D);
   };
+
+  // tooltips
+  const nodeLabel = useCallback((_n: any) => '', []); // text already rendered on node
+  const linkLabel = useCallback((l: PlagiarismGraphLink) => {
+    const lines = Number(l.lines_matched) || 0;
+    const rep = l.report_id ?? '—';
+    return `${getSim(l)}% • ${lines} lines • report ${rep}`;
+  }, []);
 
   // context menu
   const [contextNode, setContextNode] = useState<any | null>(null);
@@ -285,6 +417,7 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
     setStatus('all');
     setSimRange([0, 100]);
     setUsername('');
+    setReportId('all');
     setRawLinks([]);
     setError(null);
     applyNodeFilter(null);
@@ -295,31 +428,64 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
     fetchGraph({ user: '' });
   }, [fetchGraph]);
 
-  const contextMenu = [
-    {
-      key: 'filter',
-      label: 'Show connections',
-      onClick: () => {
-        if (contextNode) {
-          const nid = String(contextNode.id);
-          setUsername(nid);
-          setPanelOpen(false);
-          fetchGraph({ user: nid });
-        }
-        setContextNode(null);
-        setMenuPos(null);
-      },
+  const nodeCanvasObject = useCallback(
+    (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const label = usernameFromNodeId(String(node.id));
+      const pad = 4; // px
+      const inv = 1 / (globalScale || 1);
+
+      ctx.save();
+      ctx.translate(node.x, node.y);
+      ctx.scale(inv, inv); // <<< key: cancel zoom
+      ctx.font = `${LABEL_2D_PX}px Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI"`;
+
+      const { width } = ctx.measureText(label);
+      const w = width + pad * 2;
+      const h = LABEL_2D_PX + pad * 2;
+
+      ctx.fillStyle = isDarkMode ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.9)';
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isDarkMode ? '#e5e7eb' : '#111827';
+      ctx.fillText(label, 0, 0);
+
+      ctx.restore();
     },
-    {
-      key: 'clear-user',
-      label: 'Clear username filter',
-      onClick: () => {
-        clearUsernameFilter();
-        setContextNode(null);
-        setMenuPos(null);
-      },
+    [isDarkMode],
+  );
+
+  const nodePointerAreaPaint = useCallback(
+    (node: any, color: string, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const label = usernameFromNodeId(String(node.id));
+      const pad = 4;
+      const inv = 1 / (globalScale || 1);
+
+      ctx.save();
+      ctx.translate(node.x, node.y);
+      ctx.scale(inv, inv);
+      ctx.font = `${LABEL_2D_PX}px Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI"`;
+      const { width } = ctx.measureText(label);
+      const w = width + pad * 2;
+      const h = LABEL_2D_PX + pad * 2;
+
+      ctx.fillStyle = color;
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+      ctx.restore();
     },
-  ];
+    [],
+  );
+
+  // 3D custom node object: ALWAYS text sprite
+  const nodeThreeObject = useCallback(
+    (node: any) =>
+      makeTextSprite(`txt|${isDarkMode ? 'd' : 'l'}`, usernameFromNodeId(String(node.id)), {
+        bg: isDarkMode ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.92)',
+        fg: isDarkMode ? '#e5e7eb' : '#111827',
+      }),
+    [isDarkMode],
+  );
 
   // --------- UI ----------
   return (
@@ -353,11 +519,15 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
                 ref={fg2dRef}
                 graphData={{ nodes: filteredNodes, links: filteredLinks }}
                 backgroundColor={bg}
-                nodeLabel={(n: any) => String(n.id)}
-                nodeColor={() => '#4096ff'}
+                nodeLabel={nodeLabel}
+                linkLabel={linkLabel}
+                nodeCanvasObjectMode={() => 'replace'}
+                nodeCanvasObject={nodeCanvasObject}
+                nodePointerAreaPaint={nodePointerAreaPaint}
                 linkDirectionalArrowLength={0}
                 linkWidth={linkWidth}
                 linkColor={linkColor2D}
+                linkHoverPrecision={4}
                 width={size.w}
                 height={Math.max(0, size.h - 48)}
                 cooldownTicks={90}
@@ -374,12 +544,13 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
                 ref={fg3dRef}
                 graphData={{ nodes: filteredNodes, links: filteredLinks }}
                 backgroundColor={bg}
-                nodeOpacity={1}
-                nodeLabel={(n: any) => String(n.id)}
-                nodeColor={() => '#4096ff'}
+                nodeLabel={nodeLabel}
+                linkLabel={linkLabel}
+                nodeThreeObject={nodeThreeObject}
                 linkDirectionalArrowLength={0}
                 linkWidth={linkWidth}
                 linkMaterial={linkMaterial3D}
+                linkHoverPrecision={4}
                 width={size.w}
                 height={Math.max(0, size.h - 48)}
                 cooldownTicks={90}
@@ -427,7 +598,7 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gray-50 dark:bg-gray-950">
             <Card
-              className="w-[720px] max-w-[92vw] shadow-lg"
+              className="w-[820px] max-w-[96vw] shadow-lg"
               title="Build plagiarism graph"
               extra={<Tag color="blue">{mode.toUpperCase()}</Tag>}
             >
@@ -478,6 +649,23 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
                       className="mt-2"
                     />
                   </div>
+
+                  <div className="flex-1 min-w-[260px]">
+                    <Typography.Text type="secondary">Report</Typography.Text>
+                    <Select
+                      className="mt-2 w-full"
+                      loading={reportsLoading}
+                      value={reportId}
+                      onChange={(v) => setReportId(v)}
+                      options={[
+                        { label: 'All reports', value: 'all' as const },
+                        ...reports.map((r) => ({
+                          label: `#${r.id} — ${new Date(r.generated_at).toLocaleString()}`,
+                          value: r.id,
+                        })),
+                      ]}
+                    />
+                  </div>
                 </Space>
 
                 {error && <Typography.Text type="danger">Error: {error}</Typography.Text>}
@@ -491,6 +679,7 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
                         setStatus('all');
                         setSimRange([0, 100]);
                         setUsername('');
+                        setReportId('all');
                       }}
                     >
                       Reset fields
@@ -522,7 +711,34 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
             style={{ position: 'fixed', inset: 0, zIndex: 1999 }}
           />
           <Dropdown
-            menu={{ items: contextMenu }}
+            menu={{
+              items: [
+                {
+                  key: 'filter',
+                  label: 'Show connections',
+                  onClick: () => {
+                    if (contextNode) {
+                      const nid = String(contextNode.id);
+                      const uname = usernameFromNodeId(nid); // extract username
+                      setUsername(uname);
+                      setPanelOpen(false);
+                      fetchGraph({ user: uname }); // backend expects username substring
+                    }
+                    setContextNode(null);
+                    setMenuPos(null);
+                  },
+                },
+                {
+                  key: 'clear-user',
+                  label: 'Clear username filter',
+                  onClick: () => {
+                    clearUsernameFilter();
+                    setContextNode(null);
+                    setMenuPos(null);
+                  },
+                },
+              ],
+            }}
             open
             trigger={[]}
             onOpenChange={(o) => {
@@ -555,6 +771,7 @@ const PlagiarismGraph: React.FC<PlagiarismGraphProps> = ({
         onClick={onClose}
         style={{ right: 24, bottom: 24, position: 'fixed', zIndex: 1001 }}
       />
+
       <FloatButton.Group
         shape="circle"
         trigger="click"

@@ -1,17 +1,12 @@
 use axum::{
-    extract::{State, Path},
+    Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
-use sea_orm::{
-    ActiveModelTrait,
-    ColumnTrait,
-    EntityTrait,
-    QueryFilter,
-};
-use serde_json::json;
 use db::models::assignment_file;
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
+use serde_json::json;
 use util::state::AppState;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/files
@@ -84,9 +79,15 @@ pub async fn delete_files(
 
     let found_models = match assignment_file::Entity::find()
         .filter(assignment_file::Column::AssignmentId.eq(assignment_id as i32))
-        .filter(assignment_file::Column::Id.is_in(
-            file_ids.iter().copied().map(|id| id as i32).collect::<Vec<_>>(),
-        ))
+        .filter(
+            assignment_file::Column::Id.is_in(
+                file_ids
+                    .iter()
+                    .copied()
+                    .map(|id| id as i32)
+                    .collect::<Vec<_>>(),
+            ),
+        )
         .all(db)
         .await
     {

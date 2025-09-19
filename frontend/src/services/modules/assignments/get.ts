@@ -1,14 +1,21 @@
-import type { PaginationRequest } from "@/types/common";
+import type { PaginationRequest, PaginationResponse } from "@/types/common";
 import type { 
-  GetListAssignmentsResponse, 
-  GetAssignmentResponse, 
-  Assignment, 
-  AssignmentFile, 
-  GetListAssignmentFilesResponse, 
   AssignmentType,
-  GetAssignmentReadinessResponse,
-  BestMark} from "@/types/modules/assignments";
-import { apiDownload, apiFetch, buildQuery } from "@/utils/api";
+  AssignmentDetails,
+  AssignmentReadiness,
+  AssignmentFile,
+  Assignment,
+  AssignmentStats,
+} from "@/types/modules/assignments";
+import { api, apiDownload, apiFetchBlob, buildQuery } from "@/utils/api";
+
+// ─────────────────────────────────────────────────────────────
+// GET Responses Types
+// ─────────────────────────────────────────────────────────────
+
+type GetListAssignmentsResponse = {
+  assignments: Assignment[];
+} & PaginationResponse;
 
 export const listAssignments = async (
   moduleId: number,
@@ -20,38 +27,22 @@ export const listAssignments = async (
     due_before?: string;
     due_after?: string;
   } & PaginationRequest
-): Promise<GetListAssignmentsResponse> => {
-  return apiFetch(`/modules/${moduleId}/assignments?${buildQuery(options)}`);
+) => {
+  return api.get<GetListAssignmentsResponse>(`/modules/${moduleId}/assignments?${buildQuery(options)}`);
 };
 
 export const getAssignmentDetails = async (
   moduleId: number,
   assignmentId: number
-): Promise<GetAssignmentResponse> => {
-  const res = await apiFetch<{
-    assignment: Assignment;
-    files: AssignmentFile[];
-    best_mark?: BestMark;
-  }>(`/modules/${moduleId}/assignments/${assignmentId}`);
-
-  const merged = {
-    ...res.data.assignment,
-    files: res.data.files,
-    best_mark: res.data.best_mark,
-  };
-
-  return {
-    success: res.success,
-    message: res.message,
-    data: merged,
-  };
+) => {
+  return await api.get<AssignmentDetails>(`/modules/${moduleId}/assignments/${assignmentId}`);
 };
 
 export const listAssignmentFiles = async (
   moduleId: number,
   assignmentId: number
-): Promise<GetListAssignmentFilesResponse> => {
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/files`);
+) => {
+  return api.get<AssignmentFile[]>(`/modules/${moduleId}/assignments/${assignmentId}/files`);
 };
 
 export const downloadAssignmentFile = async (
@@ -62,9 +53,24 @@ export const downloadAssignmentFile = async (
   return apiDownload(`/modules/${moduleId}/assignments/${assignmentId}/files/${fileId}`);
 };
 
+export const fetchAssignmentFileBlob = async (
+  moduleId: number,
+  assignmentId: number,
+  fileId: number,
+): Promise<Blob> => {
+  return apiFetchBlob(`/modules/${moduleId}/assignments/${assignmentId}/files/${fileId}`);
+};
+
 export const getAssignmentReadiness = async (
   moduleId: number,
   assignmentId: number
-): Promise<GetAssignmentReadinessResponse> => {
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/readiness`);
+) => {
+  return api.get<AssignmentReadiness>(`/modules/${moduleId}/assignments/${assignmentId}/readiness`);
 };
+
+export async function getAssignmentStats(
+  moduleId: number,
+  assignmentId: number,
+) {
+  return await api.get<AssignmentStats>(`/modules/${moduleId}/assignments/${assignmentId}/stats`);
+}

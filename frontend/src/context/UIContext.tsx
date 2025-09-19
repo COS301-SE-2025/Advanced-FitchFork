@@ -13,6 +13,8 @@ interface UIContextType {
   isSm: boolean;
   isMd: boolean;
   isLg: boolean;
+  isXl: boolean;
+  isXxl: boolean;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
@@ -35,6 +37,8 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const isSm = !!screens.sm;
   const isMd = !!screens.md;
   const isLg = !!screens.lg;
+  const isXl = !!screens.xl;
+  const isXxl = !!screens.xxl;
 
   useEffect(() => {
     localStorage.setItem('compact', String(compact));
@@ -65,6 +69,8 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         isSm,
         isMd,
         isLg,
+        isXl,
+        isXxl,
       }}
     >
       <ConfigProvider

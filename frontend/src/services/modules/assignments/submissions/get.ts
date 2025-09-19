@@ -1,6 +1,11 @@
-import type { ApiResponse, PaginationRequest } from "@/types/common";
-import type { GetSubmissionListResponse, GetSubmissionDetailResponse, SubmissionTaskOutput } from "@/types/modules/assignments/submissions";
-import { apiDownload, apiFetch, apiFetchBlob, buildQuery } from "@/utils/api";
+import type { PaginationRequest, PaginationResponse } from "@/types/common";
+import type { SubmissionTaskOutput, Submission } from "@/types/modules/assignments/submissions";
+import { api, apiDownload, apiFetchBlob, buildQuery } from "@/utils/api";
+
+
+export type GetSubmissionListResponse = {
+  submissions: Submission[];
+} & PaginationResponse;
 
 export const getSubmissions = async (
   moduleId: number,
@@ -9,25 +14,25 @@ export const getSubmissions = async (
     username?: string;
     status?: string;
   } & PaginationRequest
-): Promise<GetSubmissionListResponse> => {
+) => {
   const query = buildQuery(options);
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/submissions?${query}`);
+  return api.get<GetSubmissionListResponse>(`/modules/${moduleId}/assignments/${assignmentId}/submissions?${query}`);
 };
 
 export const getSubmissionDetails = async (
   moduleId: number,
   assignmentId: number,
   submissionId: number
-): Promise<GetSubmissionDetailResponse> => {
-  return apiFetch(`/modules/${moduleId}/assignments/${assignmentId}/submissions/${submissionId}`);
+) => {
+  return api.get<Submission>(`/modules/${moduleId}/assignments/${assignmentId}/submissions/${submissionId}`);
 };
 
 export async function getSubmissionOutput(
   moduleId: number,
   assignmentId: number,
   submissionId: number
-): Promise<ApiResponse<SubmissionTaskOutput[]>> {
-  return apiFetch(
+) {
+  return api.get<SubmissionTaskOutput[]>(
     `/modules/${moduleId}/assignments/${assignmentId}/submissions/${submissionId}/output`
   );
 }

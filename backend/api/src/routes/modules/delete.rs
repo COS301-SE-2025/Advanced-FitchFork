@@ -6,17 +6,17 @@
 //!
 //! All responses follow the standard `ApiResponse` format.
 
+use crate::response::ApiResponse;
 use axum::{
-    extract::{State, Path},
+    Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-use util::state::AppState;
-use crate::response::ApiResponse;
 use db::models::module;
-use serde::{Serialize, Deserialize};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use serde::{Deserialize, Serialize};
+use util::state::AppState;
 use validator::Validate;
 
 /// DELETE /api/modules/{module_id}
@@ -54,7 +54,7 @@ use validator::Validate;
 /// ```
 pub async fn delete_module(
     State(state): State<AppState>,
-    Path(module_id): Path<i64>
+    Path(module_id): Path<i64>,
 ) -> impl IntoResponse {
     let db = state.db();
 
@@ -63,18 +63,22 @@ pub async fn delete_module(
         .one(db)
         .await
     {
-        Ok(Some(m)) => {
-            match m.delete(db).await {
-                Ok(_) => (
-                    StatusCode::OK,
-                    Json(ApiResponse::<()>::success((), "Module deleted successfully")),
-                ),
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error(format!("Failed to delete module: {}", e))),
-                ),
-            }
-        }
+        Ok(Some(m)) => match m.delete(db).await {
+            Ok(_) => (
+                StatusCode::OK,
+                Json(ApiResponse::<()>::success(
+                    (),
+                    "Module deleted successfully",
+                )),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!(
+                    "Failed to delete module: {}",
+                    e
+                ))),
+            ),
+        },
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Module not found")),
@@ -164,17 +168,15 @@ pub async fn bulk_delete_modules(
             .one(db)
             .await
         {
-            Ok(Some(module_model)) => {
-                match module_model.delete(db).await {
-                    Ok(_) => deleted_count += 1,
-                    Err(e) => {
-                        failed.push(FailedDelete {
-                            id,
-                            error: format!("Failed to delete module: {}", e),
-                        });
-                    }
+            Ok(Some(module_model)) => match module_model.delete(db).await {
+                Ok(_) => deleted_count += 1,
+                Err(e) => {
+                    failed.push(FailedDelete {
+                        id,
+                        error: format!("Failed to delete module: {}", e),
+                    });
                 }
-            }
+            },
             Ok(None) => {
                 failed.push(FailedDelete {
                     id,
@@ -195,14 +197,7 @@ pub async fn bulk_delete_modules(
         failed,
     };
 
-    let message = format!(
-        "Deleted {}/{} modules",
-        deleted_count,
-        req.module_ids.len()
-    );
+    let message = format!("Deleted {}/{} modules", deleted_count, req.module_ids.len());
 
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(result, message)),
-    )
+    (StatusCode::OK, Json(ApiResponse::success(result, message)))
 }

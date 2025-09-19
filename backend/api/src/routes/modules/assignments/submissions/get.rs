@@ -2,9 +2,9 @@
 //!
 //! Provides endpoints to manage and retrieve assignment submissions.
 //!
-//! Users can retrieve their own submissions or, if authorized (lecturers, tutors, admins), 
-//! retrieve all submissions for a given assignment. The endpoints support filtering, sorting, 
-//! and pagination. Submission details include marks, late status, practice status, tasks, 
+//! Users can retrieve their own submissions or, if authorized (lecturers, tutors, admins),
+//! retrieve all submissions for a given assignment. The endpoints support filtering, sorting,
+//! and pagination. Submission details include marks, late status, practice status, tasks,
 //! code coverage, and code complexity analysis.
 
 use super::common::{
@@ -14,24 +14,27 @@ use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     Extension, Json,
     extract::{Path, Query, State},
-    http::{header, HeaderMap, HeaderValue, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
 use db::models::{
-    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity}, 
-    assignment_submission::{self, Entity as SubmissionEntity}, assignment_submission_output::Model as SubmissionOutput, assignment_task, user, user_module_role::{self, Role},
+    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
+    assignment_submission::{self, Entity as SubmissionEntity},
     assignment_submission::{Column as SubmissionColumn, Model as SubmissionModel},
+    assignment_submission_output::Model as SubmissionOutput,
+    assignment_task, user,
+    user_module_role::{self, Role},
 };
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, RelationTrait, sea_query::{Expr, Func}, QueryTrait,
+    QueryOrder, QuerySelect, QueryTrait, RelationTrait,
+    sea_query::{Expr, Func},
 };
 use serde::Serialize;
 use serde_json::Value;
+use std::{collections::HashMap, fs, path::PathBuf};
 use util::state::AppState;
-use std::{fs, path::PathBuf};
-use tokio::{fs::File as FsFile, io::AsyncReadExt};
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
@@ -71,6 +74,8 @@ fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
 ///
 /// ### Notes
 /// - No filtering on other students or usernames is possible in this endpoint.
+use util::paths::submission_report_path; // add near the other imports
+
 async fn get_user_submissions(
     db: &DatabaseConnection,
     module_id: i64,
@@ -97,8 +102,10 @@ async fn get_user_submissions(
     if let Some(query) = &params.query {
         let pattern = format!("%{}%", query.to_lowercase());
         condition = condition.add(
-            Expr::expr(Func::lower(Expr::col(assignment_submission::Column::Filename)))
-                .like(&pattern),
+            Expr::expr(Func::lower(Expr::col(
+                assignment_submission::Column::Filename,
+            )))
+            .like(&pattern),
         );
     }
 
@@ -147,9 +154,6 @@ async fn get_user_submissions(
         .await
         .unwrap_or_default();
 
-    let base =
-        std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
-
     let user_resp = {
         let u = user::Entity::find_by_id(user_id)
             .one(db)
@@ -174,13 +178,9 @@ async fn get_user_submissions(
     let mut items: Vec<SubmissionListItem> = rows
         .into_iter()
         .map(|s| {
-            let report_path = PathBuf::from(&base)
-                .join(format!("module_{module_id}"))
-                .join(format!("assignment_{assignment_id}"))
-                .join("assignment_submissions")
-                .join(format!("user_{}", s.user_id))
-                .join(format!("attempt_{}", s.attempt))
-                .join("submission_report.json");
+            // Centralized report path
+            let report_path =
+                submission_report_path(module_id, assignment_id, s.user_id, s.attempt);
 
             let (mark, is_practice) = match fs::read_to_string(&report_path) {
                 Ok(content) => {
@@ -348,8 +348,10 @@ async fn get_list_submissions(
         // LOWER(filename) LIKE %pattern% OR user_id IN (subquery)
         let or_condition = Condition::any()
             .add(
-                Expr::expr(Func::lower(Expr::col(assignment_submission::Column::Filename)))
-                    .like(&pattern),
+                Expr::expr(Func::lower(Expr::col(
+                    assignment_submission::Column::Filename,
+                )))
+                .like(&pattern),
             )
             .add(assignment_submission::Column::UserId.in_subquery(user_ids_subq));
 
@@ -415,9 +417,6 @@ async fn get_list_submissions(
         .await
         .unwrap_or_default();
 
-    let base =
-        std::env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
-
     let mut items: Vec<SubmissionListItem> = rows
         .into_iter()
         .map(|(s, u)| {
@@ -435,13 +434,8 @@ async fn get_list_submissions(
                 }
             };
 
-            let report_path = PathBuf::from(&base)
-                .join(format!("module_{module_id}"))
-                .join(format!("assignment_{assignment_id}"))
-                .join("assignment_submissions")
-                .join(format!("user_{}", s.user_id))
-                .join(format!("attempt_{}", s.attempt))
-                .join("submission_report.json");
+            let report_path =
+                submission_report_path(module_id, assignment_id, s.user_id, s.attempt);
 
             let (mark, is_practice) = match fs::read_to_string(&report_path) {
                 Ok(content) => {
@@ -662,21 +656,13 @@ pub async fn list_submissions(
 ///   "message": "Failed to parse submission report"
 /// }
 /// ```
-/// or
-/// ```json
-/// {
-///   "success": false,
-///   "message": "ASSIGNMENT_STORAGE_ROOT not set"
-/// }
-/// ```
 ///
 /// ### Notes
-/// - The submission report is read from the filesystem at:
-///   `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/assignment_submissions/user_{user_id}/attempt_{attempt}/submission_report.json`
 /// - User metadata is only included for non-student users (lecturers, tutors, admins)
 /// - The response contains the complete grading report including marks, tasks, and optional
 ///   code coverage/complexity analysis
 /// - Access is restricted to users with appropriate permissions for the module
+
 pub async fn get_submission(
     State(app_state): State<AppState>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
@@ -732,24 +718,7 @@ pub async fn get_submission(
     let user_id = submission.user_id;
     let attempt = submission.attempt;
 
-    let base = match std::env::var("ASSIGNMENT_STORAGE_ROOT") {
-        Ok(val) => val,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("ASSIGNMENT_STORAGE_ROOT not set")),
-            )
-                .into_response();
-        }
-    };
-
-    let path = PathBuf::from(&base)
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id))
-        .join("assignment_submissions")
-        .join(format!("user_{}", user_id))
-        .join(format!("attempt_{}", attempt))
-        .join("submission_report.json");
+    let path = submission_report_path(module_id, assignment_id, user_id, attempt);
 
     let content = match fs::read_to_string(&path) {
         Ok(c) => c,
@@ -775,6 +744,77 @@ pub async fn get_submission(
         }
     };
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Enrich task names: replace numeric task IDs or task_numbers with real names
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    let (by_id, by_num): (HashMap<i64, String>, HashMap<i64, String>) =
+        match assignment_task::Entity::find()
+            .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
+            .all(db)
+            .await
+        {
+            Ok(rows) => {
+                let mut id_map = HashMap::with_capacity(rows.len());
+                let mut num_map = HashMap::with_capacity(rows.len());
+                for t in rows {
+                    id_map.insert(t.id, t.name.clone());
+                    num_map.insert(t.task_number, t.name);
+                }
+                (id_map, num_map)
+            }
+            Err(err) => {
+                eprintln!(
+                    "get_submission: failed to load tasks for enrichment: {:?}",
+                    err
+                );
+                (HashMap::new(), HashMap::new())
+            }
+        };
+
+    if let Some(tasks) = parsed.get_mut("tasks").and_then(|v| v.as_array_mut()) {
+        for task_val in tasks.iter_mut() {
+            // Capture current name as owned string (may be string or number)
+            let name_str_owned: Option<String> = task_val.get("name").and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s.to_string())
+                } else if let Some(n) = v.as_i64() {
+                    Some(n.to_string())
+                } else {
+                    None
+                }
+            });
+
+            // Also capture task_number (if present)
+            let task_number_opt: Option<i64> = task_val.get("task_number").and_then(|v| v.as_i64());
+
+            // Decide on the best replacement
+            let replacement: Option<String> = (|| {
+                // 1) If name is numeric → treat as task_id
+                if let Some(name_s) = &name_str_owned {
+                    if let Ok(task_id) = name_s.trim().parse::<i64>() {
+                        if let Some(real) = by_id.get(&task_id) {
+                            return Some(real.clone());
+                        }
+                    }
+                }
+                // 2) Fallback: use task_number if available
+                if let Some(tn) = task_number_opt {
+                    if let Some(real) = by_num.get(&tn) {
+                        return Some(real.clone());
+                    }
+                }
+                None
+            })();
+
+            // Mutate only if we have a real name
+            if let (Some(obj), Some(real_name)) = (task_val.as_object_mut(), replacement) {
+                obj.insert("name".to_string(), serde_json::Value::String(real_name));
+            }
+        }
+    }
+
+    // If the requester is not a student, append minimal user info
     if !is_student(module_id, claims.sub, db).await {
         if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(db).await {
             let user_value = serde_json::to_value(UserResponse {
@@ -782,8 +822,7 @@ pub async fn get_submission(
                 username: u.username,
                 email: u.email,
             })
-            .unwrap(); // safe since UserResponse is serializable
-
+            .unwrap();
             if let Some(obj) = parsed.as_object_mut() {
                 obj.insert("user".to_string(), user_value);
             }
@@ -812,23 +851,26 @@ pub async fn get_submission_output(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    let output = match SubmissionOutput::get_output(db, module_id, assignment_id, submission_id).await {
-        Ok(output) => output,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Failed to retrieve submission output")),
-            )
-            .into_response();
-        }
-    };
+    let output =
+        match SubmissionOutput::get_output(db, module_id, assignment_id, submission_id).await {
+            Ok(output) => output,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error(
+                        "Failed to retrieve submission output",
+                    )),
+                )
+                    .into_response();
+            }
+        };
 
     if output.is_empty() {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Submission output not found")),
         )
-        .into_response();
+            .into_response();
     }
 
     let mut memo_data = Vec::new();
@@ -854,14 +896,16 @@ pub async fn get_submission_output(
                         task_id, assignment_id
                     ))),
                 )
-                .into_response();
+                    .into_response();
             }
             Err(_) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error("Database error while fetching task info")),
+                    Json(ApiResponse::<()>::error(
+                        "Database error while fetching task info",
+                    )),
                 )
-                .into_response();
+                    .into_response();
             }
         }
     }
@@ -873,7 +917,7 @@ pub async fn get_submission_output(
             "Fetched memo output successfully",
         )),
     )
-    .into_response()
+        .into_response()
 }
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}/download
@@ -887,7 +931,7 @@ pub async fn download_submission_file(
 ) -> Response {
     let db = app_state.db();
 
-    // Still load records we need for auth + filename/path.
+    // Load assignment (module guard)
     let assignment = match AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id))
         .filter(AssignmentColumn::ModuleId.eq(module_id))
@@ -900,17 +944,18 @@ pub async fn download_submission_file(
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::error("Assignment not found")),
             )
-                .into_response()
+                .into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Database error")),
             )
-                .into_response()
+                .into_response();
         }
     };
 
+    // Load submission
     let submission: SubmissionModel = match SubmissionEntity::find()
         .filter(SubmissionColumn::Id.eq(submission_id))
         .filter(SubmissionColumn::AssignmentId.eq(assignment.id))
@@ -923,18 +968,18 @@ pub async fn download_submission_file(
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::error("Submission not found")),
             )
-                .into_response()
+                .into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Database error")),
             )
-                .into_response()
+                .into_response();
         }
     };
 
-    // Authorization: allow owner or module staff or admin
+    // Authorization: owner, staff on this module, or admin
     let is_owner = claims.sub == submission.user_id;
     let is_admin = claims.admin;
     let is_staff = if is_admin {
@@ -942,22 +987,31 @@ pub async fn download_submission_file(
     } else {
         let uid = claims.sub;
         let mid = assignment.module_id;
-        let lect = user::Model::is_in_role(db, uid, mid, "Lecturer").await.unwrap_or(false);
-        let al   = user::Model::is_in_role(db, uid, mid, "AssistantLecturer").await.unwrap_or(false);
-        let tut  = user::Model::is_in_role(db, uid, mid, "Tutor").await.unwrap_or(false);
+        let lect = user::Model::is_in_role(db, uid, mid, "Lecturer")
+            .await
+            .unwrap_or(false);
+        let al = user::Model::is_in_role(db, uid, mid, "AssistantLecturer")
+            .await
+            .unwrap_or(false);
+        let tut = user::Model::is_in_role(db, uid, mid, "Tutor")
+            .await
+            .unwrap_or(false);
         lect || al || tut
     };
 
     if !(is_owner || is_staff || is_admin) {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("Not authorized to download this submission")),
+            Json(ApiResponse::<()>::error(
+                "Not authorized to download this submission",
+            )),
         )
             .into_response();
     }
 
-    // Resolve file path and read bytes
+    // Resolve file path from the stored relative path (submission.full_path() joins STORAGE_ROOT)
     let full_path: PathBuf = submission.full_path();
+
     if tokio::fs::metadata(&full_path).await.is_err() {
         return (
             StatusCode::NOT_FOUND,
@@ -966,25 +1020,17 @@ pub async fn download_submission_file(
             .into_response();
     }
 
-    let mut fh = match FsFile::open(&full_path).await {
-        Ok(f) => f,
+    // Read file bytes
+    let buffer = match tokio::fs::read(&full_path).await {
+        Ok(b) => b,
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Could not open file")),
+                Json(ApiResponse::<()>::error("Failed to read file")),
             )
-                .into_response()
+                .into_response();
         }
     };
-
-    let mut buffer = Vec::new();
-    if let Err(_) = fh.read_to_end(&mut buffer).await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error("Failed to read file")),
-        )
-            .into_response();
-    }
 
     // Build response with sensible headers
     let mut headers = HeaderMap::new();
@@ -993,7 +1039,10 @@ pub async fn download_submission_file(
         HeaderValue::from_str(&format!("attachment; filename=\"{}\"", submission.filename))
             .unwrap_or_else(|_| HeaderValue::from_static("attachment")),
     );
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
 
     (StatusCode::OK, headers, buffer).into_response()
 }

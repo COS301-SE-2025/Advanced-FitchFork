@@ -15,7 +15,7 @@ mod tests {
     use serde_json::json;
     use tower::ServiceExt;
 
-    use crate::helpers::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         user: UserModel,
@@ -57,7 +57,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_ticket_test() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.user.id, data.user.admin);
         let uri = format!(
@@ -91,7 +91,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_invalid_ticket_test() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let uri = format!(
             "/api/modules/{}/assignments/{}/tickets",

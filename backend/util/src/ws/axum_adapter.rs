@@ -1,14 +1,18 @@
 // util/ws/axum_adapter.rs
-use std::sync::Arc;
-use axum::{extract::{State, WebSocketUpgrade, ws::WebSocket}, response::IntoResponse, Extension};
-use crate::state::AppState;
-use super::serve::{serve_topic, WsServerOptions};
 use super::handler_trait::WsHandler;
+use super::serve::{WsServerOptions, serve_topic};
+use crate::state::AppState;
+use axum::{
+    Extension,
+    extract::{State, WebSocketUpgrade, ws::WebSocket},
+    response::IntoResponse,
+};
+use std::sync::Arc;
 
 pub async fn ws_route<H, FTopic, Uid>(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
-    Extension(user_id): Extension<Uid>,  // could be Option<AuthUser> or AuthUser
+    Extension(user_id): Extension<Uid>, // could be Option<AuthUser> or AuthUser
     topic_fn: FTopic,
     handler: Arc<H>,
     opts: WsServerOptions,

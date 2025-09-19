@@ -5,9 +5,12 @@ use axum::{
     http::StatusCode,
 };
 use code_runner::create_memo_outputs_for_all_tasks;
-use util::state::AppState;
-use std::{env, fs, path::PathBuf};
+use std::fs;
 use tracing::{error, info};
+use util::{
+    paths::{config_dir, memo_dir},
+    state::AppState,
+};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/memo_output/generate
 ///
@@ -71,8 +74,7 @@ use tracing::{error, info};
 /// ```
 ///
 /// ### Directory Requirements
-/// The endpoint validates the presence of required directories under:
-/// `ASSIGNMENT_STORAGE_ROOT/module_{module_id}/assignment_{assignment_id}/`
+/// The endpoint validates the presence of required directories under and assignment:
 ///
 /// - `memo/` directory: Must exist and contain at least one file
 ///   - Contains memo files that define expected outputs for each task
@@ -100,21 +102,11 @@ pub async fn generate_memo_output(
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let db = app_state.db();
 
-    let base_path =
-        env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".into());
-
-    let assignment_root = PathBuf::from(&base_path)
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id));
-
-    let memo_dir = assignment_root.join("memo");
+    // Use centralized helpers for directories
+    let memo_dir = memo_dir(module_id, assignment_id);
     let memo_valid = memo_dir.is_dir()
         && fs::read_dir(&memo_dir)
-            .map(|entries| {
-                entries
-                    .filter_map(Result::ok)
-                    .any(|entry| entry.path().is_file())
-            })
+            .map(|mut entries| entries.any(|e| e.ok().map(|f| f.path().is_file()).unwrap_or(false)))
             .unwrap_or(false);
 
     if !memo_valid {
@@ -126,14 +118,10 @@ pub async fn generate_memo_output(
         );
     }
 
-    let config_dir = assignment_root.join("config");
-    let config_valid = config_dir.is_dir()
-        && fs::read_dir(&config_dir)
-            .map(|entries| {
-                entries
-                    .filter_map(Result::ok)
-                    .any(|entry| entry.path().is_file())
-            })
+    let cfg_dir = config_dir(module_id, assignment_id);
+    let config_valid = cfg_dir.is_dir()
+        && fs::read_dir(&cfg_dir)
+            .map(|mut entries| entries.any(|e| e.ok().map(|f| f.path().is_file()).unwrap_or(false)))
             .unwrap_or(false);
 
     if !config_valid {
@@ -158,15 +146,74 @@ pub async fn generate_memo_output(
             )
         }
         Err(e) => {
-            println!("{}", e);
+            let err_str = e.to_string();
             error!(
-                "Memo output generation failed for assignment {}: {:?}",
-                assignment_id, e
+                "Memo output generation failed for assignment {}: {}",
+                assignment_id, err_str
             );
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Failed to generate memo output")),
-            )
+
+            // Map low-level error strings to user-friendly messages + appropriate status codes.
+            let (status, message) = if err_str.contains("Config validation failed")
+                || err_str.contains("Failed to load execution config")
+            {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "Your configuration is missing or invalid. Open the Config step and save settings before generating memo output.",
+                )
+            } else if err_str.contains("memo")
+                && (err_str.contains("Required directory")
+                    || err_str.contains("Missing directory")
+                    || err_str.contains("No .zip"))
+            {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "Memo archive (.zip) not found. Upload your Memo files under Files & Resources.",
+                )
+            } else if err_str.contains("makefile")
+                && (err_str.contains("Required directory")
+                    || err_str.contains("Missing directory")
+                    || err_str.contains("No .zip"))
+            {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "Makefile archive (.zip) not found. Upload a Makefile under Files & Resources.",
+                )
+            } else if err_str.contains("main")
+                && (err_str.contains("Required directory")
+                    || err_str.contains("Missing directory")
+                    || err_str.contains("No .zip"))
+            {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "Main files (.zip) not found. In manual mode, upload Main Files; in GATLAM mode, ensure the Interpreter is configured.",
+                )
+            } else if err_str.contains("No tasks are defined") || err_str.contains("No tasks found")
+            {
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "No tasks are defined yet. Add at least one task and try again.",
+                )
+            } else if err_str.contains("Failed to send request to code_manager") {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "The runner service is unavailable. Please try again shortly or contact support if it persists.",
+                )
+            } else if err_str.contains("code_manager responded with error")
+                || err_str.contains("Failed to parse response JSON")
+                || err_str.contains("Response missing 'output'")
+            {
+                (
+                    StatusCode::BAD_GATEWAY,
+                    "The runner failed to execute your tasks. Check your build/commands and execution limits, then retry.",
+                )
+            } else {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to generate memo output. Please retry; if it continues, contact support.",
+                )
+            };
+
+            (status, Json(ApiResponse::<()>::error(message)))
         }
     }
 }

@@ -3,8 +3,8 @@
 //! This struct holds shared resources such as the database connection and WebSocket manager.
 //! It is typically wrapped in an `Arc` and passed into route handlers via Axum's `State<T>` extractor.
 
-use sea_orm::DatabaseConnection;
 use crate::ws::WebSocketManager;
+use sea_orm::DatabaseConnection;
 
 /// Central application state shared across the server.
 ///

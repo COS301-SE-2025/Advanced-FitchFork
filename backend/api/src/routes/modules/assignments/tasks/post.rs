@@ -17,6 +17,8 @@ pub struct CreateTaskRequest {
     task_number: i64,
     name: String,
     command: String,
+    /// Optional; defaults to false. When true, this task is a **coverage-type** task.
+    code_coverage: Option<bool>,
 }
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/tasks
@@ -37,7 +39,8 @@ pub struct CreateTaskRequest {
 /// {
 ///   "task_number": 1,
 ///   "name": "Unit Tests",
-///   "command": "cargo test --lib"
+///   "command": "cargo test --lib",
+///   "code_coverage": false
 /// }
 /// ```
 ///
@@ -45,16 +48,18 @@ pub struct CreateTaskRequest {
 /// - `task_number` (i64, required): Unique sequential number for the task within the assignment
 /// - `name` (string, required): Short descriptive name for the task (e.g., "Compile", "Unit Tests")
 /// - `command` (string, required): Command to execute for this task (e.g., test commands, build scripts)
+/// - `code_coverage` (boolean, optional, default: false): Marks this task as a **coverage-type** task
 ///
 /// ### Example Request
 /// ```bash
 /// curl -X POST http://localhost:3000/api/modules/1/assignments/2/tasks \
-///   -H "Authorization: Bearer <token>" \
+///   -H "Authorization: Bearer <token)" \
 ///   -H "Content-Type: application/json" \
 ///   -d '{
 ///     "task_number": 1,
-///     "name": "Unit Tests",
-///     "command": "cargo test --lib"
+///     "name": "Coverage run",
+///     "command": "cargo llvm-cov --no-report",
+///     "code_coverage": true
 ///   }'
 /// ```
 ///
@@ -66,8 +71,9 @@ pub struct CreateTaskRequest {
 ///   "data": {
 ///     "id": 123,
 ///     "task_number": 1,
-///     "name": "Unit Tests",
-///     "command": "cargo test --lib",
+///     "name": "Coverage run",
+///     "command": "cargo llvm-cov --no-report",
+///     "code_coverage": true,
 ///     "created_at": "2024-01-01T00:00:00Z",
 ///     "updated_at": "2024-01-01T00:00:00Z"
 ///   }
@@ -78,49 +84,31 @@ pub struct CreateTaskRequest {
 ///
 /// **400 Bad Request** - Invalid JSON body
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Invalid JSON body"
-/// }
+/// { "success": false, "message": "Invalid JSON body" }
 /// ```
 ///
 /// **403 Forbidden** - Insufficient permissions
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Access denied"
-/// }
+/// { "success": false, "message": "Access denied" }
 /// ```
 ///
 /// **404 Not Found** - Assignment or module not found
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Assignment or module not found"
-/// }
+/// { "success": false, "message": "Assignment or module not found" }
 /// ```
 ///
 /// **422 Unprocessable Entity** - Validation errors
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Invalid task_number, name, or command"
-/// }
+/// { "success": false, "message": "Invalid task_number, name, or command" }
 /// ```
 /// or
 /// ```json
-/// {
-///   "success": false,
-///   "message": "task_number must be unique"
-/// }
+/// { "success": false, "message": "task_number must be unique" }
 /// ```
 ///
 /// **500 Internal Server Error** - Database or server error
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Failed to create task"
-/// }
+/// { "success": false, "message": "Failed to create task" }
 /// ```
 ///
 /// ### Validation Rules
@@ -132,7 +120,7 @@ pub struct CreateTaskRequest {
 ///
 /// ### Notes
 /// - Tasks are executed in order of their `task_number` during assignment evaluation
-/// - The `command` field supports any shell command that can be executed in the evaluation environment
+/// - `code_coverage: true` designates a **coverage-type** task (the evaluator may apply coverage-specific handling)
 /// - Task creation is restricted to users with appropriate module permissions
 pub async fn create_task(
     State(app_state): State<AppState>,
@@ -156,18 +144,27 @@ pub async fn create_task(
     }
 
     // Ensure task_number uniqueness
-    let exists = Entity::find()
+    match Entity::find()
         .filter(Column::AssignmentId.eq(assignment_id))
         .filter(Column::TaskNumber.eq(payload.task_number))
         .one(db)
-        .await;
-
-    if let Ok(Some(_)) = exists {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<()>::error("task_number must be unique")),
-        )
-            .into_response();
+        .await
+    {
+        Ok(Some(_)) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ApiResponse::<()>::error("task_number must be unique")),
+            )
+                .into_response();
+        }
+        Ok(None) => {}
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to create task")),
+            )
+                .into_response();
+        }
     }
 
     let now = Utc::now();
@@ -176,8 +173,9 @@ pub async fn create_task(
         task_number: sea_orm::ActiveValue::Set(payload.task_number),
         name: sea_orm::ActiveValue::Set(payload.name.clone()),
         command: sea_orm::ActiveValue::Set(payload.command.clone()),
-        created_at: sea_orm::ActiveValue::Set(now.clone()),
-        updated_at: sea_orm::ActiveValue::Set(now.clone()),
+        code_coverage: sea_orm::ActiveValue::Set(payload.code_coverage.unwrap_or(false)),
+        created_at: sea_orm::ActiveValue::Set(now),
+        updated_at: sea_orm::ActiveValue::Set(now),
         ..Default::default()
     };
 
