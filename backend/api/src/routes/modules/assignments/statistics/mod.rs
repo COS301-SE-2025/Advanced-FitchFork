@@ -7,7 +7,7 @@
 
 use axum::{Router, middleware::from_fn_with_state, routing::get};
 
-use crate::auth::guards::require_lecturer_or_assistant_lecturer;
+use crate::auth::guards::allow_assistant_lecturer;
 use get::get_assignment_stats;
 use util::state::AppState;
 
@@ -18,7 +18,7 @@ pub fn statistics_routes(app_state: AppState) -> Router<AppState> {
         "/",
         get(get_assignment_stats).route_layer(from_fn_with_state(
             app_state.clone(),
-            require_lecturer_or_assistant_lecturer,
+            allow_assistant_lecturer,
         )),
     )
 }
