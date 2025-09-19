@@ -787,7 +787,10 @@ pub async fn hash_scan(
 
     let exec_config = ExecutionConfig::get_execution_config(module_id, assignment_id)
         .unwrap_or_else(|_| ExecutionConfig::default_config());
-    let policy_used = exec_config.marking.grading_policy.to_string();
+    let policy_used = match exec_config.marking.grading_policy {
+        util::execution_config::GradingPolicy::Best => "Best",
+        util::execution_config::GradingPolicy::Last => "Last",
+    }.to_string();
 
     let selected_submissions: Vec<assignment_submission::Model> =
         match assignment_submission::Model::get_selected_submissions_for_assignment(

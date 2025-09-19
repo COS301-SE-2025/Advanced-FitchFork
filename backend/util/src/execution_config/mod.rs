@@ -314,14 +314,6 @@ impl Default for SecurityOptions {
     }
 }
 
-use std::fmt;
-
-impl fmt::Display for GradingPolicy {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionConfig {
     #[serde(default)]
