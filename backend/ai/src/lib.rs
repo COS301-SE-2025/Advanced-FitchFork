@@ -20,6 +20,8 @@
 
 pub mod algorithms {
     pub mod genetic_algorithm;
+    pub mod rng;
+    pub mod code_coverage;
 }
 
 pub mod utils {
@@ -34,9 +36,12 @@ use code_runner::run_interpreter;
 use db::models::assignment_submission::Entity as AssignmentSubmission;
 use sea_orm::DatabaseConnection;
 use sea_orm::EntityTrait;
-// use serde_json::Value;
 use std::collections::HashMap;
 use util::execution_config::ExecutionConfig;
+
+use crate::algorithms::rng::{RandomGenomeGenerator as RngGen, GeneConfig as RngGeneConfig};
+use crate::algorithms::code_coverage::{coverage_percent_for_attempt, coverage_fitness};
+
 
 // -----------------------------------------------------------------------------
 // Public entrypoint: build GA + Evaluator + Components, then run the loop
@@ -115,6 +120,81 @@ pub async fn run_ga_job(
         assignment_id,
     )
     .await
+}
+
+pub async fn run_rng_job(
+    db: &DatabaseConnection,
+    submission_id: i64,
+    config: &ExecutionConfig,
+    module_id: i64,
+    assignment_id: i64,
+    iterations: usize,
+    seed: u64,
+) -> Result<(), String> {
+    let rng_cfgs = exec_to_rng_configs(config);
+    let mut generation = RngGen::new(seed);
+
+    // Resolve submission → (user_id, attempt_number)
+    let submission = AssignmentSubmission::find_by_id(submission_id)
+        .one(db).await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?
+        .ok_or_else(|| format!("Submission {} not found", submission_id))?;
+    let user_id = submission.user_id;
+    let attempt_number = submission.attempt;
+
+    for i in 0..iterations {
+        let payload = generation.generate_string(&rng_cfgs);
+        eprintln!("[RNG] iter={i} payload={payload}");
+        run_interpreter(db, submission_id, &payload).await?;
+
+        // Optional: verify tasks landed (no coverage read here)
+        let outs = Output::get_submission_output_no_coverage(
+            db, module_id, assignment_id, user_id, attempt_number
+        ).await.map_err(|e| e.to_string())?;
+        eprintln!("[RNG] iter={i} tasks_returned={}", outs.len());
+    }
+    Ok(())
+}
+
+pub async fn run_coverage_ga_job(
+    db: &DatabaseConnection,
+    submission_id: i64,
+    config: &ExecutionConfig,
+    module_id: i64,
+    assignment_id: i64,
+) -> Result<(), String> {
+    let mut ga = GeneticAlgorithm::from_execution_config(&config.clone());
+    let bits_per_gene = ga.bits_per_gene();
+
+    let submission = AssignmentSubmission::find_by_id(submission_id)
+        .one(db).await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?
+        .ok_or_else(|| format!("Submission {} not found", submission_id))?;
+    let user_id = submission.user_id;
+    let attempt_number = submission.attempt;
+
+    let gens = ga.config().number_of_generations;
+
+    for generation in 0..gens {
+        let mut fitness_scores = Vec::with_capacity(ga.population().len());
+
+        for chrom in ga.population().iter() {
+            let decoded = decode_genes(chrom.genes(), bits_per_gene);
+            let payload = decoded.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(",");
+            run_interpreter(db, submission_id, &payload).await?;
+            let percent = coverage_percent_for_attempt(
+                db, module_id, assignment_id, user_id, attempt_number
+            ).await?;
+            let score = coverage_fitness(percent);
+
+            eprintln!("[CoverageGA] gen={generation} coverage={percent:.2}% score={score:.3}");
+            fitness_scores.push(score);
+        }
+
+        ga.step_with_fitness(&fitness_scores);
+    }
+
+    Ok(())
 }
 
 // -----------------------------------------------------------------------------
@@ -258,6 +338,19 @@ where
 
     Ok(())
 }
+
+fn exec_to_rng_configs(cfg: &ExecutionConfig) -> Vec<RngGeneConfig> {
+    cfg.gatlam
+        .genes
+        .iter()
+        .map(|g| RngGeneConfig {
+            min_value: g.min_value,
+            max_value: g.max_value,
+            invalid_values: std::collections::HashSet::new(),
+        })
+        .collect()
+}
+
 // Fitness Components
 pub struct Components {
     omega1: f64,

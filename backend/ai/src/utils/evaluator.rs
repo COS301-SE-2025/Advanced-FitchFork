@@ -188,10 +188,6 @@ pub fn derive_props(
     }
 
     for (i, (task_id, blob)) in outs.iter().enumerate() {
-        eprintln!("--- Evaluating blob ---");
-        eprintln!("task_id={task_id}, index={i}");
-        eprintln!("{blob}");
-        eprintln!("------------------------");
 
         let spec = specs.get(i).unwrap_or_else(|| &specs[0]);
         let view = self.parse(*task_id, blob);
