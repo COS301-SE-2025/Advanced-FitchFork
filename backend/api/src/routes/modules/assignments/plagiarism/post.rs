@@ -774,8 +774,8 @@ pub struct CreatedCases {
 /// # Request Body
 ///
 /// Requires a JSON payload with the following optional field:
-/// - `create_cases` (boolean, default: false): Whether to automatically create plagiarism 
-///   cases for detected hash collisions. When true, creates cases with 100% similarity 
+/// - `create_cases` (boolean, default: false): Whether to automatically create plagiarism
+///   cases for detected hash collisions. When true, creates cases with 100% similarity
 ///   for each pair of submissions with identical hashes.
 ///
 /// # Behavior
@@ -875,7 +875,7 @@ pub struct CreatedCases {
 ///
 /// # Notes
 ///
-/// - Hash collisions indicate **exact file duplication**, which is stronger evidence 
+/// - Hash collisions indicate **exact file duplication**, which is stronger evidence
 ///   of plagiarism than similarity-based detection methods
 /// - This scan is complementary to MOSS-based similarity detection
 /// - Empty or missing file hashes are excluded from analysis
