@@ -1,18 +1,53 @@
-// src/hooks/useAttendanceSessionWs.ts
 import { useEffect, useMemo, useRef, useState } from "react";
 import { WS_BASE_URL } from "@/config/api";
 
 type Envelope =
   | { type: "ping" }
   | { event: "pong"; payload?: unknown }
-  | { event: "attendance_marked"; payload: { session_id: number; user_id: number; method: string; taken_at: string; count?: number } }
-  | { event: "session_updated"; payload: { active?: boolean } }
+  | {
+      event: "attendance_marked";
+      payload: {
+        session_id: number;
+        user_id: number;
+        method: string;
+        taken_at: string;
+        count?: number;
+      };
+    }
+  | {
+      event: "session_updated";
+      payload: {
+        session_id?: number;
+        active?: boolean;
+        rotation_seconds?: number;
+        title?: string;
+        restrict_by_ip?: boolean;
+        allowed_ip_cidr?: string | null;
+        created_from_ip?: string | null;
+      };
+    }
+  | { event: "session_deleted"; payload: { session_id: number } }
   | { event: "code_rotated"; payload?: unknown }
   | Record<string, unknown>;
 
 type Handlers = {
-  onMarked?: (p: { session_id: number; user_id: number; method: string; taken_at: string; count?: number }) => void;
-  onSessionUpdated?: (p: { active?: boolean }) => void;
+  onMarked?: (p: {
+    session_id: number;
+    user_id: number;
+    method: string;
+    taken_at: string;
+    count?: number;
+  }) => void;
+  onSessionUpdated?: (p: {
+    session_id?: number;
+    active?: boolean;
+    rotation_seconds?: number;
+    title?: string;
+    restrict_by_ip?: boolean;
+    allowed_ip_cidr?: string | null;
+    created_from_ip?: string | null;
+  }) => void;
+  onSessionDeleted?: (p: { session_id: number }) => void;
   onCodeRotated?: () => void;
 };
 
@@ -27,6 +62,7 @@ export function useAttendanceSessionWs(opts: {
   handlersRef.current = {
     onMarked: opts.onMarked,
     onSessionUpdated: opts.onSessionUpdated,
+    onSessionDeleted: opts.onSessionDeleted,
     onCodeRotated: opts.onCodeRotated,
   };
 
@@ -46,9 +82,10 @@ export function useAttendanceSessionWs(opts: {
   const closedByHookRef = useRef(false);
 
   // Visibility guard: pause connections when tab hidden
-  const visible = typeof document !== "undefined"
-    ? document.visibilityState === "visible"
-    : true;
+  const visible =
+    typeof document !== "undefined"
+      ? document.visibilityState === "visible"
+      : true;
 
   useEffect(() => {
     if (!url || !visible) {
@@ -59,14 +96,20 @@ export function useAttendanceSessionWs(opts: {
         window.clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = undefined;
       }
-      try { wsRef.current?.close(); } catch {}
+      try {
+        wsRef.current?.close();
+      } catch {}
       wsRef.current = null;
       return;
     }
 
     // avoid reconnect if URL unchanged and socket is still alive/connecting
-    if (urlRef.current === url && wsRef.current &&
-       (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+    if (
+      urlRef.current === url &&
+      wsRef.current &&
+      (wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
 
@@ -89,17 +132,25 @@ export function useAttendanceSessionWs(opts: {
           setConnected(true);
           backoffRef.current = 0;
           // optional keepalive ping
-          try { ws.send(JSON.stringify({ type: "ping" })); } catch {}
+          try {
+            ws.send(JSON.stringify({ type: "ping" }));
+          } catch {}
         };
 
         ws.onmessage = (ev) => {
           let data: Envelope | null = null;
-          try { data = JSON.parse(ev.data); } catch { return; }
+          try {
+            data = JSON.parse(ev.data);
+          } catch {
+            return;
+          }
           if (!data) return;
 
-          // framework ping/pong
+          // framework ping/pong passthrough
           if ((data as any).type === "ping") {
-            try { ws.send(JSON.stringify({ type: "pong" })); } catch {}
+            try {
+              ws.send(JSON.stringify({ type: "pong" }));
+            } catch {}
             return;
           }
 
@@ -112,6 +163,9 @@ export function useAttendanceSessionWs(opts: {
               break;
             case "session_updated":
               handlersRef.current.onSessionUpdated?.(payload);
+              break;
+            case "session_deleted":
+              handlersRef.current.onSessionDeleted?.(payload);
               break;
             case "code_rotated":
               handlersRef.current.onCodeRotated?.();
@@ -127,17 +181,19 @@ export function useAttendanceSessionWs(opts: {
           if (closedByHookRef.current) return;
           // backoff with jitter: 500ms * 2^n (cap ~8s)
           const n = Math.min(backoffRef.current++, 4);
-          const delay = Math.floor((500 * Math.pow(2, n)) + Math.random() * 200);
+          const delay = Math.floor(500 * Math.pow(2, n) + Math.random() * 200);
           reconnectTimerRef.current = window.setTimeout(connect, delay);
         };
 
         ws.onerror = () => {
-          try { ws.close(); } catch {}
+          try {
+            ws.close();
+          } catch {}
         };
       } catch {
         // schedule a retry if constructor throws
         const n = Math.min(backoffRef.current++, 4);
-        const delay = Math.floor((500 * Math.pow(2, n)) + Math.random() * 200);
+        const delay = Math.floor(500 * Math.pow(2, n) + Math.random() * 200);
         reconnectTimerRef.current = window.setTimeout(connect, delay);
       }
     };
@@ -152,7 +208,9 @@ export function useAttendanceSessionWs(opts: {
         reconnectTimerRef.current = undefined;
       }
       setConnected(false);
-      try { wsRef.current?.close(); } catch {}
+      try {
+        wsRef.current?.close();
+      } catch {}
       wsRef.current = null;
     };
   }, [url, visible]);
@@ -160,10 +218,8 @@ export function useAttendanceSessionWs(opts: {
   // visibility listener (so `visible` changes without remount)
   useEffect(() => {
     const onVis = () => {
-      // trigger effect by changing `visible` via state? Simpler:
-      // do nothing here; the dep on `visible` above is already from document.visibilityState
-      // but we need to force a render when it changes:
-      setConnected((v) => v); // noop set to bump render
+      // force a render; the main effect depends on `visible` and will re-evaluate
+      setConnected((v) => v);
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);

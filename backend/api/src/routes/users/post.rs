@@ -5,16 +5,11 @@
 //!
 //! All routes require admin privileges.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
-use util::state::AppState;
 use crate::response::ApiResponse;
+use crate::routes::users::common::{BulkCreateUsersRequest, CreateUserRequest, UserResponse};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use db::models::user::Model as UserModel;
-use crate::routes::users::common::{CreateUserRequest, BulkCreateUsersRequest, UserResponse};
+use util::state::AppState;
 use validator::Validate;
 
 /// POST /api/users
@@ -65,15 +60,10 @@ pub async fn create_user(
             } else {
                 format!("Database error: {e}")
             };
-            (
-                StatusCode::CONFLICT,
-                Json(ApiResponse::<()>::error(msg)),
-            )
-                .into_response()
+            (StatusCode::CONFLICT, Json(ApiResponse::<()>::error(msg))).into_response()
         }
     }
 }
-
 
 /// POST /api/users/bulk
 ///
@@ -106,26 +96,33 @@ pub async fn bulk_create_users(
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::error(format!("Validation failed: {e}"))),
         )
-        .into_response();
+            .into_response();
     }
 
     let mut results = Vec::new();
 
     for user_req in req.users {
-        match UserModel::create(db, &user_req.username, &user_req.email, &user_req.password, false).await {
+        match UserModel::create(
+            db,
+            &user_req.username,
+            &user_req.email,
+            &user_req.password,
+            false,
+        )
+        .await
+        {
             Ok(u) => results.push(UserResponse::from(u)),
             Err(e) => {
                 let msg = if e.to_string().contains("UNIQUE constraint failed") {
-                    format!("A user with this username or email already exists: {}", user_req.username)
+                    format!(
+                        "A user with this username or email already exists: {}",
+                        user_req.username
+                    )
                 } else {
                     format!("Database error while creating {}: {}", user_req.username, e)
                 };
 
-                return (
-                    StatusCode::CONFLICT,
-                    Json(ApiResponse::<()>::error(msg)),
-                )
-                .into_response();
+                return (StatusCode::CONFLICT, Json(ApiResponse::<()>::error(msg))).into_response();
             }
         }
     }
@@ -137,5 +134,5 @@ pub async fn bulk_create_users(
             "Users created successfully",
         )),
     )
-    .into_response()
+        .into_response()
 }

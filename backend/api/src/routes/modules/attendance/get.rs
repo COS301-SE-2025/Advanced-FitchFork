@@ -4,9 +4,9 @@
 //! fetch current code, list records, export records as CSV).
 
 use axum::{
+    Extension, Json,
     extract::{Path, Query, State},
     http::{HeaderMap, HeaderValue, StatusCode},
-    Extension, Json,
 };
 use chrono::{SecondsFormat, Utc};
 use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
@@ -19,15 +19,15 @@ use db::models::attendance_session::{
     Column as SessionCol, Entity as SessionEntity, Model as Session,
 };
 use db::models::{
-    attendance_record::Entity as RecordEntity,
     attendance_record::Column as RecordCol,
-    user::{Entity as UserEntity, Column as UserCol},
+    attendance_record::Entity as RecordEntity,
+    user::{Column as UserCol, Entity as UserEntity},
 };
 
 /// GET `/api/modules/{module_id}/attendance/sessions`
 ///
 /// List attendance sessions for a module.
-/// 
+///
 /// **Auth**: Any user **assigned to the module** (Lecturer/AssistantLecturer/Tutor/Student).
 /// Enforced by router (`require_assigned_to_module`).
 ///
@@ -101,17 +101,14 @@ pub async fn list_sessions(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(
-            resp,
-            "Attendance sessions retrieved",
-        )),
+        Json(ApiResponse::success(resp, "Attendance sessions retrieved")),
     )
 }
 
 /// GET `/api/modules/{module_id}/attendance/sessions/{session_id}`
 ///
 /// Fetch a single attendance session with counts.
-/// 
+///
 /// **Auth**: Any user assigned to the module.
 ///
 /// **Response**: `AttendanceSessionResponse`.
@@ -164,7 +161,7 @@ pub async fn get_session(
 /// GET `/api/modules/{module_id}/attendance/sessions/{session_id}/code`
 ///
 /// Get the **current rotating code** for an active session.
-/// 
+///
 /// **Auth**: **Lecturer or AssistantLecturer**.
 ///
 /// **Notes**:
@@ -199,7 +196,10 @@ pub async fn get_session_code(
 
     let now = Utc::now();
     let code = sess.current_code(now);
-    (StatusCode::OK, Json(ApiResponse::success(code, "Current code")))
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(code, "Current code")),
+    )
 }
 
 /// A single attendance record (DTO) for API responses.
@@ -208,7 +208,7 @@ pub struct AttendanceRecordDto {
     pub session_id: i64,
     pub user_id: i64,
     pub username: Option<String>,
-    pub taken_at: String,       // ISO-8601 (UTC)
+    pub taken_at: String, // ISO-8601 (UTC)
     pub ip_address: Option<String>,
     pub token_window: i64,
 }
@@ -240,7 +240,7 @@ pub struct RecordsListResponse {
 /// GET `/api/modules/{module_id}/attendance/sessions/{session_id}/records`
 ///
 /// List **attendance records** for a session with **pagination, sorting, and search**.
-/// 
+///
 /// **Auth**: Any user assigned to the module (router layer).
 ///
 /// **Query**:
@@ -266,7 +266,11 @@ pub async fn list_session_records(
     let mut sel = RecordEntity::find().filter(RecordCol::SessionId.eq(session_id));
 
     // ----- Search (q)
-    if let Some(ref raw) = q.q.as_ref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+    if let Some(ref raw) =
+        q.q.as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    {
         let mut cond = Condition::any();
         // ip contains
         cond = cond.add(RecordCol::IpAddress.contains(raw));
@@ -296,12 +300,12 @@ pub async fn list_session_records(
     sel = match q.sort.as_deref() {
         Some(sort) if sort.starts_with('-') => match &sort[1..] {
             "taken_at" => sel.order_by_desc(RecordCol::TakenAt),
-            "user_id"  => sel.order_by_desc(RecordCol::UserId),
-            _          => sel.order_by_desc(RecordCol::TakenAt),
+            "user_id" => sel.order_by_desc(RecordCol::UserId),
+            _ => sel.order_by_desc(RecordCol::TakenAt),
         },
         Some("taken_at") => sel.order_by_asc(RecordCol::TakenAt),
-        Some("user_id")  => sel.order_by_asc(RecordCol::UserId),
-        _                => sel.order_by_desc(RecordCol::TakenAt), // default newest first
+        Some("user_id") => sel.order_by_asc(RecordCol::UserId),
+        _ => sel.order_by_desc(RecordCol::TakenAt), // default newest first
     };
 
     // ----- Pagination
@@ -350,17 +354,14 @@ pub async fn list_session_records(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(
-            resp,
-            "Attendance records retrieved",
-        )),
+        Json(ApiResponse::success(resp, "Attendance records retrieved")),
     )
 }
 
 /// GET `/api/modules/{module_id}/attendance/sessions/{session_id}/records.csv`
 ///
 /// Export all **attendance records** for a session as a CSV file.
-/// 
+///
 /// **Auth**: Any user assigned to the module.
 ///
 /// **Response**: `text/csv` attachment with columns:
@@ -398,11 +399,12 @@ pub async fn export_session_records_csv(
         .unwrap_or_default();
 
     let mut uname_map = std::collections::HashMap::<i64, String>::new();
-    for u in users { uname_map.insert(u.id, u.username); }
+    for u in users {
+        uname_map.insert(u.id, u.username);
+    }
 
     // CSV header
-    let mut csv =
-        String::from("session_id,user_id,username,taken_at,ip_address,token_window\n");
+    let mut csv = String::from("session_id,user_id,username,taken_at,ip_address,token_window\n");
 
     fn esc(s: &str) -> String {
         if s.contains(',') || s.contains('"') || s.contains('\n') {

@@ -4,34 +4,25 @@
 //! and bulk updating multiple modules (`PUT /api/modules/bulk`).  
 //! Only accessible by admin users. Responses follow the standard `ApiResponse` format.
 
-use axum::{
-    extract::{State, Path},
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
-use chrono::Utc;
-use util::state::AppState;
-use validator::Validate;
-use sea_orm::{
-    IntoActiveModel,
-    ActiveModelTrait,
-    ColumnTrait,
-    Condition,
-    EntityTrait,
-    QueryFilter,
-    Set,
-};
-use db::models::module::{
-    self,
-    ActiveModel as ModuleActiveModel,
-    Column as ModuleCol,
-    Entity as ModuleEntity,
-};
 use crate::response::ApiResponse;
 use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use chrono::Utc;
+use db::models::module::{
+    self, ActiveModel as ModuleActiveModel, Column as ModuleCol, Entity as ModuleEntity,
+};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, EntityTrait, IntoActiveModel, QueryFilter, Set,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use util::state::AppState;
+use validator::Validate;
 
 /// PUT /api/modules/{module_id}
 ///
@@ -135,7 +126,9 @@ pub async fn edit_module(
     if let Ok(Some(_)) = duplicate {
         return (
             StatusCode::CONFLICT,
-            Json(ApiResponse::<ModuleResponse>::error("Module code already exists")),
+            Json(ApiResponse::<ModuleResponse>::error(
+                "Module code already exists",
+            )),
         );
     }
 
@@ -152,27 +145,31 @@ pub async fn edit_module(
     match updated_module.update(db).await {
         Ok(module) => (
             StatusCode::OK,
-            Json(ApiResponse::success(ModuleResponse::from(module), "Module updated successfully")),
+            Json(ApiResponse::success(
+                ModuleResponse::from(module),
+                "Module updated successfully",
+            )),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<ModuleResponse>::error("Failed to update module")),
+            Json(ApiResponse::<ModuleResponse>::error(
+                "Failed to update module",
+            )),
         ),
     }
 }
-
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct BulkUpdateRequest {
     #[validate(length(min = 1, message = "At least one module ID is required"))]
     pub module_ids: Vec<i64>,
-    
+
     #[validate(range(min = 2024, message = "Year must be at least 2024"))]
     pub year: Option<i32>,
-    
+
     #[validate(length(max = 1000, message = "Description must be at most 1000 characters"))]
     pub description: Option<String>,
-    
+
     #[validate(range(min = 1, message = "Credits must be positive"))]
     pub credits: Option<i32>,
 }
@@ -244,7 +241,9 @@ pub async fn bulk_edit_modules(
         if obj.keys().any(|k| k.to_lowercase() == "code") {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<BulkUpdateResult>::error("Bulk update cannot change module code")),
+                Json(ApiResponse::<BulkUpdateResult>::error(
+                    "Bulk update cannot change module code",
+                )),
             );
         }
     }
@@ -255,7 +254,10 @@ pub async fn bulk_edit_modules(
         Err(e) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<BulkUpdateResult>::error(format!("Invalid request body: {}", e))),
+                Json(ApiResponse::<BulkUpdateResult>::error(format!(
+                    "Invalid request body: {}",
+                    e
+                ))),
             );
         }
     };
@@ -329,8 +331,5 @@ pub async fn bulk_edit_modules(
     let result = BulkUpdateResult { updated, failed };
     let message = format!("Updated {}/{} modules", updated, req.module_ids.len());
 
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(result, message)),
-    )
+    (StatusCode::OK, Json(ApiResponse::success(result, message)))
 }

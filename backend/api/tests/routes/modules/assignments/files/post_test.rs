@@ -1,13 +1,21 @@
 #[cfg(test)]
 mod tests {
-    use db::{models::{user::Model as UserModel, module::Model as ModuleModel, assignment::Model as AssignmentModel, user_module_role::{Model as UserModuleRoleModel, Role}}};
-    use axum::{body::Body, http::{Request, StatusCode}};
-    use tower::ServiceExt;
-    use api::auth::generate_jwt;
-    use chrono::{Utc, TimeZone};
-    use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
-    use axum::http::header::{CONTENT_TYPE, AUTHORIZATION};
     use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
+    use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use chrono::{TimeZone, Utc};
+    use db::models::{
+        assignment::Model as AssignmentModel,
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
+    };
+    use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+    use tower::ServiceExt;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -17,11 +25,23 @@ mod tests {
     }
 
     async fn setup_test_data(db: &DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
-        let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
+            .await
+            .unwrap();
+        let lecturer_user =
+            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
+                .await
+                .unwrap();
+        let student_user =
+            UserModel::create(db, "student1", "student1@test.com", "password2", false)
+                .await
+                .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
+            .await
+            .unwrap();
         let assignment = AssignmentModel::create(
             db,
             module.id,
@@ -30,8 +50,10 @@ mod tests {
             db::models::assignment::AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        ).await.unwrap();
-        
+        )
+        .await
+        .unwrap();
+
         TestData {
             lecturer_user,
             student_user,
@@ -44,7 +66,13 @@ mod tests {
         let boundary = "----BoundaryTest".to_string();
         let mut body = Vec::new();
         body.extend(format!("--{}\r\n", boundary).as_bytes());
-        body.extend(format!("Content-Disposition: form-data; name=\"file_type\"\r\n\r\n{}\r\n", file_type).as_bytes());
+        body.extend(
+            format!(
+                "Content-Disposition: form-data; name=\"file_type\"\r\n\r\n{}\r\n",
+                file_type
+            )
+            .as_bytes(),
+        );
         body.extend(format!("--{}\r\n", boundary).as_bytes());
         body.extend(format!("Content-Disposition: form-data; name=\"file\"; filename=\"{}\"\r\nContent-Type: application/octet-stream\r\n\r\n", filename).as_bytes());
         body.extend(file_content);
@@ -60,12 +88,18 @@ mod tests {
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/files",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
@@ -80,12 +114,18 @@ mod tests {
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/files",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
@@ -105,7 +145,10 @@ mod tests {
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
@@ -124,12 +167,18 @@ mod tests {
         body.extend(format!("Content-Disposition: form-data; name=\"file\"; filename=\"spec.txt\"\r\nContent-Type: application/octet-stream\r\n\r\nspec file content\r\n").as_bytes());
         body.extend(format!("--{}--\r\n", boundary).as_bytes());
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/files",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
@@ -144,12 +193,18 @@ mod tests {
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/files",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
@@ -163,11 +218,17 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
-        let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/files",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
@@ -182,12 +243,18 @@ mod tests {
 
         let (boundary, body) = multipart_body("not_a_type", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/files",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
@@ -201,13 +268,19 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/files",
+            data.module.id, data.assignment.id
+        );
         let (boundary1, body1) = multipart_body("spec", "spec1.txt", b"first content");
         let req1 = Request::builder()
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary1))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary1),
+            )
             .body(Body::from(body1))
             .unwrap();
 
@@ -219,7 +292,10 @@ mod tests {
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary2))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary2),
+            )
             .body(Body::from(body2))
             .unwrap();
 
@@ -228,7 +304,10 @@ mod tests {
 
         let files = db::models::assignment_file::Entity::find()
             .filter(db::models::assignment_file::Column::AssignmentId.eq(data.assignment.id))
-            .filter(db::models::assignment_file::Column::FileType.eq(db::models::assignment_file::FileType::Spec))
+            .filter(
+                db::models::assignment_file::Column::FileType
+                    .eq(db::models::assignment_file::FileType::Spec),
+            )
             .all(app_state.db())
             .await
             .unwrap();

@@ -8,7 +8,7 @@
 //! Includes `From` implementations to convert database models into API-friendly responses.
 
 use chrono::{Datelike, Utc};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 #[derive(Debug, Deserialize)]

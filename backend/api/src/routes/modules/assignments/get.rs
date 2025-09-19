@@ -22,29 +22,28 @@
 //!
 //! All endpoints use `AppState` for database access and return JSON-wrapped `ApiResponse`.
 
+use crate::routes::modules::assignments::common::{AssignmentResponse, File};
+use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
-    extract::{State, Path, Query},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder, sea_query::Expr,
-};
-use util::{execution_config::{execution_config::{GradingPolicy, SubmissionMode}, ExecutionConfig}, state::AppState};
-use crate::{auth::AuthUser, response::ApiResponse};
-use crate::routes::modules::assignments::common::{File, AssignmentResponse};
-use db::{
-    models::{
-        assignment::{
-            self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity, Model as AssignmentModel
-        }, 
-        assignment_file,
-        assignment_submission, 
-        user
+use db::models::{
+    assignment::{
+        self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
+        Model as AssignmentModel,
     },
+    assignment_file, assignment_submission, user,
+};
+use sea_orm::{
+    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, sea_query::Expr,
+};
+use serde::{Deserialize, Serialize};
+use util::{
+    execution_config::{ExecutionConfig, GradingPolicy, SubmissionMode},
+    state::AppState,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -88,7 +87,6 @@ pub struct AssignmentPolicy {
     pub pass_mark: u32,
 }
 
-
 impl From<AssignmentModel> for AssignmentFileResponse {
     fn from(assignment: AssignmentModel) -> Self {
         Self {
@@ -106,12 +104,11 @@ impl From<AssignmentModel> for AssignmentFileResponse {
             },
             files: Vec::new(),
             best_mark: None,
-            attempts: None, 
+            attempts: None,
             policy: None,
         }
     }
 }
-
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}
 ///
@@ -227,7 +224,8 @@ pub async fn get_assignment(
             match a.auto_open_or_close(db).await {
                 Ok(Some(_new_status)) => {
                     // refresh `a` so we return the updated status
-                    if let Ok(Some(refreshed)) = assignment::Entity::find_by_id(a.id).one(db).await {
+                    if let Ok(Some(refreshed)) = assignment::Entity::find_by_id(a.id).one(db).await
+                    {
                         a = refreshed;
                     }
                 }
@@ -324,7 +322,9 @@ pub async fn get_assignment(
         }
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<AssignmentFileResponse>::error("Assignment not found")),
+            Json(ApiResponse::<AssignmentFileResponse>::error(
+                "Assignment not found",
+            )),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -335,7 +335,6 @@ pub async fn get_assignment(
         ),
     }
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
@@ -360,12 +359,7 @@ pub struct FilterResponse {
 }
 
 impl FilterResponse {
-    fn new(
-        assignments: Vec<AssignmentResponse>,
-        page: i32,
-        per_page: i32,
-        total: i32,
-    ) -> Self {
+    fn new(assignments: Vec<AssignmentResponse>, page: i32, per_page: i32, total: i32) -> Self {
         Self {
             assignments,
             page,
@@ -445,7 +439,7 @@ pub async fn get_assignments(
     Query(params): Query<FilterReq>,
 ) -> impl IntoResponse {
     let db = app_state.db();
-    
+
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100).max(1);
 
@@ -605,10 +599,8 @@ pub async fn get_assignments(
 
     match paginator.fetch_page((page - 1) as u64).await {
         Ok(results) => {
-            let assignments: Vec<AssignmentResponse> = results
-                .into_iter()
-                .map(AssignmentResponse::from)
-                .collect();
+            let assignments: Vec<AssignmentResponse> =
+                results.into_iter().map(AssignmentResponse::from).collect();
 
             let response = FilterResponse::new(assignments, page, per_page, total);
             (

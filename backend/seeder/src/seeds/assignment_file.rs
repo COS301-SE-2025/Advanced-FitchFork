@@ -640,8 +640,16 @@ task4: main
         let zipped_files = vec![
             (FileType::Main, "main.zip", create_plag_main_zip_cpp()),
             (FileType::Memo, "memo.zip", create_plag_memo_zip_cpp()),
-            (FileType::Makefile, "makefile.zip", create_plag_makefile_zip_cpp()),
-            (FileType::Config, "config.json", config_json_cpp_plag.as_bytes().to_vec()),
+            (
+                FileType::Makefile,
+                "makefile.zip",
+                create_plag_makefile_zip_cpp(),
+            ),
+            (
+                FileType::Config,
+                "config.json",
+                config_json_cpp_plag.as_bytes().to_vec(),
+            ),
         ];
 
         for (file_type, filename, content) in zipped_files {

@@ -11,8 +11,13 @@ pub struct ManualFeedback;
 
 #[async_trait]
 impl Feedback for ManualFeedback {
-    async fn assemble_feedback(&self, _results: &[TaskResult]) -> Result<Vec<FeedbackEntry>, MarkerError> {
+    async fn assemble_feedback(
+        &self,
+        _results: &[TaskResult],
+    ) -> Result<Vec<FeedbackEntry>, MarkerError> {
         // TODO: Implement manual feedback assembly
-        Err(MarkerError::InputMismatch("Manual feedback not implemented".into()))
+        Err(MarkerError::InputMismatch(
+            "Manual feedback not implemented".into(),
+        ))
     }
 }

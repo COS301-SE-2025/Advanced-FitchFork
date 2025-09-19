@@ -8,13 +8,13 @@ import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 const { Title, Paragraph, Text } = Typography;
 
 const toc = [
-  { key: 'what', href: '#what', title: 'What this page covers' },
+  { key: 'overview', href: '#overview', title: 'How Submissions Work' },
   { key: 'where', href: '#where', title: 'Where to submit' },
-  { key: 'prep', href: '#prep', title: 'Before you submit (checklist)' },
-  { key: 'structure', href: '#structure', title: 'Archive structure (no folders)' },
+  { key: 'prep', href: '#prep', title: 'Before you submit' },
+  { key: 'structure', href: '#structure', title: 'Archive structure' },
   { key: 'how', href: '#how', title: 'Submit step-by-step' },
   { key: 'after', href: '#after', title: 'After you submit' },
-  { key: 'trouble', href: '#trouble', title: 'Troubleshooting' }, // keep last
+  { key: 'trouble', href: '#trouble', title: 'Troubleshooting' },
 ];
 
 const FLAT_LAYOUT = `submission.zip
@@ -38,18 +38,10 @@ export default function HowToSubmitHelp() {
     extra: (
       <Card className="mt-4" size="small" title="Quick facts" bordered>
         <ul className="list-disc pl-5">
-          <li>
-            Submit via the assignment page (top-right <b>Submit</b> button).
-          </li>
-          <li>
-            Your archive must be <b>flat</b> — <b>no nested folders</b>.
-          </li>
-          <li>
-            Include <b>all required source files</b>. Don’t include large binaries.
-          </li>
-          <li>
-            If the assignment is <b>closed</b>, the Submit button will be disabled.
-          </li>
+          <li>Submit from the assignment page via the <b>Submit</b> button (top-right).</li>
+          <li>Upload a single archive (.zip recommended) with files at the root.</li>
+          <li>Include all required sources; leave out binaries and large datasets.</li>
+          <li>The button is disabled when the assignment window is closed.</li>
         </ul>
       </Card>
     ),
@@ -62,11 +54,12 @@ export default function HowToSubmitHelp() {
         How to Submit
       </Title>
 
-      <section id="what" className="scroll-mt-24" />
-      <Title level={3}>What this page covers</Title>
+      <section id="overview" className="scroll-mt-24" />
+      <Title level={3}>How Submissions Work</Title>
       <Paragraph className="mb-0">
-        For students: how to package your code and submit it. This page also explains the required
-        archive layout (<b>no nested directories</b>) and common submission errors.
+        Uploading creates a new attempt that Fitchfork unpacks, builds, and runs using the assignment’s Main/Makefile or
+        interpreter. Outputs per task are diffed against Memo Output, then marks and feedback appear on the assignment
+        page. Follow the archive rules below so your submission passes validation and runs cleanly on the grader.
       </Paragraph>
 
       <section id="where" className="scroll-mt-24" />
@@ -78,31 +71,20 @@ export default function HowToSubmitHelp() {
       </Paragraph>
 
       <section id="prep" className="scroll-mt-24" />
-      <Title level={3}>Before you submit (checklist)</Title>
+      <Title level={3}>Before you submit</Title>
       <ul className="list-disc pl-5">
-        <li>
-          <b>All code included:</b> add every source file needed to build/run.
-        </li>
-        <li>
-          <b>Flat archive:</b> place files at the root — <i>no folders, no nesting</i>.
-        </li>
-        <li>
-          <b>Correct entry file:</b> follow the assignment’s language/filename rules (e.g.,{' '}
-          <Text code>Main.java</Text> or <Text code>Main.cpp</Text>).
-        </li>
-        <li>
-          <b>Keep it light:</b> exclude compiled binaries, large datasets, and temporary files.
-        </li>
-        <li>
-          <b>Deterministic output:</b> avoid debug spam or timestamps if your marking compares text.
-        </li>
+        <li><b>Include every required source file</b> so the grader can build and run.</li>
+        <li><b>Flatten the archive</b> — no nested directories; files go at the root.</li>
+        <li><b>Match the expected entry file</b> (e.g., <Text code>Main.java</Text> or <Text code>Main.cpp</Text>).</li>
+        <li><b>Exclude binaries and large data</b> to keep uploads small and clean.</li>
+        <li><b>Prefer deterministic output</b> (avoid timestamps/random logs) if marking compares text.</li>
       </ul>
 
       <section id="structure" className="scroll-mt-24" />
       <Title level={3}>Archive structure (no folders)</Title>
       <Paragraph className="mb-2">
-        Submit a single archive (recommended: <Text code>.zip</Text>). Put all required files at the{' '}
-        <b>root</b>. Do <u>not</u> include subdirectories.
+        Submit a single archive (recommended: <Text code>.zip</Text>). Place required files at the <b>root</b> and avoid
+        nested folders so the grader can extract them directly.
       </Paragraph>
       <Card>
         <CodeEditor
@@ -127,19 +109,10 @@ export default function HowToSubmitHelp() {
       <section id="how" className="scroll-mt-24" />
       <Title level={3}>Submit step-by-step</Title>
       <ol className="list-decimal pl-5">
-        <li>
-          Go to the assignment page and click <b>Submit</b> (top-right).
-        </li>
-        <li>
-          In the submission modal, <b>drag &amp; drop</b> your archive (e.g.,{' '}
-          <Text code>submission.zip</Text>).
-        </li>
-        <li>
-          Tick the checkbox to confirm the work is <b>your own</b>.
-        </li>
-        <li>
-          Click <b>Submit</b> to upload. You’ll see status/feedback once the run completes.
-        </li>
+        <li>Go to the assignment page and click <b>Submit</b> (top-right).</li>
+        <li>Drag and drop your archive (e.g., <Text code>submission.zip</Text>) into the modal.</li>
+        <li>Confirm the honour code checkbox if prompted.</li>
+        <li>Click <b>Submit</b>. The attempt is queued, built, and run; results appear once processing finishes.</li>
       </ol>
       <Alert
         className="mt-2"
@@ -153,13 +126,15 @@ export default function HowToSubmitHelp() {
       <Title level={3}>After you submit</Title>
       <Descriptions bordered size="middle" column={1} className="mt-2">
         <Descriptions.Item label="Status">
-          Your submission is queued, built, and run under the assignment’s limits.
+          Submissions are queued, built, and run under the assignment’s execution limits. Progress appears on the
+          assignment page.
         </Descriptions.Item>
         <Descriptions.Item label="Results">
-          View output and marks under the assignment once processing finishes.
+          View output, marks, and feedback once processing completes. The run history shows each attempt.
         </Descriptions.Item>
         <Descriptions.Item label="Resubmissions">
-          If allowed, you can submit again; the assignment’s policy determines which attempt counts.
+          If resubmissions are allowed, the assignment’s policy (e.g., “best” or “last”) decides which attempt counts
+          toward your mark.
         </Descriptions.Item>
       </Descriptions>
 

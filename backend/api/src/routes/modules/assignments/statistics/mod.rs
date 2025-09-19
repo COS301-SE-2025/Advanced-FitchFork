@@ -5,19 +5,20 @@
 //! Routes:
 //! - GET /summary  — Aggregated submission summary (lecturer/assistant lecturer/admin)
 
-use axum::{
-    middleware::from_fn_with_state,
-    routing::get,
-    Router,
-};
+use axum::{Router, middleware::from_fn_with_state, routing::get};
 
-use util::state::AppState;
-use crate::{auth::guards::allow_lecturer_or_assistant_lecturer};
+use crate::auth::guards::allow_assistant_lecturer;
 use get::get_assignment_stats;
+use util::state::AppState;
 
 pub mod get;
 
 pub fn statistics_routes(app_state: AppState) -> Router<AppState> {
-    Router::new()
-    .route("/",get(get_assignment_stats).route_layer(from_fn_with_state(app_state.clone(),allow_lecturer_or_assistant_lecturer)))
+    Router::new().route(
+        "/",
+        get(get_assignment_stats).route_layer(from_fn_with_state(
+            app_state.clone(),
+            allow_assistant_lecturer,
+        )),
+    )
 }

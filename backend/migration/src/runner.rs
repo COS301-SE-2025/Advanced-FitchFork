@@ -19,10 +19,7 @@ pub async fn run_all_migrations(url: &str) {
     }
 }
 
-async fn run_migration(
-    schema_manager: &SchemaManager<'_>,
-    migration: Box<dyn MigrationTrait>,
-) {
+async fn run_migration(schema_manager: &SchemaManager<'_>, migration: Box<dyn MigrationTrait>) {
     let name_str = format!("Applying {}", migration.name().bold());
     let dots = ".".repeat(STATUS_COLUMN.saturating_sub(name_str.len()));
     print!("{}{} ", name_str, dots);

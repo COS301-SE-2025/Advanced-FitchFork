@@ -1,7 +1,7 @@
-use axum::extract::ws::{Message, Utf8Bytes};
-use tokio::{sync::{mpsc}};
-use serde::Serialize;
 use crate::ws::WebSocketManager;
+use axum::extract::ws::{Message, Utf8Bytes};
+use serde::Serialize;
+use tokio::sync::mpsc;
 
 pub struct WsContext {
     pub topic: String,
@@ -17,14 +17,18 @@ impl WsContext {
 
     /// Send a *single* text frame to this client only
     pub async fn reply_text(&self, text: impl Into<Utf8Bytes>) -> Result<(), ()> {
-        self.out_tx.send(Message::Text(text.into()))
-            .await.map_err(|_| ())
+        self.out_tx
+            .send(Message::Text(text.into()))
+            .await
+            .map_err(|_| ())
     }
 
     /// Send a WS-level pong to this client
     pub async fn reply_pong(&self, payload: bytes::Bytes) -> Result<(), ()> {
-        self.out_tx.send(Message::Pong(payload))
-            .await.map_err(|_| ())
+        self.out_tx
+            .send(Message::Pong(payload))
+            .await
+            .map_err(|_| ())
     }
 
     /// Send any raw WS frame to this client

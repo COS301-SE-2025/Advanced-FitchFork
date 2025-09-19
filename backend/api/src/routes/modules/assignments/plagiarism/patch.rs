@@ -1,15 +1,15 @@
+use crate::response::ApiResponse;
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use chrono::{DateTime, Utc};
-use db::models::plagiarism_case::{Entity as PlagiarismEntity, Status, Column as PlagiarismColumn};
-use sea_orm::{ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, ActiveModelTrait, Set};
+use db::models::plagiarism_case::{Column as PlagiarismColumn, Entity as PlagiarismEntity, Status};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
 use serde::Serialize;
 use util::state::AppState;
-use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
 pub struct FlaggedCaseResponse {
@@ -91,13 +91,13 @@ pub async fn patch_plagiarism_flag(
             return (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::error("Plagiarism case not found")),
-            )
+            );
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::error(format!("Database error: {}", e))),
-            )
+            );
         }
     };
 
@@ -110,8 +110,11 @@ pub async fn patch_plagiarism_flag(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(format!("Failed to update plagiarism case: {}", e))),
-            )
+                Json(ApiResponse::error(format!(
+                    "Failed to update plagiarism case: {}",
+                    e
+                ))),
+            );
         }
     };
 
@@ -123,7 +126,10 @@ pub async fn patch_plagiarism_flag(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response_data, "Plagiarism case flagged")),
+        Json(ApiResponse::success(
+            response_data,
+            "Plagiarism case flagged",
+        )),
     )
 }
 
@@ -207,13 +213,13 @@ pub async fn patch_plagiarism_review(
             return (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::error("Plagiarism case not found")),
-            )
+            );
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::error(format!("Database error: {}", e))),
-            )
+            );
         }
     };
 
@@ -226,8 +232,11 @@ pub async fn patch_plagiarism_review(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(format!("Failed to update plagiarism case: {}", e))),
-            )
+                Json(ApiResponse::error(format!(
+                    "Failed to update plagiarism case: {}",
+                    e
+                ))),
+            );
         }
     };
 
@@ -239,6 +248,9 @@ pub async fn patch_plagiarism_review(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response_data, "Plagiarism case marked as reviewed")),
+        Json(ApiResponse::success(
+            response_data,
+            "Plagiarism case marked as reviewed",
+        )),
     )
 }

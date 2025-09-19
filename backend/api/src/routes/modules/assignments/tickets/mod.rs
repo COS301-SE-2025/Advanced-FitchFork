@@ -9,18 +9,21 @@
 //!
 //! Access control is enforced via middleware guards for ticket ownership, lecturer, or admin roles.
 
-use axum::{Router, routing::{post, put, delete, get}};
+use axum::{
+    Router,
+    routing::{delete, get, post, put},
+};
 use util::state::AppState;
-pub mod post;
-pub mod put;
+pub mod common;
 pub mod delete;
 pub mod get;
+pub mod post;
+pub mod put;
 pub mod ticket_messages;
-pub mod common;
-use post::create_ticket;
-use put::{open_ticket, close_ticket};
 use delete::delete_ticket;
 use get::{get_ticket, get_tickets};
+use post::create_ticket;
+use put::{close_ticket, open_ticket};
 use ticket_messages::ticket_message_routes;
 
 /// Builds and returns the `/tickets` route group for a given ticket context.
@@ -43,5 +46,8 @@ pub fn ticket_routes(app_state: AppState) -> Router<AppState> {
         .route("/{ticket_id}", delete(delete_ticket))
         .route("/{ticket_id}", get(get_ticket))
         .route("/", get(get_tickets))
-        .nest("/{ticket_id}/messages", ticket_message_routes(app_state.clone()))
+        .nest(
+            "/{ticket_id}/messages",
+            ticket_message_routes(app_state.clone()),
+        )
 }

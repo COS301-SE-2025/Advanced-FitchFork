@@ -88,7 +88,7 @@ pub struct ReportSubsection {
     /// Label or name of the subsection (e.g., "Subtask 1").
     pub label: String,
     /// Points earned for this subsection.
-    pub earned:i64,
+    pub earned: i64,
     /// Total possible points for this subsection.
     pub total: i64,
     /// Feedback or comments for this subsection.
@@ -223,7 +223,10 @@ mod tests {
     use serde_json;
 
     fn sample_score() -> Score {
-        Score { earned: 8, total: 10 }
+        Score {
+            earned: 8,
+            total: 10,
+        }
     }
 
     fn sample_subsection() -> ReportSubsection {
@@ -246,7 +249,10 @@ mod tests {
 
     #[test]
     fn test_score_struct_fields() {
-        let score = Score { earned: 5, total: 10 };
+        let score = Score {
+            earned: 5,
+            total: 10,
+        };
         assert_eq!(score.earned, 5);
         assert_eq!(score.total, 10);
     }
@@ -257,7 +263,10 @@ mod tests {
         let task = ReportTask {
             task_number: 2,
             name: "Task 2".to_string(),
-            score: Score { earned: 7, total: 10 },
+            score: Score {
+                earned: 7,
+                total: 10,
+            },
             subsections: vec![subsection.clone()],
         };
         assert_eq!(task.task_number, 2);
@@ -301,9 +310,13 @@ mod tests {
     #[test]
     fn test_generate_new_mark_report_function() {
         let now = "2024-06-01T12:00:00Z".to_string();
-        let mark = Score { earned: 10, total: 20 };
+        let mark = Score {
+            earned: 10,
+            total: 20,
+        };
         let tasks = vec![sample_task()];
-        let report = generate_new_mark_report(now.clone(), now.clone(), tasks.clone(), mark.clone());
+        let report =
+            generate_new_mark_report(now.clone(), now.clone(), tasks.clone(), mark.clone());
         assert_eq!(report.created_at, now);
         assert_eq!(report.updated_at, now);
         assert_eq!(report.mark.earned, 10);
@@ -313,12 +326,27 @@ mod tests {
     #[test]
     fn test_code_coverage_and_complexity_optional_fields() {
         let coverage = CodeCoverageReport {
-            summary: Some(Score { earned: 5, total: 10 }),
-            files: vec![CoverageFile { path: "src/lib.rs".to_string(), earned: 5, total: 10 }],
+            summary: Some(Score {
+                earned: 5,
+                total: 10,
+            }),
+            files: vec![CoverageFile {
+                path: "src/lib.rs".to_string(),
+                earned: 5,
+                total: 10,
+            }],
         };
         let complexity = CodeComplexityReport {
-            summary: Some(Score { earned: 2, total: 4 }),
-            metrics: vec![ComplexityMetric { name: "Cyclomatic".to_string(), earned: 2, total: 4, unit: "count".to_string() }],
+            summary: Some(Score {
+                earned: 2,
+                total: 4,
+            }),
+            metrics: vec![ComplexityMetric {
+                name: "Cyclomatic".to_string(),
+                earned: 2,
+                total: 4,
+                unit: "count".to_string(),
+            }],
         };
         let report = MarkReport {
             created_at: "2024-06-01T12:00:00Z".to_string(),

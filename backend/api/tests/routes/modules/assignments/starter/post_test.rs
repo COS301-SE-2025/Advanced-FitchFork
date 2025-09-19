@@ -1,20 +1,23 @@
 #[cfg(test)]
 mod tests {
-    use axum::{body::Body, http::{Request, StatusCode, header::CONTENT_TYPE}};
-    use tower::ServiceExt;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode, header::CONTENT_TYPE},
+    };
     use serde_json::json;
     use serial_test::serial;
+    use tower::ServiceExt;
 
-    use api::auth::generate_jwt;
     use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
 
+    use chrono::Utc;
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use chrono::Utc;
 
     struct TestData {
         admin: UserModel,
@@ -54,9 +57,14 @@ mod tests {
         UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer)
             .await
             .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, assistant.id, module.id, Role::AssistantLecturer)
-            .await
-            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            assistant.id,
+            module.id,
+            Role::AssistantLecturer,
+        )
+        .await
+        .unwrap();
         UserModuleRoleModel::assign_user_to_module(db, tutor.id, module.id, Role::Tutor)
             .await
             .unwrap();
@@ -76,11 +84,23 @@ mod tests {
         .await
         .unwrap();
 
-        TestData { admin, lecturer, assistant, tutor, student, outsider, module, assignment }
+        TestData {
+            admin,
+            lecturer,
+            assistant,
+            tutor,
+            student,
+            outsider,
+            module,
+            assignment,
+        }
     }
 
     fn starter_uri(module_id: i64, assignment_id: i64) -> String {
-        format!("/api/modules/{}/assignments/{}/starter", module_id, assignment_id)
+        format!(
+            "/api/modules/{}/assignments/{}/starter",
+            module_id, assignment_id
+        )
     }
 
     #[tokio::test]

@@ -2,15 +2,15 @@
 //!
 //! Provides claims, guards, extractors, middleware, and a function to generate JWTs.
 
-pub mod middleware;
 pub mod claims;
 pub mod extractors;
 pub mod guards;
+pub mod middleware;
 
-pub use claims::{Claims, AuthUser};
+pub use claims::{AuthUser, Claims};
 
-use jsonwebtoken::{encode, Header, EncodingKey};
-use chrono::{Utc, Duration};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{EncodingKey, Header, encode};
 use util::config;
 
 /// Generates a JWT and its expiry timestamp for a given user.

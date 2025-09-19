@@ -9,17 +9,21 @@
 //! ## Usage
 //! The `auth_routes()` function returns a `Router` which is nested under `/auth` in the main application.
 
-use axum::{middleware::from_fn, Router, routing::{get, post}};
 use crate::auth::guards::allow_authenticated;
-use post::{
-    register, login, request_password_reset, verify_reset_token,
-    reset_password, upload_profile_picture, change_password
+use axum::{
+    Router,
+    middleware::from_fn,
+    routing::{get, post},
 };
-use get::{get_me, get_avatar, has_role_in_module, get_module_role};
+use get::{get_avatar, get_me, get_module_role, has_role_in_module};
+use post::{
+    change_password, login, register, request_password_reset, reset_password,
+    upload_profile_picture, verify_reset_token,
+};
 use util::state::AppState;
 
-pub mod post;
 pub mod get;
+pub mod post;
 
 // # Auth Routes Module
 //
@@ -39,13 +43,13 @@ pub mod get;
 // - `GET /auth/me` — Retrieve info about the currently authenticated user.
 // - `GET /auth/avatar/{user_id}` — Retrieve a user's profile picture.
 // - `GET /auth/has-role` — Check if the current user has a role in a module.
-// - 
+// -
 //
 // ## Usage
 // Use the `auth_routes()` function to mount all `/auth` endpoints under the main application router.
 
 pub fn auth_routes() -> Router<AppState> {
-    Router::new()        
+    Router::new()
         .route("/register", post(register))
         .route("/login", post(login))
         .route("/request-password-reset", post(request_password_reset))
@@ -56,5 +60,8 @@ pub fn auth_routes() -> Router<AppState> {
         .route("/avatar/{user_id}", get(get_avatar))
         .route("/has-role", get(has_role_in_module))
         .route("/module-role", get(get_module_role))
-    .route("/change-password", post(change_password).route_layer(from_fn(allow_authenticated)))
+        .route(
+            "/change-password",
+            post(change_password).route_layer(from_fn(allow_authenticated)),
+        )
 }

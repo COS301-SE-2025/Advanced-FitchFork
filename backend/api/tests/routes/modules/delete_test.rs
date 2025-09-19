@@ -1,15 +1,18 @@
 #[cfg(test)]
 mod tests {
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
-    use db::{models::{module::{self, Model as Module}, user::Model as UserModel}};
-    use tower::ServiceExt;
-    use serde_json::json;
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app_with_storage;
+    use db::models::{
+        module::{self, Model as Module},
+        user::Model as UserModel,
+    };
     use sea_orm::{DatabaseConnection, EntityTrait};
+    use serde_json::json;
+    use tower::ServiceExt;
 
     struct TestData {
         admin_user: UserModel,
@@ -20,17 +23,15 @@ mod tests {
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let admin_user = UserModel::create(db, "admin", "admin@test.com", "password", true).await.expect("Failed to create admin user");
-        let regular_user = UserModel::create(db, "regular", "regular@test.com", "password", false).await.expect("Failed to create regular user");
-        let module = Module::create(
-            db,
-            "COS301",
-            2025,
-            Some("Module to be deleted"),
-            16,
-        )
-        .await
-        .expect("Failed to create test module");
+        let admin_user = UserModel::create(db, "admin", "admin@test.com", "password", true)
+            .await
+            .expect("Failed to create admin user");
+        let regular_user = UserModel::create(db, "regular", "regular@test.com", "password", false)
+            .await
+            .expect("Failed to create regular user");
+        let module = Module::create(db, "COS301", 2025, Some("Module to be deleted"), 16)
+            .await
+            .expect("Failed to create test module");
 
         TestData {
             admin_user,
@@ -57,9 +58,11 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Module deleted successfully");
         assert!(json["data"].is_null());
@@ -90,7 +93,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Admin access required");
@@ -121,7 +126,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Module 99999 not found.");
@@ -154,15 +161,9 @@ mod tests {
     async fn create_multiple_modules(db: &DatabaseConnection, count: usize) -> Vec<Module> {
         let mut modules = Vec::new();
         for i in 0..count {
-            let module = Module::create(
-                db,
-                &format!("MOD{}", i),
-                2025,
-                Some("Test module"),
-                15,
-            )
-            .await
-            .expect("Failed to create test module");
+            let module = Module::create(db, &format!("MOD{}", i), 2025, Some("Test module"), 15)
+                .await
+                .expect("Failed to create test module");
             modules.push(module);
         }
         modules
@@ -190,9 +191,11 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Deleted 3/3 modules");
         assert_eq!(json["data"]["deleted"], 3);
@@ -228,7 +231,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "At least one module ID is required");
@@ -291,13 +296,15 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Deleted 2/3 modules");
         assert_eq!(json["data"]["deleted"], 2);
-        
+
         let failed = json["data"]["failed"].as_array().unwrap();
         assert_eq!(failed.len(), 1);
         assert_eq!(failed[0]["id"], 99999);
@@ -327,14 +334,21 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Deleted 0/1 modules");
-        
+
         let failed = json["data"]["failed"].as_array().unwrap();
         assert_eq!(failed.len(), 1);
-        assert!(failed[0]["error"].as_str().unwrap().contains("Module not found"));
+        assert!(
+            failed[0]["error"]
+                .as_str()
+                .unwrap()
+                .contains("Module not found")
+        );
     }
 }

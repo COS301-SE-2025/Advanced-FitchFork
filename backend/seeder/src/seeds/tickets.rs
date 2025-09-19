@@ -1,8 +1,8 @@
 use crate::seed::Seeder;
 use chrono::Utc;
-use db::models::{tickets, assignment, user};
+use db::models::{assignment, tickets, user};
 use rand::rngs::{OsRng, StdRng};
-use rand::{seq::SliceRandom, SeedableRng};
+use rand::{SeedableRng, seq::SliceRandom};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 pub struct TicketSeeder;
@@ -56,6 +56,5 @@ impl Seeder for TicketSeeder {
 
             let _ = ticket.insert(db).await;
         }
-
     }
 }

@@ -1,14 +1,22 @@
 #[cfg(test)]
 mod tests {
-    use db::{models::{user::Model as UserModel, module::{Model as ModuleModel, ActiveModel as ModuleActiveModel}, assignment::{Model as AssignmentModel, AssignmentType, Status}, user_module_role::{Model as UserModuleRoleModel, Role}}};
-    use axum::{body::Body, http::{Request, StatusCode}};
-    use tower::ServiceExt;
-    use serde_json::{json, Value};
-    use api::auth::generate_jwt;
-    use dotenvy;
-    use chrono::{Utc, TimeZone, DateTime};
-    use sea_orm::{Set, ActiveModelTrait, EntityTrait};
     use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use chrono::{DateTime, TimeZone, Utc};
+    use db::models::{
+        assignment::{AssignmentType, Model as AssignmentModel, Status},
+        module::{ActiveModel as ModuleActiveModel, Model as ModuleModel},
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
+    };
+    use dotenvy;
+    use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+    use serde_json::{Value, json};
+    use tower::ServiceExt;
 
     struct TestData {
         admin_user: UserModel,
@@ -24,15 +32,41 @@ mod tests {
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
-        let empty_module = ModuleModel::create(db, "EMPTY101", 2024, Some("Empty Module"), 16).await.unwrap();
-        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true).await.unwrap();
-        let lecturer_user = UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false).await.unwrap();
-        let student_user = UserModel::create(db, "student1", "student1@test.com", "password2", false).await.unwrap();
-        let forbidden_user = UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, empty_module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
+            .await
+            .unwrap();
+        let empty_module = ModuleModel::create(db, "EMPTY101", 2024, Some("Empty Module"), 16)
+            .await
+            .unwrap();
+        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true)
+            .await
+            .unwrap();
+        let lecturer_user =
+            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
+                .await
+                .unwrap();
+        let student_user =
+            UserModel::create(db, "student1", "student1@test.com", "password2", false)
+                .await
+                .unwrap();
+        let forbidden_user =
+            UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false)
+                .await
+                .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            lecturer_user.id,
+            empty_module.id,
+            Role::Lecturer,
+        )
+        .await
+        .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
+            .await
+            .unwrap();
         let dummy_module = ModuleActiveModel {
             id: Set(9999),
             code: Set("DUMMY9999".to_string()),
@@ -45,7 +79,14 @@ mod tests {
         .insert(db)
         .await
         .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, dummy_module.id, Role::Lecturer).await.unwrap();
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            lecturer_user.id,
+            dummy_module.id,
+            Role::Lecturer,
+        )
+        .await
+        .unwrap();
         let a1 = AssignmentModel::create(
             db,
             module.id,
@@ -54,7 +95,9 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         let a2 = AssignmentModel::create(
             db,
             module.id,
@@ -63,7 +106,9 @@ mod tests {
             AssignmentType::Practical,
             Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 2, 28, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         let a3 = AssignmentModel::create(
             db,
             module.id,
@@ -72,7 +117,9 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 3, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 3, 31, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         TestData {
             admin_user,
@@ -92,7 +139,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[1].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[1].id
+        );
         let body = json!({
             "name": "Admin Updated",
             "description": "Admin update desc",
@@ -112,7 +162,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["name"], "Admin Updated");
@@ -125,7 +177,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[2].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[2].id
+        );
         let body = json!({
             "name": "No Desc",
             "description": null,
@@ -145,7 +200,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["description"], serde_json::Value::Null);
@@ -167,7 +224,10 @@ mod tests {
                 "available_from": "2024-01-01T00:00:00Z",
                 "due_date": "2024-01-31T23:59:59Z"
             });
-            let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+            let uri = format!(
+                "/api/modules/{}/assignments/{}",
+                data.module.id, data.assignments[0].id
+            );
             let req = Request::builder()
                 .method("PUT")
                 .uri(&uri)
@@ -187,7 +247,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let body = json!({
             "name": "Student Update",
             "description": "Should not be allowed",
@@ -214,7 +277,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let body = json!({
             "name": "Forbidden Update",
             "description": "Should not be allowed",
@@ -241,7 +307,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let body = json!({
             "name": "Invalid Type",
             "description": "Invalid assignment_type",
@@ -261,10 +330,17 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("assignment_type"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("assignment_type")
+        );
     }
 
     #[tokio::test]
@@ -273,7 +349,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let body = json!({
             "name": "Bad Dates",
             "description": "Invalid dates",
@@ -293,7 +372,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert!(json["message"].as_str().unwrap().contains("datetime"));
@@ -305,7 +386,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let body = json!({
             "name": "Missing Fields"
         });
@@ -355,7 +439,10 @@ mod tests {
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
 
-        let uri = format!("/api/modules/{}/assignments/{}", data.empty_module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.empty_module.id, data.assignments[0].id
+        );
         let body = json!({
             "name": "Wrong Module",
             "description": "Assignment not in this module",
@@ -383,7 +470,10 @@ mod tests {
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
 
-        let uri = format!("/api/modules/{}/assignments/{}", data.dummy_module_id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.dummy_module_id, data.assignments[0].id
+        );
         let body = json!({
             "name": "Module 9999 not found.",
             "description": "Module does not exist",
@@ -409,7 +499,10 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let uri = format!("/api/modules/{}/assignments/{}", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}",
+            data.module.id, data.assignments[0].id
+        );
         let body = json!({
             "name": "No Auth",
             "description": "No token",
@@ -424,7 +517,7 @@ mod tests {
             .header("Content-Type", "application/json")
             .body(Body::from(body.to_string()))
             .unwrap();
-        
+
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
@@ -435,14 +528,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/open",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -467,14 +563,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Closed);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/open",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -492,14 +591,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Archived);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/open",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -517,14 +619,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/open",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -542,14 +647,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/open",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -570,9 +678,11 @@ mod tests {
         let assignment = data.assignments[0].clone();
         assert_eq!(assignment.status, Status::Setup);
 
-
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/open",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -590,14 +700,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/open", data.empty_module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/open",
+            data.empty_module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -615,13 +728,16 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
-        let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/open",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -638,14 +754,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/open", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/open",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -682,14 +801,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/close",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -714,14 +836,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/close",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -742,12 +867,16 @@ mod tests {
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
 
         for state in &[Status::Ready, Status::Closed, Status::Archived] {
-            let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+            let mut active_assignment: db::models::assignment::ActiveModel =
+                data.assignments[0].clone().into();
             active_assignment.status = Set(state.clone());
             active_assignment.updated_at = Set(Utc::now());
             let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-            let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
+            let uri = format!(
+                "/api/modules/{}/assignments/{}/close",
+                data.module.id, assignment.id
+            );
             let req = Request::builder()
                 .method("PUT")
                 .uri(&uri)
@@ -758,18 +887,27 @@ mod tests {
             let response = app.clone().oneshot(req).await.unwrap();
             assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
             let json: Value = serde_json::from_slice(&body).unwrap();
-            assert_eq!(json["message"], "Assignment can only be closed if it is in Open state");
+            assert_eq!(
+                json["message"],
+                "Assignment can only be closed if it is in Open state"
+            );
         }
 
         for state in &[Status::Setup] {
-            let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+            let mut active_assignment: db::models::assignment::ActiveModel =
+                data.assignments[0].clone().into();
             active_assignment.status = Set(state.clone());
             active_assignment.updated_at = Set(Utc::now());
             let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-            let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
+            let uri = format!(
+                "/api/modules/{}/assignments/{}/close",
+                data.module.id, assignment.id
+            );
             let req = Request::builder()
                 .method("PUT")
                 .uri(&uri)
@@ -780,7 +918,9 @@ mod tests {
             let response = app.clone().oneshot(req).await.unwrap();
             assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
-            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
             let json: Value = serde_json::from_slice(&body).unwrap();
             assert_eq!(json["message"], "Assignment is still in Setup stage");
         }
@@ -792,14 +932,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/close",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -817,14 +960,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/close", data.empty_module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/close",
+            data.empty_module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -842,13 +988,16 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
-        let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/close",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -865,14 +1014,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/close",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -909,14 +1061,17 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
-
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/close", data.module.id, assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/close",
+            data.module.id, assignment.id
+        );
         let req = Request::builder()
             .method("PUT")
             .uri(&uri)
@@ -934,11 +1089,11 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let mut active_assignment: db::models::assignment::ActiveModel = data.assignments[0].clone().into();
+        let mut active_assignment: db::models::assignment::ActiveModel =
+            data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
         let assignment = active_assignment.update(app_state.db()).await.unwrap();
-
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/99999/assignments/{}/close", assignment.id);
@@ -963,9 +1118,13 @@ mod tests {
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
 
         let ids_to_update = vec![data.assignments[0].id, data.assignments[1].id];
-        let new_available_from = DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z").unwrap().with_timezone(&Utc);
-        let new_due_date = DateTime::parse_from_rfc3339("2025-02-01T00:00:00Z").unwrap().with_timezone(&Utc);
-        
+        let new_available_from = DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let new_due_date = DateTime::parse_from_rfc3339("2025-02-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
         let req_body = json!({
             "assignment_ids": ids_to_update,
             "available_from": new_available_from,
@@ -982,9 +1141,11 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Updated 2/2 assignments");
         assert_eq!(json["data"]["updated"], 2);
@@ -996,15 +1157,9 @@ mod tests {
                 .await
                 .unwrap()
                 .unwrap();
-                
-            assert_eq!(
-                assignment.available_from,
-                new_available_from
-            );
-            assert_eq!(
-                assignment.due_date,
-                new_due_date
-            );
+
+            assert_eq!(assignment.available_from, new_available_from);
+            assert_eq!(assignment.due_date, new_due_date);
         }
     }
 
@@ -1016,10 +1171,12 @@ mod tests {
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
-    
+
         let ids_to_update = vec![data.assignments[2].id];
-        let new_due_date = DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z").unwrap().with_timezone(&Utc);
-        
+        let new_due_date = DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
         let req_body = json!({
             "assignment_ids": ids_to_update,
             "due_date": new_due_date
@@ -1040,11 +1197,8 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-            
-        assert_eq!(
-            assignment.due_date,
-            new_due_date
-        );
+
+        assert_eq!(assignment.due_date, new_due_date);
     }
 
     /// Test Case: Partial Success with Some Failures
@@ -1055,10 +1209,12 @@ mod tests {
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
-        
+
         let ids_to_update = vec![data.assignments[0].id, 9999, data.assignments[2].id];
-        let new_available_from = DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z").unwrap().with_timezone(&Utc);
-        
+        let new_available_from = DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
         let req_body = json!({
             "assignment_ids": ids_to_update,
             "available_from": new_available_from
@@ -1074,13 +1230,15 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Updated 2/3 assignments");
         assert_eq!(json["data"]["updated"], 2);
-        
+
         let failed = json["data"]["failed"].as_array().unwrap();
         assert_eq!(failed.len(), 1);
         assert_eq!(failed[0]["id"], 9999);
@@ -1092,11 +1250,8 @@ mod tests {
                 .await
                 .unwrap()
                 .unwrap();
-                
-            assert_eq!(
-                assignment.available_from,
-                new_available_from
-            );
+
+            assert_eq!(assignment.available_from, new_available_from);
         }
     }
 
@@ -1123,7 +1278,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "No assignment IDs provided");
@@ -1161,11 +1318,13 @@ mod tests {
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
-        
+
         let ids_to_update = vec![data.assignments[0].id];
-        let new_available_from = DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z").unwrap().with_timezone(&Utc);
+        let new_available_from = DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let original_due_date = data.assignments[0].due_date;
-        
+
         let req_body = json!({
             "assignment_ids": ids_to_update,
             "available_from": new_available_from
@@ -1186,15 +1345,9 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-            
-        assert_eq!(
-            assignment.available_from,
-            new_available_from
-        );
-        assert_eq!(
-            assignment.due_date,
-            original_due_date
-        );
+
+        assert_eq!(assignment.available_from, new_available_from);
+        assert_eq!(assignment.due_date, original_due_date);
     }
 
     /// Test Case: Update Only Due Date
@@ -1205,11 +1358,13 @@ mod tests {
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
-        
+
         let ids_to_update = vec![data.assignments[1].id];
-        let new_due_date = DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z").unwrap().with_timezone(&Utc);
+        let new_due_date = DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let original_available_from = data.assignments[1].available_from;
-        
+
         let req_body = json!({
             "assignment_ids": ids_to_update,
             "due_date": new_due_date
@@ -1230,15 +1385,9 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-            
-        assert_eq!(
-            assignment.available_from,
-            original_available_from
-        );
-        assert_eq!(
-            assignment.due_date,
-            new_due_date
-        );
+
+        assert_eq!(assignment.available_from, original_available_from);
+        assert_eq!(assignment.due_date, new_due_date);
     }
 
     /// Test Case: Assignment in Wrong Module
@@ -1259,7 +1408,6 @@ mod tests {
         .await
         .unwrap();
 
-
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/bulk", data.module.id);
         let ids_to_update = vec![data.assignments[0].id, other_assignment.id];
@@ -1278,13 +1426,15 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Updated 1/2 assignments");
         assert_eq!(json["data"]["updated"], 1);
-        
+
         let failed = json["data"]["failed"].as_array().unwrap();
         assert_eq!(failed.len(), 1);
         assert_eq!(failed[0]["id"], other_assignment.id);
@@ -1299,7 +1449,7 @@ mod tests {
             updated_assignment.due_date.to_rfc3339(),
             "2025-01-01T00:00:00+00:00"
         );
-        
+
         let not_updated = db::models::assignment::Entity::find_by_id(other_assignment.id)
             .one(app_state.db())
             .await

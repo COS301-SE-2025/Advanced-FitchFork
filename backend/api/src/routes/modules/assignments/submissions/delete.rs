@@ -13,10 +13,10 @@
 //! **Responses:** JSON-wrapped `ApiResponse` indicating success, number of deletions, or detailed errors.
 
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -24,8 +24,8 @@ use sqlx::types::JsonValue;
 
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
-use util::state::AppState;
 use crate::response::ApiResponse;
+use util::state::AppState;
 
 use db::models::assignment_submission as submission;
 
@@ -107,7 +107,10 @@ pub async fn delete_submission(
     }
 
     // Delete DB row by primary key (we already validated assignment_id)
-    match submission::Entity::delete_by_id(submission_id).exec(db).await {
+    match submission::Entity::delete_by_id(submission_id)
+        .exec(db)
+        .await
+    {
         Ok(_) => (
             StatusCode::OK,
             Json(json!({
@@ -169,7 +172,9 @@ pub async fn bulk_delete_submissions(
     if req.submission_ids.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<JsonValue>::error("No submission IDs provided")),
+            Json(ApiResponse::<JsonValue>::error(
+                "No submission IDs provided",
+            )),
         );
     }
 
@@ -187,7 +192,10 @@ pub async fn bulk_delete_submissions(
             Ok(Some(sub)) => {
                 // Remove file best-effort
                 if let Err(e) = sub.delete_file_only() {
-                    eprintln!("bulk_delete_submissions: file removal failed for {}: {}", sid, e);
+                    eprintln!(
+                        "bulk_delete_submissions: file removal failed for {}: {}",
+                        sid, e
+                    );
                 }
 
                 // Delete row

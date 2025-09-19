@@ -1,8 +1,8 @@
+use super::common::TicketIncoming;
 use serde_json::json;
 use util::ws::handler_trait::WsHandler;
-use util::ws::runtime::WsContext;
 use util::ws::handler_trait::async_trait;
-use super::common::TicketIncoming;
+use util::ws::runtime::WsContext;
 
 pub struct TicketWsHandler;
 
@@ -23,12 +23,17 @@ impl WsHandler for TicketWsHandler {
             }
             TicketIncoming::Ping => {
                 // App-level pong to THIS client (framework also auto-responds to {"type":"ping"})
-                let _ = ctx.reply_text(json!({
-                    "event": "pong",
-                    "topic": ctx.topic,
-                    "payload": {},
-                    "ts": chrono::Utc::now().to_rfc3339(),
-                }).to_string()).await;
+                let _ = ctx
+                    .reply_text(
+                        json!({
+                            "event": "pong",
+                            "topic": ctx.topic,
+                            "payload": {},
+                            "ts": chrono::Utc::now().to_rfc3339(),
+                        })
+                        .to_string(),
+                    )
+                    .await;
             }
         }
     }

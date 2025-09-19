@@ -16,14 +16,40 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Alias::new("modules"))
                     .if_not_exists()
-                    .col(ColumnDef::new(Alias::new("id")).integer().not_null().auto_increment().primary_key())
+                    .col(
+                        ColumnDef::new(Alias::new("id"))
+                            .integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
                     .col(ColumnDef::new(Alias::new("code")).string().not_null())
                     .col(ColumnDef::new(Alias::new("year")).integer().not_null())
                     .col(ColumnDef::new(Alias::new("description")).string().null())
-                    .col(ColumnDef::new(Alias::new("credits")).integer().not_null().default(0))
-                    .col(ColumnDef::new(Alias::new("created_at")).timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
-                    .col(ColumnDef::new(Alias::new("updated_at")).timestamp().not_null().default(Expr::cust("CURRENT_TIMESTAMP")))
-                    .index(Index::create().col(Alias::new("code")).col(Alias::new("year")).unique())
+                    .col(
+                        ColumnDef::new(Alias::new("credits"))
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("created_at"))
+                            .timestamp()
+                            .not_null()
+                            .default(Expr::cust("CURRENT_TIMESTAMP")),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("updated_at"))
+                            .timestamp()
+                            .not_null()
+                            .default(Expr::cust("CURRENT_TIMESTAMP")),
+                    )
+                    .index(
+                        Index::create()
+                            .col(Alias::new("code"))
+                            .col(Alias::new("year"))
+                            .unique(),
+                    )
                     .to_owned(),
             )
             .await

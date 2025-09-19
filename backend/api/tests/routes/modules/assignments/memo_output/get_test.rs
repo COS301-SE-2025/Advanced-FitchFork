@@ -16,9 +16,9 @@ mod tests {
     };
     use serde_json::Value;
     use serial_test::serial;
-    use util::paths::memo_output_dir;
     use std::fs;
     use tower::ServiceExt;
+    use util::paths::memo_output_dir;
 
     struct TestData {
         admin_user: UserModel,
@@ -28,7 +28,7 @@ mod tests {
         module: ModuleModel,
         assignment: AssignmentModel,
     }
-    
+
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
             .await

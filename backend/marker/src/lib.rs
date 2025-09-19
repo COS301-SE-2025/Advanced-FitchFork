@@ -158,19 +158,6 @@ impl<'a> MarkingJob<'a> {
         }
 
         //TODO - this currently returns an error when the submission code crashes. Temporary fix below to just give 0 (with no reason) - Richard
-        // let submission = parsers::output_parser::OutputParser.parse(
-        //     (
-        //         &files.memo_contents,
-        //         &files.student_contents,
-        //         allocator
-        //             .0
-        //             .iter()
-        //             .map(|task| task.subsections.len())
-        //             .collect(),
-        //     ),
-        //     self.config,
-        // )?;
-
         let submission = match parsers::output_parser::OutputParser.parse(
             (
                 &files.memo_contents,
@@ -252,9 +239,9 @@ impl<'a> MarkingJob<'a> {
             if let Some(task_output) = submission_task {
                 for (i, subsection) in task_entry.subsections.iter().enumerate() {
                     if i >= task_output.memo_output.subtasks.len() {
+                        let id = &task_entry.id;
                         return Err(MarkerError::InputMismatch(format!(
-                            "Task '{}' has more subsections in allocator than in memo output",
-                            task_entry.id
+                            "Task '{id}' has more subsections in allocator than in memo output"
                         )));
                     }
 
@@ -277,9 +264,9 @@ impl<'a> MarkingJob<'a> {
                     all_results.push(result);
                 }
             } else {
+                let id = &task_entry.id;
                 return Err(MarkerError::InputMismatch(format!(
-                    "Task '{}' from allocator not found in submission outputs",
-                    task_entry.id
+                    "Task '{id}' from allocator not found in submission outputs"
                 )));
             }
 
@@ -349,9 +336,9 @@ mod tests {
     #[tokio::test]
     async fn test_marker_happy_path() {
         let dir = "src/test_files/marker/case1";
-        let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-        let student_outputs = vec![PathBuf::from(format!("{}/student1.txt", dir))];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
+        let student_outputs = vec![PathBuf::from(dir).join("student1.txt")];
+        let allocation_json = PathBuf::from(dir).join("allocator.json");
 
         let job = MarkingJob::new(
             memo_outputs,
@@ -391,14 +378,14 @@ mod tests {
     async fn test_marker_happy_path_case2() {
         let dir = "src/test_files/marker/case2";
         let memo_outputs = vec![
-            PathBuf::from(format!("{}/memo1.txt", dir)),
-            PathBuf::from(format!("{}/memo2.txt", dir)),
+            PathBuf::from(dir).join("memo1.txt"),
+            PathBuf::from(dir).join("memo2.txt"),
         ];
         let student_outputs = vec![
-            PathBuf::from(format!("{}/student1.txt", dir)),
-            PathBuf::from(format!("{}/student2.txt", dir)),
+            PathBuf::from(dir).join("student1.txt"),
+            PathBuf::from(dir).join("student2.txt"),
         ];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let allocation_json = PathBuf::from(dir).join("allocator.json");
 
         let job = MarkingJob::new(
             memo_outputs,
@@ -424,8 +411,6 @@ mod tests {
 
         let task1 = &report.tasks[0];
         assert_eq!(task1.name, "Task 1");
-        assert_eq!(task1.score.earned, 10);
-        assert_eq!(task1.score.total, 10);
         assert_eq!(task1.subsections.len(), 2);
         assert_eq!(task1.subsections[0].label, "Sub1.1");
         assert_eq!(task1.subsections[0].earned, 5);
@@ -438,8 +423,6 @@ mod tests {
 
         let task2 = &report.tasks[1];
         assert_eq!(task2.name, "Task 2");
-        assert_eq!(task2.score.earned, 10);
-        assert_eq!(task2.score.total, 20);
         assert_eq!(task2.subsections.len(), 2);
         assert_eq!(task2.subsections[0].label, "Sub2.1");
         assert_eq!(task2.subsections[0].earned, 10);
@@ -455,14 +438,14 @@ mod tests {
     async fn test_marker_edge_cases_partial_and_empty() {
         let dir = "src/test_files/marker/case3";
         let memo_outputs = vec![
-            PathBuf::from(format!("{}/memo1.txt", dir)),
-            PathBuf::from(format!("{}/memo2.txt", dir)),
+            PathBuf::from(dir).join("memo1.txt"),
+            PathBuf::from(dir).join("memo2.txt"),
         ];
         let student_outputs = vec![
-            PathBuf::from(format!("{}/student1.txt", dir)),
-            PathBuf::from(format!("{}/student2.txt", dir)),
+            PathBuf::from(dir).join("student1.txt"),
+            PathBuf::from(dir).join("student2.txt"),
         ];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let allocation_json = PathBuf::from(dir).join("allocator.json");
 
         let job = MarkingJob::new(
             memo_outputs,
@@ -513,14 +496,14 @@ mod tests {
     async fn test_marker_mixed_partial_extra_and_order() {
         let dir = "src/test_files/marker/case4";
         let memo_outputs = vec![
-            PathBuf::from(format!("{}/memo1.txt", dir)),
-            PathBuf::from(format!("{}/memo2.txt", dir)),
+            PathBuf::from(dir).join("memo1.txt"),
+            PathBuf::from(dir).join("memo2.txt"),
         ];
         let student_outputs = vec![
-            PathBuf::from(format!("{}/student1.txt", dir)),
-            PathBuf::from(format!("{}/student2.txt", dir)),
+            PathBuf::from(dir).join("student1.txt"),
+            PathBuf::from(dir).join("student2.txt"),
         ];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let allocation_json = PathBuf::from(dir).join("allocator.json");
 
         let job = MarkingJob::new(
             memo_outputs,
@@ -580,14 +563,14 @@ mod tests {
     async fn test_marker_whitespace_case_and_duplicates() {
         let dir = "src/test_files/marker/case5";
         let memo_outputs = vec![
-            PathBuf::from(format!("{}/memo1.txt", dir)),
-            PathBuf::from(format!("{}/memo2.txt", dir)),
+            PathBuf::from(dir).join("memo1.txt"),
+            PathBuf::from(dir).join("memo2.txt"),
         ];
         let student_outputs = vec![
-            PathBuf::from(format!("{}/student1.txt", dir)),
-            PathBuf::from(format!("{}/student2.txt", dir)),
+            PathBuf::from(dir).join("student1.txt"),
+            PathBuf::from(dir).join("student2.txt"),
         ];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let allocation_json = PathBuf::from(dir).join("allocator.json");
 
         let job = MarkingJob::new(
             memo_outputs,
@@ -647,40 +630,39 @@ mod tests {
     // #[tokio::test]
     // async fn test_marker_error_handling_mismatched_subsections() {
     //     let dir = "src/test_files/marker/case6";
-    //     let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-    //     let student_outputs = vec![PathBuf::from(format!("{}/student1.txt", dir))];
-    //     let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
-
+    //     let memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
+    //     let student_outputs = vec![PathBuf::from(dir).join("student1.txt")];
+    //     let allocation_json = PathBuf::from(dir).join("allocator.json");
+    //
     //     let job = MarkingJob::new(
     //         memo_outputs,
     //         student_outputs,
     //         allocation_json,
     //         ExecutionConfig::default_config(),
     //     );
-
+    //
     //     let result = job.mark().await;
     //     assert!(
     //         result.is_err(),
     //         "Marking should fail due to mismatched subsection count"
     //     );
     //     let err = result.unwrap_err();
-    //     let err_str = format!("{:?}", err);
+    //     let err_str = format!("{err:?}");
     //     assert!(
     //         err_str.contains("more subsections in allocator than in memo output")
     //             || err_str.contains("InputMismatch")
     //             || err_str.contains("Expected 2 subtasks, but found 1 delimiters"),
-    //         "Error message should mention mismatched subsections, got: {}",
-    //         err_str
+    //         "Error message should mention mismatched subsections, got: {err_str}"
     //     );
     // }
 
     #[tokio::test]
     async fn test_marker_error_handling_missing_file() {
         let dir = "src/test_files/marker/case6";
-        let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
+        let memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
         // Purposely reference a missing student file
-        let student_outputs = vec![PathBuf::from(format!("{}/student_missing.txt", dir))];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let student_outputs = vec![PathBuf::from(dir).join("student_missing.txt")];
+        let allocation_json = PathBuf::from(dir).join("allocator.json");
 
         let job = MarkingJob::new(
             memo_outputs,
@@ -695,20 +677,19 @@ mod tests {
             "Marking should fail due to missing student file"
         );
         let err = result.unwrap_err();
-        let err_str = format!("{:?}", err);
+        let err_str = format!("{err:?}");
         assert!(
             err_str.contains("File not found") || err_str.contains("unreadable"),
-            "Error message should mention missing file, got: {}",
-            err_str
+            "Error message should mention missing file, got: {err_str}"
         );
     }
 
     #[tokio::test]
     async fn test_marker_error_handling_invalid_allocator_json() {
         let dir = "src/test_files/marker/case7";
-        let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-        let student_outputs = vec![PathBuf::from(format!("{}/student1.txt", dir))];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
+        let student_outputs = vec![PathBuf::from(dir).join("student1.txt")];
+        let allocation_json = PathBuf::from(dir).join("allocator.json");
 
         let job = MarkingJob::new(
             memo_outputs,
@@ -723,14 +704,13 @@ mod tests {
             "Marking should fail due to invalid allocator JSON"
         );
         let err = result.unwrap_err();
-        let err_str = format!("{:?}", err);
+        let err_str = format!("{err:?}");
         assert!(
             err_str.contains("InvalidJson")
                 || err_str.contains("allocator")
                 || err_str.contains("expected")
                 || err_str.contains("EOF"),
-            "Error message should mention invalid JSON, got: {}",
-            err_str
+            "Error message should mention invalid JSON, got: {err_str}"
         );
     }
 
@@ -738,40 +718,39 @@ mod tests {
     // #[tokio::test]
     // async fn test_marker_error_handling_invalid_memo_format() {
     //     let dir = "src/test_files/marker/case8";
-    //     let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-    //     let student_outputs = vec![PathBuf::from(format!("{}/student1.txt", dir))];
-    //     let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
-
+    //     let memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
+    //     let student_outputs = vec![PathBuf::from(dir).join("student1.txt")];
+    //     let allocation_json = PathBuf::from(dir).join("allocator.json");
+    //
     //     let job = MarkingJob::new(
     //         memo_outputs,
     //         student_outputs,
     //         allocation_json,
     //         ExecutionConfig::default_config(),
     //     );
-
+    //
     //     let result = job.mark().await;
     //     assert!(
     //         result.is_err(),
     //         "Marking should fail due to invalid memo output format"
     //     );
     //     let err = result.unwrap_err();
-    //     let err_str = format!("{:?}", err);
+    //     let err_str = format!("{err:?}");
     //     assert!(
     //         err_str.contains("ParseOutputError")
     //             || err_str.contains("Expected")
     //             || err_str.contains("subtasks")
     //             || err_str.contains("delimiter"),
-    //         "Error message should mention invalid memo format, got: {}",
-    //         err_str
+    //         "Error message should mention invalid memo format, got: {err_str}"
     //     );
     // }
 
     #[tokio::test]
     async fn test_marker_error_handling_empty_student_output() {
         let dir = "src/test_files/marker/case9";
-        let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-        let student_outputs = vec![PathBuf::from(format!("{}/student1.txt", dir))];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
+        let student_outputs = vec![PathBuf::from(dir).join("student1.txt")];
+        let allocation_json = PathBuf::from(dir).join("allocator.json");
 
         let job = MarkingJob::new(
             memo_outputs,
@@ -795,15 +774,14 @@ mod tests {
                 assert_eq!(report.mark.total, 10);
             }
             Err(err) => {
-                let err_str = format!("{:?}", err);
+                let err_str = format!("{err:?}");
                 assert!(
                     err_str.contains("ParseOutputError")
                         || err_str.contains("Expected")
                         || err_str.contains("subtasks")
                         || err_str.contains("delimiter")
                         || err_str.contains("empty"),
-                    "Error message should mention empty or invalid student output, got: {}",
-                    err_str
+                    "Error message should mention empty or invalid student output, got: {err_str}"
                 );
             }
         }

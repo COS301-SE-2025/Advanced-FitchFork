@@ -7,7 +7,7 @@ import type {
   Assignment,
   AssignmentStats,
 } from "@/types/modules/assignments";
-import { api, apiDownload, buildQuery } from "@/utils/api";
+import { api, apiDownload, apiFetchBlob, buildQuery } from "@/utils/api";
 
 // ─────────────────────────────────────────────────────────────
 // GET Responses Types
@@ -51,6 +51,14 @@ export const downloadAssignmentFile = async (
   fileId: number
 ): Promise<void> => {
   return apiDownload(`/modules/${moduleId}/assignments/${assignmentId}/files/${fileId}`);
+};
+
+export const fetchAssignmentFileBlob = async (
+  moduleId: number,
+  assignmentId: number,
+  fileId: number,
+): Promise<Blob> => {
+  return apiFetchBlob(`/modules/${moduleId}/assignments/${assignmentId}/files/${fileId}`);
 };
 
 export const getAssignmentReadiness = async (

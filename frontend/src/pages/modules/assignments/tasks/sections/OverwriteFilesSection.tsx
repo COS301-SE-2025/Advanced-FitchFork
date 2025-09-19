@@ -1,6 +1,6 @@
 // src/pages/modules/assignments/Tasks/sections/OverwriteFilesSection.tsx
 import React, { useState } from 'react';
-import { Button, Typography, Upload, Space, Tag, Tooltip } from 'antd';
+import { Button, Typography, Upload, Tag, Tooltip } from 'antd';
 import type { UploadFile, RcFile, UploadProps } from 'antd/es/upload/interface';
 import SettingsGroup from '@/components/SettingsGroup';
 import { message } from '@/utils/message';
@@ -156,29 +156,45 @@ const OverwriteFilesSection: React.FC = () => {
         </Dragger>
 
         <div className="mt-4">
-          <Space.Compact>
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
             <Button
               type="primary"
               onClick={onUpload}
               loading={uploading}
               disabled={fileList.length === 0}
+              className="w-full sm:w-auto"
             >
               Upload selected
             </Button>
             <Tooltip title={hasFile ? '' : 'Nothing to download yet'}>
-              <Button onClick={onDownload} loading={downloading} disabled={!hasFile}>
+              <Button
+                onClick={onDownload}
+                loading={downloading}
+                disabled={!hasFile}
+                className="w-full sm:w-auto"
+              >
                 Download latest
               </Button>
             </Tooltip>
             <Tooltip title={hasFile ? '' : 'Nothing to delete'}>
-              <Button danger onClick={onDeleteAll} loading={deleting} disabled={!hasFile}>
+              <Button
+                danger
+                onClick={onDeleteAll}
+                loading={deleting}
+                disabled={!hasFile}
+                className="w-full sm:w-auto"
+              >
                 Delete all
               </Button>
             </Tooltip>
-            <Button onClick={clearSelection} disabled={fileList.length === 0}>
+            <Button
+              onClick={clearSelection}
+              disabled={fileList.length === 0}
+              className="w-full sm:w-auto"
+            >
               Clear selection
             </Button>
-          </Space.Compact>
+          </div>
         </div>
 
         <Typography.Paragraph type="secondary" className="!mb-0 mt-2">

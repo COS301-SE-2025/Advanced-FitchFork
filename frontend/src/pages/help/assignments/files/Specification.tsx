@@ -7,11 +7,13 @@ import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 const { Title, Paragraph, Text } = Typography;
 
 const toc = [
-  { key: 'what', href: '#what', title: 'What is the Specification ZIP?' },
-  { key: 'where', href: '#where', title: 'Where to Upload' },
+  { key: 'overview', href: '#overview', title: 'Why the Specification Archive Matters' },
+  { key: 'lifecycle', href: '#lifecycle', title: 'How Fitchfork Uses Spec Files' },
+  { key: 'requirements', href: '#requirements', title: 'Archive Requirements' },
+  { key: 'storage', href: '#storage', title: 'After You Upload' },
   { key: 'structure', href: '#structure', title: 'Archive Structure' },
   { key: 'examples', href: '#examples', title: 'Examples' },
-  { key: 'plagiarism', href: '#plagiarism', title: 'Plagiarism: Base Files Behavior' },
+  { key: 'plagiarism', href: '#plagiarism', title: 'Plagiarism Base Files' },
   { key: 'best', href: '#best', title: 'Best Practices' },
   { key: 'faq', href: '#faq', title: 'FAQ' },
   { key: 'trouble', href: '#trouble', title: 'Troubleshooting' },
@@ -105,18 +107,10 @@ export default function Specification() {
     extra: (
       <Card className="mt-4" size="small" title="Quick facts" bordered>
         <ul className="list-disc pl-5">
-          <li>
-            Archive for <b>skeleton starter code</b> students receive
-          </li>
-          <li>
-            May include <b>spec.pdf</b> and <b>README.md</b>
-          </li>
-          <li>
-            <b>Root-only files</b> — no folders
-          </li>
-          <li>
-            Also used as <b>base files</b> in plagiarism detection
-          </li>
+          <li>Upload under <Text code>Assignments → Config → Files</Text></li>
+          <li>Archive contains skeleton starter code plus optional docs (spec.pdf, README)</li>
+          <li>Root-only files (no folders) so the runner and MOSS can ingest them</li>
+          <li>Everything in the archive is sent to MOSS as base files to suppress boilerplate matches</li>
         </ul>
       </Card>
     ),
@@ -129,49 +123,76 @@ export default function Specification() {
         Specification
       </Title>
 
-      <section id="what" className="scroll-mt-24" />
-      <Title level={3}>What is the Specification ZIP?</Title>
+      <section id="overview" className="scroll-mt-24" />
+      <Title level={3}>Why the Specification Archive Matters</Title>
       <Paragraph className="mb-0">
-        The <b>Specification</b> ZIP (often <Text code>spec.zip</Text>) bundles the{' '}
-        <b>skeleton files</b> you give to students: headers, stubs, scaffolding, and optionally a{' '}
-        <Text code>spec.pdf</Text> describing the assignment. Students build on top of this starter.
-        The platform also uses this archive as <b>base files</b> for plagiarism detection—shared
-        boilerplate is <i>excluded</i> from similarity scoring, while students’ actual
-        implementations can still be flagged if they match one another.
+        The <strong>Specification</strong> archive (usually <Text code>spec.zip</Text>) bundles the skeleton students inherit—
+        headers, stubs, scaffolding, and optional docs. Fitchfork also passes these files to MOSS as base files, so shared
+        boilerplate is ignored while student-written code can still be flagged. Keeping this archive clean and consistent
+        protects both the student starting experience and plagiarism accuracy.
+      </Paragraph>
+      <Paragraph className="mt-3 mb-0">
+        Upload the archive under <Text code>Assignments → Config → Files</Text>. Lecturers/assistant lecturers own the
+        upload. Manual submissions require it; in GATLAM or interpreter workflows it still serves as the canonical starter
+        pack and base-file input.
       </Paragraph>
 
       <Descriptions bordered size="middle" column={1} className="mt-3">
-        <Descriptions.Item label="Accepted formats">
-          <Tag>.zip</Tag> <Tag>.tar</Tag> <Tag>.tgz</Tag> <Tag>.gz</Tag> (max&nbsp;50&nbsp;MB)
+        <Descriptions.Item label="Formats">
+          <Tag>.zip</Tag> <Tag>.tar</Tag> <Tag>.tgz</Tag> <Tag>.gz</Tag> (≤50&nbsp;MB recommended)
         </Descriptions.Item>
-        <Descriptions.Item label="Contains">
-          Skeleton sources, headers, stub files, optional <Text code>spec.pdf</Text> and{' '}
-          <Text code>README.md</Text>. <b>Root-only files — no folders.</b>
+        <Descriptions.Item label="Contents">
+          Skeleton sources, headers, stubbed implementations, optional <Text code>spec.pdf</Text>/<Text code>README.md</Text>.
+          All files must sit at the archive root.
         </Descriptions.Item>
         <Descriptions.Item label="Used by">
-          <Tag color="geekblue">Students (starter pack)</Tag>{' '}
-          <Tag color="purple">Plagiarism (base files)</Tag>
+          <Tag color="geekblue">Students</Tag> (starter code) and <Tag color="purple">Plagiarism</Tag> (base files).
         </Descriptions.Item>
       </Descriptions>
 
-      <section id="where" className="scroll-mt-24" />
-      <Title level={3}>Where to Upload</Title>
-      <Paragraph className="mb-0">
-        Go to <Text code>Assignments → Config → Files</Text> and upload the <b>Specification</b>{' '}
-        archive. Students will receive these skeleton files as their starting point, and the same
-        archive will be used as <b>base files</b> during similarity checks.
-      </Paragraph>
+      <section id="lifecycle" className="scroll-mt-24" />
+      <Title level={3}>How Fitchfork Uses Spec Files</Title>
+      <Card>
+        <Tabs
+          items={[
+            {
+              key: 'pipeline',
+              label: 'Pipeline',
+              children: (
+                <ul className="list-disc pl-5">
+                  <li>When students clone the assignment, they receive the Specification archive as their starter code.</li>
+                  <li>During memo generation and student runs, the archive is extracted alongside Main and Makefile so the same stubs are available.</li>
+                  <li>When you run MOSS, all files in the archive are uploaded as base files; MOSS ignores exact matches from this skeleton.</li>
+                </ul>
+              ),
+            },
+            {
+              key: 'storage',
+              label: 'Storage & readiness',
+              children: (
+                <Paragraph className="mb-0">
+                  The archive is stored in <Text code>spec/</Text>. Readiness reports and the Setup Checklist check for its
+                  presence. Uploading a new spec overwrites the stored copy and is picked up on the next student download or
+                  MOSS run, so keep versions under source control.
+                </Paragraph>
+              ),
+            },
+          ]}
+        />
+      </Card>
+
+      <section id="requirements" className="scroll-mt-24" />
+      <Title level={3}>Archive Requirements</Title>
+      <ul className="list-disc pl-5">
+        <li>Files must live at the archive root (no nested directories).</li>
+        <li>Provide compilable headers/stubs but leave implementations incomplete (e.g., TODOs, return 0).</li>
+        <li>Do not include instructor-only assets like solutions, hidden tests, or credentials.</li>
+        <li>Optional docs (spec.pdf, README.md) are welcome; MOSS treats them as base files too.</li>
+      </ul>
 
       <section id="structure" className="scroll-mt-24" />
       <Title level={3}>Archive Structure</Title>
-      <Paragraph className="mb-0">
-        The Specification ZIP can include <b>multiple files</b>, but they must all live at the{' '}
-        <b>archive root (no directories)</b>. Keep the code <b>compilable</b> but <b>incomplete</b>{' '}
-        (e.g., empty bodies, TODO stubs). Do not include instructor-only artifacts (solutions,
-        answer keys, private tests).
-      </Paragraph>
-
-      <Card className="mt-2">
+      <Card>
         <Tabs
           items={[
             {
@@ -269,7 +290,7 @@ export default function Specification() {
       </Card>
 
       <section id="plagiarism" className="scroll-mt-24" />
-      <Title level={3}>Plagiarism</Title>
+      <Title level={3}>Plagiarism Base Files</Title>
 
       <Alert
         type="info"
@@ -278,9 +299,8 @@ export default function Specification() {
         message="Spec ZIP is treated as base files"
         description={
           <>
-            During similarity checks, <b>all files</b> in the Specification ZIP are uploaded as{' '}
-            <b>base files</b> (MOSS <Text code>-b</Text>). Shared boilerplate is <b>ignored</b>;
-            only student-written code can be flagged.
+            During MOSS runs, every file in the Specification archive is uploaded as a base file (<Text code>-b</Text>).
+            Shared boilerplate is ignored, while code outside the skeleton remains eligible for similarity matches.
           </>
         }
       />
@@ -344,22 +364,32 @@ export default function Specification() {
         items={[
           {
             key: 't1',
-            label: '“Skeleton code still appears as matched in the report”',
+            label: '“Specification archive missing or empty”',
             children: (
-              <ul className="list-disc pl-5">
-                <li>Confirm you uploaded the correct, current Specification ZIP.</li>
-                <li>Ensure students didn’t delete essential skeleton lines/markers.</li>
-                <li>Keep filenames identical; renames reduce base matching.</li>
-              </ul>
+              <Paragraph>
+                Upload a supported archive to the Specification slot and keep files at the root. Readiness checks and
+                memo generation will continue to fail until the archive contains at least one file.
+              </Paragraph>
             ),
           },
           {
             key: 't2',
-            label: 'Spec ZIP rejected or too large',
+            label: 'Skeleton code still appears in plagiarism matches',
+            children: (
+              <ul className="list-disc pl-5">
+                <li>Verify the uploaded Specification matches the skeleton students were given.</li>
+                <li>Keep filenames consistent; renaming files after students download can prevent base matching.</li>
+                <li>Ensure students retain required markers (e.g., delimiter prints) so shared sections align.</li>
+              </ul>
+            ),
+          },
+          {
+            key: 't3',
+            label: 'Archive rejected or too large',
             children: (
               <Paragraph>
-                Use a supported format (<Text code>.zip</Text>/<Text code>.tar</Text>/
-                <Text code>.tgz</Text>/<Text code>.gz</Text>) and keep it ≤ 50&nbsp;MB.
+                Use .zip/.tar/.tgz/.gz and keep the archive under ~50&nbsp;MB. Remove compiled artefacts or large binaries
+                from the skeleton before uploading.
               </Paragraph>
             ),
           },

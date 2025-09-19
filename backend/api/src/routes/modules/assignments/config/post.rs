@@ -1,15 +1,14 @@
-use db::models::assignment_file::{FileType, Model as AssignmentFile};
+use crate::response::ApiResponse;
 use axum::{
-    extract::{State, Json, Path},
+    extract::{Json, Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
-use serde_json::Value;
-use crate::response::ApiResponse;
 use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
+use db::models::assignment_file::{FileType, Model as AssignmentFile};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use serde_json::Value;
 use util::{execution_config::ExecutionConfig, state::AppState};
-
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -68,7 +67,9 @@ pub async fn set_assignment_config(
     if !config_json.is_object() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error("Configuration must be a JSON object")),
+            Json(ApiResponse::<()>::error(
+                "Configuration must be a JSON object",
+            )),
         );
     }
 
@@ -77,7 +78,10 @@ pub async fn set_assignment_config(
         Err(e) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(format!("Invalid config format: {}", e))),
+                Json(ApiResponse::<()>::error(format!(
+                    "Invalid config format: {}",
+                    e
+                ))),
             );
         }
     };
@@ -141,7 +145,6 @@ pub async fn set_assignment_config(
     }
 }
 
-
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/config/reset
 ///
 /// Overwrite the assignment's config on disk with the system defaults (`ExecutionConfig::default_config()`).
@@ -172,7 +175,9 @@ pub async fn reset_assignment_config(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<ExecutionConfig>::error("Assignment or module not found")),
+                Json(ApiResponse::<ExecutionConfig>::error(
+                    "Assignment or module not found",
+                )),
             );
         }
         Err(e) => {
@@ -194,7 +199,9 @@ pub async fn reset_assignment_config(
             eprintln!("Serialization error: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ExecutionConfig>::error("Failed to serialize default config")),
+                Json(ApiResponse::<ExecutionConfig>::error(
+                    "Failed to serialize default config",
+                )),
             );
         }
     };
