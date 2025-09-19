@@ -64,7 +64,7 @@ fn check_file(path: &Path, max_size: Option<u64>) -> Result<(), MarkerError> {
         error!("{}", specific_error);
         MarkerError::IoError("File unreadable".to_string())
     })?;
-    
+
     if let Some(max) = max_size {
         if metadata.len() > max {
             let specific_error = format!(
@@ -114,19 +114,27 @@ pub fn load_files(
         )));
     }
     check_file(&allocator_path, Some(MAX_JSON_SIZE))?;
-    
+
     let allocator_bytes = fs::read(&allocator_path).map_err(|e| {
-        let specific_error = format!("Failed to read allocator file {}: {}", allocator_path.display(), e);
+        let specific_error = format!(
+            "Failed to read allocator file {}: {}",
+            allocator_path.display(),
+            e
+        );
         error!("{}", specific_error);
         MarkerError::IoError("Failed to load mark allocator".to_string())
     })?;
-    
+
     let allocator_raw = serde_json::from_slice(&allocator_bytes).map_err(|e| {
-        let specific_error = format!("Invalid JSON in allocator file {}: {}", allocator_path.display(), e);
+        let specific_error = format!(
+            "Invalid JSON in allocator file {}: {}",
+            allocator_path.display(),
+            e
+        );
         error!("{}", specific_error);
         MarkerError::InvalidJson("Failed to parse mark allocator".to_string())
     })?;
-    
+
     let coverage_raw = if let Some(path) = coverage_path {
         check_file(&path, Some(MAX_JSON_SIZE))?;
         let bytes = fs::read(&path).map_err(|e| {
@@ -143,7 +151,7 @@ pub fn load_files(
     } else {
         None
     };
-    
+
     let mut memo_contents = Vec::new();
     for path in &memo_paths {
         let content = fs::read_to_string(path).map_err(|e| {
@@ -153,7 +161,7 @@ pub fn load_files(
         })?;
         memo_contents.push(content);
     }
-    
+
     let mut student_contents = Vec::new();
     for path in &student_paths {
         let content = fs::read_to_string(path).map_err(|e| {
@@ -163,7 +171,7 @@ pub fn load_files(
         })?;
         student_contents.push(content);
     }
-    
+
     Ok(LoadedFiles {
         memo_contents,
         student_contents,
@@ -308,9 +316,16 @@ mod tests {
         );
         match result {
             Err(MarkerError::InvalidJson(msg)) => {
-                assert_eq!(msg, "Failed to parse mark allocator", "Error message should be general, got: {}", msg);
-            },
-            other => panic!("Expected InvalidJson for invalid json content, got: {:?}", other),
+                assert_eq!(
+                    msg, "Failed to parse mark allocator",
+                    "Error message should be general, got: {}",
+                    msg
+                );
+            }
+            other => panic!(
+                "Expected InvalidJson for invalid json content, got: {:?}",
+                other
+            ),
         }
     }
 
@@ -321,13 +336,8 @@ mod tests {
         let memo_paths = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
         let student_paths = vec![PathBuf::from(format!("{}/student1.txt", dir))];
         let allocator_path = PathBuf::from(format!("{}/allocator.json", dir));
-        
-        let result = load_files(
-            memo_paths,
-            student_paths,
-            allocator_path,
-            None,
-        );
+
+        let result = load_files(memo_paths, student_paths, allocator_path, None);
 
         assert!(result.is_ok());
         let loaded = result.unwrap();

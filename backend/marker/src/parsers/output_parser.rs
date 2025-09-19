@@ -94,8 +94,10 @@ impl<'a> Parser<(&'a [String], &'a [String], Vec<usize>), Submission> for Output
         {
             let task_id = format!("Task{}", i + 1);
             let expected_subtask_count = expected_subtasks[i];
-            let (memo_output, _, _) = parse_task_output(memo_content, expected_subtask_count, &config)?;
-            let (student_output, stderr, return_code) = parse_task_output(student_content, expected_subtask_count, &config)?;
+            let (memo_output, _, _) =
+                parse_task_output(memo_content, expected_subtask_count, &config)?;
+            let (student_output, stderr, return_code) =
+                parse_task_output(student_content, expected_subtask_count, &config)?;
 
             tasks.push(Task {
                 task_id,
@@ -132,7 +134,10 @@ fn parse_task_output(
 ) -> Result<(TaskOutput, Option<String>, Option<i32>), MarkerError> {
     let (content_without_system_delimiters, stderr, return_code) = extract_crash_info(content);
 
-    let lines: Vec<String> = content_without_system_delimiters.lines().map(|s| s.to_string()).collect();
+    let lines: Vec<String> = content_without_system_delimiters
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
     if lines.is_empty() {
         return Err(MarkerError::ParseOutputError(
             "Content is empty".to_string(),
@@ -261,7 +266,6 @@ fn extract_crash_info(content: &str) -> (String, Option<String>, Option<i32>) {
 
     (clean_content, stderr, return_code)
 }
-
 
 fn strip_trailing_newlines(lines: &mut Vec<String>) {
     while matches!(lines.last(), Some(s) if s.is_empty() || s.chars().all(|c| c == '\r')) {

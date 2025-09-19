@@ -1,7 +1,7 @@
+use crate::languages::Language;
 use chrono::Utc;
 use regex::Regex;
 use serde::Serialize;
-use crate::languages::Language;
 
 #[derive(Debug, Serialize)]
 pub struct CoverageSummary {

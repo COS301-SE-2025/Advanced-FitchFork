@@ -17,9 +17,9 @@ use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as M
 use db::models::assignment_task::Model as AssignmentTask;
 use reqwest::Client;
 use serde_json::json;
+use util::code_coverage_report::CoverageProcessor;
 use util::config;
 use util::execution_config::ExecutionConfig;
-use util::code_coverage_report::CoverageProcessor;
 pub mod validate_files;
 
 /// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
@@ -489,17 +489,32 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
                     let output_combined = output_vec.join("\n");
 
                     if task.code_coverage {
-                        match CoverageProcessor::process_report(config.project.language, &output_combined) {
+                        match CoverageProcessor::process_report(
+                            config.project.language,
+                            &output_combined,
+                        ) {
                             Ok(coverage_json) => {
-                                let coverage_report_path = submission_path_cloned.join("coverage_report.json");
-                                if let Err(e) = std::fs::write(&coverage_report_path, &coverage_json) {
-                                    println!("Failed to save coverage report to attempt directory: {}", e);
+                                let coverage_report_path =
+                                    submission_path_cloned.join("coverage_report.json");
+                                if let Err(e) =
+                                    std::fs::write(&coverage_report_path, &coverage_json)
+                                {
+                                    println!(
+                                        "Failed to save coverage report to attempt directory: {}",
+                                        e
+                                    );
                                 } else {
-                                    println!("Coverage report saved to: {:?}", coverage_report_path);
+                                    println!(
+                                        "Coverage report saved to: {:?}",
+                                        coverage_report_path
+                                    );
                                 }
                             }
                             Err(e) => {
-                                println!("Failed to process coverage report for task {}: {}", task.task_number, e);
+                                println!(
+                                    "Failed to process coverage report for task {}: {}",
+                                    task.task_number, e
+                                );
                             }
                         }
                     } else {

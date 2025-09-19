@@ -12,7 +12,10 @@ pub struct ManualFeedback;
 
 #[async_trait]
 impl Feedback for ManualFeedback {
-    async fn assemble_feedback(&self, results: &[TaskResult]) -> Result<Vec<FeedbackEntry>, MarkerError> {
+    async fn assemble_feedback(
+        &self,
+        results: &[TaskResult],
+    ) -> Result<Vec<FeedbackEntry>, MarkerError> {
         let mut feedback_entries = Vec::new();
 
         for result in results {
@@ -27,7 +30,10 @@ impl Feedback for ManualFeedback {
             } else if let Some(ref manual_feedback) = result.manual_feedback {
                 manual_feedback.clone()
             } else {
-                format!("Score: {:.1}% - Some patterns were not matched correctly", percentage)
+                format!(
+                    "Score: {:.1}% - Some patterns were not matched correctly",
+                    percentage
+                )
             };
 
             feedback_entries.push(FeedbackEntry {

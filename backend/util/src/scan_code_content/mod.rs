@@ -1,7 +1,7 @@
-use std::io::{Cursor, Read};
-use zip::ZipArchive;
-use tar::Archive;
 use flate2::read::GzDecoder;
+use std::io::{Cursor, Read};
+use tar::Archive;
+use zip::ZipArchive;
 
 use crate::execution_config::ExecutionConfig;
 
@@ -32,13 +32,13 @@ fn detect_archive_format(bytes: &[u8]) -> Result<ArchiveFormat, String> {
         let cursor = Cursor::new(bytes);
         let mut decoder = GzDecoder::new(cursor);
         let mut decompressed = Vec::new();
-        
+
         if decoder.read_to_end(&mut decompressed).is_ok() && decompressed.len() > 262 {
             if &decompressed[257..262] == b"ustar" {
                 return Ok(ArchiveFormat::TarGz);
             }
         }
-        
+
         return Ok(ArchiveFormat::Gz);
     }
 
@@ -47,8 +47,8 @@ fn detect_archive_format(bytes: &[u8]) -> Result<ArchiveFormat, String> {
 
 fn scan_zip_archive(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, String> {
     let cursor = Cursor::new(bytes);
-    let mut archive = ZipArchive::new(cursor)
-        .map_err(|e| format!("Failed to read zip archive: {}", e))?;
+    let mut archive =
+        ZipArchive::new(cursor).map_err(|e| format!("Failed to read zip archive: {}", e))?;
 
     for i in 0..archive.len() {
         let mut file = archive
@@ -77,15 +77,19 @@ fn scan_tar_archive(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, Stri
     let cursor = Cursor::new(bytes);
     let mut archive = Archive::new(cursor);
 
-    for entry in archive.entries().map_err(|e| format!("Failed to read tar entries: {}", e))? {
+    for entry in archive
+        .entries()
+        .map_err(|e| format!("Failed to read tar entries: {}", e))?
+    {
         let mut entry = entry.map_err(|e| format!("Failed to read tar entry: {}", e))?;
-        
+
         if entry.header().entry_type().is_dir() {
             continue;
         }
 
         let mut contents = String::new();
-        entry.read_to_string(&mut contents)
+        entry
+            .read_to_string(&mut contents)
             .map_err(|e| format!("Failed to read entry contents: {e}"))?;
 
         for dis in &config.marking.dissalowed_code {
@@ -103,15 +107,19 @@ fn scan_tar_gz_archive(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, S
     let decoder = GzDecoder::new(cursor);
     let mut archive = Archive::new(decoder);
 
-    for entry in archive.entries().map_err(|e| format!("Failed to read tar.gz entries: {}", e))? {
+    for entry in archive
+        .entries()
+        .map_err(|e| format!("Failed to read tar.gz entries: {}", e))?
+    {
         let mut entry = entry.map_err(|e| format!("Failed to read tar.gz entry: {}", e))?;
-        
+
         if entry.header().entry_type().is_dir() {
             continue;
         }
 
         let mut contents = String::new();
-        entry.read_to_string(&mut contents)
+        entry
+            .read_to_string(&mut contents)
             .map_err(|e| format!("Failed to read entry contents: {e}"))?;
 
         for dis in &config.marking.dissalowed_code {
@@ -128,8 +136,9 @@ fn scan_gz_file(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, String> 
     let cursor = Cursor::new(bytes);
     let mut decoder = GzDecoder::new(cursor);
     let mut contents = String::new();
-    
-    decoder.read_to_string(&mut contents)
+
+    decoder
+        .read_to_string(&mut contents)
         .map_err(|e| format!("Failed to decompress gz file: {e}"))?;
 
     for dis in &config.marking.dissalowed_code {
@@ -174,7 +183,7 @@ pub fn contains_dissalowed_code(
     config: &ExecutionConfig,
 ) -> Result<bool, String> {
     let format = detect_archive_format(archive_bytes)?;
-    
+
     match format {
         ArchiveFormat::Zip => scan_zip_archive(archive_bytes, config),
         ArchiveFormat::Tar => scan_tar_archive(archive_bytes, config),
@@ -186,12 +195,12 @@ pub fn contains_dissalowed_code(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flate2::Compression;
+    use flate2::write::GzEncoder;
     use std::fs::File;
     use std::io::Write;
     use tempfile::tempdir;
     use zip::write::FileOptions;
-    use flate2::write::GzEncoder;
-    use flate2::Compression;
 
     fn create_test_zip(files: Vec<(&str, &str)>, zip_path: &std::path::Path) {
         let file = File::create(zip_path).unwrap();
@@ -379,7 +388,10 @@ mod tests {
     fn test_detect_archive_format() {
         // Test ZIP format detection
         let zip_bytes = [0x50, 0x4B, 0x03, 0x04]; // ZIP magic bytes
-        assert_eq!(detect_archive_format(&zip_bytes).unwrap(), ArchiveFormat::Zip);
+        assert_eq!(
+            detect_archive_format(&zip_bytes).unwrap(),
+            ArchiveFormat::Zip
+        );
 
         // Test plain GZIP format detection (not a TAR archive)
         let gz_bytes = [0x1F, 0x8B, 0x08, 0x00]; // GZIP magic bytes with no TAR content

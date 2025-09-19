@@ -242,7 +242,11 @@ mod tests {
         assert_eq!(factorial_feedback.task, "Calculate factorial");
         assert!(!factorial_feedback.message.to_lowercase().contains("answer"));
         assert!(!factorial_feedback.message.contains("All patterns matched"));
-        assert!(!factorial_feedback.message.contains("Could not generate AI feedback."));
+        assert!(
+            !factorial_feedback
+                .message
+                .contains("Could not generate AI feedback.")
+        );
         println!("Factorial AI Feedback: {}", factorial_feedback.message);
 
         let palindrome_feedback = &feedback[1];

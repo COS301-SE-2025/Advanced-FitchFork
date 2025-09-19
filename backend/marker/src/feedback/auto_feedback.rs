@@ -35,40 +35,51 @@ impl Feedback for AutoFeedback {
 
         for result in results {
             let mut summary = String::new();
-            
+
             if let Some(return_code) = result.return_code {
                 if return_code != 0 {
                     if let Some(stderr) = &result.stderr {
                         if !stderr.trim().is_empty() {
-                            summary.push_str(&format!("Code crashed with exit code {}: {}", return_code, stderr.trim()));
+                            summary.push_str(&format!(
+                                "Code crashed with exit code {}: {}",
+                                return_code,
+                                stderr.trim()
+                            ));
                         } else {
-                            summary.push_str(&format!("Code crashed with exit code {}", return_code));
+                            summary
+                                .push_str(&format!("Code crashed with exit code {}", return_code));
                         }
                     } else {
                         summary.push_str(&format!("Code crashed with exit code {}", return_code));
                     }
                 }
             }
-            
+
             if summary.is_empty() {
-                if !result.missed_patterns.is_empty() {
-                    let student_set: std::collections::HashSet<&String> = result.student_output.iter().collect();
-                    let memo_set: std::collections::HashSet<&String> = result.memo_output.iter().collect();
+                let student_set: std::collections::HashSet<&String> =
+                    result.student_output.iter().collect();
+                let memo_set: std::collections::HashSet<&String> =
+                    result.memo_output.iter().collect();
 
-                    let feedback_message =  if student_set.is_subset(&memo_set) && student_set.len() < memo_set.len() {
-                        "Missing lines"
-                    } else if memo_set.is_subset(&student_set) && memo_set.len() < student_set.len() {
+                let feedback_message =
+                    if memo_set.is_subset(&student_set) && memo_set.len() < student_set.len() {
+                        println!("TOO MUCH OUTPUT DETECTED");
                         "Too much output"
+                    } else if !result.missed_patterns.is_empty() {
+                        if student_set.is_subset(&memo_set) && student_set.len() < memo_set.len() {
+                            "Missing lines"
+                        } else {
+                            "Incorrect output"
+                        }
+                    } else if !result.matched_patterns.is_empty() {
+                        "All patterns matched"
                     } else {
-                        "Incorrect output"
-                    }.to_string();
+                        ""
+                    };
 
-                    summary.push_str(&feedback_message);
-                } else if !result.matched_patterns.is_empty() {
-                    summary.push_str("All patterns matched");
-                }
+                summary.push_str(feedback_message);
             }
-            
+
             feedback_entries.push(FeedbackEntry {
                 task: result.name.clone(),
                 message: summary,
@@ -82,8 +93,18 @@ impl Feedback for AutoFeedback {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    fn make_task(name: &str, matched: &[&str], missed: &[&str], awarded: i64, possible: i64, student_output: &[&str], memo_output: &[&str], stderr: Option<&str>, return_code: Option<i32>) -> TaskResult {
+
+    fn make_task(
+        name: &str,
+        matched: &[&str],
+        missed: &[&str],
+        awarded: i64,
+        possible: i64,
+        student_output: &[&str],
+        memo_output: &[&str],
+        stderr: Option<&str>,
+        return_code: Option<i32>,
+    ) -> TaskResult {
         TaskResult {
             name: name.to_string(),
             awarded,
@@ -112,19 +133,22 @@ mod tests {
             None,
         );
         let feedback = AutoFeedback.assemble_feedback(&[task]).await.unwrap();
-        assert_eq!(feedback, vec![FeedbackEntry {
-            task: "Task1".to_string(),
-            message: "All patterns matched".to_string(),
-        }]);
+        assert_eq!(
+            feedback,
+            vec![FeedbackEntry {
+                task: "Task1".to_string(),
+                message: "All patterns matched".to_string(),
+            }]
+        );
     }
 
     #[tokio::test]
     async fn test_some_patterns_missed_missing_lines() {
         let task = make_task(
-            "Task2", 
-            &["a"], 
-            &["b", "c"], 
-            1, 
+            "Task2",
+            &["a"],
+            &["b", "c"],
+            1,
             3,
             &["a"],
             &["a", "b", "c"],
@@ -132,21 +156,22 @@ mod tests {
             None,
         );
         let feedback = AutoFeedback.assemble_feedback(&[task]).await.unwrap();
-        assert_eq!(feedback, vec![
-            FeedbackEntry {
+        assert_eq!(
+            feedback,
+            vec![FeedbackEntry {
                 task: "Task2".to_string(),
                 message: "Missing lines".to_string(),
-            },
-        ]);
+            },]
+        );
     }
 
     #[tokio::test]
     async fn test_some_patterns_missed_too_much_output() {
         let task = make_task(
-            "Task2", 
-            &["a"], 
-            &["b"], 
-            1, 
+            "Task2",
+            &["a"],
+            &["b"],
+            1,
             2,
             &["a", "b", "extra"],
             &["a", "b"],
@@ -154,21 +179,22 @@ mod tests {
             None,
         );
         let feedback = AutoFeedback.assemble_feedback(&[task]).await.unwrap();
-        assert_eq!(feedback, vec![
-            FeedbackEntry {
+        assert_eq!(
+            feedback,
+            vec![FeedbackEntry {
                 task: "Task2".to_string(),
                 message: "Too much output".to_string(),
-            },
-        ]);
+            },]
+        );
     }
 
     #[tokio::test]
     async fn test_some_patterns_missed_incorrect_output() {
         let task = make_task(
-            "Task2", 
-            &["a"], 
-            &["b", "c"], 
-            1, 
+            "Task2",
+            &["a"],
+            &["b", "c"],
+            1,
             3,
             &["a", "x"],
             &["a", "b", "c"],
@@ -176,21 +202,22 @@ mod tests {
             None,
         );
         let feedback = AutoFeedback.assemble_feedback(&[task]).await.unwrap();
-        assert_eq!(feedback, vec![
-            FeedbackEntry {
+        assert_eq!(
+            feedback,
+            vec![FeedbackEntry {
                 task: "Task2".to_string(),
                 message: "Incorrect output".to_string(),
-            },
-        ]);
+            },]
+        );
     }
 
     #[tokio::test]
     async fn test_only_missed_patterns() {
         let task = make_task(
-            "Task3", 
-            &[], 
-            &["x", "y"], 
-            0, 
+            "Task3",
+            &[],
+            &["x", "y"],
+            0,
             2,
             &[],
             &["x", "y"],
@@ -198,10 +225,13 @@ mod tests {
             None,
         );
         let feedback = AutoFeedback.assemble_feedback(&[task]).await.unwrap();
-        assert_eq!(feedback, vec![FeedbackEntry {
-            task: "Task3".to_string(),
-            message: "Missing lines".to_string(),
-        }]);
+        assert_eq!(
+            feedback,
+            vec![FeedbackEntry {
+                task: "Task3".to_string(),
+                message: "Missing lines".to_string(),
+            }]
+        );
     }
 
     #[tokio::test]
@@ -223,53 +253,62 @@ mod tests {
         let t2 = make_task("T2", &[], &["b"], 0, 1, &[], &["b"], None, None);
         let t3 = make_task("T3", &["x"], &["y"], 1, 2, &["x"], &["x", "y"], None, None);
         let feedback = AutoFeedback.assemble_feedback(&[t1, t2, t3]).await.unwrap();
-        assert_eq!(feedback, vec![
-            FeedbackEntry {
-                task: "T1".to_string(),
-                message: "All patterns matched".to_string(),
-            },
-            FeedbackEntry {
-                task: "T2".to_string(),
-                message: "Missing lines".to_string(),
-            },
-            FeedbackEntry {
-                task: "T3".to_string(),
-                message: "Missing lines".to_string(),
-            },
-        ]);
+        assert_eq!(
+            feedback,
+            vec![
+                FeedbackEntry {
+                    task: "T1".to_string(),
+                    message: "All patterns matched".to_string(),
+                },
+                FeedbackEntry {
+                    task: "T2".to_string(),
+                    message: "Missing lines".to_string(),
+                },
+                FeedbackEntry {
+                    task: "T3".to_string(),
+                    message: "Missing lines".to_string(),
+                },
+            ]
+        );
     }
 
     #[tokio::test]
     async fn test_crash_feedback_with_stderr() {
         let task = make_task(
-            "CrashTask", 
-            &[], 
-            &["expected_output"], 
-            0, 
-            10,
-            &[], 
+            "CrashTask",
+            &[],
             &["expected_output"],
-            Some("java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"str\" is null\n    at Main.main(Main.java:5)"),
-            Some(1)
+            0,
+            10,
+            &[],
+            &["expected_output"],
+            Some(
+                "java.lang.NullPointerException: Cannot invoke \"String.length()\" because \"str\" is null\n    at Main.main(Main.java:5)",
+            ),
+            Some(1),
         );
         let feedback = AutoFeedback.assemble_feedback(&[task]).await.unwrap();
         assert_eq!(feedback.len(), 1);
-        assert!(feedback[0].message.contains("Code crashed with exit code 1"));
+        assert!(
+            feedback[0]
+                .message
+                .contains("Code crashed with exit code 1")
+        );
         assert!(feedback[0].message.contains("NullPointerException"));
     }
 
     #[tokio::test]
     async fn test_crash_feedback_no_stderr() {
         let task = make_task(
-            "CrashTask", 
-            &[], 
-            &["expected_output"], 
-            0, 
+            "CrashTask",
+            &[],
+            &["expected_output"],
+            0,
             10,
-            &[], 
+            &[],
             &["expected_output"],
             None,
-            Some(139)
+            Some(139),
         );
         let feedback = AutoFeedback.assemble_feedback(&[task]).await.unwrap();
         assert_eq!(feedback.len(), 1);

@@ -130,10 +130,14 @@ impl<'a> MarkingJob<'a> {
             self.coverage_report,
         )?;
 
-        let allocator: AllocatorSchema = parsers::allocator_parser::JsonAllocatorParser.parse(&files.allocator_raw, self.config.clone())?;
+        let allocator: AllocatorSchema = parsers::allocator_parser::JsonAllocatorParser
+            .parse(&files.allocator_raw, self.config.clone())?;
 
         let coverage_report = if let Some(ref coverage_raw) = files.coverage_raw {
-            Some(parsers::coverage_parser::JsonCoverageParser.parse(coverage_raw, self.config.clone())?)
+            Some(
+                parsers::coverage_parser::JsonCoverageParser
+                    .parse(coverage_raw, self.config.clone())?,
+            )
         } else {
             None
         };
@@ -182,12 +186,20 @@ impl<'a> MarkingJob<'a> {
                         .map(|s| s.lines.clone())
                         .unwrap_or_default();
 
-                    let memo_or_regex_lines: Vec<String> = match self.config.marking.marking_scheme {
+                    let memo_or_regex_lines: Vec<String> = match self.config.marking.marking_scheme
+                    {
                         MarkingScheme::Regex => subsection.regex.clone().unwrap_or_default(),
-                        _ => task_output.memo_output.subtasks.get(sub_index).map(|s| s.lines.clone()).unwrap_or_default(),
+                        _ => task_output
+                            .memo_output
+                            .subtasks
+                            .get(sub_index)
+                            .map(|s| s.lines.clone())
+                            .unwrap_or_default(),
                     };
 
-                    let mut result = self.comparator.compare(subsection, &memo_or_regex_lines, &student_lines);
+                    let mut result =
+                        self.comparator
+                            .compare(subsection, &memo_or_regex_lines, &student_lines);
                     result.stderr = task_output.stderr.clone();
                     result.return_code = task_output.return_code;
 
@@ -259,10 +271,16 @@ impl<'a> MarkingJob<'a> {
                 p if p < 80.0 => 80,
                 _ => 100,
             };
-            
-            let coverage_value = allocator.tasks.iter().filter(|t| t.code_coverage).map(|t| t.value).sum::<i64>();
+
+            let coverage_value = allocator
+                .tasks
+                .iter()
+                .filter(|t| t.code_coverage)
+                .map(|t| t.value)
+                .sum::<i64>();
             coverage_total_earned = bucket_percent * coverage_value / 100;
             coverage_total_possible = coverage_value;
+            total_earned += coverage_total_earned;
         }
 
         let mark = crate::report::Score {
@@ -271,7 +289,8 @@ impl<'a> MarkingJob<'a> {
         };
 
         let now = Utc::now().to_rfc3339();
-        let mut report = crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
+        let mut report =
+            crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
 
         if coverage_report.is_some() {
             report.code_coverage = Some(crate::report::CodeCoverageReport {

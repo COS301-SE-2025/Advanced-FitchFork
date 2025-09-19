@@ -2,9 +2,9 @@
 //!
 //! Provides endpoints to manage and retrieve assignment submissions.
 //!
-//! Users can retrieve their own submissions or, if authorized (lecturers, tutors, admins), 
-//! retrieve all submissions for a given assignment. The endpoints support filtering, sorting, 
-//! and pagination. Submission details include marks, late status, practice status, tasks and 
+//! Users can retrieve their own submissions or, if authorized (lecturers, tutors, admins),
+//! retrieve all submissions for a given assignment. The endpoints support filtering, sorting,
+//! and pagination. Submission details include marks, late status, practice status, tasks and
 //! code coverage.
 
 use super::common::{

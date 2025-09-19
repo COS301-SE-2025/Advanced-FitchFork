@@ -204,17 +204,16 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
                     }
                 };
 
-                let feedback = sub_obj.get("feedback")
+                let feedback = sub_obj
+                    .get("feedback")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
-                let regex = sub_obj.get("regex")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                            .collect::<Vec<String>>()
-                    });
+                let regex = sub_obj.get("regex").and_then(|v| v.as_array()).map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect::<Vec<String>>()
+                });
 
                 subsections.push(Subsection {
                     name: sub_name,
@@ -251,10 +250,7 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
             });
         }
 
-        Ok(AllocatorSchema {
-            tasks,
-            total_value,
-        })
+        Ok(AllocatorSchema { tasks, total_value })
     }
 }
 

@@ -53,7 +53,7 @@ impl OutputComparator for RegexComparator {
                 manual_feedback: section.feedback.clone(),
             };
         }
-        
+
         let mut awarded_marks = 0;
         let mut matched_patterns = vec![];
         let mut missed_patterns = vec![];
