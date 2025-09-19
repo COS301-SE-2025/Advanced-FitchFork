@@ -277,6 +277,29 @@ impl Model {
             }
         }
     }
+
+    pub async fn get_selected_submissions_for_assignment(
+        db: &DatabaseConnection,
+        assignment: &AssignmentModel,
+    ) -> Result<Vec<Self>, DbErr> {
+        let all_for_assignment = Entity::find()
+            .filter(Column::AssignmentId.eq(assignment.id))
+            .all(db)
+            .await?;
+
+        let mut user_ids = HashSet::<i64>::new();
+        for s in &all_for_assignment {
+            user_ids.insert(s.user_id);
+        }
+
+        let mut chosen = Vec::with_capacity(user_ids.len());
+        for uid in user_ids {
+            if let Ok(Some(s)) = Model::get_best_for_user(db, assignment, uid).await {
+                chosen.push(s);
+            }
+        }
+        Ok(chosen)
+    }
 }
 
 #[cfg(test)]

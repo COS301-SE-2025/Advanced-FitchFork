@@ -26,6 +26,7 @@ use db::models::{
 use moss_parser::{ParseOptions, parse_moss};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tracing::{error, info};
 use util::config;
 use util::paths::{assignment_dir, ensure_parent_dir, moss_archive_zip_path};
@@ -41,7 +42,7 @@ pub struct CreatePlagiarismCasePayload {
     pub report_id: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PlagiarismCaseResponse {
     pub id: i64,
     pub assignment_id: i64,
@@ -719,4 +720,228 @@ fn generate_description(
         "Submissions `{}` ({}) and `{}` ({}) show {}, with {} lines matched and a similarity score of {:.1}%.",
         sub_a, user_a, sub_b, user_b, level, total_lines, percent
     )
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct HashScanPayload {
+    #[serde(default)]
+    pub create_cases: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct HashScanResponse {
+    pub assignment_id: i64,
+    pub policy_used: String,
+    pub group_count: usize,
+    pub groups: Vec<CollisionGroup>,
+    pub cases: CreatedCases,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CollisionGroup {
+    pub file_hash: String,
+    pub submissions: Vec<SubmissionInfo>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SubmissionInfo {
+    pub submission_id: i64,
+    pub user_id: i64,
+    pub attempt: i64,
+    pub filename: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CreatedCases {
+    pub created: Vec<PlagiarismCaseResponse>,
+    pub skipped_existing: i64,
+}
+
+pub async fn hash_scan(
+    State(app_state): State<AppState>,
+    AxumPath((module_id, assignment_id)): AxumPath<(i64, i64)>,
+    Json(payload): Json<HashScanPayload>,
+) -> impl IntoResponse {
+    let assignment = match AssignmentEntity::find_by_id(assignment_id)
+        .one(app_state.db())
+        .await
+    {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment not found.")),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            error!("Failed to fetch assignment: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Internal server error.")),
+            )
+                .into_response();
+        }
+    };
+
+    let exec_config = ExecutionConfig::get_execution_config(module_id, assignment_id)
+        .unwrap_or_else(|_| ExecutionConfig::default_config());
+    let policy_used = exec_config.marking.grading_policy.to_string();
+
+    let selected_submissions: Vec<assignment_submission::Model> =
+        match assignment_submission::Model::get_selected_submissions_for_assignment(
+            app_state.db(),
+            &assignment,
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to retrieve submissions: {}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Failed to retrieve submissions.")),
+                )
+                    .into_response();
+            }
+        };
+
+    let mut groups_map: HashMap<String, Vec<assignment_submission::Model>> = HashMap::new();
+    for s in selected_submissions
+        .into_iter()
+        .filter(|s| !s.file_hash.is_empty())
+    {
+        groups_map.entry(s.file_hash.clone()).or_default().push(s);
+    }
+
+    let groups: Vec<CollisionGroup> = groups_map
+        .into_iter()
+        .filter(|(_, v)| v.len() >= 2)
+        .map(|(file_hash, submissions_vec)| CollisionGroup {
+            file_hash,
+            submissions: submissions_vec
+                .into_iter()
+                .map(|s| SubmissionInfo {
+                    submission_id: s.id,
+                    user_id: s.user_id,
+                    attempt: s.attempt,
+                    filename: s.filename,
+                    created_at: s.created_at,
+                })
+                .collect(),
+        })
+        .collect();
+
+    let cases = if payload.create_cases {
+        let mut created_cases = vec![];
+        let mut skipped_existing = 0;
+
+        for group in &groups {
+            for (i, s1) in group.submissions.iter().enumerate() {
+                for s2 in group.submissions.iter().skip(i + 1) {
+                    if s1.user_id == s2.user_id {
+                        continue;
+                    }
+
+                    let submission_id_1 = std::cmp::min(s1.submission_id, s2.submission_id);
+                    let submission_id_2 = std::cmp::max(s1.submission_id, s2.submission_id);
+
+                    let existing_case = match plagiarism_case::Entity::find()
+                        .filter(
+                            sea_orm::Condition::all()
+                                .add(plagiarism_case::Column::SubmissionId1.eq(submission_id_1))
+                                .add(plagiarism_case::Column::SubmissionId2.eq(submission_id_2)),
+                        )
+                        .one(app_state.db())
+                        .await
+                    {
+                        Ok(case) => case,
+                        Err(e) => {
+                            error!("Failed to check for existing plagiarism case: {}", e);
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(ApiResponse::<()>::error(
+                                    "Failed to check for existing plagiarism case.",
+                                )),
+                            )
+                                .into_response();
+                        }
+                    };
+
+                    if existing_case.is_some() {
+                        skipped_existing += 1;
+                        continue;
+                    }
+
+                    let new_case = match plagiarism_case::Model::create_case(
+                        app_state.db(),
+                        assignment_id,
+                        submission_id_1,
+                        submission_id_2,
+                        "Identical file hash collision",
+                        100.0,
+                        0,
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(case) => case,
+                        Err(e) => {
+                            error!("Failed to create plagiarism case: {}", e);
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(ApiResponse::<()>::error(
+                                    "Failed to create plagiarism case.",
+                                )),
+                            )
+                                .into_response();
+                        }
+                    };
+
+                    created_cases.push(new_case);
+                }
+            }
+        }
+
+        CreatedCases {
+            created: created_cases
+                .into_iter()
+                .map(|case| PlagiarismCaseResponse {
+                    id: case.id,
+                    assignment_id: case.assignment_id,
+                    submission_id_1: case.submission_id_1,
+                    submission_id_2: case.submission_id_2,
+                    description: case.description,
+                    status: case.status.to_string(),
+                    similarity: case.similarity,
+                    lines_matched: case.lines_matched,
+                    report_id: case.report_id,
+                    created_at: case.created_at,
+                    updated_at: case.updated_at,
+                })
+                .collect(),
+            skipped_existing,
+        }
+    } else {
+        CreatedCases {
+            created: vec![],
+            skipped_existing: 0,
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            HashScanResponse {
+                assignment_id,
+                policy_used,
+                group_count: groups.len(),
+                groups,
+                cases,
+            },
+            "Hash scan complete.",
+        )),
+    )
+        .into_response()
 }
