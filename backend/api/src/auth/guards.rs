@@ -241,7 +241,7 @@ pub async fn allow_student(
         req,
         next,
         allowed,
-        "Student (or higher) access required for this module"
+        "User not assigned to this module"
     ).await
 }
 
