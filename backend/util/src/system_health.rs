@@ -66,7 +66,7 @@ pub fn sample_system_metrics() -> SystemMetrics {
     // CPU & memory refresh (these are fine)
     sys.refresh_cpu_specifics(CpuRefreshKind::everything());
     std::thread::sleep(Duration::from_millis(200));
-    sys.refresh_cpu();
+    sys.refresh_cpu_all();
     sys.refresh_memory();
 
     let cpus = sys.cpus();
