@@ -758,6 +758,130 @@ pub struct CreatedCases {
     pub skipped_existing: i64,
 }
 
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/hash-scan
+///
+/// Performs a hash-based collision scan to detect potentially identical submissions
+/// within an assignment. This endpoint identifies submissions with identical file
+/// hashes, which typically indicates exact file duplication or copy-paste plagiarism.
+///
+/// Accessible only to lecturers and assistant lecturers assigned to the module.
+///
+/// # Path Parameters
+///
+/// - `module_id`: The ID of the parent module
+/// - `assignment_id`: The ID of the assignment to scan
+///
+/// # Request Body
+///
+/// Requires a JSON payload with the following optional field:
+/// - `create_cases` (boolean, default: false): Whether to automatically create plagiarism 
+///   cases for detected hash collisions. When true, creates cases with 100% similarity 
+///   for each pair of submissions with identical hashes.
+///
+/// # Behavior
+///
+/// - **Submission selection respects the assignment's grading policy**:
+///   - `grading_policy = "last"` → uses each student's **most recent** non-practice, non-ignored submission
+///   - `grading_policy = "best"` → uses each student's **best-scoring** non-practice, non-ignored submission
+/// - Groups submissions by their SHA-256 file hash
+/// - Only includes groups with 2+ submissions (actual collisions)
+/// - Filters out submissions with empty/missing file hashes
+/// - When `create_cases = true`:
+///   - Creates plagiarism cases for each unique pair within collision groups
+///   - Skips pairs from the same user (self-collision)
+///   - Deduplicates against existing cases (order-independent)
+///   - Sets similarity to 100.0% and lines_matched to 0
+///   - Uses description: "Identical file hash collision"
+///
+/// # Returns
+///
+/// - `200 OK` on success with collision analysis and optional case creation results
+/// - `404 NOT FOUND` if the assignment doesn't exist
+/// - `403 FORBIDDEN` if user lacks required permissions
+/// - `500 INTERNAL SERVER ERROR` for database errors or processing failures
+///
+/// # Example Request
+///
+/// ```json
+/// {
+///   "create_cases": true
+/// }
+/// ```
+///
+/// # Example Response (200 OK)
+///
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Hash scan complete.",
+///   "data": {
+///     "assignment_id": 42,
+///     "policy_used": "Best",
+///     "group_count": 3,
+///     "groups": [
+///       {
+///         "file_hash": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+///         "submissions": [
+///           {
+///             "submission_id": 101,
+///             "user_id": 15,
+///             "attempt": 2,
+///             "filename": "solution.py",
+///             "created_at": "2024-05-20T14:30:00Z"
+///           },
+///           {
+///             "submission_id": 108,
+///             "user_id": 23,
+///             "attempt": 1,
+///             "filename": "main.py",
+///             "created_at": "2024-05-20T15:45:00Z"
+///           }
+///         ]
+///       }
+///     ],
+///     "cases": {
+///       "created": [
+///         {
+///           "id": 67,
+///           "assignment_id": 42,
+///           "submission_id_1": 101,
+///           "submission_id_2": 108,
+///           "description": "Identical file hash collision",
+///           "status": "review",
+///           "similarity": 100.0,
+///           "lines_matched": 0,
+///           "report_id": null,
+///           "created_at": "2024-05-20T16:00:00Z",
+///           "updated_at": "2024-05-20T16:00:00Z"
+///         }
+///       ],
+///       "skipped_existing": 0
+///     }
+///   }
+/// }
+/// ```
+///
+/// # Example Error Responses
+///
+/// - `404 Not Found`
+/// ```json
+/// { "success": false, "message": "Assignment not found." }
+/// ```
+///
+/// - `500 Internal Server Error`
+/// ```json
+/// { "success": false, "message": "Failed to retrieve submissions." }
+/// ```
+///
+/// # Notes
+///
+/// - Hash collisions indicate **exact file duplication**, which is stronger evidence 
+///   of plagiarism than similarity-based detection methods
+/// - This scan is complementary to MOSS-based similarity detection
+/// - Empty or missing file hashes are excluded from analysis
+/// - Created cases start in "review" status and can be managed via plagiarism APIs/UI
+/// - The scan only considers the selected submission per user based on grading policy
+/// - Practice and ignored submissions are automatically excluded
 pub async fn hash_scan(
     State(app_state): State<AppState>,
     AxumPath((module_id, assignment_id)): AxumPath<(i64, i64)>,
