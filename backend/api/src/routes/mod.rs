@@ -11,7 +11,7 @@
 //! - `/modules` → Module management, personnel, and assignments (authenticated users)
 //! - `/me` → User-specific endpoints (announcements, tickets, assignments)
 
-use crate::auth::guards::{require_admin, require_authenticated};
+use crate::auth::guards::{allow_admin, allow_authenticated};
 use crate::routes::auth::get::get_avatar;
 use crate::routes::{
     auth::auth_routes,
@@ -54,10 +54,10 @@ pub fn routes(app_state: AppState) -> Router<AppState> {
     let mut router: Router<AppState> = Router::new()
         .nest("/health", health_routes())
         .nest("/auth", auth_routes())
-        .nest("/users", users_routes().route_layer(from_fn(require_admin)))
+    .nest("/users", users_routes().route_layer(from_fn(allow_admin)))
         .route("/users/{user_id}/avatar", get(get_avatar))
-        .nest("/modules",modules_routes(app_state.clone()).route_layer(from_fn(require_authenticated)),)
-        .nest("/me", me_routes().route_layer(from_fn(require_authenticated)))
+    .nest("/modules",modules_routes(app_state.clone()).route_layer(from_fn(allow_authenticated)),)
+    .nest("/me", me_routes().route_layer(from_fn(allow_authenticated)))
         .with_state(app_state.clone());
 
     // Conditionally mount the `/test` route group if *not* in production.

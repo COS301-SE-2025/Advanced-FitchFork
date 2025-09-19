@@ -19,7 +19,7 @@ use post::create;
 use put::{edit_module, bulk_edit_modules};
 use assignments::assignment_routes;
 use util::state::AppState;
-use crate::{auth::guards::{require_admin, require_assigned_to_module, require_lecturer}, routes::modules::{announcements::announcement_routes, attendance::attendance_routes, personnel::personnel_routes}};
+use crate::{auth::guards::{allow_admin, allow_assigned_to_module, allow_lecturer}, routes::modules::{announcements::announcement_routes, attendance::attendance_routes, personnel::personnel_routes}};
 
 pub mod assignments;
 pub mod personnel;
@@ -48,14 +48,14 @@ pub fn modules_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(get_modules))
         .route("/me", get(get_my_details))
-        .route("/{module_id}", get(get_module).route_layer(from_fn_with_state(app_state.clone(),require_assigned_to_module)))
-        .route("/", post(create).route_layer(from_fn(require_admin)))
-        .route("/{module_id}", put(edit_module).route_layer(from_fn(require_admin)))
-        .route("/{module_id}", delete(delete_module).route_layer(from_fn(require_admin)))
-        .route("/bulk", delete(bulk_delete_modules).route_layer(from_fn(require_admin)))
-        .route("/bulk", put(bulk_edit_modules).route_layer(from_fn(require_admin)))
+    .route("/{module_id}", get(get_module).route_layer(from_fn_with_state(app_state.clone(),allow_assigned_to_module)))
+    .route("/", post(create).route_layer(from_fn(allow_admin)))
+    .route("/{module_id}", put(edit_module).route_layer(from_fn(allow_admin)))
+    .route("/{module_id}", delete(delete_module).route_layer(from_fn(allow_admin)))
+    .route("/bulk", delete(bulk_delete_modules).route_layer(from_fn(allow_admin)))
+    .route("/bulk", put(bulk_edit_modules).route_layer(from_fn(allow_admin)))
         .nest("/{module_id}/assignments", assignment_routes(app_state.clone()))
-        .nest("/{module_id}/personnel", personnel_routes().route_layer(from_fn_with_state(app_state.clone(),require_lecturer)))
-        .nest("/{module_id}/announcements", announcement_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
-        .nest("/{module_id}/attendance",attendance_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
+    .nest("/{module_id}/personnel", personnel_routes().route_layer(from_fn_with_state(app_state.clone(),allow_lecturer)))
+    .nest("/{module_id}/announcements", announcement_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), allow_assigned_to_module)))
+    .nest("/{module_id}/attendance",attendance_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), allow_assigned_to_module)))
 }

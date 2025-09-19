@@ -1,6 +1,5 @@
 use axum::{extract::{Path, State, FromRequestParts}, http::{Request, StatusCode}, middleware::Next, body::Body, response::{Response, IntoResponse}, Json};
-use once_cell::sync::OnceCell;
-use util::state::AppState;
+use util::{config, state::AppState};
 use crate::auth::claims::AuthUser;
 use crate::response::ApiResponse;
 use sea_orm::DatabaseConnection;
@@ -22,10 +21,14 @@ use db::models::{
 };
 
 // --- Superuser ---
-pub static SUPERUSER_IDS: OnceCell<HashSet<i64>> = OnceCell::new();
+use once_cell::sync::Lazy;
+
+pub static SUPERUSER_IDS: Lazy<HashSet<i64>> = Lazy::new(|| {
+    config::super_users().into()
+});
 
 pub async fn is_superuser(user_id: i64) -> bool {
-    SUPERUSER_IDS.get().unwrap().contains(&user_id)
+    SUPERUSER_IDS.contains(&user_id)
 }
 
 // --- Role Based Access Guards ---
@@ -142,128 +145,128 @@ async fn allow_role_base(
     }
 }
 
-/// Compute the set of roles that are considered "lower or equal" in privilege to the provided role.
+/// Compute the set of roles that are considered "higher or equal" in privilege to the provided role.
 ///
 /// Hierarchy (high -> low): Lecturer > AssistantLecturer > Tutor > Student
-/// If you allow a role you implicitly allow all roles BELOW it ("lower roles") as per new access rule.
-/// This inverses the previous semantics where a "require_*" guard allowed only the exact role.
-fn roles_lower_or_equal(role: &str) -> &'static [&'static str] {
+/// If you allow a role you implicitly allow all roles ABOVE it ("higher roles").
+/// Example: allowing "Tutor" permits Tutor, AssistantLecturer, and Lecturer; not Students.
+fn roles_higher_or_equal(role: &str) -> &'static [&'static str] {
     match role {
-        "Lecturer" => &["Lecturer", "AssistantLecturer", "Tutor", "Student"],
-        "AssistantLecturer" => &["AssistantLecturer", "Tutor", "Student"],
-        "Tutor" => &["Tutor", "Student"],
-        "Student" => &["Student"],
+        "Lecturer" => &["Lecturer"],
+        "AssistantLecturer" => &["Lecturer", "AssistantLecturer"],
+        "Tutor" => &["Lecturer", "AssistantLecturer", "Tutor"],
+        "Student" => &["Lecturer", "AssistantLecturer", "Tutor", "Student"],
         _ => &[], // Fail-safe: unknown role => deny later
     }
 }
 
-/// Guard for allowing Lecturer and all lower roles (AssistantLecturer, Tutor, Student).
+/// Guard for allowing Lecturer and higher (effectively just Lecturer, since it's the highest).
 pub async fn allow_lecturer(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let allowed = roles_lower_or_equal("Lecturer");
+    let allowed = roles_higher_or_equal("Lecturer");
     allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
         allowed,
-        "Lecturer (or lower) access required for this module"
+        "Lecturer (or higher) access required for this module"
     ).await
 }
 
-/// Guard for allowing AssistantLecturer and all lower roles (Tutor, Student).
+/// Guard for allowing AssistantLecturer and higher (AssistantLecturer, Lecturer).
 pub async fn allow_assistant_lecturer(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let allowed = roles_lower_or_equal("AssistantLecturer");
+    let allowed = roles_higher_or_equal("AssistantLecturer");
     allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
         allowed,
-        "Assistant lecturer (or lower) access required for this module"
+        "Assistant lecturer (or higher) access required for this module"
     ).await
 }
 
-/// Guard for allowing Tutor and all lower roles (Student).
+/// Guard for allowing Tutor and higher (Tutor, AssistantLecturer, Lecturer).
 pub async fn allow_tutor(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let allowed = roles_lower_or_equal("Tutor");
+    let allowed = roles_higher_or_equal("Tutor");
     allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
         allowed,
-        "Tutor (or lower) access required for this module"
+        "Tutor (or higher) access required for this module"
     ).await
 }
 
-/// Guard for allowing only Student role.
+/// Guard for allowing Student and higher (Student, Tutor, AssistantLecturer, Lecturer).
 pub async fn allow_student(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    let allowed = roles_lower_or_equal("Student");
+    let allowed = roles_higher_or_equal("Student");
     allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
         allowed,
-        "Student access required for this module"
+        "Student (or higher) access required for this module"
     ).await
 }
 
-/// Guard for allowing Lecturer or AssistantLecturer (and their lower roles).
+/// Guard for allowing Lecturer or AssistantLecturer (and higher of the lower requirement -> AssistantLecturer or above).
 pub async fn allow_lecturer_or_assistant_lecturer(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    // Union of lower-or-equal sets for Lecturer and AssistantLecturer collapses to Lecturer's set.
-    let allowed = roles_lower_or_equal("Lecturer");
+    // Union of higher-or-equal sets collapses to the broader (lower requirement) level: AssistantLecturer
+    let allowed = roles_higher_or_equal("AssistantLecturer");
     allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
         allowed,
-        "Lecturer / AssistantLecturer (or lower) access required for this module"
+        "Lecturer / AssistantLecturer (or higher) access required for this module"
     ).await
 }
 
-/// Guard for allowing Lecturer or Tutor (and their lower roles).
+/// Guard for allowing Lecturer or Tutor (and higher of the lower requirement -> Tutor or above).
 pub async fn allow_lecturer_or_tutor(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    // Lecturer already includes all lower roles.
-    let allowed = roles_lower_or_equal("Lecturer");
+    // Union of higher-or-equal sets collapses to the broader (lower requirement) level: Tutor
+    let allowed = roles_higher_or_equal("Tutor");
     allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
         allowed,
-        "Lecturer or Tutor (or lower) access required for this module"
+        "Lecturer or Tutor (or higher) access required for this module"
     ).await
 }
 
@@ -279,7 +282,7 @@ pub async fn allow_assigned_to_module(
         Path(params),
         req,
         next,
-        &["Lecturer", "AssistantLecturer", "Tutor", "Student"],
+        roles_higher_or_equal("Student"),
         "User not assigned to this module"
     ).await
 }
@@ -778,7 +781,7 @@ pub async fn allow_ticket_ws_access(
     Err((StatusCode::FORBIDDEN, Json(ApiResponse::error("Not allowed to access this ticket websocket"))))
 }
 
-pub async fn require_attendance_ws_access(
+pub async fn allow_attendance_ws_access(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
@@ -830,7 +833,7 @@ pub async fn require_attendance_ws_access(
 /// Admin + staff (Lecturer, AssistantLecturer, Tutor) are bypassed.
 /// Path must include `{module_id}` and `{assignment_id}`.
 /// When required, PIN is read from `x-assignment-pin` header.
-pub async fn require_assignment_access(
+pub async fn allow_assignment_access(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: axum::http::Request<Body>,
