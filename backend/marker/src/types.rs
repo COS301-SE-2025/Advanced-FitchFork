@@ -21,6 +21,16 @@ pub struct TaskResult {
     pub matched_patterns: Vec<String>,
     /// A list of patterns or items that were expected but not found in the student's output.
     pub missed_patterns: Vec<String>,
+    /// The student's actual output lines for comparison purposes.
+    pub student_output: Vec<String>,
+    /// The memo's expected output lines for comparison purposes.
+    pub memo_output: Vec<String>,
+    /// The stderr output (stack trace) if the student's code crashed.
+    pub stderr: Option<String>,
+    /// The return code from running the student's code.
+    pub return_code: Option<i32>,
+    /// Optional manual feedback message for manual feedback strategy.
+    pub manual_feedback: Option<String>,
 }
 
 /// Represents a serializable per-task result for API output.
@@ -38,12 +48,17 @@ pub struct JsonTaskResult {
     pub percentage: f32,
 }
 
-/// The top-level schema for an allocator report, containing a list of tasks.
-#[derive(Debug)]
-pub struct AllocatorSchema(pub Vec<TaskEntry>);
+/// The top-level schema for an allocator report, containing a list of tasks and total value.
+#[derive(Debug, Clone)]
+pub struct AllocatorSchema {
+    /// The list of tasks in the allocator report.
+    pub tasks: Vec<TaskEntry>,
+    /// The total value across all tasks.
+    pub total_value: i64,
+}
 
 /// Represents a single task in the allocator report.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TaskEntry {
     /// The task identifier (e.g., "task1").
     pub id: String,
@@ -51,15 +66,21 @@ pub struct TaskEntry {
     pub name: String,
     /// The value (score/points) assigned to the task.
     pub value: i64,
+    /// Whether this task represents a code coverage requirement and should not be graded as an output task.
+    pub code_coverage: bool,
     /// The subsections of the task. Every task must have atleast one subsection.
     pub subsections: Vec<Subsection>,
 }
 
 /// Represents a subsection within a task.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Subsection {
     /// The name of the subsection.
     pub name: String,
     /// The value (score/points) assigned to the subsection.
     pub value: i64,
+    /// Optional feedback for manual feedback strategy.
+    pub feedback: Option<String>,
+    /// Optional regex patterns for regex-based marking scheme.
+    pub regex: Option<Vec<String>>,
 }

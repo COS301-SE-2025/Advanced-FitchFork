@@ -4,8 +4,8 @@
 //!
 //! Users can retrieve their own submissions or, if authorized (lecturers, tutors, admins),
 //! retrieve all submissions for a given assignment. The endpoints support filtering, sorting,
-//! and pagination. Submission details include marks, late status, practice status, tasks,
-//! code coverage, and code complexity analysis.
+//! and pagination. Submission details include marks, late status, practice status, tasks and
+//! code coverage.
 
 use super::common::{
     ListSubmissionsQuery, SubmissionListItem, SubmissionsListResponse, UserResponse,
@@ -601,7 +601,6 @@ pub async fn list_submissions(
 ///     "is_late": false,
 ///     "tasks": [...],
 ///     "code_coverage": [...],
-///     "code_complexity": {...},
 ///     "user": {
 ///       "user_id": 456,
 ///       "username": "student1",
@@ -660,7 +659,7 @@ pub async fn list_submissions(
 /// ### Notes
 /// - User metadata is only included for non-student users (lecturers, tutors, admins)
 /// - The response contains the complete grading report including marks, tasks, and optional
-///   code coverage/complexity analysis
+///   code coverage analysis
 /// - Access is restricted to users with appropriate permissions for the module
 
 pub async fn get_submission(

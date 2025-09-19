@@ -1,9 +1,0 @@
-{
-    "generated_at": "2025-06-20T12:03:00+02:00",
-    "resource_metrics": {
-        "user_time_s": 0.50,
-        "system_time_s": 0.10,
-        "wall_time_s": 0.75,
-        "max_rss_kb": "102400"
-    }
-}
