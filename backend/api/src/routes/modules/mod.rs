@@ -13,11 +13,10 @@
 //! Call `modules_routes()` to get a configured `Router` for `/modules` to be mounted in the main app.
 
 use crate::{
-    auth::guards::{require_admin, require_assigned_to_module, require_lecturer},
-    routes::modules::{
+    auth::guards::allow_student, routes::modules::{
         announcements::announcement_routes, attendance::attendance_routes,
         personnel::personnel_routes,
-    },
+    }
 };
 use assignments::assignment_routes;
 use axum::{
@@ -30,7 +29,7 @@ use get::{get_module, get_modules, get_my_details};
 use post::create;
 use put::{bulk_edit_modules, edit_module};
 use util::state::AppState;
-use crate::{auth::guards::{allow_admin, allow_assigned_to_module, allow_lecturer}, routes::modules::{announcements::announcement_routes, attendance::attendance_routes, personnel::personnel_routes}};
+use crate::auth::guards::{allow_admin, allow_lecturer};
 
 pub mod announcements;
 pub mod assignments;
@@ -63,7 +62,7 @@ pub fn modules_routes(app_state: AppState) -> Router<AppState> {
             "/{module_id}",
             get(get_module).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_assigned_to_module,
+                allow_student,
             )),
         )
         .route("/", post(create).route_layer(from_fn(allow_admin)))
@@ -95,14 +94,14 @@ pub fn modules_routes(app_state: AppState) -> Router<AppState> {
             "/{module_id}/announcements",
             announcement_routes(app_state.clone()).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_assigned_to_module,
+                allow_student,
             )),
         )
         .nest(
             "/{module_id}/attendance",
             attendance_routes(app_state.clone()).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_assigned_to_module,
+                allow_student,
             )),
         )
 }

@@ -5,8 +5,7 @@ mod tests {
             generate_jwt,
             guards::{
                 Empty, allow_admin, allow_assigned_to_module, allow_assistant_lecturer,
-                allow_authenticated, allow_lecturer, allow_lecturer_or_assistant_lecturer,
-                allow_lecturer_or_tutor, allow_ready_assignment, allow_student,
+                allow_authenticated, allow_lecturer, allow_ready_assignment, allow_student,
                 allow_tutor, validate_known_ids,
             },
         },
@@ -225,7 +224,10 @@ mod tests {
         async fn allows_for_student() {
             let ctx = setup().await;
             let app = create_test_router(ctx.app_state.clone(), allow_lecturer);
-            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.student_token));
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.student_token),
+            );
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }
@@ -325,7 +327,10 @@ mod tests {
         async fn allows_for_student() {
             let ctx = setup().await;
             let app = create_test_router(ctx.app_state.clone(), allow_tutor);
-            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.student_token));
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.student_token),
+            );
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }
@@ -367,7 +372,10 @@ mod tests {
         async fn forbids_for_lecturer() {
             let ctx = setup().await;
             let app = create_test_router(ctx.app_state.clone(), allow_student);
-            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.lecturer_token));
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.lecturer_token),
+            );
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::FORBIDDEN);
         }
@@ -379,10 +387,8 @@ mod tests {
         #[tokio::test]
         async fn succeeds_for_lecturer() {
             let ctx = setup().await;
-            let app = create_test_router(
-                ctx.app_state.clone(),
-                allow_lecturer_or_assistant_lecturer,
-            );
+            let app =
+                create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.lecturer_token),
@@ -394,10 +400,8 @@ mod tests {
         #[tokio::test]
         async fn succeeds_for_assistant_lecturer() {
             let ctx = setup().await;
-            let app = create_test_router(
-                ctx.app_state.clone(),
-                allow_lecturer_or_assistant_lecturer,
-            );
+            let app =
+                create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.assistant_lecturer_token),
@@ -409,10 +413,8 @@ mod tests {
         #[tokio::test]
         async fn succeeds_for_admin() {
             let ctx = setup().await;
-            let app = create_test_router(
-                ctx.app_state.clone(),
-                allow_lecturer_or_assistant_lecturer,
-            );
+            let app =
+                create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
@@ -421,10 +423,8 @@ mod tests {
         #[tokio::test]
         async fn allows_for_tutor() {
             let ctx = setup().await;
-            let app = create_test_router(
-                ctx.app_state.clone(),
-                allow_lecturer_or_assistant_lecturer,
-            );
+            let app =
+                create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
@@ -433,10 +433,8 @@ mod tests {
         #[tokio::test]
         async fn allows_for_student() {
             let ctx = setup().await;
-            let app = create_test_router(
-                ctx.app_state.clone(),
-                allow_lecturer_or_assistant_lecturer,
-            );
+            let app =
+                create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.student_token),
@@ -452,7 +450,7 @@ mod tests {
         #[tokio::test]
         async fn succeeds_for_lecturer() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), allow_lecturer_or_tutor);
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.lecturer_token),
@@ -464,7 +462,7 @@ mod tests {
         #[tokio::test]
         async fn succeeds_for_tutor() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), allow_lecturer_or_tutor);
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
@@ -473,7 +471,7 @@ mod tests {
         #[tokio::test]
         async fn succeeds_for_admin() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), allow_lecturer_or_tutor);
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
@@ -482,7 +480,7 @@ mod tests {
         #[tokio::test]
         async fn allows_for_student() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), allow_lecturer_or_tutor);
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.student_token),
@@ -508,7 +506,10 @@ mod tests {
         async fn succeeds_for_lecturer() {
             let ctx = setup().await;
             let app = create_test_router(ctx.app_state.clone(), guard_adapter);
-            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.lecturer_token));
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.lecturer_token),
+            );
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }
@@ -517,7 +518,10 @@ mod tests {
         async fn succeeds_for_assistant_lecturer() {
             let ctx = setup().await;
             let app = create_test_router(ctx.app_state.clone(), guard_adapter);
-            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.assistant_lecturer_token));
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.assistant_lecturer_token),
+            );
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }
@@ -535,7 +539,10 @@ mod tests {
         async fn succeeds_for_student() {
             let ctx = setup().await;
             let app = create_test_router(ctx.app_state.clone(), guard_adapter);
-            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.student_token));
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.student_token),
+            );
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }
@@ -553,7 +560,10 @@ mod tests {
         async fn fails_for_unassigned_user() {
             let ctx = setup().await;
             let app = create_test_router(ctx.app_state.clone(), guard_adapter);
-            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.unassigned_user_token));
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.unassigned_user_token),
+            );
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::FORBIDDEN);
         }

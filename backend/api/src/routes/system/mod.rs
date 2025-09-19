@@ -1,7 +1,7 @@
 use axum::{Router, middleware::from_fn, routing::get};
 use util::state::AppState;
 
-use crate::auth::guards::require_admin;
+use crate::auth::guards::allow_admin;
 
 pub mod get;
 pub mod post;
@@ -19,5 +19,5 @@ pub fn system_routes() -> Router<AppState> {
             "/submissions/export",
             get(get::submissions_over_time_export),
         )
-        .route_layer(from_fn(require_admin))
+        .route_layer(from_fn(allow_admin))
 }

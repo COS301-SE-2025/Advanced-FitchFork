@@ -1,4 +1,4 @@
-use api::auth::guards::validate_known_ids;
+use api::auth::guards::{validate_known_ids, SUPERUSER_IDS};
 use api::routes::routes;
 use api::ws::system::topics; // for topic helpers
 use api::{auth::middleware::log_request, ws::ws_routes};
@@ -26,6 +26,9 @@ use util::{config, state::AppState, ws::WebSocketManager};
 async fn main() {
     // Load configuration and initialize logging
     let _log_guard = init_logging(&config::log_file(), &config::log_level());
+
+    // Initialize superuser IDs
+    let _ = once_cell::sync::Lazy::force(&SUPERUSER_IDS);
 
     // Set up dependencies
     let db = connect().await;

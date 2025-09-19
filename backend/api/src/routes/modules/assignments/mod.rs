@@ -12,8 +12,8 @@
 
 use crate::{
     auth::guards::{
-        allow_student, require_assignment_access,
-        allow_assistant_lecturer, require_ready_assignment,
+        allow_student, allow_assignment_access,
+        allow_assistant_lecturer, allow_ready_assignment,
     },
     routes::modules::assignments::{post::verify_assignment_pin, statistics::statistics_routes},
 };
@@ -114,7 +114,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
                 ))
                 .route_layer(from_fn_with_state(
                     app_state.clone(),
-                    require_assignment_access,
+                    allow_assignment_access,
                 )),
         )
         .route(
@@ -140,7 +140,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
                 ))
                 .route_layer(from_fn_with_state(
                     app_state.clone(),
-                    require_ready_assignment,
+                    allow_ready_assignment,
                 )),
         )
         .route(
@@ -152,7 +152,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
                 ))
                 .route_layer(from_fn_with_state(
                     app_state.clone(),
-                    require_ready_assignment,
+                    allow_ready_assignment,
                 )),
         )
         .route(
@@ -178,7 +178,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
                 ))
                 .route_layer(from_fn_with_state(
                     app_state.clone(),
-                    require_assignment_access,
+                    allow_assignment_access,
                 )),
         )
         .nest(
@@ -218,7 +218,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
                 ))
                 .route_layer(from_fn_with_state(
                     app_state.clone(),
-                    require_assignment_access,
+                    allow_assignment_access,
                 )),
         )
         .nest("/{assignment_id}/files", files_routes(app_state.clone()))
@@ -235,7 +235,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
                 ))
                 .route_layer(from_fn_with_state(
                     app_state.clone(),
-                    require_assignment_access,
+                    allow_assignment_access,
                 )),
         )
         .nest(
