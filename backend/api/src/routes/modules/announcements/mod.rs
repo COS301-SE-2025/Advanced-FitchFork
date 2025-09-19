@@ -13,14 +13,14 @@
 //! Call `announcement_routes(app_state)` to get a configured `Router` for announcements
 //! to be mounted under a module in the main app.
 
-use axum::{middleware::from_fn_with_state, Router};
-use util::state::AppState;
-use axum::routing::{post, delete, put, get};
-use post::create_announcement;
+use crate::auth::guards::allow_assistant_lecturer;
+use axum::routing::{delete, get, post, put};
+use axum::{Router, middleware::from_fn_with_state};
 use delete::delete_announcement;
+use get::{get_announcement, get_announcements};
+use post::create_announcement;
 use put::edit_announcement;
-use get::{get_announcements, get_announcement};
-use crate::auth::guards::{allow_assistant_lecturer};
+use util::state::AppState;
 
 pub mod common;
 pub mod delete;

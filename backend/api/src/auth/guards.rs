@@ -33,9 +33,7 @@ use util::{config, state::AppState};
 // --- Superuser ---
 use once_cell::sync::Lazy;
 
-pub static SUPERUSER_IDS: Lazy<HashSet<i64>> = Lazy::new(|| {
-    config::super_users().into()
-});
+pub static SUPERUSER_IDS: Lazy<HashSet<i64>> = Lazy::new(|| config::super_users().into());
 
 pub async fn is_superuser(user_id: i64) -> bool {
     SUPERUSER_IDS.contains(&user_id)
@@ -187,8 +185,9 @@ pub async fn allow_lecturer(
         req,
         next,
         allowed,
-        "Lecturer (or higher) access required for this module"
-    ).await
+        "Lecturer (or higher) access required for this module",
+    )
+    .await
 }
 
 /// Guard for allowing AssistantLecturer and higher (AssistantLecturer, Lecturer).
@@ -205,8 +204,9 @@ pub async fn allow_assistant_lecturer(
         req,
         next,
         allowed,
-        "Assistant lecturer (or higher) access required for this module"
-    ).await
+        "Lecturer or assistant lecturer access required for this module",
+    )
+    .await
 }
 
 /// Guard for allowing Tutor and higher (Tutor, AssistantLecturer, Lecturer).
@@ -223,8 +223,9 @@ pub async fn allow_tutor(
         req,
         next,
         allowed,
-        "Tutor (or higher) access required for this module"
-    ).await
+        "Tutor (or higher) access required for this module",
+    )
+    .await
 }
 
 /// Guard for allowing Student and higher (Student, Tutor, AssistantLecturer, Lecturer).
@@ -241,8 +242,9 @@ pub async fn allow_student(
         req,
         next,
         allowed,
-        "User not assigned to this module"
-    ).await
+        "User not assigned to this module",
+    )
+    .await
 }
 
 /// Guard for allowing any assigned role (Lecturer, AssistantLecturer, Tutor, Student).
@@ -258,8 +260,9 @@ pub async fn allow_assigned_to_module(
         req,
         next,
         roles_higher_or_equal("Student"),
-        "User not assigned to this module"
-    ).await
+        "User not assigned to this module",
+    )
+    .await
 }
 
 pub async fn allow_ready_assignment(
@@ -286,7 +289,9 @@ pub async fn allow_ready_assignment(
             Json(ApiResponse::error("Missing or invalid assignment_id")),
         ))?;
 
-     if let Err(e) = db::models::assignment::Model::try_transition_to_ready(db, module_id, assignment_id).await {
+    if let Err(e) =
+        db::models::assignment::Model::try_transition_to_ready(db, module_id, assignment_id).await
+    {
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::error(format!(

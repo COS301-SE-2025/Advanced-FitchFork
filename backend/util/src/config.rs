@@ -3,9 +3,9 @@
 //! All variables are REQUIRED.
 
 use std::collections::HashSet;
-use std::sync::{OnceLock, RwLock};
 use std::str::FromStr;
 use std::sync::Once;
+use std::sync::{OnceLock, RwLock};
 
 #[inline]
 fn ensure_dotenv() {
@@ -70,7 +70,7 @@ pub struct AppConfig {
     pub email_from_name: String,
     pub gemini_api_key: String,
     pub moss_user_id: String,
-     pub superuser_ids: HashSet<i64>,
+    pub superuser_ids: HashSet<i64>,
 }
 
 impl AppConfig {
@@ -247,10 +247,13 @@ pub fn super_users() -> HashSet<i64> {
         .split(',')
         .map(str::trim)
         .filter(|x| !x.is_empty())
-        .map(|x| x.parse().unwrap_or_else(|e| panic!("invalid SUPERUSER_ID {x}: {e}")))
+        .map(|x| {
+            x.parse()
+                .unwrap_or_else(|e| panic!("invalid SUPERUSER_ID {x}: {e}"))
+        })
         .collect();
     *write_guard = set.clone();
-     set
+    set
 }
 
 #[cfg(test)]
@@ -456,7 +459,9 @@ mod tests {
         }
         assert_eq!(super::moss_user_id(), "mid");
 
-        unsafe { std::env::set_var("SUPERUSER_IDS", "10,20,30"); }
+        unsafe {
+            std::env::set_var("SUPERUSER_IDS", "10,20,30");
+        }
         let su = super::super_users();
         assert!(su.contains(&10));
         assert!(su.contains(&20));

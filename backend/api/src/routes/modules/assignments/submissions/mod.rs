@@ -20,9 +20,7 @@ use get::{get_submission, get_submission_output, list_submissions};
 use patch::set_submission_ignored;
 use post::{remark_submissions, resubmit_submissions, submit_assignment};
 
-use crate::auth::guards::{
-    allow_assistant_lecturer, allow_tutor, allow_ready_assignment,
-};
+use crate::auth::guards::{allow_assistant_lecturer, allow_ready_assignment, allow_tutor};
 use crate::routes::modules::assignments::submissions::get::download_submission_file;
 use util::state::AppState;
 
@@ -51,10 +49,8 @@ pub fn submission_routes(app_state: AppState) -> Router<AppState> {
         .route("/{submission_id}", get(get_submission))
         .route(
             "/{submission_id}/output",
-            get(get_submission_output).route_layer(from_fn_with_state(
-                app_state.clone(),
-                allow_tutor,
-            )),
+            get(get_submission_output)
+                .route_layer(from_fn_with_state(app_state.clone(), allow_tutor)),
         )
         .route("/{submission_id}/download", get(download_submission_file))
         .route(

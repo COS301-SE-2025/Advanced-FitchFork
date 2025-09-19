@@ -12,11 +12,13 @@
 //! ## Usage
 //! Call `modules_routes()` to get a configured `Router` for `/modules` to be mounted in the main app.
 
+use crate::auth::guards::{allow_admin, allow_lecturer};
 use crate::{
-    auth::guards::allow_student, routes::modules::{
+    auth::guards::allow_student,
+    routes::modules::{
         announcements::announcement_routes, attendance::attendance_routes,
         personnel::personnel_routes,
-    }
+    },
 };
 use assignments::assignment_routes;
 use axum::{
@@ -29,7 +31,6 @@ use get::{get_module, get_modules, get_my_details};
 use post::create;
 use put::{bulk_edit_modules, edit_module};
 use util::state::AppState;
-use crate::auth::guards::{allow_admin, allow_lecturer};
 
 pub mod announcements;
 pub mod assignments;
@@ -60,10 +61,7 @@ pub fn modules_routes(app_state: AppState) -> Router<AppState> {
         .route("/me", get(get_my_details))
         .route(
             "/{module_id}",
-            get(get_module).route_layer(from_fn_with_state(
-                app_state.clone(),
-                allow_student,
-            )),
+            get(get_module).route_layer(from_fn_with_state(app_state.clone(), allow_student)),
         )
         .route("/", post(create).route_layer(from_fn(allow_admin)))
         .route(
@@ -92,16 +90,12 @@ pub fn modules_routes(app_state: AppState) -> Router<AppState> {
         )
         .nest(
             "/{module_id}/announcements",
-            announcement_routes(app_state.clone()).route_layer(from_fn_with_state(
-                app_state.clone(),
-                allow_student,
-            )),
+            announcement_routes(app_state.clone())
+                .route_layer(from_fn_with_state(app_state.clone(), allow_student)),
         )
         .nest(
             "/{module_id}/attendance",
-            attendance_routes(app_state.clone()).route_layer(from_fn_with_state(
-                app_state.clone(),
-                allow_student,
-            )),
+            attendance_routes(app_state.clone())
+                .route_layer(from_fn_with_state(app_state.clone(), allow_student)),
         )
 }

@@ -1,4 +1,4 @@
-use api::auth::guards::{validate_known_ids, SUPERUSER_IDS};
+use api::auth::guards::{SUPERUSER_IDS, validate_known_ids};
 use api::routes::routes;
 use api::ws::system::topics; // for topic helpers
 use api::{auth::middleware::log_request, ws::ws_routes};

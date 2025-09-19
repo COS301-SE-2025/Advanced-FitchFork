@@ -12,8 +12,7 @@
 
 use crate::{
     auth::guards::{
-        allow_student, allow_assignment_access,
-        allow_assistant_lecturer, allow_ready_assignment,
+        allow_assignment_access, allow_assistant_lecturer, allow_ready_assignment, allow_student,
     },
     routes::modules::assignments::{post::verify_assignment_pin, statistics::statistics_routes},
 };
@@ -100,18 +99,12 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         )
         .route(
             "/",
-            get(get_assignments).route_layer(from_fn_with_state(
-                app_state.clone(),
-                allow_student,
-            )),
+            get(get_assignments).route_layer(from_fn_with_state(app_state.clone(), allow_student)),
         )
         .route(
             "/{assignment_id}",
             get(get_assignment)
-                .route_layer(from_fn_with_state(
-                    app_state.clone(),
-                    allow_student,
-                ))
+                .route_layer(from_fn_with_state(app_state.clone(), allow_student))
                 .route_layer(from_fn_with_state(
                     app_state.clone(),
                     allow_assignment_access,
@@ -172,10 +165,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .route(
             "/{assignment_id}/readiness",
             get(get_assignment_readiness)
-                .route_layer(from_fn_with_state(
-                    app_state.clone(),
-                    allow_student,
-                ))
+                .route_layer(from_fn_with_state(app_state.clone(), allow_student))
                 .route_layer(from_fn_with_state(
                     app_state.clone(),
                     allow_assignment_access,
@@ -212,10 +202,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .nest(
             "/{assignment_id}/submissions",
             submission_routes(app_state.clone())
-                .route_layer(from_fn_with_state(
-                    app_state.clone(),
-                    allow_student,
-                ))
+                .route_layer(from_fn_with_state(app_state.clone(), allow_student))
                 .route_layer(from_fn_with_state(
                     app_state.clone(),
                     allow_assignment_access,
@@ -229,10 +216,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .nest(
             "/{assignment_id}/tickets",
             ticket_routes(app_state.clone())
-                .route_layer(from_fn_with_state(
-                    app_state.clone(),
-                    allow_student,
-                ))
+                .route_layer(from_fn_with_state(app_state.clone(), allow_student))
                 .route_layer(from_fn_with_state(
                     app_state.clone(),
                     allow_assignment_access,
@@ -241,10 +225,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         .nest(
             "/{assignment_id}/plagiarism",
             plagiarism_routes()
-                .route_layer(from_fn_with_state(
-                    app_state.clone(),
-                    allow_student,
-                ))
+                .route_layer(from_fn_with_state(app_state.clone(), allow_student))
                 .route_layer(from_fn_with_state(
                     app_state.clone(),
                     allow_assistant_lecturer,

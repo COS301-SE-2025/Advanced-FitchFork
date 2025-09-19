@@ -2,7 +2,7 @@
 //!
 //! This module defines the routing for assignment file-related endpoints, including uploading, listing, downloading, and deleting files. It applies access control middleware to ensure appropriate permissions for each operation.
 
-use crate::auth::guards::{allow_student, allow_lecturer};
+use crate::auth::guards::{allow_lecturer, allow_student};
 use axum::{
     Router,
     middleware::from_fn_with_state,
@@ -40,21 +40,14 @@ pub fn files_routes(app_state: AppState) -> Router<AppState> {
         )
         .route(
             "/",
-            get(list_files).route_layer(from_fn_with_state(
-                app_state.clone(),
-                allow_student,
-            )),
+            get(list_files).route_layer(from_fn_with_state(app_state.clone(), allow_student)),
         )
         .route(
             "/",
-            delete(delete_files)
-                .route_layer(from_fn_with_state(app_state.clone(), allow_lecturer)),
+            delete(delete_files).route_layer(from_fn_with_state(app_state.clone(), allow_lecturer)),
         )
         .route(
             "/{file_id}",
-            get(download_file).route_layer(from_fn_with_state(
-                app_state.clone(),
-                allow_student,
-            )),
+            get(download_file).route_layer(from_fn_with_state(app_state.clone(), allow_student)),
         )
 }

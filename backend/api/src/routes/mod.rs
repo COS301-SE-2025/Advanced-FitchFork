@@ -52,16 +52,13 @@ pub fn routes(app_state: AppState) -> Router<AppState> {
     let mut router: Router<AppState> = Router::new()
         .nest("/health", health_routes())
         .nest("/auth", auth_routes())
-    .nest("/users", users_routes().route_layer(from_fn(allow_admin)))
+        .nest("/users", users_routes().route_layer(from_fn(allow_admin)))
         .route("/users/{user_id}/avatar", get(get_avatar))
         .nest(
             "/modules",
             modules_routes(app_state.clone()).route_layer(from_fn(allow_authenticated)),
         )
-        .nest(
-            "/me",
-            me_routes().route_layer(from_fn(allow_authenticated)),
-        )
+        .nest("/me", me_routes().route_layer(from_fn(allow_authenticated)))
         .nest("/system", system_routes())
         .with_state(app_state.clone());
 
