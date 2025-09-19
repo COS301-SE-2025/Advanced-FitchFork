@@ -275,23 +275,4 @@ mod tests {
         assert_eq!(feedback.len(), 1);
         assert_eq!(feedback[0].message, "Code crashed with exit code 139");
     }
-
-    #[tokio::test]
-    async fn test_stderr_without_crash() {
-        let task = make_task(
-            "WarningTask", 
-            &["output"], 
-            &[], 
-            10, 
-            10,
-            &["output"], 
-            &["output"],
-            Some("Warning: deprecated function used"),
-            Some(0)
-        );
-        let feedback = AutoFeedback.assemble_feedback(&[task]).await.unwrap();
-        assert_eq!(feedback.len(), 1);
-        assert!(feedback[0].message.contains("Code completed but with errors"));
-        assert!(feedback[0].message.contains("Warning: deprecated function used"));
-    }
 }

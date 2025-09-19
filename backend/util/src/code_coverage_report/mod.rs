@@ -106,7 +106,6 @@ mod tests {
     #[test]
     #[ignore]
     fn test_process_cpp_report_and_print() {
-        // change this to point to your local gcov text report
         let content = "dummy content here";
 
         match CoverageProcessor::process_report(Language::Cpp, content) {

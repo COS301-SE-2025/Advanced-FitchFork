@@ -23,6 +23,7 @@ use crate::error::MarkerError;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tracing::error;
 
 /// Represents all files loaded for a submission, including their paths and parsed JSON content.
 #[derive(Debug)]
@@ -47,28 +48,33 @@ const MAX_JSON_SIZE: u64 = 2 * 1024 * 1024; // 2MB
 /// Returns [`MarkerError::IoError`] if the file is missing, not a file, unreadable, or too large.
 fn check_file(path: &Path, max_size: Option<u64>) -> Result<(), MarkerError> {
     if !path.exists() {
-        return Err(MarkerError::IoError(format!(
-            "File not found: {}",
-            path.display()
-        )));
+        let specific_error = format!("File not found: {}", path.display());
+        error!("{}", specific_error);
+        return Err(MarkerError::IoError("File not found".to_string()));
     }
 
     if !path.is_file() {
-        return Err(MarkerError::IoError(format!(
-            "Not a file: {}",
-            path.display()
-        )));
+        let specific_error = format!("Not a file: {}", path.display());
+        error!("{}", specific_error);
+        return Err(MarkerError::IoError("Invalid file type".to_string()));
     }
 
-    let metadata = fs::metadata(path)
-        .map_err(|_| MarkerError::IoError(format!("File unreadable: {}", path.display())))?;
+    let metadata = fs::metadata(path).map_err(|e| {
+        let specific_error = format!("File unreadable: {} - {}", path.display(), e);
+        error!("{}", specific_error);
+        MarkerError::IoError("File unreadable".to_string())
+    })?;
+    
     if let Some(max) = max_size {
         if metadata.len() > max {
-            return Err(MarkerError::IoError(format!(
-                "File too large: {} ({} bytes)",
+            let specific_error = format!(
+                "File too large: {} ({} bytes, max {} bytes)",
                 path.display(),
-                metadata.len()
-            )));
+                metadata.len(),
+                max
+            );
+            error!("{}", specific_error);
+            return Err(MarkerError::IoError("File too large".to_string()));
         }
     }
 
@@ -108,43 +114,56 @@ pub fn load_files(
         )));
     }
     check_file(&allocator_path, Some(MAX_JSON_SIZE))?;
-    let allocator_bytes = fs::read(&allocator_path)
-        .map_err(|e| MarkerError::IoError(format!("{}: {}", allocator_path.display(), e)))?;
-    let allocator_raw = serde_json::from_slice(&allocator_bytes)
-        .map_err(|_| MarkerError::InvalidJson(allocator_path.display().to_string()))?;
+    
+    let allocator_bytes = fs::read(&allocator_path).map_err(|e| {
+        let specific_error = format!("Failed to read allocator file {}: {}", allocator_path.display(), e);
+        error!("{}", specific_error);
+        MarkerError::IoError("Failed to load mark allocator".to_string())
+    })?;
+    
+    let allocator_raw = serde_json::from_slice(&allocator_bytes).map_err(|e| {
+        let specific_error = format!("Invalid JSON in allocator file {}: {}", allocator_path.display(), e);
+        error!("{}", specific_error);
+        MarkerError::InvalidJson("Failed to parse mark allocator".to_string())
+    })?;
+    
     let coverage_raw = if let Some(path) = coverage_path {
         check_file(&path, Some(MAX_JSON_SIZE))?;
-        let bytes = fs::read(&path)
-            .map_err(|e| MarkerError::IoError(format!("{}: {}", path.display(), e)))?;
-        Some(
-            serde_json::from_slice(&bytes)
-                .map_err(|_| MarkerError::InvalidJson(path.display().to_string()))?,
-        )
+        let bytes = fs::read(&path).map_err(|e| {
+            let specific_error = format!("Failed to read coverage file {}: {}", path.display(), e);
+            error!("{}", specific_error);
+            MarkerError::IoError("Failed to load coverage report".to_string())
+        })?;
+        let coverage_json = serde_json::from_slice(&bytes).map_err(|e| {
+            let specific_error = format!("Invalid JSON in coverage file {}: {}", path.display(), e);
+            error!("{}", specific_error);
+            MarkerError::InvalidJson("Failed to parse coverage report".to_string())
+        })?;
+        Some(coverage_json)
     } else {
         None
     };
+    
     let mut memo_contents = Vec::new();
     for path in &memo_paths {
         let content = fs::read_to_string(path).map_err(|e| {
-            MarkerError::IoError(format!(
-                "Failed to read memo file {}: {}",
-                path.display(),
-                e
-            ))
+            let specific_error = format!("Failed to read memo file {}: {}", path.display(), e);
+            error!("{}", specific_error);
+            MarkerError::IoError("Failed to read memo file".to_string())
         })?;
         memo_contents.push(content);
     }
+    
     let mut student_contents = Vec::new();
     for path in &student_paths {
         let content = fs::read_to_string(path).map_err(|e| {
-            MarkerError::IoError(format!(
-                "Failed to read student file {}: {}",
-                path.display(),
-                e
-            ))
+            let specific_error = format!("Failed to read student file {}: {}", path.display(), e);
+            error!("{}", specific_error);
+            MarkerError::IoError("Failed to read student file".to_string())
         })?;
         student_contents.push(content);
     }
+    
     Ok(LoadedFiles {
         memo_contents,
         student_contents,
@@ -205,9 +224,9 @@ mod tests {
         );
         match result {
             Err(MarkerError::IoError(msg)) => {
-                assert!(
-                    msg.contains("File not found"),
-                    "Error message should mention file not found, got: {}",
+                assert_eq!(
+                    msg, "File not found",
+                    "Error message should be general, got: {}",
                     msg
                 );
             }
@@ -263,9 +282,9 @@ mod tests {
         );
         match result {
             Err(MarkerError::IoError(msg)) => {
-                assert!(
-                    msg.contains("File too large"),
-                    "Error message should mention file too large, got: {}",
+                assert_eq!(
+                    msg, "File too large",
+                    "Error message should be general, got: {}",
                     msg
                 );
             }
@@ -288,8 +307,8 @@ mod tests {
             Some(coverage_path),
         );
         match result {
-            Err(MarkerError::InvalidJson(path)) => {
-                assert!(path.contains("allocator.json"), "Error path should mention allocator.json, got: {}", path);
+            Err(MarkerError::InvalidJson(msg)) => {
+                assert_eq!(msg, "Failed to parse mark allocator", "Error message should be general, got: {}", msg);
             },
             other => panic!("Expected InvalidJson for invalid json content, got: {:?}", other),
         }

@@ -48,9 +48,14 @@ pub struct JsonTaskResult {
     pub percentage: f32,
 }
 
-/// The top-level schema for an allocator report, containing a list of tasks.
+/// The top-level schema for an allocator report, containing a list of tasks and total value.
 #[derive(Debug, Clone)]
-pub struct AllocatorSchema(pub Vec<TaskEntry>);
+pub struct AllocatorSchema {
+    /// The list of tasks in the allocator report.
+    pub tasks: Vec<TaskEntry>,
+    /// The total value across all tasks.
+    pub total_value: i64,
+}
 
 /// Represents a single task in the allocator report.
 #[derive(Debug, Clone)]

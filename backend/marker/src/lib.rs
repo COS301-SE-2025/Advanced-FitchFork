@@ -139,7 +139,7 @@ impl<'a> MarkingJob<'a> {
         };
 
         let expected_counts: Vec<usize> = allocator
-            .0
+            .tasks
             .iter()
             .filter(|t| !t.code_coverage)
             .map(|task| task.subsections.len())
@@ -160,7 +160,7 @@ impl<'a> MarkingJob<'a> {
         let mut per_task_names: Vec<String> = Vec::new();
         let mut per_task_scores: Vec<(i64, i64)> = Vec::new();
 
-        for (_, task_entry) in allocator.0.iter().enumerate() {
+        for (_, task_entry) in allocator.tasks.iter().enumerate() {
             if task_entry.code_coverage {
                 continue;
             }
@@ -171,7 +171,6 @@ impl<'a> MarkingJob<'a> {
                 .find(|t| t.task_id.eq_ignore_ascii_case(&task_entry.id));
             let mut subsections: Vec<crate::report::ReportSubsection> = Vec::new();
             let mut task_earned = 0;
-            let mut task_possible = 0;
             let mut task_results: Vec<TaskResult> = Vec::new();
 
             if let Some(task_output) = submission_task {
@@ -193,11 +192,10 @@ impl<'a> MarkingJob<'a> {
                     result.return_code = task_output.return_code;
 
                     task_earned += result.awarded;
-                    task_possible += result.possible;
                     subsections.push(crate::report::ReportSubsection {
                         label: subsection.name.clone(),
                         earned: result.awarded,
-                        total: result.possible,
+                        total: subsection.value,
                         feedback: String::new(),
                     });
                     task_results.push(result.clone());
@@ -213,7 +211,7 @@ impl<'a> MarkingJob<'a> {
             per_task_results.push(task_results);
             per_task_subsections.push(subsections);
             per_task_names.push(task_entry.name.clone());
-            per_task_scores.push((task_earned, task_possible));
+            per_task_scores.push((task_earned, task_entry.value));
         }
 
         let feedback_entries = self.feedback.assemble_feedback(&all_results).await?;
@@ -222,7 +220,6 @@ impl<'a> MarkingJob<'a> {
         let mut report_tasks: Vec<crate::report::ReportTask> = Vec::new();
         let mut task_counter = 1;
         let mut total_earned = 0;
-        let mut total_possible = 0;
         for ((_task_results, mut subsections), (name, (task_earned, task_possible))) in
             per_task_results
                 .into_iter()
@@ -247,7 +244,6 @@ impl<'a> MarkingJob<'a> {
             });
 
             total_earned += task_earned;
-            total_possible += task_possible;
             task_counter += 1;
         }
 
@@ -264,14 +260,14 @@ impl<'a> MarkingJob<'a> {
                 _ => 100,
             };
             
-            let coverage_value = allocator.0.iter().filter(|t| t.code_coverage).map(|t| t.value).sum::<i64>();
+            let coverage_value = allocator.tasks.iter().filter(|t| t.code_coverage).map(|t| t.value).sum::<i64>();
             coverage_total_earned = bucket_percent * coverage_value / 100;
             coverage_total_possible = coverage_value;
         }
 
         let mark = crate::report::Score {
             earned: total_earned,
-            total: total_possible,
+            total: allocator.total_value,
         };
 
         let now = Utc::now().to_rfc3339();

@@ -10,11 +10,13 @@
 //! ```json
 //! {
 //!   "generated_at": "<timestamp>",
+//!   "total_value": <u32>,
 //!   "tasks": [
 //!     {
 //!       "task1": {
 //!         "name": "<task name>",
 //!         "value": <u32>,
+//!         "code_coverage": <boolean>,
 //!         "subsections": [
 //!           { "name": "<subsection name>", "value": <u32> },
 //!           ...
@@ -27,7 +29,8 @@
 //! ```
 //!
 //! - `generated_at` must be a string.
-//! - `tasks` is an array of objects, each with a single key (`task1`, `task2`, ...), whose value is an object with `name`, `value`, and `subsections` fields.
+//! - `total_value` must be a number representing the sum of all task values.
+//! - `tasks` is an array of objects, each with a single key (`task1`, `task2`, ...), whose value is an object with `name`, `value`, `code_coverage`, and `subsections` fields.
 //! - Each subsection must have a `name` (string) and `value` (u32).
 //! - The sum of subsection values must not exceed the parent task's value.
 //!
@@ -87,6 +90,20 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
                 "Top-level JSON must have a 'tasks' array field".to_string(),
             )
         })?;
+
+        let total_value = match obj.get("total_value") {
+            Some(Value::Number(n)) if n.is_u64() => n.as_u64().unwrap() as i64,
+            Some(_) => {
+                return Err(MarkerError::ParseAllocatorError(
+                    "'total_value' must be a number".to_string(),
+                ));
+            }
+            None => {
+                return Err(MarkerError::ParseAllocatorError(
+                    "Missing required 'total_value' field".to_string(),
+                ));
+            }
+        };
 
         let mut tasks = Vec::with_capacity(arr.len());
         for (i, task_obj) in arr.iter().enumerate() {
@@ -234,7 +251,10 @@ impl<'a> Parser<&'a Value, AllocatorSchema> for JsonAllocatorParser {
             });
         }
 
-        Ok(AllocatorSchema(tasks))
+        Ok(AllocatorSchema {
+            tasks,
+            total_value,
+        })
     }
 }
 
@@ -257,8 +277,8 @@ mod tests {
         let report = parser
             .parse(&value, ExecutionConfig::default_config())
             .expect("Should parse valid single task report");
-        assert_eq!(report.0.len(), 1, "Should have one task");
-        let task = &report.0[0];
+        assert_eq!(report.tasks.len(), 1, "Should have one task");
+        let task = &report.tasks[0];
         assert_eq!(task.id, "task1");
         assert_eq!(task.name, "Initialization");
         assert_eq!(task.value, 10);
@@ -269,6 +289,7 @@ mod tests {
         assert_eq!(task.subsections[1].name, "Setup Globals");
         assert_eq!(task.subsections[1].value, 4);
         assert_eq!(task.subsections[1].feedback, None);
+        assert_eq!(report.total_value, 10);
     }
 
     /// Test parsing a valid report with multiple tasks, including a task with no subsections.
@@ -281,17 +302,18 @@ mod tests {
         let report = parser
             .parse(&value, ExecutionConfig::default_config())
             .expect("Should parse valid multiple tasks report");
-        assert_eq!(report.0.len(), 2, "Should have two tasks");
-        let task1 = &report.0[0];
+        assert_eq!(report.tasks.len(), 2, "Should have two tasks");
+        let task1 = &report.tasks[0];
         assert_eq!(task1.id, "task1");
         assert_eq!(task1.name, "Parsing Stage");
         assert_eq!(task1.value, 8);
         assert_eq!(task1.subsections.len(), 2);
-        let task2 = &report.0[1];
+        let task2 = &report.tasks[1];
         assert_eq!(task2.id, "task2");
         assert_eq!(task2.name, "Computation");
         assert_eq!(task2.value, 12);
         assert_eq!(task2.subsections.len(), 0);
+        assert_eq!(report.total_value, 20);
     }
 
     /// Test error handling for a task missing the 'name' field.
@@ -360,6 +382,81 @@ mod tests {
             }
             other => panic!(
                 "Expected ParseAllocatorError for invalid subsections or value type, got: {:?}",
+                other
+            ),
+        }
+    }
+
+    /// Test error handling when the total_value field is missing.
+    #[test]
+    fn test_parse_missing_total_value() {
+        let json_str = r#"
+        {
+          "generated_at": "2025-06-20T12:00:00+02:00",
+          "tasks": [
+            {
+              "task1": {
+                "name": "Test Task",
+                "value": 10,
+                "subsections": [
+                  { "name": "Sub1", "value": 5 }
+                ]
+              }
+            }
+          ]
+        }
+        "#;
+        let value: Value = serde_json::from_str(json_str).expect("Failed to parse JSON");
+        let parser = JsonAllocatorParser;
+        let result = parser.parse(&value, ExecutionConfig::default_config());
+        match result {
+            Err(MarkerError::ParseAllocatorError(msg)) => {
+                assert!(
+                    msg.contains("total_value"),
+                    "Error message should mention missing total_value, got: {}",
+                    msg
+                );
+            }
+            other => panic!(
+                "Expected ParseAllocatorError for missing total_value, got: {:?}",
+                other
+            ),
+        }
+    }
+
+    /// Test error handling when the total_value field has the wrong type.
+    #[test]
+    fn test_parse_total_value_wrong_type() {
+        let json_str = r#"
+        {
+          "generated_at": "2025-06-20T12:00:00+02:00",
+          "total_value": "not_a_number",
+          "tasks": [
+            {
+              "task1": {
+                "name": "Test Task",
+                "value": 10,
+                "subsections": [
+                  { "name": "Sub1", "value": 5 }
+                ]
+              }
+            }
+          ]
+        }
+        "#;
+        let value: Value = serde_json::from_str(json_str).expect("Failed to parse JSON");
+        let parser = JsonAllocatorParser;
+        let result = parser.parse(&value, ExecutionConfig::default_config());
+        match result {
+            Err(MarkerError::ParseAllocatorError(msg)) => {
+                assert!(
+                    msg.contains("must be a number"),
+                    "Error message should mention that total_value must be a number, got: {}",
+                    msg
+                );
+            }
+            other => panic!(
+                "Expected ParseAllocatorError for wrong type total_value, got: {:?}",
                 other
             ),
         }

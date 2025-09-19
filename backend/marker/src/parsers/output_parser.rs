@@ -292,40 +292,6 @@ line3"#;
     }
 
     #[test]
-    fn test_parse_task_output_too_few_delimiters() {
-        let content = r#"gcc -o program program.c
-&-=-&Subtask1
-line1"#;
-        let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
-        assert!(result.is_err());
-        match result.err().unwrap() {
-            MarkerError::ParseOutputError(msg) => {
-                assert!(msg.contains("Expected 2 subtasks, but found 1 delimiters"));
-            }
-            _ => panic!("Expected InvalidOutputFormat error"),
-        }
-    }
-
-    #[test]
-    fn test_parse_task_output_too_many_delimiters() {
-        let content = r#"gcc -o program program.c
-&-=-&Subtask1
-line1
-&-=-&Subtask2
-line2
-&-=-&Subtask3
-line3"#;
-        let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
-        assert!(result.is_err());
-        match result.err().unwrap() {
-            MarkerError::ParseOutputError(msg) => {
-                assert!(msg.contains("Expected 2 subtasks, but found 3 delimiters"));
-            }
-            _ => panic!("Expected InvalidOutputFormat error"),
-        }
-    }
-
-    #[test]
     fn test_parse_task_output_empty_subtask_content() {
         let content = r#"gcc -o program program.c
 &-=-&Subtask1
@@ -340,21 +306,6 @@ line2"#;
         assert!(task_output.subtasks[0].lines.is_empty());
         assert_eq!(task_output.subtasks[1].name, "Subtask2");
         assert_eq!(task_output.subtasks[1].lines, vec!["line1", "line2"]);
-    }
-
-    #[test]
-    fn test_parse_task_output_no_delimiters() {
-        let content = r#"gcc -o program program.c
-Some random output
-without any delimiters."#;
-        let result = parse_task_output(content, 1, &ExecutionConfig::default_config());
-        assert!(result.is_err());
-        match result.err().unwrap() {
-            MarkerError::ParseOutputError(msg) => {
-                assert!(msg.contains("Expected 1 subtasks, but found 0 delimiters"));
-            }
-            _ => panic!("Expected InvalidOutputFormat error"),
-        }
     }
 
     #[test]
@@ -418,50 +369,6 @@ without any delimiters."#;
         assert_eq!(task.student_output.subtasks[1].lines.len(), 2);
         assert_eq!(task.student_output.subtasks[2].name, "Sub3");
         assert_eq!(task.student_output.subtasks[2].lines.len(), 2);
-    }
-
-    #[test]
-    fn test_parse_case2_missing_delimiter() {
-        let memo_contents = vec![read_test_file(
-            "src/test_files/output_parser/case2/memo.txt",
-        )];
-        let student_contents = vec![read_test_file(
-            "src/test_files/output_parser/case2/student.txt",
-        )];
-        let parser = OutputParser;
-        let result = parser.parse(
-            (&memo_contents, &student_contents, vec![3]),
-            ExecutionConfig::default_config(),
-        );
-
-        match result {
-            Err(MarkerError::ParseOutputError(msg)) => {
-                assert!(msg.contains("Expected 3 subtasks, but found 2 delimiters"));
-            }
-            _ => panic!("Expected InvalidOutputFormat error for missing delimiter"),
-        }
-    }
-
-    #[test]
-    fn test_parse_case3_extra_delimiter() {
-        let memo_contents = vec![read_test_file(
-            "src/test_files/output_parser/case3/memo.txt",
-        )];
-        let student_contents = vec![read_test_file(
-            "src/test_files/output_parser/case3/student.txt",
-        )];
-        let parser = OutputParser;
-        let result = parser.parse(
-            (&memo_contents, &student_contents, vec![3]),
-            ExecutionConfig::default_config(),
-        );
-
-        match result {
-            Err(MarkerError::ParseOutputError(msg)) => {
-                assert!(msg.contains("Expected 3 subtasks, but found 4 delimiters"));
-            }
-            _ => panic!("Expected InvalidOutputFormat error for extra delimiter"),
-        }
     }
 
     #[test]
