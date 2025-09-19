@@ -17,6 +17,7 @@ use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as M
 use db::models::assignment_task::Model as AssignmentTask;
 use reqwest::Client;
 use serde_json::json;
+use util::code_coverage_report::CoverageProcessor;
 use util::config;
 use util::execution_config::ExecutionConfig;
 pub mod validate_files;
@@ -410,6 +411,7 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
         let db_cloned = db.clone();
         let module_id_cloned = module_id;
         let assignment_id_cloned = assignment_id;
+        let submission_path_cloned = submission_path.clone();
 
         let sem = semaphore.clone();
         join_set.spawn(async move {
@@ -486,40 +488,71 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
 
                     let output_combined = output_vec.join("\n");
 
-                    // Save file with simple retry (helps with SQLite write locks)
-                    let mut saved = false;
-                    for attempt in 0..5 {
-                        match SubmissionOutputModel::save_file(
-                            &db_cloned,
-                            task.id,
-                            submission_id,
-                            &filename,
-                            output_combined.as_bytes(),
-                        )
-                        .await
-                        {
-                            Ok(_) => {
-                                saved = true;
-                                break;
+                    if task.code_coverage {
+                        match CoverageProcessor::process_report(
+                            config.project.language,
+                            &output_combined,
+                        ) {
+                            Ok(coverage_json) => {
+                                let coverage_report_path =
+                                    submission_path_cloned.join("coverage_report.json");
+                                if let Err(e) =
+                                    std::fs::write(&coverage_report_path, &coverage_json)
+                                {
+                                    println!(
+                                        "Failed to save coverage report to attempt directory: {}",
+                                        e
+                                    );
+                                } else {
+                                    println!(
+                                        "Coverage report saved to: {:?}",
+                                        coverage_report_path
+                                    );
+                                }
                             }
                             Err(e) => {
-                                let backoff_ms = 20u64 * (1 << attempt);
                                 println!(
-                                    "Retry {}/5 saving output for task {} ({} ms): {}",
-                                    attempt + 1,
-                                    task.task_number,
-                                    backoff_ms,
-                                    e
+                                    "Failed to process coverage report for task {}: {}",
+                                    task.task_number, e
                                 );
-                                sleep(Duration::from_millis(backoff_ms)).await;
                             }
                         }
-                    }
-                    if !saved {
-                        println!(
-                            "Failed to save submission output for task {} after retries",
-                            task.task_number
-                        );
+                    } else {
+                        // Save file with simple retry (helps with SQLite write locks)
+                        let mut saved = false;
+                        for attempt in 0..5 {
+                            match SubmissionOutputModel::save_file(
+                                &db_cloned,
+                                task.id,
+                                submission_id,
+                                &filename,
+                                output_combined.as_bytes(),
+                            )
+                            .await
+                            {
+                                Ok(_) => {
+                                    saved = true;
+                                    break;
+                                }
+                                Err(e) => {
+                                    let backoff_ms = 20u64 * (1 << attempt);
+                                    println!(
+                                        "Retry {}/5 saving output for task {} ({} ms): {}",
+                                        attempt + 1,
+                                        task.task_number,
+                                        backoff_ms,
+                                        e
+                                    );
+                                    sleep(Duration::from_millis(backoff_ms)).await;
+                                }
+                            }
+                        }
+                        if !saved {
+                            println!(
+                                "Failed to save submission output for task {} after retries",
+                                task.task_number
+                            );
+                        }
                     }
 
                     Some((idx, task.id, filename, output_combined))
@@ -666,6 +699,7 @@ pub async fn create_submission_outputs_for_all_tasks(
         let db_cloned = db.clone();
         let module_id_cloned = module_id;
         let assignment_id_cloned = assignment_id;
+        let submission_path_cloned = submission_path.clone();
 
         let sem = semaphore.clone();
         join_set.spawn(async move {
@@ -741,37 +775,56 @@ pub async fn create_submission_outputs_for_all_tasks(
 
                     let output_combined = output_vec.join("\n");
 
-                    // Save with retry to mitigate transient DB locks
-                    for attempt in 0..5 {
-                        match SubmissionOutputModel::save_file(
-                            &db_cloned,
-                            task.id,
-                            submission_id,
-                            &filename,
-                            output_combined.as_bytes(),
-                        )
-                        .await
-                        {
-                            Ok(_) => {
-                                return true;
+                    if task.code_coverage {
+                        match CoverageProcessor::process_report(config.project.language, &output_combined) {
+                            Ok(coverage_json) => {
+                                let coverage_report_path = submission_path_cloned.join("coverage_report.json");
+                                match std::fs::write(&coverage_report_path, &coverage_json) {
+                                    Ok(_) => {
+                                        return true;
+                                    }
+                                    Err(e) => {
+                                        println!("Failed to save coverage report to attempt directory: {}", e);
+                                    }
+                                }
                             }
                             Err(e) => {
-                                let backoff_ms = 20u64 * (1 << attempt);
-                                println!(
-                                    "Retry {}/5 saving output for task {} ({} ms): {}",
-                                    attempt + 1,
-                                    task.task_number,
-                                    backoff_ms,
-                                    e
-                                );
-                                sleep(Duration::from_millis(backoff_ms)).await;
+                                println!("Failed to process coverage report for task {}: {}", task.task_number, e);
                             }
                         }
+                    } else {
+                        // Save with retry to mitigate transient DB locks
+                        for attempt in 0..5 {
+                            match SubmissionOutputModel::save_file(
+                                &db_cloned,
+                                task.id,
+                                submission_id,
+                                &filename,
+                                output_combined.as_bytes(),
+                            )
+                            .await
+                            {
+                                Ok(_) => {
+                                    return true;
+                                }
+                                Err(e) => {
+                                    let backoff_ms = 20u64 * (1 << attempt);
+                                    println!(
+                                        "Retry {}/5 saving output for task {} ({} ms): {}",
+                                        attempt + 1,
+                                        task.task_number,
+                                        backoff_ms,
+                                        e
+                                    );
+                                    sleep(Duration::from_millis(backoff_ms)).await;
+                                }
+                            }
+                        }
+                        println!(
+                            "Failed to save submission output for task {} after retries",
+                            task.task_number
+                        );
                     }
-                    println!(
-                        "Failed to save submission output for task {} after retries",
-                        task.task_number
-                    );
                     false
                 }
             }
@@ -985,13 +1038,11 @@ pub async fn create_main_from_interpreter(
         return Err("Interpreter did not return plausible source code".to_string());
     }
 
-    if config.output.retcode == true {
-        combined_output = combined_output
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("Retcode:"))
-            .collect::<Vec<_>>()
-            .join("\n");
-    }
+    combined_output = combined_output
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("Retcode:"))
+        .collect::<Vec<_>>()
+        .join("\n");
 
     // Zip the generated source as Main.*
     let zip_ext = std::path::Path::new(main_file_name)

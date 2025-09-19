@@ -15,7 +15,7 @@ export interface Submission extends Timestamp {
   ignored: boolean;
   score?: number;
   tasks?: TaskBreakdown[];
-  code_coverage?: CodeCoverageEntry[];
+  code_coverage?: CodeCoverage;
   user?: SubmissionUserInfo;
 }
 
@@ -39,10 +39,8 @@ export interface TaskBreakdown {
   subsections: SubsectionBreakdown[];
 }
 
-export interface CodeCoverageEntry {
-  class: string;
-  percentage: number;
-}
+export interface CodeCoverageFile { path: string; earned: number; total: number }
+export interface CodeCoverage { summary?: SubmissionMark; files: CodeCoverageFile[] }
 
 export interface SubmissionUserInfo {
   id: number;

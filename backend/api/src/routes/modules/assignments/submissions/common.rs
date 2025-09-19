@@ -10,8 +10,6 @@
 //! - `SubmissionsListResponse` → paginated submissions list
 //! - `SubmissionResponse` → minimal response for a single submission
 //! - `MarkSummary` → summary of earned vs total marks
-//! - `CodeComplexitySummary` → summary of code complexity metrics
-//! - `CodeComplexity` → detailed code complexity information
 //! - `SubmissionDetailResponse` → detailed response after grading a submission
 
 use serde::{Deserialize, Serialize};
@@ -82,24 +80,25 @@ pub struct SubmissionResponse {
 }
 
 /// Represents a summary of earned vs total marks.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MarkSummary {
     pub earned: i64,
     pub total: i64,
 }
 
-/// Represents a summary of code complexity metrics.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CodeComplexitySummary {
+/// Represents code coverage for a submission.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CodeCoverageFile {
+    pub path: String,
     pub earned: i64,
     pub total: i64,
 }
 
-/// Represents code complexity details, including per-metric results.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CodeComplexity {
-    pub summary: CodeComplexitySummary,
-    pub metrics: Vec<serde_json::Value>,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CodeCoverage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<MarkSummary>,
+    pub files: Vec<CodeCoverageFile>,
 }
 
 /// Detailed response returned after grading a submission.
@@ -116,7 +115,5 @@ pub struct SubmissionDetailResponse {
     pub is_late: bool,
     pub tasks: Vec<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_coverage: Option<Vec<serde_json::Value>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_complexity: Option<CodeComplexity>,
+    pub code_coverage: Option<CodeCoverage>,
 }
