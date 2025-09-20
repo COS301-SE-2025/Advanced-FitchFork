@@ -27,7 +27,7 @@ pub struct ListSubmissionsQuery {
 }
 
 /// Represents a user associated with a submission.
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserResponse {
     pub id: i64,
     pub username: String,
@@ -54,6 +54,7 @@ pub struct SubmissionListItem {
     pub is_late: bool,
     pub mark: Option<Mark>,
     pub ignored: bool,
+    pub status: String,
 }
 
 /// Paginated response of submissions list.
@@ -77,6 +78,7 @@ pub struct SubmissionResponse {
     pub is_practice: bool,
     pub mark: Option<Mark>,
     pub ignored: bool,
+    pub status: String,
 }
 
 /// Represents a summary of earned vs total marks.
@@ -113,7 +115,11 @@ pub struct SubmissionDetailResponse {
     pub mark: MarkSummary,
     pub is_practice: bool,
     pub is_late: bool,
+    pub ignored: bool,
+    pub status: String,
     pub tasks: Vec<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code_coverage: Option<CodeCoverage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<serde_json::Value>,
 }

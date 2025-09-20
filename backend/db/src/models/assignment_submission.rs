@@ -11,6 +11,66 @@ use util::execution_config::ExecutionConfig;
 use util::execution_config::GradingPolicy;
 use util::paths::{ensure_parent_dir, storage_root};
 
+/// Represents the status of a submission throughout its lifecycle
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
+#[sea_orm(
+    rs_type = "String",
+    db_type = "Enum",
+    enum_name = "submission_status_enum"
+)]
+pub enum SubmissionStatus {
+    /// Waiting for execution/marking
+    #[sea_orm(string_value = "queued")]
+    Queued,
+    /// Code is compiling/building
+    #[sea_orm(string_value = "running")]
+    Running,
+    /// Marking in progress
+    #[sea_orm(string_value = "grading")]
+    Grading,
+    /// Marking complete (success)
+    #[sea_orm(string_value = "graded")]
+    Graded,
+    /// File save error
+    #[sea_orm(string_value = "failed_upload")]
+    FailedUpload,
+    /// Compilation failure
+    #[sea_orm(string_value = "failed_compile")]
+    FailedCompile,
+    /// Runtime/test execution failure
+    #[sea_orm(string_value = "failed_execution")]
+    FailedExecution,
+    /// Marking logic failure
+    #[sea_orm(string_value = "failed_grading")]
+    FailedGrading,
+    /// Unexpected internal error
+    #[sea_orm(string_value = "failed_internal")]
+    FailedInternal,
+}
+
+impl Default for SubmissionStatus {
+    fn default() -> Self {
+        Self::Queued
+    }
+}
+
+impl std::fmt::Display for SubmissionStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let status_str = match self {
+            SubmissionStatus::Queued => "queued",
+            SubmissionStatus::Running => "running",
+            SubmissionStatus::Grading => "grading",
+            SubmissionStatus::Graded => "graded",
+            SubmissionStatus::FailedUpload => "failed_upload",
+            SubmissionStatus::FailedCompile => "failed_compile",
+            SubmissionStatus::FailedExecution => "failed_execution",
+            SubmissionStatus::FailedGrading => "failed_grading",
+            SubmissionStatus::FailedInternal => "failed_internal",
+        };
+        write!(f, "{}", status_str)
+    }
+}
+
 /// Represents a user's submission for a specific assignment.
 ///
 /// Each submission is linked to one assignment and one user.
@@ -41,6 +101,8 @@ pub struct Model {
     pub is_practice: bool,
     /// Whether this submission should be ignored for grading/analytics.
     pub ignored: bool,
+    /// Current status of the submission in the lifecycle.
+    pub status: SubmissionStatus,
     /// Timestamp when the submission was created.
     pub created_at: DateTime<Utc>,
     /// Timestamp when the submission was last updated.
@@ -124,6 +186,7 @@ impl Model {
             filename: Set(filename.to_string()),
             file_hash: Set(file_hash.to_string()),
             path: Set(String::new()),
+            status: Set(SubmissionStatus::Queued),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
@@ -300,6 +363,87 @@ impl Model {
         }
         Ok(chosen)
     }
+
+    /// Update the status of a submission and persist to database
+    pub async fn update_status(
+        db: &DatabaseConnection,
+        submission_id: i64,
+        new_status: SubmissionStatus,
+    ) -> Result<Self, DbErr> {
+        // Load existing submission
+        let existing = Entity::find_by_id(submission_id)
+            .one(db)
+            .await?
+            .ok_or_else(|| DbErr::Custom(format!("Submission {submission_id} not found")))?;
+
+        let mut active_model: ActiveModel = existing.into();
+        active_model.status = Set(new_status);
+        active_model.updated_at = Set(Utc::now());
+
+        active_model.update(db).await
+    }
+
+    /// Set the status to running
+    pub async fn set_running(db: &DatabaseConnection, submission_id: i64) -> Result<Self, DbErr> {
+        Self::update_status(db, submission_id, SubmissionStatus::Running).await
+    }
+
+    /// Set the status to grading
+    pub async fn set_grading(db: &DatabaseConnection, submission_id: i64) -> Result<Self, DbErr> {
+        Self::update_status(db, submission_id, SubmissionStatus::Grading).await
+    }
+
+    /// Set the status to graded (successful completion)
+    pub async fn set_graded(db: &DatabaseConnection, submission_id: i64) -> Result<Self, DbErr> {
+        Self::update_status(db, submission_id, SubmissionStatus::Graded).await
+    }
+
+    /// Set the status to failed with the appropriate failure type
+    pub async fn set_failed(
+        db: &DatabaseConnection,
+        submission_id: i64,
+        failure_type: SubmissionStatus,
+    ) -> Result<Self, DbErr> {
+        // Validate that the provided status is a failure status
+        match failure_type {
+            SubmissionStatus::FailedUpload
+            | SubmissionStatus::FailedCompile
+            | SubmissionStatus::FailedExecution
+            | SubmissionStatus::FailedGrading
+            | SubmissionStatus::FailedInternal => {
+                Self::update_status(db, submission_id, failure_type).await
+            }
+            _ => Err(DbErr::Custom(format!(
+                "Invalid failure type: {:?}. Use a failed_* status.",
+                failure_type
+            ))),
+        }
+    }
+
+    /// Check if the current status represents a failure state
+    pub fn is_failed(&self) -> bool {
+        matches!(
+            self.status,
+            SubmissionStatus::FailedUpload
+                | SubmissionStatus::FailedCompile
+                | SubmissionStatus::FailedExecution
+                | SubmissionStatus::FailedGrading
+                | SubmissionStatus::FailedInternal
+        )
+    }
+
+    /// Check if the submission is complete (either graded or failed)
+    pub fn is_complete(&self) -> bool {
+        matches!(self.status, SubmissionStatus::Graded) || self.is_failed()
+    }
+
+    /// Check if the submission is currently in progress
+    pub fn is_in_progress(&self) -> bool {
+        matches!(
+            self.status,
+            SubmissionStatus::Queued | SubmissionStatus::Running | SubmissionStatus::Grading
+        )
+    }
 }
 
 #[cfg(test)]
@@ -370,6 +514,7 @@ mod tests {
             path: Set("".to_string()),
             is_practice: Set(false),
             ignored: Set(false),
+            status: Set(super::SubmissionStatus::Queued),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()
@@ -397,6 +542,7 @@ mod tests {
 
         assert_eq!(file.assignment_id, assignment.id);
         assert_eq!(file.user_id, user.id);
+        assert_eq!(file.status, super::SubmissionStatus::Queued);
         assert!(file.path.contains("assignment_submissions"));
 
         // Confirm file written
@@ -410,5 +556,244 @@ mod tests {
         // Delete file
         file.delete_file_only().expect("Failed to delete file");
         assert!(!full_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_submission_status_defaults() {
+        let _tmp = setup_test_storage_root();
+        let db = setup_test_db().await;
+
+        // Create dummy user
+        let user = UserModel::create(
+            &db,
+            "u12345678",
+            "testuser@example.com",
+            "password123",
+            false,
+        )
+        .await
+        .expect("Failed to insert user");
+
+        // Create dummy module
+        let module = crate::models::module::ActiveModel {
+            code: Set("COS101".to_string()),
+            year: Set(2025),
+            description: Set(Some("Test Module".to_string())),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .expect("Failed to insert module");
+
+        // Create dummy assignment
+        let assignment = crate::models::assignment::Model::create(
+            &db,
+            module.id,
+            "Test Assignment",
+            Some("Test Description"),
+            AssignmentType::Practical,
+            Utc::now(),
+            Utc::now(),
+        )
+        .await
+        .expect("Failed to insert assignment");
+
+        // Test that new submissions default to Queued status
+        let content = fake_bytes();
+        let submission = Model::save_file(
+            &db,
+            assignment.id,
+            user.id,
+            1,
+            0,
+            10,
+            false,
+            "test.zip",
+            "test_hash",
+            &content,
+        )
+        .await
+        .expect("Failed to save file");
+
+        assert_eq!(submission.status, super::SubmissionStatus::Queued);
+    }
+
+    #[tokio::test]
+    async fn test_submission_status_transitions() {
+        let _tmp = setup_test_storage_root();
+        let db = setup_test_db().await;
+
+        // Create dummy user
+        let user = UserModel::create(
+            &db,
+            "u87654321",
+            "statustest@example.com",
+            "password123",
+            false,
+        )
+        .await
+        .expect("Failed to insert user");
+
+        // Create dummy module
+        let module = crate::models::module::ActiveModel {
+            code: Set("COS202".to_string()),
+            year: Set(2025),
+            description: Set(Some("Status Test Module".to_string())),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .expect("Failed to insert module");
+
+        // Create dummy assignment
+        let assignment = crate::models::assignment::Model::create(
+            &db,
+            module.id,
+            "Status Test Assignment",
+            Some("Status Test Description"),
+            AssignmentType::Practical,
+            Utc::now(),
+            Utc::now(),
+        )
+        .await
+        .expect("Failed to insert assignment");
+
+        // Create initial submission
+        let content = fake_bytes();
+        let submission = Model::save_file(
+            &db,
+            assignment.id,
+            user.id,
+            1,
+            0,
+            10,
+            false,
+            "status_test.zip",
+            "status_hash",
+            &content,
+        )
+        .await
+        .expect("Failed to save file");
+
+        // Test status transition to Running
+        let updated = Model::set_running(&db, submission.id)
+            .await
+            .expect("Failed to set running status");
+        assert_eq!(updated.status, super::SubmissionStatus::Running);
+
+        // Test status transition to Grading
+        let updated = Model::set_grading(&db, submission.id)
+            .await
+            .expect("Failed to set grading status");
+        assert_eq!(updated.status, super::SubmissionStatus::Grading);
+
+        // Test status transition to Graded
+        let updated = Model::set_graded(&db, submission.id)
+            .await
+            .expect("Failed to set graded status");
+        assert_eq!(updated.status, super::SubmissionStatus::Graded);
+
+        // Test status transition to various failure states
+        let updated = Model::set_failed(&db, submission.id, super::SubmissionStatus::FailedCompile)
+            .await
+            .expect("Failed to set failed compile status");
+        assert_eq!(updated.status, super::SubmissionStatus::FailedCompile);
+
+        let updated =
+            Model::set_failed(&db, submission.id, super::SubmissionStatus::FailedExecution)
+                .await
+                .expect("Failed to set failed execution status");
+        assert_eq!(updated.status, super::SubmissionStatus::FailedExecution);
+
+        // Test invalid failure type
+        let result = Model::set_failed(&db, submission.id, super::SubmissionStatus::Queued).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_submission_status_helpers() {
+        let _tmp = setup_test_storage_root();
+        let db = setup_test_db().await;
+
+        // Create dummy user
+        let user = UserModel::create(
+            &db,
+            "u11223344",
+            "helpertest@example.com",
+            "password123",
+            false,
+        )
+        .await
+        .expect("Failed to insert user");
+
+        // Create dummy module
+        let module = crate::models::module::ActiveModel {
+            code: Set("COS303".to_string()),
+            year: Set(2025),
+            description: Set(Some("Helper Test Module".to_string())),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .expect("Failed to insert module");
+
+        // Create dummy assignment
+        let assignment = crate::models::assignment::Model::create(
+            &db,
+            module.id,
+            "Helper Test Assignment",
+            Some("Helper Test Description"),
+            AssignmentType::Practical,
+            Utc::now(),
+            Utc::now(),
+        )
+        .await
+        .expect("Failed to insert assignment");
+
+        // Test with queued submission
+        let content = fake_bytes();
+        let submission = Model::save_file(
+            &db,
+            assignment.id,
+            user.id,
+            1,
+            0,
+            10,
+            false,
+            "helper_test.zip",
+            "helper_hash",
+            &content,
+        )
+        .await
+        .expect("Failed to save file");
+
+        assert!(!submission.is_failed());
+        assert!(!submission.is_complete());
+        assert!(submission.is_in_progress());
+
+        // Test with failed submission
+        let failed_submission =
+            Model::set_failed(&db, submission.id, super::SubmissionStatus::FailedGrading)
+                .await
+                .expect("Failed to set failed status");
+
+        assert!(failed_submission.is_failed());
+        assert!(failed_submission.is_complete());
+        assert!(!failed_submission.is_in_progress());
+
+        // Test with graded submission
+        let graded_submission = Model::set_graded(&db, submission.id)
+            .await
+            .expect("Failed to set graded status");
+
+        assert!(!graded_submission.is_failed());
+        assert!(graded_submission.is_complete());
+        assert!(!graded_submission.is_in_progress());
     }
 }

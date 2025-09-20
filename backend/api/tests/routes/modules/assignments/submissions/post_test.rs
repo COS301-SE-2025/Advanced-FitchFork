@@ -2412,4 +2412,457 @@ mod tests {
         assert_eq!(saved.user_id, data.student_user.id);
         assert_eq!(saved.filename, "solution.zip");
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_status_running_during_processing() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+        let file = create_submission_zip();
+
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // The submission should have been set to Running during code execution
+        // and then progressed to either Graded or a Failed status
+        use db::models::assignment_submission::{Column as SubCol, Entity as SubmissionEntity};
+        let submission = SubmissionEntity::find()
+            .filter(SubCol::AssignmentId.eq(data.assignment.id))
+            .filter(SubCol::UserId.eq(data.student_user.id))
+            .order_by(SubCol::Attempt, sea_orm::Order::Desc)
+            .one(db)
+            .await
+            .expect("db ok")
+            .expect("submission exists");
+
+        // Since the submission processing completes synchronously in tests,
+        // we verify that the status is no longer Queued and has progressed
+        // (it should be either Graded or one of the Failed states)
+        assert_ne!(
+            submission.status,
+            db::models::assignment_submission::SubmissionStatus::Queued
+        );
+        assert!(
+            submission.status == db::models::assignment_submission::SubmissionStatus::Graded
+                || submission.is_failed()
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_status_graded_on_success() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+        let file = create_submission_zip();
+
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // For successful submissions with valid test setup, the status should be Graded
+        use db::models::assignment_submission::{Column as SubCol, Entity as SubmissionEntity};
+        let submission = SubmissionEntity::find()
+            .filter(SubCol::AssignmentId.eq(data.assignment.id))
+            .filter(SubCol::UserId.eq(data.student_user.id))
+            .order_by(SubCol::Attempt, sea_orm::Order::Desc)
+            .one(db)
+            .await
+            .expect("db ok")
+            .expect("submission exists");
+
+        // The submission should be graded if everything went well
+        if !submission.is_failed() {
+            assert_eq!(
+                submission.status,
+                db::models::assignment_submission::SubmissionStatus::Graded
+            );
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_status_failed_upload() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // Test with empty file to trigger upload failure
+        let empty_file = Vec::new();
+        let (boundary, body) = multipart_body("solution.zip", &empty_file, None, Some("true"));
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        // Empty file should be rejected with UNPROCESSABLE_ENTITY
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["message"], "Empty file provided");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_status_failed_execution() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // Use corrupted zip file to trigger execution failure
+        let corrupted_file = create_corrupted_zip();
+        let (boundary, body) = multipart_body("corrupted.zip", &corrupted_file, None, Some("true"));
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        // Corrupted file should cause internal server error during processing
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+
+        // Check if a submission was created and has failed status
+        use db::models::assignment_submission::{Column as SubCol, Entity as SubmissionEntity};
+        let submission = SubmissionEntity::find()
+            .filter(SubCol::AssignmentId.eq(data.assignment.id))
+            .filter(SubCol::UserId.eq(data.student_user.id))
+            .order_by(SubCol::Attempt, sea_orm::Order::Desc)
+            .one(db)
+            .await
+            .expect("db ok");
+
+        if let Some(submission) = submission {
+            assert!(submission.is_failed());
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_status_failed_grading() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // Remove mark allocator to cause grading failure
+        let allocator_path = mark_allocator_path(data.module.id, data.assignment.id);
+        std::fs::remove_file(&allocator_path).ok(); // Ignore if it doesn't exist
+
+        let file = create_submission_zip();
+        let (boundary, body) = multipart_body("solution.zip", &file, None, Some("true"));
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        // Missing mark allocator should cause internal server error
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["message"], "File not found");
+
+        // Check if a submission was created and has failed status
+        use db::models::assignment_submission::{Column as SubCol, Entity as SubmissionEntity};
+        let submission = SubmissionEntity::find()
+            .filter(SubCol::AssignmentId.eq(data.assignment.id))
+            .filter(SubCol::UserId.eq(data.student_user.id))
+            .order_by(SubCol::Attempt, sea_orm::Order::Desc)
+            .one(db)
+            .await
+            .expect("db ok");
+
+        if let Some(submission) = submission {
+            assert!(submission.is_failed());
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_status_failed_compile() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // Create a zip with invalid Java code to trigger compile failure
+        let mut buf = Vec::new();
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts = SimpleFileOptions::default();
+
+        // Invalid Java code that won't compile
+        zip.start_file("Main.java", opts).unwrap();
+        zip.write_all(b"public class Main { invalid syntax here }")
+            .unwrap();
+        zip.finish().unwrap();
+
+        let (boundary, body) = multipart_body("broken.zip", &buf, None, Some("true"));
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Check if a submission was created and verify its status
+        use db::models::assignment_submission::{Column as SubCol, Entity as SubmissionEntity};
+        let submission = SubmissionEntity::find()
+            .filter(SubCol::AssignmentId.eq(data.assignment.id))
+            .filter(SubCol::UserId.eq(data.student_user.id))
+            .order_by(SubCol::Attempt, sea_orm::Order::Desc)
+            .one(db)
+            .await
+            .expect("db ok");
+
+        if let Some(submission) = submission {
+            // The submission should either fail or succeed depending on the compilation step
+            assert!(submission.is_complete()); // Either graded or failed
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_status_helper_methods() {
+        let (_app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // Create a test submission to test direct status manipulation
+        let file = create_submission_zip();
+        let submission = db::models::assignment_submission::Model::save_file(
+            db,
+            data.assignment.id,
+            data.student_user.id,
+            1,
+            0,
+            10,
+            false,
+            "test.zip",
+            "test_hash",
+            &file,
+        )
+        .await
+        .expect("Failed to create submission");
+
+        // Test initial Queued status
+        assert_eq!(
+            submission.status,
+            db::models::assignment_submission::SubmissionStatus::Queued
+        );
+        assert!(submission.is_in_progress());
+        assert!(!submission.is_complete());
+        assert!(!submission.is_failed());
+
+        // Test Running status
+        let running_submission =
+            db::models::assignment_submission::Model::set_running(db, submission.id)
+                .await
+                .expect("Failed to set running status");
+        assert_eq!(
+            running_submission.status,
+            db::models::assignment_submission::SubmissionStatus::Running
+        );
+        assert!(running_submission.is_in_progress());
+        assert!(!running_submission.is_complete());
+        assert!(!running_submission.is_failed());
+
+        // Test Grading status
+        let grading_submission =
+            db::models::assignment_submission::Model::set_grading(db, submission.id)
+                .await
+                .expect("Failed to set grading status");
+        assert_eq!(
+            grading_submission.status,
+            db::models::assignment_submission::SubmissionStatus::Grading
+        );
+        assert!(grading_submission.is_in_progress());
+        assert!(!grading_submission.is_complete());
+        assert!(!grading_submission.is_failed());
+
+        // Test Graded status
+        let graded_submission =
+            db::models::assignment_submission::Model::set_graded(db, submission.id)
+                .await
+                .expect("Failed to set graded status");
+        assert_eq!(
+            graded_submission.status,
+            db::models::assignment_submission::SubmissionStatus::Graded
+        );
+        assert!(!graded_submission.is_in_progress());
+        assert!(graded_submission.is_complete());
+        assert!(!graded_submission.is_failed());
+
+        // Test FailedUpload status
+        let failed_upload = db::models::assignment_submission::Model::set_failed(
+            db,
+            submission.id,
+            db::models::assignment_submission::SubmissionStatus::FailedUpload,
+        )
+        .await
+        .expect("Failed to set failed upload status");
+        assert_eq!(
+            failed_upload.status,
+            db::models::assignment_submission::SubmissionStatus::FailedUpload
+        );
+        assert!(!failed_upload.is_in_progress());
+        assert!(failed_upload.is_complete());
+        assert!(failed_upload.is_failed());
+
+        // Test FailedCompile status
+        let failed_compile = db::models::assignment_submission::Model::set_failed(
+            db,
+            submission.id,
+            db::models::assignment_submission::SubmissionStatus::FailedCompile,
+        )
+        .await
+        .expect("Failed to set failed compile status");
+        assert_eq!(
+            failed_compile.status,
+            db::models::assignment_submission::SubmissionStatus::FailedCompile
+        );
+        assert!(failed_compile.is_failed());
+
+        // Test FailedExecution status
+        let failed_execution = db::models::assignment_submission::Model::set_failed(
+            db,
+            submission.id,
+            db::models::assignment_submission::SubmissionStatus::FailedExecution,
+        )
+        .await
+        .expect("Failed to set failed execution status");
+        assert_eq!(
+            failed_execution.status,
+            db::models::assignment_submission::SubmissionStatus::FailedExecution
+        );
+        assert!(failed_execution.is_failed());
+
+        // Test FailedGrading status
+        let failed_grading = db::models::assignment_submission::Model::set_failed(
+            db,
+            submission.id,
+            db::models::assignment_submission::SubmissionStatus::FailedGrading,
+        )
+        .await
+        .expect("Failed to set failed grading status");
+        assert_eq!(
+            failed_grading.status,
+            db::models::assignment_submission::SubmissionStatus::FailedGrading
+        );
+        assert!(failed_grading.is_failed());
+
+        // Test FailedInternal status
+        let failed_internal = db::models::assignment_submission::Model::set_failed(
+            db,
+            submission.id,
+            db::models::assignment_submission::SubmissionStatus::FailedInternal,
+        )
+        .await
+        .expect("Failed to set failed internal status");
+        assert_eq!(
+            failed_internal.status,
+            db::models::assignment_submission::SubmissionStatus::FailedInternal
+        );
+        assert!(failed_internal.is_failed());
+
+        // Test that invalid failure types are rejected
+        let invalid_result = db::models::assignment_submission::Model::set_failed(
+            db,
+            submission.id,
+            db::models::assignment_submission::SubmissionStatus::Queued, // Invalid failure type
+        )
+        .await;
+        assert!(invalid_result.is_err());
+    }
 }

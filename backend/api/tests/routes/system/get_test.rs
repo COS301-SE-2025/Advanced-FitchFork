@@ -287,6 +287,7 @@ mod tests {
             path: Set("path/to/file".into()),
             is_practice: Set(false),
             ignored: Set(false),
+            status: Set(db::models::assignment_submission::SubmissionStatus::Graded),
             created_at: Set(submission_time),
             updated_at: Set(submission_time),
         };
