@@ -4,6 +4,7 @@ import { Typography, Card, Descriptions, Tag, Alert, Space, Collapse, Table } fr
 import { useHelpToc } from '@/context/HelpContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { CodeEditor } from '@/components/common';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -102,6 +103,16 @@ const regenRows = [
 export default function MemoOutputHelp() {
   const { setBreadcrumbLabel } = useBreadcrumbContext();
   const ids = useMemo(() => toc.map((t) => t.href.slice(1)), []);
+  const { setValue, setBackTo } = useViewSlot();
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+        Memo Output
+      </Typography.Text>,
+    );
+    setBackTo('/help');
+  }, []);
 
   useEffect(() => {
     setBreadcrumbLabel('help/assignments/memo-output', 'Memo Output');
@@ -222,7 +233,7 @@ export default function MemoOutputHelp() {
       </Card>
 
       <section id="labels" className="scroll-mt-24" />
-      <Title level={3}>Subsections & labels</Title>
+      <Title level={3}>Subsections &amp; labels</Title>
       <Paragraph className="mb-0">
         Inside <b>Main</b>, print the delimiter <Text code>&-=-&</Text> followed by the subsection
         name. The text after the delimiter becomes the label used for per-section comparisons and
@@ -231,13 +242,37 @@ export default function MemoOutputHelp() {
 
       <section id="regen" className="scroll-mt-24" />
       <Title level={3}>When to regenerate</Title>
-      <Table
-        className="mt-2"
-        size="small"
-        columns={regenCols}
-        dataSource={regenRows}
-        pagination={false}
-      />
+
+      {/* Desktop table */}
+      <div className="hidden md:block">
+        <Table
+          className="mt-2"
+          size="small"
+          columns={regenCols}
+          dataSource={regenRows}
+          pagination={false}
+          scroll={{ x: true }}
+        />
+      </div>
+
+      {/* Mobile cards */}
+      <div className="block md:hidden !space-y-3 mt-2">
+        {regenRows.map((r) => (
+          <Card
+            key={r.key}
+            size="small"
+            title={<div className="font-semibold">{r.change}</div>}
+            extra={r.need}
+            bordered
+          >
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Why
+            </div>
+            <div className="text-sm">{r.why}</div>
+          </Card>
+        ))}
+      </div>
+
       <Alert
         className="mt-3"
         type="info"

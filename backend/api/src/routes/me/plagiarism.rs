@@ -31,6 +31,7 @@ pub struct GetMyPlagiarismCasesQuery {
     pub assignment_id: Option<i64>,
     pub status: Option<String>,
     pub sort: Option<String>,
+    pub role: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -93,11 +94,27 @@ pub async fn get_my_plagiarism_cases(
     let page = query.page.unwrap_or(1);
     let per_page = query.per_page.unwrap_or(20);
 
-    // Ensure caller has lecturer/assistant lecturer access
+    // Allowed staff roles for this endpoint (mirrors "role" support in assignments).
+    let allowed_roles = vec!["lecturer", "assistant_lecturer", "tutor"];
+
+    // Normalize/validate optional requested role (?role=lecturer|assistant_lecturer|tutor)
+    let requested_role = query
+        .role
+        .as_ref()
+        .and_then(|r| {
+            let r = r.to_lowercase();
+            if allowed_roles.iter().any(|x| *x == r) { Some(r) } else { None }
+        });
+
+    // Staff-only access (now includes Tutor).
     let memberships = user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user_id))
         .filter(
-            user_module_role::Column::Role.is_in(vec![Role::Lecturer, Role::AssistantLecturer]),
+            user_module_role::Column::Role.is_in(vec![
+                Role::Lecturer,
+                Role::AssistantLecturer,
+                Role::Tutor,
+            ]),
         )
         .all(db)
         .await
@@ -107,20 +124,27 @@ pub async fn get_my_plagiarism_cases(
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error(
-                "Only lecturers or assistant lecturers can view plagiarism cases",
+                "Only lecturers, assistant lecturers, or tutors can view plagiarism cases",
             )),
         )
             .into_response();
     }
 
+    // Filter memberships by optional module_id and requested role
     let module_ids: Vec<i64> = memberships
         .iter()
         .filter(|m| {
             if let Some(module_filter) = query.module_id {
-                m.module_id == module_filter
-            } else {
-                true
+                if m.module_id != module_filter {
+                    return false;
+                }
             }
+            if let Some(ref r) = requested_role {
+                if m.role.to_string().to_lowercase() != *r {
+                    return false;
+                }
+            }
+            true
         })
         .map(|m| m.module_id)
         .collect();

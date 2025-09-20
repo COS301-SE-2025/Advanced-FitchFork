@@ -4,6 +4,7 @@ import { Typography, Card, Space, Collapse, Table, Alert, Tag } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
 import { CodeEditor } from '@/components/common';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -183,6 +184,16 @@ const knobsRows = [
 export default function ConceptGATLAM() {
   const { setBreadcrumbLabel } = useBreadcrumbContext();
   const ids = useMemo(() => toc.map((t) => t.href.slice(1)), []);
+  const { setValue, setBackTo } = useViewSlot();
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+        GATLAM & Interpreter
+      </Typography.Text>,
+    );
+    setBackTo('/help');
+  }, []);
 
   useEffect(() => {
     setBreadcrumbLabel('help/assignments/gatlam', 'GATLAM & Interpreter');
@@ -262,13 +273,34 @@ export default function ConceptGATLAM() {
 
       <section id="eval" className="scroll-mt-24" />
       <Title level={3}>What the interpreter checks</Title>
-      <Table
-        className="mt-2"
-        size="small"
-        columns={checksCols}
-        dataSource={checksRows}
-        pagination={false}
-      />
+
+      {/* Desktop table */}
+      <div className="hidden md:block">
+        <Table
+          className="mt-2"
+          size="small"
+          columns={checksCols}
+          dataSource={checksRows}
+          pagination={false}
+          scroll={{ x: true }}
+        />
+      </div>
+      {/* Mobile cards */}
+      <div className="block md:hidden mt-2 !space-y-3">
+        {checksRows.map((r) => (
+          <Card key={r.key} size="small" title={<div className="font-semibold">{r.check}</div>}>
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Looks at
+            </div>
+            <div className="text-sm mb-2">{r.source}</div>
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Passes when…
+            </div>
+            <div className="text-sm">{r.meaning}</div>
+          </Card>
+        ))}
+      </div>
+
       <Alert
         className="mt-3"
         type="info"
@@ -332,23 +364,64 @@ export default function ConceptGATLAM() {
 
       <section id="ops" className="scroll-mt-24" />
       <Title level={3}>Operators (crossover &amp; mutation)</Title>
-      <Table
-        className="mt-2"
-        size="small"
-        columns={opsCols}
-        dataSource={opsRows}
-        pagination={false}
-      />
+
+      {/* Desktop table */}
+      <div className="hidden md:block">
+        <Table
+          className="mt-2"
+          size="small"
+          columns={opsCols}
+          dataSource={opsRows}
+          pagination={false}
+          scroll={{ x: true }}
+        />
+      </div>
+      {/* Mobile cards */}
+      <div className="block md:hidden mt-2 !space-y-3">
+        {opsRows.map((r) => (
+          <Card key={r.key} size="small" title={<div className="font-semibold">{r.name}</div>}>
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              What it does
+            </div>
+            <div className="text-sm mb-2">{r.desc}</div>
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Notes
+            </div>
+            <div className="text-sm">{r.notes}</div>
+          </Card>
+        ))}
+      </div>
 
       <section id="params" className="scroll-mt-24" />
       <Title level={3}>Key knobs (conceptually)</Title>
-      <Table
-        className="mt-2"
-        size="small"
-        columns={knobsCols}
-        dataSource={knobsRows}
-        pagination={false}
-      />
+
+      {/* Desktop table */}
+      <div className="hidden md:block">
+        <Table
+          className="mt-2"
+          size="small"
+          columns={knobsCols}
+          dataSource={knobsRows}
+          pagination={false}
+          scroll={{ x: true }}
+        />
+      </div>
+      {/* Mobile cards */}
+      <div className="block md:hidden mt-2 !space-y-3">
+        {knobsRows.map((r) => (
+          <Card key={r.key} size="small" title={<div className="font-semibold">{r.k}</div>}>
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              What it controls
+            </div>
+            <div className="text-sm mb-2">{r.w}</div>
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Typical default
+            </div>
+            <div className="text-sm">{r.d}</div>
+          </Card>
+        ))}
+      </div>
+
       <Paragraph className="mt-2 mb-0">
         Gene bit-width is picked from the <b>largest absolute</b> min/max across all genes, then
         each gene value is encoded using sign+magnitude to that width.

@@ -1,7 +1,9 @@
+// src/pages/help/assignments/plagiarism/PlagiarismMossHelp.tsx
 import { useEffect, useMemo } from 'react';
 import { Typography, Space, Card, Alert, Table, Tag, List } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -32,16 +34,8 @@ const statusColumns = [
     width: 140,
     render: (label: string, row: StatusRow) => <Tag color={row.color}>{label}</Tag>,
   },
-  {
-    title: 'Meaning',
-    dataIndex: 'meaning',
-    key: 'meaning',
-  },
-  {
-    title: 'Typical next step',
-    dataIndex: 'next',
-    key: 'next',
-  },
+  { title: 'Meaning', dataIndex: 'meaning', key: 'meaning' },
+  { title: 'Typical next step', dataIndex: 'next', key: 'next' },
 ];
 
 const statusRows: StatusRow[] = [
@@ -107,6 +101,16 @@ const ArchiveStructureList = () => (
 export default function PlagiarismMossHelp() {
   const { setBreadcrumbLabel } = useBreadcrumbContext();
   const ids = useMemo(() => toc.map((t) => t.href.slice(1)), []);
+  const { setValue, setBackTo } = useViewSlot();
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+        Plagiarism & MOSS
+      </Typography.Text>,
+    );
+    setBackTo('/help');
+  }, []);
 
   useEffect(() => {
     setBreadcrumbLabel('help/assignments/plagiarism/moss', 'Plagiarism & MOSS');
@@ -145,10 +149,8 @@ export default function PlagiarismMossHelp() {
         Fitchfork automates the <strong>MOSS (Measure of Software Similarity)</strong> flow for you.
         When you run a job, the backend selects <strong>one submission per student</strong> based on
         the assignment’s grading policy (<Text code>Last</Text> picks the latest eligible attempt,
-        <Text code>Best</Text> picks the highest scoring). Any skeleton files you attached as <em>
-          Spec
-        </em>{' '}
-        files are uploaded as base files so MOSS can discount them. The system then:
+        <Text code>Best</Text> picks the highest scoring). Any skeleton files you attached as{' '}
+        <em>Spec</em> files are uploaded as base files so MOSS can discount them. The system then:
       </Paragraph>
       <ol className="list-decimal pl-5">
         <li>Sends the curated bundle to Stanford’s MOSS service using your configured language.</li>
@@ -169,19 +171,18 @@ export default function PlagiarismMossHelp() {
         storage directory so you always have a quick pointer.
       </Paragraph>
       <Paragraph>
-        Behind the scenes, each run is persisted in the <strong>Moss Reports</strong> table with your
-        description, filter settings, timestamps, and an archive flag the UI can poll. Parsed matches
-        create rows in the <strong>Plagiarism Cases</strong> table, capturing the similarity percent,
-        matched line counts, generated description, and a nullable report reference. Those records
-        power the Plagiarism Cases list, filters, and graph visualisation.
+        Behind the scenes, each run is persisted in the <strong>Moss Reports</strong> table with
+        your description, filter settings, timestamps, and an archive flag the UI can poll. Parsed
+        matches create rows in the <strong>Plagiarism Cases</strong> table, capturing the similarity
+        percent, matched line counts, generated description, and a nullable report reference. Those
+        records power the Plagiarism Cases list, filters, and graph visualisation.
       </Paragraph>
 
       <section id="running-moss" className="scroll-mt-24" />
       <Title level={3}>Running MOSS</Title>
       <Paragraph>
         Open an assignment, switch to <strong>Plagiarism</strong>, and use the{' '}
-        <strong>Run MOSS</strong>
-        button. The modal mirrors the backend rules:
+        <strong>Run MOSS</strong> button. The modal mirrors the backend rules:
       </Paragraph>
       <ul className="list-disc pl-5">
         <li>
@@ -189,9 +190,9 @@ export default function PlagiarismMossHelp() {
           shown in the report list.
         </li>
         <li>
-          Choose a file filter: <Text code>All</Text> (compare everything),
-          <Text code>Whitelist</Text> (only listed patterns) or <Text code>Blacklist</Text>
-          (exclude patterns). Patterns use glob syntax such as <Text code>**/*.cpp</Text>.
+          Choose a file filter: <Text code>All</Text> (compare everything),{' '}
+          <Text code>Whitelist</Text> (only listed patterns) or <Text code>Blacklist</Text> (exclude
+          patterns). Patterns use glob syntax such as <Text code>**/*.cpp</Text>.
         </li>
         <li>
           The assignment’s configured language is sent automatically, so check
@@ -254,17 +255,45 @@ export default function PlagiarismMossHelp() {
         The cases list supports grid and table views. Filter by status, search by username, or focus
         on cases from a specific MOSS run using the <strong>Report</strong> filter (Fitchfork shows
         your report descriptions there). Columns for <strong>Similarity</strong> and{' '}
-        <strong>Lines</strong>
-        are sortable so you can triage the highest-risk pairs first.
+        <strong>Lines</strong> are sortable so you can triage the highest-risk pairs first.
       </Paragraph>
       <Paragraph>Case actions align with the status lifecycle:</Paragraph>
-      <Table
-        size="small"
-        columns={statusColumns}
-        dataSource={statusRows}
-        pagination={false}
-        className="max-w-4xl"
-      />
+
+      {/* Desktop table */}
+      <div className="hidden md:block">
+        <Table
+          size="small"
+          columns={statusColumns}
+          dataSource={statusRows}
+          pagination={false}
+          className="max-w-4xl"
+          scroll={{ x: true }}
+        />
+      </div>
+      {/* Mobile cards */}
+      <div className="block md:hidden !space-y-3">
+        {statusRows.map((r) => (
+          <Card
+            key={r.key}
+            size="small"
+            title={
+              <div className="font-semibold">
+                <Tag color={r.color}>{r.label}</Tag>
+              </div>
+            }
+          >
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Meaning
+            </div>
+            <div className="text-sm mb-2">{r.meaning}</div>
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Typical next step
+            </div>
+            <div className="text-sm">{r.next}</div>
+          </Card>
+        ))}
+      </div>
+
       <Paragraph>
         Use <strong>Flag</strong> to escalate, then <strong>Mark Reviewed</strong> once you have
         documented the outcome. Bulk delete is available for clearing test runs. For a birds-eye
@@ -302,16 +331,17 @@ export default function PlagiarismMossHelp() {
       <section id="archives" className="scroll-mt-24" />
       <Title level={3}>Archive format &amp; offline copies</Title>
       <Paragraph>
-        Archives are stored alongside each assignment in a <Text code>moss_archives/&lt;report_id&gt;</Text>
-        folder on the server. The folder name matches the report ID, so removing a report removes its
-        archive directory and ZIP. When the background job finishes you will find:
+        Archives are stored alongside each assignment in a{' '}
+        <Text code>moss_archives/&lt;report_id&gt;</Text> folder on the server. The folder name
+        matches the report ID, so removing a report removes its archive directory and ZIP. When the
+        background job finishes you will find:
       </Paragraph>
       <ArchiveStructureList />
       <Paragraph>
         The HTML is rewritten so <Text code>index.html</Text> works offline—open it in any browser
-        to explore matches even after the Stanford URL expires. Fitchfork also drops a pointer at
-        <Text code>moss_archives/&lt;report_id&gt;/archive.zip</Text>
-        and exposes that ZIP through the UI download buttons.
+        to explore matches even after the Stanford URL expires. Fitchfork also drops a pointer at{' '}
+        <Text code>moss_archives/&lt;report_id&gt;/archive.zip</Text> and exposes that ZIP through
+        the UI download buttons.
       </Paragraph>
 
       <section id="reading-report" className="scroll-mt-24" />

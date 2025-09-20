@@ -97,6 +97,8 @@ import HowToSubmitHelp from './pages/help/assignments/submissions/HowToSubmitHel
 import AssignmentSetupHelp from './pages/help/assignments/AssignmentSetupHelp';
 import TasksHelp from './pages/help/assignments/TasksHelp';
 import SystemMonitoringHelp from './pages/help/system/SystemMonitoring';
+import MobileHelpPageMenu from './pages/help/MobileHelpPageMenu';
+import FitchforkOverview from './pages/help/Overview';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -193,10 +195,7 @@ export default function App() {
                     <Route path="submissions" element={<SubmissionsList />} />
                     <Route path="submissions/:submission_id" element={<SubmissionView />} />
                     <Route path="tasks" element={<TasksPage />}>
-                      <Route
-                        index
-                        element={isMobile ? <TasksMobileMenu /> : <TaskView />}
-                      />
+                      <Route index element={isMobile ? <TasksMobileMenu /> : <TaskView />} />
                       <Route path=":task_id" element={<TaskView />} />
                     </Route>
                     <Route path="tickets" element={<Tickets />} />
@@ -281,13 +280,19 @@ export default function App() {
             {/* Help Routes */}
             <Route path="/help" element={<HelpPageLayout />}>
               {/* Default → Getting Started / Overview */}
-              <Route index element={<Navigate to="getting-started/overview" replace />} />
+              <Route
+                index
+                element={
+                  isMobile ? (
+                    <MobileHelpPageMenu />
+                  ) : (
+                    <Navigate to="getting-started/overview" replace />
+                  )
+                }
+              />
 
               {/* Ambiguous roots → first leaf */}
-              <Route
-                path="getting-started"
-                element={<Navigate to="getting-started/overview" replace />}
-              />
+              <Route path="getting-started" element={<Navigate to="getting-started/overview" />} />
               <Route path="modules" element={<Navigate to="modules/overview" replace />} />
               <Route path="assignments" element={<Navigate to="assignments/setup" replace />} />
               <Route
@@ -318,7 +323,7 @@ export default function App() {
               <Route path="support" element={<Navigate to="support/troubleshooting" replace />} />
 
               {/* Getting Started */}
-              <Route path="getting-started/overview" element={<UnderConstruction />} />
+              <Route path="getting-started/overview" element={<FitchforkOverview />} />
 
               {/* Modules */}
               <Route path="modules/overview" element={<UnderConstruction />} />
