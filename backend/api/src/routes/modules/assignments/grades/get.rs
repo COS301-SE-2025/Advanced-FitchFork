@@ -18,26 +18,23 @@ use axum::{
     },
     response::{IntoResponse, Response},
 };
+use db::grade::{
+    compute_assignment_grades,
+    percentage,
+    GradeComputationError,
+    GradeComputationOptions,
+};
 use db::models::{
-    assignment::{Column as AssignmentCol, Entity as AssignmentEntity, Model as AssignmentModel},
-    assignment_submission::{
-        Column as SubCol, Entity as SubmissionEntity, Model as SubModel, Relation as SubRel,
-    },
+    assignment::{Column as AssignmentCol, Entity as AssignmentEntity},
+    assignment_submission::Model as SubModel,
     assignment_task::{Column as TaskCol, Entity as TaskEntity, Model as TaskModel},
-    user::{Column as UserCol, Entity as UserEntity, Model as UserModel},
-    user_module_role::{Column as UmrCol, Entity as UmrEntity, Role as ModuleRole},
 };
-use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect,
-    QueryTrait, RelationTrait,
-};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use std::{cmp::Ordering, collections::HashMap};
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use util::state::AppState;
-use util::{
-    execution_config::{ExecutionConfig, GradingPolicy},
-    paths::submission_report_path,
-};
+use util::paths::submission_report_path;
 
 #[derive(Debug, Deserialize)]
 pub struct ListGradeQueryParams {
@@ -89,13 +86,6 @@ pub struct PaginatedGradeResponse {
     pub total: u64,
 }
 
-// Internal row after applying policy
-struct GradeRow {
-    submission: SubModel,
-    user: UserModel,
-    score_pct: f32, // 0..100
-}
-
 /// Minimal shapes we need from submission_report.json
 #[derive(Debug, Deserialize)]
 struct ReportScore {
@@ -117,14 +107,6 @@ struct ReportTask {
 struct ReportRoot {
     #[serde(default)]
     tasks: Vec<ReportTask>,
-}
-
-fn pct(earned: i64, total: i64) -> f32 {
-    if total <= 0 {
-        0.0
-    } else {
-        (earned as f32) * 100.0 / (total as f32)
-    }
 }
 
 /// Build maps for task name enrichment:
@@ -199,107 +181,12 @@ fn read_tasks_from_report(
                     name: resolved_name,
                     earned: sc.earned,
                     total: sc.total,
-                    score: pct(sc.earned, sc.total),
+                    score: percentage(sc.earned, sc.total),
                 })
             })
             .collect(),
         Err(_) => vec![],
     }
-}
-
-async fn load_execution_config_for(
-    module_id: i64,
-    assignment_id: i64,
-) -> Result<ExecutionConfig, String> {
-    ExecutionConfig::get_execution_config(module_id, assignment_id)
-}
-
-async fn compute_grades_for_assignment(
-    db: &DatabaseConnection,
-    module_id: i64,
-    assignment_id: i64,
-    username_filter: Option<&str>,
-) -> Result<(Vec<GradeRow>, ExecutionConfig), sea_orm::DbErr> {
-    // Ensure assignment exists under module
-    let _assignment: AssignmentModel = AssignmentEntity::find()
-        .filter(AssignmentCol::Id.eq(assignment_id))
-        .filter(AssignmentCol::ModuleId.eq(module_id))
-        .one(db)
-        .await?
-        .ok_or_else(|| sea_orm::DbErr::Custom("Assignment not found".into()))?;
-
-    // Load execution config
-    let exec_cfg = load_execution_config_for(module_id, assignment_id)
-        .await
-        .map_err(|e| sea_orm::DbErr::Custom(format!("Execution config error: {e}")))?;
-
-    // ---- ONLY STUDENTS: user_ids with role=Student in this module ----
-    let student_ids_subq = UmrEntity::find()
-        .select_only()
-        .column(UmrCol::UserId)
-        .filter(UmrCol::ModuleId.eq(module_id))
-        .filter(UmrCol::Role.eq(ModuleRole::Student));
-
-    // Base query
-    let mut q = SubmissionEntity::find()
-        .filter(SubCol::AssignmentId.eq(assignment_id))
-        .filter(SubCol::IsPractice.eq(false))
-        .filter(SubCol::Ignored.eq(false))
-        .filter(SubCol::UserId.in_subquery(student_ids_subq.as_query().to_owned()))
-        .join(JoinType::InnerJoin, SubRel::User.def())
-        .select_also(UserEntity)
-        .order_by_asc(SubCol::UserId)
-        .order_by_desc(SubCol::CreatedAt)
-        .order_by_desc(SubCol::Attempt);
-
-    if let Some(qs) = username_filter {
-        let qs = qs.trim();
-        if !qs.is_empty() {
-            q = q.filter(UserCol::Username.contains(qs));
-        }
-    }
-
-    let rows: Vec<(SubModel, Option<UserModel>)> = q.all(db).await?;
-
-    // Group attempts by user
-    let mut per_user: HashMap<i64, Vec<(SubModel, UserModel)>> = HashMap::new();
-    for (s, u_opt) in rows {
-        if let Some(u) = u_opt {
-            per_user.entry(s.user_id).or_default().push((s, u));
-        }
-    }
-
-    // Choose per policy
-    let policy = exec_cfg.marking.grading_policy;
-    let mut out = Vec::with_capacity(per_user.len());
-
-    for (_uid, attempts) in per_user.into_iter() {
-        let chosen = match policy {
-            GradingPolicy::Last => attempts.first().cloned(),
-            GradingPolicy::Best => attempts.into_iter().max_by(|(a, _), (b, _)| {
-                let a_ratio = (a.earned as f64) / (a.total.max(1) as f64);
-                let b_ratio = (b.earned as f64) / (b.total.max(1) as f64);
-                match a_ratio.partial_cmp(&b_ratio).unwrap_or(Ordering::Equal) {
-                    Ordering::Equal => match a.created_at.cmp(&b.created_at) {
-                        Ordering::Equal => a.attempt.cmp(&b.attempt),
-                        ord => ord,
-                    },
-                    ord => ord,
-                }
-            }),
-        };
-
-        if let Some((s, u)) = chosen {
-            let pct_final = pct(s.earned, s.total);
-            out.push(GradeRow {
-                user: u,
-                score_pct: pct_final,
-                submission: s,
-            });
-        }
-    }
-
-    Ok((out, exec_cfg))
 }
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/grades
@@ -397,18 +284,44 @@ pub async fn list_grades(
 
     let username_filter = params.query.as_deref();
 
-    let (mut grades, _cfg) =
-        match compute_grades_for_assignment(db, module_id, assignment_id, username_filter).await {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("list_grades: compute error: {e}");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error("Failed to compute grades")),
-                )
-                    .into_response();
-            }
-        };
+    let result = match compute_assignment_grades(
+        db,
+        module_id,
+        assignment_id,
+        GradeComputationOptions {
+            username_filter,
+            user_id: None,
+        },
+    )
+    .await
+    {
+        Ok(res) => res,
+        Err(GradeComputationError::AssignmentNotFound) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment not found")),
+            )
+                .into_response();
+        }
+        Err(GradeComputationError::ExecutionConfig(e)) => {
+            eprintln!("list_grades: execution config error: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to compute grades")),
+            )
+                .into_response();
+        }
+        Err(GradeComputationError::Database(e)) => {
+            eprintln!("list_grades: compute error: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to compute grades")),
+            )
+                .into_response();
+        }
+    };
+
+    let mut grades = result.grades;
 
     // Load task name map once
     let (task_name_by_id, task_name_by_num) = match load_task_maps(db, assignment_id).await {
@@ -609,10 +522,31 @@ pub async fn export_grades(
     }
 
     // Per-policy chosen submissions (students only)
-    let (rows, _cfg) = match compute_grades_for_assignment(db, module_id, assignment_id, None).await
+    let rows = match compute_assignment_grades(
+        db,
+        module_id,
+        assignment_id,
+        GradeComputationOptions::default(),
+    )
+    .await
     {
-        Ok(v) => v,
-        Err(e) => {
+        Ok(res) => res.grades,
+        Err(GradeComputationError::AssignmentNotFound) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment not found")),
+            )
+                .into_response();
+        }
+        Err(GradeComputationError::ExecutionConfig(e)) => {
+            eprintln!("export_grades: execution config error: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to compute grades")),
+            )
+                .into_response();
+        }
+        Err(GradeComputationError::Database(e)) => {
             eprintln!("export_grades: compute error: {e}");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -681,7 +615,7 @@ pub async fn export_grades(
         let mut map: Map<String, f32> = Map::new();
         for (idx, t) in tasks.iter().enumerate() {
             let label = task_label(t, idx);
-            let p = pct(t.earned, t.total);
+            let p = percentage(t.earned, t.total);
             if seen.insert(label.clone()) {
                 task_order.push(label.clone());
             }

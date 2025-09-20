@@ -345,6 +345,11 @@ mod tests {
             for event in events_list {
                 let event_type = event["type"].as_str().unwrap();
                 let content = event["content"].as_str().unwrap();
+                let module_id = event["module_id"].as_i64().unwrap();
+                let assignment_id = event["assignment_id"].as_i64().unwrap();
+
+                assert!(module_id > 0, "module_id should be present");
+                assert!(assignment_id > 0, "assignment_id should be present");
 
                 if event_type == "warning" {
                     found_warning = true;

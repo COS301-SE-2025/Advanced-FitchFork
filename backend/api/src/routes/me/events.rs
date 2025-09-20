@@ -26,6 +26,14 @@ pub struct GetEventsQuery {
     /// End date filter in ISO 8601 (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm:ss`)
     #[serde(default)]
     pub to: Option<String>,
+
+    /// Optional role filter to scope modules
+    #[serde(default)]
+    pub role: Option<String>,
+
+    /// Optional module filter
+    #[serde(default)]
+    pub module_id: Option<i64>,
 }
 
 /// Represents a single event item
@@ -33,6 +41,8 @@ pub struct GetEventsQuery {
 pub struct EventItem {
     pub r#type: String,
     pub content: String,
+    pub module_id: i64,
+    pub assignment_id: i64,
 }
 
 /// Response structure for listing events
@@ -131,6 +141,15 @@ pub async fn get_my_events(
         .join(JoinType::InnerJoin, module::Relation::UserModuleRole.def())
         .filter(user_module_role::Column::UserId.eq(user_id));
 
+    if let Some(role_filter) = &query.role {
+        assignment_query = assignment_query
+            .filter(user_module_role::Column::Role.eq(role_filter.clone()));
+    }
+
+    if let Some(module_filter) = query.module_id {
+        assignment_query = assignment_query.filter(assignment::Column::ModuleId.eq(module_filter));
+    }
+
     let mut date_conditions = Condition::all();
 
     if let Some(from) = from_dt {
@@ -180,6 +199,8 @@ pub async fn get_my_events(
                 .push(EventItem {
                     r#type: "warning".to_string(),
                     content: format!("{} available", assignment.name),
+                    module_id: assignment.module_id,
+                    assignment_id: assignment.id,
                 });
         }
 
@@ -195,6 +216,8 @@ pub async fn get_my_events(
             events_map.entry(due_key).or_default().push(EventItem {
                 r#type: "error".to_string(),
                 content: format!("{} due", assignment.name),
+                module_id: assignment.module_id,
+                assignment_id: assignment.id,
             });
         }
     }

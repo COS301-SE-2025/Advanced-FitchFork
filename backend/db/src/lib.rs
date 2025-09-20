@@ -1,3 +1,4 @@
+pub mod grade;
 pub mod models;
 pub mod test_utils;
 
