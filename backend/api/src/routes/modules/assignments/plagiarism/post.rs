@@ -26,6 +26,7 @@ use db::models::{
 use moss_parser::{ParseOptions, parse_moss};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tracing::{error, info};
 use util::config;
 use util::paths::{assignment_dir, ensure_parent_dir, moss_archive_zip_path};
@@ -41,7 +42,7 @@ pub struct CreatePlagiarismCasePayload {
     pub report_id: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PlagiarismCaseResponse {
     pub id: i64,
     pub assignment_id: i64,
@@ -719,4 +720,356 @@ fn generate_description(
         "Submissions `{}` ({}) and `{}` ({}) show {}, with {} lines matched and a similarity score of {:.1}%.",
         sub_a, user_a, sub_b, user_b, level, total_lines, percent
     )
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct HashScanPayload {
+    #[serde(default)]
+    pub create_cases: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct HashScanResponse {
+    pub assignment_id: i64,
+    pub policy_used: String,
+    pub group_count: usize,
+    pub groups: Vec<CollisionGroup>,
+    pub cases: CreatedCases,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CollisionGroup {
+    pub file_hash: String,
+    pub submissions: Vec<SubmissionInfo>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SubmissionInfo {
+    pub submission_id: i64,
+    pub user_id: i64,
+    pub attempt: i64,
+    pub filename: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CreatedCases {
+    pub created: Vec<PlagiarismCaseResponse>,
+    pub skipped_existing: i64,
+}
+
+/// POST /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/hash-scan
+///
+/// Performs a hash-based collision scan to detect potentially identical submissions
+/// within an assignment. This endpoint identifies submissions with identical file
+/// hashes, which typically indicates exact file duplication or copy-paste plagiarism.
+///
+/// Accessible only to lecturers and assistant lecturers assigned to the module.
+///
+/// # Path Parameters
+///
+/// - `module_id`: The ID of the parent module
+/// - `assignment_id`: The ID of the assignment to scan
+///
+/// # Request Body
+///
+/// Requires a JSON payload with the following optional field:
+/// - `create_cases` (boolean, default: false): Whether to automatically create plagiarism
+///   cases for detected hash collisions. When true, creates cases with 100% similarity
+///   for each pair of submissions with identical hashes.
+///
+/// # Behavior
+///
+/// - **Submission selection respects the assignment's grading policy**:
+///   - `grading_policy = "last"` → uses each student's **most recent** non-practice, non-ignored submission
+///   - `grading_policy = "best"` → uses each student's **best-scoring** non-practice, non-ignored submission
+/// - Groups submissions by their SHA-256 file hash
+/// - Only includes groups with 2+ submissions (actual collisions)
+/// - Filters out submissions with empty/missing file hashes
+/// - When `create_cases = true`:
+///   - Creates plagiarism cases for each unique pair within collision groups
+///   - Skips pairs from the same user (self-collision)
+///   - Deduplicates against existing cases (order-independent)
+///   - Sets similarity to 100.0% and lines_matched to 0
+///   - Uses description: "Identical file hash collision"
+///
+/// # Returns
+///
+/// - `200 OK` on success with collision analysis and optional case creation results
+/// - `404 NOT FOUND` if the assignment doesn't exist
+/// - `403 FORBIDDEN` if user lacks required permissions
+/// - `500 INTERNAL SERVER ERROR` for database errors or processing failures
+///
+/// # Example Request
+///
+/// ```json
+/// {
+///   "create_cases": true
+/// }
+/// ```
+///
+/// # Example Response (200 OK)
+///
+/// ```json
+/// {
+///   "success": true,
+///   "message": "Hash scan complete.",
+///   "data": {
+///     "assignment_id": 42,
+///     "policy_used": "Best",
+///     "group_count": 3,
+///     "groups": [
+///       {
+///         "file_hash": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+///         "submissions": [
+///           {
+///             "submission_id": 101,
+///             "user_id": 15,
+///             "attempt": 2,
+///             "filename": "solution.py",
+///             "created_at": "2024-05-20T14:30:00Z"
+///           },
+///           {
+///             "submission_id": 108,
+///             "user_id": 23,
+///             "attempt": 1,
+///             "filename": "main.py",
+///             "created_at": "2024-05-20T15:45:00Z"
+///           }
+///         ]
+///       }
+///     ],
+///     "cases": {
+///       "created": [
+///         {
+///           "id": 67,
+///           "assignment_id": 42,
+///           "submission_id_1": 101,
+///           "submission_id_2": 108,
+///           "description": "Identical file hash collision",
+///           "status": "review",
+///           "similarity": 100.0,
+///           "lines_matched": 0,
+///           "report_id": null,
+///           "created_at": "2024-05-20T16:00:00Z",
+///           "updated_at": "2024-05-20T16:00:00Z"
+///         }
+///       ],
+///       "skipped_existing": 0
+///     }
+///   }
+/// }
+/// ```
+///
+/// # Example Error Responses
+///
+/// - `404 Not Found`
+/// ```json
+/// { "success": false, "message": "Assignment not found." }
+/// ```
+///
+/// - `500 Internal Server Error`
+/// ```json
+/// { "success": false, "message": "Failed to retrieve submissions." }
+/// ```
+///
+/// # Notes
+///
+/// - Hash collisions indicate **exact file duplication**, which is stronger evidence
+///   of plagiarism than similarity-based detection methods
+/// - This scan is complementary to MOSS-based similarity detection
+/// - Empty or missing file hashes are excluded from analysis
+/// - Created cases start in "review" status and can be managed via plagiarism APIs/UI
+/// - The scan only considers the selected submission per user based on grading policy
+/// - Practice and ignored submissions are automatically excluded
+pub async fn hash_scan(
+    State(app_state): State<AppState>,
+    AxumPath((module_id, assignment_id)): AxumPath<(i64, i64)>,
+    Json(payload): Json<HashScanPayload>,
+) -> impl IntoResponse {
+    let assignment = match AssignmentEntity::find_by_id(assignment_id)
+        .one(app_state.db())
+        .await
+    {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment not found.")),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            error!("Failed to fetch assignment: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Internal server error.")),
+            )
+                .into_response();
+        }
+    };
+
+    let exec_config = ExecutionConfig::get_execution_config(module_id, assignment_id)
+        .unwrap_or_else(|_| ExecutionConfig::default_config());
+    let policy_used = match exec_config.marking.grading_policy {
+        util::execution_config::GradingPolicy::Best => "Best",
+        util::execution_config::GradingPolicy::Last => "Last",
+    }
+    .to_string();
+
+    let selected_submissions: Vec<assignment_submission::Model> =
+        match assignment_submission::Model::get_selected_submissions_for_assignment(
+            app_state.db(),
+            &assignment,
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to retrieve submissions: {}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Failed to retrieve submissions.")),
+                )
+                    .into_response();
+            }
+        };
+
+    let mut groups_map: HashMap<String, Vec<assignment_submission::Model>> = HashMap::new();
+    for s in selected_submissions
+        .into_iter()
+        .filter(|s| !s.file_hash.is_empty())
+    {
+        groups_map.entry(s.file_hash.clone()).or_default().push(s);
+    }
+
+    let groups: Vec<CollisionGroup> = groups_map
+        .into_iter()
+        .filter(|(_, v)| v.len() >= 2)
+        .map(|(file_hash, submissions_vec)| CollisionGroup {
+            file_hash,
+            submissions: submissions_vec
+                .into_iter()
+                .map(|s| SubmissionInfo {
+                    submission_id: s.id,
+                    user_id: s.user_id,
+                    attempt: s.attempt,
+                    filename: s.filename,
+                    created_at: s.created_at,
+                })
+                .collect(),
+        })
+        .collect();
+
+    let cases = if payload.create_cases {
+        let mut created_cases = vec![];
+        let mut skipped_existing = 0;
+
+        for group in &groups {
+            for (i, s1) in group.submissions.iter().enumerate() {
+                for s2 in group.submissions.iter().skip(i + 1) {
+                    if s1.user_id == s2.user_id {
+                        continue;
+                    }
+
+                    let submission_id_1 = std::cmp::min(s1.submission_id, s2.submission_id);
+                    let submission_id_2 = std::cmp::max(s1.submission_id, s2.submission_id);
+
+                    let existing_case = match plagiarism_case::Entity::find()
+                        .filter(
+                            sea_orm::Condition::all()
+                                .add(plagiarism_case::Column::SubmissionId1.eq(submission_id_1))
+                                .add(plagiarism_case::Column::SubmissionId2.eq(submission_id_2)),
+                        )
+                        .one(app_state.db())
+                        .await
+                    {
+                        Ok(case) => case,
+                        Err(e) => {
+                            error!("Failed to check for existing plagiarism case: {}", e);
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(ApiResponse::<()>::error(
+                                    "Failed to check for existing plagiarism case.",
+                                )),
+                            )
+                                .into_response();
+                        }
+                    };
+
+                    if existing_case.is_some() {
+                        skipped_existing += 1;
+                        continue;
+                    }
+
+                    let new_case = match plagiarism_case::Model::create_case(
+                        app_state.db(),
+                        assignment_id,
+                        submission_id_1,
+                        submission_id_2,
+                        "Identical file hash collision",
+                        100.0,
+                        0,
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(case) => case,
+                        Err(e) => {
+                            error!("Failed to create plagiarism case: {}", e);
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(ApiResponse::<()>::error(
+                                    "Failed to create plagiarism case.",
+                                )),
+                            )
+                                .into_response();
+                        }
+                    };
+
+                    created_cases.push(new_case);
+                }
+            }
+        }
+
+        CreatedCases {
+            created: created_cases
+                .into_iter()
+                .map(|case| PlagiarismCaseResponse {
+                    id: case.id,
+                    assignment_id: case.assignment_id,
+                    submission_id_1: case.submission_id_1,
+                    submission_id_2: case.submission_id_2,
+                    description: case.description,
+                    status: case.status.to_string(),
+                    similarity: case.similarity,
+                    lines_matched: case.lines_matched,
+                    report_id: case.report_id,
+                    created_at: case.created_at,
+                    updated_at: case.updated_at,
+                })
+                .collect(),
+            skipped_existing,
+        }
+    } else {
+        CreatedCases {
+            created: vec![],
+            skipped_existing: 0,
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            HashScanResponse {
+                assignment_id,
+                policy_used,
+                group_count: groups.len(),
+                groups,
+                cases,
+            },
+            "Hash scan complete.",
+        )),
+    )
+        .into_response()
 }
