@@ -220,7 +220,21 @@ pub async fn check_disallowed_code(
             )
             .await
             {
-                Ok(model) => model,
+                Ok(model) => {
+                    if let Err(e) = AssignmentSubmissionModel::set_failed(
+                        db,
+                        model.id,
+                        assignment_submission::SubmissionStatus::FailedUpload,
+                    )
+                    .await
+                    {
+                        eprintln!(
+                            "Failed to update submission status to failed_upload: {:?}",
+                            e
+                        );
+                    }
+                    model
+                }
                 Err(e) => {
                     eprintln!("Error saving disallowed submission: {:?}", e);
                     return DisallowedCodeCheckResult::CheckFailed(format!(
@@ -244,8 +258,11 @@ pub async fn check_disallowed_code(
                 },
                 is_practice: submission.is_practice,
                 is_late: is_late(submission.created_at, assignment.due_date),
+                ignored: submission.ignored,
+                status: submission.status.to_string(),
                 tasks: vec![],
                 code_coverage: None,
+                user: None, // just ignore this lol
             };
 
             let report_path = submission_report_path(
@@ -430,6 +447,10 @@ async fn grade_submission(
     db: &sea_orm::DatabaseConnection,
     strict_mismatch_error: bool,
 ) -> Result<SubmissionDetailResponse, String> {
+    if let Err(e) = AssignmentSubmissionModel::set_grading(db, submission.id).await {
+        eprintln!("Failed to update submission status to grading: {:?}", e);
+    }
+
     // Fetch tasks ordered by task_number
     let tasks = assignment_task::Entity::find()
         .filter(assignment_task::Column::AssignmentId.eq(assignment.id))
@@ -597,19 +618,36 @@ async fn grade_submission(
         marking_job = marking_job.with_coverage(coverage_path);
     }
 
-    let mark_report = marking_job.mark().await.map_err(|e| {
-        eprintln!("MARKING ERROR: {:#?}", e);
-        match e {
-            MarkerError::InputMismatch(msg)
-            | MarkerError::InvalidJson(msg)
-            | MarkerError::MissingField(msg)
-            | MarkerError::IoError(msg)
-            | MarkerError::MissingTaskId(msg)
-            | MarkerError::ParseCoverageError(msg)
-            | MarkerError::ParseAllocatorError(msg)
-            | MarkerError::ParseOutputError(msg) => msg,
+    let mark_report = match marking_job.mark().await {
+        Ok(report) => report,
+        Err(e) => {
+            eprintln!("MARKING ERROR: {:#?}", e);
+            if let Err(status_err) = AssignmentSubmissionModel::set_failed(
+                db,
+                submission.id,
+                assignment_submission::SubmissionStatus::FailedGrading,
+            )
+            .await
+            {
+                eprintln!(
+                    "Failed to update submission status to failed_grading: {:?}",
+                    status_err
+                );
+            }
+
+            let error_msg = match e {
+                MarkerError::InputMismatch(msg)
+                | MarkerError::InvalidJson(msg)
+                | MarkerError::MissingField(msg)
+                | MarkerError::IoError(msg)
+                | MarkerError::MissingTaskId(msg)
+                | MarkerError::ParseCoverageError(msg)
+                | MarkerError::ParseAllocatorError(msg)
+                | MarkerError::ParseOutputError(msg) => msg,
+            };
+            return Err(error_msg);
         }
-    })?;
+    };
 
     let mark = MarkSummary {
         earned: mark_report.data.mark.earned,
@@ -650,6 +688,8 @@ async fn grade_submission(
     let mut active_model: assignment_submission::ActiveModel = submission.clone().into();
     active_model.earned = sea_orm::ActiveValue::Set(mark.earned);
     active_model.total = sea_orm::ActiveValue::Set(mark.total);
+    active_model.status =
+        sea_orm::ActiveValue::Set(assignment_submission::SubmissionStatus::Graded);
     assignment_submission::Entity::update(active_model)
         .exec(db)
         .await
@@ -666,8 +706,11 @@ async fn grade_submission(
         mark,
         is_practice: submission.is_practice,
         is_late: is_late(submission.created_at, assignment.due_date),
+        ignored: submission.ignored,
+        status: submission.status.to_string(),
         tasks,
         code_coverage,
+        user: None, // just ignore this lol
     };
 
     let report_path = submission_report_path(
@@ -835,6 +878,8 @@ where
 ///     "mark": { "earned": 85, "total": 100 },
 ///     "is_practice": true,
 ///     "is_late": false,
+///     "ignored": false,
+///     "status": "graded",
 ///     "tasks": [ ... ],
 ///     "code_coverage": [ ... ],
 ///   }
@@ -1088,9 +1133,26 @@ pub async fn submit_assignment(
         }
     };
 
+    if let Err(e) = AssignmentSubmissionModel::set_running(db, submission.id).await {
+        eprintln!("Failed to update submission status to running: {:?}", e);
+    }
+
     if let Err(e) =
         process_submission_code(db, submission.id, config.clone(), module_id, assignment_id).await
     {
+        if let Err(status_err) = AssignmentSubmissionModel::set_failed(
+            db,
+            submission.id,
+            assignment_submission::SubmissionStatus::FailedExecution,
+        )
+        .await
+        {
+            eprintln!(
+                "Failed to update submission status to failed_execution: {:?}",
+                status_err
+            );
+        }
+
         // If no student outputs exist yet, surface as 500; otherwise continue to grading.
         let out_dir = submission_output_dir(
             module_id,
