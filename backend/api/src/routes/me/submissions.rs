@@ -16,7 +16,9 @@ use validator::Validate;
 use crate::{auth::claims::AuthUser, response::ApiResponse};
 use db::models::{
     assignment,
-    assignment_submission::{self, Column as SubmissionColumn, Entity as SubmissionEntity},
+    assignment_submission::{
+        self, Column as SubmissionColumn, Entity as SubmissionEntity, SubmissionStatus,
+    },
     module, user,
     user_module_role::{self, Column as RoleColumn, Role},
 };
@@ -97,6 +99,7 @@ pub struct SubmissionWithRelations {
     pub module_id: i64,
     pub module_code: String,
     pub username: String,
+    pub status: SubmissionStatus,
 }
 
 /// GET /api/me/submissions
@@ -177,6 +180,7 @@ pub async fn get_my_submissions(
         .column_as(SubmissionColumn::UpdatedAt, "updated_at")
         .column_as(SubmissionColumn::UserId, "user_id")
         .column_as(SubmissionColumn::AssignmentId, "assignment_id")
+        .column_as(SubmissionColumn::Status, "status")
         .column_as(assignment::Column::Name, "assignment_name")
         .column_as(assignment::Column::Description, "assignment_description")
         .column_as(assignment::Column::DueDate, "assignment_due_date")
@@ -292,7 +296,7 @@ pub async fn get_my_submissions(
 
             SubmissionItem {
                 id: s.id,
-                status: "submitted".to_string(),
+                status: s.status.to_string(),
                 score: Score {
                     earned: s.earned,
                     total: s.total,

@@ -13,7 +13,7 @@
 //! Call `announcement_routes(app_state)` to get a configured `Router` for announcements
 //! to be mounted under a module in the main app.
 
-use crate::auth::guards::require_lecturer_or_assistant_lecturer;
+use crate::auth::guards::allow_assistant_lecturer;
 use axum::routing::{delete, get, post, put};
 use axum::{Router, middleware::from_fn_with_state};
 use delete::delete_announcement;
@@ -42,21 +42,21 @@ pub fn announcement_routes(app_state: AppState) -> Router<AppState> {
             "/",
             post(create_announcement).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/{announcement_id}",
             delete(delete_announcement).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/{announcement_id}",
             put(edit_announcement).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route("/", get(get_announcements))
