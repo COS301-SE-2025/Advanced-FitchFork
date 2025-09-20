@@ -20,7 +20,7 @@ use axum::{
 use delete::{bulk_delete_plagiarism_cases, delete_plagiarism_case};
 use get::{download_moss_archive_by_report, get_graph, list_moss_reports, list_plagiarism_cases};
 use patch::{patch_plagiarism_flag, patch_plagiarism_review};
-use post::{create_plagiarism_case, run_moss_check};
+use post::{create_plagiarism_case, hash_scan, run_moss_check};
 use put::update_plagiarism_case;
 use util::state::AppState;
 
@@ -64,4 +64,5 @@ pub fn plagiarism_routes() -> Router<AppState> {
             get(download_moss_archive_by_report),
         )
         .route("/moss/reports/{report_id}", delete(delete_moss_report))
+        .route("/hash-scan", post(hash_scan))
 }
