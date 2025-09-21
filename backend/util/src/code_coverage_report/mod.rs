@@ -1,10 +1,7 @@
+use crate::languages::Language;
 use chrono::Utc;
 use regex::Regex;
 use serde::Serialize;
-use std::fs;
-use std::path::Path;
-
-use crate::languages::Language;
 
 #[derive(Debug, Serialize)]
 pub struct CoverageSummary {
@@ -32,24 +29,24 @@ pub struct CoverageReport {
 pub struct CoverageProcessor;
 
 impl CoverageProcessor {
-    pub fn process_report(language: Language, report_path: &Path) -> Result<String, String> {
+    pub fn process_report(language: Language, content: &str) -> Result<String, String> {
         match language {
-            Language::Cpp => Self::parse_cpp_report(report_path),
-            Language::Java => Self::parse_java_report(report_path),
-            other => Err(format!("Code coverage parsing not supported for {other:?}")),
+            Language::Cpp => Self::parse_cpp_report(content),
+            Language::Java => Self::parse_java_report(content),
+            other => Err(format!(
+                "Code coverage parsing not supported for {:?}",
+                other
+            )),
         }
     }
 
-    fn parse_cpp_report(report_path: &Path) -> Result<String, String> {
-        let content = fs::read_to_string(report_path)
-            .map_err(|e| format!("Failed to read report file: {e}"))?;
-
+    fn parse_cpp_report(content: &str) -> Result<String, String> {
         let re_file = Regex::new(r"File '([^']+)'").unwrap();
         let re_lines = Regex::new(r"Lines executed:([0-9.]+)% of (\d+)").unwrap();
 
         let mut files = Vec::new();
-        let mut total_lines = 0;
-        let mut total_covered = 0;
+        let mut total_lines: u64 = 0;
+        let mut total_covered: u64 = 0;
         let mut current_file: Option<String> = None;
 
         for line in content.lines() {
@@ -94,10 +91,10 @@ impl CoverageProcessor {
         };
 
         serde_json::to_string_pretty(&report)
-            .map_err(|e| format!("Failed to serialize coverage report: {e}"))
+            .map_err(|e| format!("Failed to serialize coverage report: {}", e))
     }
 
-    fn parse_java_report(_report_path: &Path) -> Result<String, String> {
+    fn parse_java_report(_content: &str) -> Result<String, String> {
         Err("Java code coverage parsing not yet implemented".to_string())
     }
 }
@@ -105,20 +102,18 @@ impl CoverageProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
     #[ignore]
     fn test_process_cpp_report_and_print() {
-        // change this to point to your local gcov text report
-        let report_path = Path::new("absolue_path_here_if_you_want_to_test");
+        let content = "dummy content here";
 
-        match CoverageProcessor::process_report(Language::Cpp, report_path) {
+        match CoverageProcessor::process_report(Language::Cpp, content) {
             Ok(json) => {
-                println!("{json}");
+                println!("{}", json);
             }
             Err(e) => {
-                panic!("Processing failed: {e}");
+                panic!("Processing failed: {}", e);
             }
         }
     }

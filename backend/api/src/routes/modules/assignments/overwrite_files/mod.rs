@@ -1,4 +1,4 @@
-use crate::auth::guards::require_lecturer;
+use crate::auth::guards::allow_lecturer;
 use axum::{
     Router,
     middleware::from_fn_with_state,
@@ -32,16 +32,16 @@ pub fn overwrite_file_routes(app_state: AppState) -> Router<AppState> {
         .route(
             "/task/{task_id}",
             get(get_task_overwrite_files)
-                .route_layer(from_fn_with_state(app_state.clone(), require_lecturer)),
+                .route_layer(from_fn_with_state(app_state.clone(), allow_lecturer)),
         )
         .route(
             "/task/{task_id}",
             delete(delete_task_overwrite_files)
-                .route_layer(from_fn_with_state(app_state.clone(), require_lecturer)),
+                .route_layer(from_fn_with_state(app_state.clone(), allow_lecturer)),
         )
         .route(
             "/task/{task_id}",
             post(post_task_overwrite_files)
-                .route_layer(from_fn_with_state(app_state.clone(), require_lecturer)),
+                .route_layer(from_fn_with_state(app_state.clone(), allow_lecturer)),
         )
 }

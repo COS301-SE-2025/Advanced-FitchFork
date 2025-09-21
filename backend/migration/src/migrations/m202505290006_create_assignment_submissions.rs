@@ -47,6 +47,25 @@ impl MigrationTrait for Migration {
                             .default(false),
                     )
                     .col(
+                        ColumnDef::new(Alias::new("status"))
+                            .enumeration(
+                                Alias::new("submission_status_enum"),
+                                vec![
+                                    Alias::new("queued"),
+                                    Alias::new("running"),
+                                    Alias::new("grading"),
+                                    Alias::new("graded"),
+                                    Alias::new("failed_upload"),
+                                    Alias::new("failed_compile"),
+                                    Alias::new("failed_execution"),
+                                    Alias::new("failed_grading"),
+                                    Alias::new("failed_internal"),
+                                ],
+                            )
+                            .not_null()
+                            .default("queued"),
+                    )
+                    .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()
                             .not_null()

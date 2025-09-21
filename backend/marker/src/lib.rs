@@ -23,8 +23,6 @@ pub mod utilities;
 use crate::comparators::percentage_comparator::PercentageComparator;
 use crate::error::MarkerError;
 use crate::feedback::auto_feedback::AutoFeedback;
-use crate::parsers::complexity_parser::ComplexityReport;
-use crate::parsers::coverage_parser::CoverageReport;
 use crate::report::MarkReportResponse;
 use crate::traits::comparator::OutputComparator;
 use crate::traits::feedback::Feedback;
@@ -34,18 +32,18 @@ use crate::utilities::file_loader::load_files;
 use chrono::Utc;
 use std::path::PathBuf;
 use util::execution_config::ExecutionConfig;
+use util::execution_config::MarkingScheme;
 
 /// Represents a marking job for a single student submission.
 ///
 /// This struct encapsulates all the input files and configuration needed to mark a submission,
-/// including memo outputs, student outputs, allocation (task) schema, and optional coverage/complexity reports.
+/// including memo outputs, student outputs, allocation (task) schema, and optional coverage report.
 ///
 /// # Fields
 /// - `memo_outputs`: Paths to the reference (memo) output files.
 /// - `student_outputs`: Paths to the student output files.
 /// - `allocation_json`: Path to the JSON file describing the task/subtask structure and scoring.
 /// - `coverage_report`: Optional path to a code coverage report.
-/// - `complexity_report`: Optional path to a code complexity report.
 /// - `comparator`: Strategy for comparing outputs (e.g., percentage, exact).
 /// - `feedback`: Automated feedback generation for each subtask.
 pub struct MarkingJob<'a> {
@@ -53,7 +51,6 @@ pub struct MarkingJob<'a> {
     student_outputs: Vec<PathBuf>,
     allocation_json: PathBuf,
     coverage_report: Option<PathBuf>,
-    complexity_report: Option<PathBuf>,
     comparator: Box<dyn OutputComparator + Send + Sync + 'a>,
     feedback: Box<dyn Feedback + Send + Sync + 'a>,
     config: ExecutionConfig,
@@ -79,7 +76,6 @@ impl<'a> MarkingJob<'a> {
             student_outputs,
             allocation_json,
             coverage_report: None,
-            complexity_report: None,
             comparator: Box::new(PercentageComparator),
             feedback: Box::new(AutoFeedback),
             config,
@@ -92,15 +88,6 @@ impl<'a> MarkingJob<'a> {
     /// * `report` - Path to the coverage report file.
     pub fn with_coverage(mut self, report: PathBuf) -> Self {
         self.coverage_report = Some(report);
-        self
-    }
-
-    /// Attach a code complexity report to the marking job.
-    ///
-    /// # Arguments
-    /// * `report` - Path to the complexity report file.
-    pub fn with_complexity(mut self, report: PathBuf) -> Self {
-        self.complexity_report = Some(report);
         self
     }
 
@@ -130,7 +117,7 @@ impl<'a> MarkingJob<'a> {
     ///
     /// # Steps
     /// 1. Loads and validates all input files.
-    /// 2. Parses allocation, coverage, and complexity reports.
+    /// 2. Parses allocation and coverage reports.
     /// 3. Parses memo and student outputs into tasks and subtasks.
     /// 4. Compares outputs using the configured comparator for each subtask.
     /// 5. Aggregates results and generates automated feedback.
@@ -141,84 +128,35 @@ impl<'a> MarkingJob<'a> {
             self.student_outputs,
             self.allocation_json,
             self.coverage_report,
-            self.complexity_report,
         )?;
 
         let allocator: AllocatorSchema = parsers::allocator_parser::JsonAllocatorParser
             .parse(&files.allocator_raw, self.config.clone())?;
 
-        if let Some(coverage_raw) = files.coverage_raw {
-            let _coverage: CoverageReport = parsers::coverage_parser::JsonCoverageParser
-                .parse(&coverage_raw, self.config.clone())?;
-        }
+        let coverage_report = if let Some(ref coverage_raw) = files.coverage_raw {
+            Some(
+                parsers::coverage_parser::JsonCoverageParser
+                    .parse(coverage_raw, self.config.clone())?,
+            )
+        } else {
+            None
+        };
 
-        if let Some(complexity_raw) = files.complexity_raw {
-            let _complexity: ComplexityReport = parsers::complexity_parser::JsonComplexityParser
-                .parse(&complexity_raw, self.config.clone())?;
-        }
+        let expected_counts: Vec<usize> = allocator
+            .tasks
+            .iter()
+            .filter(|t| !t.code_coverage)
+            .map(|task| task.subsections.len())
+            .collect();
 
-        //TODO - this currently returns an error when the submission code crashes. Temporary fix below to just give 0 (with no reason) - Richard
-        let submission = match parsers::output_parser::OutputParser.parse(
+        let submission = parsers::output_parser::OutputParser.parse(
             (
                 &files.memo_contents,
                 &files.student_contents,
-                allocator
-                    .0
-                    .iter()
-                    .map(|task| task.subsections.len())
-                    .collect(),
+                expected_counts,
             ),
-            self.config,
-        ) {
-            Ok(sub) => sub,
-            Err(_err) => {
-                // Parser failed → award 0, but still calculate totals from allocator
-                let mut report_tasks: Vec<crate::report::ReportTask> = Vec::new();
-                let mut task_counter = 1;
-                let mut total_possible = 0;
-
-                for task_entry in &allocator.0 {
-                    let mut subsections: Vec<crate::report::ReportSubsection> = Vec::new();
-                    let mut task_possible = 0;
-
-                    for subsection in &task_entry.subsections {
-                        let possible = subsection.value;
-                        task_possible += possible;
-                        total_possible += possible;
-
-                        subsections.push(crate::report::ReportSubsection {
-                            label: subsection.name.clone(),
-                            earned: 0,
-                            total: possible,
-                            feedback: String::new(),
-                        });
-                    }
-
-                    report_tasks.push(crate::report::ReportTask {
-                        task_number: task_counter,
-                        name: task_entry.name.clone(),
-                        score: crate::report::Score {
-                            earned: 0,
-                            total: task_possible,
-                        },
-                        subsections,
-                    });
-
-                    task_counter += 1;
-                }
-
-                let now = Utc::now().to_rfc3339();
-                let mark = crate::report::Score {
-                    earned: 0,
-                    total: total_possible,
-                };
-                let report =
-                    crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
-
-                return Ok(report.into());
-            }
-        };
-        // TODO - End of temporary fix
+            self.config.clone(),
+        )?;
 
         let mut all_results: Vec<TaskResult> = Vec::new();
         let mut per_task_results: Vec<Vec<TaskResult>> = Vec::new();
@@ -226,38 +164,50 @@ impl<'a> MarkingJob<'a> {
         let mut per_task_names: Vec<String> = Vec::new();
         let mut per_task_scores: Vec<(i64, i64)> = Vec::new();
 
-        for task_entry in &allocator.0 {
+        for (_, task_entry) in allocator.tasks.iter().enumerate() {
+            if task_entry.code_coverage {
+                continue;
+            }
+
             let submission_task = submission
                 .tasks
                 .iter()
                 .find(|t| t.task_id.eq_ignore_ascii_case(&task_entry.id));
             let mut subsections: Vec<crate::report::ReportSubsection> = Vec::new();
             let mut task_earned = 0;
-            let mut task_possible = 0;
             let mut task_results: Vec<TaskResult> = Vec::new();
 
             if let Some(task_output) = submission_task {
-                for (i, subsection) in task_entry.subsections.iter().enumerate() {
-                    if i >= task_output.memo_output.subtasks.len() {
-                        let id = &task_entry.id;
-                        return Err(MarkerError::InputMismatch(format!(
-                            "Task '{id}' has more subsections in allocator than in memo output"
-                        )));
-                    }
+                for (sub_index, subsection) in task_entry.subsections.iter().enumerate() {
+                    let student_lines = task_output
+                        .student_output
+                        .subtasks
+                        .get(sub_index)
+                        .map(|s| s.lines.clone())
+                        .unwrap_or_default();
 
-                    let memo_lines = &task_output.memo_output.subtasks[i].lines;
-                    let student_lines = &task_output.student_output.subtasks[i].lines;
+                    let memo_or_regex_lines: Vec<String> = match self.config.marking.marking_scheme
+                    {
+                        MarkingScheme::Regex => subsection.regex.clone().unwrap_or_default(),
+                        _ => task_output
+                            .memo_output
+                            .subtasks
+                            .get(sub_index)
+                            .map(|s| s.lines.clone())
+                            .unwrap_or_default(),
+                    };
 
-                    let result: TaskResult =
+                    let mut result =
                         self.comparator
-                            .compare(subsection, memo_lines, student_lines);
+                            .compare(subsection, &memo_or_regex_lines, &student_lines);
+                    result.stderr = task_output.stderr.clone();
+                    result.return_code = task_output.return_code;
 
                     task_earned += result.awarded;
-                    task_possible += result.possible;
                     subsections.push(crate::report::ReportSubsection {
                         label: subsection.name.clone(),
                         earned: result.awarded,
-                        total: result.possible,
+                        total: subsection.value,
                         feedback: String::new(),
                     });
                     task_results.push(result.clone());
@@ -273,7 +223,7 @@ impl<'a> MarkingJob<'a> {
             per_task_results.push(task_results);
             per_task_subsections.push(subsections);
             per_task_names.push(task_entry.name.clone());
-            per_task_scores.push((task_earned, task_possible));
+            per_task_scores.push((task_earned, task_entry.value));
         }
 
         let feedback_entries = self.feedback.assemble_feedback(&all_results).await?;
@@ -282,7 +232,6 @@ impl<'a> MarkingJob<'a> {
         let mut report_tasks: Vec<crate::report::ReportTask> = Vec::new();
         let mut task_counter = 1;
         let mut total_earned = 0;
-        let mut total_possible = 0;
         for ((_task_results, mut subsections), (name, (task_earned, task_possible))) in
             per_task_results
                 .into_iter()
@@ -307,17 +256,63 @@ impl<'a> MarkingJob<'a> {
             });
 
             total_earned += task_earned;
-            total_possible += task_possible;
             task_counter += 1;
+        }
+
+        let mut coverage_total_earned: i64 = 0;
+        let mut coverage_total_possible: i64 = 0;
+        if coverage_report.is_some() {
+            // TODO: Hard coded coverage score map for now, we can make this configurable later. These scores are what real FF uses.
+            let bucket_percent: i64 = match coverage_report.clone().unwrap().coverage_percent {
+                p if p < 5.0 => 0,
+                p if p < 20.0 => 20,
+                p if p < 40.0 => 40,
+                p if p < 60.0 => 60,
+                p if p < 80.0 => 80,
+                _ => 100,
+            };
+
+            let coverage_value = allocator
+                .tasks
+                .iter()
+                .filter(|t| t.code_coverage)
+                .map(|t| t.value)
+                .sum::<i64>();
+            coverage_total_earned = bucket_percent * coverage_value / 100;
+            coverage_total_possible = coverage_value;
+            total_earned += coverage_total_earned;
         }
 
         let mark = crate::report::Score {
             earned: total_earned,
-            total: total_possible,
+            total: allocator.total_value,
         };
 
         let now = Utc::now().to_rfc3339();
-        let report = crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
+        let mut report =
+            crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
+
+        if coverage_report.is_some() {
+            report.code_coverage = Some(crate::report::CodeCoverageReport {
+                summary: Some(crate::report::Score {
+                    earned: coverage_total_earned,
+                    total: coverage_total_possible,
+                }),
+                files: coverage_report
+                    .as_ref()
+                    .map(|cr| {
+                        cr.files
+                            .iter()
+                            .map(|f| crate::report::CoverageFile {
+                                path: f.path.clone(),
+                                earned: f.covered_lines as i64,
+                                total: f.total_lines as i64,
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            });
+        }
 
         Ok(report.into())
     }
@@ -626,43 +621,12 @@ mod tests {
         assert_eq!(report.mark.total, 30);
     }
 
-    //TODO - test no longer valid due to fix in marker - fix later
-    // #[tokio::test]
-    // async fn test_marker_error_handling_mismatched_subsections() {
-    //     let dir = "src/test_files/marker/case6";
-    //     let memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
-    //     let student_outputs = vec![PathBuf::from(dir).join("student1.txt")];
-    //     let allocation_json = PathBuf::from(dir).join("allocator.json");
-    //
-    //     let job = MarkingJob::new(
-    //         memo_outputs,
-    //         student_outputs,
-    //         allocation_json,
-    //         ExecutionConfig::default_config(),
-    //     );
-    //
-    //     let result = job.mark().await;
-    //     assert!(
-    //         result.is_err(),
-    //         "Marking should fail due to mismatched subsection count"
-    //     );
-    //     let err = result.unwrap_err();
-    //     let err_str = format!("{err:?}");
-    //     assert!(
-    //         err_str.contains("more subsections in allocator than in memo output")
-    //             || err_str.contains("InputMismatch")
-    //             || err_str.contains("Expected 2 subtasks, but found 1 delimiters"),
-    //         "Error message should mention mismatched subsections, got: {err_str}"
-    //     );
-    // }
-
     #[tokio::test]
     async fn test_marker_error_handling_missing_file() {
         let dir = "src/test_files/marker/case6";
-        let memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
-        // Purposely reference a missing student file
-        let student_outputs = vec![PathBuf::from(dir).join("student_missing.txt")];
-        let allocation_json = PathBuf::from(dir).join("allocator.json");
+        let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
+        let student_outputs = vec![PathBuf::from(format!("{}/student_missing.txt", dir))];
+        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
 
         let job = MarkingJob::new(
             memo_outputs,
@@ -710,40 +674,10 @@ mod tests {
                 || err_str.contains("allocator")
                 || err_str.contains("expected")
                 || err_str.contains("EOF"),
-            "Error message should mention invalid JSON, got: {err_str}"
+            "Error message should mention invalid JSON, got: {}",
+            err_str
         );
     }
-
-    //TODO - this test no longer valid due to fix with marker. Fix later
-    // #[tokio::test]
-    // async fn test_marker_error_handling_invalid_memo_format() {
-    //     let dir = "src/test_files/marker/case8";
-    //     let memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
-    //     let student_outputs = vec![PathBuf::from(dir).join("student1.txt")];
-    //     let allocation_json = PathBuf::from(dir).join("allocator.json");
-    //
-    //     let job = MarkingJob::new(
-    //         memo_outputs,
-    //         student_outputs,
-    //         allocation_json,
-    //         ExecutionConfig::default_config(),
-    //     );
-    //
-    //     let result = job.mark().await;
-    //     assert!(
-    //         result.is_err(),
-    //         "Marking should fail due to invalid memo output format"
-    //     );
-    //     let err = result.unwrap_err();
-    //     let err_str = format!("{err:?}");
-    //     assert!(
-    //         err_str.contains("ParseOutputError")
-    //             || err_str.contains("Expected")
-    //             || err_str.contains("subtasks")
-    //             || err_str.contains("delimiter"),
-    //         "Error message should mention invalid memo format, got: {err_str}"
-    //     );
-    // }
 
     #[tokio::test]
     async fn test_marker_error_handling_empty_student_output() {
@@ -760,7 +694,6 @@ mod tests {
         );
 
         let result = job.mark().await;
-        // The marker may either return Ok with 0 marks, or an error if it expects at least one delimiter.
         match result {
             Ok(response) => {
                 let report = &response.data;

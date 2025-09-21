@@ -3,7 +3,7 @@
 //! This module defines the routing for assignment file-related endpoints, including uploading, listing, downloading, and deleting files. It applies access control middleware to ensure appropriate permissions for each operation.
 
 use crate::{
-    auth::guards::require_lecturer,
+    auth::guards::allow_lecturer,
     routes::modules::assignments::interpreter::get::get_interpreter_info,
 };
 use axum::{
@@ -40,21 +40,21 @@ pub fn interpreter_routes(app_state: AppState) -> Router<AppState> {
         .route(
             "/",
             post(upload_interpreter)
-                .route_layer(from_fn_with_state(app_state.clone(), require_lecturer)),
+                .route_layer(from_fn_with_state(app_state.clone(), allow_lecturer)),
         )
         .route(
             "/",
             get(download_interpreter)
-                .route_layer(from_fn_with_state(app_state.clone(), require_lecturer)),
+                .route_layer(from_fn_with_state(app_state.clone(), allow_lecturer)),
         )
         .route(
             "/info",
             get(get_interpreter_info)
-                .route_layer(from_fn_with_state(app_state.clone(), require_lecturer)),
+                .route_layer(from_fn_with_state(app_state.clone(), allow_lecturer)),
         )
         .route(
             "/",
             delete(delete_interpreter)
-                .route_layer(from_fn_with_state(app_state.clone(), require_lecturer)),
+                .route_layer(from_fn_with_state(app_state.clone(), allow_lecturer)),
         )
 }

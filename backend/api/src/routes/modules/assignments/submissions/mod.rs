@@ -20,9 +20,7 @@ use get::{get_submission, get_submission_output, list_submissions};
 use patch::set_submission_ignored;
 use post::{remark_submissions, resubmit_submissions, submit_assignment};
 
-use crate::auth::guards::{
-    require_lecturer_or_assistant_lecturer, require_lecturer_or_tutor, require_ready_assignment,
-};
+use crate::auth::guards::{allow_assistant_lecturer, allow_ready_assignment, allow_tutor};
 use crate::routes::modules::assignments::submissions::get::download_submission_file;
 use util::state::AppState;
 
@@ -51,52 +49,50 @@ pub fn submission_routes(app_state: AppState) -> Router<AppState> {
         .route("/{submission_id}", get(get_submission))
         .route(
             "/{submission_id}/output",
-            get(get_submission_output).route_layer(from_fn_with_state(
-                app_state.clone(),
-                require_lecturer_or_tutor,
-            )),
+            get(get_submission_output)
+                .route_layer(from_fn_with_state(app_state.clone(), allow_tutor)),
         )
         .route("/{submission_id}/download", get(download_submission_file))
         .route(
             "/{submission_id}",
             delete(delete_submission).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/bulk",
             delete(bulk_delete_submissions).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/",
             post(submit_assignment).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_ready_assignment,
+                allow_ready_assignment,
             )),
         )
         .route(
             "/remark",
             post(remark_submissions).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/resubmit",
             post(resubmit_submissions).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/{submission_id}/ignore",
             patch(set_submission_ignored).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
 }

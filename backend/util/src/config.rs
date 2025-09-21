@@ -2,8 +2,10 @@
 //! No global singleton; each call reads current process env.
 //! All variables are REQUIRED.
 
+use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Once;
+use std::sync::{OnceLock, RwLock};
 
 #[inline]
 fn ensure_dotenv() {
@@ -68,6 +70,7 @@ pub struct AppConfig {
     pub email_from_name: String,
     pub gemini_api_key: String,
     pub moss_user_id: String,
+    pub superuser_ids: HashSet<i64>,
 }
 
 impl AppConfig {
@@ -98,6 +101,7 @@ impl AppConfig {
             email_from_name: email_from_name(),
             gemini_api_key: gemini_api_key(),
             moss_user_id: moss_user_id(),
+            superuser_ids: super_users(),
         }
     }
 }
@@ -224,6 +228,34 @@ pub fn moss_user_id() -> String {
     require("MOSS_USER_ID")
 }
 
+pub fn super_users() -> HashSet<i64> {
+    ensure_dotenv();
+    static SUPER_USERS: OnceLock<RwLock<HashSet<i64>>> = OnceLock::new();
+    let lock = SUPER_USERS.get_or_init(|| RwLock::new(HashSet::new()));
+    {
+        let read_guard = lock.read().unwrap();
+        if !read_guard.is_empty() {
+            return read_guard.clone();
+        }
+    }
+    let mut write_guard = lock.write().unwrap();
+    if !write_guard.is_empty() {
+        return write_guard.clone();
+    }
+    let s = require("SUPERUSER_IDS");
+    let set: HashSet<i64> = s
+        .split(',')
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .map(|x| {
+            x.parse()
+                .unwrap_or_else(|e| panic!("invalid SUPERUSER_ID {x}: {e}"))
+        })
+        .collect();
+    *write_guard = set.clone();
+    set
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,6 +288,7 @@ mod tests {
         "EMAIL_FROM_NAME",
         "GEMINI_API_KEY",
         "MOSS_USER_ID",
+        "SUPERUSER_IDS",
     ];
 
     fn clear_all_env() {
@@ -297,6 +330,7 @@ mod tests {
             std::env::set_var("EMAIL_FROM_NAME", "FitchFork");
             std::env::set_var("GEMINI_API_KEY", "g-abc");
             std::env::set_var("MOSS_USER_ID", "123");
+            std::env::set_var("SUPERUSER_IDS", "1, 2,3,  42");
         }
     }
 
@@ -424,6 +458,14 @@ mod tests {
             std::env::set_var("MOSS_USER_ID", "mid");
         }
         assert_eq!(super::moss_user_id(), "mid");
+
+        unsafe {
+            std::env::set_var("SUPERUSER_IDS", "10,20,30");
+        }
+        let su = super::super_users();
+        assert!(su.contains(&10));
+        assert!(su.contains(&20));
+        assert!(su.contains(&30));
     }
 
     #[test]

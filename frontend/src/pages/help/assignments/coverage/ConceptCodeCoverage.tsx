@@ -124,7 +124,7 @@ export default function ConceptCodeCoverage() {
         </Descriptions.Item>
         <Descriptions.Item label="Submission report">
           If present, coverage appears under <Text code>data.code_coverage</Text> in the submission
-          JSON. It is optional and shown alongside tasks and complexity.
+          JSON. It is optional and shown alongside tasks.
         </Descriptions.Item>
         <Descriptions.Item label="Allocator">
           Coverage tasks do <b>not</b> contribute points. They are visible in reports only.
