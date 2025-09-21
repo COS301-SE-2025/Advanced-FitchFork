@@ -29,3 +29,53 @@ pub async fn coverage_percent_for_attempt(
 pub fn coverage_fitness(percent: f64) -> f64 {
     (percent / 100.0).clamp(0.0, 1.0)
 }
+
+
+pub fn coverage_percent_from_json(json: &str) -> Result<f64, String> {
+    let v: Value = serde_json::from_str(json)
+        .map_err(|e| format!("Failed to parse coverage JSON: {}", e))?;
+    Ok(v.get("summary")
+        .and_then(|s| s.get("coverage_percent"))
+        .and_then(|p| p.as_f64())
+        .unwrap_or(0.0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn coverage_fitness_bounds_and_scale() {
+        assert_eq!(coverage_fitness(0.0), 0.0);
+        assert_eq!(coverage_fitness(50.0), 0.5);
+        assert_eq!(coverage_fitness(100.0), 1.0);
+        // clamp beyond range
+        assert_eq!(coverage_fitness(-10.0), 0.0);
+        assert_eq!(coverage_fitness(150.0), 1.0);
+    }
+
+    #[test]
+    fn parse_json_happy_path() {
+        let json = r#"{ "summary": { "coverage_percent": 73.25 } }"#;
+        let v = coverage_percent_from_json(json).unwrap();
+        assert!((v - 73.25).abs() < 1e-9);
+    }
+
+    #[test]
+    fn parse_json_missing_returns_zero() {
+        let json1 = r#"{}"#;
+        let json2 = r#"{ "summary": {} }"#;
+        let json3 = r#"{ "summary": { "coverage_percent": null } }"#;
+        assert_eq!(coverage_percent_from_json(json1).unwrap(), 0.0);
+        assert_eq!(coverage_percent_from_json(json2).unwrap(), 0.0);
+        assert_eq!(coverage_percent_from_json(json3).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn parse_json_garbage_errors() {
+        let bad = "not-json at all";
+        let err = coverage_percent_from_json(bad).unwrap_err();
+        assert!(err.contains("Failed to parse coverage JSON"));
+    }
+}
+

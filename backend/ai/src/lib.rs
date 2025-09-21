@@ -325,10 +325,6 @@ where
             // Compute fitness for this chromosome in this generation.
             //    `Components` combines sub-scores via omega weights and returns a scalar.
             let score = comps.evaluate(chrom, generation, ltl_milli, fail_milli);
-
-            println!("ltl_milli = {}, fail_milli = {}", ltl_milli, fail_milli);
-            println!("[DEBUG] generation {} fitness = {}", generation, score);
-
             fitness_scores.push(score);
         }
 
