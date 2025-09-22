@@ -43,9 +43,8 @@ use crate::algorithms::rng::{RandomGenomeGenerator as RngGen, GeneConfig as RngG
 use crate::algorithms::code_coverage::{coverage_percent_for_attempt, coverage_fitness};
 
 
-// -----------------------------------------------------------------------------
 // Public entrypoint: build GA + Evaluator + Components, then run the loop
-// -----------------------------------------------------------------------------
+
 
 /// Runs a genetic algorithm for a given submission using an ExecutionConfig
 ///
@@ -197,10 +196,7 @@ pub async fn run_coverage_ga_job(
     Ok(())
 }
 
-// -----------------------------------------------------------------------------
 // Core driver: decode -> interpreter -> derive -> evaluate -> evolve
-// -----------------------------------------------------------------------------
-
 /// Generic driver used by `run_ga_job`.
 ///
 /// For each generation:

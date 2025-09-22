@@ -2,6 +2,10 @@ use super::EvaluationStrategy;
 
 pub struct JavaStrategy;
 
+/// Heuristics for the Java toolchain/runtime.
+/// - OutOfMemoryError and StackOverflowError are treated as "safety" violations.
+/// - Segmentation faults are "segfaults"
+/// - Exceptions (including RuntimeException and its subclasses) are "exceptions"
 impl EvaluationStrategy for JavaStrategy {
     fn name(&self) -> &'static str { "java" }
 
