@@ -8,18 +8,22 @@ export const submitAssignment = async (
   assignmentId: number,
   file: File,
   isPractice: boolean,
-  attestsOwnership: boolean
+  attestsOwnership: boolean,
+  asyncMode: boolean = false 
 ): Promise<PostSubmitAssignmentResponse> => {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("is_practice", String(isPractice));
   formData.append("attests_ownership", String(attestsOwnership));
 
+  const qs = new URLSearchParams({ async_mode: String(asyncMode) });
+
   return apiUpload(
-    `/modules/${moduleId}/assignments/${assignmentId}/submissions`,
+    `/modules/${moduleId}/assignments/${assignmentId}/submissions?${qs.toString()}`,
     formData
   );
 };
+
 
 export const remarkSubmissions = async (
   moduleId: number,

@@ -107,25 +107,28 @@ mod tests {
     }
 
     fn create_mark_allocator(module_id: i64, assignment_id: i64) {
-        let allocator_content = r#"{
+        use serde_json::json;
+
+        let alloc = json!({
             "generated_at": "2025-07-21T10:00:00Z",
             "tasks": [
                 {
-                    "task1": {
-                        "name": "Task 1 Execution",
-                        "value": 10,
-                        "subsections": [
-                            { "name": "Subtask 1 Output", "value": 10 }
-                        ]
-                    }
+                    "task_number": 1,
+                    "name": "Task 1 Execution",
+                    "value": 10,
+                    "code_coverage": false,
+                    "subsections": [
+                        { "name": "Subtask 1 Output", "value": 10 }
+                    ]
                 }
             ],
             "total_value": 10
-        }"#;
+        });
+
         fs::create_dir_all(mark_allocator_dir(module_id, assignment_id)).unwrap();
         fs::write(
             mark_allocator_path(module_id, assignment_id),
-            allocator_content,
+            serde_json::to_string_pretty(&alloc).unwrap(),
         )
         .unwrap();
     }
@@ -1361,7 +1364,7 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "File not found");
+        assert_eq!(json["message"], "Failed to mark submission");
     }
 
     // Helper function to create a submission with an output file wired via path utilities.
@@ -1818,7 +1821,7 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["success"], true);
-        assert_eq!(json["data"]["failed"][0]["error"], "File not found");
+        assert_eq!(json["data"]["failed"][0]["error"], "Failed to load mark allocator: File not found");
     }
 
     /// Test 8: Failed during grading of a submission
@@ -2641,7 +2644,7 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "File not found");
+        assert_eq!(json["message"], "Failed to mark submission");
 
         // Check if a submission was created and has failed status
         use db::models::assignment_submission::{Column as SubCol, Entity as SubmissionEntity};

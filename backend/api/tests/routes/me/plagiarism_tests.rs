@@ -23,7 +23,7 @@ mod tests {
         lecturer: UserModel,
         assistant: UserModel,
         student: UserModel,
-        module: ModuleModel,
+        _module: ModuleModel,
         assignment: AssignmentModel,
         case: PlagiarismModel,
     }
@@ -117,7 +117,7 @@ mod tests {
             lecturer,
             assistant,
             student: student_a,
-            module,
+            _module: module,
             assignment,
             case,
         }

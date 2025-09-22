@@ -1,21 +1,14 @@
-//! WebSocket topic routes for assignment-related communication.
-//!
-//! Includes real-time submission progress updates and per-ticket chat channels.
-//!
-//! Effective paths (this module is nested under `/ws/modules/{module_id}/assignments`):
-//! - `/ws/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}/progress`
-//!
-//! Both endpoints are WebSocket upgrade routes.
-
-use axum::{Router, routing::get};
-use util::{state::AppState, ws::default_websocket_handler};
+// api/src/ws/modules/assignments/mod.rs
+use axum::Router;
+use util::state::AppState;
 
 pub mod submissions;
 
-/// Builds the `/ws/modules/{module_id}/assignments` WebSocket router.
-pub fn ws_assignment_routes() -> Router<AppState> {
-    Router::new().route(
-        "/{assignment_id}/submissions/{submission_id}/progress",
-        get(default_websocket_handler),
-    )
+pub fn ws_assignment_routes(app_state: AppState) -> Router<AppState> {
+    Router::new()
+        .nest(
+            "/{assignment_id}/submissions",
+            submissions::ws_assignment_submission_routes(app_state.clone()),
+        )
+        .with_state(app_state)
 }

@@ -155,14 +155,14 @@ impl Default for ExecutionOutputOptions {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CodeCoverage {
-    #[serde(default = "default_code_coverage_required")]
-    pub code_coverage_required: u8, // percentage 0-100
+    #[serde(default = "default_code_coverage_weight")]
+    pub code_coverage_weight: f32,
 }
 
 impl Default for CodeCoverage {
     fn default() -> Self {
         Self {
-            code_coverage_required: default_code_coverage_required(),
+            code_coverage_weight: default_code_coverage_weight(),
         }
     }
 }
@@ -400,7 +400,7 @@ impl ExecutionConfig {
 //Default Functions
 
 fn default_timeout_secs() -> u64 {
-    10
+    30
 }
 
 fn default_max_memory() -> u64 {
@@ -539,6 +539,6 @@ fn default_allowed_cidrs() -> Vec<String> {
     vec![]
 }
 
-fn default_code_coverage_required() -> u8 {
-    80
+fn default_code_coverage_weight() -> f32 {
+    10.0
 }
