@@ -1,13 +1,8 @@
-use axum::{
-    Json,
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use serde_json::json;
-use util::filters::FilterParam;
-use services::service::Service;
 use services::assignment_interpreter::AssignmentInterpreterService;
+use services::service::Service;
+use util::filters::FilterParam;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/interpreter
 ///
@@ -47,12 +42,12 @@ pub async fn delete_interpreter(
 ) -> impl IntoResponse {
     // Find the interpreter(s) for this assignment
     let interpreters = match AssignmentInterpreterService::find_all(
-        &vec![
-            FilterParam::eq("assignment_id", assignment_id),
-        ],
+        &vec![FilterParam::eq("assignment_id", assignment_id)],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(models) => models,
         Err(err) => {
             return (

@@ -1,12 +1,12 @@
 //! POST handlers for `/api/test`.
 
-use axum::{http::StatusCode, response::IntoResponse, Json};
-use validator::Validate;
-use crate::response::ApiResponse;
 use super::common::{TestUserResponse, UpsertUserRequest};
+use crate::response::ApiResponse;
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use services::service::Service;
-use services::user::{UserService, CreateUser, UpdateUser};
+use services::user::{CreateUser, UpdateUser, UserService};
 use util::filters::FilterParam;
+use validator::Validate;
 
 /// POST `/api/test/users`
 ///
@@ -85,9 +85,7 @@ use util::filters::FilterParam;
 ///   "message": "Database error: <details>"
 /// }
 /// ```
-pub async fn upsert_user(
-    Json(req): Json<UpsertUserRequest>,
-) -> impl IntoResponse {
+pub async fn upsert_user(Json(req): Json<UpsertUserRequest>) -> impl IntoResponse {
     if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -99,24 +97,24 @@ pub async fn upsert_user(
     let admin = req.admin.unwrap_or(false);
 
     match UserService::find_one(
-        &vec![
-            FilterParam::eq("username", req.username.clone()),
-        ],
+        &vec![FilterParam::eq("username", req.username.clone())],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(Some(existing)) => {
             // Update existing user
-            match UserService::update(
-                UpdateUser{
-                    id: existing.id,
-                    username: None,
-                    email: Some(req.email.clone()),
-                    password: Some(req.password.clone()),
-                    admin: Some(admin),
-                    profile_picture_path: None,
-                }
-            ).await {
+            match UserService::update(UpdateUser {
+                id: existing.id,
+                username: None,
+                email: Some(req.email.clone()),
+                password: Some(req.password.clone()),
+                admin: Some(admin),
+                profile_picture_path: None,
+            })
+            .await
+            {
                 Ok(updated) => (
                     StatusCode::OK,
                     Json(ApiResponse::success(
@@ -134,15 +132,15 @@ pub async fn upsert_user(
         }
         Ok(None) => {
             // Create new user
-            match UserService::create(
-                CreateUser{
-                    id: None,
-                    username: req.username,
-                    email: req.email,
-                    password: req.password,
-                    admin,
-                }
-            ).await {
+            match UserService::create(CreateUser {
+                id: None,
+                username: req.username,
+                email: req.email,
+                password: req.password,
+                admin,
+            })
+            .await
+            {
                 Ok(user) => (
                     StatusCode::CREATED,
                     Json(ApiResponse::success(
@@ -159,11 +157,7 @@ pub async fn upsert_user(
                     } else {
                         format!("Database error: {e}")
                     };
-                    (
-                        StatusCode::CONFLICT,
-                        Json(ApiResponse::<()>::error(msg)),
-                    )
-                        .into_response()
+                    (StatusCode::CONFLICT, Json(ApiResponse::<()>::error(msg))).into_response()
                 }
             }
         }

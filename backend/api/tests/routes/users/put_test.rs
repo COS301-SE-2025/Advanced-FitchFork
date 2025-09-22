@@ -1,21 +1,18 @@
 #[cfg(test)]
 mod tests {
-    use db::{
-        models::user::Model as UserModel,
-        repositories::user_repository::UserRepository,
-    };
-    use services::{
-        service::Service,
-        user::{UserService, CreateUser}
-    };
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode, header::CONTENT_TYPE},
     };
-    use tower::ServiceExt;
+    use db::{models::user::Model as UserModel, repositories::user_repository::UserRepository};
     use serde_json::{Value, json};
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app_with_storage;
+    use services::{
+        service::Service,
+        user::{CreateUser, UserService},
+    };
+    use tower::ServiceExt;
 
     struct TestData {
         admin_user: UserModel,
@@ -27,9 +24,33 @@ mod tests {
         dotenvy::dotenv().expect("Failed to load .env");
 
         let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service.create(CreateUser{ username: "put_admin".to_string(), email: "put_admin@test.com".to_string(), password: "adminpass".to_string(), admin: true }).await.expect("Failed to create admin user for PUT tests");
-        let non_admin_user = service.create(CreateUser{ username: "put_regular".to_string(), email: "put_regular@test.com".to_string(), password: "userpass".to_string(), admin: false }).await.expect("Failed to create regular user for PUT tests");
-        let user_to_update = service.create(CreateUser{ username: "target_for_update".to_string(), email: "target_original@test.com".to_string(), password: "originalpass".to_string(), admin: false }).await.expect("Failed to create target user for update");
+        let admin_user = service
+            .create(CreateUser {
+                username: "put_admin".to_string(),
+                email: "put_admin@test.com".to_string(),
+                password: "adminpass".to_string(),
+                admin: true,
+            })
+            .await
+            .expect("Failed to create admin user for PUT tests");
+        let non_admin_user = service
+            .create(CreateUser {
+                username: "put_regular".to_string(),
+                email: "put_regular@test.com".to_string(),
+                password: "userpass".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create regular user for PUT tests");
+        let user_to_update = service
+            .create(CreateUser {
+                username: "target_for_update".to_string(),
+                email: "target_original@test.com".to_string(),
+                password: "originalpass".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create target user for update");
 
         TestData {
             admin_user,
@@ -39,7 +60,9 @@ mod tests {
     }
 
     async fn get_json_body(response: axum::response::Response) -> Value {
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         serde_json::from_slice(&body).unwrap()
     }
 
@@ -53,7 +76,8 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let payload = json!({ "username": "updated_username_put", "email": "updated_put@test.com" });
+        let payload =
+            json!({ "username": "updated_username_put", "email": "updated_put@test.com" });
         let uri = format!("/api/users/{}", data.user_to_update.id);
         let req = Request::builder()
             .method("PUT")
@@ -77,7 +101,10 @@ mod tests {
         assert_eq!(updated_user_data["admin"], data.user_to_update.admin);
         assert!(updated_user_data["created_at"].as_str().is_some());
         assert!(updated_user_data["updated_at"].as_str().is_some());
-        assert!(updated_user_data["updated_at"].as_str().unwrap() >= updated_user_data["created_at"].as_str().unwrap());
+        assert!(
+            updated_user_data["updated_at"].as_str().unwrap()
+                >= updated_user_data["created_at"].as_str().unwrap()
+        );
     }
 
     /// Test Case: Successful Update of User Admin Status as Admin
@@ -104,7 +131,6 @@ mod tests {
         let json = get_json_body(response).await;
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Changing admin status is not allowed");
-
     }
 
     /// Test Case: Update User without Admin Role
@@ -129,7 +155,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
-     /// Test Case: Update Own User Info as Non-Admin
+    /// Test Case: Update Own User Info as Non-Admin
     #[tokio::test]
     #[serial]
     async fn test_update_user_forbidden_update_self_as_non_admin() {
@@ -226,7 +252,10 @@ mod tests {
 
         let json = get_json_body(response).await;
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "A user with this student number already exists");
+        assert_eq!(
+            json["message"],
+            "A user with this student number already exists"
+        );
     }
 
     /// Test Case: Update User without Authentication Header

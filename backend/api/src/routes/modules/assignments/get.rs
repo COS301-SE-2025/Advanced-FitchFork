@@ -22,28 +22,33 @@
 //!
 //! All endpoints use `AppState` for database access and return JSON-wrapped `ApiResponse`.
 
+use crate::routes::modules::assignments::common::{AssignmentResponse, File};
+use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder, sea_query::Expr,
+    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, sea_query::Expr,
 };
-use util::{execution_config::{execution_config::{GradingPolicy, SubmissionMode}, ExecutionConfig}, state::AppState};
-use crate::{auth::AuthUser, response::ApiResponse};
-use crate::routes::modules::assignments::common::{File, AssignmentResponse};
-use util::filters::{FilterParam, QueryParam};
+use serde::{Deserialize, Serialize};
+use services::assignment::{Assignment, AssignmentService};
+use services::assignment_file::AssignmentFileService;
+use services::assignment_submission::AssignmentSubmissionService;
 use services::service::Service;
 use services::user::UserService;
-use services::assignment::{AssignmentService, Assignment};
-use services::assignment_file::AssignmentFileService;
 use services::user_module_role::UserModuleRoleService;
-use services::assignment_submission::AssignmentSubmissionService;
+use std::collections::HashMap;
+use util::filters::{FilterParam, QueryParam};
+use util::{
+    execution_config::{
+        ExecutionConfig,
+        execution_config::{GradingPolicy, SubmissionMode},
+    },
+    state::AppState,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AssignmentFileResponse {
@@ -86,7 +91,6 @@ pub struct AssignmentPolicy {
     pub pass_mark: u32,
 }
 
-
 impl From<AssignmentModel> for AssignmentFileResponse {
     fn from(assignment: AssignmentModel) -> Self {
         Self {
@@ -104,12 +108,11 @@ impl From<AssignmentModel> for AssignmentFileResponse {
             },
             files: Vec::new(),
             best_mark: None,
-            attempts: None, 
+            attempts: None,
             policy: None,
         }
     }
 }
-
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}
 ///
@@ -224,7 +227,8 @@ pub async fn get_assignment(
             match a.auto_open_or_close(db).await {
                 Ok(Some(_new_status)) => {
                     // refresh `a` so we return the updated status
-                    if let Ok(Some(refreshed)) = assignment::Entity::find_by_id(a.id).one(db).await {
+                    if let Ok(Some(refreshed)) = assignment::Entity::find_by_id(a.id).one(db).await
+                    {
                         a = refreshed;
                     }
                 }
@@ -259,8 +263,17 @@ pub async fn get_assignment(
                     // ---------------------------------------------------------------
 
                     // only if user is a student in this module
-                    if let Ok(true) = UserModuleRoleService::is_in_role(user.sub, module_id, "student".to_string()).await {
-                        if let Ok(Some(sub)) = AssignmentSubmissionService::get_best_for_user(assignment_id, user.sub).await {
+                    if let Ok(true) = UserModuleRoleService::is_in_role(
+                        user.sub,
+                        module_id,
+                        "student".to_string(),
+                    )
+                    .await
+                    {
+                        if let Ok(Some(sub)) =
+                            AssignmentSubmissionService::get_best_for_user(assignment_id, user.sub)
+                                .await
+                        {
                             best_mark = Some(BestMark {
                                 earned: sub.earned,
                                 total: sub.total,
@@ -314,7 +327,9 @@ pub async fn get_assignment(
         }
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<AssignmentFileResponse>::error("Assignment not found")),
+            Json(ApiResponse::<AssignmentFileResponse>::error(
+                "Assignment not found",
+            )),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -325,7 +340,6 @@ pub async fn get_assignment(
         ),
     }
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
@@ -350,12 +364,7 @@ pub struct FilterResponse {
 }
 
 impl FilterResponse {
-    fn new(
-        assignments: Vec<AssignmentResponse>,
-        page: u64,
-        per_page: u64,
-        total: u64,
-    ) -> Self {
+    fn new(assignments: Vec<AssignmentResponse>, page: u64, per_page: u64, total: u64) -> Self {
         Self {
             assignments,
             page,
@@ -499,23 +508,16 @@ pub async fn get_assignments(
         }
     }
 
-    let (assignments, total) = match AssignmentService::filter(
-        &filters,
-        &queries,
-        page,
-        per_page,
-        sort,
-    ).await {
-        Ok(result) => result,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(
-                    format!("Database error: {}", e),
-                )),
-            );
-        }
-    };
+    let (assignments, total) =
+        match AssignmentService::filter(&filters, &queries, page, per_page, sort).await {
+            Ok(result) => result,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::error(format!("Database error: {}", e))),
+                );
+            }
+        };
 
     let assignments: Vec<AssignmentResponse> = assignments
         .into_iter()

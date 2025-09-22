@@ -9,7 +9,7 @@
 //! - `BulkUpdateRequest` – payload for updating multiple assignments.
 //! - `BulkUpdateResult` and `FailedUpdate` – results of bulk update operations.
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use services::assignment::Assignment;
 use services::assignment_file::AssignmentFile;
 

@@ -1,9 +1,15 @@
 #[cfg(test)]
 mod tests {
     use api::auth::claims::{AuthUser, Claims};
-    use axum::{http::{Request, StatusCode}, extract::FromRequestParts};
-    use jsonwebtoken::{encode, EncodingKey, Header};
-    use std::{env, time::{SystemTime, UNIX_EPOCH}};
+    use axum::{
+        extract::FromRequestParts,
+        http::{Request, StatusCode},
+    };
+    use jsonwebtoken::{EncodingKey, Header, encode};
+    use std::{
+        env,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     fn generate_token(claims: &Claims, secret: &str) -> String {
         encode(
@@ -19,7 +25,7 @@ mod tests {
         unsafe {
             env::set_var("JWT_SECRET", "test_secret");
         }
-        
+
         let claims = Claims {
             sub: 1,
             exp: (SystemTime::now()

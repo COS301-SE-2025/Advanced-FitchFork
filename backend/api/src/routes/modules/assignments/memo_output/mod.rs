@@ -1,6 +1,9 @@
-use axum::{Router, routing::{get, post}};
-use post::generate_memo_output;
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use get::get_all_memo_outputs;
+use post::generate_memo_output;
 
 pub mod get;
 pub mod post;

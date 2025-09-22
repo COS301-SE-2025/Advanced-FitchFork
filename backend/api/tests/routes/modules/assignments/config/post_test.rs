@@ -1,28 +1,28 @@
 #[cfg(test)]
 mod tests {
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use chrono::{TimeZone, Utc};
+    use db::models::assignment_file::{FileType, Model as AssignmentFile};
     use db::{
         models::{
-            user::Model as UserModel,
+            assignment::{AssignmentType, Model as AssignmentModel},
             module::Model as ModuleModel,
-            assignment::{Model as AssignmentModel, AssignmentType},
-            user_module_role::{Model as UserModuleRoleModel, Role}
+            user::Model as UserModel,
+            user_module_role::{Model as UserModuleRoleModel, Role},
         },
         repositories::user_repository::UserRepository,
     };
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode}
-    };
+    use serde_json::{Value, json};
     use services::{
         service::Service,
-        user::{CreateUser, UserService}
+        user::{CreateUser, UserService},
     };
     use tower::ServiceExt;
-    use serde_json::{json, Value};
-    use api::{auth::generate_jwt};
-    use chrono::{Utc, TimeZone};
-    use db::models::assignment_file::{FileType, Model as AssignmentFile};
-    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin_user: UserModel,
@@ -34,14 +34,52 @@ mod tests {
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
+            .await
+            .unwrap();
         let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service.create(CreateUser { username: "admin1".to_string(), email: "admin1@test.com".to_string(), password: "password".to_string(), admin: true }).await.unwrap();
-        let lecturer_user = service.create(CreateUser { username: "lecturer1".to_string(), email: "lecturer1@test.com".to_string(), password: "password1".to_string(), admin: false }).await.unwrap();
-        let student_user = service.create(CreateUser { username: "student1".to_string(), email: "student1@test.com".to_string(), password: "password2".to_string(), admin: false }).await.unwrap();
-        let forbidden_user = service.create(CreateUser { username: "forbidden".to_string(), email: "forbidden@test.com".to_string(), password: "password3".to_string(), admin: false }).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.unwrap();
+        let admin_user = service
+            .create(CreateUser {
+                username: "admin1".to_string(),
+                email: "admin1@test.com".to_string(),
+                password: "password".to_string(),
+                admin: true,
+            })
+            .await
+            .unwrap();
+        let lecturer_user = service
+            .create(CreateUser {
+                username: "lecturer1".to_string(),
+                email: "lecturer1@test.com".to_string(),
+                password: "password1".to_string(),
+                admin: false,
+            })
+            .await
+            .unwrap();
+        let student_user = service
+            .create(CreateUser {
+                username: "student1".to_string(),
+                email: "student1@test.com".to_string(),
+                password: "password2".to_string(),
+                admin: false,
+            })
+            .await
+            .unwrap();
+        let forbidden_user = service
+            .create(CreateUser {
+                username: "forbidden".to_string(),
+                email: "forbidden@test.com".to_string(),
+                password: "password3".to_string(),
+                admin: false,
+            })
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
+            .await
+            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
+            .await
+            .unwrap();
         let a1 = AssignmentModel::create(
             db,
             module.id,
@@ -50,7 +88,9 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         let a2 = AssignmentModel::create(
             db,
             module.id,
@@ -59,7 +99,9 @@ mod tests {
             AssignmentType::Practical,
             Utc.with_ymd_and_hms(2024, 2, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 2, 28, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         TestData {
             admin_user,
@@ -78,7 +120,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
         let body = json!({"test_timeout": 300, "allowed_languages": ["java", "python"]});
         let req = Request::builder()
             .method("POST")
@@ -91,7 +136,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert!(json["message"].as_str().unwrap().contains("saved"));
@@ -104,7 +151,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[1].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[1].id
+        );
         let body = json!({"max_memory": "1GB", "grading_criteria": {"test_weight": 0.7}});
         let req = Request::builder()
             .method("POST")
@@ -117,7 +167,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
     }
@@ -129,7 +181,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
         let body = json!({"test_timeout": 100});
         let req = Request::builder()
             .method("POST")
@@ -150,7 +205,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
         let body = json!({"test_timeout": 100});
         let req = Request::builder()
             .method("POST")
@@ -191,7 +249,10 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
         let body = json!({"test_timeout": 100});
         let req = Request::builder()
             .method("POST")
@@ -211,7 +272,10 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/config",
+            data.module.id, data.assignments[0].id
+        );
         let body = json!(12345);
         let req = Request::builder()
             .method("POST")
@@ -224,10 +288,17 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("must be a JSON object"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("must be a JSON object")
+        );
     }
 
     #[tokio::test]
@@ -322,6 +393,4 @@ mod tests {
         // "old_field" shouldn't be preserved since it's not part of ExecutionConfig
         assert!(json["data"].get("old_field").is_none());
     }
-
-
 }

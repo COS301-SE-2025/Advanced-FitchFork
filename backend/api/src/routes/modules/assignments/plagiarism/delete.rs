@@ -1,11 +1,6 @@
 use std::fs;
 
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use db::models::{
     moss_report::{Column as MossReportColumn, Entity as MossReportEntity},
     plagiarism_case::{Column as PlagiarismColumn, Entity as PlagiarismEntity},
@@ -15,9 +10,9 @@ use serde::Deserialize;
 use util::{paths::moss_archive_dir, state::AppState};
 
 use crate::response::ApiResponse;
-use util::filters::FilterParam;
-use services::service::Service;
 use services::plagiarism_case::PlagiarismCaseService;
+use services::service::Service;
+use util::filters::FilterParam;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/{case_id}
 ///
@@ -75,12 +70,12 @@ pub async fn delete_plagiarism_case(
     Path((_, _, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
     match PlagiarismCaseService::delete_by_id(case_id).await {
-        Ok(_) => {
-            (
-                StatusCode::OK,
-                Json(ApiResponse::success_without_data("Plagiarism case deleted successfully")),
-            )
-        }
+        Ok(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::success_without_data(
+                "Plagiarism case deleted successfully",
+            )),
+        ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error(format!(
@@ -187,22 +182,22 @@ pub async fn bulk_delete_plagiarism_cases(
         ],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(cases) => cases,
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(format!(
-                    "Database error: {}",
-                    e
-                ))),
-            )
+                Json(ApiResponse::<()>::error(format!("Database error: {}", e))),
+            );
         }
     };
 
     if existing_cases.len() != payload.case_ids.len() {
         let existing_ids: Vec<i64> = existing_cases.iter().map(|c| c.id).collect();
-        let missing_ids: Vec<i64> = payload.case_ids
+        let missing_ids: Vec<i64> = payload
+            .case_ids
             .iter()
             .filter(|id| !existing_ids.contains(id))
             .map(|&id| id as i64)
@@ -223,7 +218,9 @@ pub async fn bulk_delete_plagiarism_cases(
             FilterParam::eq("assignment_id", assignment_id),
         ],
         &vec![],
-    ).await {
+    )
+    .await
+    {
         Ok(result) => result,
         Err(e) => {
             return (
@@ -232,13 +229,17 @@ pub async fn bulk_delete_plagiarism_cases(
                     "Failed to delete plagiarism cases: {}",
                     e
                 ))),
-            )
+            );
         }
     };
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success_without_data(&format!("{} plagiarism case{} deleted successfully", delete_result, if delete_result == 1 { "" } else { "s" }))),
+        Json(ApiResponse::success_without_data(&format!(
+            "{} plagiarism case{} deleted successfully",
+            delete_result,
+            if delete_result == 1 { "" } else { "s" }
+        ))),
     )
 }
 
@@ -301,10 +302,15 @@ pub async fn delete_moss_report(
     }
 
     // 3) Delete the DB row
-    match MossReportEntity::delete_by_id(report.id).exec(app_state.db()).await {
+    match MossReportEntity::delete_by_id(report.id)
+        .exec(app_state.db())
+        .await
+    {
         Ok(res) if res.rows_affected > 0 => (
             StatusCode::OK,
-            Json(ApiResponse::<()>::success_without_data("Report deleted successfully")),
+            Json(ApiResponse::<()>::success_without_data(
+                "Report deleted successfully",
+            )),
         )
             .into_response(),
         Ok(_) => (
@@ -314,7 +320,9 @@ pub async fn delete_moss_report(
             .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(format!("Failed to delete report: {e}"))),
+            Json(ApiResponse::<()>::error(format!(
+                "Failed to delete report: {e}"
+            ))),
         )
             .into_response(),
     }

@@ -1,8 +1,8 @@
 use crate::seed::Seeder;
-use services::service::{Service, AppError};
+use rand::seq::SliceRandom;
 use services::assignment::AssignmentService;
 use services::assignment_task::{AssignmentTaskService, CreateAssignmentTask};
-use rand::seq::SliceRandom;
+use services::service::{AppError, Service};
 use std::pin::Pin;
 
 pub struct AssignmentTaskSeeder;
@@ -11,11 +11,7 @@ impl Seeder for AssignmentTaskSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
             // Fetch all assignments
-            let assignments = AssignmentService::find_all(
-                &vec![],
-                &vec![],
-                None
-            ).await?;
+            let assignments = AssignmentService::find_all(&vec![], &vec![], None).await?;
             if assignments.is_empty() {
                 panic!(
                     "No assignments found — at least one assignment must exist to seed assignment_tasks"
@@ -47,29 +43,27 @@ impl Seeder for AssignmentTaskSeeder {
                         .unwrap_or(&"echo 'Hello World'")
                         .to_string();
 
-                    AssignmentTaskService::create(
-                        CreateAssignmentTask{
-                            assignment_id: assignment.id,
-                            task_number: task_number,
-                            name: "Untitled Task".to_string(),
-                            command: command,
-                            code_coverage: false,
-                        }
-                    ).await?;
+                    AssignmentTaskService::create(CreateAssignmentTask {
+                        assignment_id: assignment.id,
+                        task_number: task_number,
+                        name: "Untitled Task".to_string(),
+                        command: command,
+                        code_coverage: false,
+                    })
+                    .await?;
                 }
             }
 
             let special_tasks = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
             for (task_number, command) in special_tasks {
-                AssignmentTaskService::create(
-                    CreateAssignmentTask{
-                        assignment_id: 9999,
-                        task_number: task_number,
-                        name: "Untitled Task".to_string(),
-                        command: command.to_string(),
-                        code_coverage: false,
-                    }
-                ).await?;
+                AssignmentTaskService::create(CreateAssignmentTask {
+                    assignment_id: 9999,
+                    task_number: task_number,
+                    name: "Untitled Task".to_string(),
+                    command: command.to_string(),
+                    code_coverage: false,
+                })
+                .await?;
             }
 
             let special_tasks2 = vec![
@@ -79,40 +73,37 @@ impl Seeder for AssignmentTaskSeeder {
                 (4, "make task4", true),
             ];
             for (task_number, command, code_coverage) in special_tasks2 {
-                AssignmentTaskService::create(
-                    CreateAssignmentTask{
-                        assignment_id: 9998,
-                        task_number: task_number,
-                        name: "Untitled Task".to_string(),
-                        command: command.to_string(),
-                        code_coverage: code_coverage,
-                    }
-                ).await?;
+                AssignmentTaskService::create(CreateAssignmentTask {
+                    assignment_id: 9998,
+                    task_number: task_number,
+                    name: "Untitled Task".to_string(),
+                    command: command.to_string(),
+                    code_coverage: code_coverage,
+                })
+                .await?;
             }
 
             let special_tasks2 = vec![(1, "make task1")];
             for (task_number, command) in special_tasks2 {
-                AssignmentTaskService::create(
-                    CreateAssignmentTask{
-                        assignment_id: 10003,
-                        task_number: task_number,
-                        name: "Untitled Task".to_string(),
-                        command: command.to_string(),
-                        code_coverage: false,
-                    }
-                ).await?;
+                AssignmentTaskService::create(CreateAssignmentTask {
+                    assignment_id: 10003,
+                    task_number: task_number,
+                    name: "Untitled Task".to_string(),
+                    command: command.to_string(),
+                    code_coverage: false,
+                })
+                .await?;
 
                 let special_tasks3 = vec![(1, "make task1")];
                 for (task_number, command) in special_tasks3 {
-                    AssignmentTaskService::create(
-                        CreateAssignmentTask{
-                            assignment_id: 10004,
-                            task_number: task_number,
-                            name: "Task to run code".to_string(),
-                            command: command.to_string(),
-                            code_coverage: false,
-                        }
-                    ).await?;
+                    AssignmentTaskService::create(CreateAssignmentTask {
+                        assignment_id: 10004,
+                        task_number: task_number,
+                        name: "Task to run code".to_string(),
+                        command: command.to_string(),
+                        code_coverage: false,
+                    })
+                    .await?;
                 }
             }
 

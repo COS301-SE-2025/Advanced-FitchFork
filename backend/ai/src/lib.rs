@@ -29,10 +29,10 @@ use crate::algorithms::genetic_algorithm::{Chromosome, GeneticAlgorithm};
 use crate::utils::evaluator::{Evaluator, TaskSpec};
 use crate::utils::output::Output;
 use code_runner::run_interpreter;
+use services::assignment_submission::AssignmentSubmissionService;
+use services::service::Service;
 use std::collections::HashMap;
 use util::execution_config::ExecutionConfig;
-use services::service::Service;
-use services::assignment_submission::AssignmentSubmissionService;
 
 // -----------------------------------------------------------------------------
 // Public entrypoint: build GA + Evaluator + Components, then run the loop
@@ -94,8 +94,8 @@ pub async fn run_ga_job(
     };
 
     // Unused fetch closure for signature compatibility
-    let mut unused_fetch = |_sid: i64|
-     -> Result<Vec<(i64, String)>, String> { Err("unused".into()) };
+    let mut unused_fetch =
+        |_sid: i64| -> Result<Vec<(i64, String)>, String> { Err("unused".into()) };
 
     // Run the GA ↔ interpreter loop
     run_ga_end_to_end(

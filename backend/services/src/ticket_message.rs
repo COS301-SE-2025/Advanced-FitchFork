@@ -1,10 +1,10 @@
-use crate::service::{Service, AppError, ToActiveModel};
+use crate::service::{AppError, Service, ToActiveModel};
+use chrono::Utc;
 use db::{
-    models::ticket_messages::{ActiveModel, Entity, Column},
+    models::ticket_messages::{ActiveModel, Column, Entity},
     repository::Repository,
 };
 use sea_orm::{DbErr, Set};
-use chrono::Utc;
 
 pub use db::models::ticket_messages::Model as TicketMessage;
 
@@ -40,7 +40,10 @@ impl ToActiveModel<Entity> for UpdateTicketMessage {
         let message = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(message)) => message,
             Ok(None) => {
-                return Err(AppError::from(DbErr::RecordNotFound(format!("Message not found for ID {}", self.id))));
+                return Err(AppError::from(DbErr::RecordNotFound(format!(
+                    "Message not found for ID {}",
+                    self.id
+                ))));
             }
             Err(err) => return Err(AppError::from(err)),
         };
@@ -58,17 +61,16 @@ impl ToActiveModel<Entity> for UpdateTicketMessage {
 
 pub struct TicketMessageService;
 
-impl<'a> Service<'a, Entity, Column, CreateTicketMessage, UpdateTicketMessage> for TicketMessageService {
+impl<'a> Service<'a, Entity, Column, CreateTicketMessage, UpdateTicketMessage>
+    for TicketMessageService
+{
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
 impl TicketMessageService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-    pub async fn is_author(
-        message_id: i64,
-        user_id: i64,
-    ) -> bool {
+    pub async fn is_author(message_id: i64, user_id: i64) -> bool {
         let message = Repository::<Entity, Column>::find_by_id(message_id).await;
         match message {
             Ok(Some(t)) => t.user_id == user_id,

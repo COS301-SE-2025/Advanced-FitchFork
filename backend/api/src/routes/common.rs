@@ -1,5 +1,5 @@
-use serde::Serialize;
 use serde::Deserialize;
+use serde::Serialize;
 use services::user::User;
 
 #[derive(Debug, Serialize, Deserialize)]

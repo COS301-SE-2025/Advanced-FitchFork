@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use sea_orm::entity::prelude::*;
 use sea_orm::EntityTrait;
+use sea_orm::entity::prelude::*;
 use strum::EnumIter;
 
 /// Assignment task model representing the `assignment_tasks` table.

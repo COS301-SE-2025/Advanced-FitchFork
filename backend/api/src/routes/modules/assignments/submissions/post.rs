@@ -19,27 +19,31 @@ use db::models::{
     assignment_task::Entity as AssignmentTaskModel,
 };
 use marker::MarkingJob;
-use marker::comparators::{exact_comparator::ExactComparator, percentage_comparator::PercentageComparator, regex_comparator::RegexComparator};
-use marker::feedback::{auto_feedback::AutoFeedback, manual_feedback::ManualFeedback, ai_feedback::AiFeedback};
+use marker::comparators::{
+    exact_comparator::ExactComparator, percentage_comparator::PercentageComparator,
+    regex_comparator::RegexComparator,
+};
+use marker::feedback::{
+    ai_feedback::AiFeedback, auto_feedback::AutoFeedback, manual_feedback::ManualFeedback,
+};
 use md5;
 use serde::{Deserialize, Serialize};
 use tokio_util::bytes;
-use util::{mark_allocator::mark_allocator::TaskInfo, paths::storage_root};
+use util::paths::{
+    assignment_dir, attempt_dir, mark_allocator_path as allocator_path, memo_output_dir,
+    submission_output_dir, submission_report_path,
+};
 use util::{
-    execution_config::{ExecutionConfig, execution_config::{SubmissionMode, MarkingScheme, FeedbackScheme}},
+    execution_config::{
+        ExecutionConfig,
+        execution_config::{FeedbackScheme, MarkingScheme, SubmissionMode},
+    },
+    filters::FilterParam,
     mark_allocator::mark_allocator::generate_allocator,
     mark_allocator::mark_allocator::load_allocator,
     scan_code_content::scan_code_content,
-    filters::FilterParam,
 };
-use util::paths::{
-    assignment_dir,
-    memo_output_dir,
-    mark_allocator_path as allocator_path,
-    submission_output_dir,
-    submission_report_path,
-    attempt_dir,
-};
+use util::{mark_allocator::mark_allocator::TaskInfo, paths::storage_root};
 
 #[derive(Debug, Deserialize)]
 pub struct RemarkRequest {
@@ -132,10 +136,7 @@ async fn resolve_submission_ids(
 }
 
 /// Loads assignment and validates it exists for the given module
-async fn load_assignment(
-    module_id: i64,
-    assignment_id: i64,
-) -> Result<Assignment, String> {
+async fn load_assignment(module_id: i64, assignment_id: i64) -> Result<Assignment, String> {
     AssignmentService::find_one(
         &vec![
             FilterParam::eq("id", assignment_id),
@@ -143,16 +144,14 @@ async fn load_assignment(
         ],
         &vec![],
         None,
-    ).await
-        .map_err(|e| format!("Database error: {}", e))?
-        .ok_or_else(|| "Assignment not found".to_string())
+    )
+    .await
+    .map_err(|e| format!("Database error: {}", e))?
+    .ok_or_else(|| "Assignment not found".to_string())
 }
 
 /// Loads the mark allocator for an assignment
-async fn load_assignment_allocator(
-    module_id: i64,
-    assignment_id: i64
-) -> Result<(), String> {
+async fn load_assignment_allocator(module_id: i64, assignment_id: i64) -> Result<(), String> {
     load_allocator(module_id, assignment_id)
         .await
         .map(|_| ())
@@ -181,10 +180,7 @@ fn get_assignment_paths(
 }
 
 /// Loads execution configuration for an assignment
-fn get_execution_config(
-    module_id: i64,
-    assignment_id: i64
-) -> Result<ExecutionConfig, String> {
+fn get_execution_config(module_id: i64, assignment_id: i64) -> Result<ExecutionConfig, String> {
     ExecutionConfig::get_execution_config(module_id, assignment_id)
         .map_err(|_| "Failed to load execution config".to_string())
 }
@@ -249,10 +245,7 @@ fn validate_file_upload(
 }
 
 /// Gets the next attempt number for a user's assignment
-async fn get_next_attempt(
-    assignment_id: i64,
-    user_id: i64,
-) -> Result<i64, String> {
+async fn get_next_attempt(assignment_id: i64, user_id: i64) -> Result<i64, String> {
     let prev_attempt = AssignmentSubmissionService::find_one(
         &vec![
             FilterParam::eq("assignment_id", assignment_id),
@@ -260,10 +253,11 @@ async fn get_next_attempt(
         ],
         &vec![],
         Some("-attempt".to_string()),
-    ).await
-        .map_err(|e| format!("Database error: {}", e))?
-        .map(|s| s.attempt)
-        .unwrap_or(0);
+    )
+    .await
+    .map_err(|e| format!("Database error: {}", e))?
+    .map(|s| s.attempt)
+    .unwrap_or(0);
 
     Ok(prev_attempt + 1)
 }
@@ -312,8 +306,12 @@ async fn grade_submission(
                     if ext.eq_ignore_ascii_case("txt") {
                         if let Some(file_stem) = file_path.file_stem().and_then(|s| s.to_str()) {
                             if let Ok(output_id) = file_stem.parse::<i64>() {
-                                if let Ok(Some(output)) = AssignmentSubmissionOutputService::find_by_id(output_id).await {
-                                    if let Ok(Some(task)) = AssignmentTaskService::find_by_id(output.task_id).await {
+                                if let Ok(Some(output)) =
+                                    AssignmentSubmissionOutputService::find_by_id(output_id).await
+                                {
+                                    if let Ok(Some(task)) =
+                                        AssignmentTaskService::find_by_id(output.task_id).await
+                                    {
                                         if task.code_coverage {
                                             student_output_code_coverage.push(file_path.clone());
                                         } else {
@@ -400,15 +398,14 @@ async fn grade_submission(
         .await
         .map_err(|e| e.to_string())?;
 
-    AssignmentSubmissionService::update(
-        UpdateAssignmentSubmission {
-            id: submission.id,
-            earned: Some(mark.earned),
-            total: Some(mark.total),
-            ..Default::default()
-        }
-    ).await
-        .map_err(|e| e.to_string())?;
+    AssignmentSubmissionService::update(UpdateAssignmentSubmission {
+        id: submission.id,
+        earned: Some(mark.earned),
+        total: Some(mark.total),
+        ..Default::default()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
 
     let now = Utc::now();
     let resp = SubmissionDetailResponse {
@@ -466,21 +463,30 @@ fn clear_submission_output(
     module_id: i64,
     assignment_id: i64,
 ) -> Result<(), String> {
-    let attempt = attempt_dir(module_id, assignment_id, submission.user_id, submission.attempt);
+    let attempt = attempt_dir(
+        module_id,
+        assignment_id,
+        submission.user_id,
+        submission.attempt,
+    );
     let output_dir = attempt.join("submission_output");
     if output_dir.exists() {
         fs::remove_dir_all(&output_dir)
             .map_err(|e| format!("Failed to clear output directory: {}", e))?;
     }
 
-    let report_path = submission_report_path(module_id, assignment_id, submission.user_id, submission.attempt);
+    let report_path = submission_report_path(
+        module_id,
+        assignment_id,
+        submission.user_id,
+        submission.attempt,
+    );
     if report_path.exists() {
         fs::remove_file(&report_path)
             .map_err(|e| format!("Failed to remove existing report: {}", e))?;
     }
     Ok(())
 }
-
 
 /// Read JSON into `SubmissionDetailResponse`, mutate, and write atomically.
 async fn update_submission_report_marks(
@@ -499,21 +505,21 @@ async fn update_submission_report_marks(
     let content = fs::read_to_string(&report_path)
         .map_err(|e| format!("Failed to read existing report: {}", e))?;
 
-    let mut resp: SubmissionDetailResponse =
-        serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to deserialize report: {}", e))?;
+    let mut resp: SubmissionDetailResponse = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to deserialize report: {}", e))?;
 
-    resp.mark = MarkSummary { earned: new_mark.earned, total: new_mark.total };
+    resp.mark = MarkSummary {
+        earned: new_mark.earned,
+        total: new_mark.total,
+    };
     resp.updated_at = Utc::now().to_rfc3339();
 
     let output = serde_json::to_string_pretty(&resp)
         .map_err(|e| format!("Failed to serialize updated report: {}", e))?;
-    fs::write(&report_path, output)
-        .map_err(|e| format!("Failed to write report: {}", e))?;
+    fs::write(&report_path, output).map_err(|e| format!("Failed to write report: {}", e))?;
 
     Ok(())
 }
-
 
 /// Executes bulk operation on submissions (remark or resubmit)
 async fn execute_bulk_operation<F, Fut>(
@@ -682,7 +688,9 @@ pub async fn submit_assignment(
         Err(_) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<SubmissionDetailResponse>::error("Assignment not found")),
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Assignment not found",
+                )),
             );
         }
     };
@@ -822,7 +830,7 @@ pub async fn submit_assignment(
         }
     }
 
-        /*
+    /*
     TODO
     Reece this dissalowed_present boolean - if its true then they have dissalowed imports - they need to be given a mark of 0
      */
@@ -978,8 +986,9 @@ pub async fn submit_assignment(
             // If disallowed imports, force mark to 0 and persist/report it
             if disallowed_present {
                 // Update DB mark to 0
-                if let Ok(Some(existing)) =
-                    assignment_submission::Entity::find_by_id(submission.id).one(db).await
+                if let Ok(Some(existing)) = assignment_submission::Entity::find_by_id(submission.id)
+                    .one(db)
+                    .await
                 {
                     let mut am: assignment_submission::ActiveModel = existing.into();
                     am.earned = sea_orm::ActiveValue::Set(0);
@@ -1028,7 +1037,6 @@ pub async fn submit_assignment(
         ),
     }
 }
-
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/submissions/remark
 ///
@@ -1200,7 +1208,9 @@ pub async fn remark_submissions(
                     assignment.id,
                     &submission,
                     &mark,
-                ).await {
+                )
+                .await
+                {
                     Ok(_) => Ok(()),
                     Err(_err) => grade_submission(
                         submission,
@@ -1376,16 +1386,14 @@ pub async fn resubmit_submissions(
                 Here you need to check for dissalowed imports as well - refer to the submit_assignment method
                 */
 
-                if let Err(e) = clear_submission_output(&submission, assignment.module_id, assignment.id) {
+                if let Err(e) =
+                    clear_submission_output(&submission, assignment.module_id, assignment.id)
+                {
                     return Err(e);
                 }
-                if let Err(e) = process_submission_code(
-                    submission.id,
-                    config.clone(),
-                    module_id,
-                    assignment_id,
-                )
-                .await
+                if let Err(e) =
+                    process_submission_code(submission.id, config.clone(), module_id, assignment_id)
+                        .await
                 {
                     return Err(format!("Failed to run code for submission: {}", e));
                 }

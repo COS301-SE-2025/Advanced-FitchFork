@@ -1,9 +1,9 @@
-use sea_orm::entity::prelude::*;
-use sea_orm::EntityTrait;
 use chrono::{DateTime, Utc};
 use log::{info, warn};
-use util::paths::module_dir;
+use sea_orm::EntityTrait;
+use sea_orm::entity::prelude::*;
 use std::fs;
+use util::paths::module_dir;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "modules")]
@@ -53,14 +53,14 @@ impl Model {
     /// # Returns
     /// A fully populated `Model` after insertion.
     pub async fn create<C>(
-      db: &C,
+        db: &C,
         code: &str,
         year: i32,
         description: Option<&str>,
         credits: i32,
     ) -> Result<Self, DbErr>
-        where
-        C: ConnectionTrait, 
+    where
+        C: ConnectionTrait,
     {
         let active = ActiveModel {
             code: Set(code.to_owned()),
@@ -89,7 +89,6 @@ impl Model {
         } else {
             warn!("Expected module directory {} does not exist", dir.display());
         }
-
 
         // Step 3: Delete the module
         Entity::delete_by_id(self.id).exec(db).await?;
@@ -122,7 +121,6 @@ impl Model {
         active.update(db).await
     }
 }
-
 
 #[cfg(test)]
 mod tests {

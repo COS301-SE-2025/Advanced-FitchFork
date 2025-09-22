@@ -1,18 +1,15 @@
+use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
-    extract::{Path, Extension},
+    Json,
+    extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::Deserialize;
-use crate::{
-    auth::AuthUser,
-    response::ApiResponse,
-};
-use util::filters::FilterParam;
 use services::service::Service;
 use services::user::UserService;
 use services::user_module_role::UserModuleRoleService;
+use util::filters::FilterParam;
 
 #[derive(Debug, Deserialize)]
 pub struct RemovePersonnelRequest {
@@ -137,12 +134,16 @@ pub async fn remove_personnel(
             ],
             &vec![],
             None,
-        ).await {
-            Ok(Some(_)) => {},
+        )
+        .await
+        {
+            Ok(Some(_)) => {}
             Ok(None) | Err(_) => {
                 return (
                     StatusCode::FORBIDDEN,
-                    Json(ApiResponse::<()>::error("Lecturer access required for this module")),
+                    Json(ApiResponse::<()>::error(
+                        "Lecturer access required for this module",
+                    )),
                 );
             }
         }
@@ -153,13 +154,16 @@ pub async fn remove_personnel(
 
     for &target_user_id in &body.user_ids {
         match UserService::find_by_id(target_user_id).await {
-            Ok(Some(_)) => {},
+            Ok(Some(_)) => {}
             Ok(None) => {
                 return (
                     StatusCode::NOT_FOUND,
-                    Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", target_user_id))),
+                    Json(ApiResponse::<()>::error(&format!(
+                        "User with ID {} does not exist",
+                        target_user_id
+                    ))),
                 );
-            },
+            }
             Err(_) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -175,7 +179,9 @@ pub async fn remove_personnel(
                 FilterParam::eq("role", role_to_remove.clone()),
             ],
             &vec![],
-        ).await {
+        )
+        .await
+        {
             Ok(res) if res == 0 => not_assigned.push(target_user_id),
             Ok(_) => {}
             Err(_) => {
@@ -190,12 +196,17 @@ pub async fn remove_personnel(
     if not_assigned.is_empty() {
         (
             StatusCode::OK,
-            Json(ApiResponse::<()>::success((), "Users removed from role successfully")),
+            Json(ApiResponse::<()>::success(
+                (),
+                "Users removed from role successfully",
+            )),
         )
     } else {
         (
             StatusCode::CONFLICT,
-            Json(ApiResponse::<()>::error("Some users are not assigned with this role")),
+            Json(ApiResponse::<()>::error(
+                "Some users are not assigned with this role",
+            )),
         )
     }
 }

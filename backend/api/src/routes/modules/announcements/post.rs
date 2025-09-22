@@ -4,10 +4,13 @@
 //!
 //! **Permissions:** Only authorized users (lecturer/assistant) can create announcements.
 
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Extension, Json};
-use crate::{auth::AuthUser, response::ApiResponse, routes::modules::announcements::common::AnnouncementRequest};
-use services::service::Service;
+use crate::{
+    auth::AuthUser, response::ApiResponse,
+    routes::modules::announcements::common::AnnouncementRequest,
+};
+use axum::{Extension, Json, extract::Path, http::StatusCode, response::IntoResponse};
 use services::announcement::{AnnouncementService, CreateAnnouncement};
+use services::service::Service;
 
 /// POST /api/modules/{module_id}/announcements
 ///
@@ -105,15 +108,15 @@ pub async fn create_announcement(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(req): Json<AnnouncementRequest>,
 ) -> impl IntoResponse {
-    match AnnouncementService::create(
-        CreateAnnouncement {
-            module_id,
-            user_id: claims.sub,
-            title: req.title,
-            body: req.body,
-            pinned: req.pinned,
-        }
-    ).await {
+    match AnnouncementService::create(CreateAnnouncement {
+        module_id,
+        user_id: claims.sub,
+        title: req.title,
+        body: req.body,
+        pinned: req.pinned,
+    })
+    .await
+    {
         Ok(announcement) => (
             StatusCode::OK,
             Json(ApiResponse::success(
@@ -123,9 +126,10 @@ pub async fn create_announcement(
         ),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::error(
-                format!("Failed to create announcement: {}", err),
-            )),
+            Json(ApiResponse::error(format!(
+                "Failed to create announcement: {}",
+                err
+            ))),
         ),
     }
 }

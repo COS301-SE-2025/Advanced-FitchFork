@@ -13,23 +13,23 @@
 //! Access control should be enforced via middleware (not shown here) for lecturers, tutors, or assistants.
 
 use axum::{
-    routing::{delete, get, patch, post, put},
     Router,
+    routing::{delete, get, patch, post, put},
 };
 
-use get::{get_graph, list_moss_reports, list_plagiarism_cases, download_moss_archive_by_report};
+use delete::{bulk_delete_plagiarism_cases, delete_plagiarism_case};
+use get::{download_moss_archive_by_report, get_graph, list_moss_reports, list_plagiarism_cases};
+use patch::{patch_plagiarism_flag, patch_plagiarism_review};
 use post::{create_plagiarism_case, run_moss_check};
 use put::update_plagiarism_case;
-use delete::{bulk_delete_plagiarism_cases, delete_plagiarism_case};
-use patch::{patch_plagiarism_flag, patch_plagiarism_review};
 
 use crate::routes::modules::assignments::plagiarism::delete::delete_moss_report;
 
+pub mod delete;
 pub mod get;
+pub mod patch;
 pub mod post;
 pub mod put;
-pub mod delete;
-pub mod patch;
 
 /// Builds and returns the `/assignments/plagiarism` route group.
 ///
@@ -58,6 +58,9 @@ pub fn plagiarism_routes() -> Router<AppState> {
         .route("/{case_id}/review", patch(patch_plagiarism_review))
         .route("/moss", post(run_moss_check))
         .route("/moss/reports", get(list_moss_reports))
-        .route("/moss/reports/{report_id}/download", get(download_moss_archive_by_report)) 
+        .route(
+            "/moss/reports/{report_id}/download",
+            get(download_moss_archive_by_report),
+        )
         .route("/moss/reports/{report_id}", delete(delete_moss_report))
 }

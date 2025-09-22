@@ -1,25 +1,25 @@
 #[cfg(test)]
 mod tests {
-    use db::{
-        models::{
-            user::Model as UserModel,
-            module::Model as ModuleModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository
-    };
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
+    use db::{
+        models::{
+            module::Model as ModuleModel,
+            user::Model as UserModel,
+            user_module_role::{Model as UserModuleRoleModel, Role},
+        },
+        repositories::user_repository::UserRepository,
+    };
+    use serde_json::Value;
     use services::{
         service::Service,
-        user::{UserService, CreateUser}
+        user::{CreateUser, UserService},
     };
     use tower::ServiceExt;
-    use serde_json::Value;
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin_user: UserModel,
@@ -32,11 +32,44 @@ mod tests {
         dotenvy::dotenv().expect("Failed to load .env");
 
         let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service.create(CreateUser{ username: "user_admin".to_string(), email: "user_admin@test.com".to_string(), password: "adminpass".to_string(), admin: true }).await.expect("Failed to create admin user");
-        let non_admin_user = service.create(CreateUser{ username: "user_regular".to_string(), email: "user_regular@test.com".to_string(), password: "userpass".to_string(), admin: false }).await.expect("Failed to create regular user");
-        let user_to_operate_on = service.create(CreateUser{ username: "target_user".to_string(), email: "target@test.com".to_string(), password: "targetpass".to_string(), admin: false }).await.expect("Failed to create target user");
-        let module = ModuleModel::create(db, "USER101", 2024, Some("User Test Module"), 16).await.expect("Failed to create test module");
-        UserModuleRoleModel::assign_user_to_module(db, user_to_operate_on.id, module.id, Role::Student).await.expect("Failed to assign role to target user");
+        let admin_user = service
+            .create(CreateUser {
+                username: "user_admin".to_string(),
+                email: "user_admin@test.com".to_string(),
+                password: "adminpass".to_string(),
+                admin: true,
+            })
+            .await
+            .expect("Failed to create admin user");
+        let non_admin_user = service
+            .create(CreateUser {
+                username: "user_regular".to_string(),
+                email: "user_regular@test.com".to_string(),
+                password: "userpass".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create regular user");
+        let user_to_operate_on = service
+            .create(CreateUser {
+                username: "target_user".to_string(),
+                email: "target@test.com".to_string(),
+                password: "targetpass".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create target user");
+        let module = ModuleModel::create(db, "USER101", 2024, Some("User Test Module"), 16)
+            .await
+            .expect("Failed to create test module");
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            user_to_operate_on.id,
+            module.id,
+            Role::Student,
+        )
+        .await
+        .expect("Failed to assign role to target user");
 
         TestData {
             admin_user,
@@ -47,7 +80,9 @@ mod tests {
     }
 
     async fn get_json_body(response: axum::response::Response) -> Value {
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         serde_json::from_slice(&body).unwrap()
     }
 
@@ -191,7 +226,9 @@ mod tests {
         let json = get_json_body(response).await;
         assert_eq!(json["success"], true);
 
-        let modules_array = json["data"].as_array().expect("Data should be an array of modules");
+        let modules_array = json["data"]
+            .as_array()
+            .expect("Data should be an array of modules");
         assert_eq!(modules_array.len(), 1);
         assert_eq!(modules_array[0]["id"], data.module.id);
         assert_eq!(modules_array[0]["code"], data.module.code);
@@ -241,7 +278,7 @@ mod tests {
         assert_eq!(json["success"], false);
     }
 
-     /// Test Case: Retrieving User Modules without Authentication
+    /// Test Case: Retrieving User Modules without Authentication
     #[tokio::test]
     #[serial]
     async fn test_get_user_modules_missing_auth() {
@@ -295,7 +332,7 @@ mod tests {
     async fn test_get_user_forbidden_non_admin() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
-        
+
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
         let uri = format!("/api/users/{}", data.user_to_operate_on.id);
         let req = Request::builder()
@@ -332,7 +369,7 @@ mod tests {
         assert_eq!(json["success"], false);
     }
 
-     /// Test Case: Retrieving Specific User without Authentication
+    /// Test Case: Retrieving Specific User without Authentication
     #[tokio::test]
     #[serial]
     async fn test_get_user_missing_auth() {

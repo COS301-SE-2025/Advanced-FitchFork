@@ -1,11 +1,11 @@
-pub mod models;
-pub mod test_utils;
-pub mod repository;
 pub mod filter_utils;
+pub mod models;
+pub mod repository;
+pub mod test_utils;
 
 use sea_orm::{Database, DatabaseConnection};
-use util::config;
 use std::path::Path;
+use util::config;
 
 pub async fn connect() -> DatabaseConnection {
     let path_or_url = config::database_path(); // your env var

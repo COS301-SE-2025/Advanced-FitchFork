@@ -4,24 +4,20 @@
 //!
 //! Only users authorized to view the ticket (author or staff) can create messages.
 
-use axum::{
-    Extension, Json,
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-};
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
     routes::modules::assignments::tickets::{
         common::is_valid,
         ticket_messages::common::{MessageResponse, UserResponse},
-    }, ws::tickets::topics::ticket_chat_topic,
+    },
+    ws::tickets::topics::ticket_chat_topic,
 };
-use util::state::AppState;
+use axum::{Extension, Json, extract::Path, http::StatusCode, response::IntoResponse};
 use services::service::Service;
+use services::ticket_message::{CreateTicketMessage, TicketMessageService};
 use services::user::UserService;
-use services::ticket_message::{TicketMessageService, CreateTicketMessage};
+use util::state::AppState;
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages
 ///
@@ -36,9 +32,9 @@ use services::ticket_message::{TicketMessageService, CreateTicketMessage};
 /// ### Request Body (JSON)
 ///
 /// { "content": "Can someone review my latest attempt?" }
-/// 
+///
 /// ### Responses
-/// 
+///
 /// - `200 OK` → Message created successfully
 /// ```json
 /// {
@@ -130,13 +126,13 @@ pub async fn create_message(
         }
     };
 
-    let message = match TicketMessageService::create(
-        CreateTicketMessage {
-            ticket_id,
-            user_id,
-            content: content,
-        }
-    ).await {
+    let message = match TicketMessageService::create(CreateTicketMessage {
+        ticket_id,
+        user_id,
+        content: content,
+    })
+    .await
+    {
         Ok(msg) => msg,
         Err(_) => {
             return (
@@ -166,7 +162,10 @@ pub async fn create_message(
         "event": "message_created",
         "payload": &response
     });
-    AppState::get().ws().broadcast(&topic, event_json.to_string()).await;
+    AppState::get()
+        .ws()
+        .broadcast(&topic, event_json.to_string())
+        .await;
 
     (
         StatusCode::OK,

@@ -13,18 +13,21 @@
 //! ## Usage
 //! The `users_routes()` function returns a `Router` which is nested under `/users` in the main application.
 
-use axum::{Router, routing::{get, put, delete, post}};
-use post::{create_user, bulk_create_users};
-use get::{list_users, get_user_modules, get_user};
-use put::update_user;
-use delete::delete_user;
 use crate::routes::users::put::upload_avatar;
+use axum::{
+    Router,
+    routing::{delete, get, post, put},
+};
+use delete::delete_user;
+use get::{get_user, get_user_modules, list_users};
+use post::{bulk_create_users, create_user};
+use put::update_user;
 
-pub mod post;
-pub mod get;
-pub mod put;
-pub mod delete;
 pub mod common;
+pub mod delete;
+pub mod get;
+pub mod post;
+pub mod put;
 
 /// Builds the `/users` route group, mapping HTTP methods to handlers.
 ///

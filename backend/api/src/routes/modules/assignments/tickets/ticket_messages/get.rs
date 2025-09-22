@@ -9,7 +9,8 @@ use crate::{
     auth::AuthUser,
     response::ApiResponse,
     routes::modules::assignments::tickets::{
-        common::is_valid, ticket_messages::common::{MessageResponse, UserResponse},
+        common::is_valid,
+        ticket_messages::common::{MessageResponse, UserResponse},
     },
 };
 use axum::{
@@ -181,11 +182,9 @@ pub async fn get_ticket_messages(
                     content: message.content,
                     created_at: message.created_at.to_rfc3339(),
                     updated_at: message.updated_at.to_rfc3339(),
-                    user: user.map(|u| {
-                        UserResponse {
-                            id: u.id,
-                            username: u.username,
-                        }
+                    user: user.map(|u| UserResponse {
+                        id: u.id,
+                        username: u.username,
                     }),
                 })
                 .collect();

@@ -1,15 +1,10 @@
 use std::vec;
 
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use serde_json::json;
-use util::filters::FilterParam;
-use services::service::Service;
 use services::assignment_file::AssignmentFileService;
+use services::service::Service;
+use util::filters::FilterParam;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/files
 ///
@@ -83,7 +78,9 @@ pub async fn delete_files(
         ],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(models) => models,
         Err(_) => {
             return (

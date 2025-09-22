@@ -1,20 +1,20 @@
-use crate::service::{Service, AppError, ToActiveModel};
+use crate::service::{AppError, Service, ToActiveModel};
+use chrono::{Duration, Utc};
 use db::{
-    models::password_reset_token::{ActiveModel, Entity, Column, Model},
+    models::password_reset_token::{ActiveModel, Column, Entity, Model},
     repository::Repository,
 };
-use util::filters::FilterParam;
-use sea_orm::{DbErr, Set};
-use chrono::{Utc, Duration};
-use rand::{thread_rng, Rng};
 use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
+use sea_orm::{DbErr, Set};
+use util::filters::FilterParam;
 
 pub use db::models::password_reset_token::Model as PasswordResetToken;
 
 #[derive(Debug, Clone)]
 pub struct CreatePasswordResetToken {
     pub user_id: i64,
-    pub expiry_minutes: i64
+    pub expiry_minutes: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -30,7 +30,7 @@ impl ToActiveModel<Entity> for CreatePasswordResetToken {
             .take(32)
             .map(char::from)
             .collect::<String>();
-        
+
         let now = Utc::now();
         Ok(ActiveModel {
             user_id: Set(self.user_id),
@@ -48,7 +48,10 @@ impl ToActiveModel<Entity> for UpdatePasswordResetToken {
         let token = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(token)) => token,
             Ok(None) => {
-                return Err(AppError::from(DbErr::RecordNotFound(format!("Token not found for ID {}", self.id))));
+                return Err(AppError::from(DbErr::RecordNotFound(format!(
+                    "Token not found for ID {}",
+                    self.id
+                ))));
             }
             Err(err) => return Err(AppError::from(err)),
         };
@@ -64,16 +67,16 @@ impl ToActiveModel<Entity> for UpdatePasswordResetToken {
 
 pub struct PasswordResetTokenService;
 
-impl<'a> Service<'a, Entity, Column, CreatePasswordResetToken, UpdatePasswordResetToken> for PasswordResetTokenService {
+impl<'a> Service<'a, Entity, Column, CreatePasswordResetToken, UpdatePasswordResetToken>
+    for PasswordResetTokenService
+{
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
 impl PasswordResetTokenService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-    pub async fn find_valid_token(
-        token: String,
-    ) -> Result<Option<Model>, DbErr> {
+    pub async fn find_valid_token(token: String) -> Result<Option<Model>, DbErr> {
         Repository::<Entity, Column>::find_one(
             &vec![
                 FilterParam::eq("token", token),
@@ -82,6 +85,7 @@ impl PasswordResetTokenService {
             ],
             &vec![],
             None,
-        ).await
+        )
+        .await
     }
 }

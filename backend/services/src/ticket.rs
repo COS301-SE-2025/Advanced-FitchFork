@@ -1,14 +1,13 @@
-use crate::service::{Service, AppError, ToActiveModel};
+use crate::service::{AppError, Service, ToActiveModel};
+use chrono::Utc;
 use db::{
-    models::tickets::{ActiveModel, Entity, Column},
+    models::tickets::{ActiveModel, Column, Entity},
     repository::Repository,
 };
 use sea_orm::{DbErr, Set};
-use chrono::Utc;
 
 pub use db::models::tickets::Model as Ticket;
 pub use db::models::tickets::TicketStatus;
-
 
 #[derive(Debug, Clone)]
 pub struct CreateTicket {
@@ -33,7 +32,9 @@ impl ToActiveModel<Entity> for CreateTicket {
             user_id: Set(self.user_id),
             title: Set(self.title.to_owned()),
             description: Set(self.description.to_owned()),
-            status: Set(self.status.trim().parse::<TicketStatus>().map_err(|e| DbErr::Custom(format!("Invalid ticket status '{}': {}", self.status, e)))?),
+            status: Set(self.status.trim().parse::<TicketStatus>().map_err(|e| {
+                DbErr::Custom(format!("Invalid ticket status '{}': {}", self.status, e))
+            })?),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
@@ -46,14 +47,19 @@ impl ToActiveModel<Entity> for UpdateTicket {
         let ticket = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(ticket)) => ticket,
             Ok(None) => {
-                return Err(AppError::from(DbErr::RecordNotFound(format!("Ticket not found for ID {}", self.id))));
+                return Err(AppError::from(DbErr::RecordNotFound(format!(
+                    "Ticket not found for ID {}",
+                    self.id
+                ))));
             }
             Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = ticket.into();
 
         if let Some(status) = self.status {
-            active.status = Set(status.trim().parse::<TicketStatus>().map_err(|e| DbErr::Custom(format!("Invalid ticket status '{}': {}", status, e)))?);
+            active.status = Set(status.trim().parse::<TicketStatus>().map_err(|e| {
+                DbErr::Custom(format!("Invalid ticket status '{}': {}", status, e))
+            })?);
         }
 
         active.updated_at = Set(Utc::now());
@@ -71,10 +77,7 @@ impl<'a> Service<'a, Entity, Column, CreateTicket, UpdateTicket> for TicketServi
 impl TicketService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-    pub async fn is_author(
-        ticket_id: i64,
-        user_id: i64,
-    ) -> bool {
+    pub async fn is_author(ticket_id: i64, user_id: i64) -> bool {
         let ticket = Repository::<Entity, Column>::find_by_id(ticket_id).await;
         match ticket {
             Ok(Some(t)) => t.user_id == user_id,

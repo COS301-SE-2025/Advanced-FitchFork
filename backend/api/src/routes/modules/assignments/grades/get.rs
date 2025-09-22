@@ -9,14 +9,14 @@
 
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
+    Json,
     body::Body,
     extract::{Extension, Path, Query},
     http::{
-        header::{CONTENT_DISPOSITION, CONTENT_TYPE},
         HeaderValue, StatusCode,
+        header::{CONTENT_DISPOSITION, CONTENT_TYPE},
     },
     response::{IntoResponse, Response},
-    Json,
 };
 use db::models::{
     assignment::{Column as AssignmentCol, Entity as AssignmentEntity, Model as AssignmentModel},
@@ -33,8 +33,11 @@ use sea_orm::{
 };
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, collections::HashMap};
-use util::{execution_config::{execution_config::GradingPolicy, ExecutionConfig}, paths::submission_report_path};
 use util::state::AppState;
+use util::{
+    execution_config::{ExecutionConfig, execution_config::GradingPolicy},
+    paths::submission_report_path,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct ListGradeQueryParams {
@@ -136,7 +139,7 @@ async fn load_task_maps(
         .all(db)
         .await?;
 
-    let mut by_id  = HashMap::with_capacity(rows.len());
+    let mut by_id = HashMap::with_capacity(rows.len());
     let mut by_num = HashMap::with_capacity(rows.len());
     for t in rows {
         by_id.insert(t.id, t.name.clone());
@@ -144,7 +147,6 @@ async fn load_task_maps(
     }
     Ok((by_id, by_num))
 }
-
 
 /// Read per-task scores from submission_report.json for a chosen submission.
 /// If a task "name" looks like a numeric string, it's treated as a task_id and
@@ -174,17 +176,23 @@ fn read_tasks_from_report(
             .tasks
             .into_iter()
             .filter_map(|t| {
-                let Some(sc) = t.score else { return None; };
+                let Some(sc) = t.score else {
+                    return None;
+                };
 
                 // 1) Try name as task_id (numeric string)
                 // 2) Fallback to task_number mapping
                 // 3) Else keep the original string (if any)
-                let resolved_name: Option<String> =
-                    t.name.as_ref()
-                        .and_then(|s| s.trim().parse::<i64>().ok())
-                        .and_then(|id| task_name_by_id.get(&id).cloned())
-                        .or_else(|| t.task_number.and_then(|n| task_name_by_num.get(&n).cloned()))
-                        .or_else(|| t.name.clone());
+                let resolved_name: Option<String> = t
+                    .name
+                    .as_ref()
+                    .and_then(|s| s.trim().parse::<i64>().ok())
+                    .and_then(|id| task_name_by_id.get(&id).cloned())
+                    .or_else(|| {
+                        t.task_number
+                            .and_then(|n| task_name_by_num.get(&n).cloned())
+                    })
+                    .or_else(|| t.name.clone());
 
                 Some(TaskBreakdown {
                     task_number: t.task_number,
@@ -260,19 +268,17 @@ async fn compute_grades_for_assignment(
     for (_uid, attempts) in per_user.into_iter() {
         let chosen = match policy {
             GradingPolicy::Last => attempts.first().cloned(),
-            GradingPolicy::Best => attempts
-                .into_iter()
-                .max_by(|(a, _), (b, _)| {
-                    let a_ratio = (a.earned as f64) / (a.total.max(1) as f64);
-                    let b_ratio = (b.earned as f64) / (b.total.max(1) as f64);
-                    match a_ratio.partial_cmp(&b_ratio).unwrap_or(Ordering::Equal) {
-                        Ordering::Equal => match a.created_at.cmp(&b.created_at) {
-                            Ordering::Equal => a.attempt.cmp(&b.attempt),
-                            ord => ord,
-                        },
+            GradingPolicy::Best => attempts.into_iter().max_by(|(a, _), (b, _)| {
+                let a_ratio = (a.earned as f64) / (a.total.max(1) as f64);
+                let b_ratio = (b.earned as f64) / (b.total.max(1) as f64);
+                match a_ratio.partial_cmp(&b_ratio).unwrap_or(Ordering::Equal) {
+                    Ordering::Equal => match a.created_at.cmp(&b.created_at) {
+                        Ordering::Equal => a.attempt.cmp(&b.attempt),
                         ord => ord,
-                    }
-                }),
+                    },
+                    ord => ord,
+                }
+            }),
         };
 
         if let Some((s, u)) = chosen {
@@ -431,10 +437,12 @@ pub async fn list_grades(
                 ("username", false) => grades.sort_by(|a, b| a.user.username.cmp(&b.user.username)),
                 ("username", true) => grades.sort_by(|a, b| b.user.username.cmp(&a.user.username)),
 
-                ("created_at", false) => grades
-                    .sort_by(|a, b| a.submission.created_at.cmp(&b.submission.created_at)),
-                ("created_at", true) => grades
-                    .sort_by(|a, b| b.submission.created_at.cmp(&a.submission.created_at)),
+                ("created_at", false) => {
+                    grades.sort_by(|a, b| a.submission.created_at.cmp(&b.submission.created_at))
+                }
+                ("created_at", true) => {
+                    grades.sort_by(|a, b| b.submission.created_at.cmp(&a.submission.created_at))
+                }
 
                 _ => {
                     return (
@@ -493,7 +501,10 @@ pub async fn list_grades(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(payload, "Grades retrieved successfully")),
+        Json(ApiResponse::success(
+            payload,
+            "Grades retrieved successfully",
+        )),
     )
         .into_response()
 }
@@ -554,9 +565,7 @@ pub async fn list_grades(
 ///
 /// # Example
 /// `GET /api/modules/12/assignments/34/grades/export` → downloads a CSV with union task columns.
-pub async fn export_grades(
-    Path((module_id, assignment_id)): Path<(i64, i64)>,
-) -> Response {
+pub async fn export_grades(Path((module_id, assignment_id)): Path<(i64, i64)>) -> Response {
     let db = state.db();
 
     // Guard: assignment exists in module
@@ -578,25 +587,27 @@ pub async fn export_grades(
             eprintln!("export_grades: assignment lookup error: {e}");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving assignment")),
+                Json(ApiResponse::<()>::error(
+                    "Database error retrieving assignment",
+                )),
             )
                 .into_response();
         }
     }
 
     // Per-policy chosen submissions (students only)
-    let (rows, _cfg) =
-        match compute_grades_for_assignment(db, module_id, assignment_id, None).await {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("export_grades: compute error: {e}");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error("Failed to compute grades")),
-                )
-                    .into_response();
-            }
-        };
+    let (rows, _cfg) = match compute_grades_for_assignment(db, module_id, assignment_id, None).await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("export_grades: compute error: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to compute grades")),
+            )
+                .into_response();
+        }
+    };
 
     // Load task name map once
     let (task_name_by_id, task_name_by_num) = match load_task_maps(db, assignment_id).await {

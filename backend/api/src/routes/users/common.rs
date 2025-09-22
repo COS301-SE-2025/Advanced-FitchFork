@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use validator::Validate;
 use services::user::User;
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct CreateUserRequest {

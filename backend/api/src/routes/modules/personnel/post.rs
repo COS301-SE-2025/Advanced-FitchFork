@@ -1,18 +1,18 @@
+use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
-    extract::{Path, Extension},
+    Json,
+    extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::Deserialize;
-use crate::{
-    auth::AuthUser,
-    response::{ApiResponse},
-};
-use util::filters::FilterParam;
-use services::{service::Service, user_module_role::{CreateUserModuleRole, UpdateUserModuleRole}};
 use services::user::UserService;
 use services::user_module_role::UserModuleRoleService;
+use services::{
+    service::Service,
+    user_module_role::{CreateUserModuleRole, UpdateUserModuleRole},
+};
+use util::filters::FilterParam;
 
 /// Request body for assigning or updating users in a module with a role
 #[derive(Debug, Deserialize)]
@@ -131,12 +131,16 @@ pub async fn assign_personnel(
             ],
             &vec![],
             None,
-        ).await {
+        )
+        .await
+        {
             Ok(Some(_)) => {}
             Ok(None) | Err(_) => {
                 return (
                     StatusCode::FORBIDDEN,
-                    Json(ApiResponse::<()>::error("Lecturer access required for this module")),
+                    Json(ApiResponse::<()>::error(
+                        "Lecturer access required for this module",
+                    )),
                 );
             }
         }
@@ -149,13 +153,18 @@ pub async fn assign_personnel(
             Ok(None) => {
                 return (
                     StatusCode::NOT_FOUND,
-                    Json(ApiResponse::<()>::error(&format!("User with ID {} does not exist", target_user_id))),
+                    Json(ApiResponse::<()>::error(&format!(
+                        "User with ID {} does not exist",
+                        target_user_id
+                    ))),
                 );
             }
             Err(_) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error("Database error while checking user existence")),
+                    Json(ApiResponse::<()>::error(
+                        "Database error while checking user existence",
+                    )),
                 );
             }
         }
@@ -167,17 +176,19 @@ pub async fn assign_personnel(
             ],
             &vec![],
             None,
-        ).await {
+        )
+        .await
+        {
             Ok(Some(existing)) => {
                 if existing.role.to_string() != *assigning_role {
-                    match UserModuleRoleService::update(
-                        UpdateUserModuleRole {
-                            user_id: target_user_id,
-                            module_id: module_id,
-                            role: Some(assigning_role.clone()),
-                        }
-                    ).await {
-                        Ok(_) => {},
+                    match UserModuleRoleService::update(UpdateUserModuleRole {
+                        user_id: target_user_id,
+                        module_id: module_id,
+                        role: Some(assigning_role.clone()),
+                    })
+                    .await
+                    {
+                        Ok(_) => {}
                         Err(_) => {
                             return (
                                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -188,14 +199,14 @@ pub async fn assign_personnel(
                 }
             }
             Ok(None) => {
-                match UserModuleRoleService::create(
-                    CreateUserModuleRole {
-                        user_id: target_user_id,
-                        module_id: module_id,
-                        role: assigning_role.clone(),
-                    }
-                ).await {
-                    Ok(_) => {},
+                match UserModuleRoleService::create(CreateUserModuleRole {
+                    user_id: target_user_id,
+                    module_id: module_id,
+                    role: assigning_role.clone(),
+                })
+                .await
+                {
+                    Ok(_) => {}
                     Err(_) => {
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
@@ -207,7 +218,9 @@ pub async fn assign_personnel(
             Err(_) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error("Database error while checking existing assignment")),
+                    Json(ApiResponse::<()>::error(
+                        "Database error while checking existing assignment",
+                    )),
                 );
             }
         }
@@ -215,6 +228,9 @@ pub async fn assign_personnel(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success((), "Users assigned/updated successfully")),
+        Json(ApiResponse::success(
+            (),
+            "Users assigned/updated successfully",
+        )),
     )
 }

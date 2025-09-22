@@ -1,16 +1,16 @@
-use api::{auth::middleware::log_request, ws::ws_routes};
 use api::auth::guards::validate_known_ids;
 use api::routes::routes;
+use api::{auth::middleware::log_request, ws::ws_routes};
 use axum::{
+    Router,
     http::header::{CONTENT_DISPOSITION, CONTENT_TYPE},
     middleware::from_fn,
-    Router,
 };
+use db::connect;
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 use tracing_appender::rolling;
 use util::{config, state::AppState, ws::WebSocketManager};
-use db::connect;
 
 #[tokio::main]
 async fn main() {
@@ -36,11 +36,15 @@ async fn main() {
 
     println!(
         "Starting {} on http://{}:{}",
-        config::project_name(), config::host(), config::port()
+        config::project_name(),
+        config::host(),
+        config::port()
     );
 
     axum::serve(
-        tokio::net::TcpListener::bind(&addr).await.expect("Failed to bind"),
+        tokio::net::TcpListener::bind(&addr)
+            .await
+            .expect("Failed to bind"),
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await
@@ -49,7 +53,7 @@ async fn main() {
 
 fn init_logging(log_file: &str, _log_level: &str) -> tracing_appender::non_blocking::WorkerGuard {
     use std::fs;
-    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
     fs::create_dir_all("logs").ok();
 

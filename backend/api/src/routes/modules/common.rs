@@ -8,10 +8,10 @@
 //! Includes `From` implementations to convert database models into API-friendly responses.
 
 use chrono::{Datelike, Utc};
-use serde::{Serialize, Deserialize};
-use validator::Validate;
-use services::user::User;
+use serde::{Deserialize, Serialize};
 use services::module::Module;
+use services::user::User;
+use validator::Validate;
 
 #[derive(Debug, Deserialize)]
 pub struct ModifyUsersModuleRequest {

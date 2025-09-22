@@ -1,27 +1,27 @@
 #[cfg(test)]
 mod tests {
-    use db::{
-        models::{
-            user::Model as UserModel,
-            module::Model as ModuleModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
-    };
-    use services::{
-        service::Service,
-        user::{UserService, CreateUser}
-    };
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
-    use tower::ServiceExt;
-    use serde_json::Value;
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app_with_storage;
     use chrono::{Datelike, Utc};
+    use db::{
+        models::{
+            module::Model as ModuleModel,
+            user::Model as UserModel,
+            user_module_role::{Model as UserModuleRoleModel, Role},
+        },
+        repositories::user_repository::UserRepository,
+    };
+    use serde_json::Value;
     use serial_test::serial;
+    use services::{
+        service::Service,
+        user::{CreateUser, UserService},
+    };
+    use tower::ServiceExt;
 
     struct TestData {
         admin_user: UserModel,
@@ -35,16 +35,70 @@ mod tests {
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let module = ModuleModel::create(db, "MOD101", Utc::now().year() - 1, Some("Test Module Description"), 16).await.expect("Failed to create test module");
+        let module = ModuleModel::create(
+            db,
+            "MOD101",
+            Utc::now().year() - 1,
+            Some("Test Module Description"),
+            16,
+        )
+        .await
+        .expect("Failed to create test module");
         let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service.create(CreateUser{ username: "module_admin".to_string(), email: "module_admin@test.com".to_string(), password: "password".to_string(), admin: true }).await.expect("Failed to create admin user");
-        let forbidden_user = service.create(CreateUser{ username: "module_forbidden".to_string(), email: "module_forbidden@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create forbidden user");
-        let lecturer_user = service.create(CreateUser{ username: "module_lecturer".to_string(), email: "module_lecturer@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create lecturer user");
-        let tutor_user = service.create(CreateUser{ username: "module_tutor".to_string(), email: "module_tutor@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create tutor user");
-        let student_user = service.create(CreateUser{ username: "module_student".to_string(), email: "module_student@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create student user");
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.expect("Failed to assign lecturer role");
-        UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor).await.expect("Failed to assign tutor role");
-        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student).await.expect("Failed to assign student role");
+        let admin_user = service
+            .create(CreateUser {
+                username: "module_admin".to_string(),
+                email: "module_admin@test.com".to_string(),
+                password: "password".to_string(),
+                admin: true,
+            })
+            .await
+            .expect("Failed to create admin user");
+        let forbidden_user = service
+            .create(CreateUser {
+                username: "module_forbidden".to_string(),
+                email: "module_forbidden@test.com".to_string(),
+                password: "password".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create forbidden user");
+        let lecturer_user = service
+            .create(CreateUser {
+                username: "module_lecturer".to_string(),
+                email: "module_lecturer@test.com".to_string(),
+                password: "password".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create lecturer user");
+        let tutor_user = service
+            .create(CreateUser {
+                username: "module_tutor".to_string(),
+                email: "module_tutor@test.com".to_string(),
+                password: "password".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create tutor user");
+        let student_user = service
+            .create(CreateUser {
+                username: "module_student".to_string(),
+                email: "module_student@test.com".to_string(),
+                password: "password".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create student user");
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
+            .await
+            .expect("Failed to assign lecturer role");
+        UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor)
+            .await
+            .expect("Failed to assign tutor role");
+        UserModuleRoleModel::assign_user_to_module(db, student_user.id, module.id, Role::Student)
+            .await
+            .expect("Failed to assign student role");
 
         TestData {
             admin_user,
@@ -75,7 +129,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);
@@ -85,20 +141,29 @@ mod tests {
         assert_eq!(module_data["id"], data.module.id);
         assert_eq!(module_data["code"], data.module.code);
         assert_eq!(module_data["year"], data.module.year);
-        assert_eq!(module_data["description"], data.module.description.unwrap_or_default());
+        assert_eq!(
+            module_data["description"],
+            data.module.description.unwrap_or_default()
+        );
         assert_eq!(module_data["credits"], data.module.credits);
         assert!(module_data["created_at"].as_str().is_some());
         assert!(module_data["updated_at"].as_str().is_some());
 
-        let lecturers = module_data["lecturers"].as_array().expect("Lecturers should be an array");
+        let lecturers = module_data["lecturers"]
+            .as_array()
+            .expect("Lecturers should be an array");
         assert_eq!(lecturers.len(), 1);
         assert_eq!(lecturers[0]["id"], data.lecturer_user.id);
 
-        let tutors = module_data["tutors"].as_array().expect("Tutors should be an array");
+        let tutors = module_data["tutors"]
+            .as_array()
+            .expect("Tutors should be an array");
         assert_eq!(tutors.len(), 1);
         assert_eq!(tutors[0]["id"], data.tutor_user.id);
 
-        let students = module_data["students"].as_array().expect("Students should be an array");
+        let students = module_data["students"]
+            .as_array()
+            .expect("Students should be an array");
         assert_eq!(students.len(), 1);
         assert_eq!(students[0]["id"], data.student_user.id);
     }
@@ -182,7 +247,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], format!("Module 99999 not found."));
@@ -264,7 +331,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let module_data = &json["data"];
 
@@ -297,9 +366,25 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let _ = setup_test_data(app_state.db()).await;
 
-        let empty_module = ModuleModel::create(db::get_connection().await, "EMPTY101", Utc::now().year() - 1, Some("Empty Module"), 10).await.expect("Failed to create empty module");
+        let empty_module = ModuleModel::create(
+            db::get_connection().await,
+            "EMPTY101",
+            Utc::now().year() - 1,
+            Some("Empty Module"),
+            10,
+        )
+        .await
+        .expect("Failed to create empty module");
         let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
-        let admin_user = service.create(CreateUser{ username: "empty_admin".to_string(), email: "empty_admin@test.com".to_string(), password: "password".to_string(), admin: true }).await.expect("Failed to create admin user for empty module test");
+        let admin_user = service
+            .create(CreateUser {
+                username: "empty_admin".to_string(),
+                email: "empty_admin@test.com".to_string(),
+                password: "password".to_string(),
+                admin: true,
+            })
+            .await
+            .expect("Failed to create admin user for empty module test");
 
         let (token, _) = generate_jwt(admin_user.id, admin_user.admin);
         let uri = format!("/api/modules/{}", empty_module.id);
@@ -313,7 +398,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);
@@ -322,13 +409,19 @@ mod tests {
         assert_eq!(module_data["id"], empty_module.id);
         assert_eq!(module_data["code"], empty_module.code);
 
-        let lecturers = module_data["lecturers"].as_array().expect("Lecturers should be an array");
+        let lecturers = module_data["lecturers"]
+            .as_array()
+            .expect("Lecturers should be an array");
         assert_eq!(lecturers.len(), 0);
 
-        let tutors = module_data["tutors"].as_array().expect("Tutors should be an array");
+        let tutors = module_data["tutors"]
+            .as_array()
+            .expect("Tutors should be an array");
         assert_eq!(tutors.len(), 0);
 
-        let students = module_data["students"].as_array().expect("Students should be an array");
+        let students = module_data["students"]
+            .as_array()
+            .expect("Students should be an array");
         assert_eq!(students.len(), 0);
     }
 
@@ -341,14 +434,59 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let service = UserService::new(UserRepository::new(db.clone()));
-        let lecturer2 = service.create(CreateUser{ username: "module_lecturer2".to_string(), email: "module_lecturer2@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create second lecturer");
-        let tutor2 = service.create(CreateUser{ username: "module_tutor2".to_string(), email: "module_tutor2@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create second tutor");
-        let student2 = service.create(CreateUser{ username: "module_student2".to_string(), email: "module_student2@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create second student");
-        let student3 = service.create(CreateUser{ username: "module_student3".to_string(), email: "module_student3@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create third student");
-        UserModuleRoleModel::assign_user_to_module(db, lecturer2.id, data.module.id, Role::Lecturer).await.expect("Failed to assign second lecturer");
-        UserModuleRoleModel::assign_user_to_module(db, tutor2.id, data.module.id, Role::Tutor).await.expect("Failed to assign second tutor");
-        UserModuleRoleModel::assign_user_to_module(db, student2.id, data.module.id, Role::Student).await.expect("Failed to assign second student");
-        UserModuleRoleModel::assign_user_to_module(db, student3.id, data.module.id, Role::Student).await.expect("Failed to assign third student");
+        let lecturer2 = service
+            .create(CreateUser {
+                username: "module_lecturer2".to_string(),
+                email: "module_lecturer2@test.com".to_string(),
+                password: "password".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create second lecturer");
+        let tutor2 = service
+            .create(CreateUser {
+                username: "module_tutor2".to_string(),
+                email: "module_tutor2@test.com".to_string(),
+                password: "password".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create second tutor");
+        let student2 = service
+            .create(CreateUser {
+                username: "module_student2".to_string(),
+                email: "module_student2@test.com".to_string(),
+                password: "password".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create second student");
+        let student3 = service
+            .create(CreateUser {
+                username: "module_student3".to_string(),
+                email: "module_student3@test.com".to_string(),
+                password: "password".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create third student");
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            lecturer2.id,
+            data.module.id,
+            Role::Lecturer,
+        )
+        .await
+        .expect("Failed to assign second lecturer");
+        UserModuleRoleModel::assign_user_to_module(db, tutor2.id, data.module.id, Role::Tutor)
+            .await
+            .expect("Failed to assign second tutor");
+        UserModuleRoleModel::assign_user_to_module(db, student2.id, data.module.id, Role::Student)
+            .await
+            .expect("Failed to assign second student");
+        UserModuleRoleModel::assign_user_to_module(db, student3.id, data.module.id, Role::Student)
+            .await
+            .expect("Failed to assign third student");
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -362,7 +500,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let module_data = &json["data"];
 
@@ -375,7 +515,10 @@ mod tests {
         let students = module_data["students"].as_array().unwrap();
         assert_eq!(students.len(), 3);
 
-        let lecturer_ids: Vec<i64> = lecturers.iter().map(|l| l["id"].as_i64().unwrap()).collect();
+        let lecturer_ids: Vec<i64> = lecturers
+            .iter()
+            .map(|l| l["id"].as_i64().unwrap())
+            .collect();
         assert!(lecturer_ids.contains(&data.lecturer_user.id));
         assert!(lecturer_ids.contains(&lecturer2.id));
 

@@ -1,21 +1,19 @@
 #[cfg(test)]
 mod tests {
-    use db::{
-        models::user::Model as UserModel,
-    };
-    use services::{
-        service::Service,
-        user::{UserService, CreateUser}
-    };
-    use db::repositories::user_repository::UserRepository;
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
+    use db::models::user::Model as UserModel;
+    use db::repositories::user_repository::UserRepository;
+    use serde_json::{Value, json};
+    use services::{
+        service::Service,
+        user::{CreateUser, UserService},
+    };
     use tower::ServiceExt;
-    use serde_json::{json, Value};
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin_user: UserModel,
@@ -26,8 +24,24 @@ mod tests {
         dotenvy::dotenv().expect("Failed to load .env");
 
         let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service.create(CreateUser{ username: "admin_user".to_string(), email: "admin@test.com".to_string(), password: "adminpass".to_string(), admin: true }).await.unwrap();
-        let non_admin_user = service.create(CreateUser{ username: "normal_user".to_string(), email: "user@test.com".to_string(), password: "userpass".to_string(), admin: false }).await.unwrap();
+        let admin_user = service
+            .create(CreateUser {
+                username: "admin_user".to_string(),
+                email: "admin@test.com".to_string(),
+                password: "adminpass".to_string(),
+                admin: true,
+            })
+            .await
+            .unwrap();
+        let non_admin_user = service
+            .create(CreateUser {
+                username: "normal_user".to_string(),
+                email: "user@test.com".to_string(),
+                password: "userpass".to_string(),
+                admin: false,
+            })
+            .await
+            .unwrap();
 
         TestData {
             admin_user,
@@ -36,7 +50,9 @@ mod tests {
     }
 
     async fn get_json_body(response: axum::response::Response) -> Value {
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         serde_json::from_slice(&body).unwrap()
     }
 
@@ -187,7 +203,15 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
-        service.create(CreateUser{ username: "dupe".to_string(), email: "dupe@test.com".to_string(), password: "pass1234".to_string(), admin: false }).await.unwrap();
+        service
+            .create(CreateUser {
+                username: "dupe".to_string(),
+                email: "dupe@test.com".to_string(),
+                password: "pass1234".to_string(),
+                admin: false,
+            })
+            .await
+            .unwrap();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
 
         let req_body = json!({

@@ -7,9 +7,7 @@
 //! authorized users can perform these actions.
 
 use crate::{
-    auth::AuthUser,
-    response::ApiResponse,
-    routes::modules::assignments::tickets::common::is_valid,
+    auth::AuthUser, response::ApiResponse, routes::modules::assignments::tickets::common::is_valid,
 };
 use axum::{
     Extension,
@@ -84,12 +82,12 @@ pub async fn open_ticket(
         status: "open",
     };
 
-    match TicketService::update(
-        UpdateTicket {
-            id: ticket_id,
-            status: Some("open".to_string()),
-        }
-    ).await {
+    match TicketService::update(UpdateTicket {
+        id: ticket_id,
+        status: Some("open".to_string()),
+    })
+    .await
+    {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::<TicketStatusResponse>::success(
@@ -160,12 +158,12 @@ pub async fn close_ticket(
         status: "closed",
     };
 
-    match TicketService::update(
-        UpdateTicket {
-            id: ticket_id,
-            status: Some("closed".to_string()),
-        }
-    ).await {
+    match TicketService::update(UpdateTicket {
+        id: ticket_id,
+        status: Some("closed".to_string()),
+    })
+    .await
+    {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::<TicketStatusResponse>::success(

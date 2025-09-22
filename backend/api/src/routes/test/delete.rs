@@ -1,10 +1,5 @@
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
 use crate::response::ApiResponse;
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use services::service::Service;
 use services::user::UserService;
 
@@ -30,9 +25,7 @@ use services::user::UserService;
 /// ```json
 /// { "success": false, "data": null, "message": "User not found" }
 /// ```
-pub async fn delete_user(
-    Path(user_id): Path<i64>,
-) -> impl IntoResponse {
+pub async fn delete_user(Path(user_id): Path<i64>) -> impl IntoResponse {
     match UserService::find_by_id(user_id).await {
         Ok(Some(_)) => {
             if let Err(e) = UserService::delete_by_id(user_id).await {

@@ -1,24 +1,14 @@
-use axum::{
-    body::Body,
-    http::Request,
-    middleware::from_fn,
-    response::Response,
-    Router,
-};
-use sea_orm::DatabaseConnection;
-use tempfile::TempDir;
-use util::test_helpers::{setup_test_storage_root};
-use util::{state::AppState, ws::WebSocketManager};
-use api::{
-    auth::guards::validate_known_ids,
-    routes::routes,
-    ws::ws_routes,
-};
-use services::util::UtilService;
-use tower::util::BoxCloneService;
-use tower::ServiceExt;
-use std::convert::Infallible;
+use api::{auth::guards::validate_known_ids, routes::routes, ws::ws_routes};
+use axum::{Router, body::Body, http::Request, middleware::from_fn, response::Response};
 use ctor::{ctor, dtor};
+use sea_orm::DatabaseConnection;
+use services::util::UtilService;
+use std::convert::Infallible;
+use tempfile::TempDir;
+use tower::ServiceExt;
+use tower::util::BoxCloneService;
+use util::test_helpers::setup_test_storage_root;
+use util::{state::AppState, ws::WebSocketManager};
 
 pub async fn make_test_app() -> (
     BoxCloneService<Request<Body>, Response, Infallible>,
@@ -29,8 +19,12 @@ pub async fn make_test_app() -> (
     let app_state = AppState::new(db, ws);
 
     let router = Router::new()
-        .nest("/api", routes(app_state.clone()).layer(from_fn_with_state(app_state.clone(), validate_known_ids)))
-        .nest("/ws", ws_routes(app_state.clone())) 
+        .nest(
+            "/api",
+            routes(app_state.clone())
+                .layer(from_fn_with_state(app_state.clone(), validate_known_ids)),
+        )
+        .nest("/ws", ws_routes(app_state.clone()))
         .with_state(app_state.clone());
 
     let boxed = router.into_service().boxed_clone();

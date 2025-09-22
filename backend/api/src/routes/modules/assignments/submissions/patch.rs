@@ -13,16 +13,11 @@
 //! - An `ignored` submission should be excluded from grading/analytics where applicable.
 //! - The endpoint validates that the submission belongs to the target assignment.
 
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
-use serde::{Deserialize, Serialize};
 use crate::response::ApiResponse;
-use services::service::Service;
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use serde::{Deserialize, Serialize};
 use services::assignment_submission::{AssignmentSubmissionService, UpdateAssignmentSubmission};
+use services::service::Service;
 
 #[derive(Debug, Deserialize)]
 pub struct SetIgnoredReq {
@@ -77,12 +72,12 @@ pub async fn set_submission_ignored(
     Path((_, _, submission_id)): Path<(i64, i64, i64)>,
     Json(req): Json<SetIgnoredReq>,
 ) -> impl IntoResponse {
-    match AssignmentSubmissionService::update(
-        UpdateAssignmentSubmission {
-            id: submission_id,
-            ignored: Some(req.ignored),
-        }
-    ).await {
+    match AssignmentSubmissionService::update(UpdateAssignmentSubmission {
+        id: submission_id,
+        ignored: Some(req.ignored),
+    })
+    .await
+    {
         Ok(updated) => {
             let data = SetIgnoredData {
                 id: updated.id,
@@ -93,13 +88,20 @@ pub async fn set_submission_ignored(
                 StatusCode::OK,
                 Json(ApiResponse::<SetIgnoredData>::success(
                     data,
-                    if req.ignored { "Submission ignored" } else { "Submission unignored" },
+                    if req.ignored {
+                        "Submission ignored"
+                    } else {
+                        "Submission unignored"
+                    },
                 )),
             )
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<SetIgnoredData>::error(format!("Failed to update: {}", e))),
+            Json(ApiResponse::<SetIgnoredData>::error(format!(
+                "Failed to update: {}",
+                e
+            ))),
         ),
     }
 }

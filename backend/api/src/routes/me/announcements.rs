@@ -6,14 +6,9 @@
 //! search query, and sorted by various fields. Only announcements in modules the user
 //! is associated with are returned.
 
-use axum::{
-    Extension, Json,
-    extract::Query,
-    http::StatusCode,
-    response::IntoResponse,
-};
-use serde::{Deserialize, Serialize};
 use crate::{auth::AuthUser, response::ApiResponse};
+use axum::{Extension, Json, extract::Query, http::StatusCode, response::IntoResponse};
+use serde::{Deserialize, Serialize};
 
 /// Query parameters for filtering, sorting, and pagination of announcements
 #[derive(Debug, Deserialize)]
@@ -72,7 +67,12 @@ pub struct FilterResponse {
 
 impl FilterResponse {
     fn new(announcements: Vec<AnnouncementResponse>, page: i32, per_page: i32, total: i32) -> Self {
-        Self { announcements, page, per_page, total }
+        Self {
+            announcements,
+            page,
+            per_page,
+            total,
+        }
     }
 }
 
@@ -121,7 +121,10 @@ pub async fn get_my_announcements(
     let per_page = params.per_page.unwrap_or(20).min(100);
 
     let allowed_roles = vec!["lecturer", "assistant_lecturer", "tutor", "student"];
-    let requested_role = params.role.clone().filter(|r| allowed_roles.contains(&r.as_str()));
+    let requested_role = params
+        .role
+        .clone()
+        .filter(|r| allowed_roles.contains(&r.as_str()));
 
     let memberships = user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user_id))
@@ -132,17 +135,30 @@ pub async fn get_my_announcements(
 
     if memberships.is_empty() {
         let response = FilterResponse::new(vec![], page, per_page, 0);
-        return (StatusCode::OK, Json(ApiResponse::success(response, "Announcements retrieved"))).into_response();
+        return (
+            StatusCode::OK,
+            Json(ApiResponse::success(response, "Announcements retrieved")),
+        )
+            .into_response();
     }
 
-    let module_ids: Vec<i64> = memberships.iter()
-        .filter(|m| requested_role.as_ref().map_or(true, |r| &m.role.to_string() == r))
+    let module_ids: Vec<i64> = memberships
+        .iter()
+        .filter(|m| {
+            requested_role
+                .as_ref()
+                .map_or(true, |r| &m.role.to_string() == r)
+        })
         .map(|m| m.module_id)
         .collect();
 
     if module_ids.is_empty() {
         let response = FilterResponse::new(vec![], page, per_page, 0);
-        return (StatusCode::OK, Json(ApiResponse::success(response, "Announcements retrieved"))).into_response();
+        return (
+            StatusCode::OK,
+            Json(ApiResponse::success(response, "Announcements retrieved")),
+        )
+            .into_response();
     }
 
     let mut condition = Condition::all().add(announcements::Column::ModuleId.is_in(module_ids));
@@ -161,7 +177,7 @@ pub async fn get_my_announcements(
             Condition::any()
                 .add(Expr::cust("LOWER(announcements.title)").like(&pattern))
                 .add(Expr::cust("LOWER(module.code)").like(&pattern))
-                .add(Expr::cust("LOWER(user.username)").like(&pattern))
+                .add(Expr::cust("LOWER(user.username)").like(&pattern)),
         );
     }
 
@@ -172,32 +188,66 @@ pub async fn get_my_announcements(
 
     if let Some(sort_param) = &params.sort {
         for sort in sort_param.split(',') {
-            let (field, asc) = if sort.starts_with('-') { (&sort[1..], false) } else { (sort, true) };
+            let (field, asc) = if sort.starts_with('-') {
+                (&sort[1..], false)
+            } else {
+                (sort, true)
+            };
             query = match field {
-                "created_at" => if asc { query.order_by_asc(announcements::Column::CreatedAt) } else { query.order_by_desc(announcements::Column::CreatedAt) },
-                "updated_at" => if asc { query.order_by_asc(announcements::Column::UpdatedAt) } else { query.order_by_desc(announcements::Column::UpdatedAt) },
+                "created_at" => {
+                    if asc {
+                        query.order_by_asc(announcements::Column::CreatedAt)
+                    } else {
+                        query.order_by_desc(announcements::Column::CreatedAt)
+                    }
+                }
+                "updated_at" => {
+                    if asc {
+                        query.order_by_asc(announcements::Column::UpdatedAt)
+                    } else {
+                        query.order_by_desc(announcements::Column::UpdatedAt)
+                    }
+                }
                 _ => query,
             };
         }
     } else {
-        query = query.order_by_desc(announcements::Column::CreatedAt).order_by_asc(announcements::Column::Id);
+        query = query
+            .order_by_desc(announcements::Column::CreatedAt)
+            .order_by_asc(announcements::Column::Id);
     }
 
     let paginator = query.clone().paginate(db, per_page as u64);
     let total = match paginator.num_items().await {
         Ok(n) => n as i32,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<FilterResponse>::error("Error counting announcements"))).into_response(),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<FilterResponse>::error(
+                    "Error counting announcements",
+                )),
+            )
+                .into_response();
+        }
     };
 
     match paginator.fetch_page((page - 1) as u64).await {
         Ok(results) => {
             let mut announcements_vec = Vec::new();
             for a in results {
-                let m = module::Entity::find_by_id(a.module_id).one(db).await.unwrap_or(None);
-                if m.is_none() { continue; }
+                let m = module::Entity::find_by_id(a.module_id)
+                    .one(db)
+                    .await
+                    .unwrap_or(None);
+                if m.is_none() {
+                    continue;
+                }
                 let m = m.unwrap();
 
-                let u = user::Entity::find_by_id(a.user_id).one(db).await.unwrap_or(None);
+                let u = user::Entity::find_by_id(a.user_id)
+                    .one(db)
+                    .await
+                    .unwrap_or(None);
 
                 announcements_vec.push(AnnouncementResponse {
                     id: a.id,
@@ -206,14 +256,30 @@ pub async fn get_my_announcements(
                     pinned: a.pinned,
                     created_at: a.created_at.to_string(),
                     updated_at: a.updated_at.to_string(),
-                    module: ModuleResponse { id: m.id, code: m.code },
-                    user: UserResponse { id: a.user_id, username: u.map(|uu| uu.username).unwrap_or_default() },
+                    module: ModuleResponse {
+                        id: m.id,
+                        code: m.code,
+                    },
+                    user: UserResponse {
+                        id: a.user_id,
+                        username: u.map(|uu| uu.username).unwrap_or_default(),
+                    },
                 });
             }
 
             let response = FilterResponse::new(announcements_vec, page, per_page, total);
-            (StatusCode::OK, Json(ApiResponse::success(response, "Announcements retrieved"))).into_response()
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(response, "Announcements retrieved")),
+            )
+                .into_response()
         }
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<FilterResponse>::error("Failed to retrieve announcements"))).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<FilterResponse>::error(
+                "Failed to retrieve announcements",
+            )),
+        )
+            .into_response(),
     }
 }

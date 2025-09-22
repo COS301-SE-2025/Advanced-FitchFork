@@ -1,16 +1,11 @@
 use crate::response::ApiResponse;
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use serde_json::to_value;
-use util::execution_config::ExecutionConfig;
-use util::filters::FilterParam;
-use services::service::Service;
 use services::assignment::AssignmentService;
 use services::assignment_file::AssignmentFileService;
+use services::service::Service;
+use util::execution_config::ExecutionConfig;
+use util::filters::FilterParam;
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -100,7 +95,9 @@ pub async fn get_assignment_config(
         ],
         &vec![],
         Some("-updated_at".to_string()),
-    ).await {
+    )
+    .await
+    {
         Ok(opt) => opt,
         Err(e) => {
             eprintln!("DB error while fetching config file: {:?}", e);
@@ -114,27 +111,32 @@ pub async fn get_assignment_config(
 
     // Load the config from the file model
     match config_file {
-        Some(_) => match AssignmentFileService::load_execution_config(module_id, assignment_id).await {
-            Ok(cfg) => {
-                let json = to_value(cfg).unwrap_or_else(|_| serde_json::json!({}));
-                (
-                    StatusCode::OK,
-                    Json(ApiResponse::success(json, "Assignment configuration retrieved successfully")),
-                )
-                    .into_response()
+        Some(_) => {
+            match AssignmentFileService::load_execution_config(module_id, assignment_id).await {
+                Ok(cfg) => {
+                    let json = to_value(cfg).unwrap_or_else(|_| serde_json::json!({}));
+                    (
+                        StatusCode::OK,
+                        Json(ApiResponse::success(
+                            json,
+                            "Assignment configuration retrieved successfully",
+                        )),
+                    )
+                        .into_response()
+                }
+                Err(err) => {
+                    eprintln!("Failed to load config from disk: {}", err);
+                    (
+                        StatusCode::OK,
+                        Json(ApiResponse::success(
+                            serde_json::json!({}),
+                            "No configuration set for this assignment",
+                        )),
+                    )
+                        .into_response()
+                }
             }
-            Err(err) => {
-                eprintln!("Failed to load config from disk: {}", err);
-                (
-                    StatusCode::OK,
-                    Json(ApiResponse::success(
-                        serde_json::json!({}),
-                        "No configuration set for this assignment",
-                    )),
-                )
-                    .into_response()
-            }
-        },
+        }
         None => (
             StatusCode::OK,
             Json(ApiResponse::success(

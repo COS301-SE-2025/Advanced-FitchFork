@@ -32,11 +32,11 @@ mod tests {
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
+    use dotenvy::dotenv;
     use services::{
         service::Service,
-        user::{UserService, CreateUser}
+        user::{CreateUser, UserService},
     };
-    use dotenvy::dotenv;
     use std::collections::HashMap;
     use std::future::Future;
     use tower::ServiceExt;
@@ -155,10 +155,14 @@ mod tests {
         fn create_admin_router<G, Fut>(guard: G) -> Router
         where
             G: Clone + Send + Sync + 'static,
-            Fut: Future<Output = Result<Response, (StatusCode, Json<ApiResponse<Empty>>)>> + Send + 'static,
+            Fut: Future<Output = Result<Response, (StatusCode, Json<ApiResponse<Empty>>)>>
+                + Send
+                + 'static,
             G: Fn(Request<Body>, Next) -> Fut,
         {
-            async fn test_handler() -> &'static str { "OK" }
+            async fn test_handler() -> &'static str {
+                "OK"
+            }
 
             Router::new()
                 .route(
@@ -592,8 +596,7 @@ mod tests {
             Router::new()
                 .route(
                     "/modules/{module_id}/assignments/{assignment_id}",
-                    get(test_handler)
-                        .route_layer(middleware::from_fn(guard)),
+                    get(test_handler).route_layer(middleware::from_fn(guard)),
                 )
                 .layer(middleware::from_fn(require_authenticated))
         }
@@ -741,7 +744,7 @@ mod tests {
     mod test_multi_param {
         use super::*;
 
-        fn create_multi_param_router<G, Fut>( guard: G) -> Router
+        fn create_multi_param_router<G, Fut>(guard: G) -> Router
         where
             G: Fn(State<AppState>, Path<HashMap<String, String>>, Request<Body>, Next) -> Fut
                 + Clone
@@ -759,8 +762,7 @@ mod tests {
             Router::new()
                 .route(
                     "/test/{module_id}/other/{other_id}",
-                    get(test_handler)
-                        .route_layer(middleware::from_fn(guard)),
+                    get(test_handler).route_layer(middleware::from_fn(guard)),
                 )
                 .layer(middleware::from_fn(require_authenticated))
         }

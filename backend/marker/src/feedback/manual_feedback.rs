@@ -10,10 +10,15 @@ use std::pin::Pin;
 pub struct ManualFeedback;
 
 impl Feedback for ManualFeedback {
-    fn assemble_feedback<'a>(&'a self, _results: &[TaskResult]) -> Pin<Box<dyn Future<Output = Result<Vec<FeedbackEntry>, MarkerError>> + Send + 'a>> {
+    fn assemble_feedback<'a>(
+        &'a self,
+        _results: &[TaskResult],
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<FeedbackEntry>, MarkerError>> + Send + 'a>> {
         Box::pin(async move {
             // TODO: Implement manual feedback assembly
-            Err(MarkerError::InputMismatch("Manual feedback not implemented".into()))
+            Err(MarkerError::InputMismatch(
+                "Manual feedback not implemented".into(),
+            ))
         })
     }
 }

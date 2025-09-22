@@ -1,10 +1,10 @@
 use crate::seed::Seeder;
-use services::service::{Service, AppError};
-use services::assignment_submission::AssignmentSubmissionService;
-use services::plagiarism_case::{PlagiarismCaseService, CreatePlagiarismCase};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
+use services::assignment_submission::AssignmentSubmissionService;
+use services::plagiarism_case::{CreatePlagiarismCase, PlagiarismCaseService};
+use services::service::{AppError, Service};
 use std::pin::Pin;
 
 pub struct PlagiarismCaseSeeder;
@@ -13,11 +13,7 @@ impl Seeder for PlagiarismCaseSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
             // Fetch all assignment submissions
-            let submissions = AssignmentSubmissionService::find_all(
-                &vec![],
-                &vec![],
-                None,
-            ).await?;
+            let submissions = AssignmentSubmissionService::find_all(&vec![], &vec![], None).await?;
 
             if submissions.len() < 2 {
                 eprintln!("Not enough submissions to create plagiarism cases");
@@ -57,15 +53,14 @@ impl Seeder for PlagiarismCaseSeeder {
                         pair[0], pair[1]
                     );
 
-                    PlagiarismCaseService::create(
-                        CreatePlagiarismCase{
-                            assignment_id: assignment_id,
-                            submission_id_1: pair[0],
-                            submission_id_2: pair[1],
-                            description: description,
-                            similarity: 0.0,
-                        }
-                    ).await?;
+                    PlagiarismCaseService::create(CreatePlagiarismCase {
+                        assignment_id: assignment_id,
+                        submission_id_1: pair[0],
+                        submission_id_2: pair[1],
+                        description: description,
+                        similarity: 0.0,
+                    })
+                    .await?;
                 }
             }
 

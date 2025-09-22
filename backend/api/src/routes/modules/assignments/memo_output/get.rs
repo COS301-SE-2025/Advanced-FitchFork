@@ -1,12 +1,12 @@
 use std::vec;
 
 use crate::response::ApiResponse;
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use db::models::{assignment_memo_output, assignment_task};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::Serialize;
 use tokio::fs as tokio_fs;
 use util::{execution_config::ExecutionConfig, paths::storage_root, state::AppState};
-use db::models::{assignment_memo_output, assignment_task};
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 
 #[derive(Serialize)]
 struct MemoSubsection {
@@ -60,23 +60,27 @@ pub async fn get_all_memo_outputs(
 ) -> impl IntoResponse {
     // Fetch all memo output models for the given assignment
     let memo_outputs = match AssignmentMemoOutputService::find_all(
-        &vec![
-            FilterParam::eq("assignment_id", assignment_id),
-        ],
+        &vec![FilterParam::eq("assignment_id", assignment_id)],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(models) if !models.is_empty() => models,
         Ok(_) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<Vec<MemoTaskOutput>>::error("No memo output records found")),
+                Json(ApiResponse::<Vec<MemoTaskOutput>>::error(
+                    "No memo output records found",
+                )),
             );
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<MemoTaskOutput>>::error("Failed to query memo outputs")),
+                Json(ApiResponse::<Vec<MemoTaskOutput>>::error(
+                    "Failed to query memo outputs",
+                )),
             );
         }
     };
@@ -122,7 +126,10 @@ pub async fn get_all_memo_outputs(
             ],
             &vec![],
             None,
-        ).await.ok().flatten() else {
+        )
+        .await
+        .ok()
+        .flatten() else {
             continue;
         };
 
@@ -145,6 +152,9 @@ pub async fn get_all_memo_outputs(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(results, "Fetched memo output successfully")),
+        Json(ApiResponse::success(
+            results,
+            "Fetched memo output successfully",
+        )),
     )
 }

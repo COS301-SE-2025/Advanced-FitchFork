@@ -4,20 +4,15 @@
 //! and bulk updating multiple modules (`PUT /api/modules/bulk`).  
 //! Only accessible by admin users. Responses follow the standard `ApiResponse` format.
 
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
-use validator::Validate;
 use crate::response::ApiResponse;
 use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use util::filters::FilterParam;
-use services::service::Service;
 use services::module::{ModuleService, UpdateModule};
+use services::service::Service;
+use util::filters::FilterParam;
+use validator::Validate;
 
 /// PUT /api/modules/{module_id}
 ///
@@ -112,54 +107,64 @@ pub async fn edit_module(
             FilterParam::ne("id", module_id),
         ],
         &vec![],
-    ).await {
+    )
+    .await
+    {
         Ok(true) => {
             return (
                 StatusCode::CONFLICT,
-                Json(ApiResponse::<ModuleResponse>::error("Module code already exists")),
+                Json(ApiResponse::<ModuleResponse>::error(
+                    "Module code already exists",
+                )),
             );
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ModuleResponse>::error("Database error while checking module code uniqueness")),
+                Json(ApiResponse::<ModuleResponse>::error(
+                    "Database error while checking module code uniqueness",
+                )),
             );
         }
         _ => {}
     }
 
-    match ModuleService::update(
-        UpdateModule {
-            id: module_id,
-            code: Some(req.code),
-            year: Some(req.year),
-            description: req.description,
-            credits: Some(req.credits),
-        }
-    ).await {
+    match ModuleService::update(UpdateModule {
+        id: module_id,
+        code: Some(req.code),
+        year: Some(req.year),
+        description: req.description,
+        credits: Some(req.credits),
+    })
+    .await
+    {
         Ok(module) => (
             StatusCode::OK,
-            Json(ApiResponse::success(ModuleResponse::from(module), "Module updated successfully")),
+            Json(ApiResponse::success(
+                ModuleResponse::from(module),
+                "Module updated successfully",
+            )),
         ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<ModuleResponse>::error("Failed to update module")),
+            Json(ApiResponse::<ModuleResponse>::error(
+                "Failed to update module",
+            )),
         ),
     }
 }
-
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct BulkUpdateRequest {
     #[validate(length(min = 1, message = "At least one module ID is required"))]
     pub module_ids: Vec<i64>,
-    
+
     #[validate(range(min = 2024, message = "Year must be at least 2024"))]
     pub year: Option<i32>,
-    
+
     #[validate(length(max = 1000, message = "Description must be at most 1000 characters"))]
     pub description: Option<String>,
-    
+
     #[validate(range(min = 1, message = "Credits must be positive"))]
     pub credits: Option<i64>,
 }
@@ -220,14 +225,14 @@ pub struct FailedUpdate {
 ///   "message": "No module IDs provided"
 /// }
 /// ```
-pub async fn bulk_edit_modules(
-    Json(raw_value): Json<Value>,
-) -> impl IntoResponse {
+pub async fn bulk_edit_modules(Json(raw_value): Json<Value>) -> impl IntoResponse {
     if let Some(obj) = raw_value.as_object() {
         if obj.keys().any(|k| k.to_lowercase() == "code") {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<BulkUpdateResult>::error("Bulk update cannot change module code")),
+                Json(ApiResponse::<BulkUpdateResult>::error(
+                    "Bulk update cannot change module code",
+                )),
             );
         }
     }
@@ -237,7 +242,10 @@ pub async fn bulk_edit_modules(
         Err(e) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<BulkUpdateResult>::error(format!("Invalid request body: {}", e))),
+                Json(ApiResponse::<BulkUpdateResult>::error(format!(
+                    "Invalid request body: {}",
+                    e
+                ))),
             );
         }
     };
@@ -254,15 +262,15 @@ pub async fn bulk_edit_modules(
     let mut failed = Vec::new();
 
     for id in &req.module_ids {
-        match ModuleService::update(
-            UpdateModule {
-                id: *id,
-                code: None,
-                year: req.year,
-                description: req.description.clone(),
-                credits: req.credits,
-            }
-        ).await {
+        match ModuleService::update(UpdateModule {
+            id: *id,
+            code: None,
+            year: req.year,
+            description: req.description.clone(),
+            credits: req.credits,
+        })
+        .await
+        {
             Ok(_) => {
                 updated += 1;
             }
@@ -278,8 +286,5 @@ pub async fn bulk_edit_modules(
     let result = BulkUpdateResult { updated, failed };
     let message = format!("Updated {}/{} modules", updated, req.module_ids.len());
 
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(result, message)),
-    )
+    (StatusCode::OK, Json(ApiResponse::success(result, message)))
 }

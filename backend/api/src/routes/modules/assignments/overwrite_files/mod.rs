@@ -30,17 +30,14 @@ pub fn overwrite_file_routes() -> Router {
     Router::new()
         .route(
             "/task/{task_id}",
-            get(get_task_overwrite_files)
-                .route_layer(from_fn(require_lecturer)),
+            get(get_task_overwrite_files).route_layer(from_fn(require_lecturer)),
         )
         .route(
             "/task/{task_id}",
-            delete(delete_task_overwrite_files)
-                .route_layer(from_fn(require_lecturer)),
+            delete(delete_task_overwrite_files).route_layer(from_fn(require_lecturer)),
         )
         .route(
             "/task/{task_id}",
-            post(post_task_overwrite_files)
-                .route_layer(from_fn(require_lecturer)),
+            post(post_task_overwrite_files).route_layer(from_fn(require_lecturer)),
         )
 }

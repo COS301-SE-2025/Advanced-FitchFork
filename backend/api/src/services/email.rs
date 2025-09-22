@@ -1,26 +1,26 @@
 //! Email service module for handling email-related functionality.
-//! 
+//!
 //! This module provides functionality for sending various types of emails using SMTP,
 //! specifically configured for Gmail. It uses the `lettre` crate for email handling
 //! and supports both plain text and HTML email formats.
-//! 
+//!
 //! # Environment Variables Required
 //! - `GMAIL_USERNAME`: Gmail address to send emails from
 //! - `GMAIL_APP_PASSWORD`: Gmail app password for authentication
 //! - `FRONTEND_URL`: Base URL of the frontend application
 //! - `EMAIL_FROM_NAME`: Display name for the sender
 
-use lettre::{
-    message::{header, Message, MultiPart, SinglePart},
-    transport::smtp::{authentication::Credentials, AsyncSmtpTransport},
-    AsyncTransport, Tokio1Executor,
-};
 use lettre::transport::smtp::client::{Tls, TlsParameters};
+use lettre::{
+    AsyncTransport, Tokio1Executor,
+    message::{Message, MultiPart, SinglePart, header},
+    transport::smtp::{AsyncSmtpTransport, authentication::Credentials},
+};
 use once_cell::sync::Lazy;
 use util::config;
 
 /// Global SMTP client instance configured for Gmail.
-/// 
+///
 /// This is initialized lazily when first used, using environment variables
 /// for configuration. The client is configured to use TLS and requires
 /// authentication.
@@ -28,8 +28,8 @@ static SMTP_CLIENT: Lazy<AsyncSmtpTransport<Tokio1Executor>> = Lazy::new(|| {
     let username = config::gmail_username();
     let password = config::gmail_app_password();
 
-    let tls_parameters = TlsParameters::new("smtp.gmail.com".to_string())
-        .expect("Failed to create TLS parameters");
+    let tls_parameters =
+        TlsParameters::new("smtp.gmail.com".to_string()).expect("Failed to create TLS parameters");
 
     AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
         .expect("Failed to create SMTP transport")
@@ -44,15 +44,15 @@ pub struct EmailService;
 
 impl EmailService {
     /// Sends a password reset email to the specified email address.
-    /// 
+    ///
     /// # Arguments
     /// * `to_email` - The recipient's email address
     /// * `reset_token` - The password reset token to include in the reset link
-    /// 
+    ///
     /// # Returns
     /// * `Result<(), Box<dyn std::error::Error>>` - Ok(()) if email was sent successfully,
     ///   Err containing the error if sending failed
-    /// 
+    ///
     /// # Email Content
     /// The email includes both plain text and HTML versions with:
     /// * A personalized greeting
@@ -131,24 +131,20 @@ impl EmailService {
             )?;
 
         match SMTP_CLIENT.send(email).await {
-            Ok(_) => {
-                Ok(())
-            }
-            Err(e) => {
-                Err(Box::new(e) as Box<dyn std::error::Error>)
-            }
+            Ok(_) => Ok(()),
+            Err(e) => Err(Box::new(e) as Box<dyn std::error::Error>),
         }
     }
 
     /// Sends a password change confirmation email to the specified email address.
-    /// 
+    ///
     /// # Arguments
     /// * `to_email` - The recipient's email address
-    /// 
+    ///
     /// # Returns
     /// * `Result<(), Box<dyn std::error::Error>>` - Ok(()) if email was sent successfully,
     ///   Err containing the error if sending failed
-    /// 
+    ///
     /// # Email Content
     /// The email includes both plain text and HTML versions with:
     /// * Confirmation of password change
@@ -197,12 +193,8 @@ impl EmailService {
             )?;
 
         match SMTP_CLIENT.send(email).await {
-            Ok(_) => {
-                Ok(())
-            }
-            Err(e) => {
-                Err(Box::new(e) as Box<dyn std::error::Error>)
-            }
+            Ok(_) => Ok(()),
+            Err(e) => Err(Box::new(e) as Box<dyn std::error::Error>),
         }
     }
 }

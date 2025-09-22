@@ -13,12 +13,12 @@
 //! - Direct modification of `status` is not allowed through edit/bulk endpoints; status updates are automatic.
 //! - All date fields must be in ISO 8601 format (RFC 3339).
 
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
-use chrono::{DateTime, Utc};
-use crate::response::ApiResponse;
 use super::common::{AssignmentRequest, AssignmentResponse, BulkUpdateRequest, BulkUpdateResult};
-use services::service::Service;
+use crate::response::ApiResponse;
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use chrono::{DateTime, Utc};
 use services::assignment::{AssignmentService, AssignmentType, Status, UpdateAssignment};
+use services::service::Service;
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}
 ///
@@ -79,33 +79,31 @@ pub async fn edit_assignment(
     Path((_, assignment_id)): Path<(i64, i64)>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
-    let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
-        .map(|dt| dt.with_timezone(&Utc))
-    {
-        Ok(dt) => dt,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error(
-                    "Invalid available_from datetime format",
-                )),
-            );
-        }
-    };
+    let available_from =
+        match DateTime::parse_from_rfc3339(&req.available_from).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(dt) => dt,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid available_from datetime format",
+                    )),
+                );
+            }
+        };
 
-    let due_date = match DateTime::parse_from_rfc3339(&req.due_date)
-        .map(|dt| dt.with_timezone(&Utc))
-    {
-        Ok(dt) => dt,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error(
-                    "Invalid due_date datetime format",
-                )),
-            );
-        }
-    };
+    let due_date =
+        match DateTime::parse_from_rfc3339(&req.due_date).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(dt) => dt,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid due_date datetime format",
+                    )),
+                );
+            }
+        };
 
     let assignment_type = match req.assignment_type.parse::<AssignmentType>() {
         Ok(t) => t,
@@ -119,17 +117,17 @@ pub async fn edit_assignment(
         }
     };
 
-    match AssignmentService::update(
-        UpdateAssignment {
-            id: assignment_id,
-            name: Some(req.name),
-            description: req.description,
-            assignment_type: Some(assignment_type),
-            status: None,
-            available_from: Some(available_from),
-            due_date: Some(due_date),
-        }
-    ).await {
+    match AssignmentService::update(UpdateAssignment {
+        id: assignment_id,
+        name: Some(req.name),
+        description: req.description,
+        assignment_type: Some(assignment_type),
+        status: None,
+        available_from: Some(available_from),
+        due_date: Some(due_date),
+    })
+    .await
+    {
         Ok(updated) => {
             let response = AssignmentResponse::from(updated);
             (
@@ -223,22 +221,25 @@ pub async fn bulk_update_assignments(
     let mut failed = Vec::new();
 
     for id in &req.assignment_ids {
-        match AssignmentService::update(
-            UpdateAssignment {
-                id: *id,
-                name: None,
-                description: None,
-                assignment_type: None,
-                status: None,
-                available_from: req.available_from
-                    .as_ref()
-                    .and_then(|af| DateTime::parse_from_rfc3339(af).ok())
-                    .map(|dt| dt.with_timezone(&Utc)),
-                due_date: req.due_date
-                    .as_ref()
-                    .and_then(|dd| DateTime::parse_from_rfc3339(dd).ok())
-                    .map(|dt| dt.with_timezone(&Utc)),
-            }).await {
+        match AssignmentService::update(UpdateAssignment {
+            id: *id,
+            name: None,
+            description: None,
+            assignment_type: None,
+            status: None,
+            available_from: req
+                .available_from
+                .as_ref()
+                .and_then(|af| DateTime::parse_from_rfc3339(af).ok())
+                .map(|dt| dt.with_timezone(&Utc)),
+            due_date: req
+                .due_date
+                .as_ref()
+                .and_then(|dd| DateTime::parse_from_rfc3339(dd).ok())
+                .map(|dt| dt.with_timezone(&Utc)),
+        })
+        .await
+        {
             Ok(_) => {
                 updated += 1;
             }
@@ -253,12 +254,13 @@ pub async fn bulk_update_assignments(
 
     let result = BulkUpdateResult { updated, failed };
 
-    let message = format!("Updated {}/{} assignments", updated, req.assignment_ids.len());
+    let message = format!(
+        "Updated {}/{} assignments",
+        updated,
+        req.assignment_ids.len()
+    );
 
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(result, message)),
-    )
+    (StatusCode::OK, Json(ApiResponse::success(result, message)))
 }
 
 /// PUT /api/modules/:module_id/assignments/:assignment_id/open
@@ -266,9 +268,7 @@ pub async fn bulk_update_assignments(
 /// Transition an assignment to `Open`
 ///
 /// Only works if current status is `Ready`, `Closed`, or `Archived`.
-pub async fn open_assignment(
-    Path((_, assignment_id)): Path<(i64, i64)>,
-) -> impl IntoResponse {
+pub async fn open_assignment(Path((_, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
     match AssignmentService::find_by_id(assignment_id).await {
         Ok(Some(model)) => {
             if !matches!(
@@ -283,17 +283,18 @@ pub async fn open_assignment(
                 );
             }
 
-            if AssignmentService::update(
-                UpdateAssignment {
-                    id: assignment_id,
-                    name: None,
-                    description: None,
-                    assignment_type: None,
-                    status: Some(Status::Open),
-                    available_from: None,
-                    due_date: None,
-                }
-            ).await.is_ok() {
+            if AssignmentService::update(UpdateAssignment {
+                id: assignment_id,
+                name: None,
+                description: None,
+                assignment_type: None,
+                status: Some(Status::Open),
+                available_from: None,
+                due_date: None,
+            })
+            .await
+            .is_ok()
+            {
                 (
                     StatusCode::OK,
                     Json(ApiResponse::<()>::success(
@@ -314,10 +315,7 @@ pub async fn open_assignment(
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(&format!(
-                "Database error: {}",
-                e
-            ))),
+            Json(ApiResponse::<()>::error(&format!("Database error: {}", e))),
         ),
     }
 }
@@ -327,9 +325,7 @@ pub async fn open_assignment(
 /// Transition an assignment from `Open` to `Closed`
 ///
 /// Only works if current status is `Open`.
-pub async fn close_assignment(
-    Path((_, assignment_id)): Path<(i64, i64)>,
-) -> impl IntoResponse {
+pub async fn close_assignment(Path((_, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
     match AssignmentService::find_by_id(assignment_id).await {
         Ok(Some(model)) => {
             if model.status != Status::Open {
@@ -341,17 +337,18 @@ pub async fn close_assignment(
                 );
             }
 
-            if AssignmentService::update(
-                UpdateAssignment {
-                    id: assignment_id,
-                    name: None,
-                    description: None,
-                    assignment_type: None,
-                    status: Some(Status::Closed),
-                    available_from: None,
-                    due_date: None,
-                }
-            ).await.is_ok() {
+            if AssignmentService::update(UpdateAssignment {
+                id: assignment_id,
+                name: None,
+                description: None,
+                assignment_type: None,
+                status: Some(Status::Closed),
+                available_from: None,
+                due_date: None,
+            })
+            .await
+            .is_ok()
+            {
                 (
                     StatusCode::OK,
                     Json(ApiResponse::<()>::success(
@@ -372,10 +369,7 @@ pub async fn close_assignment(
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(&format!(
-                "Database error: {}",
-                e
-            ))),
+            Json(ApiResponse::<()>::error(&format!("Database error: {}", e))),
         ),
     }
 }

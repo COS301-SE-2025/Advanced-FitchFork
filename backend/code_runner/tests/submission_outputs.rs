@@ -11,20 +11,24 @@ use db::models::user::{ActiveModel as UserActiveModel, Entity as UserEntity};
 use db::test_utils::setup_test_db;
 use sea_orm::DatabaseConnection;
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
-use util::paths::{storage_root, attempt_dir};
+use util::paths::{attempt_dir, storage_root};
 
 async fn seed_user() -> i64 {
     let user_id = 1;
-    if UserService::find_by_id(user_id).await.expect("DB error during user lookup").is_none() {
-        let _ = UserService::create(
-            CreateUser {
-                id: Some(user_id),
-                username: "u00000001".to_string(),
-                email: "testuser@example.com".to_string(),
-                password: "hashedpassword".to_string(),
-                admin: false,
-            }
-        ).await.expect("Failed to insert user");
+    if UserService::find_by_id(user_id)
+        .await
+        .expect("DB error during user lookup")
+        .is_none()
+    {
+        let _ = UserService::create(CreateUser {
+            id: Some(user_id),
+            username: "u00000001".to_string(),
+            email: "testuser@example.com".to_string(),
+            password: "hashedpassword".to_string(),
+            admin: false,
+        })
+        .await
+        .expect("Failed to insert user");
     }
     user_id
 }
@@ -80,15 +84,15 @@ async fn seed_module(module_id: i64, code: &str) {
         .expect("DB error during module lookup");
 
     if existing_module.is_none() {
-        let _ = ModuleService::create(
-            CreateModule {
-                id: Some(module_id),
-                code: code.to_string(),
-                year: 2025,
-                description: Some(format!("Test module for ID {}", module_id)),
-                credits: 12,
-            }
-        ).await.expect(&format!("Failed to insert module with id {}", module_id));
+        let _ = ModuleService::create(CreateModule {
+            id: Some(module_id),
+            code: code.to_string(),
+            year: 2025,
+            description: Some(format!("Test module for ID {}", module_id)),
+            credits: 12,
+        })
+        .await
+        .expect(&format!("Failed to insert module with id {}", module_id));
     }
 }
 
@@ -98,17 +102,20 @@ async fn seed_assignment(assignment_id: i64, module_id: i64) {
         .expect("DB error during assignment lookup");
 
     if existing_assignment.is_none() {
-        let _ = AssignmentService::create(
-            CreateAssignment {
-                id: Some(assignment_id),
-                module_id,
-                name: "Special Assignment".to_string(),
-                description: Some("Special assignment for testing".to_string()),
-                assignment_type: AssignmentType::Assignment,
-                available_from: Utc::now(),
-                due_date: Utc::now(),
-            }
-        ).await.expect(&format!("Failed to insert assignment with id {}", assignment_id));
+        let _ = AssignmentService::create(CreateAssignment {
+            id: Some(assignment_id),
+            module_id,
+            name: "Special Assignment".to_string(),
+            description: Some("Special assignment for testing".to_string()),
+            assignment_type: AssignmentType::Assignment,
+            available_from: Utc::now(),
+            due_date: Utc::now(),
+        })
+        .await
+        .expect(&format!(
+            "Failed to insert assignment with id {}",
+            assignment_id
+        ));
     }
 }
 
@@ -120,15 +127,15 @@ async fn seed_tasks(assignment_id: i64) {
     }
 
     for (task_number, command) in tasks {
-        let _ = AssignmentTaskService::create(
-            CreateAssignmentTask {
-                assignment_id,
-                task_number,
-                name: "Untitled Task".to_string(),
-                command: command.to_string(),
-                code_coverage: false,
-            }
-        ).await.expect("Failed to create assignment task");
+        let _ = AssignmentTaskService::create(CreateAssignmentTask {
+            assignment_id,
+            task_number,
+            name: "Untitled Task".to_string(),
+            command: command.to_string(),
+            code_coverage: false,
+        })
+        .await
+        .expect("Failed to create assignment task");
     }
 }
 
@@ -157,7 +164,8 @@ async fn test_create_submission_outputs_for_all_tasks_9999_java() {
         ],
         &vec![],
         None,
-    ).await
+    )
+    .await
     .expect("DB error during submission lookup")
     .expect("No matching submission found");
 
@@ -182,7 +190,8 @@ async fn test_create_submission_outputs_for_all_tasks_9998_cpp() {
         ],
         &vec![],
         None,
-    ).await
+    )
+    .await
     .expect("DB error during submission lookup")
     .expect("No matching submission found");
 

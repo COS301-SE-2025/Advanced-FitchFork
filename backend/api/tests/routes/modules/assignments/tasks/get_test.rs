@@ -68,7 +68,9 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 12, 31, 23, 59, 59).unwrap(),
-        ).await.expect("Failed to create test assignment");
+        )
+        .await
+        .expect("Failed to create test assignment");
         let task1 = AssignmentTaskModel::create(
             db,
             assignment.id,

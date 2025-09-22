@@ -5,16 +5,12 @@
 //!
 //! All routes require admin privileges.
 
-use axum::{
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
 use crate::response::ApiResponse;
-use crate::routes::users::common::{CreateUserRequest, BulkCreateUsersRequest, UserResponse};
-use validator::Validate;
+use crate::routes::users::common::{BulkCreateUsersRequest, CreateUserRequest, UserResponse};
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use services::service::Service;
-use services::user::{UserService, CreateUser};
+use services::user::{CreateUser, UserService};
+use validator::Validate;
 
 /// POST /api/users
 ///
@@ -35,9 +31,7 @@ use services::user::{UserService, CreateUser};
 /// ### Errors:
 /// - 400 Bad Request — Validation failure
 /// - 409 Conflict — Duplicate username/email
-pub async fn create_user(
-    Json(req): Json<CreateUserRequest>,
-) -> impl IntoResponse {
+pub async fn create_user(Json(req): Json<CreateUserRequest>) -> impl IntoResponse {
     if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -52,7 +46,9 @@ pub async fn create_user(
         email: req.email,
         password: req.password,
         admin: false,
-    }).await {
+    })
+    .await
+    {
         Ok(user) => (
             StatusCode::CREATED,
             Json(ApiResponse::<UserResponse>::success(
@@ -67,11 +63,7 @@ pub async fn create_user(
             } else {
                 format!("Database error: {e}")
             };
-            (
-                StatusCode::CONFLICT,
-                Json(ApiResponse::<()>::error(msg)),
-            )
-                .into_response()
+            (StatusCode::CONFLICT, Json(ApiResponse::<()>::error(msg))).into_response()
         }
     }
 }
@@ -96,15 +88,13 @@ pub async fn create_user(
 /// ### Errors:
 /// - 400 Bad Request — If validation fails
 /// - 409 Conflict — If one user fails to insert (first error returned)
-pub async fn bulk_create_users(
-    Json(req): Json<BulkCreateUsersRequest>,
-) -> impl IntoResponse {
+pub async fn bulk_create_users(Json(req): Json<BulkCreateUsersRequest>) -> impl IntoResponse {
     if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::error(format!("Validation failed: {e}"))),
         )
-        .into_response();
+            .into_response();
     }
 
     let mut results = Vec::new();
@@ -116,20 +106,21 @@ pub async fn bulk_create_users(
             email: user_req.email,
             password: user_req.password,
             admin: false,
-        }).await {
+        })
+        .await
+        {
             Ok(u) => results.push(UserResponse::from(u)),
             Err(e) => {
                 let msg = if e.to_string().contains("UNIQUE constraint failed") {
-                    format!("A user with this username or email already exists: {}", user_req.username)
+                    format!(
+                        "A user with this username or email already exists: {}",
+                        user_req.username
+                    )
                 } else {
                     format!("Database error while creating {}: {}", user_req.username, e)
                 };
 
-                return (
-                    StatusCode::CONFLICT,
-                    Json(ApiResponse::<()>::error(msg)),
-                )
-                .into_response();
+                return (StatusCode::CONFLICT, Json(ApiResponse::<()>::error(msg))).into_response();
             }
         }
     }
@@ -141,5 +132,5 @@ pub async fn bulk_create_users(
             "Users created successfully",
         )),
     )
-    .into_response()
+        .into_response()
 }

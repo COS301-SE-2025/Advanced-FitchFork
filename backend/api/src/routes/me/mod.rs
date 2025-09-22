@@ -13,14 +13,14 @@
 //! ## Usage
 //! Call `me_routes()` to get a configured `Router` for `/me` endpoints to be mounted in the main app.
 
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 
 pub mod announcements;
 pub mod assignments;
-pub mod tickets;
+pub mod events;
 pub mod grades;
 pub mod submissions;
-pub mod events;
+pub mod tickets;
 
 /// Builds and returns the `/me` route group.
 ///

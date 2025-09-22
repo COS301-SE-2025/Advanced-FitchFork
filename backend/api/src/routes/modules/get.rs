@@ -16,10 +16,10 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
-use util::filters::{FilterParam, QueryParam};
+use services::module::{Module, ModuleService};
 use services::service::{AppError, Service};
-use services::module::{ModuleService, Module};
 use services::user_module_role::UserModuleRoleService;
+use util::filters::{FilterParam, QueryParam};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModuleResponse {
@@ -148,9 +148,7 @@ impl From<Module> for ModuleResponse {
 ///   "message": "Database error retrieving module"
 /// }
 /// ```
-pub async fn get_module(
-    Path(module_id): Path<i64>,
-) -> Response {
+pub async fn get_module(Path(module_id): Path<i64>) -> Response {
     let module = match ModuleService::find_by_id(module_id).await {
         Ok(Some(module)) => module,
         Ok(None) => {
@@ -158,14 +156,17 @@ pub async fn get_module(
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::error("Module not found")),
             )
-            .into_response();
+                .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(format!("Database error retrieving module: {}", e))),
+                Json(ApiResponse::<()>::error(format!(
+                    "Database error retrieving module: {}",
+                    e
+                ))),
             )
-            .into_response();
+                .into_response();
         }
     };
 
@@ -218,10 +219,7 @@ pub async fn get_module(
         .into_response()
 }
 
-async fn get_users_by_role(
-    module_id: i64,
-    role: String,
-) -> Result<Vec<User>, AppError> {
+async fn get_users_by_role(module_id: i64, role: String) -> Result<Vec<User>, AppError> {
     UserEntity::find()
         .join(
             JoinType::InnerJoin,
@@ -386,28 +384,29 @@ pub async fn get_modules(
     if let Some(query_text) = query.query {
         queries.push(QueryParam::new(
             vec!["code".to_string(), "description".to_string()],
-            query_text
+            query_text,
         ));
     }
 
     let module_ids = if !claims.admin {
         match UserModuleRoleService::find_all(
-            &vec![
-                FilterParam::eq("user_id", user_id)
-            ],
+            &vec![FilterParam::eq("user_id", user_id)],
             &vec![],
             None,
-        ).await {
+        )
+        .await
+        {
             Ok(memberships) => {
                 let ids: Vec<i64> = memberships.into_iter().map(|m| m.module_id).collect();
                 Some(ids)
-            },
+            }
             Err(e) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<FilterResponse>::error(
-                        format!("Database error: {}", e)
-                    )),
+                    Json(ApiResponse::<FilterResponse>::error(format!(
+                        "Database error: {}",
+                        e
+                    ))),
                 );
             }
         }
@@ -429,23 +428,19 @@ pub async fn get_modules(
         filters.push(FilterParam::eq("id", ids));
     }
 
-    let (modules, total) = match ModuleService::filter(
-        &filters,
-        &queries,
-        page,
-        per_page,
-        sort,
-    ).await {
-        Ok(result) => result,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<FilterResponse>::error(
-                    format!("Database error: {}", e)
-                )),
-            );
-        }
-    };
+    let (modules, total) =
+        match ModuleService::filter(&filters, &queries, page, per_page, sort).await {
+            Ok(result) => result,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<FilterResponse>::error(format!(
+                        "Database error: {}",
+                        e
+                    ))),
+                );
+            }
+        };
 
     let response = FilterResponse::from((modules, page, per_page, total));
     (
@@ -542,9 +537,7 @@ impl From<(Vec<Module>, Vec<Module>, Vec<Module>, Vec<Module>)> for MyDetailsRes
 ///   "message": "An error occurred while retrieving module details"
 /// }
 /// ```
-pub async fn get_my_details(
-    Extension(AuthUser(claims)): Extension<AuthUser>,
-) -> impl IntoResponse {
+pub async fn get_my_details(Extension(AuthUser(claims)): Extension<AuthUser>) -> impl IntoResponse {
     let user_id = claims.sub;
 
     let (as_student, as_tutor, as_lecturer, as_assistant_lecturer) = tokio::join!(
@@ -575,10 +568,7 @@ pub async fn get_my_details(
 }
 
 /// Helper to fetch modules by user_id and role using SeaORM relations
-async fn get_modules_by_user_and_role(
-    user_id: i64,
-    role: String,
-) -> Result<Vec<Module>, AppError> {
+async fn get_modules_by_user_and_role(user_id: i64, role: String) -> Result<Vec<Module>, AppError> {
     RoleEntity::find()
         .filter(
             Condition::all()

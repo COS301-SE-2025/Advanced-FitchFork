@@ -4,7 +4,7 @@
 //! output compared to the memo's output and awards marks proportionally. **Lines are compared in order; only lines at the same position are considered a match.**
 
 use crate::traits::comparator::OutputComparator;
-use crate::types::{TaskResult, Subsection};
+use crate::types::{Subsection, TaskResult};
 
 /// A comparator that awards marks based on the percentage of matching lines between student and memo output.
 ///
@@ -39,7 +39,11 @@ impl OutputComparator for PercentageComparator {
         if memo_lines.is_empty() {
             return TaskResult {
                 name: section.name.clone(),
-                awarded: if student_lines.is_empty() { section.value } else { 0 },
+                awarded: if student_lines.is_empty() {
+                    section.value
+                } else {
+                    0
+                },
                 possible: section.value,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
@@ -59,7 +63,7 @@ impl OutputComparator for PercentageComparator {
                 missed_patterns.push(memo_lines[i].clone());
             }
         }
-  
+
         for i in min_len..memo_lines.len() {
             missed_patterns.push(memo_lines[i].clone());
         }
@@ -202,4 +206,4 @@ mod tests {
         assert!(result.awarded < 10);
         assert!(result.awarded > 0);
     }
-} 
+}

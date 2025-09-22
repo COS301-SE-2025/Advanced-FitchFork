@@ -13,33 +13,33 @@ pub enum Language {
     /// Serialized as "go".
     #[serde(alias = "golang")]
     Go,
-    C,                                  // "c"
+    C, // "c"
     #[serde(alias = "cc", alias = "c++")]
-    Cpp,                                // maps to MOSS "cc"
-    Java,                               // "java"
-    Ml,                                 // "ml" (OCaml/SML)
-    Pascal,                             // "pascal"
-    Ada,                                // "ada"
-    Lisp,                               // "lisp"
-    Scheme,                             // "scheme"
-    Haskell,                            // "haskell"
-    Fortran,                            // "fortran"
-    Ascii,                              // "ascii"
-    Vhdl,                               // "vhdl"
-    Perl,                               // "perl"
-    Matlab,                             // "matlab"
-    Python,                             // "python"
-    Mips,                               // "mips"
-    Prolog,                             // "prolog"
-    Spice,                              // "spice"
-    Vb,                                 // "vb"
+    Cpp, // maps to MOSS "cc"
+    Java, // "java"
+    Ml, // "ml" (OCaml/SML)
+    Pascal, // "pascal"
+    Ada, // "ada"
+    Lisp, // "lisp"
+    Scheme, // "scheme"
+    Haskell, // "haskell"
+    Fortran, // "fortran"
+    Ascii, // "ascii"
+    Vhdl, // "vhdl"
+    Perl, // "perl"
+    Matlab, // "matlab"
+    Python, // "python"
+    Mips, // "mips"
+    Prolog, // "prolog"
+    Spice, // "spice"
+    Vb, // "vb"
     #[serde(alias = "c#")]
-    CSharp,                             // "csharp"
-    Modula2,                            // "modula2"
-    A8086,                              // "a8086"
+    CSharp, // "csharp"
+    Modula2, // "modula2"
+    A8086, // "a8086"
     #[serde(alias = "js")]
-    JavaScript,                         // "javascript"
-    PlSql,                              // "plsql"
+    JavaScript, // "javascript"
+    PlSql, // "plsql"
 }
 
 impl Language {
@@ -47,33 +47,33 @@ impl Language {
     pub fn to_moss(self) -> &'static str {
         match self {
             // MOSS does not have native Rust support. Use ascii fallback when needed.
-            Language::Rust     => "ascii",
+            Language::Rust => "ascii",
             // MOSS does not have native Go support either; use ascii.
-            Language::Go       => "ascii",
-            Language::C         => "c",
-            Language::Cpp       => "cc",
-            Language::Java      => "java",
-            Language::Ml        => "ml",
-            Language::Pascal    => "pascal",
-            Language::Ada       => "ada",
-            Language::Lisp      => "lisp",
-            Language::Scheme    => "scheme",
-            Language::Haskell   => "haskell",
-            Language::Fortran   => "fortran",
-            Language::Ascii     => "ascii",
-            Language::Vhdl      => "vhdl",
-            Language::Perl      => "perl",
-            Language::Matlab    => "matlab",
-            Language::Python    => "python",
-            Language::Mips      => "mips",
-            Language::Prolog    => "prolog",
-            Language::Spice     => "spice",
-            Language::Vb        => "vb",
-            Language::CSharp    => "csharp",
-            Language::Modula2   => "modula2",
-            Language::A8086     => "a8086",
-            Language::JavaScript=> "javascript",
-            Language::PlSql     => "plsql",
+            Language::Go => "ascii",
+            Language::C => "c",
+            Language::Cpp => "cc",
+            Language::Java => "java",
+            Language::Ml => "ml",
+            Language::Pascal => "pascal",
+            Language::Ada => "ada",
+            Language::Lisp => "lisp",
+            Language::Scheme => "scheme",
+            Language::Haskell => "haskell",
+            Language::Fortran => "fortran",
+            Language::Ascii => "ascii",
+            Language::Vhdl => "vhdl",
+            Language::Perl => "perl",
+            Language::Matlab => "matlab",
+            Language::Python => "python",
+            Language::Mips => "mips",
+            Language::Prolog => "prolog",
+            Language::Spice => "spice",
+            Language::Vb => "vb",
+            Language::CSharp => "csharp",
+            Language::Modula2 => "modula2",
+            Language::A8086 => "a8086",
+            Language::JavaScript => "javascript",
+            Language::PlSql => "plsql",
         }
     }
 }
@@ -95,32 +95,32 @@ pub trait LanguageExt {
 impl LanguageExt for Language {
     fn main_filename(&self) -> &'static str {
         match self {
-            Language::Rust      => "main.rs",
-            Language::Go        => "main.go",
-            Language::C          => "main.c",
-            Language::Cpp        => "Main.cpp",
-            Language::Java       => "Main.java",
-            Language::Ml         => "Main.ml",
-            Language::Pascal     => "main.pas",
-            Language::Ada        => "main.adb",
-            Language::Lisp       => "main.lisp",
-            Language::Scheme     => "main.scm",
-            Language::Haskell    => "Main.hs",
-            Language::Fortran    => "main.f90",
-            Language::Ascii      => "input.txt",
-            Language::Vhdl       => "main.vhdl",
-            Language::Perl       => "main.pl",
-            Language::Matlab     => "main.m",
-            Language::Python     => "main.py",
-            Language::Mips       => "main.s",
-            Language::Prolog     => "main.pro", // .pl also common, but avoid Perl clash
-            Language::Spice      => "main.sp",
-            Language::Vb         => "Main.vb",
-            Language::CSharp     => "Program.cs",
-            Language::Modula2    => "Main.mod",
-            Language::A8086      => "main.asm",
+            Language::Rust => "main.rs",
+            Language::Go => "main.go",
+            Language::C => "main.c",
+            Language::Cpp => "Main.cpp",
+            Language::Java => "Main.java",
+            Language::Ml => "Main.ml",
+            Language::Pascal => "main.pas",
+            Language::Ada => "main.adb",
+            Language::Lisp => "main.lisp",
+            Language::Scheme => "main.scm",
+            Language::Haskell => "Main.hs",
+            Language::Fortran => "main.f90",
+            Language::Ascii => "input.txt",
+            Language::Vhdl => "main.vhdl",
+            Language::Perl => "main.pl",
+            Language::Matlab => "main.m",
+            Language::Python => "main.py",
+            Language::Mips => "main.s",
+            Language::Prolog => "main.pro", // .pl also common, but avoid Perl clash
+            Language::Spice => "main.sp",
+            Language::Vb => "Main.vb",
+            Language::CSharp => "Program.cs",
+            Language::Modula2 => "Main.mod",
+            Language::A8086 => "main.asm",
             Language::JavaScript => "main.js",
-            Language::PlSql      => "main.sql",
+            Language::PlSql => "main.sql",
         }
     }
 
@@ -130,10 +130,12 @@ impl LanguageExt for Language {
             Language::Rust => c.contains("cargo ") || c.contains("rustc "),
             Language::Go => c.contains("go build") || c.contains("go run"),
             Language::Cpp => c.contains("g++") || c.contains("clang++") || c.contains("c++"),
-            Language::C   => c.contains("gcc") || c.contains("clang ") || c.contains("clang-"),
+            Language::C => c.contains("gcc") || c.contains("clang ") || c.contains("clang-"),
             Language::Java => c.contains("javac"),
             Language::Python => c.contains("python "),
-            Language::JavaScript => c.contains("node ") || c.contains("deno ") || c.contains("nodejs"),
+            Language::JavaScript => {
+                c.contains("node ") || c.contains("deno ") || c.contains("nodejs")
+            }
             Language::CSharp => c.contains("dotnet build") || c.contains("csc"),
             Language::Pascal => c.contains("fpc") || c.contains("gpc"),
             Language::Haskell => c.contains("ghc"),
@@ -150,7 +152,9 @@ impl LanguageExt for Language {
             Language::Vb => c.contains("vbc ") || c.contains("dotnet build"),
             Language::Modula2 => c.contains("gm2"),
             Language::A8086 => c.contains("nasm") || c.contains("masm"),
-            Language::Ada => c.contains("gnatmake") || c.contains("gprbuild") || c.contains("gnatgcc"),
+            Language::Ada => {
+                c.contains("gnatmake") || c.contains("gprbuild") || c.contains("gnatgcc")
+            }
             Language::Ascii | Language::PlSql => false,
         }
     }
@@ -159,47 +163,61 @@ impl LanguageExt for Language {
         let msg = s.replace('"', "\\\"");
         Some(match self {
             Language::Rust => format!(
-r#"fn main() {{
+                r#"fn main() {{
     println!("{}");
-}}"#, msg),
+}}"#,
+                msg
+            ),
             Language::Go => format!(
-r#"package main
+                r#"package main
 import "fmt"
 func main() {{
     fmt.Println("{}")
-}}"#, msg),
+}}"#,
+                msg
+            ),
             Language::Cpp => format!(
-r#"#include <bits/stdc++.h>
+                r#"#include <bits/stdc++.h>
 int main() {{
     std::cout << "{}" << std::endl;
     return 0;
-}}"#, msg),
+}}"#,
+                msg
+            ),
             Language::C => format!(
-r#"#include <stdio.h>
+                r#"#include <stdio.h>
 int main() {{
     printf("{}\n");
     return 0;
-}}"#, msg),
+}}"#,
+                msg
+            ),
             Language::Java => format!(
-r#"public class Main {{
+                r#"public class Main {{
     public static void main(String[] args) {{
         System.out.println("{}");
     }}
-}}"#, msg),
+}}"#,
+                msg
+            ),
             Language::Python => format!(r#"print("{}")"#, msg),
             Language::JavaScript => format!(r#"console.log("{}");"#, msg),
             Language::CSharp => format!(
-r#"using System;
+                r#"using System;
 class Program {{
     static void Main() {{
         Console.WriteLine("{0}");
     }}
-}}"#, msg),
+}}"#,
+                msg
+            ),
             Language::Pascal => format!(
-r#"program Main;
+                r#"program Main;
 begin
     writeln('{0}');
-end."#, msg.replace('\'', "''")),
+end."#,
+                msg.replace('\'', "''")
+            ),
             Language::Haskell => format!("main = putStrLn \"{}\"", msg),
             // For everything else, we don’t know the template → return None
             _ => return None,
@@ -216,7 +234,9 @@ end."#, msg.replace('\'', "''")),
             Language::Python => t.contains("def ") || t.contains("print("),
             Language::JavaScript => t.contains("function ") || t.contains("console.log"),
             Language::CSharp => t.contains("class Program") || t.contains("static void Main"),
-            Language::Pascal => t.contains("program ") || (t.contains("begin") && t.contains("end")),
+            Language::Pascal => {
+                t.contains("program ") || (t.contains("begin") && t.contains("end"))
+            }
             Language::Haskell => t.contains("main ="),
             Language::Perl => t.contains("use strict") || t.contains("print "),
             Language::Ml => t.contains("let ") || t.contains("fun "),
@@ -237,5 +257,4 @@ end."#, msg.replace('\'', "''")),
             Language::Ascii | Language::PlSql => !t.trim().is_empty(),
         }
     }
-
 }

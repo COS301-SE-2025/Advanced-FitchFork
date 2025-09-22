@@ -6,8 +6,8 @@ use axum::{
     response::IntoResponse,
 };
 use serde::Serialize;
-use services::service::Service;
 use services::assignment_interpreter::{AssignmentInterpreterService, CreateAssignmentInterpreter};
+use services::service::Service;
 
 #[derive(Debug, Serialize)]
 pub struct UploadedInterpreterMetadata {
@@ -113,15 +113,15 @@ pub async fn upload_interpreter(
         }
     };
 
-    match AssignmentInterpreterService::create(
-        CreateAssignmentInterpreter {
-            assignment_id,
-            module_id,
-            filename: file_name,
-            command: command,
-            bytes: file_bytes,
-        }
-    ).await {
+    match AssignmentInterpreterService::create(CreateAssignmentInterpreter {
+        assignment_id,
+        module_id,
+        filename: file_name,
+        command: command,
+        bytes: file_bytes,
+    })
+    .await
+    {
         Ok(saved) => {
             let metadata = UploadedInterpreterMetadata {
                 id: saved.id,

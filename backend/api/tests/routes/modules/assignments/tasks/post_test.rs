@@ -1,28 +1,28 @@
 #[cfg(test)]
 mod tests {
-    use db::{
-        models::{
-            user::Model as UserModel,
-            module::Model as ModuleModel,
-            assignment::{Model as AssignmentModel, AssignmentType},
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
-    };
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode, header::CONTENT_TYPE},
     };
-    use tower::ServiceExt;
+    use chrono::{TimeZone, Utc};
+    use db::{
+        models::{
+            assignment::{AssignmentType, Model as AssignmentModel},
+            module::Model as ModuleModel,
+            user::Model as UserModel,
+            user_module_role::{Model as UserModuleRoleModel, Role},
+        },
+        repositories::user_repository::UserRepository,
+    };
     use serde_json::{Value, json};
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app_with_storage;
-    use chrono::{Utc, TimeZone};
     use serial_test::serial;
+    use services::{
+        service::Service,
+        user::{CreateUser, UserService},
+    };
+    use tower::ServiceExt;
 
     struct TestData {
         admin_user: UserModel,
@@ -33,12 +33,40 @@ mod tests {
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module = ModuleModel::create(db, "TASK101", 2024, Some("Test Task Module"), 16).await.expect("Failed to create test module");
+        let module = ModuleModel::create(db, "TASK101", 2024, Some("Test Task Module"), 16)
+            .await
+            .expect("Failed to create test module");
         let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service.create(CreateUser { username: "task_admin".to_string(), email: "task_admin@test.com".to_string(), password: "password".to_string(), admin: true }).await.expect("Failed to create admin user");
-        let forbidden_user = service.create(CreateUser { username: "task_unauthed".to_string(), email: "task_unauthed@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create forbidden user");
-        let lecturer1 = service.create(CreateUser { username: "task_lecturer1".to_string(), email: "task_lecturer1@test.com".to_string(), password: "password1".to_string(), admin: false }).await.expect("Failed to create lecturer1");
-        UserModuleRoleModel::assign_user_to_module(db, lecturer1.id, module.id, Role::Lecturer).await.expect("Failed to assign lecturer1 to module");
+        let admin_user = service
+            .create(CreateUser {
+                username: "task_admin".to_string(),
+                email: "task_admin@test.com".to_string(),
+                password: "password".to_string(),
+                admin: true,
+            })
+            .await
+            .expect("Failed to create admin user");
+        let forbidden_user = service
+            .create(CreateUser {
+                username: "task_unauthed".to_string(),
+                email: "task_unauthed@test.com".to_string(),
+                password: "password".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create forbidden user");
+        let lecturer1 = service
+            .create(CreateUser {
+                username: "task_lecturer1".to_string(),
+                email: "task_lecturer1@test.com".to_string(),
+                password: "password1".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create lecturer1");
+        UserModuleRoleModel::assign_user_to_module(db, lecturer1.id, module.id, Role::Lecturer)
+            .await
+            .expect("Failed to assign lecturer1 to module");
         let assignment = AssignmentModel::create(
             db,
             module.id,
@@ -73,7 +101,10 @@ mod tests {
             "name": "Hello Task",
             "command": "echo 'Hello, World!'"
         });
-        let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/tasks",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
@@ -85,7 +116,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Task created successfully");
@@ -112,7 +145,10 @@ mod tests {
             "name": "List Files",
             "command": "ls -la"
         });
-        let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/tasks",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
@@ -150,7 +186,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Assignment 9999 in Module 1 not found.");
@@ -163,7 +201,15 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let module2 = ModuleModel::create(db::get_connection().await, "MISMTCH101", 2024, Some("Mismatch Module"), 16).await.expect("Failed to create second module");
+        let module2 = ModuleModel::create(
+            db::get_connection().await,
+            "MISMTCH101",
+            2024,
+            Some("Mismatch Module"),
+            16,
+        )
+        .await
+        .expect("Failed to create second module");
         let assignment2_in_module2 = AssignmentModel::create(
             db::get_connection().await,
             module2.id,
@@ -182,7 +228,10 @@ mod tests {
             "name": "Mismatch",
             "command": "echo 'Mismatch'"
         });
-        let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, assignment2_in_module2.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/tasks",
+            data.module.id, assignment2_in_module2.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
@@ -194,7 +243,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Assignment 2 in Module 1 not found.");
@@ -214,7 +265,10 @@ mod tests {
             "name": "Forbidden",
             "command": "echo 'Forbidden'"
         });
-        let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/tasks",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
@@ -240,7 +294,10 @@ mod tests {
             "name": "Invalid number",
             "command": "echo 'Invalid number'"
         });
-        let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/tasks",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
@@ -252,7 +309,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Invalid task_number, name, or command");
@@ -271,7 +330,10 @@ mod tests {
             "name": "Negative number",
             "command": "echo 'Negative number'"
         });
-        let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/tasks",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
@@ -283,7 +345,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Invalid task_number, name, or command");
@@ -302,7 +366,10 @@ mod tests {
             "name": "Empty Command",
             "command": ""
         });
-        let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/tasks",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
@@ -314,7 +381,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Invalid task_number, name, or command");
@@ -333,7 +402,10 @@ mod tests {
             "name": "Whitespace Command",
             "command": "   \n\t  "
         });
-        let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/tasks",
+            data.module.id, data.assignment.id
+        );
         let req = Request::builder()
             .method("POST")
             .uri(&uri)
@@ -345,7 +417,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Invalid task_number, name, or command");
@@ -364,13 +438,18 @@ mod tests {
             "name": "First Task",
             "command": "echo 'First Task'"
         });
-        let uri = format!("/api/modules/{}/assignments/{}/tasks", data.module.id, data.assignment.id);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/tasks",
+            data.module.id, data.assignment.id
+        );
         let req1 = Request::builder()
             .method("POST")
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header(CONTENT_TYPE, "application/json")
-            .body(AxumBody::from(serde_json::to_vec(&initial_payload).unwrap()))
+            .body(AxumBody::from(
+                serde_json::to_vec(&initial_payload).unwrap(),
+            ))
             .unwrap();
 
         let response1 = app.clone().oneshot(req1).await.unwrap();
@@ -386,13 +465,17 @@ mod tests {
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header(CONTENT_TYPE, "application/json")
-            .body(AxumBody::from(serde_json::to_vec(&duplicate_payload).unwrap()))
+            .body(AxumBody::from(
+                serde_json::to_vec(&duplicate_payload).unwrap(),
+            ))
             .unwrap();
 
         let response2 = app.oneshot(req2).await.unwrap();
         assert_eq!(response2.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-        let body = axum::body::to_bytes(response2.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response2.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "task_number must be unique");

@@ -5,16 +5,14 @@
 //! Only authenticated users can create tickets, and each ticket is linked
 //! to the assignment and the user who created it.
 
-use axum::{
-    Extension, Json,
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
+use crate::{
+    auth::AuthUser, response::ApiResponse,
+    routes::modules::assignments::tickets::common::TicketResponse,
 };
+use axum::{Extension, Json, extract::Path, http::StatusCode, response::IntoResponse};
 use serde::Deserialize;
-use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::tickets::common::TicketResponse};
 use services::service::Service;
-use services::ticket::{TicketService, CreateTicket};
+use services::ticket::{CreateTicket, TicketService};
 
 /// Request payload for creating a ticket.
 #[derive(Debug, Deserialize)]
@@ -72,15 +70,15 @@ pub async fn create_ticket(
 ) -> impl IntoResponse {
     let user_id = claims.sub;
 
-    match TicketService::create(
-        CreateTicket {
-            assignment_id: assignment_id,
-            user_id: user_id,
-            title: req.title,
-            description: req.description,
-            status: "open".to_string(),
-        }
-    ).await {
+    match TicketService::create(CreateTicket {
+        assignment_id: assignment_id,
+        user_id: user_id,
+        title: req.title,
+        description: req.description,
+        status: "open".to_string(),
+    })
+    .await
+    {
         Ok(ticket) => {
             let response = TicketResponse::from(ticket);
             (

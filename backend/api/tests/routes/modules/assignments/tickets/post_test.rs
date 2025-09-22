@@ -15,11 +15,11 @@ mod tests {
         },
         repositories::user_repository::UserRepository,
     };
+    use serde_json::json;
     use services::{
         service::Service,
-        user::{CreateUser, UserService}
+        user::{CreateUser, UserService},
     };
-    use serde_json::json;
     use tower::ServiceExt;
 
     use crate::helpers::app::make_test_app_with_storage;
@@ -32,9 +32,21 @@ mod tests {
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         let service = UserService::new(UserRepository::new(db.clone()));
-        let user = service.create(CreateUser{ username: "test_user".to_string(), email: "test@example.com".to_string(), password: "pass".to_string(), admin: false }).await.unwrap();
-        let module = ModuleModel::create(db, "330", 2025, Some("test description"), 16).await.unwrap();
-        UserModuleRole::assign_user_to_module(db, user.id, module.id, Role::Student).await.unwrap();
+        let user = service
+            .create(CreateUser {
+                username: "test_user".to_string(),
+                email: "test@example.com".to_string(),
+                password: "pass".to_string(),
+                admin: false,
+            })
+            .await
+            .unwrap();
+        let module = ModuleModel::create(db, "330", 2025, Some("test description"), 16)
+            .await
+            .unwrap();
+        UserModuleRole::assign_user_to_module(db, user.id, module.id, Role::Student)
+            .await
+            .unwrap();
         let assignment = AssignmentModel::create(
             db,
             module.id,
@@ -43,7 +55,9 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         TestData {
             user,

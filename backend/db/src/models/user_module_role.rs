@@ -1,7 +1,7 @@
-use sea_orm::entity::prelude::*;
 use sea_orm::EntityTrait;
-use strum::{Display, EnumString};
+use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use strum::{Display, EnumString};
 
 /// The central table for user-module-role relationships.
 /// Replaces old `module_lecturers`, `module_tutors`, and `module_students`.
@@ -22,9 +22,15 @@ pub struct Model {
 
 /// Enum representing user roles within a module.
 /// Backed by a `user_module_role_type` enum in the database.
-#[derive(Debug, Clone, PartialEq, EnumIter, DeriveActiveEnum, Display, EnumString, Deserialize, Serialize)]
+#[derive(
+    Debug, Clone, PartialEq, EnumIter, DeriveActiveEnum, Display, EnumString, Deserialize, Serialize,
+)]
 #[serde(rename_all = "snake_case")]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "user_module_role_type")]
+#[sea_orm(
+    rs_type = "String",
+    db_type = "Enum",
+    enum_name = "user_module_role_type"
+)]
 #[strum(serialize_all = "lowercase", ascii_case_insensitive)]
 pub enum Role {
     #[sea_orm(string_value = "lecturer")]

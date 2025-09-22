@@ -1,31 +1,31 @@
 #[cfg(test)]
 mod plagiarism_tests {
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
+    use axum::{
+        body::Body as AxumBody,
+        http::{Request, StatusCode},
+    };
+    use chrono::{Datelike, TimeZone, Utc};
     use db::{
         models::{
-            assignment::{Model as AssignmentModel, AssignmentType},
+            assignment::{AssignmentType, Model as AssignmentModel},
             assignment_submission::Model as SubmissionModel,
             module::Model as ModuleModel,
-            plagiarism_case::{Status, Model as PlagiarismCaseModel},
+            plagiarism_case::{Model as PlagiarismCaseModel, Status},
             user::Model as UserModel,
             user_module_role::{Model as UserModuleRoleModel, Role},
         },
         repositories::user_repository::UserRepository,
     };
-    use axum::{
-        body::Body as AxumBody,
-        http::{Request, StatusCode},
-    };
+    use sea_orm::{ActiveModelTrait, DatabaseConnection, IntoActiveModel, Set};
+    use serde_json::Value;
+    use serial_test::serial;
     use services::{
         service::Service,
         user::{CreateUser, UserService},
     };
-    use sea_orm::{Set, IntoActiveModel, ActiveModelTrait, DatabaseConnection};
     use tower::ServiceExt;
-    use serde_json::Value;
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app_with_storage;
-    use chrono::{Datelike, Utc, TimeZone};
-    use serial_test::serial;
 
     struct TestData {
         admin_user: UserModel,
@@ -44,32 +44,135 @@ mod plagiarism_tests {
     async fn setup_test_data(db: &DatabaseConnection) -> TestData {
         dotenvy::dotenv().ok();
 
-        let module = ModuleModel::create(db, "CS101", Utc::now().year(), Some("Intro to CS"), 5).await.expect("Failed to create test module");
+        let module = ModuleModel::create(db, "CS101", Utc::now().year(), Some("Intro to CS"), 5)
+            .await
+            .expect("Failed to create test module");
         let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service.create(CreateUser { username: "admin".into(), email: "admin@test.com".into(), password: "password".into(), admin: true }).await.expect("Failed to create admin user");
-        let lecturer_user = service.create(CreateUser { username: "lecturer".into(), email: "lecturer@test.com".into(), password: "password".into(), admin: false }).await.expect("Failed to create lecturer user");
-        let assistant_user = service.create(CreateUser { username: "assistant".into(), email: "assistant@test.com".into(), password: "password".into(), admin: false }).await.expect("Failed to create assistant user");
-        let tutor_user = service.create(CreateUser { username: "tutor".into(), email: "tutor@test.com".into(), password: "password".into(), admin: false }).await.expect("Failed to create tutor user");
-        let student_user1 = service.create(CreateUser { username: "student1".into(), email: "student1@test.com".into(), password: "password".into(), admin: false }).await.expect("Failed to create student1 user");
-        let student_user2 = service.create(CreateUser { username: "student2".into(), email: "student2@test.com".into(), password: "password".into(), admin: false }).await.expect("Failed to create student2 user");
-        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer).await.expect("Failed to assign lecturer role");
-        UserModuleRoleModel::assign_user_to_module(db, assistant_user.id, module.id, Role::AssistantLecturer).await.expect("Failed to assign assistant lecturer role");
-        UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor).await.expect("Failed to assign tutor role");
-        UserModuleRoleModel::assign_user_to_module(db, student_user1.id, module.id, Role::Student).await.expect("Failed to assign student role");
-        UserModuleRoleModel::assign_user_to_module(db, student_user2.id, module.id, Role::Student).await.expect("Failed to assign student role");
-        let assignment = AssignmentModel::create(db, module.id, "Assignment 1", Some("Desc 1"), AssignmentType::Assignment, Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(), Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap()).await.unwrap();
-        let submission1 = SubmissionModel::save_file(db, assignment.id, student_user1.id, 1, 10, 10, false, "sub1.txt", "hash123#", b"ontime").await.unwrap();
-        let submission2 = SubmissionModel::save_file(db, assignment.id, student_user2.id, 1, 10, 10, false, "sub2.txt", "hash123#", b"ontime").await.unwrap();
+        let admin_user = service
+            .create(CreateUser {
+                username: "admin".into(),
+                email: "admin@test.com".into(),
+                password: "password".into(),
+                admin: true,
+            })
+            .await
+            .expect("Failed to create admin user");
+        let lecturer_user = service
+            .create(CreateUser {
+                username: "lecturer".into(),
+                email: "lecturer@test.com".into(),
+                password: "password".into(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create lecturer user");
+        let assistant_user = service
+            .create(CreateUser {
+                username: "assistant".into(),
+                email: "assistant@test.com".into(),
+                password: "password".into(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create assistant user");
+        let tutor_user = service
+            .create(CreateUser {
+                username: "tutor".into(),
+                email: "tutor@test.com".into(),
+                password: "password".into(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create tutor user");
+        let student_user1 = service
+            .create(CreateUser {
+                username: "student1".into(),
+                email: "student1@test.com".into(),
+                password: "password".into(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create student1 user");
+        let student_user2 = service
+            .create(CreateUser {
+                username: "student2".into(),
+                email: "student2@test.com".into(),
+                password: "password".into(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create student2 user");
+        UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
+            .await
+            .expect("Failed to assign lecturer role");
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            assistant_user.id,
+            module.id,
+            Role::AssistantLecturer,
+        )
+        .await
+        .expect("Failed to assign assistant lecturer role");
+        UserModuleRoleModel::assign_user_to_module(db, tutor_user.id, module.id, Role::Tutor)
+            .await
+            .expect("Failed to assign tutor role");
+        UserModuleRoleModel::assign_user_to_module(db, student_user1.id, module.id, Role::Student)
+            .await
+            .expect("Failed to assign student role");
+        UserModuleRoleModel::assign_user_to_module(db, student_user2.id, module.id, Role::Student)
+            .await
+            .expect("Failed to assign student role");
+        let assignment = AssignmentModel::create(
+            db,
+            module.id,
+            "Assignment 1",
+            Some("Desc 1"),
+            AssignmentType::Assignment,
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
+        )
+        .await
+        .unwrap();
+        let submission1 = SubmissionModel::save_file(
+            db,
+            assignment.id,
+            student_user1.id,
+            1,
+            10,
+            10,
+            false,
+            "sub1.txt",
+            "hash123#",
+            b"ontime",
+        )
+        .await
+        .unwrap();
+        let submission2 = SubmissionModel::save_file(
+            db,
+            assignment.id,
+            student_user2.id,
+            1,
+            10,
+            10,
+            false,
+            "sub2.txt",
+            "hash123#",
+            b"ontime",
+        )
+        .await
+        .unwrap();
         let plagiarism_case = PlagiarismCaseModel::create_case(
             db,
             assignment.id,
             submission1.id,
             submission2.id,
             "High similarity detected",
-            0.0,       // similarity
-            0,     // lines_matched
-            None,      // report_id
-        ).await.unwrap();
+            0.0,  // similarity
+            0,    // lines_matched
+            None, // report_id
+        )
+        .await
+        .unwrap();
 
         TestData {
             admin_user,
@@ -94,12 +197,34 @@ mod plagiarism_tests {
     ) -> Vec<PlagiarismCaseModel> {
         let mut cases = Vec::new();
 
-        let sub3 = SubmissionModel::save_file(db, assignment_id, user1, 1, 10, 10, false, "sub3.txt", "hash123#", b"ontime")
-            .await
-            .unwrap();
-        let sub4 = SubmissionModel::save_file(db, assignment_id, user2, 1, 10, 10, false, "sub4.txt", "hash123#", b"ontime")
-            .await
-            .unwrap();
+        let sub3 = SubmissionModel::save_file(
+            db,
+            assignment_id,
+            user1,
+            1,
+            10,
+            10,
+            false,
+            "sub3.txt",
+            "hash123#",
+            b"ontime",
+        )
+        .await
+        .unwrap();
+        let sub4 = SubmissionModel::save_file(
+            db,
+            assignment_id,
+            user2,
+            1,
+            10,
+            10,
+            false,
+            "sub4.txt",
+            "hash123#",
+            b"ontime",
+        )
+        .await
+        .unwrap();
 
         let mut case1 = PlagiarismCaseModel::create_case(
             db,
@@ -107,15 +232,17 @@ mod plagiarism_tests {
             sub3.id,
             sub4.id,
             "Resolved case",
-            0.0,       // similarity
-            0,     // lines_matched
-            None,      // report_id
-        ).await.unwrap();
+            0.0,  // similarity
+            0,    // lines_matched
+            None, // report_id
+        )
+        .await
+        .unwrap();
 
         let mut active_case1 = case1.into_active_model();
         active_case1.status = Set(Status::Flagged);
         active_case1.updated_at = Set(Utc::now());
-        
+
         case1 = active_case1.update(db).await.unwrap();
         cases.push(case1);
 
@@ -125,15 +252,17 @@ mod plagiarism_tests {
             sub3.id,
             sub4.id,
             "Pending case",
-            0.0,       // similarity
-            0_i64,     // lines_matched
-            None,      // report_id
-        ).await.unwrap();
+            0.0,   // similarity
+            0_i64, // lines_matched
+            None,  // report_id
+        )
+        .await
+        .unwrap();
 
         let mut active_case2 = case2.into_active_model();
         active_case2.status = Set(Status::Reviewed);
         active_case2.updated_at = Set(Utc::now());
-        
+
         case2 = active_case2.update(db).await.unwrap();
         cases.push(case2);
 
@@ -147,8 +276,11 @@ mod plagiarism_tests {
         query_params: Option<Vec<(&str, &str)>>,
     ) -> Request<AxumBody> {
         let (token, _) = generate_jwt(user.id, user.admin);
-        let mut uri = format!("/api/modules/{}/assignments/{}/plagiarism", module_id, assignment_id);
-        
+        let mut uri = format!(
+            "/api/modules/{}/assignments/{}/plagiarism",
+            module_id, assignment_id
+        );
+
         if let Some(params) = query_params {
             let query_string = params
                 .iter()
@@ -173,36 +305,33 @@ mod plagiarism_tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let req = make_request(
-            &data.admin_user,
-            data.module.id,
-            data.assignment.id,
-            None,
-        );
+        let req = make_request(&data.admin_user, data.module.id, data.assignment.id, None);
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
-        
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Plagiarism cases retrieved successfully");
-        
+
         let cases = &json["data"]["cases"];
         assert!(cases.is_array());
         assert_eq!(cases.as_array().unwrap().len(), 1);
-        
+
         let case_data = &cases[0];
         assert_eq!(case_data["id"], data.plagiarism_case.id);
         assert_eq!(case_data["status"], "review");
         assert_eq!(case_data["description"], "High similarity detected");
-        
+
         let sub1 = &case_data["submission_1"];
         assert_eq!(sub1["id"], data.submission1.id);
         assert_eq!(sub1["filename"], "sub1.txt");
         assert_eq!(sub1["user"]["username"], "student1");
-        
+
         let sub2 = &case_data["submission_2"];
         assert_eq!(sub2["id"], data.submission2.id);
         assert_eq!(sub2["filename"], "sub2.txt");
@@ -223,10 +352,12 @@ mod plagiarism_tests {
             None,
         );
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
-        
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["data"]["cases"].as_array().unwrap().len(), 1);
     }
@@ -245,10 +376,12 @@ mod plagiarism_tests {
             None,
         );
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
-        
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["data"]["cases"].as_array().unwrap().len(), 1);
     }
@@ -260,14 +393,9 @@ mod plagiarism_tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let req = make_request(
-            &data.tutor_user,
-            data.module.id,
-            data.assignment.id,
-            None,
-        );
+        let req = make_request(&data.tutor_user, data.module.id, data.assignment.id, None);
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
@@ -285,7 +413,7 @@ mod plagiarism_tests {
             None,
         );
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
@@ -304,21 +432,20 @@ mod plagiarism_tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
-        let req = make_request(
-            &data.admin_user,
-            data.module.id,
-            new_assignment.id,
-            None,
-        );
+        let req = make_request(&data.admin_user, data.module.id, new_assignment.id, None);
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["cases"].as_array().unwrap().len(), 0);
         assert_eq!(json["data"]["total"], 0);
@@ -330,13 +457,14 @@ mod plagiarism_tests {
     async fn test_list_plagiarism_cases_filter_by_review_status() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
-        
+
         let _ = create_additional_plagiarism_cases(
             db::get_connection().await,
             data.assignment.id,
             data.student_user1.id,
             data.student_user2.id,
-        ).await;
+        )
+        .await;
 
         let req = make_request(
             &data.admin_user,
@@ -345,12 +473,14 @@ mod plagiarism_tests {
             Some(vec![("status", "review")]),
         );
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 1);
         assert_eq!(cases[0]["status"], "review");
@@ -362,13 +492,14 @@ mod plagiarism_tests {
     async fn test_list_plagiarism_cases_filter_by_flagged_status() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
-        
+
         let _ = create_additional_plagiarism_cases(
             db::get_connection().await,
             data.assignment.id,
             data.student_user1.id,
             data.student_user2.id,
-        ).await;
+        )
+        .await;
 
         let req = make_request(
             &data.admin_user,
@@ -377,12 +508,14 @@ mod plagiarism_tests {
             Some(vec![("status", "Flagged")]),
         );
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 1);
         assert_eq!(cases[0]["status"], "flagged");
@@ -394,13 +527,14 @@ mod plagiarism_tests {
     async fn test_list_plagiarism_cases_filter_by_reviewed_status() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
-        
+
         let _ = create_additional_plagiarism_cases(
             db::get_connection().await,
             data.assignment.id,
             data.student_user1.id,
             data.student_user2.id,
-        ).await;
+        )
+        .await;
 
         let req = make_request(
             &data.admin_user,
@@ -409,12 +543,14 @@ mod plagiarism_tests {
             Some(vec![("status", "reviewed")]),
         );
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 1);
         assert_eq!(cases[0]["status"], "reviewed");
@@ -434,18 +570,20 @@ mod plagiarism_tests {
             Some(vec![("query", "student1")]),
         );
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
-        
+
         let cases = json["data"]["cases"].as_array().unwrap();
         assert!(cases.len() >= 1);
         let case = &cases[0];
         assert!(
-            case["submission_1"]["user"]["username"] == "student1" ||
-            case["submission_2"]["user"]["username"] == "student1"
+            case["submission_1"]["user"]["username"] == "student1"
+                || case["submission_2"]["user"]["username"] == "student1"
         );
     }
 
@@ -455,13 +593,14 @@ mod plagiarism_tests {
     async fn test_list_plagiarism_cases_sorting() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
-        
+
         let _ = create_additional_plagiarism_cases(
             db::get_connection().await,
             data.assignment.id,
             data.student_user1.id,
             data.student_user2.id,
-        ).await;
+        )
+        .await;
 
         let req = make_request(
             &data.admin_user,
@@ -470,11 +609,13 @@ mod plagiarism_tests {
             Some(vec![("sort", "created_at")]),
         );
         let response = app.clone().oneshot(req).await.unwrap();
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let cases = json["data"]["cases"].as_array().unwrap();
         let first_created = cases[0]["created_at"].as_str().unwrap();
-        let last_created = cases[cases.len()-1]["created_at"].as_str().unwrap();
+        let last_created = cases[cases.len() - 1]["created_at"].as_str().unwrap();
         assert!(first_created < last_created);
 
         let req = make_request(
@@ -484,11 +625,13 @@ mod plagiarism_tests {
             Some(vec![("sort", "-created_at")]),
         );
         let response = app.oneshot(req).await.unwrap();
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let cases = json["data"]["cases"].as_array().unwrap();
         let first_created = cases[0]["created_at"].as_str().unwrap();
-        let last_created = cases[cases.len()-1]["created_at"].as_str().unwrap();
+        let last_created = cases[cases.len() - 1]["created_at"].as_str().unwrap();
         assert!(first_created > last_created);
     }
 
@@ -498,7 +641,7 @@ mod plagiarism_tests {
     async fn test_list_plagiarism_cases_pagination() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
-        
+
         for _ in 0..15 {
             let sub = SubmissionModel::save_file(
                 db::get_connection().await,
@@ -511,7 +654,9 @@ mod plagiarism_tests {
                 "sub.txt",
                 "hash123#",
                 b"ontime",
-            ).await.unwrap();
+            )
+            .await
+            .unwrap();
 
             PlagiarismCaseModel::create_case(
                 db::get_connection().await,
@@ -519,10 +664,12 @@ mod plagiarism_tests {
                 data.submission1.id,
                 sub.id,
                 "Test case description",
-                0.0,       // similarity
-                0,     // lines_matched
-                None,      // report_id
-            ).await.unwrap();
+                0.0,  // similarity
+                0,    // lines_matched
+                None, // report_id
+            )
+            .await
+            .unwrap();
         }
 
         let req = make_request(
@@ -532,7 +679,9 @@ mod plagiarism_tests {
             Some(vec![("per_page", "10"), ("page", "1")]),
         );
         let response = app.clone().oneshot(req).await.unwrap();
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 10);
@@ -547,7 +696,9 @@ mod plagiarism_tests {
             Some(vec![("per_page", "10"), ("page", "2")]),
         );
         let response = app.oneshot(req).await.unwrap();
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 6);
@@ -604,17 +755,14 @@ mod plagiarism_tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        let req = make_request(
-            &data.admin_user,
-            data.module.id,
-            999999,
-            None,
-        );
+        let req = make_request(&data.admin_user, data.module.id, 999999, None);
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Assignment 999999 in Module 1 not found.");
@@ -634,7 +782,7 @@ mod plagiarism_tests {
             Some(vec![("status", "InvalidStatus")]),
         );
         let response = app.oneshot(req).await.unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use regex::Regex;
-use reqwest::{redirect, Client};
+use reqwest::{Client, redirect};
 use scraper::{Html, Selector};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -154,15 +154,23 @@ fn extract_pairs(doc: &Html) -> Vec<MossPair> {
         }
 
         let mut tds = tr.select(&td_sel);
-        let (Some(td1), Some(td2), Some(td3)) = (tds.next(), tds.next(), tds.next()) else { continue };
+        let (Some(td1), Some(td2), Some(td3)) = (tds.next(), tds.next(), tds.next()) else {
+            continue;
+        };
 
-        let a1 = match td1.select(&a_sel).next() { Some(a) => a, None => continue };
+        let a1 = match td1.select(&a_sel).next() {
+            Some(a) => a,
+            None => continue,
+        };
         let href1 = a1.value().attr("href").unwrap_or("").to_string();
         let text1 = a1.text().collect::<String>().trim().to_string();
         let (name1, pct1) = parse_name_and_pct(&text1, &pct_re);
         let (u1, s1, f1) = parse_triplet(&name1);
 
-        let a2 = match td2.select(&a_sel).next() { Some(a) => a, None => continue };
+        let a2 = match td2.select(&a_sel).next() {
+            Some(a) => a,
+            None => continue,
+        };
         let href2 = a2.value().attr("href").unwrap_or("").to_string();
         let text2 = a2.text().collect::<String>().trim().to_string();
         let (name2, pct2) = parse_name_and_pct(&text2, &pct_re);
@@ -172,8 +180,22 @@ fn extract_pairs(doc: &Html) -> Vec<MossPair> {
         let lines_matched = lines_txt.parse::<i64>().unwrap_or(0);
 
         out.push(MossPair {
-            file1: PairRef { raw: name1, username: u1, submission_id: s1, filename: f1, percent: pct1, href: href1.clone() },
-            file2: PairRef { raw: name2, username: u2, submission_id: s2, filename: f2, percent: pct2, href: href2.clone() },
+            file1: PairRef {
+                raw: name1,
+                username: u1,
+                submission_id: s1,
+                filename: f1,
+                percent: pct1,
+                href: href1.clone(),
+            },
+            file2: PairRef {
+                raw: name2,
+                username: u2,
+                submission_id: s2,
+                filename: f2,
+                percent: pct2,
+                href: href2.clone(),
+            },
             lines_matched,
             match_href: href1,
         });
@@ -224,10 +246,13 @@ fn dedupe_pairs_keep_best(pairs: Vec<MossPair>) -> Vec<MossPair> {
     for p in pairs {
         let key = canonical_file_key(&p.file1, &p.file2);
         match best.get_mut(&key) {
-            None => { best.insert(key, p); }
+            None => {
+                best.insert(key, p);
+            }
             Some(existing) => {
                 if p.lines_matched > existing.lines_matched
-                    || (p.lines_matched == existing.lines_matched && p.match_href < existing.match_href)
+                    || (p.lines_matched == existing.lines_matched
+                        && p.match_href < existing.match_href)
                 {
                     *existing = p;
                 }

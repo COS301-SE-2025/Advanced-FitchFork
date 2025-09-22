@@ -9,12 +9,12 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{TimeZone, Utc};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use serial_test::serial;
     use tower::ServiceExt;
 
-    use api::auth::generate_jwt;
     use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
 
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
@@ -37,19 +37,20 @@ mod tests {
 
     /// Creates a module + users + roles + two assignments.
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
-        let module =
-            ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
+        let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
+            .await
+            .unwrap();
 
-        let admin_user =
-            UserModel::create(db, "admin1", "admin1@test.com", "password", true).await.unwrap();
+        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true)
+            .await
+            .unwrap();
         let lecturer_user =
             UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
                 .await
                 .unwrap();
-        let tutor_user =
-            UserModel::create(db, "tutor1", "tutor1@test.com", "passwordt", false)
-                .await
-                .unwrap();
+        let tutor_user = UserModel::create(db, "tutor1", "tutor1@test.com", "passwordt", false)
+            .await
+            .unwrap();
         let student_user =
             UserModel::create(db, "student1", "student1@test.com", "password2", false)
                 .await
@@ -151,7 +152,8 @@ mod tests {
                 "bind_cookie_to_user": true,
                 "allowed_cidrs": ["0.0.0.0/0"]
             }),
-        ).await;
+        )
+        .await;
 
         // Any authenticated user is fine (use the student)
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -173,7 +175,9 @@ mod tests {
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
     }
@@ -214,7 +218,9 @@ mod tests {
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
 
-        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
     }
@@ -236,7 +242,8 @@ mod tests {
                 "bind_cookie_to_user": true,
                 "allowed_cidrs": ["0.0.0.0/0"]
             }),
-        ).await;
+        )
+        .await;
 
         // Any authenticated user is fine (use the student)
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -258,7 +265,9 @@ mod tests {
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
     }
@@ -622,7 +631,8 @@ mod tests {
                 "cookie_ttl_minutes": 60,
                 "bind_cookie_to_user": false
             }),
-        ).await;
+        )
+        .await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/verify",
@@ -658,7 +668,8 @@ mod tests {
                 "cookie_ttl_minutes": 60,
                 "bind_cookie_to_user": true
             }),
-        ).await;
+        )
+        .await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
@@ -675,7 +686,9 @@ mod tests {
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::FORBIDDEN);
 
-        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "PIN required");
@@ -698,7 +711,8 @@ mod tests {
                 "cookie_ttl_minutes": 60,
                 "bind_cookie_to_user": true
             }),
-        ).await;
+        )
+        .await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
@@ -716,7 +730,9 @@ mod tests {
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::FORBIDDEN);
 
-        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "IP not allowed");
@@ -729,19 +745,17 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         // Create an assistant lecturer and assign to module
-        let al_user = UserModel::create(
-            app_state.db(),
-            "al1",
-            "al1@test.com",
-            "pass",
-            false
-        ).await.unwrap();
+        let al_user = UserModel::create(app_state.db(), "al1", "al1@test.com", "pass", false)
+            .await
+            .unwrap();
         UserModuleRoleModel::assign_user_to_module(
             app_state.db(),
             al_user.id,
             data.module.id,
-            Role::AssistantLecturer
-        ).await.unwrap();
+            Role::AssistantLecturer,
+        )
+        .await
+        .unwrap();
 
         // Hardest case: disallow IP and require PIN — should still pass
         write_security_config(
@@ -755,7 +769,8 @@ mod tests {
                 "cookie_ttl_minutes": 60,
                 "bind_cookie_to_user": true
             }),
-        ).await;
+        )
+        .await;
 
         let (token, _) = generate_jwt(al_user.id, al_user.admin);
         let uri = format!(
@@ -772,5 +787,4 @@ mod tests {
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
     }
-
 }

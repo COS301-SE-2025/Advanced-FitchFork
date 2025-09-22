@@ -10,29 +10,27 @@
 //! Access control is enforced via middleware guards for students, tutors, or lecturers.
 
 use axum::{
-    middleware::from_fn,
-    routing::{get, post, delete, patch},
     Router,
+    middleware::from_fn,
+    routing::{delete, get, patch, post},
 };
 
-use get::{get_submission, list_submissions, get_submission_output};
-use post::{submit_assignment, remark_submissions, resubmit_submissions};
-use delete::{delete_submission, bulk_delete_submissions};
-use patch::{set_submission_ignored};
+use delete::{bulk_delete_submissions, delete_submission};
+use get::{get_submission, get_submission_output, list_submissions};
+use patch::set_submission_ignored;
+use post::{remark_submissions, resubmit_submissions, submit_assignment};
 
-use util::state::AppState;
-use crate::{auth::guards::{
-    require_lecturer_or_assistant_lecturer,
-    require_lecturer_or_tutor,
-    require_ready_assignment,
-}};
+use crate::auth::guards::{
+    require_lecturer_or_assistant_lecturer, require_lecturer_or_tutor, require_ready_assignment,
+};
 use crate::routes::modules::assignments::submissions::get::download_submission_file;
+use util::state::AppState;
 
 pub mod common;
-pub mod get;
-pub mod post;
 pub mod delete;
+pub mod get;
 pub mod patch;
+pub mod post;
 
 /// Build the `/submissions` routes for a specific assignment.
 ///
@@ -51,12 +49,35 @@ pub fn submission_routes() -> Router {
     Router::new()
         .route("/", get(list_submissions))
         .route("/{submission_id}", get(get_submission))
-        .route("/{submission_id}/output", get(get_submission_output).route_layer(from_fn(require_lecturer_or_tutor)))
+        .route(
+            "/{submission_id}/output",
+            get(get_submission_output).route_layer(from_fn(require_lecturer_or_tutor)),
+        )
         .route("/{submission_id}/download", get(download_submission_file))
-        .route("/{submission_id}",delete(delete_submission).route_layer(from_fn(require_lecturer_or_assistant_lecturer)))
-        .route("/bulk",delete(bulk_delete_submissions).route_layer(from_fn(require_lecturer_or_assistant_lecturer)))
-        .route("/", post(submit_assignment).route_layer(from_fn(require_ready_assignment)))
-        .route("/remark", post(remark_submissions).route_layer(from_fn(require_lecturer_or_assistant_lecturer)))
-        .route("/resubmit", post(resubmit_submissions).route_layer(from_fn(require_lecturer_or_assistant_lecturer)))
-        .route("/{submission_id}/ignore", patch(set_submission_ignored).route_layer(from_fn(require_lecturer_or_assistant_lecturer)))
+        .route(
+            "/{submission_id}",
+            delete(delete_submission).route_layer(from_fn(require_lecturer_or_assistant_lecturer)),
+        )
+        .route(
+            "/bulk",
+            delete(bulk_delete_submissions)
+                .route_layer(from_fn(require_lecturer_or_assistant_lecturer)),
+        )
+        .route(
+            "/",
+            post(submit_assignment).route_layer(from_fn(require_ready_assignment)),
+        )
+        .route(
+            "/remark",
+            post(remark_submissions).route_layer(from_fn(require_lecturer_or_assistant_lecturer)),
+        )
+        .route(
+            "/resubmit",
+            post(resubmit_submissions).route_layer(from_fn(require_lecturer_or_assistant_lecturer)),
+        )
+        .route(
+            "/{submission_id}/ignore",
+            patch(set_submission_ignored)
+                .route_layer(from_fn(require_lecturer_or_assistant_lecturer)),
+        )
 }

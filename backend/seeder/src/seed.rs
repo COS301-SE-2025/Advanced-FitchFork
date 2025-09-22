@@ -1,9 +1,9 @@
-use services::service::AppError;
 use colored::*;
 use futures::FutureExt;
+use services::service::AppError;
 use std::io::{self, Write};
-use std::time::Instant;
 use std::pin::Pin;
+use std::time::Instant;
 
 const STATUS_COLUMN: usize = 80;
 
@@ -18,7 +18,10 @@ pub async fn run_seeder<S: Seeder + ?Sized>(seeder: &S, name: &str) {
     io::stdout().flush().unwrap();
 
     let start = Instant::now();
-    let duration = match std::panic::AssertUnwindSafe(seeder.seed()).catch_unwind().await {
+    let duration = match std::panic::AssertUnwindSafe(seeder.seed())
+        .catch_unwind()
+        .await
+    {
         Ok(_) => Some(start.elapsed()),
         Err(_) => {
             println!("{}", "failed".red());

@@ -1,20 +1,25 @@
 #[cfg(test)]
 mod tests {
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
     use chrono::{Datelike, Utc};
-    use db::{models::{module::Model as Module, user::Model as UserModel, module::Entity as ModuleEntity,}, repositories::user_repository::UserRepository};
-    use services::{
-        service::Service,
-        user::{UserService, CreateUser}
+    use db::{
+        models::{
+            module::Entity as ModuleEntity, module::Model as Module, user::Model as UserModel,
+        },
+        repositories::user_repository::UserRepository,
     };
     use sea_orm::{DatabaseConnection, EntityTrait};
     use serde_json::json;
+    use services::{
+        service::Service,
+        user::{CreateUser, UserService},
+    };
     use tower::ServiceExt;
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin_user: UserModel,
@@ -26,8 +31,24 @@ mod tests {
         dotenvy::dotenv().expect("Failed to load .env");
 
         let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service.create(CreateUser{ username: "admin".to_string(), email: "admin@test.com".to_string(), password: "password".to_string(), admin: true }).await.expect("Failed to create admin user");
-        let regular_user = service.create(CreateUser{ username: "regular".to_string(), email: "regular@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create regular user");
+        let admin_user = service
+            .create(CreateUser {
+                username: "admin".to_string(),
+                email: "admin@test.com".to_string(),
+                password: "password".to_string(),
+                admin: true,
+            })
+            .await
+            .expect("Failed to create admin user");
+        let regular_user = service
+            .create(CreateUser {
+                username: "regular".to_string(),
+                email: "regular@test.com".to_string(),
+                password: "password".to_string(),
+                admin: false,
+            })
+            .await
+            .expect("Failed to create regular user");
         let module = Module::create(
             db,
             "COS301",
@@ -66,9 +87,11 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Module updated successfully");
         let json_data = &json["data"];
@@ -76,7 +99,10 @@ mod tests {
         assert_eq!(json_data["year"], Utc::now().year() + 1);
         assert_eq!(json_data["description"], "Updated description");
         assert_eq!(json_data["credits"], 20);
-        assert_ne!(json_data["updated_at"].as_str().unwrap(), data.module.updated_at.to_rfc3339());
+        assert_ne!(
+            json_data["updated_at"].as_str().unwrap(),
+            data.module.updated_at.to_rfc3339()
+        );
     }
 
     /// Test Case: Non-admin user attempts to update module
@@ -100,7 +126,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Admin access required");
@@ -127,10 +155,17 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Module code must be in format ABC123"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Module code must be in format ABC123")
+        );
     }
 
     /// Test Case: Year in the past
@@ -154,10 +189,17 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Year must be current year or later"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Year must be current year or later")
+        );
     }
 
     /// Test Case: Invalid credits value
@@ -181,10 +223,17 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Credits must be a positive number"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Credits must be a positive number")
+        );
     }
 
     /// Test Case: Description too long
@@ -213,10 +262,17 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Description must be at most 1000 characters"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Description must be at most 1000 characters")
+        );
     }
 
     /// Test Case: Duplicate module code
@@ -250,7 +306,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::CONFLICT);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Module code already exists");
@@ -277,7 +335,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Module 99999 not found.");
@@ -291,7 +351,8 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let req_body = json!({"code": "invalid", "year": 2000, "description": "a".repeat(1001), "credits": 0});
+        let req_body =
+            json!({"code": "invalid", "year": 2000, "description": "a".repeat(1001), "credits": 0});
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
             .method("PUT")
@@ -304,7 +365,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let message = json["message"].as_str().unwrap();
         assert!(message.contains("Module code must be in format ABC123"));
@@ -334,7 +397,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["year"], Utc::now().year() + 1);
@@ -343,15 +408,9 @@ mod tests {
     async fn create_multiple_modules(db: &DatabaseConnection, count: usize) -> Vec<Module> {
         let mut modules = Vec::new();
         for i in 0..count {
-            let module = Module::create(
-                db,
-                &format!("MOD{}", i),
-                2025,
-                Some("Test module"),
-                15,
-            )
-            .await
-            .expect("Failed to create test module");
+            let module = Module::create(db, &format!("MOD{}", i), 2025, Some("Test module"), 15)
+                .await
+                .expect("Failed to create test module");
             modules.push(module);
         }
         modules
@@ -385,7 +444,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);
@@ -394,11 +455,7 @@ mod tests {
         assert!(json["data"]["failed"].as_array().unwrap().is_empty());
 
         for id in module_ids {
-            let module = ModuleEntity::find_by_id(id)
-                .one(db)
-                .await
-                .unwrap()
-                .unwrap();
+            let module = ModuleEntity::find_by_id(id).one(db).await.unwrap().unwrap();
             assert_eq!(module.year, 2026);
             assert_eq!(module.description, Some("Updated description".into()));
         }
@@ -431,7 +488,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Bulk update cannot change module code");
@@ -461,7 +520,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "At least one module ID is required");
@@ -495,13 +556,15 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        
+
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Updated 2/3 modules");
         assert_eq!(json["data"]["updated"], 2);
-        
+
         let failed = json["data"]["failed"].as_array().unwrap();
         assert_eq!(failed.len(), 1);
         assert_eq!(failed[0]["id"], 99999);
@@ -509,11 +572,7 @@ mod tests {
 
         // Verify successful updates
         for id in modules.iter().map(|m| m.id) {
-            let module = ModuleEntity::find_by_id(id)
-                .one(db)
-                .await
-                .unwrap()
-                .unwrap();
+            let module = ModuleEntity::find_by_id(id).one(db).await.unwrap().unwrap();
             assert_eq!(module.credits, 20);
         }
     }
@@ -546,7 +605,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
         let message = json["message"].as_str().unwrap();
@@ -583,11 +644,7 @@ mod tests {
 
         // Verify no updates occurred
         for id in module_ids {
-            let module = ModuleEntity::find_by_id(id)
-                .one(db)
-                .await
-                .unwrap()
-                .unwrap();
+            let module = ModuleEntity::find_by_id(id).one(db).await.unwrap().unwrap();
             assert_eq!(module.year, 2025); // Original value
         }
     }

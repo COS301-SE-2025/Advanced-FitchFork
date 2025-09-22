@@ -5,14 +5,14 @@
 //! Only the user who owns the ticket can delete it. The endpoint validates
 //! that the user has permission before performing the deletion.
 
+use crate::routes::modules::assignments::tickets::common::is_valid;
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
+    Extension,
     extract::Path,
     http::StatusCode,
     response::{IntoResponse, Json},
-    Extension,
 };
-use crate::routes::modules::assignments::tickets::common::is_valid;
 use services::service::Service;
 use services::ticket::TicketService;
 
@@ -57,14 +57,21 @@ pub async fn delete_ticket(
 ) -> impl IntoResponse {
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, module_id,claims.admin).await {
-        return (StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("Forbidden"))).into_response();
+    if !is_valid(user_id, ticket_id, module_id, claims.admin).await {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("Forbidden")),
+        )
+            .into_response();
     }
 
     match TicketService::delete_by_id(ticket_id).await {
         Ok(_) => (
             StatusCode::OK,
-            Json(ApiResponse::<()>::success((), "Ticket deleted successfully")),
+            Json(ApiResponse::<()>::success(
+                (),
+                "Ticket deleted successfully",
+            )),
         )
             .into_response(),
         Err(_) => (

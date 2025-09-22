@@ -1,14 +1,14 @@
 use crate::seed::Seeder;
-use services::announcement::{AnnouncementService, CreateAnnouncement};
-use services::service::{Service, AppError};
-use services::user::UserService;
-use services::module::ModuleService;
-use services::user_module_role::UserModuleRoleService;
-use util::filters::FilterParam;
 use chrono::{Duration, Utc};
 use rand::rngs::{OsRng, StdRng};
-use rand::{seq::SliceRandom, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, seq::SliceRandom};
+use services::announcement::{AnnouncementService, CreateAnnouncement};
+use services::module::ModuleService;
+use services::service::{AppError, Service};
+use services::user::UserService;
+use services::user_module_role::UserModuleRoleService;
 use std::pin::Pin;
+use util::filters::FilterParam;
 
 pub struct AnnouncementSeeder;
 
@@ -17,20 +17,12 @@ impl Seeder for AnnouncementSeeder {
         Box::pin(async move {
             let mut rng = StdRng::from_rng(OsRng).expect("rng");
 
-            let all_users = UserService::find_all(
-                &vec![],
-                &vec![],
-                None,
-            ).await?;
+            let all_users = UserService::find_all(&vec![], &vec![], None).await?;
             if all_users.is_empty() {
                 panic!("No users found; run UserSeeder first");
             }
 
-            let modules = ModuleService::find_all(
-                &vec![],
-                &vec![],
-                None,
-            ).await?;
+            let modules = ModuleService::find_all(&vec![], &vec![], None).await?;
             if modules.is_empty() {
                 return Err(AppError::DatabaseUnknown);
             }
@@ -53,15 +45,19 @@ impl Seeder for AnnouncementSeeder {
                 let staff_user_ids: Vec<i64> = UserModuleRoleService::find_all(
                     &vec![
                         FilterParam::eq("module_id", m.id),
-                        FilterParam::eq("role", vec![
-                            "lecturer".to_string(),
-                            "assistant_lecturer".to_string(), 
-                            "tutor".to_string()
-                        ]),
+                        FilterParam::eq(
+                            "role",
+                            vec![
+                                "lecturer".to_string(),
+                                "assistant_lecturer".to_string(),
+                                "tutor".to_string(),
+                            ],
+                        ),
                     ],
                     &vec![],
                     None,
-                ).await?
+                )
+                .await?
                 .into_iter()
                 .map(|r| r.user_id)
                 .collect();
@@ -88,15 +84,14 @@ impl Seeder for AnnouncementSeeder {
                     // Ensure a couple are pinned per module; others ~22% chance
                     let pinned = if i < 3 { true } else { rng.gen_bool(0.22) };
 
-                    AnnouncementService::create(
-                        CreateAnnouncement{
-                           module_id: m.id,
-                            user_id: pick_author(&mut rng),
-                            title: title,
-                            body: body,
-                            pinned: pinned, 
-                        }
-                    ).await?;
+                    AnnouncementService::create(CreateAnnouncement {
+                        module_id: m.id,
+                        user_id: pick_author(&mut rng),
+                        title: title,
+                        body: body,
+                        pinned: pinned,
+                    })
+                    .await?;
                 }
             }
 
@@ -106,7 +101,12 @@ impl Seeder for AnnouncementSeeder {
 }
 
 /// Build a rich, longer Markdown body with sections, lists, code, quotes, and a simple table.
-fn build_long_markdown(code: &str, year: i32, ts: chrono::DateTime<Utc>, rng: &mut StdRng) -> String {
+fn build_long_markdown(
+    code: &str,
+    year: i32,
+    ts: chrono::DateTime<Utc>,
+    rng: &mut StdRng,
+) -> String {
     let when = ts.format("%Y-%m-%d %H:%M").to_string();
 
     let intros = [
@@ -159,13 +159,18 @@ fn build_long_markdown(code: &str, year: i32, ts: chrono::DateTime<Utc>, rng: &m
     ];
 
     let code_blocks = [
-        ("bash", r#"# Run tests locally
+        (
+            "bash",
+            r#"# Run tests locally
 cargo test -- --nocapture
 
 # Format and lint
 cargo fmt
-cargo clippy -- -D warnings"#),
-        ("rust", r#"fn main() {
+cargo clippy -- -D warnings"#,
+        ),
+        (
+            "rust",
+            r#"fn main() {
     println!("Hello, COS!");
 }
 
@@ -175,12 +180,16 @@ mod tests {
     fn it_works() {
         assert_eq!(2 + 2, 4);
     }
-}"#),
-        ("json", r#"{
+}"#,
+        ),
+        (
+            "json",
+            r#"{
   "name": "example",
   "version": "1.0.0",
   "private": true
-}"#),
+}"#,
+        ),
     ];
 
     // Pick random slices
@@ -238,7 +247,7 @@ mod tests {
     };
 
     format!(
-r#"{intro}
+        r#"{intro}
 
 ### Action Items
 {bullets}
@@ -261,7 +270,11 @@ _Updated at {when}_ in **{code} {year}**."#,
         numbered = numbered,
         maybe_quote = maybe_quote,
         maybe_table = maybe_table,
-        maybe_links = if maybe_links.is_empty() { "- (none)" .to_string() } else { maybe_links },
+        maybe_links = if maybe_links.is_empty() {
+            "- (none)".to_string()
+        } else {
+            maybe_links
+        },
         maybe_code = maybe_code,
         when = when,
         code = code,

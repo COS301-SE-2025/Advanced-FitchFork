@@ -1,7 +1,7 @@
 use crate::seed::Seeder;
-use services::service::{Service, AppError};
-use services::user::{UserService, CreateUser};
 use fake::{Fake, faker::internet::en::SafeEmail};
+use services::service::{AppError, Service};
+use services::user::{CreateUser, UserService};
 use std::pin::Pin;
 
 pub struct UserSeeder;
@@ -16,7 +16,8 @@ impl Seeder for UserSeeder {
                 email: "admin@example.com".to_string(),
                 password: "1".to_string(),
                 admin: true,
-            }).await?;
+            })
+            .await?;
 
             // Fixed Lecturer User
             UserService::create(CreateUser {
@@ -25,7 +26,8 @@ impl Seeder for UserSeeder {
                 email: "lecturer@example.com".to_string(),
                 password: "1".to_string(),
                 admin: false,
-            }).await?;
+            })
+            .await?;
 
             // Fixed Assistant Lecturer User
             UserService::create(CreateUser {
@@ -34,7 +36,8 @@ impl Seeder for UserSeeder {
                 email: "assistant_lecturer@example.com".to_string(),
                 password: "1".to_string(),
                 admin: false,
-            }).await?;
+            })
+            .await?;
 
             // Fixed Tutor User
             UserService::create(CreateUser {
@@ -43,7 +46,8 @@ impl Seeder for UserSeeder {
                 email: "tutor@example.com".to_string(),
                 password: "1".to_string(),
                 admin: false,
-            }).await?;
+            })
+            .await?;
 
             // Fixed Student User
             UserService::create(CreateUser {
@@ -52,7 +56,8 @@ impl Seeder for UserSeeder {
                 email: "student@example.com".to_string(),
                 password: "1".to_string(),
                 admin: false,
-            }).await?;
+            })
+            .await?;
 
             // Composite-role users
             UserService::create(CreateUser {
@@ -61,21 +66,24 @@ impl Seeder for UserSeeder {
                 email: "student_tutor@example.com".to_string(),
                 password: "1".to_string(),
                 admin: false,
-            }).await?;
+            })
+            .await?;
             UserService::create(CreateUser {
                 id: None,
                 username: "all_staff".to_string(),
                 email: "all_staff@example.com".to_string(),
                 password: "1".to_string(),
                 admin: false,
-            }).await?;
+            })
+            .await?;
             UserService::create(CreateUser {
                 id: None,
                 username: "lecturer_assistant".to_string(),
                 email: "lecturer_assistant@example.com".to_string(),
                 password: "1".to_string(),
                 admin: false,
-            }).await?;
+            })
+            .await?;
 
             // User with every role (distributed across modules)
             UserService::create(CreateUser {
@@ -84,7 +92,8 @@ impl Seeder for UserSeeder {
                 email: "all@example.com".to_string(),
                 password: "1".to_string(),
                 admin: false,
-            }).await?;
+            })
+            .await?;
 
             // Random Users
             for _ in 0..100 {
@@ -95,7 +104,8 @@ impl Seeder for UserSeeder {
                     &email,
                     "password_hash",
                     false,
-                ).await?;
+                )
+                .await?;
             }
 
             Ok(())

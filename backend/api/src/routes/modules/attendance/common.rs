@@ -54,9 +54,9 @@ impl AttendanceSessionResponse {
 pub struct ListQuery {
     pub page: Option<i32>,
     pub per_page: Option<i32>,
-    pub q: Option<String>,        // search in title
-    pub active: Option<bool>,     // filter by current status
-    pub sort: Option<String>,     // "created_at", "-created_at", "title", "-title"
+    pub q: Option<String>,    // search in title
+    pub active: Option<bool>, // filter by current status
+    pub sort: Option<String>, // "created_at", "-created_at", "title", "-title"
 }
 
 #[derive(Debug, Serialize)]
@@ -70,7 +70,7 @@ pub struct ListResponse {
 #[derive(Deserialize)]
 pub struct CreateSessionReq {
     pub title: String,
-    pub active: Option<bool>,           // ← NEW
+    pub active: Option<bool>, // ← NEW
     pub rotation_seconds: Option<i32>,
     pub code_length: Option<i16>,
     pub restrict_by_ip: Option<bool>,
@@ -82,7 +82,7 @@ pub struct CreateSessionReq {
 #[derive(Deserialize)]
 pub struct EditSessionReq {
     pub title: Option<String>,
-    pub active: Option<bool>,           // ← NEW
+    pub active: Option<bool>, // ← NEW
     pub rotation_seconds: Option<i32>,
     pub code_length: Option<i16>,
     pub restrict_by_ip: Option<bool>,

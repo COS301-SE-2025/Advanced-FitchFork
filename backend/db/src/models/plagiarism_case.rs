@@ -1,8 +1,8 @@
 //! Entity and business logic for managing plagiarism cases.
 
 use chrono::{DateTime, Utc};
-use sea_orm::entity::prelude::*;
 use sea_orm::EntityTrait;
+use sea_orm::entity::prelude::*;
 
 /// Represents a detected plagiarism case between two submissions.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -46,7 +46,14 @@ pub struct Model {
 
 /// Defines the possible review statuses for a plagiarism case.
 #[derive(
-    Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, sea_orm::strum::Display, sea_orm::strum::EnumString
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    EnumIter,
+    DeriveActiveEnum,
+    sea_orm::strum::Display,
+    sea_orm::strum::EnumString,
 )]
 #[sea_orm(rs_type = "String", db_type = "Text")]
 #[strum(serialize_all = "lowercase", ascii_case_insensitive)]

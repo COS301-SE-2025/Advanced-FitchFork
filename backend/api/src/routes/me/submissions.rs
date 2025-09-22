@@ -1,13 +1,13 @@
+use crate::{auth::claims::AuthUser, response::ApiResponse};
 use axum::{
+    Extension, Json,
     extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Extension, Json,
 };
 use common::format_validation_errors;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-use crate::{auth::claims::AuthUser, response::ApiResponse};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct GetSubmissionsQuery {
@@ -198,7 +198,7 @@ pub async fn get_my_submissions(
     }
 
     let mut condition = Condition::all();
-    
+
     if let Some(q) = &query.query {
         let pattern = format!("%{}%", q.to_lowercase());
         condition = condition.add(
@@ -216,7 +216,7 @@ pub async fn get_my_submissions(
     if let Some(is_late) = query.is_late {
         let submission_alias = Alias::new("assignment_submissions");
         let assignment_alias = Alias::new("assignments");
-        
+
         let created_at = Expr::col((submission_alias.clone(), SubmissionColumn::CreatedAt));
         let due_date = Expr::col((assignment_alias.clone(), assignment::Column::DueDate));
 
@@ -255,18 +255,16 @@ pub async fn get_my_submissions(
     } else {
         query_builder = query_builder.order_by(SubmissionColumn::CreatedAt, sea_orm::Order::Desc);
     }
-    
+
     query_builder = query_builder.order_by(SubmissionColumn::Id, sea_orm::Order::Asc);
 
     let paginator = query_builder
         .into_model::<SubmissionWithRelations>()
         .paginate(db, per_page);
-    
+
     let total = paginator.num_items().await.unwrap_or(0);
-    let submissions_db: Vec<SubmissionWithRelations> = paginator
-        .fetch_page(page - 1)
-        .await
-        .unwrap_or_default();
+    let submissions_db: Vec<SubmissionWithRelations> =
+        paginator.fetch_page(page - 1).await.unwrap_or_default();
 
     let submissions: Vec<SubmissionItem> = submissions_db
         .into_iter()
@@ -312,7 +310,8 @@ pub async fn get_my_submissions(
                 },
                 "No submissions found",
             )),
-        ).into_response();
+        )
+            .into_response();
     }
 
     (

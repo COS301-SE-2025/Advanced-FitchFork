@@ -1,14 +1,14 @@
-use crate::service::{Service, AppError, ToActiveModel};
+use crate::service::{AppError, Service, ToActiveModel};
+use chrono::Utc;
 use db::{
-    models::module::{Entity, Column, ActiveModel},
+    models::module::{ActiveModel, Column, Entity},
     repository::Repository,
 };
-use sea_orm::{DbErr, Set};
-use std::{env, fs, path::PathBuf};
 use log::{info, warn};
+use sea_orm::{DbErr, Set};
 use std::future::Future;
 use std::pin::Pin;
-use chrono::Utc;
+use std::{env, fs, path::PathBuf};
 
 pub use db::models::module::Model as Module;
 
@@ -25,9 +25,9 @@ pub struct CreateModule {
 pub struct UpdateModule {
     pub id: i64,
     pub code: Option<String>,
-    pub year:  Option<i32>,
+    pub year: Option<i32>,
     pub description: Option<String>,
-    pub credits:  Option<i64>,
+    pub credits: Option<i64>,
 }
 
 impl ToActiveModel<Entity> for CreateModule {
@@ -56,7 +56,10 @@ impl ToActiveModel<Entity> for UpdateModule {
         let module = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(module)) => module,
             Ok(None) => {
-                return Err(AppError::from(DbErr::RecordNotFound(format!("Module ID {} not found", self.id))));
+                return Err(AppError::from(DbErr::RecordNotFound(format!(
+                    "Module ID {} not found",
+                    self.id
+                ))));
             }
             Err(err) => return Err(AppError::from(err)),
         };
@@ -89,9 +92,7 @@ pub struct ModuleService;
 impl<'a> Service<'a, Entity, Column, CreateModule, UpdateModule> for ModuleService {
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
-    fn delete_by_id(
-        id: i64,
-    ) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send>> {
+    fn delete_by_id(id: i64) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send>> {
         Box::pin(async move {
             let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
                 .unwrap_or_else(|_| "data/assignment_files".to_string());
@@ -101,13 +102,22 @@ impl<'a> Service<'a, Entity, Column, CreateModule, UpdateModule> for ModuleServi
             if module_dir.exists() {
                 match fs::remove_dir_all(&module_dir) {
                     Ok(_) => info!("Deleted module directory {}", module_dir.display()),
-                    Err(e) => warn!("Failed to delete module directory {}: {}", module_dir.display(), e),
+                    Err(e) => warn!(
+                        "Failed to delete module directory {}: {}",
+                        module_dir.display(),
+                        e
+                    ),
                 }
             } else {
-                warn!("Expected module directory {} does not exist", module_dir.display());
+                warn!(
+                    "Expected module directory {} does not exist",
+                    module_dir.display()
+                );
             }
 
-            Repository::<Entity, Column>::delete_by_id(id).await.map_err(AppError::from)
+            Repository::<Entity, Column>::delete_by_id(id)
+                .await
+                .map_err(AppError::from)
         })
     }
 }

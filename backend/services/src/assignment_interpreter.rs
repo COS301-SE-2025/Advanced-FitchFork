@@ -1,13 +1,13 @@
-use crate::service::{Service, AppError, ToActiveModel};
+use crate::service::{AppError, Service, ToActiveModel};
+use chrono::Utc;
 use db::{
-    models::assignment_interpreter::{ActiveModel, Entity, Column, Model},
+    models::assignment_interpreter::{ActiveModel, Column, Entity, Model},
     repository::Repository,
 };
-use util::filters::FilterParam;
 use sea_orm::{DbErr, Set};
-use chrono::Utc;
-use std::{env, fs};
 use std::path::PathBuf;
+use std::{env, fs};
+use util::filters::FilterParam;
 
 pub use db::models::assignment_interpreter::Model as AssignmentInterpreter;
 
@@ -45,7 +45,10 @@ impl ToActiveModel<Entity> for UpdateAssignmentInterpreter {
         let announcement = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(announcement)) => announcement,
             Ok(None) => {
-                return Err(AppError::from(DbErr::RecordNotFound(format!("AssignmentInterpreter not found for ID {}", self.id))));
+                return Err(AppError::from(DbErr::RecordNotFound(format!(
+                    "AssignmentInterpreter not found for ID {}",
+                    self.id
+                ))));
             }
             Err(err) => return Err(AppError::from(err)),
         };
@@ -59,12 +62,21 @@ impl ToActiveModel<Entity> for UpdateAssignmentInterpreter {
 
 pub struct AssignmentInterpreterService;
 
-impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignmentInterpreter> for AssignmentInterpreterService {
+impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignmentInterpreter>
+    for AssignmentInterpreterService
+{
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(
-            params: CreateAssignmentInterpreter,
-        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
+        params: CreateAssignmentInterpreter,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::prelude::rust_2024::Future<
+                    Output = Result<<Entity as sea_orm::EntityTrait>::Model, AppError>,
+                > + Send
+                + 'a,
+        >,
+    > {
         Box::pin(async move {
             if let Some(existing) = Repository::<Entity, Column>::find_one(
                 &vec![
@@ -73,14 +85,19 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignme
                 ],
                 &vec![],
                 None,
-            ).await? {
-                let existing_path = AssignmentInterpreterService::storage_root().join(&existing.path);
+            )
+            .await?
+            {
+                let existing_path =
+                    AssignmentInterpreterService::storage_root().join(&existing.path);
                 let _ = fs::remove_file(existing_path); // Silently ignore failure
 
                 Repository::<Entity, Column>::delete_by_id(existing.id).await?;
             }
 
-            let inserted: Model = Repository::<Entity, Column>::create(params.clone().into_active_model().await?).await?;
+            let inserted: Model =
+                Repository::<Entity, Column>::create(params.clone().into_active_model().await?)
+                    .await?;
 
             let ext = PathBuf::from(params.filename)
                 .extension()
@@ -92,8 +109,9 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignme
             };
 
             let dir_path = Self::full_directory_path(params.module_id, params.assignment_id);
-            fs::create_dir_all(&dir_path)
-                .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to create directory: {}", e)))?;
+            fs::create_dir_all(&dir_path).map_err(|e| {
+                sea_orm::DbErr::Custom(format!("Failed to create directory: {}", e))
+            })?;
 
             let file_path = dir_path.join(&stored_filename);
             let relative_path = file_path
@@ -109,7 +127,9 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignme
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            Repository::<Entity, Column>::update(model).await.map_err(AppError::from)
+            Repository::<Entity, Column>::update(model)
+                .await
+                .map_err(AppError::from)
         })
     }
 }
@@ -123,34 +143,37 @@ impl AssignmentInterpreterService {
             .unwrap_or_else(|_| PathBuf::from("data/interpreters"))
     }
 
-    pub fn full_directory_path(
-        module_id: i64,
-        assignment_id: i64,
-    ) -> PathBuf {
+    pub fn full_directory_path(module_id: i64, assignment_id: i64) -> PathBuf {
         Self::storage_root()
             .join(format!("module_{}", module_id))
             .join(format!("assignment_{}", assignment_id))
             .join("interpreter")
     }
 
-    pub async fn load_file(
-        id: i64,
-    ) -> Result<Vec<u8>, std::io::Error> {
+    pub async fn load_file(id: i64) -> Result<Vec<u8>, std::io::Error> {
         let interpreter = Repository::<Entity, Column>::find_by_id(id)
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Interpreter ID {} not found", id)))?;
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Interpreter ID {} not found", id),
+                )
+            })?;
         let full_path = Self::storage_root().join(interpreter.path);
         fs::read(full_path)
     }
 
-    pub async fn delete_file_only(
-        id: i64,
-    ) -> Result<(), std::io::Error> {
+    pub async fn delete_file_only(id: i64) -> Result<(), std::io::Error> {
         let interpreter = Repository::<Entity, Column>::find_by_id(id)
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Interpreter ID {} not found", id)))?;
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Interpreter ID {} not found", id),
+                )
+            })?;
         let full_path = Self::storage_root().join(interpreter.path);
         fs::remove_file(full_path)
     }

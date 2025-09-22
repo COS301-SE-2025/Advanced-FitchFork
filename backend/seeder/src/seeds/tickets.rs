@@ -1,10 +1,10 @@
 use crate::seed::Seeder;
-use services::service::{Service, AppError};
-use services::user::UserService;
-use services::assignment::AssignmentService;
-use services::ticket::{TicketService, CreateTicket};
 use rand::rngs::{OsRng, StdRng};
-use rand::{seq::SliceRandom, SeedableRng};
+use rand::{SeedableRng, seq::SliceRandom};
+use services::assignment::AssignmentService;
+use services::service::{AppError, Service};
+use services::ticket::{CreateTicket, TicketService};
+use services::user::UserService;
 use std::pin::Pin;
 
 pub struct TicketSeeder;
@@ -30,16 +30,8 @@ impl Seeder for TicketSeeder {
                 "Other module-related inquiry.",
             ];
 
-            let assignments = AssignmentService::find_all(
-                &vec![],
-                &vec![],
-                None,
-            ).await?;
-            let users = UserService::find_all(
-                &vec![],
-                &vec![],
-                None,
-            ).await?;
+            let assignments = AssignmentService::find_all(&vec![], &vec![], None).await?;
+            let users = UserService::find_all(&vec![], &vec![], None).await?;
 
             if assignments.is_empty() || users.is_empty() {
                 return Err(AppError::DatabaseUnknown);
@@ -53,15 +45,14 @@ impl Seeder for TicketSeeder {
                 let description = descriptions.choose(&mut rng).unwrap().to_string();
                 let status = statuses.choose(&mut rng).unwrap();
 
-                TicketService::create(
-                    CreateTicket{
-                        assignment_id: assignment.id,
-                        user_id: user.id,
-                        title: title,
-                        description: description,
-                        status: status.to_string(),
-                    }
-                ).await?;
+                TicketService::create(CreateTicket {
+                    assignment_id: assignment.id,
+                    user_id: user.id,
+                    title: title,
+                    description: description,
+                    status: status.to_string(),
+                })
+                .await?;
             }
 
             Ok(())

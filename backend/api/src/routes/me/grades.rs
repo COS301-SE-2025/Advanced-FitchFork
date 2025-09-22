@@ -1,13 +1,8 @@
-use axum::{
-    extract::Query,
-    http::StatusCode,
-    response::IntoResponse,
-    Extension, Json,
-};
+use crate::{auth::claims::AuthUser, response::ApiResponse};
+use axum::{Extension, Json, extract::Query, http::StatusCode, response::IntoResponse};
 use common::format_validation_errors;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-use crate::{auth::claims::AuthUser, response::ApiResponse};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct GetGradesQuery {
@@ -201,7 +196,7 @@ pub async fn get_my_grades(
     }
 
     let mut condition = Condition::all();
-    
+
     if let Some(q) = &query.query {
         let pattern = format!("%{}%", q.to_lowercase());
         condition = condition.add(
@@ -244,18 +239,15 @@ pub async fn get_my_grades(
     } else {
         query_builder = query_builder.order_by(GradeColumn::CreatedAt, sea_orm::Order::Desc);
     }
-    
+
     query_builder = query_builder.order_by(GradeColumn::Id, sea_orm::Order::Asc);
 
     let paginator = query_builder
         .into_model::<GradeWithRelations>()
         .paginate(db, per_page);
-    
+
     let total = paginator.num_items().await.unwrap_or(0);
-    let grades: Vec<GradeWithRelations> = paginator
-        .fetch_page(page - 1)
-        .await
-        .unwrap_or_default();
+    let grades: Vec<GradeWithRelations> = paginator.fetch_page(page - 1).await.unwrap_or_default();
 
     let grades: Vec<GradeItem> = grades
         .into_iter()
@@ -303,7 +295,8 @@ pub async fn get_my_grades(
                 },
                 "No grades found",
             )),
-        ).into_response();
+        )
+            .into_response();
     }
 
     (

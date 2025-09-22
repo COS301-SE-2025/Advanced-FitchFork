@@ -1,10 +1,10 @@
-use crate::service::{Service, AppError, ToActiveModel};
+use crate::service::{AppError, Service, ToActiveModel};
+use chrono::Utc;
 use db::{
-    models::plagiarism_case::{ActiveModel, Entity, Column},
+    models::plagiarism_case::{ActiveModel, Column, Entity},
     repository::Repository,
 };
 use sea_orm::{DbErr, Set};
-use chrono::Utc;
 
 pub use db::models::plagiarism_case::Model as PlagiarismCase;
 pub use db::models::plagiarism_case::Status;
@@ -48,7 +48,10 @@ impl ToActiveModel<Entity> for UpdatePlagiarismCase {
         let case = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(case)) => case,
             Ok(None) => {
-                return Err(AppError::from(DbErr::RecordNotFound(format!("Case not found for ID {}", self.id))));
+                return Err(AppError::from(DbErr::RecordNotFound(format!(
+                    "Case not found for ID {}",
+                    self.id
+                ))));
             }
             Err(err) => return Err(AppError::from(err)),
         };
@@ -66,7 +69,9 @@ impl ToActiveModel<Entity> for UpdatePlagiarismCase {
 
 pub struct PlagiarismCaseService;
 
-impl<'a> Service<'a, Entity, Column, CreatePlagiarismCase, UpdatePlagiarismCase> for PlagiarismCaseService {
+impl<'a> Service<'a, Entity, Column, CreatePlagiarismCase, UpdatePlagiarismCase>
+    for PlagiarismCaseService
+{
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 

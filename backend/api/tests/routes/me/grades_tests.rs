@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
@@ -13,10 +14,9 @@ mod tests {
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use serial_test::serial;
     use serde_json::Value;
+    use serial_test::serial;
     use tower::ServiceExt;
-    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         student1: UserModel,
@@ -247,7 +247,7 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
@@ -344,7 +344,7 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();

@@ -14,13 +14,13 @@ mod tests {
         },
         repositories::user_repository::UserRepository,
     };
+    use serde_json::json;
+    use serial_test::serial;
     use services::{
         service::Service,
         user::{CreateUser, UserService},
     };
-    use serde_json::json;
     use tower::ServiceExt;
-    use serial_test::serial;
 
     struct TestData {
         student: UserModel,

@@ -1,20 +1,18 @@
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
-use axum::extract::Multipart;
-use serde::Deserialize;
-use tokio::io::AsyncWriteExt;
-use util::{paths::{ensure_dir, user_profile_dir, user_profile_path}, state::AppState};
-use validator::Validate;
-use crate::{response::ApiResponse};
-use common::format_validation_errors;
+use crate::response::ApiResponse;
 use crate::routes::common::UserResponse;
-use util::filters::FilterParam;
+use axum::extract::Multipart;
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use common::format_validation_errors;
+use serde::Deserialize;
 use services::service::Service;
 use services::user::{UpdateUser, UserService};
+use tokio::io::AsyncWriteExt;
+use util::filters::FilterParam;
+use util::{
+    paths::{ensure_dir, user_profile_dir, user_profile_path},
+    state::AppState,
+};
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateUserRequest {
@@ -102,14 +100,18 @@ pub async fn update_user(
     if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<UserResponse>::error(format_validation_errors(&e))),
+            Json(ApiResponse::<UserResponse>::error(
+                format_validation_errors(&e),
+            )),
         );
     }
 
     if req.username.is_none() && req.email.is_none() && req.admin.is_none() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<UserResponse>::error("At least one field must be provided")),
+            Json(ApiResponse::<UserResponse>::error(
+                "At least one field must be provided",
+            )),
         );
     }
 
@@ -127,7 +129,9 @@ pub async fn update_user(
     if let Some(_) = req.admin {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<UserResponse>::error("Changing admin status is not allowed")),
+            Json(ApiResponse::<UserResponse>::error(
+                "Changing admin status is not allowed",
+            )),
         );
     }
 
@@ -140,20 +144,26 @@ pub async fn update_user(
                 ],
                 &vec![],
                 None,
-            ).await;
+            )
+            .await;
 
             match exists_result {
                 Ok(Some(_)) => {
                     return (
                         StatusCode::CONFLICT,
-                        Json(ApiResponse::<UserResponse>::error("A user with this email already exists")),
+                        Json(ApiResponse::<UserResponse>::error(
+                            "A user with this email already exists",
+                        )),
                     );
                 }
                 Ok(None) => {}
                 Err(e) => {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
+                        Json(ApiResponse::<UserResponse>::error(format!(
+                            "Database error: {}",
+                            e
+                        ))),
                     );
                 }
             }
@@ -169,7 +179,8 @@ pub async fn update_user(
                 ],
                 &vec![],
                 None,
-            ).await;
+            )
+            .await;
 
             match exists_result {
                 Ok(Some(_)) => {
@@ -184,23 +195,26 @@ pub async fn update_user(
                 Err(e) => {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
+                        Json(ApiResponse::<UserResponse>::error(format!(
+                            "Database error: {}",
+                            e
+                        ))),
                     );
                 }
             }
         }
     }
 
-    match UserService::update(
-        UpdateUser {
-            id: user_id,
-            username: req.username.clone(),
-            email: req.email.clone(),
-            password: None,
-            admin: req.admin,
-            profile_picture_path: None,
-        }
-    ).await {
+    match UserService::update(UpdateUser {
+        id: user_id,
+        username: req.username.clone(),
+        email: req.email.clone(),
+        password: None,
+        admin: req.admin,
+        profile_picture_path: None,
+    })
+    .await
+    {
         Ok(updated) => (
             StatusCode::OK,
             Json(ApiResponse::success(
@@ -210,7 +224,10 @@ pub async fn update_user(
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
+            Json(ApiResponse::<UserResponse>::error(format!(
+                "Database error: {}",
+                e
+            ))),
         ),
     }
 }
@@ -292,8 +309,10 @@ pub async fn upload_avatar(
                 if !ALLOWED_MIME.contains(&ct.as_str()) {
                     return (
                         StatusCode::BAD_REQUEST,
-                        Json(ApiResponse::<ProfilePictureResponse>::error("File type not supported.")),
-                    )
+                        Json(ApiResponse::<ProfilePictureResponse>::error(
+                            "File type not supported.",
+                        )),
+                    );
                 }
             }
 
@@ -301,8 +320,10 @@ pub async fn upload_avatar(
             if bytes.len() as u64 > MAX_SIZE {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<ProfilePictureResponse>::error("File too large.")),
-                )
+                    Json(ApiResponse::<ProfilePictureResponse>::error(
+                        "File too large.",
+                    )),
+                );
             }
 
             file_data = Some(bytes);
@@ -312,8 +333,10 @@ pub async fn upload_avatar(
     let Some(file_bytes) = file_data else {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<ProfilePictureResponse>::error("No file uploaded.")),
-        )
+            Json(ApiResponse::<ProfilePictureResponse>::error(
+                "No file uploaded.",
+            )),
+        );
     };
 
     let ext = match content_type.as_deref() {
@@ -323,11 +346,13 @@ pub async fn upload_avatar(
         _ => "bin",
     };
 
-        // Ensure the user's profile directory exists under USERS_STORAGE_ROOT
+    // Ensure the user's profile directory exists under USERS_STORAGE_ROOT
     if let Err(_) = ensure_dir(user_profile_dir(user_id)) {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<ProfilePictureResponse>::error("Failed to prepare user directory")),
+            Json(ApiResponse::<ProfilePictureResponse>::error(
+                "Failed to prepare user directory",
+            )),
         );
     }
 
@@ -340,14 +365,18 @@ pub async fn upload_avatar(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ProfilePictureResponse>::error("Failed to create avatar file")),
+                Json(ApiResponse::<ProfilePictureResponse>::error(
+                    "Failed to create avatar file",
+                )),
             );
         }
     };
     if let Err(_) = file.write_all(&file_bytes).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<ProfilePictureResponse>::error("Failed to write avatar file")),
+            Json(ApiResponse::<ProfilePictureResponse>::error(
+                "Failed to write avatar file",
+            )),
         );
     }
 
@@ -355,7 +384,10 @@ pub async fn upload_avatar(
     let relative_path = filename.clone();
 
     let current = user::Entity::find_by_id(user_id)
-        .one(db).await.unwrap().unwrap();
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap();
 
     let mut model = current.into_active_model();
     model.profile_picture_path = Set(Some(relative_path.clone()));

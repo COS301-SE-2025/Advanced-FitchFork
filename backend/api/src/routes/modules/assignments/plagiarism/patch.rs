@@ -1,14 +1,9 @@
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use crate::response::ApiResponse;
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use crate::response::ApiResponse;
-use services::service::Service;
 use services::plagiarism_case::{PlagiarismCaseService, Status, UpdatePlagiarismCase};
+use services::service::Service;
 
 #[derive(Debug, Serialize)]
 pub struct FlaggedCaseResponse {
@@ -78,20 +73,23 @@ pub struct FlaggedCaseResponse {
 pub async fn patch_plagiarism_flag(
     Path((_, _, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let updated_case = match PlagiarismCaseService::update(
-        UpdatePlagiarismCase {
-            id: case_id,
-            description: None,
-            status: Some(Status::Flagged),
-            similarity: None,
-        }
-    ).await {
+    let updated_case = match PlagiarismCaseService::update(UpdatePlagiarismCase {
+        id: case_id,
+        description: None,
+        status: Some(Status::Flagged),
+        similarity: None,
+    })
+    .await
+    {
         Ok(case) => case,
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(format!("Failed to update plagiarism case: {}", e))),
-            )
+                Json(ApiResponse::error(format!(
+                    "Failed to update plagiarism case: {}",
+                    e
+                ))),
+            );
         }
     };
 
@@ -103,7 +101,10 @@ pub async fn patch_plagiarism_flag(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response_data, "Plagiarism case flagged")),
+        Json(ApiResponse::success(
+            response_data,
+            "Plagiarism case flagged",
+        )),
     )
 }
 
@@ -175,20 +176,23 @@ pub struct ReviewedCaseResponse {
 pub async fn patch_plagiarism_review(
     Path((_, _, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let updated_case = match PlagiarismCaseService::update(
-        UpdatePlagiarismCase {
-            id: case_id,
-            description: None,
-            status: Some(Status::Reviewed),
-            similarity: None,
-        }
-    ).await {
+    let updated_case = match PlagiarismCaseService::update(UpdatePlagiarismCase {
+        id: case_id,
+        description: None,
+        status: Some(Status::Reviewed),
+        similarity: None,
+    })
+    .await
+    {
         Ok(case) => case,
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(format!("Failed to update plagiarism case: {}", e))),
-            )
+                Json(ApiResponse::error(format!(
+                    "Failed to update plagiarism case: {}",
+                    e
+                ))),
+            );
         }
     };
 
@@ -200,6 +204,9 @@ pub async fn patch_plagiarism_review(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response_data, "Plagiarism case marked as reviewed")),
+        Json(ApiResponse::success(
+            response_data,
+            "Plagiarism case marked as reviewed",
+        )),
     )
 }

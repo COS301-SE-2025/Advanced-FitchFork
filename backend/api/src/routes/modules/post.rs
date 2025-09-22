@@ -3,17 +3,13 @@
 //! Provides the `POST /api/modules` endpoint for creating new university modules.  
 //! Only accessible by admin users. Responses follow the standard `ApiResponse` format.
 
-use axum::{
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
-use chrono::{Datelike, Utc};
-use validator::Validate;
 use crate::response::ApiResponse;
 use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
-use services::service::{Service, AppError};
-use services::module::{ModuleService, CreateModule};
+use axum::{Json, http::StatusCode, response::IntoResponse};
+use chrono::{Datelike, Utc};
+use services::module::{CreateModule, ModuleService};
+use services::service::{AppError, Service};
+use validator::Validate;
 
 /// POST /api/modules
 ///
@@ -85,9 +81,7 @@ use services::module::{ModuleService, CreateModule};
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn create(
-    Json(req): Json<ModuleRequest>
-) -> impl IntoResponse {
+pub async fn create(Json(req): Json<ModuleRequest>) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -107,25 +101,31 @@ pub async fn create(
         );
     }
 
-    match ModuleService::create(
-        CreateModule {
-            id: None,
-            code: req.code,
-            year: req.year,
-            description: req.description,
-            credits: req.credits,
-        }
-    ).await {
+    match ModuleService::create(CreateModule {
+        id: None,
+        code: req.code,
+        year: req.year,
+        description: req.description,
+        credits: req.credits,
+    })
+    .await
+    {
         Ok(module) => {
             let response = ModuleResponse::from(module);
             (
                 StatusCode::CREATED,
-                Json(ApiResponse::success(response, "Module created successfully")),
+                Json(ApiResponse::success(
+                    response,
+                    "Module created successfully",
+                )),
             )
         }
         Err(e) => {
             if let AppError::Database(err) = &e {
-                if err.to_string().contains("UNIQUE constraint failed: modules.code") {
+                if err
+                    .to_string()
+                    .contains("UNIQUE constraint failed: modules.code")
+                {
                     return (
                         StatusCode::CONFLICT,
                         Json(ApiResponse::<ModuleResponse>::error(

@@ -1,12 +1,12 @@
 #[cfg(test)]
 mod tests {
+    use crate::helpers::app::make_test_app_with_storage;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
-    use tower::ServiceExt;
     use serde_json::Value;
-    use crate::helpers::app::make_test_app_with_storage;
+    use tower::ServiceExt;
 
     #[tokio::test]
     #[serial]
@@ -22,7 +22,9 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"], "OK");

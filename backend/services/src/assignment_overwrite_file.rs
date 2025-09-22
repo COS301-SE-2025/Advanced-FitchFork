@@ -1,14 +1,17 @@
-use crate::service::{Service, AppError, ToActiveModel};
+use crate::service::{AppError, Service, ToActiveModel};
+use chrono::Utc;
 use db::{
-    models::assignment::{Entity as AssignmentEntity, Column as AssignmentColumn},
-    models::assignment_task::{Entity as AssignmentTaskEntity, Column as AssignmentTaskColumn},
-    models::assignment_overwrite_file::{ActiveModel, Entity as AssignmentOverwriteFileEntity, Column as AssignmentOverwriteFileColumn, Model},
+    models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
+    models::assignment_overwrite_file::{
+        ActiveModel, Column as AssignmentOverwriteFileColumn,
+        Entity as AssignmentOverwriteFileEntity, Model,
+    },
+    models::assignment_task::{Column as AssignmentTaskColumn, Entity as AssignmentTaskEntity},
     repository::Repository,
 };
 use sea_orm::{DbErr, Set};
-use chrono::Utc;
 use std::path::PathBuf;
-use std::{fs, env};
+use std::{env, fs};
 
 pub use db::models::assignment_overwrite_file::Model as AssignmentOverwriteFile;
 
@@ -64,14 +67,36 @@ impl ToActiveModel<AssignmentOverwriteFileEntity> for UpdateAssignmentOverwriteF
 
 pub struct AssignmentOverwriteFileService;
 
-impl<'a> Service<'a, AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn, CreateAssignmentOverwriteFile, UpdateAssignmentOverwriteFile> for AssignmentOverwriteFileService {
+impl<'a>
+    Service<
+        'a,
+        AssignmentOverwriteFileEntity,
+        AssignmentOverwriteFileColumn,
+        CreateAssignmentOverwriteFile,
+        UpdateAssignmentOverwriteFile,
+    > for AssignmentOverwriteFileService
+{
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 
     fn create(
-            params: CreateAssignmentOverwriteFile,
-        ) -> std::pin::Pin<Box<dyn std::prelude::rust_2024::Future<Output = Result<<AssignmentOverwriteFileEntity as sea_orm::EntityTrait>::Model, AppError>> + Send + 'a>> {
+        params: CreateAssignmentOverwriteFile,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::prelude::rust_2024::Future<
+                    Output = Result<
+                        <AssignmentOverwriteFileEntity as sea_orm::EntityTrait>::Model,
+                        AppError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
         Box::pin(async move {
-            let inserted: Model = Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::create(params.clone().into_active_model().await?).await?;
+            let inserted: Model = Repository::<
+                AssignmentOverwriteFileEntity,
+                AssignmentOverwriteFileColumn,
+            >::create(params.clone().into_active_model().await?)
+            .await?;
 
             let ext = PathBuf::from(params.filename)
                 .extension()
@@ -82,11 +107,27 @@ impl<'a> Service<'a, AssignmentOverwriteFileEntity, AssignmentOverwriteFileColum
                 None => inserted.id.to_string(),
             };
 
-            let assignment = Repository::<AssignmentEntity, AssignmentColumn>::find_by_id(params.assignment_id).await?
-                .ok_or_else(|| DbErr::RecordNotFound(format!("Assignment ID {} not found", params.assignment_id)))?;
-            let task = Repository::<AssignmentTaskEntity, AssignmentTaskColumn>::find_by_id(params.task_id).await?
-                .ok_or_else(|| DbErr::RecordNotFound(format!("Task ID {} not found", params.task_id)))?;
-            let dir_path = Self::full_directory_path(assignment.module_id, params.assignment_id, task.task_number);
+            let assignment =
+                Repository::<AssignmentEntity, AssignmentColumn>::find_by_id(params.assignment_id)
+                    .await?
+                    .ok_or_else(|| {
+                        DbErr::RecordNotFound(format!(
+                            "Assignment ID {} not found",
+                            params.assignment_id
+                        ))
+                    })?;
+            let task = Repository::<AssignmentTaskEntity, AssignmentTaskColumn>::find_by_id(
+                params.task_id,
+            )
+            .await?
+            .ok_or_else(|| {
+                DbErr::RecordNotFound(format!("Task ID {} not found", params.task_id))
+            })?;
+            let dir_path = Self::full_directory_path(
+                assignment.module_id,
+                params.assignment_id,
+                task.task_number,
+            );
             fs::create_dir_all(&dir_path)
                 .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
 
@@ -104,7 +145,11 @@ impl<'a> Service<'a, AssignmentOverwriteFileEntity, AssignmentOverwriteFileColum
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::update(model).await.map_err(AppError::from)
+            Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::update(
+                model,
+            )
+            .await
+            .map_err(AppError::from)
         })
     }
 }
@@ -118,11 +163,7 @@ impl AssignmentOverwriteFileService {
             .unwrap_or_else(|_| PathBuf::from("data/assignment_files"))
     }
 
-    pub fn full_directory_path(
-        module_id: i64,
-        assignment_id: i64,
-        task_number: i64
-    ) -> PathBuf {
+    pub fn full_directory_path(module_id: i64, assignment_id: i64, task_number: i64) -> PathBuf {
         Self::storage_root()
             .join(format!("module_{module_id}"))
             .join(format!("assignment_{assignment_id}"))
@@ -130,32 +171,46 @@ impl AssignmentOverwriteFileService {
             .join(format!("task_{task_number}"))
     }
 
-    pub async fn full_path(
-        id: i64
-    ) -> Result<PathBuf, DbErr> {
-        let overwrite = Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::find_by_id(id).await?
+    pub async fn full_path(id: i64) -> Result<PathBuf, DbErr> {
+        let overwrite =
+            Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::find_by_id(
+                id,
+            )
+            .await?
             .ok_or_else(|| DbErr::RecordNotFound(format!("Overwrite File ID {} not found", id)))?;
         Ok(Self::storage_root().join(overwrite.path))
     }
 
-    pub async fn load_file(
-        id: i64,
-    ) -> Result<Vec<u8>, std::io::Error> {
-        let overwrite = Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::find_by_id(id)
+    pub async fn load_file(id: i64) -> Result<Vec<u8>, std::io::Error> {
+        let overwrite =
+            Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::find_by_id(
+                id,
+            )
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Overwrite File ID {} not found", id)))?;
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Overwrite File ID {} not found", id),
+                )
+            })?;
         let full_path = Self::storage_root().join(overwrite.path);
         fs::read(full_path)
     }
 
-    pub async fn delete_file_only(
-        id: i64,
-    ) -> Result<(), std::io::Error> {
-        let overwrite = Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::find_by_id(id)
+    pub async fn delete_file_only(id: i64) -> Result<(), std::io::Error> {
+        let overwrite =
+            Repository::<AssignmentOverwriteFileEntity, AssignmentOverwriteFileColumn>::find_by_id(
+                id,
+            )
             .await
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("DB error: {e}")))?
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, format!("Overwrite File ID {} not found", id)))?;
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Overwrite File ID {} not found", id),
+                )
+            })?;
         let full_path = Self::storage_root().join(overwrite.path);
         fs::remove_file(full_path)
     }

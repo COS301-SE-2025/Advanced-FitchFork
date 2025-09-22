@@ -6,16 +6,11 @@
 //!
 //! All responses follow the standard `ApiResponse` format.
 
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
-use services::service::Service;
-use services::module::ModuleService;
 use crate::response::ApiResponse;
-use serde::{Serialize, Deserialize};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use serde::{Deserialize, Serialize};
+use services::module::ModuleService;
+use services::service::Service;
 use validator::Validate;
 
 /// DELETE /api/modules/{module_id}
@@ -51,17 +46,21 @@ use validator::Validate;
 ///   "message": "Module not found"
 /// }
 /// ```
-pub async fn delete_module(
-    Path(module_id): Path<i64>
-) -> impl IntoResponse {
+pub async fn delete_module(Path(module_id): Path<i64>) -> impl IntoResponse {
     match ModuleService::delete_by_id(module_id).await {
         Ok(_) => (
             StatusCode::OK,
-            Json(ApiResponse::<()>::success((), "Module deleted successfully")),
+            Json(ApiResponse::<()>::success(
+                (),
+                "Module deleted successfully",
+            )),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(format!("Failed to delete module: {}", e))),
+            Json(ApiResponse::<()>::error(format!(
+                "Failed to delete module: {}",
+                e
+            ))),
         ),
     }
 }
@@ -120,9 +119,7 @@ pub struct FailedDelete {
 ///   "message": "At least one module ID is required"
 /// }
 /// ```
-pub async fn bulk_delete_modules(
-    Json(req): Json<BulkDeleteRequest>,
-) -> impl IntoResponse {
+pub async fn bulk_delete_modules(Json(req): Json<BulkDeleteRequest>) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -151,14 +148,7 @@ pub async fn bulk_delete_modules(
         failed,
     };
 
-    let message = format!(
-        "Deleted {}/{} modules",
-        deleted_count,
-        req.module_ids.len()
-    );
+    let message = format!("Deleted {}/{} modules", deleted_count, req.module_ids.len());
 
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(result, message)),
-    )
+    (StatusCode::OK, Json(ApiResponse::success(result, message)))
 }

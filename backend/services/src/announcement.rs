@@ -1,10 +1,10 @@
-use crate::service::{Service, AppError, ToActiveModel};
+use crate::service::{AppError, Service, ToActiveModel};
+use chrono::Utc;
 use db::{
-    models::announcements::{ActiveModel, Entity, Column},
+    models::announcements::{ActiveModel, Column, Entity},
     repository::Repository,
 };
 use sea_orm::{DbErr, Set};
-use chrono::Utc;
 
 pub use db::models::announcements::Model as Announcement;
 
@@ -46,7 +46,10 @@ impl ToActiveModel<Entity> for UpdateAnnouncement {
         let announcement = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(announcement)) => announcement,
             Ok(None) => {
-                return Err(AppError::from(DbErr::RecordNotFound(format!("Announcement not found for ID {}", self.id))));
+                return Err(AppError::from(DbErr::RecordNotFound(format!(
+                    "Announcement not found for ID {}",
+                    self.id
+                ))));
             }
             Err(err) => return Err(AppError::from(err)),
         };
@@ -72,7 +75,9 @@ impl ToActiveModel<Entity> for UpdateAnnouncement {
 
 pub struct AnnouncementService;
 
-impl<'a> Service<'a, Entity, Column, CreateAnnouncement, UpdateAnnouncement> for AnnouncementService {
+impl<'a> Service<'a, Entity, Column, CreateAnnouncement, UpdateAnnouncement>
+    for AnnouncementService
+{
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 

@@ -1,8 +1,8 @@
 use crate::ws::WebSocketManager;
-use jsonwebtoken::{EncodingKey, DecodingKey};
+use dotenvy::dotenv;
+use jsonwebtoken::{DecodingKey, EncodingKey};
 use std::env;
 use std::sync::OnceLock;
-use dotenvy::dotenv;
 
 static APP_STATE: OnceLock<AppState> = OnceLock::new();
 
@@ -20,9 +20,8 @@ impl AppState {
         APP_STATE.get_or_init(|| {
             dotenv().ok();
 
-            let secret = env::var("JWT_SECRET")
-                .expect("JWT_SECRET must be set at startup");
-            
+            let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set at startup");
+
             let jwt_duration_minutes = env::var("JWT_DURATION_MINUTES")
                 .expect("JWT_DURATION_MINUTES must be set at startup")
                 .parse::<i64>()

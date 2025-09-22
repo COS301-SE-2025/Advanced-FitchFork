@@ -12,12 +12,9 @@ use db::test_utils::setup_test_db;
 use sea_orm::ColumnTrait;
 use sea_orm::QueryFilter;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
-use util::paths::{
-    interpreter_dir, makefile_dir, memo_dir, storage_root, submission_file_path
-};
 use util::execution_config::ExecutionConfig;
+use util::paths::{interpreter_dir, makefile_dir, memo_dir, storage_root, submission_file_path};
 use util::test_helpers::setup_test_storage_root;
-
 
 fn write_zip(path: &std::path::Path, entries: &[(&str, &[u8])]) -> std::io::Result<()> {
     use std::io::Write;
@@ -32,86 +29,101 @@ fn write_zip(path: &std::path::Path, entries: &[(&str, &[u8])]) -> std::io::Resu
         }
         zip.finish()?;
     }
-    if let Some(parent) = path.parent() { std::fs::create_dir_all(parent)?; }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     std::fs::write(path, &buf)
 }
 
-
-async fn seed_user() -> i64 {
+async fn seed_user(db: &DatabaseConnection) -> i64 {
     let user_id = 1;
-    if UserService::find_by_id(user_id).await.expect("DB error during user lookup").is_none() {
-        let _ = UserService::create(
-            CreateUser {
-                id: Some(user_id),
-                username: "u00000001".to_string(),
-                email: "testuser@example.com".to_string(),
-                password: "hashedpassword".to_string(),
-                admin: false,
-            }
-        ).await.expect("Failed to insert user");
+    if UserEntity::find_by_id(user_id)
+        .one(db)
+        .await
+        .expect("DB error during user lookup")
+        .is_none()
+    {
+        let user = UserActiveModel {
+            id: Set(user_id),
+            username: Set("u00000001".to_string()),
+            email: Set("testuser@example.com".to_string()),
+            password_hash: Set("hashedpassword".to_string()),
+            admin: Set(false),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            profile_picture_path: Set(None),
+        };
+        user.insert(db).await.expect("Failed to insert user");
     }
     user_id
 }
 
-async fn seed_module(module_id: i64, code: &str) {
-    if ModuleService::find_by_id(module_id)
+async fn seed_module(db: &DatabaseConnection, module_id: i64, code: &str) {
+    if ModuleEntity::find_by_id(module_id)
+        .one(db)
         .await
         .expect("DB error")
         .is_none()
     {
-        let _ = ModuleService::create(
-            CreateModule {
-                id: Some(module_id),
-                code: code.to_string(),
-                year: 2025,
-                description: Some(format!("Test module for ID {}", module_id)),
-                credits: 12,
-            }
-        ).await.expect("Failed to insert module");
+        let module = ModuleActiveModel {
+            id: Set(module_id),
+            code: Set(code.to_string()),
+            year: Set(2025),
+            description: Set(Some(format!("Test module for ID {}", module_id))),
+            credits: Set(12),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+        };
+        module.insert(db).await.expect("Failed to insert module");
     }
 }
 
-async fn seed_assignment(assignment_id: i64, module_id: i64) {
-    if AssignmentService::find_by_id(assignment_id)
+async fn seed_assignment(db: &DatabaseConnection, assignment_id: i64, module_id: i64) {
+    if AssignmentEntity::find_by_id(assignment_id)
+        .one(db)
         .await
         .expect("DB error")
         .is_none()
     {
-        let _ = AssignmentService::create(
-            CreateAssignment {
-                id: Some(assignment_id),
-                module_id,
-                name: "Special Assignment".to_string(),
-                description: Some("Special assignment for testing".to_string()),
-                assignment_type: AssignmentType::Assignment,
-                available_from: Utc::now(),
-                due_date: Utc::now(),
-            }
-        ).await.expect("Failed to insert assignment");
+        let assignment = AssignmentActiveModel {
+            id: Set(assignment_id),
+            module_id: Set(module_id),
+            name: Set("Special Assignment".to_string()),
+            description: Set(Some("Special assignment for testing".to_string())),
+            assignment_type: Set(AssignmentType::Assignment),
+            available_from: Set(Utc::now()),
+            due_date: Set(Utc::now()),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+        assignment
+            .insert(db)
+            .await
+            .expect("Failed to insert assignment");
     }
 }
 
-async fn seed_tasks(assignment_id: i64) {
+async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
     let mut tasks = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
     if assignment_id == 9998 {
         tasks.push((4, "make task4"));
     }
     for (task_number, command) in tasks {
-        let _ = AssignmentTaskService::create(
-            CreateAssignmentTask {
-                assignment_id,
-                task_number,
-                name: "Untitled Task".to_string(),
-                command: command.to_string(),
-                code_coverage: false,
-            }
-        ).await.expect("Failed to create assignment task");
+        AssignmentTaskModel::create(
+            db,
+            assignment_id,
+            task_number,
+            "Untitled Task",
+            command,
+            false,
+        )
+        .await
+        .expect("Failed to create assignment task");
     }
 }
 
-async fn seed_submission(
-    assignment_id: i64,
-) -> SubmissionModel {
+async fn seed_submission(db: &DatabaseConnection, assignment_id: i64) -> SubmissionModel {
     let user_id = seed_user(db).await;
     let attempt = 1;
 
@@ -171,9 +183,11 @@ async fn seed_submission(
     update.path = Set(rel);
     update.updated_at = Set(Utc::now());
 
-    update.update(db).await.expect("Failed to update submission")
+    update
+        .update(db)
+        .await
+        .expect("Failed to update submission")
 }
-
 
 async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, interpreter_id: i64) {
     use db::models::assignment_interpreter::{
@@ -197,10 +211,12 @@ async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, inte
     let interp_dir = interpreter_dir(module_id, assignment_id);
     let interp_path = interp_dir.join(&filename);
 
-
     // Minimal interpreter payload (content won't be used in compile stopgap case)
-    write_zip(&interp_path, &[("interpreter.cpp", b"int main(){return 0;}")])
-        .expect("write interpreter zip");
+    write_zip(
+        &interp_path,
+        &[("interpreter.cpp", b"int main(){return 0;}")],
+    )
+    .expect("write interpreter zip");
 
     // Relative DB path:
     let relative_path = interp_path
@@ -208,7 +224,6 @@ async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, inte
         .expect("strip prefix")
         .to_string_lossy()
         .to_string();
-
 
     // The command; choose something that triggers the compile stopgap if desired
     let command = "g++ Main.cpp -o main && ./main".to_string();
@@ -229,7 +244,10 @@ async fn seed_interpreter_file(db: &DatabaseConnection, assignment_id: i64, inte
             updated_at: Set(now),
             ..Default::default()
         };
-        interpreter.insert(db).await.expect("Failed to insert interpreter");
+        interpreter
+            .insert(db)
+            .await
+            .expect("Failed to insert interpreter");
     }
 }
 
@@ -237,13 +255,8 @@ async fn setup_test_db_for_run_interpreter(
     assignment_id: i64,
     module_id: i64,
     interpreter_id: i64,
-) -> i64 {
-    seed_user().await;
-    seed_module(module_id, &format!("COS{}", module_id)).await;
-    seed_assignment(assignment_id, module_id).await;
-    seed_tasks(assignment_id).await;
-    let submission = seed_submission(assignment_id).await;
-    seed_interpreter_file(assignment_id, interpreter_id).await;
+) -> (DatabaseConnection, i64) {
+    let db = setup_test_db().await;
 
     // IMPORTANT: make sure storage root is set and lives long enough
     // e.g., in your test use a TempDir and set the env var before calling this helper.
@@ -270,24 +283,8 @@ async fn setup_test_db_for_run_interpreter(
     let submission = seed_submission(&db, assignment_id).await;
     seed_interpreter_file(&db, assignment_id, interpreter_id).await;
 
-fn create_dummy_zip() -> Vec<u8> {
-    let mut buf = Vec::new();
-    {
-        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
-
-        let options = FileOptions::<()>::default()
-            .compression_method(zip::CompressionMethod::Stored);
-
-        // Add a dummy file inside the zip
-        zip.start_file("dummy.txt", options).unwrap();
-        zip.write_all(b"Hello, world!").unwrap();
-
-        // Finish writing zip (important: writes central directory + EOCD)
-        zip.finish().unwrap();
-    }
-    buf
+    (db, submission.id)
 }
-
 
 #[tokio::test]
 #[ignore]
@@ -301,12 +298,8 @@ async fn test_run_interpreter_9998_cpp() {
 
     let gene_string = "01234";
 
-    let submission_id = setup_test_db_for_run_interpreter(
-        assignment_id,
-        module_id,
-        interpreter_id,
-    )
-    .await;
+    let (db, submission_id) =
+        setup_test_db_for_run_interpreter(assignment_id, module_id, interpreter_id).await;
 
     // run_interpreter will:
     // 1) synthesize main zip (compile stopgap)
@@ -319,4 +312,3 @@ async fn test_run_interpreter_9998_cpp() {
 
     // keep `tmp` in scope until here
 }
-

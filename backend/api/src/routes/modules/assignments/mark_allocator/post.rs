@@ -1,12 +1,12 @@
-use std::vec;
 use crate::response::ApiResponse;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use db::models::assignment_memo_output;
 use db::models::assignment_task;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use std::vec;
 use util::mark_allocator::mark_allocator::TaskInfo;
 use util::mark_allocator::mark_allocator::{SaveError, generate_allocator};
-use util::paths::{storage_root, memo_output_dir};
+use util::paths::{memo_output_dir, storage_root};
 use util::state::AppState;
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
@@ -81,16 +81,14 @@ use util::state::AppState;
 /// - Task weights are automatically calculated to ensure fair distribution
 /// - Generation is restricted to users with Lecturer permissions for the module
 /// - The generated allocator can be further customized using the PUT endpoint
-pub async fn generate(
-    Path((module_id, assignment_id)): Path<(i64, i64)>,
-) -> impl IntoResponse {
+pub async fn generate(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
     let tasks = match AssignmentTaskService::find_all(
-        &vec![
-            FilterParam::eq("assignment_id", assignment_id),
-        ],
+        &vec![FilterParam::eq("assignment_id", assignment_id)],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(t) => t,
         Err(_) => {
             return (

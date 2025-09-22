@@ -28,7 +28,7 @@ pub struct FeedbackEntry {
 /// # Returns
 /// - `Ok(Vec<FeedbackEntry>)`: An ordered list of feedback entries for the submission.
 /// - `Err(MarkerError)`: If feedback generation fails.
-/// 
+///
 pub trait Feedback {
     fn assemble_feedback<'a>(
         &'a self,

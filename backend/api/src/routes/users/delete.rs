@@ -1,12 +1,9 @@
+use crate::{auth::claims::AuthUser, response::ApiResponse};
 use axum::{
+    Json,
     extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
-    Json,
-};
-use crate::{
-    auth::claims::AuthUser,
-    response::ApiResponse,
 };
 use services::service::Service;
 use services::user::UserService;
@@ -67,14 +64,18 @@ pub async fn delete_user(
     if user_id == claims.sub {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("You cannot delete your own account")),
+            Json(ApiResponse::<()>::error(
+                "You cannot delete your own account",
+            )),
         );
     }
 
     match UserService::delete_by_id(user_id).await {
         Ok(_) => (
             StatusCode::OK,
-            Json(ApiResponse::success_without_data("User deleted successfully")),
+            Json(ApiResponse::success_without_data(
+                "User deleted successfully",
+            )),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,

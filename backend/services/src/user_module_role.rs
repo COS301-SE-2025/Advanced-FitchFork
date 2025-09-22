@@ -1,14 +1,17 @@
-use crate::service::{Service, AppError, ToActiveModel};
+use crate::service::{AppError, Service, ToActiveModel};
 use db::{
     models::{
-        module::{Model as ModuleModel, Entity as ModuleEntity, Column as ModuleColumn},
-        user_module_role::{Model as UserModuleRoleModel, ActiveModel, Entity as UserModuleRoleEntity, Column as UserModuleRoleColumn, Role},
+        module::{Column as ModuleColumn, Entity as ModuleEntity, Model as ModuleModel},
+        user_module_role::{
+            ActiveModel, Column as UserModuleRoleColumn, Entity as UserModuleRoleEntity,
+            Model as UserModuleRoleModel, Role,
+        },
     },
     repository::Repository,
 };
-use util::filters::FilterParam;
 use sea_orm::{DbErr, Set};
 use serde::Serialize;
+use util::filters::FilterParam;
 
 pub use db::models::user_module_role::Model as UserModuleRole;
 
@@ -43,7 +46,9 @@ impl ToActiveModel<UserModuleRoleEntity> for CreateUserModuleRole {
         Ok(ActiveModel {
             user_id: Set(self.user_id),
             module_id: Set(self.module_id),
-            role: Set(self.role.trim().parse::<Role>().map_err(|e| DbErr::Custom(format!("Invalid role string '{}': {}", self.role, e)))?),
+            role: Set(self.role.trim().parse::<Role>().map_err(|e| {
+                DbErr::Custom(format!("Invalid role string '{}': {}", self.role, e))
+            })?),
             ..Default::default()
         })
     }
@@ -51,17 +56,28 @@ impl ToActiveModel<UserModuleRoleEntity> for CreateUserModuleRole {
 
 impl ToActiveModel<UserModuleRoleEntity> for UpdateUserModuleRole {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        let task = match Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::find_by_id((self.user_id, self.module_id)).await {
+        let task = match Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::find_by_id((
+            self.user_id,
+            self.module_id,
+        ))
+        .await
+        {
             Ok(Some(task)) => task,
             Ok(None) => {
-                return Err(AppError::from(DbErr::RecordNotFound(format!("Role not found for user ID {} and module ID {}", self.user_id, self.module_id))));
+                return Err(AppError::from(DbErr::RecordNotFound(format!(
+                    "Role not found for user ID {} and module ID {}",
+                    self.user_id, self.module_id
+                ))));
             }
             Err(err) => return Err(AppError::from(err)),
         };
         let mut active: ActiveModel = task.into();
 
         if let Some(role) = self.role {
-            active.role = Set(role.trim().parse::<Role>().map_err(|e| DbErr::Custom(format!("Invalid role string '{}': {}", role, e)))?);
+            active.role = Set(role
+                .trim()
+                .parse::<Role>()
+                .map_err(|e| DbErr::Custom(format!("Invalid role string '{}': {}", role, e)))?);
         }
 
         Ok(active)
@@ -70,7 +86,15 @@ impl ToActiveModel<UserModuleRoleEntity> for UpdateUserModuleRole {
 
 pub struct UserModuleRoleService;
 
-impl<'a> Service<'a, UserModuleRoleEntity, UserModuleRoleColumn, CreateUserModuleRole, UpdateUserModuleRole> for UserModuleRoleService {
+impl<'a>
+    Service<
+        'a,
+        UserModuleRoleEntity,
+        UserModuleRoleColumn,
+        CreateUserModuleRole,
+        UpdateUserModuleRole,
+    > for UserModuleRoleService
+{
     // ↓↓↓ OVERRIDE DEFAULT BEHAVIOR IF NEEDED HERE ↓↓↓
 }
 
@@ -88,7 +112,8 @@ impl UserModuleRoleService {
             ],
             &vec![],
             None,
-        ).await
+        )
+        .await
     }
 
     // pub async fn get_modules_by_user_role(
@@ -104,23 +129,25 @@ impl UserModuleRoleService {
     //     ).await
     // }
 
-    pub async fn get_module_roles(
-        user_id: i64
-    ) -> Result<Vec<UserModuleRoleInfo>, DbErr> {
+    pub async fn get_module_roles(user_id: i64) -> Result<Vec<UserModuleRoleInfo>, DbErr> {
         let roles = Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::find_all(
-            &vec![
-                FilterParam::eq("user_id", user_id),
-            ],
+            &vec![FilterParam::eq("user_id", user_id)],
             &vec![],
             None,
-        ).await?;
+        )
+        .await?;
         let modules = Repository::<ModuleEntity, ModuleColumn>::find_all(
-            &vec![
-                FilterParam::eq("id", roles.iter().map(|role| role.module_id).collect::<Vec<i64>>()),
-            ],
+            &vec![FilterParam::eq(
+                "id",
+                roles
+                    .iter()
+                    .map(|role| role.module_id)
+                    .collect::<Vec<i64>>(),
+            )],
             &vec![],
             None,
-        ).await?;
+        )
+        .await?;
 
         let modules_by_id: std::collections::HashMap<i64, ModuleModel> =
             modules.into_iter().map(|m| (m.id, m)).collect();
@@ -128,8 +155,9 @@ impl UserModuleRoleService {
         let result = roles
             .into_iter()
             .filter_map(|role| {
-                modules_by_id.get(&role.module_id).map(|module| {
-                    UserModuleRoleInfo {
+                modules_by_id
+                    .get(&role.module_id)
+                    .map(|module| UserModuleRoleInfo {
                         module_id: module.id,
                         module_code: module.code.clone(),
                         module_year: module.year,
@@ -138,19 +166,14 @@ impl UserModuleRoleService {
                         module_created_at: module.created_at.to_string(),
                         module_updated_at: module.updated_at.to_string(),
                         role: role.role.to_string(),
-                    }
-                })
+                    })
             })
             .collect();
 
         Ok(result)
     }
 
-    pub async fn is_in_role(
-        user_id: i64,
-        module_id: i64,
-        role: String,
-    ) -> Result<bool, DbErr> {
+    pub async fn is_in_role(user_id: i64, module_id: i64, role: String) -> Result<bool, DbErr> {
         Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::exists(
             &vec![
                 FilterParam::eq("user_id", user_id),
@@ -158,6 +181,7 @@ impl UserModuleRoleService {
                 FilterParam::eq("role", role),
             ],
             &vec![],
-        ).await
+        )
+        .await
     }
 }

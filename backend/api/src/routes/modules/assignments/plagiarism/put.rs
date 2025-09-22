@@ -1,14 +1,9 @@
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use crate::response::ApiResponse;
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use crate::response::ApiResponse;
-use services::service::Service;
 use services::plagiarism_case::{PlagiarismCaseService, Status, UpdatePlagiarismCase};
+use services::service::Service;
 
 #[derive(Serialize, Deserialize)]
 pub struct UpdatePlagiarismCasePayload {
@@ -155,32 +150,30 @@ pub async fn update_plagiarism_case(
     }
 
     let status = match payload.status {
-        Some(status_str) => {
-            match status_str.as_str() {
-                "review" => Some(Status::Review),
-                "flagged" => Some(Status::Flagged),
-                "reviewed" => Some(Status::Reviewed),
-                _ => {
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        Json(ApiResponse::<PlagiarismCaseResponse>::error(
-                            "Invalid status value. Must be one of: 'review', 'flagged', 'reviewed'",
-                        )),
-                    );
-                }
+        Some(status_str) => match status_str.as_str() {
+            "review" => Some(Status::Review),
+            "flagged" => Some(Status::Flagged),
+            "reviewed" => Some(Status::Reviewed),
+            _ => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<PlagiarismCaseResponse>::error(
+                        "Invalid status value. Must be one of: 'review', 'flagged', 'reviewed'",
+                    )),
+                );
             }
-        }
+        },
         None => None,
     };
 
-    let updated_case = match PlagiarismCaseService::update(
-        UpdatePlagiarismCase {
-            id: case_id,
-            description: payload.description,
-            status,
-            similarity: payload.similarity,
-        }
-     ).await {
+    let updated_case = match PlagiarismCaseService::update(UpdatePlagiarismCase {
+        id: case_id,
+        description: payload.description,
+        status,
+        similarity: payload.similarity,
+    })
+    .await
+    {
         Ok(updated) => updated,
         Err(e) => {
             return (

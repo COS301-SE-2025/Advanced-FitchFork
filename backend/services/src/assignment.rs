@@ -1,19 +1,19 @@
-use crate::service::{Service, AppError, ToActiveModel};
-use crate::assignment_task::AssignmentTaskService;
 use crate::assignment_file::AssignmentFileService;
+use crate::assignment_task::AssignmentTaskService;
+use crate::service::{AppError, Service, ToActiveModel};
+use chrono::{DateTime, Utc};
 use db::{
-    models::assignment::{Entity, Column, ActiveModel, ReadinessReport},
+    models::assignment::{ActiveModel, Column, Entity, ReadinessReport},
     models::assignment_file::FileType,
     repository::Repository,
 };
-use sea_orm::{DbErr, Set, IntoActiveModel};
-use chrono::{DateTime, Utc};
-use std::{env, fs, path::PathBuf};
+use sea_orm::{DbErr, IntoActiveModel, Set};
 use std::future::Future;
 use std::pin::Pin;
+use std::{env, fs, path::PathBuf};
 
-pub use db::models::assignment::Model as Assignment;
 pub use db::models::assignment::AssignmentType;
+pub use db::models::assignment::Model as Assignment;
 pub use db::models::assignment::Status;
 
 #[derive(Debug, Clone)]
@@ -68,7 +68,10 @@ impl ToActiveModel<Entity> for UpdateAssignment {
         let assignment = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(assignment)) => assignment,
             Ok(None) => {
-                return Err(AppError::from(DbErr::RecordNotFound(format!("Assignment ID {} not found", self.id))));
+                return Err(AppError::from(DbErr::RecordNotFound(format!(
+                    "Assignment ID {} not found",
+                    self.id
+                ))));
             }
             Err(err) => return Err(AppError::from(err)),
         };
@@ -131,17 +134,19 @@ impl<'a> Service<'a, Entity, Column, CreateAssignment, UpdateAssignment> for Ass
     //     })
     // }
 
-    fn delete_by_id(
-        id: i64,
-    ) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send>> {
-         Box::pin(async move {
+    fn delete_by_id(id: i64) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send>> {
+        Box::pin(async move {
             let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
                 .unwrap_or_else(|_| "data/assignment_files".to_string());
 
             // TODO: Find a better way @reece
             let module_id = match Repository::<Entity, Column>::find_by_id(id).await? {
                 Some(assignment) => assignment.module_id,
-                None => return Err(DbErr::RecordNotFound(format!("Assignment ID {} not found", id)).into()),
+                None => {
+                    return Err(
+                        DbErr::RecordNotFound(format!("Assignment ID {} not found", id)).into(),
+                    )
+                }
             };
 
             let assignment_dir = PathBuf::from(storage_root)
@@ -150,11 +155,16 @@ impl<'a> Service<'a, Entity, Column, CreateAssignment, UpdateAssignment> for Ass
 
             if assignment_dir.exists() {
                 if let Err(e) = fs::remove_dir_all(&assignment_dir) {
-                    eprintln!("Warning: Failed to delete assignment directory {:?}: {}", assignment_dir, e);
+                    eprintln!(
+                        "Warning: Failed to delete assignment directory {:?}: {}",
+                        assignment_dir, e
+                    );
                 }
             }
 
-            Repository::<Entity, Column>::delete_by_id(id).await.map_err(AppError::from)
+            Repository::<Entity, Column>::delete_by_id(id)
+                .await
+                .map_err(AppError::from)
         })
     }
 }
@@ -166,34 +176,25 @@ impl AssignmentService {
         module_id: i64,
         assignment_id: i64,
     ) -> Result<ReadinessReport, DbErr> {
-        let config_present = AssignmentFileService::full_directory_path(
-            module_id,
-            assignment_id,
-            &FileType::Config,
-        )
-        .read_dir()
-        .map(|mut it| it.any(|f| f.is_ok()))
-        .unwrap_or(false);
+        let config_present =
+            AssignmentFileService::full_directory_path(module_id, assignment_id, &FileType::Config)
+                .read_dir()
+                .map(|mut it| it.any(|f| f.is_ok()))
+                .unwrap_or(false);
 
         let tasks_present = AssignmentTaskService::tasks_present(assignment_id).await;
 
-        let main_present = AssignmentFileService::full_directory_path(
-            module_id,
-            assignment_id,
-            &FileType::Main,
-        )
-        .read_dir()
-        .map(|mut it| it.any(|f| f.is_ok()))
-        .unwrap_or(false);
+        let main_present =
+            AssignmentFileService::full_directory_path(module_id, assignment_id, &FileType::Main)
+                .read_dir()
+                .map(|mut it| it.any(|f| f.is_ok()))
+                .unwrap_or(false);
 
-        let memo_present = AssignmentFileService::full_directory_path(
-            module_id,
-            assignment_id,
-            &FileType::Memo,
-        )
-        .read_dir()
-        .map(|mut it| it.any(|f| f.is_ok()))
-        .unwrap_or(false);
+        let memo_present =
+            AssignmentFileService::full_directory_path(module_id, assignment_id, &FileType::Memo)
+                .read_dir()
+                .map(|mut it| it.any(|f| f.is_ok()))
+                .unwrap_or(false);
 
         let makefile_present = AssignmentFileService::full_directory_path(
             module_id,
@@ -247,7 +248,8 @@ impl AssignmentService {
         let report = Self::compute_readiness_report(module_id, assignment_id).await?;
 
         if report.is_ready() {
-            let mut active = Repository::<Entity, Column>::find_by_id(assignment_id).await?
+            let mut active = Repository::<Entity, Column>::find_by_id(assignment_id)
+                .await?
                 .ok_or(DbErr::RecordNotFound("Assignment not found".into()))?
                 .into_active_model();
 

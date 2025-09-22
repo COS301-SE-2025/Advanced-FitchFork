@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use util::paths::storage_root;
-use util::paths::interpreter_dir;
 use std::fs;
 use std::path::PathBuf;
+use util::paths::interpreter_dir;
+use util::paths::storage_root;
 
 /// Represents an interpreter file associated with an assignment,
 /// including the command used to run it.
@@ -40,7 +40,6 @@ pub enum Relation {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-
 
 impl Model {
     pub async fn save_file(

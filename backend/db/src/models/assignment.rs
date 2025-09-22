@@ -3,29 +3,28 @@
 //! This module defines the `Assignment` model, its relations, and
 //! methods for creating, editing, and filtering assignments.
 
+use crate::models::assignment_file::{FileType, Model as AssignmentFileModel};
+use crate::models::assignment_submission::{Column as SubmissionCol, Entity as SubmissionEntity};
+use crate::models::assignment_task::{Column as TaskColumn, Entity as TaskEntity};
+use crate::models::moss_report;
+use crate::models::user_module_role::{
+    Column as UserModuleRoleCol, Entity as UserModuleRoleEntity, Role as ModuleRole,
+};
+use chrono::{DateTime, Utc};
 use ipnet::IpNet;
 use sea_orm::entity::prelude::*;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, IntoActiveModel, PaginatorTrait, QueryFilter, QueryOrder, Set, QuerySelect
+    ActiveModelTrait, ColumnTrait, Condition, DbErr, EntityTrait, IntoActiveModel, PaginatorTrait,
+    QueryFilter, QueryOrder, QuerySelect, Set,
 };
-use util::execution_config::execution_config::SubmissionMode;
-use util::execution_config::ExecutionConfig;
-use util::paths::{assignment_dir, interpreter_dir, memo_output_dir};
-use crate::models::assignment_file::{Model as AssignmentFileModel, FileType};
-use crate::models::assignment_task::{Entity as TaskEntity, Column as TaskColumn};
-use crate::models::assignment_submission::{Entity as SubmissionEntity, Column as SubmissionCol};
-use crate::models::moss_report;
-use crate::models::user_module_role::{
-    Entity as UserModuleRoleEntity,
-    Column as UserModuleRoleCol,
-    Role as ModuleRole,
-};
-use chrono::{DateTime, Utc};
-use std::net::IpAddr;
-use std::fs;
-use serde::{Serialize, Deserialize};
-use strum::{Display, EnumIter, EnumString};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::fs;
+use std::net::IpAddr;
+use strum::{Display, EnumIter, EnumString};
+use util::execution_config::ExecutionConfig;
+use util::execution_config::execution_config::SubmissionMode;
+use util::paths::{assignment_dir, interpreter_dir, memo_output_dir};
 
 /// Assignment model representing the `assignments` table in the database.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -59,11 +58,19 @@ pub enum Relation {
 }
 
 impl Related<moss_report::Entity> for Entity {
-    fn to() -> RelationDef { Relation::MossReports.def() }
+    fn to() -> RelationDef {
+        Relation::MossReports.def()
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Display, EnumIter, EnumString, Serialize, Deserialize, DeriveActiveEnum)]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "assignment_type_enum")]
+#[derive(
+    Debug, Clone, PartialEq, Display, EnumIter, EnumString, Serialize, Deserialize, DeriveActiveEnum,
+)]
+#[sea_orm(
+    rs_type = "String",
+    db_type = "Enum",
+    enum_name = "assignment_type_enum"
+)]
 #[strum(serialize_all = "lowercase", ascii_case_insensitive)]
 pub enum AssignmentType {
     #[sea_orm(string_value = "assignment")]
@@ -73,8 +80,14 @@ pub enum AssignmentType {
     Practical,
 }
 
-#[derive(Debug, Clone, PartialEq, Display, EnumIter, EnumString, Serialize, Deserialize, DeriveActiveEnum)]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "assignment_status_enum")]
+#[derive(
+    Debug, Clone, PartialEq, Display, EnumIter, EnumString, Serialize, Deserialize, DeriveActiveEnum,
+)]
+#[sea_orm(
+    rs_type = "String",
+    db_type = "Enum",
+    enum_name = "assignment_status_enum"
+)]
 #[strum(serialize_all = "lowercase", ascii_case_insensitive)]
 pub enum Status {
     #[sea_orm(string_value = "setup")]
@@ -137,7 +150,6 @@ pub struct AttemptsSummary {
     pub limit_attempts: bool,
 }
 
-
 impl Model {
     pub async fn create(
         db: &DatabaseConnection,
@@ -175,7 +187,6 @@ impl Model {
 
         Ok(created)
     }
-
 
     pub async fn edit(
         db: &DatabaseConnection,
@@ -225,7 +236,10 @@ impl Model {
         let dir = assignment_dir(module_id as i64, id as i64);
         if dir.exists() {
             if let Err(e) = fs::remove_dir_all(&dir) {
-                eprintln!("Warning: Failed to delete assignment directory {:?}: {}", dir, e);
+                eprintln!(
+                    "Warning: Failed to delete assignment directory {:?}: {}",
+                    dir, e
+                );
             }
         }
 
@@ -283,7 +297,10 @@ impl Model {
             };
         }
 
-        query_builder.paginate(db, per_page).fetch_page(page - 1).await
+        query_builder
+            .paginate(db, per_page)
+            .fetch_page(page - 1)
+            .await
     }
 
     fn validate_dates(available_from: DateTime<Utc>, due_date: DateTime<Utc>) -> Result<(), DbErr> {
@@ -336,14 +353,11 @@ impl Model {
         assignment_id: i64,
     ) -> Result<ReadinessReport, DbErr> {
         // presence checks (unchanged ones kept)
-        let config_present = AssignmentFileModel::full_directory_path(
-            module_id,
-            assignment_id,
-            &FileType::Config,
-        )
-        .read_dir()
-        .map(|mut it| it.any(|f| f.is_ok()))
-        .unwrap_or(false);
+        let config_present =
+            AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Config)
+                .read_dir()
+                .map(|mut it| it.any(|f| f.is_ok()))
+                .unwrap_or(false);
 
         let tasks_present = TaskEntity::find()
             .filter(TaskColumn::AssignmentId.eq(assignment_id))
@@ -353,14 +367,11 @@ impl Model {
             .map(|tasks| !tasks.is_empty())
             .unwrap_or(false);
 
-        let main_present = AssignmentFileModel::full_directory_path(
-            module_id,
-            assignment_id,
-            &FileType::Main,
-        )
-        .read_dir()
-        .map(|mut it| it.any(|f| f.is_ok()))
-        .unwrap_or(false);
+        let main_present =
+            AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Main)
+                .read_dir()
+                .map(|mut it| it.any(|f| f.is_ok()))
+                .unwrap_or(false);
 
         // interpreter presence
         let interpreter_present = interpreter_dir(module_id, assignment_id)
@@ -368,23 +379,17 @@ impl Model {
             .map(|mut it| it.any(|f| f.is_ok()))
             .unwrap_or(false);
 
-        let memo_present = AssignmentFileModel::full_directory_path(
-            module_id,
-            assignment_id,
-            &FileType::Memo,
-        )
-        .read_dir()
-        .map(|mut it| it.any(|f| f.is_ok()))
-        .unwrap_or(false);
+        let memo_present =
+            AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Memo)
+                .read_dir()
+                .map(|mut it| it.any(|f| f.is_ok()))
+                .unwrap_or(false);
 
-        let makefile_present = AssignmentFileModel::full_directory_path(
-            module_id,
-            assignment_id,
-            &FileType::Makefile,
-        )
-        .read_dir()
-        .map(|mut it| it.any(|f| f.is_ok()))
-        .unwrap_or(false);
+        let makefile_present =
+            AssignmentFileModel::full_directory_path(module_id, assignment_id, &FileType::Makefile)
+                .read_dir()
+                .map(|mut it| it.any(|f| f.is_ok()))
+                .unwrap_or(false);
 
         let memo_output_present = {
             let base_path = memo_output_dir(module_id, assignment_id);
@@ -424,7 +429,6 @@ impl Model {
             mark_allocator_present,
         })
     }
-
 
     /// Attempts to transition an assignment to `Ready` state if all readiness conditions are met.
     ///
@@ -485,9 +489,11 @@ impl Model {
 
     /// Staff are any non-student roles.
     fn is_staff_role(role: &ModuleRole) -> bool {
-        matches!(role, ModuleRole::Lecturer | ModuleRole::AssistantLecturer | ModuleRole::Tutor)
+        matches!(
+            role,
+            ModuleRole::Lecturer | ModuleRole::AssistantLecturer | ModuleRole::Tutor
+        )
     }
-
 
     /// Load the assignment's ExecutionConfig from disk.
     /// Returns None if the file is missing or invalid.
@@ -554,11 +560,7 @@ impl Model {
     /// Decide whether the user can submit another **non-practice** attempt.
     /// - Staff: always true (unlimited).
     /// - Students: obey attempt limits.
-    pub async fn can_submit(
-        &self,
-        db: &DatabaseConnection,
-        user_id: i64,
-    ) -> Result<bool, DbErr> {
+    pub async fn can_submit(&self, db: &DatabaseConnection, user_id: i64) -> Result<bool, DbErr> {
         if let Some(role) = self.role_for_user_in_module(db, user_id).await? {
             if Self::is_staff_role(&role) {
                 return Ok(true); // staff are never limited
@@ -606,9 +608,7 @@ impl Model {
     }
 
     pub fn pass_mark(&self) -> u32 {
-        self.config()
-            .map(|cfg| cfg.marking.pass_mark)
-            .unwrap_or(50) // default fallback
+        self.config().map(|cfg| cfg.marking.pass_mark).unwrap_or(50) // default fallback
     }
 
     /// Automatically adjust an assignment's status based on the current time and its
@@ -685,8 +685,12 @@ impl Model {
 
     /// Verify a plaintext PIN against the PIN in the config.
     pub fn verify_password_from_config(&self, candidate: &str) -> bool {
-        let Some(cfg) = self.config() else { return false; };
-        let Some(ref pin) = cfg.security.password_pin else { return false; };
+        let Some(cfg) = self.config() else {
+            return false;
+        };
+        let Some(ref pin) = cfg.security.password_pin else {
+            return false;
+        };
         // simple equality (you can swap to constant-time later if desired)
         candidate == pin
     }
@@ -712,7 +716,9 @@ impl Model {
     /// Whether the given client IP is allowed by the config’s CIDR allowlist.
     /// Empty allowlist => allow all. Missing/invalid config => allow.
     pub fn ip_allowed(&self, client_ip: IpAddr) -> bool {
-        let Some(cfg) = self.config() else { return true; };
+        let Some(cfg) = self.config() else {
+            return true;
+        };
         if cfg.security.allowed_cidrs.is_empty() {
             return true;
         }
@@ -725,15 +731,14 @@ impl Model {
         }
         false
     }
-
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{TimeZone, Utc};
-    use crate::test_utils::setup_test_db;
     use crate::models::module::ActiveModel as ModuleActiveModel;
+    use crate::test_utils::setup_test_db;
+    use chrono::{TimeZone, Utc};
 
     fn sample_dates() -> (DateTime<Utc>, DateTime<Utc>) {
         (
@@ -884,15 +889,17 @@ mod tests {
         .unwrap();
 
         assert_eq!(rust_results.len(), 2);
-        assert!(rust_results
-            .iter()
-            .all(|a| a.name.to_lowercase().contains("rust")));
+        assert!(
+            rust_results
+                .iter()
+                .all(|a| a.name.to_lowercase().contains("rust"))
+        );
     }
 
     #[tokio::test]
     async fn test_auto_transition_ready_to_open() {
-        use chrono::Duration;
         use crate::models::module::ActiveModel as ModuleActiveModel;
+        use chrono::Duration;
 
         let db = crate::test_utils::setup_test_db().await;
         let now = Utc::now();
@@ -936,8 +943,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_auto_transition_open_to_closed() {
-        use chrono::Duration;
         use crate::models::module::ActiveModel as ModuleActiveModel;
+        use chrono::Duration;
 
         let db = crate::test_utils::setup_test_db().await;
         let now = Utc::now();
@@ -980,8 +987,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_auto_transition_open_back_to_ready_when_available_moved_later() {
-        use chrono::Duration;
         use crate::models::module::ActiveModel as ModuleActiveModel;
+        use chrono::Duration;
 
         let db = crate::test_utils::setup_test_db().await;
         let now = Utc::now();
@@ -1024,8 +1031,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_auto_transition_no_change_for_setup_or_archived() {
-        use chrono::Duration;
         use crate::models::module::ActiveModel as ModuleActiveModel;
+        use chrono::Duration;
 
         let db = crate::test_utils::setup_test_db().await;
         let now = Utc::now();
@@ -1061,7 +1068,11 @@ mod tests {
 
         let changed = setup.auto_open_or_close(&db).await.unwrap();
         assert_eq!(changed, None);
-        let fresh = Entity::find_by_id(setup.id).one(&db).await.unwrap().unwrap();
+        let fresh = Entity::find_by_id(setup.id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(fresh.status, Status::Setup);
 
         // Archived should not auto-transition
@@ -1083,14 +1094,18 @@ mod tests {
 
         let changed = archived.auto_open_or_close(&db).await.unwrap();
         assert_eq!(changed, None);
-        let fresh = Entity::find_by_id(archived.id).one(&db).await.unwrap().unwrap();
+        let fresh = Entity::find_by_id(archived.id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(fresh.status, Status::Archived);
     }
 
     #[tokio::test]
     async fn test_auto_transition_does_not_jump_ready_to_closed() {
-        use chrono::Duration;
         use crate::models::module::ActiveModel as ModuleActiveModel;
+        use chrono::Duration;
 
         let db = crate::test_utils::setup_test_db().await;
         let now = Utc::now();
@@ -1129,5 +1144,4 @@ mod tests {
         let fresh = Entity::find_by_id(a.id).one(&db).await.unwrap().unwrap();
         assert_eq!(fresh.status, Status::Ready);
     }
-
 }

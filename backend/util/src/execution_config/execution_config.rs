@@ -302,7 +302,6 @@ pub struct SecurityOptions {
     pub allowed_cidrs: Vec<String>,
 }
 
-
 impl Default for SecurityOptions {
     fn default() -> Self {
         Self {
@@ -314,7 +313,6 @@ impl Default for SecurityOptions {
         }
     }
 }
-
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionConfig {
@@ -348,15 +346,12 @@ impl ExecutionConfig {
             project: ProjectSetup::default(),
             output: ExecutionOutputOptions::default(),
             gatlam: GATLAM::default(),
-            security: SecurityOptions::default(),  
+            security: SecurityOptions::default(),
             code_coverage: CodeCoverage::default(),
         }
     }
 
-    pub fn get_execution_config(
-        module_id: i64,
-        assignment_id: i64,
-    ) -> Result<Self, String> {
+    pub fn get_execution_config(module_id: i64, assignment_id: i64) -> Result<Self, String> {
         let cfg_dir = config_dir(module_id, assignment_id);
 
         // 1) Prefer canonical config.json if it exists
@@ -364,8 +359,7 @@ impl ExecutionConfig {
         if canonical.exists() {
             let s = fs::read_to_string(&canonical)
                 .map_err(|_| format!("Failed to read config file at {:?}", canonical))?;
-            return serde_json::from_str(&s)
-                .map_err(|_| "Invalid config JSON format".to_string());
+            return serde_json::from_str(&s).map_err(|_| "Invalid config JSON format".to_string());
         }
 
         // 2) Fallback: any *.json in the directory
@@ -453,8 +447,8 @@ fn default_pass_mark() -> u32 {
     50
 }
 
-fn default_allow_practice_submissions() -> bool { 
-    false 
+fn default_allow_practice_submissions() -> bool {
+    false
 }
 
 fn default_language() -> Language {
@@ -530,19 +524,19 @@ fn default_submission_mode() -> SubmissionMode {
     SubmissionMode::Manual
 }
 
-fn default_cookie_ttl_minutes() -> u32 { 
-    480 
+fn default_cookie_ttl_minutes() -> u32 {
+    480
 } // 8 hours
 
-fn default_password_enabled() -> bool { 
-    false 
+fn default_password_enabled() -> bool {
+    false
 }
-fn default_bind_cookie_to_user() -> bool { 
+fn default_bind_cookie_to_user() -> bool {
     true
 }
 
-fn default_allowed_cidrs() -> Vec<String> { 
-    vec![] 
+fn default_allowed_cidrs() -> Vec<String> {
+    vec![]
 }
 
 fn default_code_coverage_required() -> u8 {

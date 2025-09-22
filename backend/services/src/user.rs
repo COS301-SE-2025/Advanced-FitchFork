@@ -1,17 +1,17 @@
-use crate::service::{Service, AppError, ToActiveModel};
-use db::{
-    models::user::{Model, Column, Entity, ActiveModel},
-    repository::Repository,
-};
-use util::filters::FilterParam;
-use sea_orm::{DbErr, Set};
+use crate::service::{AppError, Service, ToActiveModel};
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use rand::rngs::OsRng;
-use validator::{Validate, ValidationError};
 use chrono::Utc;
+use db::{
+    models::user::{ActiveModel, Column, Entity, Model},
+    repository::Repository,
+};
+use rand::rngs::OsRng;
+use sea_orm::{DbErr, Set};
+use util::filters::FilterParam;
+use validator::{Validate, ValidationError};
 
 pub use db::models::user::Model as User;
 
@@ -54,11 +54,13 @@ fn validate_password(password: &str) -> Result<(), ValidationError> {
     let mut has_lower = false;
     let mut has_digit = false;
     let mut has_special = false;
-    
+
     if password.len() < 8 {
-        return Err(ValidationError::new("Password must be at least 8 characters long"));
+        return Err(ValidationError::new(
+            "Password must be at least 8 characters long",
+        ));
     }
-    
+
     for c in password.chars() {
         if c.is_ascii_uppercase() {
             has_upper = true;
@@ -70,27 +72,34 @@ fn validate_password(password: &str) -> Result<(), ValidationError> {
             has_special = true;
         }
     }
-    
+
     if !has_upper {
-        return Err(ValidationError::new("Password must contain at least one uppercase letter"));
+        return Err(ValidationError::new(
+            "Password must contain at least one uppercase letter",
+        ));
     }
     if !has_lower {
-        return Err(ValidationError::new("Password must contain at least one lowercase letter"));
+        return Err(ValidationError::new(
+            "Password must contain at least one lowercase letter",
+        ));
     }
     if !has_digit {
-        return Err(ValidationError::new("Password must contain at least one number"));
+        return Err(ValidationError::new(
+            "Password must contain at least one number",
+        ));
     }
     if !has_special {
-        return Err(ValidationError::new("Password must contain at least one special character"));
+        return Err(ValidationError::new(
+            "Password must contain at least one special character",
+        ));
     }
-    
+
     Ok(())
 }
 
 impl ToActiveModel<Entity> for CreateUser {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        self.validate()
-            .map_err(|e| DbErr::Custom(e.to_string()))?;
+        self.validate().map_err(|e| DbErr::Custom(e.to_string()))?;
 
         let mut active = ActiveModel {
             username: Set(self.username),
@@ -110,13 +119,15 @@ impl ToActiveModel<Entity> for CreateUser {
 
 impl ToActiveModel<Entity> for UpdateUser {
     async fn into_active_model(self) -> Result<ActiveModel, AppError> {
-        self.validate()
-            .map_err(|e| DbErr::Custom(e.to_string()))?;
+        self.validate().map_err(|e| DbErr::Custom(e.to_string()))?;
 
         let user = match Repository::<Entity, Column>::find_by_id(self.id).await {
             Ok(Some(user)) => user,
             Ok(None) => {
-                return Err(AppError::from(DbErr::RecordNotFound(format!("User ID {} not found", self.id))));
+                return Err(AppError::from(DbErr::RecordNotFound(format!(
+                    "User ID {} not found",
+                    self.id
+                ))));
             }
             Err(err) => return Err(AppError::from(err)),
         };
@@ -183,12 +194,12 @@ impl UserService {
         password: &str,
     ) -> Result<Option<Model>, DbErr> {
         if let Some(user) = Repository::<Entity, Column>::find_one(
-            &vec![
-                FilterParam::eq("username", username.trim().to_string()),
-            ],
+            &vec![FilterParam::eq("username", username.trim().to_string())],
             &vec![],
             None,
-        ).await? {
+        )
+        .await?
+        {
             if Self::verify_password(&user, password) {
                 return Ok(Some(user));
             }

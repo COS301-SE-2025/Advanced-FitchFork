@@ -1,23 +1,23 @@
-use axum::{
-    extract::{Path, Query},
-    http::{StatusCode, Response},
-    response::IntoResponse,
-    Json,
-};
-use serde::{Deserialize, Serialize};
-use util::{paths::user_profile_path, state::AppState};
-use validator::Validate;
 use crate::response::ApiResponse;
 use crate::routes::common::UserModule;
-use db::models::user::{Entity as UserEntity, Model as UserModel, Column as UserColumn};
+use axum::body::Body;
+use axum::{
+    Json,
+    extract::{Path, Query},
+    http::{Response, StatusCode},
+    response::IntoResponse,
+};
+use db::models::user::{Column as UserColumn, Entity as UserEntity, Model as UserModel};
+use mime_guess::from_path;
+use serde::{Deserialize, Serialize};
+use services::service::Service;
+use services::user::{User, UserService};
+use services::user_module_role::UserModuleRoleService;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
-use axum::body::Body;
-use mime_guess::from_path;
 use util::filters::{FilterParam, QueryParam};
-use services::service::Service;
-use services::user::{UserService, User};
-use services::user_module_role::UserModuleRoleService;
+use util::{paths::user_profile_path, state::AppState};
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct ListUsersQuery {
@@ -117,9 +117,7 @@ impl From<User> for UserListItem {
 /// - `401 Unauthorized` - Missing or invalid JWT
 /// - `403 Forbidden` - Authenticated but not admin user
 /// - `500 Internal Server Error` - Database error
-pub async fn list_users(
-    Query(query): Query<ListUsersQuery>
-) -> impl IntoResponse {
+pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoResponse {
     if let Err(e) = query.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -138,11 +136,11 @@ pub async fn list_users(
     if let Some(email) = query.email {
         filters.push(FilterParam::like("email", email));
     }
-    
+
     if let Some(username) = query.username {
         filters.push(FilterParam::like("username", username));
     }
-    
+
     if let Some(admin) = query.admin {
         filters.push(FilterParam::eq("admin", admin));
     }
@@ -150,30 +148,24 @@ pub async fn list_users(
     if let Some(query_text) = query.query {
         queries.push(QueryParam::new(
             vec!["email".to_string(), "username".to_string()],
-            query_text
+            query_text,
         ));
     }
 
-    let (users, total) = match UserService::filter(
-        &filters,
-        &queries,
-        page,
-        per_page,
-        sort,
-    ).await {
+    let (users, total) = match UserService::filter(&filters, &queries, page, per_page, sort).await {
         Ok(users) => users,
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UsersListResponse>::error(format!("Database error: {}", e))),
+                Json(ApiResponse::<UsersListResponse>::error(format!(
+                    "Database error: {}",
+                    e
+                ))),
             );
         }
     };
 
-    let user_list_items: Vec<UserListItem> = users
-        .into_iter()
-        .map(UserListItem::from)
-        .collect();
+    let user_list_items: Vec<UserListItem> = users.into_iter().map(UserListItem::from).collect();
 
     (
         StatusCode::OK,
@@ -201,15 +193,16 @@ pub async fn list_users(
 /// - `400 Bad Request`: Invalid ID format
 /// - `404 Not Found`: User does not exist
 /// - `500 Internal Server Error`: DB error
-pub async fn get_user(
-    Path(user_id): Path<i64>
-) -> impl IntoResponse {
+pub async fn get_user(Path(user_id): Path<i64>) -> impl IntoResponse {
     match UserService::find_by_id(user_id).await {
         Ok(Some(user)) => {
             let user_item = UserListItem::from(user);
             (
                 StatusCode::OK,
-                Json(ApiResponse::success(user_item, "User retrieved successfully")),
+                Json(ApiResponse::success(
+                    user_item,
+                    "User retrieved successfully",
+                )),
             )
         }
         Ok(None) => (
@@ -218,7 +211,10 @@ pub async fn get_user(
         ),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<UserListItem>::error(format!("Database error: {}", err))),
+            Json(ApiResponse::<UserListItem>::error(format!(
+                "Database error: {}",
+                err
+            ))),
         ),
     }
 }
@@ -277,15 +273,16 @@ pub async fn get_user(
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn get_user_modules(
-    Path(user_id): Path<i64>
-) -> impl IntoResponse {
+pub async fn get_user_modules(Path(user_id): Path<i64>) -> impl IntoResponse {
     let roles = match UserModuleRoleService::get_module_roles(user_id).await {
         Ok(r) => r,
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<UserModule>>::error(format!("Database error: {}", e))),
+                Json(ApiResponse::<Vec<UserModule>>::error(format!(
+                    "Database error: {}",
+                    e
+                ))),
             );
         }
     };
@@ -316,9 +313,7 @@ pub async fn get_user_modules(
 /// GET /api/users/{user_id}/avatar
 ///
 /// Returns the avatar image file for a user if it exists.
-pub async fn get_avatar(
-    Path(user_id): Path<i64>,
-) -> impl IntoResponse {
+pub async fn get_avatar(Path(user_id): Path<i64>) -> impl IntoResponse {
     // Try common extensions under the user's profile dir: .../user_{id}/profile/avatar.{ext}
     for ext in ["jpg", "png", "gif"] {
         let try_path = user_profile_path(user_id, &format!("avatar.{ext}"));

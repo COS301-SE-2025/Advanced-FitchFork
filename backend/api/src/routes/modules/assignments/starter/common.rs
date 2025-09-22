@@ -1,5 +1,5 @@
 use serde::Serialize;
-use util::{languages::Language};
+use util::languages::Language;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct StarterPack {
@@ -31,7 +31,7 @@ pub static STARTER_PACKS: &[StarterPack] = &[
         language: Language::Java,
         description: "Singly-linked list scaffold (memo/spec/makefile/main).",
     },
-        StarterPack {
+    StarterPack {
         id: "python-linkedlist",
         name: "Python - LinkedList",
         language: Language::Python,

@@ -3,11 +3,11 @@
 //! Contains real-time module-related routes such as announcements,
 //! and nests assignment-specific WebSocket topics as well.
 
-use axum::{middleware::from_fn, routing::get, Router};
+use axum::{Router, middleware::from_fn, routing::get};
 use util::ws::default_websocket_handler;
 
-use crate::ws::modules::assignments::ws_assignment_routes;
 use crate::auth::guards::require_assigned_to_module;
+use crate::ws::modules::assignments::ws_assignment_routes;
 
 pub mod assignments;
 
@@ -21,6 +21,9 @@ pub mod assignments;
 /// - `require_assigned_to_module` ensures only users assigned to the module can subscribe to its announcement topic
 pub fn ws_module_routes() -> Router {
     Router::new()
-        .route("/{module_id}/announcements", get(default_websocket_handler).route_layer(from_fn(require_assigned_to_module)))
+        .route(
+            "/{module_id}/announcements",
+            get(default_websocket_handler).route_layer(from_fn(require_assigned_to_module)),
+        )
         .nest("/{module_id}/assignments", ws_assignment_routes())
 }

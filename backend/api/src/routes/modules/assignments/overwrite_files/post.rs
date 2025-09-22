@@ -6,8 +6,10 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use services::assignment_overwrite_file::{
+    AssignmentOverwriteFileService, CreateAssignmentOverwriteFile,
+};
 use services::service::Service;
-use services::assignment_overwrite_file::{AssignmentOverwriteFileService, CreateAssignmentOverwriteFile};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_id}
 ///
@@ -30,14 +32,14 @@ pub async fn post_task_overwrite_files(
             .unwrap_or_else(|| "file".into());
         let bytes = field.bytes().await.unwrap_or_else(|_| Bytes::new());
 
-        match AssignmentOverwriteFileService::create(
-            CreateAssignmentOverwriteFile {
-                assignment_id,
-                task_id,
-                filename: file_name,
-                bytes: bytes.to_vec(),
-            }
-        ).await {
+        match AssignmentOverwriteFileService::create(CreateAssignmentOverwriteFile {
+            assignment_id,
+            task_id,
+            filename: file_name,
+            bytes: bytes.to_vec(),
+        })
+        .await
+        {
             Ok(file_model) => saved_files.push(file_model.filename),
             Err(e) => {
                 eprintln!("Failed to save overwrite file: {:?}", e);

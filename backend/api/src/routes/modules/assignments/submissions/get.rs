@@ -2,26 +2,40 @@
 //!
 //! Provides endpoints to manage and retrieve assignment submissions.
 //!
-//! Users can retrieve their own submissions or, if authorized (lecturers, tutors, admins), 
-//! retrieve all submissions for a given assignment. The endpoints support filtering, sorting, 
-//! and pagination. Submission details include marks, late status, practice status, tasks, 
-//! code coverage, and code complexity analysis.
+//! Users can retrieve their own submissions or, if authorized (lecturers, tutors, admins),
+//! retrieve all submissions for a given assignment. The endpoints support filtering, sorting,
+//! and pagination. Submission details include marks, late status, practice status, tasks and
+//! code coverage.
 
 use super::common::{
-    ListSubmissionsQuery, SubmissionListItem, SubmissionsListResponse, UserResponse,
+    CodeCoverage, ListSubmissionsQuery, MarkSummary, SubmissionDetailResponse, SubmissionListItem,
+    SubmissionsListResponse, UserResponse,
 };
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     Extension, Json,
-    extract::{Path, Query},
-    http::{header, HeaderMap, HeaderValue, StatusCode},
+    extract::{Path, Query, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
+use db::models::{
+    assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
+    assignment_submission::{self, Entity as SubmissionEntity},
+    assignment_submission::{Column as SubmissionColumn, Model as SubmissionModel},
+    assignment_submission_output::Model as SubmissionOutput,
+    assignment_task, user,
+    user_module_role::{self, Role},
+};
+use sea_orm::{
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
+    QueryOrder, QuerySelect, QueryTrait, RelationTrait,
+    sea_query::{Expr, Func},
+};
 use serde::Serialize;
 use serde_json::Value;
-use util::state::AppState;
 use std::{collections::HashMap, fs, path::PathBuf};
+use util::state::AppState;
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
@@ -64,25 +78,68 @@ fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
 use util::paths::submission_report_path; // add near the other imports
 
 async fn get_user_submissions(
+    db: &DatabaseConnection,
     module_id: i64,
     assignment_id: i64,
     user_id: i64,
     Query(params): Query<ListSubmissionsQuery>,
 ) -> impl IntoResponse {
-    let assignment = match AssignmentService::find_one(
-        &vec![
-            FilterParam::eq("id", assignment_id),
-            FilterParam::eq("module_id", module_id),
-        ],
-        &vec![],
-        None,
-    ).await {
-        Ok(Some(assignment)) => assignment,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<SubmissionsListResponse>::error("Assignment not found")),
-            );
+    let assignment = AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
+        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let page = params.page.unwrap_or(1).max(1);
+    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
+
+    let mut condition = Condition::all()
+        .add(assignment_submission::Column::AssignmentId.eq(assignment_id as i32))
+        .add(assignment_submission::Column::UserId.eq(user_id));
+
+    // filename: fuzzy, case-insensitive
+    if let Some(query) = &params.query {
+        let pattern = format!("%{}%", query.to_lowercase());
+        condition = condition.add(
+            Expr::expr(Func::lower(Expr::col(
+                assignment_submission::Column::Filename,
+            )))
+            .like(&pattern),
+        );
+    }
+
+    if let Some(late_status) = params.late {
+        condition = if late_status {
+            condition.add(assignment_submission::Column::CreatedAt.gt(assignment.due_date))
+        } else {
+            condition.add(assignment_submission::Column::CreatedAt.lte(assignment.due_date))
+        };
+    }
+
+    if let Some(ignored) = params.ignored {
+        condition = condition.add(assignment_submission::Column::Ignored.eq(ignored));
+    }
+
+    let mut query = assignment_submission::Entity::find().filter(condition);
+
+    if let Some(ref sort) = params.sort {
+        for field in sort.split(',') {
+            let (field, dir) = if field.starts_with('-') {
+                (&field[1..], sea_orm::Order::Desc)
+            } else {
+                (field, sea_orm::Order::Asc)
+            };
+
+            match field {
+                "created_at" => {
+                    query = query.order_by(assignment_submission::Column::CreatedAt, dir)
+                }
+                "filename" => query = query.order_by(assignment_submission::Column::Filename, dir),
+                "attempt" => query = query.order_by(assignment_submission::Column::Attempt, dir),
+                _ => {}
+            }
         }
     } else {
         query = query.order_by(
@@ -119,75 +176,12 @@ async fn get_user_submissions(
         }
     };
 
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
-    let sort = params.sort.clone();
-
-    let mut filters = vec![
-        FilterParam::eq("assignment_id", assignment_id),
-        FilterParam::eq("user_id", user_id),
-    ];
-
-    if let Some(query) = params.query {
-        filters.push(FilterParam::like("filename", query));
-    }
-
-    if let Some(late_status) = params.late {
-        if late_status {
-            filters.push(FilterParam::gt("created_at", assignment.due_date));
-        } else {
-            filters.push(FilterParam::lte("created_at", assignment.due_date));
-        }
-    }
-
-    if let Some(ignored) = params.ignored {
-        filters.push(FilterParam::eq("ignored", ignored));
-    }
-
-    let (submissions, total) = match AssignmentSubmissionService::filter(
-        &filters,
-        &vec![],
-        page,
-        per_page,
-        sort.clone(),
-    ).await {
-        Ok(result) => result,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<SubmissionsListResponse>::error(
-                    format!("Database error: {}", e),
-                )),
-            );
-        }
-    };
-
-    let user_resp = match UserService::find_by_id(user_id).await {
-        Ok(Some(user)) => UserResponse {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-        },
-        _ => UserResponse {
-            id: user_id,
-            username: "unknown".to_string(),
-            email: "unknown".to_string(),
-        },
-    };
-
-    let base = std::env::var("ASSIGNMENT_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/assignment_files".into());
-
-    let mut items: Vec<SubmissionListItem> = submissions
+    let mut items: Vec<SubmissionListItem> = rows
         .into_iter()
         .map(|s| {
             // Centralized report path
-            let report_path = submission_report_path(
-                module_id,
-                assignment_id,
-                s.user_id,
-                s.attempt,
-            );
+            let report_path =
+                submission_report_path(module_id, assignment_id, s.user_id, s.attempt);
 
             let (mark, is_practice) = match fs::read_to_string(&report_path) {
                 Ok(content) => {
@@ -218,25 +212,29 @@ async fn get_user_submissions(
                 is_late: is_late(s.created_at, assignment.due_date),
                 mark,
                 ignored: s.ignored,
+                status: s.status.to_string(),
             }
         })
         .collect();
 
-    if let Some(sort_str) = &sort {
-        for field in sort_str.split(',').rev() {
+    if let Some(ref sort) = params.sort {
+        for field in sort.split(',').rev() {
             let (field, desc) = if field.starts_with('-') {
                 (&field[1..], true)
             } else {
                 (field, false)
             };
 
-            if field == "mark" {
-                items.sort_by(|a, b| {
-                    let a_mark = a.mark.as_ref().map(|m| m.earned).unwrap_or(0);
-                    let b_mark = b.mark.as_ref().map(|m| m.earned).unwrap_or(0);
-                    let ord = a_mark.cmp(&b_mark);
-                    if desc { ord.reverse() } else { ord }
-                });
+            match field {
+                "mark" => {
+                    items.sort_by(|a, b| {
+                        let a_mark = a.mark.as_ref().map(|m| m.earned).unwrap_or(0);
+                        let b_mark = b.mark.as_ref().map(|m| m.earned).unwrap_or(0);
+                        let ord = a_mark.cmp(&b_mark);
+                        if desc { ord.reverse() } else { ord }
+                    });
+                }
+                _ => {}
             }
         }
     }
@@ -253,6 +251,7 @@ async fn get_user_submissions(
             "Submissions retrieved successfully",
         )),
     )
+        .into_response()
 }
 
 /// GET /api/modules/:module_id/assignments/:assignment_id/submissions
@@ -289,7 +288,7 @@ async fn get_user_submissions(
 /// - If `username` is provided, restricts to that user.
 ///
 /// ### Output
-/// - Returns paginated `SubmissionsListResponse` for all students, including `is_late`, `mark`, `is_practice`.
+/// - Returns paginated `SubmissionsListResponse` for all students, including `is_late`, `mark`, `is_practice`, `ignored`, `status`.
 ///
 /// ### Errors
 /// - `404`: Assignment not found.
@@ -299,6 +298,7 @@ async fn get_user_submissions(
 /// - Late submissions are computed relative to assignment `due_date`.
 /// - Defaults to sorting by `created_at DESC`.
 async fn get_list_submissions(
+    db: &DatabaseConnection,
     module_id: i64,
     assignment_id: i64,
     params: ListSubmissionsQuery,
@@ -350,8 +350,10 @@ async fn get_list_submissions(
         // LOWER(filename) LIKE %pattern% OR user_id IN (subquery)
         let or_condition = Condition::any()
             .add(
-                Expr::expr(Func::lower(Expr::col(assignment_submission::Column::Filename)))
-                    .like(&pattern),
+                Expr::expr(Func::lower(Expr::col(
+                    assignment_submission::Column::Filename,
+                )))
+                .like(&pattern),
             )
             .add(assignment_submission::Column::UserId.in_subquery(user_ids_subq));
 
@@ -434,7 +436,8 @@ async fn get_list_submissions(
                 }
             };
 
-            let report_path = submission_report_path(module_id, assignment_id, s.user_id, s.attempt);
+            let report_path =
+                submission_report_path(module_id, assignment_id, s.user_id, s.attempt);
 
             let (mark, is_practice) = match fs::read_to_string(&report_path) {
                 Ok(content) => {
@@ -465,6 +468,7 @@ async fn get_list_submissions(
                 is_late: is_late(s.created_at, assignment.due_date),
                 mark,
                 ignored: s.ignored,
+                status: s.status.to_string(),
             }
         })
         .collect();
@@ -512,7 +516,7 @@ async fn get_list_submissions(
         .into_response()
 }
 
-async fn is_student(module_id: i64, user_id: i64) -> bool {
+async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bool {
     user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user_id))
         .filter(user_module_role::Column::ModuleId.eq(module_id))
@@ -542,18 +546,21 @@ async fn is_student(module_id: i64, user_id: i64) -> bool {
 /// - Students: `username` is ignored, only their own submissions returned.
 /// - Late submissions are calculated based on `due_date`.
 pub async fn list_submissions(
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Query(params): Query<ListSubmissionsQuery>,
 ) -> axum::response::Response {
+    let db = app_state.db();
+
     let user_id = claims.sub;
-    if is_student(module_id, user_id).await {
-        return get_user_submissions(module_id, assignment_id, user_id, Query(params))
+    if is_student(module_id, user_id, db).await {
+        return get_user_submissions(db, module_id, assignment_id, user_id, Query(params))
             .await
             .into_response();
     }
 
-    get_list_submissions(module_id, assignment_id, params)
+    get_list_submissions(db, module_id, assignment_id, params)
         .await
         .into_response()
 }
@@ -595,9 +602,10 @@ pub async fn list_submissions(
 ///     },
 ///     "is_practice": false,
 ///     "is_late": false,
+///     "ignored": false,
+///     "status": "Graded",
 ///     "tasks": [...],
 ///     "code_coverage": [...],
-///     "code_complexity": {...},
 ///     "user": {
 ///       "user_id": 456,
 ///       "username": "student1",
@@ -656,23 +664,43 @@ pub async fn list_submissions(
 /// ### Notes
 /// - User metadata is only included for non-student users (lecturers, tutors, admins)
 /// - The response contains the complete grading report including marks, tasks, and optional
-///   code coverage/complexity analysis
+///   code coverage analysis
 /// - Access is restricted to users with appropriate permissions for the module
 
 pub async fn get_submission(
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let submission = SubmissionEntity::find_by_id(submission_id)
-        .one(db)
-        .await
-        .unwrap()
-        .unwrap();
+    let db = app_state.db();
+
+    let submission = match SubmissionEntity::find_by_id(submission_id).one(db).await {
+        Ok(Some(submission)) => submission,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Submission not found",
+                )),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            eprintln!("DB error finding submission: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Database error",
+                )),
+            )
+                .into_response();
+        }
+    };
 
     if submission.assignment_id != assignment_id {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error(
+            Json(ApiResponse::<SubmissionDetailResponse>::error(
                 "Submission does not belong to the specified assignment",
             )),
         )
@@ -684,7 +712,9 @@ pub async fn get_submission(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment not found")),
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Assignment not found",
+                )),
             )
                 .into_response();
         }
@@ -692,7 +722,9 @@ pub async fn get_submission(
             eprintln!("DB error checking assignment: {:?}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error")),
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Database error",
+                )),
             )
                 .into_response();
         }
@@ -701,7 +733,7 @@ pub async fn get_submission(
     if assignment.module_id != module_id {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error(
+            Json(ApiResponse::<SubmissionDetailResponse>::error(
                 "Assignment does not belong to the specified module",
             )),
         )
@@ -718,18 +750,20 @@ pub async fn get_submission(
         Err(_) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Submission report not found")),
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Submission report not found",
+                )),
             )
                 .into_response();
         }
     };
 
-    let mut parsed: Value = match serde_json::from_str(&content) {
+    let parsed: Value = match serde_json::from_str(&content) {
         Ok(val) => val,
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
                     "Failed to parse submission report",
                 )),
             )
@@ -737,99 +771,137 @@ pub async fn get_submission(
         }
     };
 
-    // ─────────────────────────────────────────────────────────────────────────────
+    // Extract fields from the parsed JSON
+    let mark = parsed
+        .get("mark")
+        .and_then(|m| serde_json::from_value::<MarkSummary>(m.clone()).ok())
+        .unwrap_or(MarkSummary {
+            earned: 0,
+            total: 0,
+        });
+
+    let is_practice = parsed
+        .get("is_practice")
+        .and_then(|p| p.as_bool())
+        .unwrap_or(false);
+
+    let mut tasks: Vec<serde_json::Value> = parsed
+        .get("tasks")
+        .and_then(|t| t.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let code_coverage = parsed
+        .get("code_coverage")
+        .and_then(|c| serde_json::from_value::<CodeCoverage>(c.clone()).ok());
+
     // Enrich task names: replace numeric task IDs or task_numbers with real names
-    // ─────────────────────────────────────────────────────────────────────────────
-
-    let (by_id, by_num): (HashMap<i64, String>, HashMap<i64, String>) = match assignment_task::Entity::find()
-        .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
-        .all(db)
-        .await
-    {
-        Ok(rows) => {
-            let mut id_map = HashMap::with_capacity(rows.len());
-            let mut num_map = HashMap::with_capacity(rows.len());
-            for t in rows {
-                id_map.insert(t.id, t.name.clone());
-                num_map.insert(t.task_number, t.name);
-            }
-            (id_map, num_map)
-        }
-        Err(err) => {
-            eprintln!("get_submission: failed to load tasks for enrichment: {:?}", err);
-            (HashMap::new(), HashMap::new())
-        }
-    };
-
-    if let Some(tasks) = parsed.get_mut("tasks").and_then(|v| v.as_array_mut()) {
-        for task_val in tasks.iter_mut() {
-            // Capture current name as owned string (may be string or number)
-            let name_str_owned: Option<String> = task_val
-                .get("name")
-                .and_then(|v| {
-                    if let Some(s) = v.as_str() {
-                        Some(s.to_string())
-                    } else if let Some(n) = v.as_i64() {
-                        Some(n.to_string())
-                    } else {
-                        None
-                    }
-                });
-
-            // Also capture task_number (if present)
-            let task_number_opt: Option<i64> = task_val
-                .get("task_number")
-                .and_then(|v| v.as_i64());
-
-            // Decide on the best replacement
-            let replacement: Option<String> = (|| {
-                // 1) If name is numeric → treat as task_id
-                if let Some(name_s) = &name_str_owned {
-                    if let Ok(task_id) = name_s.trim().parse::<i64>() {
-                        if let Some(real) = by_id.get(&task_id) {
-                            return Some(real.clone());
-                        }
-                    }
+    let (by_id, by_num): (HashMap<i64, String>, HashMap<i64, String>) =
+        match assignment_task::Entity::find()
+            .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
+            .all(db)
+            .await
+        {
+            Ok(rows) => {
+                let mut id_map = HashMap::with_capacity(rows.len());
+                let mut num_map = HashMap::with_capacity(rows.len());
+                for t in rows {
+                    id_map.insert(t.id, t.name.clone());
+                    num_map.insert(t.task_number, t.name);
                 }
-                // 2) Fallback: use task_number if available
-                if let Some(tn) = task_number_opt {
-                    if let Some(real) = by_num.get(&tn) {
+                (id_map, num_map)
+            }
+            Err(err) => {
+                eprintln!(
+                    "get_submission: failed to load tasks for enrichment: {:?}",
+                    err
+                );
+                (HashMap::new(), HashMap::new())
+            }
+        };
+
+    for task_val in tasks.iter_mut() {
+        // Capture current name as owned string (may be string or number)
+        let name_str_owned: Option<String> = task_val.get("name").and_then(|v| {
+            if let Some(s) = v.as_str() {
+                Some(s.to_string())
+            } else if let Some(n) = v.as_i64() {
+                Some(n.to_string())
+            } else {
+                None
+            }
+        });
+
+        // Also capture task_number (if present)
+        let task_number_opt: Option<i64> = task_val.get("task_number").and_then(|v| v.as_i64());
+
+        // Decide on the best replacement
+        let replacement: Option<String> = (|| {
+            // 1) If name is numeric → treat as task_id
+            if let Some(name_s) = &name_str_owned {
+                if let Ok(task_id) = name_s.trim().parse::<i64>() {
+                    if let Some(real) = by_id.get(&task_id) {
                         return Some(real.clone());
                     }
                 }
-                None
-            })();
-
-            // Mutate only if we have a real name
-            if let (Some(obj), Some(real_name)) = (task_val.as_object_mut(), replacement) {
-                obj.insert("name".to_string(), serde_json::Value::String(real_name));
             }
+            // 2) Fallback: use task_number if available
+            if let Some(tn) = task_number_opt {
+                if let Some(real) = by_num.get(&tn) {
+                    return Some(real.clone());
+                }
+            }
+            None
+        })();
+
+        // Mutate only if we have a real name
+        if let (Some(obj), Some(real_name)) = (task_val.as_object_mut(), replacement) {
+            obj.insert("name".to_string(), serde_json::Value::String(real_name));
         }
     }
 
-    // If the requester is not a student, append minimal user info
+    // Construct the structured response
+    let mut user_info = None;
+
+    // If the requester is not a student, include user info
     if !is_student(module_id, claims.sub, db).await {
         if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(db).await {
-            let user_value = serde_json::to_value(UserResponse {
-                id: u.id,
-                username: u.username,
-                email: u.email,
-            })
-            .unwrap();
-            if let Some(obj) = parsed.as_object_mut() {
-                obj.insert("user".to_string(), user_value);
-            }
+            user_info = Some(
+                serde_json::to_value(UserResponse {
+                    id: u.id,
+                    username: u.username,
+                    email: u.email,
+                })
+                .unwrap(),
+            );
         }
     }
+
+    let response = SubmissionDetailResponse {
+        id: submission.id,
+        attempt: submission.attempt,
+        filename: submission.filename.clone(),
+        hash: submission.file_hash.clone(),
+        created_at: submission.created_at.to_rfc3339(),
+        updated_at: submission.updated_at.to_rfc3339(),
+        mark,
+        is_practice,
+        is_late: is_late(submission.created_at, assignment.due_date),
+        ignored: submission.ignored,
+        status: submission.status.to_string(),
+        tasks,
+        code_coverage,
+        user: user_info,
+    };
 
     (
         StatusCode::OK,
         Json(ApiResponse::success(
-            parsed,
+            response,
             "Submission details retrieved successfully",
         )),
     )
-    .into_response()
+        .into_response()
 }
 
 #[derive(Serialize)]
@@ -839,25 +911,31 @@ struct MemoResponse {
 }
 
 pub async fn get_submission_output(
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    let output = match SubmissionOutput::get_output(db, module_id, assignment_id, submission_id).await {
-        Ok(output) => output,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Failed to retrieve submission output")),
-            )
-            .into_response();
-        }
-    };
+    let db = app_state.db();
+
+    let output =
+        match SubmissionOutput::get_output(db, module_id, assignment_id, submission_id).await {
+            Ok(output) => output,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error(
+                        "Failed to retrieve submission output",
+                    )),
+                )
+                    .into_response();
+            }
+        };
 
     if output.is_empty() {
         return (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Submission output not found")),
         )
-        .into_response();
+            .into_response();
     }
 
     let mut memo_data = Vec::new();
@@ -883,14 +961,16 @@ pub async fn get_submission_output(
                         task_id, assignment_id
                     ))),
                 )
-                .into_response();
+                    .into_response();
             }
             Err(_) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<()>::error("Database error while fetching task info")),
+                    Json(ApiResponse::<()>::error(
+                        "Database error while fetching task info",
+                    )),
                 )
-                .into_response();
+                    .into_response();
             }
         }
     }
@@ -902,7 +982,7 @@ pub async fn get_submission_output(
             "Fetched memo output successfully",
         )),
     )
-    .into_response()
+        .into_response()
 }
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/submissions/{submission_id}/download
@@ -910,6 +990,7 @@ pub async fn get_submission_output(
 /// Returns the original uploaded archive for a submission.
 /// Authorization: owner OR module staff (Lecturer/AssistantLecturer/Tutor) OR admin.
 pub async fn download_submission_file(
+    State(app_state): State<AppState>,
     Path((module_id, assignment_id, submission_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> Response {
@@ -928,14 +1009,14 @@ pub async fn download_submission_file(
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::error("Assignment not found")),
             )
-                .into_response()
+                .into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Database error")),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -952,14 +1033,14 @@ pub async fn download_submission_file(
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::error("Submission not found")),
             )
-                .into_response()
+                .into_response();
         }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Database error")),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -971,16 +1052,24 @@ pub async fn download_submission_file(
     } else {
         let uid = claims.sub;
         let mid = assignment.module_id;
-        let lect = user::Model::is_in_role(db, uid, mid, "Lecturer").await.unwrap_or(false);
-        let al   = user::Model::is_in_role(db, uid, mid, "AssistantLecturer").await.unwrap_or(false);
-        let tut  = user::Model::is_in_role(db, uid, mid, "Tutor").await.unwrap_or(false);
+        let lect = user::Model::is_in_role(db, uid, mid, "Lecturer")
+            .await
+            .unwrap_or(false);
+        let al = user::Model::is_in_role(db, uid, mid, "AssistantLecturer")
+            .await
+            .unwrap_or(false);
+        let tut = user::Model::is_in_role(db, uid, mid, "Tutor")
+            .await
+            .unwrap_or(false);
         lect || al || tut
     };
 
     if !(is_owner || is_staff || is_admin) {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::error("Not authorized to download this submission")),
+            Json(ApiResponse::<()>::error(
+                "Not authorized to download this submission",
+            )),
         )
             .into_response();
     }
@@ -1004,7 +1093,7 @@ pub async fn download_submission_file(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Failed to read file")),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -1015,7 +1104,10 @@ pub async fn download_submission_file(
         HeaderValue::from_str(&format!("attachment; filename=\"{}\"", submission.filename))
             .unwrap_or_else(|_| HeaderValue::from_static("attachment")),
     );
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
 
     (StatusCode::OK, headers, buffer).into_response()
 }

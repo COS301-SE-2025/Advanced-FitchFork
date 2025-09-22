@@ -11,9 +11,9 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
-use util::filters::{FilterParam, QueryParam};
+use services::announcement::{Announcement, AnnouncementService};
 use services::service::Service;
-use services::announcement::{AnnouncementService, Announcement};
+use util::filters::{FilterParam, QueryParam};
 
 #[derive(Serialize)]
 pub struct MinimalUser {
@@ -26,7 +26,6 @@ pub struct ShowAnnouncementResponse {
     pub announcement: Announcement,
     pub user: MinimalUser,
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
@@ -167,9 +166,7 @@ pub async fn get_announcements(
             Err(_) => {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<FilterResponse>::error(
-                        "Invalid pinned value",
-                    )),
+                    Json(ApiResponse::<FilterResponse>::error("Invalid pinned value")),
                 );
             }
         }
@@ -191,23 +188,19 @@ pub async fn get_announcements(
         };
     }
 
-    let (announcements, total) = match AnnouncementService::filter(
-        &filters,
-        &queries,
-        page,
-        per_page,
-        sort,
-    ).await {
-        Ok(result) => result,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<FilterResponse>::error(
-                    format!("Database error: {}", e),
-                )),
-            );
-        }
-    };
+    let (announcements, total) =
+        match AnnouncementService::filter(&filters, &queries, page, per_page, sort).await {
+            Ok(result) => result,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<FilterResponse>::error(format!(
+                        "Database error: {}",
+                        e
+                    ))),
+                );
+            }
+        };
 
     let response = FilterResponse::new(announcements, page, per_page, total);
     (

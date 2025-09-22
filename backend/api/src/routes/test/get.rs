@@ -1,15 +1,10 @@
-use axum::{
-    extract::Query,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use super::common::TestUserResponse;
+use crate::response::ApiResponse;
+use axum::{Json, extract::Query, http::StatusCode, response::IntoResponse};
 use serde::Deserialize;
-use util::filters::FilterParam;
 use services::service::Service;
 use services::user::UserService;
-use crate::response::ApiResponse;
-use super::common::TestUserResponse;
+use util::filters::FilterParam;
 
 /// Query parameters for fetching a test user.
 #[derive(Debug, Deserialize)]
@@ -69,16 +64,14 @@ pub struct GetUserParams {
 ///   "message": "Database error: <details>"
 /// }
 /// ```
-pub async fn get_user(
-    Query(params): Query<GetUserParams>,
-) -> impl IntoResponse {
+pub async fn get_user(Query(params): Query<GetUserParams>) -> impl IntoResponse {
     match UserService::find_one(
-        &vec![
-            FilterParam::eq("username", params.username),
-        ],
+        &vec![FilterParam::eq("username", params.username)],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(Some(user)) => (
             StatusCode::OK,
             Json(ApiResponse::success(

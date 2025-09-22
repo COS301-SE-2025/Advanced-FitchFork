@@ -3,9 +3,9 @@ use axum::{
     http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
-use util::filters::FilterParam;
-use services::service::Service;
 use services::assignment_overwrite_file::AssignmentOverwriteFileService;
+use services::service::Service;
+use util::filters::FilterParam;
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_id}
 ///
@@ -20,7 +20,9 @@ pub async fn get_task_overwrite_files(
         ],
         &vec![],
         Some("-created_at".to_string()),
-    ).await {
+    )
+    .await
+    {
         Ok(f) => f,
         Err(e) => {
             eprintln!("DB error fetching overwrite files: {:?}", e);

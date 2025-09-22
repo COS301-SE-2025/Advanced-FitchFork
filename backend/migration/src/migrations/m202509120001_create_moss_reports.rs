@@ -3,7 +3,9 @@ use sea_orm_migration::prelude::*;
 pub struct Migration;
 
 impl MigrationName for Migration {
-    fn name(&self) -> &str { "m202509120001_create_moss_reports.rs" }
+    fn name(&self) -> &str {
+        "m202509120001_create_moss_reports.rs"
+    }
 }
 
 #[async_trait::async_trait]
@@ -21,7 +23,11 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(Alias::new("assignment_id")).big_integer().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("assignment_id"))
+                            .big_integer()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(Alias::new("report_url")).text().not_null())
                     .col(
                         ColumnDef::new(Alias::new("generated_at"))
@@ -38,7 +44,11 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .default(false),
                     )
-                    .col(ColumnDef::new(Alias::new("archive_generated_at")).timestamp().null())
+                    .col(
+                        ColumnDef::new(Alias::new("archive_generated_at"))
+                            .timestamp()
+                            .null(),
+                    )
                     // generation filter metadata
                     .col(
                         ColumnDef::new(Alias::new("filter_mode"))
@@ -46,7 +56,11 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .default("all"),
                     )
-                    .col(ColumnDef::new(Alias::new("filter_patterns")).json_binary().null())
+                    .col(
+                        ColumnDef::new(Alias::new("filter_patterns"))
+                            .json_binary()
+                            .null(),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_moss_reports_assignment")

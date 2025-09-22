@@ -2,6 +2,10 @@
 mod tests {
     use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
     use db::{
         models::{
             announcements::Model as AnnouncementModel,
@@ -11,16 +15,12 @@ mod tests {
         },
         repositories::user_repository::UserRepository,
     };
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode},
-    };
+    use serial_test::serial;
     use services::{
         service::Service,
         user::{CreateUser, UserService},
     };
     use tower::ServiceExt;
-    use serial_test::serial;
 
     struct TestData {
         student: UserModel,
@@ -32,7 +32,7 @@ mod tests {
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         let service = UserService::new(UserRepository::new(db.clone()));
-        
+
         let student = service
             .create(CreateUser {
                 username: "test_user".into(),
@@ -171,10 +171,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
-        let uri = format!(
-            "/api/modules/{}/announcements/999",
-            data.module.id
-        );
+        let uri = format!("/api/modules/{}/announcements/999", data.module.id);
 
         let req = Request::builder()
             .method("DELETE")

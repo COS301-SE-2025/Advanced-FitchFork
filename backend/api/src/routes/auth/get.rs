@@ -1,22 +1,19 @@
-use axum::{
-    extract::{Query, Path},
-    http::{StatusCode, header, HeaderMap, HeaderValue},
-    response::IntoResponse,
-    Json,
-};
-use tokio::fs::File as FsFile;
-use serde::{Deserialize, Serialize};
-use tokio::io::AsyncReadExt;
-use util::{paths::user_profile_path, state::AppState};
-use crate::{
-    auth::claims::AuthUser,
-    response::ApiResponse,
-};
 use crate::routes::common::UserModule;
-use util::filters::FilterParam;
+use crate::{auth::claims::AuthUser, response::ApiResponse};
+use axum::{
+    Json,
+    extract::{Path, Query},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    response::IntoResponse,
+};
+use serde::{Deserialize, Serialize};
 use services::service::Service;
 use services::user::UserService;
 use services::user_module_role::UserModuleRoleService;
+use tokio::fs::File as FsFile;
+use tokio::io::AsyncReadExt;
+use util::filters::FilterParam;
+use util::{paths::user_profile_path, state::AppState};
 
 #[derive(Debug, Serialize)]
 pub struct MeResponse {
@@ -87,9 +84,7 @@ pub struct HasRoleResponse {
 /// - `403 Forbidden` – Missing or invalid token
 /// - `404 Not Found` – User not found
 /// - `500 Internal Server Error` – Database failure
-pub async fn get_me(
-    AuthUser(claims): AuthUser
-) -> impl IntoResponse {
+pub async fn get_me(AuthUser(claims): AuthUser) -> impl IntoResponse {
     let user_id = claims.sub;
 
     let user = match UserService::find_by_id(user_id).await {
@@ -107,7 +102,7 @@ pub async fn get_me(
             );
         }
     };
-    
+
     let roles = match user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user.id))
         .find_also_related(module::Entity)
@@ -118,7 +113,9 @@ pub async fn get_me(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<MeResponse>::error("Failed to load module roles")),
+                Json(ApiResponse::<MeResponse>::error(
+                    "Failed to load module roles",
+                )),
             );
         }
     };
@@ -151,7 +148,10 @@ pub async fn get_me(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(response_data, "User data retrieved successfully")),
+        Json(ApiResponse::success(
+            response_data,
+            "User data retrieved successfully",
+        )),
     )
 }
 
@@ -199,9 +199,7 @@ pub async fn get_me(
 ///   "data": null
 /// }
 /// ```
-pub async fn get_avatar(
-    Path(user_id): Path<i64>
-) -> impl IntoResponse {
+pub async fn get_avatar(Path(user_id): Path<i64>) -> impl IntoResponse {
     let user = match UserService::find_by_id(user_id).await {
         Ok(Some(u)) => u,
         Ok(None) => {
@@ -265,7 +263,8 @@ pub async fn get_avatar(
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_str(&mime).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+        HeaderValue::from_str(&mime)
+            .unwrap_or(HeaderValue::from_static("application/octet-stream")),
     );
 
     (StatusCode::OK, headers, buffer).into_response()
@@ -298,17 +297,15 @@ pub async fn get_avatar(
 /// - `500 Internal Server Error` – Database failure
 pub async fn has_role_in_module(
     AuthUser(claims): AuthUser,
-    Query(params): Query<HasRoleQuery>
+    Query(params): Query<HasRoleQuery>,
 ) -> impl IntoResponse {
     let role = params.role.to_lowercase();
-    if role != "lecturer"
-        && role != "assistant_lecturer"
-        && role != "tutor"
-        && role != "student"
-    {
+    if role != "lecturer" && role != "assistant_lecturer" && role != "tutor" && role != "student" {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<HasRoleResponse>::error("Invalid role specified")),
+            Json(ApiResponse::<HasRoleResponse>::error(
+                "Invalid role specified",
+            )),
         );
     }
 
@@ -320,14 +317,16 @@ pub async fn has_role_in_module(
         ],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(Some(_)) => true,
         Ok(None) => false,
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<HasRoleResponse>::error("Database error")),
-            )
+            );
         }
     };
 
@@ -381,7 +380,9 @@ pub async fn get_module_role(
         ],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(Some(model)) => Some(model.role.to_string().to_lowercase()),
         Ok(None) => None,
         Err(_) => {

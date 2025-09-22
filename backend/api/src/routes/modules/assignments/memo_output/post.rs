@@ -1,13 +1,12 @@
 use crate::response::ApiResponse;
-use axum::{
-    Json,
-    extract::Path,
-    http::StatusCode,
-};
+use axum::{Json, extract::Path, http::StatusCode};
 use code_runner::create_memo_outputs_for_all_tasks;
-use util::{paths::{config_dir, memo_dir}, state::AppState};
 use std::fs;
 use tracing::{error, info};
+use util::{
+    paths::{config_dir, memo_dir},
+    state::AppState,
+};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/memo_output/generate
 ///
@@ -102,9 +101,7 @@ pub async fn generate_memo_output(
     let memo_dir = memo_dir(module_id, assignment_id);
     let memo_valid = memo_dir.is_dir()
         && fs::read_dir(&memo_dir)
-            .map(|mut entries| {
-                entries.any(|e| e.ok().map(|f| f.path().is_file()).unwrap_or(false))
-            })
+            .map(|mut entries| entries.any(|e| e.ok().map(|f| f.path().is_file()).unwrap_or(false)))
             .unwrap_or(false);
 
     if !memo_valid {
@@ -119,9 +116,7 @@ pub async fn generate_memo_output(
     let cfg_dir = config_dir(module_id, assignment_id);
     let config_valid = cfg_dir.is_dir()
         && fs::read_dir(&cfg_dir)
-            .map(|mut entries| {
-                entries.any(|e| e.ok().map(|f| f.path().is_file()).unwrap_or(false))
-            })
+            .map(|mut entries| entries.any(|e| e.ok().map(|f| f.path().is_file()).unwrap_or(false)))
             .unwrap_or(false);
 
     if !config_valid {
@@ -133,7 +128,10 @@ pub async fn generate_memo_output(
 
     match create_memo_outputs_for_all_tasks(assignment_id).await {
         Ok(_) => {
-            info!("Memo output generation complete for assignment {}", assignment_id);
+            info!(
+                "Memo output generation complete for assignment {}",
+                assignment_id
+            );
             (
                 StatusCode::OK,
                 Json(ApiResponse::<()>::success(
@@ -144,7 +142,10 @@ pub async fn generate_memo_output(
         }
         Err(e) => {
             let err_str = e.to_string();
-            error!("Memo output generation failed for assignment {}: {}", assignment_id, err_str);
+            error!(
+                "Memo output generation failed for assignment {}: {}",
+                assignment_id, err_str
+            );
 
             // Map low-level error strings to user-friendly messages + appropriate status codes.
             let (status, message) = if err_str.contains("Config validation failed")
@@ -181,7 +182,8 @@ pub async fn generate_memo_output(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "Main files (.zip) not found. In manual mode, upload Main Files; in GATLAM mode, ensure the Interpreter is configured.",
                 )
-            } else if err_str.contains("No tasks are defined") || err_str.contains("No tasks found") {
+            } else if err_str.contains("No tasks are defined") || err_str.contains("No tasks found")
+            {
                 (
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "No tasks are defined yet. Add at least one task and try again.",

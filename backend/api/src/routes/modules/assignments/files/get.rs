@@ -1,21 +1,17 @@
-use std::{path::PathBuf};
-use axum::{
-    extract::Path,
-    http::{header, HeaderMap, HeaderValue, StatusCode},
-    response::{IntoResponse, Json, Response},
-};
-use tokio::{fs::File as FsFile, io::AsyncReadExt};
-use sea_orm::{
-    ColumnTrait,
-    EntityTrait,
-    QueryFilter,
-};
-use util::{paths::storage_root, state::AppState};
 use crate::response::ApiResponse;
 use crate::routes::modules::assignments::common::File;
-use util::filters::FilterParam;
-use services::service::Service;
+use axum::{
+    extract::Path,
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    response::{IntoResponse, Json, Response},
+};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use services::assignment_file::AssignmentFileService;
+use services::service::Service;
+use std::path::PathBuf;
+use tokio::{fs::File as FsFile, io::AsyncReadExt};
+use util::filters::FilterParam;
+use util::{paths::storage_root, state::AppState};
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/files/{file_id}
 ///
@@ -45,9 +41,7 @@ use services::assignment_file::AssignmentFileService;
 /// }
 /// ```
 ///
-pub async fn download_file(
-    Path((_, _, file_id)): Path<(i64, i64, i64)>,
-) -> Response {
+pub async fn download_file(Path((_, _, file_id)): Path<(i64, i64, i64)>) -> Response {
     let file = match AssignmentFileService::find_by_id(file_id).await {
         Ok(Some(f)) => f,
         Ok(None) => {
@@ -157,16 +151,14 @@ pub async fn download_file(
 /// }
 /// ```
 ///
-pub async fn list_files(
-    Path((_, assignment_id)): Path<(i64, i64)>
-) -> Response {
+pub async fn list_files(Path((_, assignment_id)): Path<(i64, i64)>) -> Response {
     match AssignmentFileService::find_all(
-        &vec![
-            FilterParam::eq("assignment_id", assignment_id),
-        ],
+        &vec![FilterParam::eq("assignment_id", assignment_id)],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(files) => {
             let file_list: Vec<File> = files
                 .into_iter()

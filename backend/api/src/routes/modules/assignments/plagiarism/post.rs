@@ -1,33 +1,34 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::{response::ApiResponse, services::moss::{MossService, MossRunOptions}};
-use crate::services::moss_archiver::{archive_moss_to_fs_and_zip, ArchiveOptions};
+use crate::services::moss_archiver::{ArchiveOptions, archive_moss_to_fs_and_zip};
+use crate::{
+    response::ApiResponse,
+    services::moss::{MossRunOptions, MossService},
+};
 use axum::{
     Json,
     extract::{Path as AxumPath, State},
     http::StatusCode,
-    response::IntoResponse
+    response::IntoResponse,
 };
 use chrono::{DateTime, Utc};
+use db::models::assignment::{Entity as AssignmentEntity, Model as AssignmentModel};
+use db::models::assignment_file::{
+    Column as AssignmentFileCol, Entity as AssignmentFileEntity, FileType as AssignmentFileType,
+};
+use db::models::moss_report::{self, FilterMode as MossFilterMode};
 use db::models::{
     assignment_submission::{self, Entity as SubmissionEntity},
     plagiarism_case,
     user::Entity as UserEntity,
 };
-use db::models::assignment::{Entity as AssignmentEntity, Model as AssignmentModel};
 use moss_parser::{ParseOptions, parse_moss};
 use serde::{Deserialize, Serialize};
+use tracing::{error, info};
 use util::config;
 use util::paths::{assignment_dir, ensure_parent_dir, moss_archive_zip_path};
-use util::{
-    execution_config::ExecutionConfig,
-    state::AppState,
-};
-use tracing::{error, info};
-use db::models::moss_report::{self, FilterMode as MossFilterMode};
-use db::models::assignment_file::{Entity as AssignmentFileEntity, Column as AssignmentFileCol, FileType as AssignmentFileType};
-
+use util::{execution_config::ExecutionConfig, state::AppState};
 
 #[derive(Serialize, Deserialize)]
 pub struct CreatePlagiarismCasePayload {
@@ -35,7 +36,7 @@ pub struct CreatePlagiarismCasePayload {
     pub submission_id_2: i64,
     pub description: String,
     pub similarity: f32,
-    pub lines_matched: i64, 
+    pub lines_matched: i64,
     pub report_id: Option<i64>,
 }
 
@@ -144,22 +145,31 @@ pub async fn create_plagiarism_case(
     if payload.submission_id_1 == payload.submission_id_2 {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error("Submissions cannot be the same".to_string())),
-        ).into_response();
+            Json(ApiResponse::<()>::error(
+                "Submissions cannot be the same".to_string(),
+            )),
+        )
+            .into_response();
     }
 
     if !(0.0_f32..=100.0_f32).contains(&payload.similarity) || !payload.similarity.is_finite() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error("Similarity must be between 0.0 and 100.0".to_string())),
-        ).into_response();
+            Json(ApiResponse::<()>::error(
+                "Similarity must be between 0.0 and 100.0".to_string(),
+            )),
+        )
+            .into_response();
     }
 
     if payload.lines_matched < 0 {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error("lines_matched must be >= 0".to_string())),
-        ).into_response();
+            Json(ApiResponse::<()>::error(
+                "lines_matched must be >= 0".to_string(),
+            )),
+        )
+            .into_response();
     }
 
     match AssignmentSubmissionService::find_one(
@@ -169,7 +179,9 @@ pub async fn create_plagiarism_case(
         ],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(Some(sub)) => sub,
         _ => {
             return (
@@ -190,7 +202,9 @@ pub async fn create_plagiarism_case(
         ],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(Some(sub)) => sub,
         _ => {
             return (
@@ -208,9 +222,11 @@ pub async fn create_plagiarism_case(
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::error(
-                "One or both submissions do not exist or belong to a different assignment".to_string(),
+                "One or both submissions do not exist or belong to a different assignment"
+                    .to_string(),
             )),
-        ).into_response();
+        )
+            .into_response();
     }
 
     let new_case = plagiarism_case::Model::create_case(
@@ -220,9 +236,10 @@ pub async fn create_plagiarism_case(
         payload.submission_id_2,
         &payload.description,
         payload.similarity,
-        payload.lines_matched,  // NEW
-        payload.report_id,      // NEW
-    ).await;
+        payload.lines_matched, // NEW
+        payload.report_id,     // NEW
+    )
+    .await;
 
     match new_case {
         Ok(case) => (
@@ -243,11 +260,15 @@ pub async fn create_plagiarism_case(
                 },
                 "Plagiarism case created successfully",
             )),
-        ).into_response(),
+        )
+            .into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error("Failed to create plagiarism case".to_string())),
-        ).into_response(),
+            Json(ApiResponse::<()>::error(
+                "Failed to create plagiarism case".to_string(),
+            )),
+        )
+            .into_response(),
     }
 }
 
@@ -352,30 +373,41 @@ pub async fn run_moss_check(
 
     // 0.1) Assignment model
     let assignment_model: AssignmentModel = match AssignmentEntity::find_by_id(assignment_id)
-        .one(app_state.db()).await.ok().flatten()
+        .one(app_state.db())
+        .await
+        .ok()
+        .flatten()
     {
         Some(a) => a,
         None => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Assignment not found")),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
     // 1) Choose one submission per user according to policy
     let selected_submissions: Vec<assignment_submission::Model> = match SubmissionEntity::find()
         .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
-        .all(app_state.db()).await
+        .all(app_state.db())
+        .await
     {
         Ok(all_for_assignment) => {
             use std::collections::HashSet;
             let mut user_ids = HashSet::<i64>::new();
-            for s in &all_for_assignment { user_ids.insert(s.user_id); }
+            for s in &all_for_assignment {
+                user_ids.insert(s.user_id);
+            }
             let mut chosen = Vec::with_capacity(user_ids.len());
             for uid in user_ids {
-                if let Ok(Some(s)) =
-                    assignment_submission::Model::get_best_for_user(app_state.db(), &assignment_model, uid).await
+                if let Ok(Some(s)) = assignment_submission::Model::get_best_for_user(
+                    app_state.db(),
+                    &assignment_model,
+                    uid,
+                )
+                .await
                 {
                     chosen.push(s);
                 }
@@ -386,7 +418,8 @@ pub async fn run_moss_check(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Failed to retrieve submissions")),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
@@ -394,7 +427,11 @@ pub async fn run_moss_check(
     let mut submission_files = Vec::with_capacity(selected_submissions.len());
     for submission in &selected_submissions {
         let username = UserEntity::find_by_id(submission.user_id)
-            .one(app_state.db()).await.ok().flatten().map(|u| u.username);
+            .one(app_state.db())
+            .await
+            .ok()
+            .flatten()
+            .map(|u| u.username);
         submission_files.push((submission.full_path(), username, Some(submission.id)));
     }
 
@@ -420,9 +457,15 @@ pub async fn run_moss_check(
     // 3) Build MOSS run options (with filters from request)
     let mut opts = MossRunOptions::default();
     opts.language = moss_language.to_string();
-    if let Some(v) = body.experimental { opts.experimental = v; }
-    if let Some(v) = body.max_matches { opts.max_matches = v; }
-    if let Some(v) = body.show_limit { opts.show_limit = v; }
+    if let Some(v) = body.experimental {
+        opts.experimental = v;
+    }
+    if let Some(v) = body.max_matches {
+        opts.max_matches = v;
+    }
+    if let Some(v) = body.show_limit {
+        opts.show_limit = v;
+    }
 
     let filter_mode = body.filter_mode.unwrap_or(MossFilterMode::All);
     let filter_patterns = body.filter_patterns.clone();
@@ -432,20 +475,36 @@ pub async fn run_moss_check(
 
     // Validate filters before spawning
     if matches!(opts.filter_mode, MossFilterMode::All)
-        && opts.filter_patterns.as_ref().map(|v| !v.is_empty()).unwrap_or(false)
+        && opts
+            .filter_patterns
+            .as_ref()
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
     {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error("filter_mode=all does not accept filter_patterns")),
-        ).into_response();
+            Json(ApiResponse::<()>::error(
+                "filter_mode=all does not accept filter_patterns",
+            )),
+        )
+            .into_response();
     }
-    if matches!(opts.filter_mode, MossFilterMode::Whitelist | MossFilterMode::Blacklist)
-        && opts.filter_patterns.as_ref().map(|v| v.is_empty()).unwrap_or(true)
+    if matches!(
+        opts.filter_mode,
+        MossFilterMode::Whitelist | MossFilterMode::Blacklist
+    ) && opts
+        .filter_patterns
+        .as_ref()
+        .map(|v| v.is_empty())
+        .unwrap_or(true)
     {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error("filter_patterns must be non-empty for whitelist/blacklist")),
-        ).into_response();
+            Json(ApiResponse::<()>::error(
+                "filter_patterns must be non-empty for whitelist/blacklist",
+            )),
+        )
+            .into_response();
     }
 
     // 4) Prepare async job inputs
@@ -456,7 +515,9 @@ pub async fn run_moss_check(
 
     // Respond immediately; background task does: run → save → parse → archive
     tokio::spawn(async move {
-        let res = moss_service.run_with_options(base_files, submission_files, opts).await;
+        let res = moss_service
+            .run_with_options(base_files, submission_files, opts)
+            .await;
 
         match res {
             Ok(report_url) => {
@@ -466,7 +527,11 @@ pub async fn run_moss_check(
                     error!("MOSS: failed to create report dir: {e}");
                 } else {
                     let report_path = base_dir.join("reports.txt");
-                    let content = format!("Report URL: {}\nDate: {}", &report_url, Utc::now().to_rfc3339());
+                    let content = format!(
+                        "Report URL: {}\nDate: {}",
+                        &report_url,
+                        Utc::now().to_rfc3339()
+                    );
                     if let Err(e) = fs::write(&report_path, content) {
                         error!("MOSS: failed to write reports.txt: {e}");
                     }
@@ -481,7 +546,9 @@ pub async fn run_moss_check(
                     filter_mode.clone(),
                     body.description.clone(),
                     filter_patterns.clone(),
-                ).await {
+                )
+                .await
+                {
                     Ok(m) => Some(m),
                     Err(e) => {
                         error!("MOSS: failed to save moss_report: {e}");
@@ -490,7 +557,10 @@ pub async fn run_moss_check(
                 };
 
                 // (B) Parse → create cases (NO deletion of prior cases; link to this report)
-                let parse_opts = ParseOptions { min_lines: 0, include_matches: false };
+                let parse_opts = ParseOptions {
+                    min_lines: 0,
+                    include_matches: false,
+                };
                 match parse_moss(&report_url, parse_opts).await {
                     Ok(parsed) => {
                         use std::collections::HashSet;
@@ -498,19 +568,44 @@ pub async fn run_moss_check(
                         let report_id_opt = report_row.as_ref().map(|m| m.id);
 
                         for r in parsed.reports {
-                            let (Some(sub_a), Some(sub_b)) = (r.submission_id_a, r.submission_id_b) else { continue; };
-                            let (a, b, ua, ub) = if sub_a <= sub_b { (sub_a, sub_b, r.user_a, r.user_b) }
-                                                 else { (sub_b, sub_a, r.user_b, r.user_a) };
-                            if !seen.insert((a, b)) { continue; }
+                            let (Some(sub_a), Some(sub_b)) = (r.submission_id_a, r.submission_id_b)
+                            else {
+                                continue;
+                            };
+                            let (a, b, ua, ub) = if sub_a <= sub_b {
+                                (sub_a, sub_b, r.user_a, r.user_b)
+                            } else {
+                                (sub_b, sub_a, r.user_b, r.user_a)
+                            };
+                            if !seen.insert((a, b)) {
+                                continue;
+                            }
 
-                            let description = generate_description(&ua, &ub, a, b, r.total_lines_matched, r.total_percent);
-                            let similarity: f32 = r.total_percent.unwrap_or(0.0).clamp(0.0, 100.0) as f32;
+                            let description = generate_description(
+                                &ua,
+                                &ub,
+                                a,
+                                b,
+                                r.total_lines_matched,
+                                r.total_percent,
+                            );
+                            let similarity: f32 =
+                                r.total_percent.unwrap_or(0.0).clamp(0.0, 100.0) as f32;
                             let lines_matched = r.total_lines_matched.max(0);
 
                             // NEW signature: (similarity, lines_matched, report_id)
                             if let Err(e) = plagiarism_case::Model::create_case(
-                                &db, assignment_id, a, b, &description, similarity, lines_matched, report_id_opt
-                            ).await {
+                                &db,
+                                assignment_id,
+                                a,
+                                b,
+                                &description,
+                                similarity,
+                                lines_matched,
+                                report_id_opt,
+                            )
+                            .await
+                            {
                                 error!("MOSS: failed to create case for ({a},{b}): {e}");
                             }
                         }
@@ -521,12 +616,20 @@ pub async fn run_moss_check(
                 // (C) Archive (zip) if report row exists (unchanged semantics)
                 if let Some(report) = report_row {
                     let report_id_str = report.id.to_string();
-                    let final_zip: PathBuf = moss_archive_zip_path(module_id, assignment_id, &report_id_str);
+                    let final_zip: PathBuf =
+                        moss_archive_zip_path(module_id, assignment_id, &report_id_str);
 
                     let still_exists = moss_report::Entity::find_by_id(report.id)
-                        .one(&db).await.ok().flatten().is_some();
+                        .one(&db)
+                        .await
+                        .ok()
+                        .flatten()
+                        .is_some();
                     if !still_exists {
-                        info!("MOSS: skipping archive; report {} was deleted before archive started", report.id);
+                        info!(
+                            "MOSS: skipping archive; report {} was deleted before archive started",
+                            report.id
+                        );
                         return;
                     }
 
@@ -535,34 +638,61 @@ pub async fn run_moss_check(
                         return;
                     }
 
-                    let work_dir: PathBuf = std::env::temp_dir()
-                        .join(format!("moss_arch_{}_{}_{}", module_id, assignment_id, &report_id_str));
+                    let work_dir: PathBuf = std::env::temp_dir().join(format!(
+                        "moss_arch_{}_{}_{}",
+                        module_id, assignment_id, &report_id_str
+                    ));
                     if let Err(e) = fs::create_dir_all(&work_dir) {
                         error!("MOSS: failed to create temp work dir: {e}");
                         return;
                     }
 
                     let opts = ArchiveOptions { concurrency: 12 };
-                    match archive_moss_to_fs_and_zip(&report_url, &work_dir, &final_zip, opts).await {
+                    match archive_moss_to_fs_and_zip(&report_url, &work_dir, &final_zip, opts).await
+                    {
                         Ok((_manifest, _zip_abs)) => {
                             let _ = fs::remove_dir_all(&work_dir);
 
                             let exists_after = moss_report::Entity::find_by_id(report.id)
-                                .one(&db).await.ok().flatten().is_some();
+                                .one(&db)
+                                .await
+                                .ok()
+                                .flatten()
+                                .is_some();
 
                             if !exists_after {
                                 if let Err(e) = fs::remove_file(&final_zip) {
-                                    error!("MOSS: report deleted during archive; failed to remove zip {}: {e}", final_zip.display());
+                                    error!(
+                                        "MOSS: report deleted during archive; failed to remove zip {}: {e}",
+                                        final_zip.display()
+                                    );
                                 } else {
-                                    info!("MOSS: report deleted during archive; zip removed {}", final_zip.display());
+                                    info!(
+                                        "MOSS: report deleted during archive; zip removed {}",
+                                        final_zip.display()
+                                    );
                                 }
                                 return;
                             }
 
-                            if let Err(e) = moss_report::Entity::set_archive_state(&db, report.id, true, Some(Utc::now())).await {
-                                error!("MOSS: failed to update archive state for report {}: {e}", report.id);
+                            if let Err(e) = moss_report::Entity::set_archive_state(
+                                &db,
+                                report.id,
+                                true,
+                                Some(Utc::now()),
+                            )
+                            .await
+                            {
+                                error!(
+                                    "MOSS: failed to update archive state for report {}: {e}",
+                                    report.id
+                                );
                             } else {
-                                info!("MOSS archive saved for report {}: {}", report.id, final_zip.display());
+                                info!(
+                                    "MOSS archive saved for report {}: {}",
+                                    report.id,
+                                    final_zip.display()
+                                );
                             }
                         }
                         Err(e) => {
@@ -592,9 +722,9 @@ pub async fn run_moss_check(
             }),
             "Started MOSS job",
         )),
-    ).into_response()
+    )
+        .into_response()
 }
-
 
 fn generate_description(
     user_a: &str,

@@ -1,5 +1,8 @@
 use crate::config;
-use std::{fs, io, path::{Path, PathBuf}};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 /// Create a directory (and all parents) if it doesn't exist, and return the path.
 pub fn ensure_dir<P: AsRef<Path>>(path: P) -> io::Result<PathBuf> {
@@ -161,12 +164,7 @@ pub fn submissions_dir(module_id: i64, assignment_id: i64) -> PathBuf {
 pub fn user_submission_dir(module_id: i64, assignment_id: i64, user_id: i64) -> PathBuf {
     submissions_dir(module_id, assignment_id).join(format!("user_{user_id}"))
 }
-pub fn attempt_dir(
-    module_id: i64,
-    assignment_id: i64,
-    user_id: i64,
-    attempt: i64,
-) -> PathBuf {
+pub fn attempt_dir(module_id: i64, assignment_id: i64, user_id: i64, attempt: i64) -> PathBuf {
     user_submission_dir(module_id, assignment_id, user_id).join(format!("attempt_{attempt}"))
 }
 
@@ -221,7 +219,6 @@ pub fn submission_output_path(
     submission_output_dir(module_id, assignment_id, user_id, attempt).join(filename)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,11 +226,7 @@ mod tests {
     use tempfile::TempDir;
 
     // Minimal set mutated by these tests; other config fields use defaults.
-    const MUT_VARS: &[&str] = &[
-        "STORAGE_ROOT",
-        "DATABASE_PATH",
-        "JWT_SECRET",
-    ];
+    const MUT_VARS: &[&str] = &["STORAGE_ROOT", "DATABASE_PATH", "JWT_SECRET"];
 
     fn clear_mut_vars() {
         for k in MUT_VARS {
@@ -317,55 +310,87 @@ mod tests {
 
         // Mark allocator
         assert_eq!(mark_allocator_dir(m, a), base.join("mark_allocator"));
-        assert_eq!(mark_allocator_path(m, a), base.join("mark_allocator").join("allocator.json"));
+        assert_eq!(
+            mark_allocator_path(m, a),
+            base.join("mark_allocator").join("allocator.json")
+        );
 
         // Memo output
         assert_eq!(memo_output_dir(m, a), base.join("memo_output"));
-        assert_eq!(memo_output_path(m, a, f), base.join("memo_output").join("99.txt"));
+        assert_eq!(
+            memo_output_path(m, a, f),
+            base.join("memo_output").join("99.txt")
+        );
 
         // Interpreter
         assert_eq!(interpreter_dir(m, a), base.join("interpreter"));
-        assert_eq!(interpreter_path(m, a, f), base.join("interpreter").join("99.zip"));
+        assert_eq!(
+            interpreter_path(m, a, f),
+            base.join("interpreter").join("99.zip")
+        );
 
         // Overwrite files
         assert_eq!(overwrite_files_dir(m, a), base.join("overwrite_files"));
-        assert_eq!(overwrite_task_dir(m, a, t), base.join("overwrite_files").join("task_3"));
+        assert_eq!(
+            overwrite_task_dir(m, a, t),
+            base.join("overwrite_files").join("task_3")
+        );
         assert_eq!(
             overwrite_file_path(m, a, t, "foo.c"),
             base.join("overwrite_files").join("task_3").join("foo.c")
         );
 
-                // Submissions tree
+        // Submissions tree
         assert_eq!(submissions_dir(m, a), base.join("assignment_submissions"));
-        assert_eq!(user_submission_dir(m, a, u), base.join("assignment_submissions").join("user_5"));
+        assert_eq!(
+            user_submission_dir(m, a, u),
+            base.join("assignment_submissions").join("user_5")
+        );
         assert_eq!(
             attempt_dir(m, a, u, attempt),
-            base.join("assignment_submissions").join("user_5").join("attempt_2")
+            base.join("assignment_submissions")
+                .join("user_5")
+                .join("attempt_2")
         );
 
         // Use a fake submission id to validate filename construction
         let s = 123_i64;
         assert_eq!(
             submission_file_path(m, a, u, attempt, s, Some("zip")),
-            base.join("assignment_submissions").join("user_5").join("attempt_2").join("123.zip")
+            base.join("assignment_submissions")
+                .join("user_5")
+                .join("attempt_2")
+                .join("123.zip")
         );
         assert_eq!(
             submission_file_path(m, a, u, attempt, s, None),
-            base.join("assignment_submissions").join("user_5").join("attempt_2").join("123")
+            base.join("assignment_submissions")
+                .join("user_5")
+                .join("attempt_2")
+                .join("123")
         );
 
         assert_eq!(
             submission_report_path(m, a, u, attempt),
-            base.join("assignment_submissions").join("user_5").join("attempt_2").join("submission_report.json")
+            base.join("assignment_submissions")
+                .join("user_5")
+                .join("attempt_2")
+                .join("submission_report.json")
         );
         assert_eq!(
             submission_output_dir(m, a, u, attempt),
-            base.join("assignment_submissions").join("user_5").join("attempt_2").join("submission_output")
+            base.join("assignment_submissions")
+                .join("user_5")
+                .join("attempt_2")
+                .join("submission_output")
         );
         assert_eq!(
             submission_output_path(m, a, u, attempt, "stdout.txt"),
-            base.join("assignment_submissions").join("user_5").join("attempt_2").join("submission_output").join("stdout.txt")
+            base.join("assignment_submissions")
+                .join("user_5")
+                .join("attempt_2")
+                .join("submission_output")
+                .join("stdout.txt")
         );
-
     }
 }

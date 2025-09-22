@@ -7,8 +7,11 @@
 //! has permission to view the ticket(s) before returning data.
 
 use crate::{
-    auth::AuthUser, response::ApiResponse,
-    routes::modules::assignments::tickets::common::{is_valid, TicketResponse, TicketWithUserResponse},
+    auth::AuthUser,
+    response::ApiResponse,
+    routes::modules::assignments::tickets::common::{
+        TicketResponse, TicketWithUserResponse, is_valid,
+    },
 };
 use axum::{
     Extension,
@@ -17,10 +20,10 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
-use util::filters::{FilterParam, QueryParam};
 use services::service::Service;
 use services::ticket::{TicketService, TicketStatus};
 use services::user_module_role::UserModuleRoleService;
+use util::filters::{FilterParam, QueryParam};
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}
 ///
@@ -93,7 +96,8 @@ pub async fn get_ticket(
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error("Forbidden")),
-        ).into_response();
+        )
+            .into_response();
     }
 
     // Fetch ticket and preload the user relation
@@ -110,20 +114,24 @@ pub async fn get_ticket(
             (
                 StatusCode::OK,
                 Json(ApiResponse::success(response, "Ticket with user retrieved")),
-            ).into_response()
+            )
+                .into_response()
         }
         Ok(Some((_ticket, None))) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error("User not found")),
-        ).into_response(),
+        )
+            .into_response(),
         Ok(None) => (
             StatusCode::NOT_FOUND,
             Json(ApiResponse::<()>::error("Ticket not found")),
-        ).into_response(),
+        )
+            .into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error("Failed to retrieve ticket")),
-        ).into_response(),
+        )
+            .into_response(),
     }
 }
 
@@ -245,17 +253,20 @@ pub async fn get_tickets(
             ],
             &vec![],
             None,
-        ).await {
+        )
+        .await
+        {
             Ok(Some(_)) => {
                 filters.push(FilterParam::eq("user_id", user_id));
-            },
-            Ok(None) => {},
+            }
+            Ok(None) => {}
             Err(e) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<FilterResponse>::error(
-                        format!("Database error: {}", e),
-                    )),
+                    Json(ApiResponse::<FilterResponse>::error(format!(
+                        "Database error: {}",
+                        e
+                    ))),
                 );
             }
         }
@@ -282,25 +293,22 @@ pub async fn get_tickets(
         }
     }
 
-    let (tickets, total) = match TicketService::filter(
-        &filters,
-        &queries,
-        page,
-        per_page,
-        sort,
-    ).await {
-        Ok(result) => result,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<FilterResponse>::error(
-                    format!("Database error: {}", e),
-                )),
-            );
-        }
-    };
+    let (tickets, total) =
+        match TicketService::filter(&filters, &queries, page, per_page, sort).await {
+            Ok(result) => result,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<FilterResponse>::error(format!(
+                        "Database error: {}",
+                        e
+                    ))),
+                );
+            }
+        };
 
-    let ticket_responses: Vec<TicketResponse> = tickets.into_iter().map(TicketResponse::from).collect();
+    let ticket_responses: Vec<TicketResponse> =
+        tickets.into_iter().map(TicketResponse::from).collect();
 
     let response = FilterResponse::new(ticket_responses, page, per_page, total);
     (

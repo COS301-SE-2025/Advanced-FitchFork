@@ -1,19 +1,19 @@
-use axum::{
-    extract::{Path, Query, Extension},
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
 use crate::{
     auth::AuthUser,
-    response::{ApiResponse},
-    routes::modules::common::{RoleResponse, RoleQuery, PaginatedRoleResponse},
+    response::ApiResponse,
+    routes::modules::common::{PaginatedRoleResponse, RoleQuery, RoleResponse},
+};
+use axum::{
+    Json,
+    extract::{Extension, Path, Query},
+    http::StatusCode,
+    response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use util::filters::{FilterParam, QueryParam};
 use services::service::Service;
-use services::user::{UserService, User};
+use services::user::{User, UserService};
 use services::user_module_role::UserModuleRoleService;
+use util::filters::{FilterParam, QueryParam};
 
 #[derive(Debug, serde::Deserialize)]
 pub struct RoleParam {
@@ -97,7 +97,9 @@ pub async fn get_personnel(
     if !["lecturer", "tutor", "assistant_lecturer", "student"].contains(&requested_role.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<PaginatedRoleResponse>::error("Invalid role specified")),
+            Json(ApiResponse::<PaginatedRoleResponse>::error(
+                "Invalid role specified",
+            )),
         );
     }
 
@@ -118,7 +120,9 @@ pub async fn get_personnel(
             ],
             &vec![],
             None,
-        ).await {
+        )
+        .await
+        {
             Ok(is_member) => {
                 if is_member.is_none() {
                     return (
@@ -132,9 +136,10 @@ pub async fn get_personnel(
             Err(e) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<PaginatedRoleResponse>::error(
-                        format!("Database error: {}", e),
-                    )),
+                    Json(ApiResponse::<PaginatedRoleResponse>::error(format!(
+                        "Database error: {}",
+                        e
+                    ))),
                 );
             }
         }
@@ -165,20 +170,15 @@ pub async fn get_personnel(
         }
     }
 
-    let (users, total) = match UserService::filter(
-        &filters,
-        &queries,
-        page,
-        per_page,
-        sort,
-    ).await {
+    let (users, total) = match UserService::filter(&filters, &queries, page, per_page, sort).await {
         Ok(result) => result,
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<PaginatedRoleResponse>::error(
-                    format!("Database error: {}", e),
-                )),
+                Json(ApiResponse::<PaginatedRoleResponse>::error(format!(
+                    "Database error: {}",
+                    e
+                ))),
             );
         }
     };
@@ -281,19 +281,20 @@ pub async fn get_eligible_users_for_module(
     let sort = params.sort.clone();
 
     let assigned_ids = match UserModuleRoleService::find_all(
-        &vec![
-            FilterParam::eq("module_id", module_id),
-        ],
+        &vec![FilterParam::eq("module_id", module_id)],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(models) => models.into_iter().map(|m| m.user_id).collect::<Vec<i64>>(),
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<EligibleUserListResponse>::error(
-                    format!("Database error: {}", e),
-                )),
+                Json(ApiResponse::<EligibleUserListResponse>::error(format!(
+                    "Database error: {}",
+                    e
+                ))),
             );
         }
     };
@@ -319,25 +320,21 @@ pub async fn get_eligible_users_for_module(
         }
     }
 
-    let (users, total) = match UserService::filter(
-        &filters,
-        &queries,
-        page,
-        per_page,
-        sort,
-    ).await {
+    let (users, total) = match UserService::filter(&filters, &queries, page, per_page, sort).await {
         Ok(result) => result,
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<EligibleUserListResponse>::error(
-                    format!("Database error: {}", e),
-                )),
+                Json(ApiResponse::<EligibleUserListResponse>::error(format!(
+                    "Database error: {}",
+                    e
+                ))),
             );
         }
     };
 
-    let user_responses: Vec<MinimalUserResponse> = users.into_iter().map(MinimalUserResponse::from).collect();
+    let user_responses: Vec<MinimalUserResponse> =
+        users.into_iter().map(MinimalUserResponse::from).collect();
 
     let response = EligibleUserListResponse {
         users: user_responses,
@@ -348,9 +345,6 @@ pub async fn get_eligible_users_for_module(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(
-            response,
-            "Eligible users fetched",
-        )),
+        Json(ApiResponse::success(response, "Eligible users fetched")),
     )
 }

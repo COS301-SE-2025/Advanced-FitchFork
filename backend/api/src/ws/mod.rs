@@ -1,17 +1,13 @@
-use axum::{middleware::from_fn, Router};
+use axum::{Router, middleware::from_fn};
 
 use crate::{
     auth::guards::require_authenticated,
-    ws::{
-        modules::ws_module_routes,
-        tickets::ws_ticket_routes,
-        attendance::ws_attendance_routes,
-    },
+    ws::{attendance::ws_attendance_routes, modules::ws_module_routes, tickets::ws_ticket_routes},
 };
 
+pub mod attendance;
 pub mod modules;
 pub mod tickets;
-pub mod attendance;
 
 pub fn ws_routes() -> Router {
     Router::new()

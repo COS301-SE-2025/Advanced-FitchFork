@@ -1,13 +1,8 @@
 use crate::response::ApiResponse;
-use axum::{
-    Json,
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-};
-use util::filters::FilterParam;
-use services::service::Service;
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use services::assignment_overwrite_file::AssignmentOverwriteFileService;
+use services::service::Service;
+use util::filters::FilterParam;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/overwrite_files/task/{task_id}
 ///
@@ -27,7 +22,9 @@ pub async fn delete_task_overwrite_files(
         ],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(f) => f,
         Err(e) => {
             eprintln!("DB error fetching overwrite files: {:?}", e);

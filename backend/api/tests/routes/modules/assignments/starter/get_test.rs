@@ -1,21 +1,24 @@
 #[cfg(test)]
 mod tests {
-    use axum::{body::Body, http::{Request, StatusCode}};
-    use tower::ServiceExt;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
     use serde_json::Value;
     use serial_test::serial;
+    use tower::ServiceExt;
 
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use api::routes::modules::assignments::starter::common::STARTER_PACKS;
-    use crate::helpers::app::make_test_app_with_storage;
 
+    use chrono::Utc;
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use chrono::Utc;
 
     struct TestData {
         admin: UserModel,
@@ -117,16 +120,15 @@ mod tests {
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
 
         let items = json["data"].as_array().unwrap();
         assert_eq!(items.len(), STARTER_PACKS.len());
-        let ids: Vec<&str> = items
-            .iter()
-            .map(|v| v["id"].as_str().unwrap())
-            .collect();
+        let ids: Vec<&str> = items.iter().map(|v| v["id"].as_str().unwrap()).collect();
         assert!(ids.contains(&STARTER_PACKS[0].id));
     }
 

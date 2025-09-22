@@ -2,6 +2,10 @@
 mod tests {
     use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
     use chrono::{TimeZone, Utc};
     use db::{
         models::{
@@ -13,17 +17,13 @@ mod tests {
         },
         repositories::user_repository::UserRepository,
     };
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode},
-    };
+    use serial_test::serial;
     use services::{
         service::Service,
-        user::{CreateUser, UserService}
+        user::{CreateUser, UserService},
     };
     use tower::ServiceExt;
-    use serial_test::serial;
-    
+
     struct TestData {
         user: UserModel,
         invalid_user: UserModel,
@@ -34,10 +34,30 @@ mod tests {
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         let service = UserService::new(UserRepository::new(db.clone()));
-        let user = service.create(CreateUser{ username: "test_user".to_string(), email: "test@example.com".to_string(), password: "pass".to_string(), admin: false }).await.unwrap();
-        let invalid_user = service.create(CreateUser{ username: "invalid_user".to_string(), email: "invalid@email.com".to_string(), password: "pass2".to_string(), admin: false }).await.unwrap();
-        let module = ModuleModel::create(db, "330", 2025, Some("test description"), 16).await.unwrap();
-        UserModuleRole::assign_user_to_module(db, user.id, module.id, Role::Student).await.unwrap();
+        let user = service
+            .create(CreateUser {
+                username: "test_user".to_string(),
+                email: "test@example.com".to_string(),
+                password: "pass".to_string(),
+                admin: false,
+            })
+            .await
+            .unwrap();
+        let invalid_user = service
+            .create(CreateUser {
+                username: "invalid_user".to_string(),
+                email: "invalid@email.com".to_string(),
+                password: "pass2".to_string(),
+                admin: false,
+            })
+            .await
+            .unwrap();
+        let module = ModuleModel::create(db, "330", 2025, Some("test description"), 16)
+            .await
+            .unwrap();
+        UserModuleRole::assign_user_to_module(db, user.id, module.id, Role::Student)
+            .await
+            .unwrap();
         let assignment = AssignmentModel::create(
             db,
             module.id,
@@ -46,14 +66,18 @@ mod tests {
             AssignmentType::Assignment,
             Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
         let ticket = TicketModel::create(
             db,
             assignment.id,
             user.id,
             "Test Ticket",
             "This is a test ticket",
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         TestData {
             user,

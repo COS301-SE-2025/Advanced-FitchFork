@@ -4,16 +4,13 @@ use axum::{
 };
 use std::convert::Infallible;
 use tokio::net::TcpListener;
-use tokio_tungstenite::{
-    connect_async,
-    tungstenite::{client::IntoClientRequest},
-    MaybeTlsStream,
-    WebSocketStream
-};
-use tower::util::BoxCloneService;
-use tower::make::Shared;
-use url::Url;
 use tokio::net::TcpStream;
+use tokio_tungstenite::{
+    MaybeTlsStream, WebSocketStream, connect_async, tungstenite::client::IntoClientRequest,
+};
+use tower::make::Shared;
+use tower::util::BoxCloneService;
+use url::Url;
 
 /// Spawns the Axum app on a random local port
 pub async fn spawn_server(
@@ -43,11 +40,7 @@ pub async fn connect_ws(
     ),
     tokio_tungstenite::tungstenite::Error,
 > {
-    let url = Url::parse(&format!(
-        "ws://{}/ws/{}?token={}",
-        addr, topic, token
-    ))
-    .unwrap();
+    let url = Url::parse(&format!("ws://{}/ws/{}?token={}", addr, topic, token)).unwrap();
 
     let req = url.to_string().into_client_request().unwrap();
     connect_async(req).await

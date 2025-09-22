@@ -5,7 +5,7 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use serde::Serialize;
-use std::{path::PathBuf};
+use std::path::PathBuf;
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
 use util::{paths::storage_root, state::AppState};
 
@@ -22,22 +22,22 @@ use util::{paths::storage_root, state::AppState};
 /// - `404 Not Found`: If no interpreter exists for the assignment, or if the file is missing on disk
 /// - `500 Internal Server Error`: If DB or file read fails
 ///
-pub async fn download_interpreter(
-    Path((_module_id, assignment_id)): Path<(i64, i64)>,
-) -> Response {
+pub async fn download_interpreter(Path((_module_id, assignment_id)): Path<(i64, i64)>) -> Response {
     // There should be at most one interpreter per assignment
     let interpreter = match AssignmentInterpreterService::find_one(
-        &vec![
-            FilterParam::eq("assignment_id", assignment_id),
-        ],
+        &vec![FilterParam::eq("assignment_id", assignment_id)],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(Some(interpreter)) => interpreter,
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("No interpreter found for assignment")),
+                Json(ApiResponse::<()>::error(
+                    "No interpreter found for assignment",
+                )),
             )
                 .into_response();
         }
@@ -101,7 +101,6 @@ pub async fn download_interpreter(
     (StatusCode::OK, headers, buffer).into_response()
 }
 
-
 #[derive(Debug, Serialize)]
 pub struct InterpreterInfo {
     pub id: i64,
@@ -114,26 +113,26 @@ pub struct InterpreterInfo {
 }
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/interpreter/info
-/// 
+///
 /// Returns metadata about the current interpreter (if any).
 /// - 200 OK with metadata
 /// - 404 Not Found if no interpreter present
 /// - 500 on DB or other errors
-pub async fn get_interpreter_info(
-    Path((_module_id, assignment_id)): Path<(i64, i64)>,
-) -> Response {
+pub async fn get_interpreter_info(Path((_module_id, assignment_id)): Path<(i64, i64)>) -> Response {
     let interpreter = match AssignmentInterpreterService::find_one(
-        &vec![
-            FilterParam::eq("assignment_id", assignment_id),
-        ],
+        &vec![FilterParam::eq("assignment_id", assignment_id)],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(Some(interpreter)) => interpreter,
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("No interpreter found for assignment")),
+                Json(ApiResponse::<()>::error(
+                    "No interpreter found for assignment",
+                )),
             )
                 .into_response();
         }

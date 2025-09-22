@@ -5,16 +5,11 @@
 //! Only the author of the message can delete it. The endpoint validates
 //! that the user is the author before performing the deletion.
 
-use axum::{
-    Extension, Json,
-    extract::Path,
-    http::StatusCode,
-    response::IntoResponse,
-};
 use crate::{auth::AuthUser, response::ApiResponse, ws::tickets::topics::ticket_chat_topic};
-use util::state::AppState;
+use axum::{Extension, Json, extract::Path, http::StatusCode, response::IntoResponse};
 use services::service::Service;
 use services::ticket_message::TicketMessageService;
+use util::state::AppState;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages/{message_id}
 ///
@@ -89,7 +84,10 @@ pub async fn delete_ticket_message(
         "event": "message_deleted",
         "payload": { "id": message_id }
     });
-    AppState::get().ws().broadcast(&topic, event.to_string()).await;
+    AppState::get()
+        .ws()
+        .broadcast(&topic, event.to_string())
+        .await;
 
     // HTTP response
     (

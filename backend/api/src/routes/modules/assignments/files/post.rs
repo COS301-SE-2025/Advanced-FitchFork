@@ -1,13 +1,13 @@
+use crate::response::ApiResponse;
 use axum::{
+    Json,
     extract::{Multipart, Path},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::Serialize;
-use crate::response::ApiResponse;
+use services::assignment_file::{AssignmentFileService, CreateAssignmentFile, FileType};
 use services::service::Service;
-use services::assignment_file::{AssignmentFileService, FileType, CreateAssignmentFile};
 
 #[derive(Debug, Serialize)]
 pub struct UploadedFileMetadata {
@@ -170,15 +170,15 @@ pub async fn upload_files(
         }
     };
 
-    match AssignmentFileService::create(
-        CreateAssignmentFile {
-            assignment_id,
-            module_id,
-            file_type: file_type.to_string(),
-            filename: file_name,
-            bytes: file_bytes,
-        }
-    ).await {
+    match AssignmentFileService::create(CreateAssignmentFile {
+        assignment_id,
+        module_id,
+        file_type: file_type.to_string(),
+        filename: file_name,
+        bytes: file_bytes,
+    })
+    .await
+    {
         Ok(saved) => {
             let metadata = UploadedFileMetadata {
                 id: saved.id,

@@ -1,21 +1,17 @@
 use crate::seed::Seeder;
-use services::service::{Service, AppError};
 use services::assignment::AssignmentService;
 use services::assignment_interpreter::{AssignmentInterpreterService, CreateAssignmentInterpreter};
+use services::service::{AppError, Service};
 use std::io::{Cursor, Write};
-use zip::write::SimpleFileOptions;
 use std::pin::Pin;
+use zip::write::SimpleFileOptions;
 
 pub struct AssignmentInterpreterSeeder;
 
 impl Seeder for AssignmentInterpreterSeeder {
     fn seed<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send + 'a>> {
         Box::pin(async move {
-            let assignments = AssignmentService::find_all(
-                &vec![],
-                &vec![],
-                None,
-            ).await?;
+            let assignments = AssignmentService::find_all(&vec![], &vec![], None).await?;
 
             // For each assignment, insert an interpreter file with a sample command string
             for a in &assignments {
@@ -27,15 +23,14 @@ impl Seeder for AssignmentInterpreterSeeder {
                 let command = "g++ -std=c++17 Main.cpp -o main && ./main".to_string();
                 let content = create_example_interpreter_zip();
 
-                AssignmentInterpreterService::create(
-                    CreateAssignmentInterpreter{
-                        assignment_id: a.id,
-                        module_id: a.module_id,
-                        filename: filename,
-                        command: command,
-                        bytes: content,
-                    }
-                ).await?;
+                AssignmentInterpreterService::create(CreateAssignmentInterpreter {
+                    assignment_id: a.id,
+                    module_id: a.module_id,
+                    filename: filename,
+                    command: command,
+                    bytes: content,
+                })
+                .await?;
             }
 
             // Special assignment with realistic interpreter file
@@ -46,27 +41,25 @@ impl Seeder for AssignmentInterpreterSeeder {
             let special_command = "g++ -std=c++17 Main.cpp -o main && ./main".to_string();
             let special_content = create_interpreter_zip_cpp();
 
-            AssignmentInterpreterService::create(
-                CreateAssignmentInterpreter{
-                    assignment_id: special_assignment_id,
-                    module_id: special_module_id,
-                    filename: special_filename.to_string(),
-                    command: special_command,
-                    bytes: special_content,
-                }
-            ).await?;
+            AssignmentInterpreterService::create(CreateAssignmentInterpreter {
+                assignment_id: special_assignment_id,
+                module_id: special_module_id,
+                filename: special_filename.to_string(),
+                command: special_command,
+                bytes: special_content,
+            })
+            .await?;
 
             let gatlam_content = create_gatlam_interpreter_zip();
 
-            AssignmentInterpreterService::create(
-                CreateAssignmentInterpreter{
-                    assignment_id: 10004,
-                    module_id: 10003,
-                    filename: "Interpreter.zip".to_string(),
-                    command: "javac /code/Interpreter.java && java -cp /code Interpreter".to_string(),
-                    bytes: gatlam_content,
-                }
-            ).await?;
+            AssignmentInterpreterService::create(CreateAssignmentInterpreter {
+                assignment_id: 10004,
+                module_id: 10003,
+                filename: "Interpreter.zip".to_string(),
+                command: "javac /code/Interpreter.java && java -cp /code Interpreter".to_string(),
+                bytes: gatlam_content,
+            })
+            .await?;
 
             Ok(())
         })

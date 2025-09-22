@@ -8,8 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 use services::service::Service;
+use services::ticket::{Ticket, TicketService};
 use services::user::User;
-use services::ticket::{TicketService, Ticket};
 use services::user_module_role::UserModuleRoleService;
 use util::filters::FilterParam;
 
@@ -21,12 +21,7 @@ use util::filters::FilterParam;
 /// - `is_admin == true` → allowed
 /// - Ticket **author** → allowed
 /// - Module **staff** (Lecturer, AssistantLecturer, Tutor) → allowed
-pub async fn is_valid(
-    user_id: i64,
-    ticket_id: i64,
-    module_id: i64,
-    is_admin: bool,
-) -> bool {
+pub async fn is_valid(user_id: i64, ticket_id: i64, module_id: i64, is_admin: bool) -> bool {
     // Admin override
     if is_admin {
         return true;
@@ -47,7 +42,9 @@ pub async fn is_valid(
         ],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(Some(_)) => true,
         Ok(None) => false,
         Err(_) => false,

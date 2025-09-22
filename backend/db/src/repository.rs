@@ -1,9 +1,12 @@
-use std::str::FromStr;
-use std::marker::PhantomData;
-use sea_orm::{DbErr, EntityTrait, PaginatorTrait, IntoActiveModel, PrimaryKeyTrait, ActiveModelTrait, Select, QueryFilter, ColumnTrait};
-use util::filters::{FilterParam, QueryParam};
-use crate::get_connection;
 use crate::filter_utils::{FilterUtils, QueryUtils, SortUtils};
+use crate::get_connection;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, IntoActiveModel, PaginatorTrait,
+    PrimaryKeyTrait, QueryFilter, Select,
+};
+use std::marker::PhantomData;
+use std::str::FromStr;
+use util::filters::{FilterParam, QueryParam};
 
 /// Generic repository that works with any SeaORM entity
 pub struct Repository<E, C>
@@ -33,12 +36,15 @@ where
         }
     }
 
-    pub fn apply_filter(query: Select<E>, filter_params: &[FilterParam]) -> Result<Select<E>, DbErr> {
+    pub fn apply_filter(
+        query: Select<E>,
+        filter_params: &[FilterParam],
+    ) -> Result<Select<E>, DbErr> {
         let condition = FilterUtils::apply_all_filters(filter_params, |column_name| {
             C::from_str(column_name)
                 .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e)))
         })?;
-        
+
         Ok(query.filter(condition))
     }
 
@@ -47,7 +53,7 @@ where
             C::from_str(column_name)
                 .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e)))
         })?;
-        
+
         Ok(query.filter(condition))
     }
 
@@ -55,18 +61,27 @@ where
         SortUtils::apply_sorting(query.clone(), sort_by, |column_name| {
             C::from_str(column_name)
                 .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e)))
-        }).unwrap_or(query)
+        })
+        .unwrap_or(query)
     }
 
     pub async fn create(active_model: E::ActiveModel) -> Result<E::Model, DbErr> {
-        active_model.insert(get_connection().await).await.map_err(DbErr::from)
+        active_model
+            .insert(get_connection().await)
+            .await
+            .map_err(DbErr::from)
     }
 
     pub async fn update(active_model: E::ActiveModel) -> Result<E::Model, DbErr> {
-        active_model.update(get_connection().await).await.map_err(DbErr::from)
+        active_model
+            .update(get_connection().await)
+            .await
+            .map_err(DbErr::from)
     }
 
-    pub async fn delete_by_id(id: <E::PrimaryKey as PrimaryKeyTrait>::ValueType) -> Result<(), DbErr> {
+    pub async fn delete_by_id(
+        id: <E::PrimaryKey as PrimaryKeyTrait>::ValueType,
+    ) -> Result<(), DbErr> {
         E::delete_by_id(id)
             .exec(get_connection().await)
             .await
@@ -76,7 +91,7 @@ where
 
     pub async fn delete(
         filter_params: &[FilterParam],
-        query_params: &[QueryParam]
+        query_params: &[QueryParam],
     ) -> Result<u64, DbErr> {
         if filter_params.is_empty() && query_params.is_empty() {
             return Err(DbErr::Custom(
@@ -85,31 +100,39 @@ where
         }
 
         let mut query = E::delete_many();
-        
+
         if !filter_params.is_empty() {
             let condition = FilterUtils::apply_all_filters(filter_params, |column_name| {
-                C::from_str(column_name)
-                    .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e)))
+                C::from_str(column_name).map_err(|e| {
+                    DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e))
+                })
             })?;
             query = query.filter(condition);
         }
 
         if !query_params.is_empty() {
             let condition = QueryUtils::apply_all_queries(query_params, |column_name| {
-                C::from_str(column_name)
-                    .map_err(|e| DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e)))
+                C::from_str(column_name).map_err(|e| {
+                    DbErr::Custom(format!("Invalid column name '{}': {}", column_name, e))
+                })
             })?;
             query = query.filter(condition);
         }
 
-        let res = query.exec(get_connection().await).await.map_err(DbErr::from)?;
+        let res = query
+            .exec(get_connection().await)
+            .await
+            .map_err(DbErr::from)?;
         Ok(res.rows_affected)
     }
 
     pub async fn find_by_id(
         id: <E::PrimaryKey as PrimaryKeyTrait>::ValueType,
     ) -> Result<Option<E::Model>, DbErr> {
-        E::find_by_id(id).one(get_connection().await).await.map_err(DbErr::from)
+        E::find_by_id(id)
+            .one(get_connection().await)
+            .await
+            .map_err(DbErr::from)
     }
 
     pub async fn find_one(
@@ -120,9 +143,7 @@ where
         let query = Self::apply_filter(E::find(), filter_params)?;
         let query = Self::apply_query(query, query_params)?;
         let query = Self::apply_sorting(query, sort_by);
-        query.one(get_connection().await)
-            .await
-            .map_err(DbErr::from)
+        query.one(get_connection().await).await.map_err(DbErr::from)
     }
 
     pub async fn find_all(
@@ -133,9 +154,7 @@ where
         let query = Self::apply_filter(E::find(), filter_params)?;
         let query = Self::apply_query(query, query_params)?;
         let query = Self::apply_sorting(query, sort_by);
-        query.all(get_connection().await)
-            .await
-            .map_err(DbErr::from)
+        query.all(get_connection().await).await.map_err(DbErr::from)
     }
 
     pub async fn filter(
@@ -148,10 +167,11 @@ where
         let query = Self::apply_filter(E::find(), filter_params)?;
         let query = Self::apply_query(query, query_params)?;
         let query = Self::apply_sorting(query, sort_by);
-        
+
         let paginator = query.paginate(get_connection().await, per_page);
         let total = paginator.num_items().await?;
-        let items = paginator.fetch_page(page.saturating_sub(1))
+        let items = paginator
+            .fetch_page(page.saturating_sub(1))
             .await
             .map_err(DbErr::from)?;
 

@@ -1,19 +1,28 @@
-use axum::{body::Body, extract::{Path, Query, State}, http::{HeaderMap, HeaderValue, StatusCode}, response::IntoResponse, Json};
+use crate::response::ApiResponse;
+use axum::{
+    Json,
+    body::Body,
+    extract::{Path, Query, State},
+    http::{HeaderMap, HeaderValue, StatusCode},
+    response::IntoResponse,
+};
+use db::models::moss_report::Entity as MossReportEntity;
 use db::models::{
     assignment_submission::{self, Entity as SubmissionEntity},
     plagiarism_case::{self, Entity as PlagiarismEntity, Status},
     user::{self, Entity as UserEntity},
 };
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Condition, QuerySelect, QueryTrait, QueryOrder, PaginatorTrait};
+use sea_orm::{
+    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+    QueryTrait,
+};
 use serde::{Deserialize, Serialize};
+use serde_json;
+use std::collections::HashMap;
+use std::str::FromStr;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
-use std::str::FromStr;
-use std::collections::HashMap;
 use util::{paths::moss_archive_zip_path, state::AppState};
-use crate::response::ApiResponse;
-use db::models::moss_report::{Entity as MossReportEntity};
-use serde_json;
 
 #[derive(Debug, Deserialize)]
 pub struct ListPlagiarismCaseQueryParams {
@@ -160,7 +169,9 @@ pub async fn list_plagiarism_cases(
         } else {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<PlagiarismCaseListResponse>::error("Invalid status parameter")),
+                Json(ApiResponse::<PlagiarismCaseListResponse>::error(
+                    "Invalid status parameter",
+                )),
             );
         }
     }
@@ -181,7 +192,10 @@ pub async fn list_plagiarism_cases(
 
         query = query.filter(
             Condition::any()
-                .add(plagiarism_case::Column::SubmissionId1.in_subquery(submission_ids_subquery.clone()))
+                .add(
+                    plagiarism_case::Column::SubmissionId1
+                        .in_subquery(submission_ids_subquery.clone()),
+                )
                 .add(plagiarism_case::Column::SubmissionId2.in_subquery(submission_ids_subquery)),
         );
     }
@@ -199,7 +213,9 @@ pub async fn list_plagiarism_cases(
                 "status" => query = query.order_by(plagiarism_case::Column::Status, order),
                 "similarity" => query = query.order_by(plagiarism_case::Column::Similarity, order),
                 // NEW
-                "lines_matched" => query = query.order_by(plagiarism_case::Column::LinesMatched, order),
+                "lines_matched" => {
+                    query = query.order_by(plagiarism_case::Column::LinesMatched, order)
+                }
                 _ => {}
             }
         }
@@ -215,7 +231,9 @@ pub async fn list_plagiarism_cases(
             Err(_) => {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<PlagiarismCaseListResponse>::error("Invalid status parameter")),
+                    Json(ApiResponse::<PlagiarismCaseListResponse>::error(
+                        "Invalid status parameter",
+                    )),
                 );
             }
         }
@@ -223,29 +241,22 @@ pub async fn list_plagiarism_cases(
 
     let mut queries = Vec::new();
     if let Some(query_text) = params.query {
-        queries.push(QueryParam::new(
-            vec!["username".to_string()],
-            query_text,
-        ));
+        queries.push(QueryParam::new(vec!["username".to_string()], query_text));
     }
 
-    let (cases, total) = match PlagiarismCaseService::filter(
-        &filters,
-        &queries,
-        page,
-        per_page,
-        sort,
-    ).await {
-        Ok(result) => result,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<PlagiarismCaseListResponse>::error(
-                    format!("Failed to retrieve plagiarism cases: {}", e),
-                )),
-            );
-        }
-    };
+    let (cases, total) =
+        match PlagiarismCaseService::filter(&filters, &queries, page, per_page, sort).await {
+            Ok(result) => result,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<PlagiarismCaseListResponse>::error(format!(
+                        "Failed to retrieve plagiarism cases: {}",
+                        e
+                    ))),
+                );
+            }
+        };
 
     let submission_ids: Vec<i64> = cases
         .iter()
@@ -256,34 +267,35 @@ pub async fn list_plagiarism_cases(
         &vec![FilterParam::eq("id", submission_ids)],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(subs) => subs,
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<PlagiarismCaseListResponse>::error(
-                    format!("Failed to retrieve submissions: {}", e),
-                )),
+                Json(ApiResponse::<PlagiarismCaseListResponse>::error(format!(
+                    "Failed to retrieve submissions: {}",
+                    e
+                ))),
             );
         }
     };
 
     let user_ids: Vec<i64> = submissions.iter().map(|s| s.user_id).collect();
-    let users = match UserService::find_all(
-        &vec![FilterParam::eq("id", user_ids)],
-        &vec![],
-        None,
-    ).await {
-        Ok(us) => us,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<PlagiarismCaseListResponse>::error(
-                    format!("Failed to retrieve users: {}", e),
-                )),
-            );
-        }
-    };
+    let users =
+        match UserService::find_all(&vec![FilterParam::eq("id", user_ids)], &vec![], None).await {
+            Ok(us) => us,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<PlagiarismCaseListResponse>::error(format!(
+                        "Failed to retrieve users: {}",
+                        e
+                    ))),
+                );
+            }
+        };
 
     let user_map: HashMap<i64, User> = users.into_iter().map(|u| (u.id, u)).collect();
     let submission_map: HashMap<i64, (AssignmentSubmission, User)> = submissions
@@ -367,7 +379,6 @@ struct GraphLink {
     lines_matched: i64,
     status: String,
 }
-
 
 #[derive(Serialize)]
 struct LinksResponse {
@@ -474,8 +485,8 @@ pub async fn get_graph(
     let mut filters = vec![FilterParam::eq("assignment_id", assignment_id)];
 
     // 1) Base: assignment filter
-    let mut q = PlagiarismEntity::find()
-        .filter(plagiarism_case::Column::AssignmentId.eq(assignment_id));
+    let mut q =
+        PlagiarismEntity::find().filter(plagiarism_case::Column::AssignmentId.eq(assignment_id));
 
     // NEW: report filter
     if let Some(rid) = query.report_id {
@@ -491,7 +502,9 @@ pub async fn get_graph(
             Err(_) => {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<LinksResponse>::error("Invalid status parameter")),
+                    Json(ApiResponse::<LinksResponse>::error(
+                        "Invalid status parameter",
+                    )),
                 );
             }
         }
@@ -504,16 +517,14 @@ pub async fn get_graph(
         filters.push(FilterParam::lte("similarity", max));
     }
 
-    let cases = match PlagiarismCaseService::find_all(
-        &filters,
-        &[],
-        None,
-    ).await {
+    let cases = match PlagiarismCaseService::find_all(&filters, &[], None).await {
         Ok(cs) => cs,
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<LinksResponse>::error("Failed to fetch plagiarism cases")),
+                Json(ApiResponse::<LinksResponse>::error(
+                    "Failed to fetch plagiarism cases",
+                )),
             );
         }
     };
@@ -536,17 +547,19 @@ pub async fn get_graph(
         .collect();
 
     let submissions = match AssignmentSubmissionService::find_all(
-        &vec![
-            FilterParam::eq("id", all_sub_ids),
-        ],
+        &vec![FilterParam::eq("id", all_sub_ids)],
         &vec![],
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(ss) => ss,
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<LinksResponse>::error("Failed to fetch submissions for cases")),
+                Json(ApiResponse::<LinksResponse>::error(
+                    "Failed to fetch submissions for cases",
+                )),
             );
         }
     };
@@ -554,21 +567,16 @@ pub async fn get_graph(
 
     // 6) Load users
     let user_ids: Vec<i64> = sub_by_id.values().map(|s| s.user_id).collect();
-    let users = match UserService::find_all(
-        &vec![
-            FilterParam::eq("id", user_ids),
-        ],
-        &vec![],
-        None,
-    ).await {
-        Ok(us) => us,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<LinksResponse>::error("Failed to fetch users")),
-            );
-        }
-    };
+    let users =
+        match UserService::find_all(&vec![FilterParam::eq("id", user_ids)], &vec![], None).await {
+            Ok(us) => us,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<LinksResponse>::error("Failed to fetch users")),
+                );
+            }
+        };
     let user_by_id: HashMap<i64, _> = users.into_iter().map(|u| (u.id, u)).collect();
 
     // 7) Build links, applying optional USERNAME filter (case-insensitive partial)
@@ -577,8 +585,13 @@ pub async fn get_graph(
 
     for case in cases {
         let (s1, s2) = (case.submission_id_1, case.submission_id_2);
-        let (Some(sub1), Some(sub2)) = (sub_by_id.get(&s1), sub_by_id.get(&s2)) else { continue };
-        let (Some(u1), Some(u2)) = (user_by_id.get(&sub1.user_id), user_by_id.get(&sub2.user_id)) else { continue };
+        let (Some(sub1), Some(sub2)) = (sub_by_id.get(&s1), sub_by_id.get(&s2)) else {
+            continue;
+        };
+        let (Some(u1), Some(u2)) = (user_by_id.get(&sub1.user_id), user_by_id.get(&sub2.user_id))
+        else {
+            continue;
+        };
 
         let u1_name = u1.username.as_str();
         let u2_name = u2.username.as_str();
@@ -601,8 +614,6 @@ pub async fn get_graph(
             lines_matched: case.lines_matched,
             status: case.status.to_string().to_lowercase(),
         });
-
-
     }
 
     (
@@ -624,21 +635,26 @@ pub async fn download_moss_archive_by_report(
     Path((module_id, assignment_id, report_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
     // 1) Look up the report
-    let report = match MossReportEntity::find_by_id(report_id).one(app_state.db()).await {
+    let report = match MossReportEntity::find_by_id(report_id)
+        .one(app_state.db())
+        .await
+    {
         Ok(Some(r)) => r,
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::error("Report not found")),
             )
-                .into_response()
+                .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(format!("Failed to fetch report: {e}"))),
+                Json(ApiResponse::<()>::error(format!(
+                    "Failed to fetch report: {e}"
+                ))),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -646,7 +662,9 @@ pub async fn download_moss_archive_by_report(
     if report.assignment_id != assignment_id {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Report not found for this assignment")),
+            Json(ApiResponse::<()>::error(
+                "Report not found for this assignment",
+            )),
         )
             .into_response();
     }
@@ -655,7 +673,9 @@ pub async fn download_moss_archive_by_report(
     if !report.has_archive {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Archive not available for this report")),
+            Json(ApiResponse::<()>::error(
+                "Archive not available for this report",
+            )),
         )
             .into_response();
     }
@@ -678,7 +698,9 @@ pub async fn download_moss_archive_by_report(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(format!("Failed to open archive: {e}"))),
+                Json(ApiResponse::<()>::error(format!(
+                    "Failed to open archive: {e}"
+                ))),
             )
                 .into_response();
         }
@@ -696,8 +718,9 @@ pub async fn download_moss_archive_by_report(
     );
     headers.insert(
         axum::http::header::CONTENT_DISPOSITION,
-        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename))
-            .unwrap_or(HeaderValue::from_static("attachment; filename=\"archive.zip\"")),
+        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)).unwrap_or(
+            HeaderValue::from_static("attachment; filename=\"archive.zip\""),
+        ),
     );
 
     let stream = ReaderStream::new(file);
