@@ -38,6 +38,7 @@ use sea_orm::DatabaseConnection;
 use sea_orm::EntityTrait;
 use std::collections::HashMap;
 use util::execution_config::ExecutionConfig;
+use rand::random;
 
 use crate::algorithms::rng::{RandomGenomeGenerator as RngGen, GeneConfig as RngGeneConfig};
 use crate::algorithms::code_coverage::{coverage_percent_for_attempt, coverage_fitness};
@@ -107,7 +108,7 @@ pub async fn run_ga_job(
                             _sid: i64|
      -> Result<Vec<(i64, String)>, String> { Err("unused".into()) };
 
-    // Run the GA ↔ interpreter loop
+    // Run the GA <-> interpreter loop
     run_ga_end_to_end(
         db,
         submission_id,
@@ -127,13 +128,15 @@ pub async fn run_rng_job(
     config: &ExecutionConfig,
     module_id: i64,
     assignment_id: i64,
-    iterations: usize,
-    seed: u64,
 ) -> Result<(), String> {
+    let seed: u64 = random::<u64>();
+
+    let iterations: usize =
+        config.gatlam.number_of_generations.saturating_mul(config.gatlam.population_size);
+
     let rng_cfgs = exec_to_rng_configs(config);
     let mut generation = RngGen::new(seed);
 
-    // Resolve submission → (user_id, attempt_number)
     let submission = AssignmentSubmission::find_by_id(submission_id)
         .one(db).await
         .map_err(|e| format!("Failed to fetch submission: {}", e))?
@@ -143,17 +146,17 @@ pub async fn run_rng_job(
 
     for i in 0..iterations {
         let payload = generation.generate_string(&rng_cfgs);
-        eprintln!("[RNG] iter={i} payload={payload}");
         run_interpreter(db, submission_id, &payload).await?;
 
-        // Optional: verify tasks landed (no coverage read here)
+        // optional sanity: confirm outputs arrived
         let outs = Output::get_submission_output_no_coverage(
             db, module_id, assignment_id, user_id, attempt_number
         ).await.map_err(|e| e.to_string())?;
-        eprintln!("[RNG] iter={i} tasks_returned={}", outs.len());
+       
     }
+
     Ok(())
-}
+} 
 
 pub async fn run_coverage_ga_job(
     db: &DatabaseConnection,
@@ -185,8 +188,6 @@ pub async fn run_coverage_ga_job(
                 db, module_id, assignment_id, user_id, attempt_number
             ).await?;
             let score = coverage_fitness(percent);
-
-            eprintln!("[CoverageGA] gen={generation} coverage={percent:.2}% score={score:.3}");
             fitness_scores.push(score);
         }
 
