@@ -1,28 +1,35 @@
+// src/components/submissions/SubmissionListItem.tsx
 import { List, Avatar, Tag, Space } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Submission } from '@/types/modules/assignments/submissions';
 import { UserAvatar } from '../common';
+import SubmissionStatusTag from '@/components/submissions/SubmissionStatusTag';
+import PercentageTag from '@/components/common/PercentageTag';
 
 type Props = {
   submission: Submission & {
-    status: 'Pending' | 'Graded';
     path: string;
-    percentageMark?: number;
+    percentagePct?: number;
   };
   onClick?: (submission: Submission) => void;
 };
 
-const getMarkColor = (mark: number): string => {
-  if (mark >= 75) return 'green';
-  if (mark >= 50) return 'orange';
-  return 'red';
-};
-
 const SubmissionListItem = ({ submission, onClick }: Props) => {
-  const { user, attempt, status, is_late, percentageMark, created_at, is_practice } = submission;
+  const { user, attempt, status, is_late, percentagePct, created_at, is_practice, mark } =
+    submission;
 
   const handleClick = () => onClick?.(submission);
+
+  const showPct =
+    typeof percentagePct === 'number' || (mark && typeof mark.total === 'number' && mark.total > 0);
+
+  const pct =
+    typeof percentagePct === 'number'
+      ? percentagePct
+      : mark && mark.total > 0
+        ? Math.round((mark.earned / mark.total) * 100)
+        : null;
 
   return (
     <List.Item
@@ -44,16 +51,15 @@ const SubmissionListItem = ({ submission, onClick }: Props) => {
         description={
           <div className="space-y-1 mt-1">
             <Space wrap>
-              <Tag color={status === 'Graded' ? getMarkColor(percentageMark ?? 0) : 'default'}>
-                {status === 'Graded' && typeof percentageMark === 'number'
-                  ? `${percentageMark}%`
-                  : 'Pending'}
-              </Tag>
-
+              <SubmissionStatusTag status={status} />
+              {showPct ? (
+                <PercentageTag value={pct ?? 0} scheme="red-green" />
+              ) : (
+                <Tag>Not marked</Tag>
+              )}
               <Tag color={is_late ? 'red' : 'default'}>
                 {is_late ? 'Late Submission' : 'On Time'}
               </Tag>
-
               {is_practice && <Tag color="gold">Practice</Tag>}
             </Space>
 

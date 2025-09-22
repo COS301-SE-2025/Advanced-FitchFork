@@ -35,6 +35,7 @@ pub struct GetSubmissionsQuery {
     pub year: Option<i32>,
     pub is_late: Option<bool>,
     pub sort: Option<String>,
+    pub module_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -229,6 +230,10 @@ pub async fn get_my_submissions(
 
     if let Some(year) = query.year {
         condition = condition.add(module::Column::Year.eq(year));
+    }
+
+    if let Some(module_filter) = query.module_id {
+        condition = condition.add(module::Column::Id.eq(module_filter));
     }
 
     if let Some(is_late) = query.is_late {

@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react';
 import { Typography, Card, Space, Table, Alert, Tag, Descriptions } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -69,6 +70,16 @@ const sectionsRows = [
 export default function ConfigOverviewHelp() {
   const { setBreadcrumbLabel } = useBreadcrumbContext();
   const ids = useMemo(() => toc.map((t) => t.href.slice(1)), []);
+  const { setValue, setBackTo } = useViewSlot();
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+        Assignment Config Overview
+      </Typography.Text>,
+    );
+    setBackTo('/help');
+  }, []);
 
   useEffect(() => {
     setBreadcrumbLabel('help/assignments/config', 'Assignment Config');
@@ -116,13 +127,40 @@ export default function ConfigOverviewHelp() {
 
       <section id="sections" className="scroll-mt-24" />
       <Title level={3}>Sections at a glance</Title>
-      <Table
-        className="mt-2"
-        size="small"
-        columns={sectionsCols}
-        dataSource={sectionsRows}
-        pagination={false}
-      />
+
+      {/* md+ : normal table */}
+      <div className="hidden md:block">
+        <Table
+          size="small"
+          columns={sectionsCols}
+          dataSource={sectionsRows}
+          pagination={false}
+          scroll={{ x: true }}
+        />
+      </div>
+
+      {/* <md : cards (no extra shadows) */}
+      <div className="block md:hidden !space-y-3">
+        {sectionsRows.map((r) => (
+          <Card
+            key={r.key}
+            size="small"
+            title={<div className="text-base font-semibold truncate">{r.area}</div>}
+          >
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              What it controls
+            </div>
+            <div className="text-sm text-gray-900 dark:text-gray-100 mb-2">{r.what}</div>
+
+            {r.link && (
+              <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+                Go to
+              </div>
+            )}
+            <div className="text-sm text-gray-900 dark:text-gray-100">{r.link}</div>
+          </Card>
+        ))}
+      </div>
 
       <section id="workflows" className="scroll-mt-24" />
       <Title level={3}>Common workflows</Title>

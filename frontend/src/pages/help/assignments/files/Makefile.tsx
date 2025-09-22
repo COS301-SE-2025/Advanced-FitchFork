@@ -24,6 +24,7 @@ import { useEffect, useMemo } from 'react';
 import { useHelpToc } from '@/context/HelpContext';
 import { CodeEditor } from '@/components/common';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -130,6 +131,16 @@ clean:
 export default function MakefileHelp() {
   const { setBreadcrumbLabel } = useBreadcrumbContext();
   const ids = useMemo(() => toc.map((t) => t.href.slice(1)), []);
+  const { setValue, setBackTo } = useViewSlot();
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+        Makefile
+      </Typography.Text>,
+    );
+    setBackTo('/help');
+  }, []);
 
   useEffect(() => {
     setBreadcrumbLabel('help/assignments/files/makefile', 'Makefile');
@@ -141,9 +152,16 @@ export default function MakefileHelp() {
     extra: (
       <Card className="mt-4" size="small" title="Quick facts" bordered>
         <ul className="list-disc pl-5">
-          <li>Upload under <Text code>Assignments → Config → Files</Text></li>
-          <li>Archive format: .zip / .tar / .tgz / .gz (≤50&nbsp;MB) with a single <Text code>Makefile</Text></li>
-          <li>Make targets mirror Tasks; each runs <Text code>Main &lt;task&gt;</Text></li>
+          <li>
+            Upload under <Text code>Assignments → Config → Files</Text>
+          </li>
+          <li>
+            Archive format: .zip / .tar / .tgz / .gz (≤50&nbsp;MB) with a single{' '}
+            <Text code>Makefile</Text>
+          </li>
+          <li>
+            Make targets mirror Tasks; each runs <Text code>Main &lt;task&gt;</Text>
+          </li>
           <li>Regenerate Memo Output whenever the Makefile changes</li>
         </ul>
       </Card>
@@ -160,15 +178,16 @@ export default function MakefileHelp() {
       <section id="overview" className="scroll-mt-24" />
       <Title level={3}>Why the Makefile Matters</Title>
       <Paragraph className="mb-0">
-        The <strong>Makefile</strong> teaches Fitchfork how to build and execute your tests. Main drives the
-        logic, Memo supplies the reference answers, and the Makefile stitches everything together by turning
-        each Task into a repeatable shell command. Keeping it separate lets you tweak build flags or tooling
-        without touching Main or Memo archives.
+        The <strong>Makefile</strong> teaches Fitchfork how to build and execute your tests. Main
+        drives the logic, Memo supplies the reference answers, and the Makefile stitches everything
+        together by turning each Task into a repeatable shell command. Keeping it separate lets you
+        tweak build flags or tooling without touching Main or Memo archives.
       </Paragraph>
       <Paragraph className="mt-3 mb-0">
-        Upload the Makefile archive under <Text code>Assignments → Config → Files</Text>. Lecturers or assistant
-        lecturers own this upload. In Manual submission mode it is required; in GATLAM mode the Interpreter is
-        responsible for compiling/running, so the Makefile can be left empty.
+        Upload the Makefile archive under <Text code>Assignments → Config → Files</Text>. Lecturers
+        or assistant lecturers own this upload. In Manual submission mode it is required; in GATLAM
+        mode the Interpreter is responsible for compiling/running, so the Makefile can be left
+        empty.
       </Paragraph>
 
       <Descriptions bordered size="middle" column={1} className="mt-3">
@@ -215,27 +234,29 @@ export default function MakefileHelp() {
       <section id="requirements" className="scroll-mt-24" />
       <Title level={3}>Archive &amp; Target Requirements</Title>
       <Paragraph className="mb-0">
-        Treat the Makefile as the authoritative source for build commands. Set up phony targets that compile in
-        a <Text code>build</Text> step (if necessary) and then run <Text code>Main &lt;task&gt;</Text>. Use relative
-        paths because Fitchfork extracts everything into the workspace root before executing targets.
+        Treat the Makefile as the authoritative source for build commands. Set up phony targets that
+        compile in a <Text code>build</Text> step (if necessary) and then run{' '}
+        <Text code>Main &lt;task&gt;</Text>. Use relative paths because Fitchfork extracts
+        everything into the workspace root before executing targets.
       </Paragraph>
 
       <section id="storage" className="scroll-mt-24" />
       <Title level={3}>After You Upload</Title>
       <Paragraph className="mb-2">
-        Fitchfork stores the archive in the assignment’s <Text code>makefile/</Text> folder and tracks it in the
-        assignment files list. Readiness checks, the Setup Checklist, and memo generation all look for that stored
-        archive. Uploading a new version overwrites the existing file; the next memo generation or student run uses
-        it immediately, so keep prior versions in source control if you may need to revert.
+        Fitchfork stores the archive in the assignment’s <Text code>makefile/</Text> folder and
+        tracks it in the assignment files list. Readiness checks, the Setup Checklist, and memo
+        generation all look for that stored archive. Uploading a new version overwrites the existing
+        file; the next memo generation or student run uses it immediately, so keep prior versions in
+        source control if you may need to revert.
       </Paragraph>
       <Descriptions bordered size="middle" column={1}>
         <Descriptions.Item label="Readiness flag">
-          Assignments register <Text code>makefile_present</Text> once a valid archive is stored. Manual mode requires
-          this flag to be true before the assignment is considered ready.
+          Assignments register <Text code>makefile_present</Text> once a valid archive is stored.
+          Manual mode requires this flag to be true before the assignment is considered ready.
         </Descriptions.Item>
         <Descriptions.Item label="Validation">
-          Missing or empty Makefile directories trigger “Makefile archive (.zip) not found” errors during memo
-          generation and student attempts.
+          Missing or empty Makefile directories trigger “Makefile archive (.zip) not found” errors
+          during memo generation and student attempts.
         </Descriptions.Item>
       </Descriptions>
 
@@ -243,9 +264,10 @@ export default function MakefileHelp() {
       <Title level={3}>Mapping Tasks to Targets</Title>
       <Card>
         <Paragraph>
-          Create one Make target per Task (e.g., <Text code>task1</Text>, <Text code>task2</Text>). Each target should
-          prepare any build artefacts, then invoke <Text code>Main &lt;task&gt;</Text>. The Tasks screen simply shells out to
-          the command you provide, so keeping the naming aligned avoids “target not found” failures at run time.
+          Create one Make target per Task (e.g., <Text code>task1</Text>, <Text code>task2</Text>).
+          Each target should prepare any build artefacts, then invoke{' '}
+          <Text code>Main &lt;task&gt;</Text>. The Tasks screen simply shells out to the command you
+          provide, so keeping the naming aligned avoids “target not found” failures at run time.
         </Paragraph>
         <Steps
           direction="vertical"
@@ -318,7 +340,41 @@ export default function MakefileHelp() {
               key: 'table',
               label: 'Quick reference',
               children: (
-                <Table columns={langCols} dataSource={langRows} pagination={false} size="small" />
+                <>
+                  {/* md+ : normal table */}
+                  <div className="hidden md:block">
+                    <Table
+                      columns={langCols}
+                      dataSource={langRows}
+                      pagination={false}
+                      size="small"
+                      scroll={{ x: true }}
+                    />
+                  </div>
+
+                  {/* <md : cards (no extra shadows) */}
+                  <div className="block md:hidden mt-2 !space-y-3">
+                    {langRows.map((r) => (
+                      <Card
+                        key={r.key}
+                        size="small"
+                        title={<div className="text-base font-semibold truncate">{r.lang}</div>}
+                      >
+                        <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+                          Typical Task Command
+                        </div>
+                        <div className="text-sm text-gray-900 dark:text-gray-100 mb-2">
+                          {r.target}
+                        </div>
+
+                        <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+                          Notes
+                        </div>
+                        <div className="text-sm text-gray-900 dark:text-gray-100">{r.note}</div>
+                      </Card>
+                    ))}
+                  </div>
+                </>
               ),
             },
           ]}
@@ -374,11 +430,12 @@ export default function MakefileHelp() {
           <b>Separate build & run</b>: compile in <Text code>build</Text>, run in per-task targets.
         </li>
         <li>
-          <b>Stay self-contained</b>: rely on files from Main/Memo archives; avoid network installs or
-          absolute paths.
+          <b>Stay self-contained</b>: rely on files from Main/Memo archives; avoid network installs
+          or absolute paths.
         </li>
         <li>
-          <b>Use phony targets</b> so repeated runs do not skip commands because artefacts already exist.
+          <b>Use phony targets</b> so repeated runs do not skip commands because artefacts already
+          exist.
         </li>
       </ul>
 

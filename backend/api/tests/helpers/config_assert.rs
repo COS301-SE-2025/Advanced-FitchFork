@@ -4,7 +4,7 @@ use serde_json::Value;
 /// Pass the **object under "data"** from the /config response: `assert_default_config(&json["data"])`.
 pub fn assert_default_config(d: &Value) {
     // ---------- execution ----------
-    assert_eq!(d["execution"]["timeout_secs"], 10);
+    assert_eq!(d["execution"]["timeout_secs"], 30);
     assert_eq!(d["execution"]["max_memory"], 8_589_934_592u64);
     assert_eq!(d["execution"]["max_cpus"], 2);
     assert_eq!(d["execution"]["max_uncompressed_size"], 100_000_000u64);
@@ -101,7 +101,7 @@ pub fn assert_default_config(d: &Value) {
     );
 
     // ---------- code_coverage ----------
-    assert_eq!(d["code_coverage"]["code_coverage_required"], 80);
+    assert_eq!(d["code_coverage"]["code_coverage_weight"], 10f32);
 }
 
 fn approx(v: &Value, expected: f64, path: &str) {

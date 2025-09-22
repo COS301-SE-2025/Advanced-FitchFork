@@ -1117,3 +1117,79 @@ pub async fn allow_assignment_access(
 
     Ok(next.run(req).await)
 }
+
+/// Owner-only guard for the per-user submission websocket.
+/// Path must include `{module_id}`, `{assignment_id}`, `{user_id}`.
+/// Allowed: ONLY when `AuthUser.sub == user_id`.
+/// Everyone else (including admins / staff) is forbidden.
+/// Validates that `assignment_id` belongs to `module_id`.
+pub async fn allow_submission_ws_owner_only(
+    State(app_state): State<AppState>,
+    Path(params): Path<HashMap<String, String>>,
+    req: axum::http::Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, axum::Json<ApiResponse<Empty>>)> {
+    let db = app_state.db();
+
+    // Auth was done by the top-level .route_layer(from_fn(allow_authenticated))
+    let user = req.extensions().get::<AuthUser>().cloned().ok_or((
+        StatusCode::UNAUTHORIZED,
+        axum::Json(ApiResponse::error("Authentication required")),
+    ))?;
+
+    let module_id = params
+        .get("module_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            axum::Json(ApiResponse::error("Missing or invalid module_id")),
+        ))?;
+
+    let assignment_id = params
+        .get("assignment_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            axum::Json(ApiResponse::error("Missing or invalid assignment_id")),
+        ))?;
+
+    let user_id = params
+        .get("user_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            axum::Json(ApiResponse::error("Missing or invalid user_id")),
+        ))?;
+
+    // Validate relationship: assignment belongs to module (fail-closed on DB errors)
+    use db::models::assignment::{Column as ACol, Entity as AEntity};
+    AEntity::find()
+        .filter(ACol::Id.eq(assignment_id))
+        .filter(ACol::ModuleId.eq(module_id))
+        .one(db)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                axum::Json(ApiResponse::error(
+                    "Database error while checking assignment",
+                )),
+            )
+        })?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            axum::Json(ApiResponse::error("Assignment not found in module")),
+        ))?;
+
+    // Strictly owner-only
+    if user.0.sub == user_id {
+        return Ok(next.run(req).await);
+    }
+
+    Err((
+        StatusCode::FORBIDDEN,
+        axum::Json(ApiResponse::error(
+            "Not allowed to access this submission websocket",
+        )),
+    ))
+}

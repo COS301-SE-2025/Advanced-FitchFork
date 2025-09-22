@@ -1,120 +1,82 @@
 use crate::response::ApiResponse;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
-use serde_json::json;
-use util::mark_allocator::{SaveError, load_allocator};
+use util::mark_allocator::load_allocator;
+use util::paths::{assignment_dir, mark_allocator_path};
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
-/// Load the mark allocator JSON configuration for a specific assignment. Accessible to users with
-/// appropriate permissions assigned to the module.
-///
-/// The mark allocator configuration defines how marks are distributed across different tasks and
-/// criteria within an assignment. This configuration is used by the grading system to determine
-/// the weight and allocation of marks for various assessment components.
-///
-/// ### Path Parameters
-/// - `module_id` (i64): The ID of the module containing the assignment
-/// - `assignment_id` (i64): The ID of the assignment to load mark allocator for
-///
-/// ### Example Request
-/// ```bash
-/// curl -X GET http://localhost:3000/api/modules/1/assignments/2/mark_allocator \
-///   -H "Authorization: Bearer <token>"
-/// ```
-///
-/// ### Success Response (200 OK)
+/// Load the **normalized** mark allocator for an assignment.
+/// Returns:
 /// ```json
 /// {
 ///   "success": true,
 ///   "message": "Mark allocator successfully loaded.",
 ///   "data": {
+///     "generated_at": "2025-09-22T15:08:51.377Z",
+///     "total_value": 37,
 ///     "tasks": [
 ///       {
 ///         "task_number": 1,
-///         "weight": 0.4,
-///         "criteria": [
-///           {
-///             "name": "Correctness",
-///             "weight": 0.7
-///           },
-///           {
-///             "name": "Code Quality",
-///             "weight": 0.3
-///           }
-///         ]
-///       },
-///       {
-///         "task_number": 2,
-///         "weight": 0.6,
-///         "criteria": [
-///           {
-///             "name": "Functionality",
-///             "weight": 0.8
-///           },
-///           {
-///             "name": "Documentation",
-///             "weight": 0.2
-///           }
+///         "name": "Core list operations",
+///         "value": 12,
+///         "code_coverage": false,
+///         "subsections": [
+///           { "name": "empty-list", "value": 1, "regex": [""], "feedback": "" },
+///           { "name": "push_front_back", "value": 1, "regex": ["", "" ] }
 ///         ]
 ///       }
-///     ],
-///     "total_weight": 1.0
+///     ]
 ///   }
 /// }
 /// ```
 ///
-/// ### Error Responses
+/// Notes:
+/// - This returns the **normalized** structure: `{ generated_at, total_value, tasks[] }`.
+/// - Each task contains `subsections[]` with `{ name, value, feedback?, regex? }`.
+/// - If the assignment’s marking scheme is **Regex**, the generator will have
+///   created `regex` arrays where each element corresponds to a line within that subsection.
+/// - File location: `{STORAGE_ROOT}/module_{m}/assignment_{a}/mark_allocator/allocator.json`.
 ///
-/// **404 Not Found** - Module or assignment folder does not exist
-/// ```json
-/// {
-///   "error": "Module or assignment folder does not exist"
-/// }
-/// ```
-///
-/// **500 Internal Server Error** - Failed to load allocator
-/// ```json
-/// {
-///   "error": "Failed to load allocator"
-/// }
-/// ```
-///
-/// ### Mark Allocator Structure
-/// The mark allocator configuration typically contains:
-/// - `tasks`: Array of task configurations with mark allocations
-///   - `task_number`: Sequential number of the task
-///   - `weight`: Relative weight of this task in the overall assignment (0.0 to 1.0)
-///   - `criteria`: Array of grading criteria for this task
-///     - `name`: Name of the grading criterion
-///     - `weight`: Weight of this criterion within the task (0.0 to 1.0)
-/// - `total_weight`: Sum of all task weights (should equal 1.0)
-///
-/// ### Notes
-/// - The mark allocator configuration is stored as a JSON file in the module/assignment directory
-/// - This configuration is used by the grading system to calculate final marks
-/// - Task weights should sum to 1.0 across all tasks in the assignment
-/// - Criteria weights within each task should also sum to 1.0
-/// - Mark allocator loading is restricted to users with appropriate module permissions
+/// Errors:
+/// - **404 Not Found**: assignment folder or allocator file is missing
+/// - **500 Internal Server Error**: allocator exists but failed to parse/read
 pub async fn load(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl IntoResponse {
-    match load_allocator(module_id, assignment_id).await {
-        Ok(json) => (
+    // Quick existence checks for clearer 404s
+    let assign_path = assignment_dir(module_id, assignment_id);
+    if !assign_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error(
+                "Module or assignment folder does not exist",
+            )),
+        )
+            .into_response();
+    }
+    let alloc_path = mark_allocator_path(module_id, assignment_id);
+    if !alloc_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error(
+                "Mark allocator file not found for this assignment",
+            )),
+        )
+            .into_response();
+    }
+
+    match load_allocator(module_id, assignment_id) {
+        Ok(alloc) => (
             StatusCode::OK,
             Json(ApiResponse::success(
-                json,
+                alloc,
                 "Mark allocator successfully loaded.",
             )),
         )
             .into_response(),
-
-        Err(SaveError::DirectoryNotFound) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": "Module or assignment folder does not exist" })),
-        )
-            .into_response(),
-
-        Err(_) => (
+        Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Failed to load allocator" })),
+            Json(ApiResponse::<()>::error(&format!(
+                "Failed to load allocator: {e}"
+            ))),
         )
             .into_response(),
     }

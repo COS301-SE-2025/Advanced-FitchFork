@@ -22,8 +22,10 @@ use db::models::{
     assignment_memo_output::{Column as MemoOutCol, Entity as MemoOutEntity},
     assignment_task::{Column as TaskCol, Entity as TaskEntity, Model as TaskModel},
 };
+use db::models::{assignment_memo_output, assignment_task};
 use util::{
     execution_config::ExecutionConfig,
+    mark_allocator::{TaskInfo, generate_allocator, save_allocator},
     paths::{
         assignment_dir, config_dir, ensure_dir, main_dir, makefile_dir, mark_allocator_dir,
         mark_allocator_path, memo_dir, memo_output_dir, spec_dir, storage_root,
@@ -386,9 +388,6 @@ async fn try_generate_allocator(
     assignment_id: i64,
     db: &sea_orm::DatabaseConnection,
 ) -> Result<(), String> {
-    use db::models::{assignment_memo_output, assignment_task};
-    use util::mark_allocator::{SaveError, TaskInfo, generate_allocator};
-
     let tasks = assignment_task::Entity::find()
         .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
         .all(db)
@@ -425,12 +424,14 @@ async fn try_generate_allocator(
         pairs.push((info, memo_path));
     }
 
-    match generate_allocator(module_id, assignment_id, &pairs).await {
-        Ok(_) => Ok(()),
-        Err(SaveError::DirectoryNotFound) => Err(
-            "Mark allocator directory not found. Ensure the assignment storage folder exists and memo outputs were generated."
-                .to_string(),
-        ),
-        Err(_) => Err("Failed to generate the mark allocator configuration.".to_string()),
-    }
+    // Generate normalized allocator (this pads regex if scheme == Regex)
+    let alloc = generate_allocator(module_id, assignment_id, &pairs)
+        .await
+        .map_err(|e| format!("Failed to generate allocator: {e}"))?;
+
+    // Persist normalized JSON (no legacy wire shape)
+    save_allocator(module_id, assignment_id, &alloc)
+        .map_err(|e| format!("Failed to save allocator: {e}"))?;
+
+    Ok(())
 }

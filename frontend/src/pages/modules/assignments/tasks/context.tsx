@@ -7,8 +7,8 @@ import type { Task } from '@/types/modules/assignments/tasks';
 import type { GetTaskResponse } from '@/types/modules/assignments/tasks/responses';
 import type {
   MarkAllocatorFile,
-  MarkAllocatorTaskEntry,
   MarkAllocatorSubsection,
+  MarkAllocatorTask,
 } from '@/types/modules/assignments/mark-allocator';
 
 import {
@@ -31,11 +31,25 @@ import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 
 function normalizeSubsections(subs: any[]) {
   if (!subs) return [];
-  return subs.map((s) => ({
-    name: s?.name ?? s?.label ?? 'Unnamed',
-    value: Number.isFinite(Number(s?.value)) ? parseInt(String(s.value), 10) : 0,
-    memo_output: s?.memo_output ?? s?.output ?? '',
-  }));
+  return subs.map((s: any) => {
+    const rawMemo: string | null | undefined = s?.memo_output ?? s?.output;
+    const memo_output = typeof rawMemo === 'string' ? rawMemo : null;
+
+    const feedback: string = typeof s?.feedback === 'string' ? s.feedback : '';
+
+    // Type the items coming from s.regex as unknown, then narrow to string
+    const regex: string[] | undefined = Array.isArray(s?.regex)
+      ? (s.regex as unknown[]).map((r: unknown) => (typeof r === 'string' ? r : ''))
+      : undefined;
+
+    return {
+      name: s?.name ?? s?.label ?? 'Unnamed',
+      value: Number.isFinite(Number(s?.value)) ? parseInt(String(s.value), 10) : 0,
+      memo_output,
+      feedback,
+      ...(Array.isArray(regex) ? { regex } : {}),
+    };
+  });
 }
 
 type TaskDetail = GetTaskResponse['data'];
@@ -329,6 +343,7 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const saveAllocatorAllTasks = useCallback(async (): Promise<void> => {
     if (!moduleId || !assignmentId) return;
 
+    // Ensure we have all details in memory
     const missing = tasks.filter((t) => !taskDetails[t.id]);
     if (missing.length) {
       try {
@@ -349,28 +364,54 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
       } catch {
         message.error('Failed to load all task details for saving.');
-        return; // return void explicitly
+        return;
       }
     }
 
+    // Build normalized tasks array
     const byNumber = [...tasks].sort((a, b) => a.task_number - b.task_number);
-    const tasksPayload: MarkAllocatorTaskEntry[] = byNumber.map((t) => {
-      const full = taskDetails[t.id];
-      const subsections: MarkAllocatorSubsection[] =
-        (full?.subsections ?? []).map((s) => ({
+    const tasksPayload: MarkAllocatorTask[] = byNumber.map((t) => {
+      const full = t.id === selectedTask?.id ? selectedTask : taskDetails[t.id];
+
+      const subsections: MarkAllocatorSubsection[] = (full?.subsections ?? []).map((s: any) => {
+        const out: MarkAllocatorSubsection = {
           name: s.name,
+          // value is the allocated marks, leave it as-is (independent of regex)
           value: Number.isFinite(Number(s.value)) ? parseInt(String(s.value), 10) : 0,
-        })) ?? [];
+        };
+
+        if (typeof s.feedback === 'string') out.feedback = s.feedback;
+
+        // Size regex array to the number of memo lines – not to `value`
+        const memo = typeof s.memo_output === 'string' ? s.memo_output : '';
+        const lineCount = memo.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').length;
+
+        if (Array.isArray(s.regex)) {
+          const padded = [...s.regex];
+          while (padded.length < lineCount) padded.push('');
+          out.regex = padded.slice(0, lineCount).map((r) => (typeof r === 'string' ? r : ''));
+        } else {
+          out.regex = Array.from({ length: lineCount }, () => '');
+        }
+
+        return out;
+      });
+
       const value = subsections.reduce((sum, c) => sum + c.value, 0);
       const name = (full?.name ?? t.name) || `Task ${t.task_number}`;
-      const key = `task${t.task_number}`;
-      return { [key]: { task_number: t.task_number, name, value, subsections } };
+
+      return {
+        task_number: t.task_number,
+        name,
+        value,
+        subsections,
+        ...(typeof full?.code_coverage === 'boolean'
+          ? { code_coverage: !!full.code_coverage }
+          : {}),
+      };
     });
 
-    const totalValue = tasksPayload.reduce((sum, entry) => {
-      const body = Object.values(entry)[0];
-      return sum + (body?.value ?? 0);
-    }, 0);
+    const totalValue = tasksPayload.reduce((sum, task) => sum + (task?.value ?? 0), 0);
 
     const payload: MarkAllocatorFile = {
       generated_at: new Date().toISOString(),

@@ -40,6 +40,8 @@ pub struct FilterReq {
     pub pinned: Option<bool>,
     /// Sort fields (comma-separated, prefix with `-` for descending)
     pub sort: Option<String>,
+    /// Filter announcements for a specific module
+    pub module_id: Option<i64>,
 }
 
 /// Response object for a user
@@ -160,6 +162,12 @@ pub async fn get_my_announcements(
     let module_ids: Vec<i64> = memberships
         .iter()
         .filter(|m| {
+            if let Some(module_filter) = params.module_id {
+                if m.module_id != module_filter {
+                    return false;
+                }
+            }
+
             requested_role
                 .as_ref()
                 .map_or(true, |r| &m.role.to_string() == r)

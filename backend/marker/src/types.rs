@@ -5,6 +5,12 @@
 
 use serde::Serialize;
 
+// Re-export allocator schema from util so callers can `use crate::types::*;`
+use util::mark_allocator as util_alloc;
+pub type Allocator = util_alloc::MarkAllocator;
+pub type Task = util_alloc::Task;
+pub type Subsection = util_alloc::Subsection;
+
 /// Represents the result of a single marking task.
 ///
 /// This struct holds the information about a task's outcome, including the score awarded,
@@ -46,41 +52,4 @@ pub struct JsonTaskResult {
     pub possible: i64,
     /// The percentage score for this task, computed as (awarded / possible) * 100 (or 0.0 if possible is zero).
     pub percentage: f32,
-}
-
-/// The top-level schema for an allocator report, containing a list of tasks and total value.
-#[derive(Debug, Clone)]
-pub struct AllocatorSchema {
-    /// The list of tasks in the allocator report.
-    pub tasks: Vec<TaskEntry>,
-    /// The total value across all tasks.
-    pub total_value: i64,
-}
-
-/// Represents a single task in the allocator report.
-#[derive(Debug, Clone)]
-pub struct TaskEntry {
-    /// The task identifier (e.g., "task1").
-    pub id: String,
-    /// The name of the task.
-    pub name: String,
-    /// The value (score/points) assigned to the task.
-    pub value: i64,
-    /// Whether this task represents a code coverage requirement and should not be graded as an output task.
-    pub code_coverage: bool,
-    /// The subsections of the task. Every task must have atleast one subsection.
-    pub subsections: Vec<Subsection>,
-}
-
-/// Represents a subsection within a task.
-#[derive(Debug, Clone)]
-pub struct Subsection {
-    /// The name of the subsection.
-    pub name: String,
-    /// The value (score/points) assigned to the subsection.
-    pub value: i64,
-    /// Optional feedback for manual feedback strategy.
-    pub feedback: Option<String>,
-    /// Optional regex patterns for regex-based marking scheme.
-    pub regex: Option<Vec<String>>,
 }
