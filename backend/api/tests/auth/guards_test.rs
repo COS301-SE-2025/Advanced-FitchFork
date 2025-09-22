@@ -4,10 +4,9 @@ mod tests {
         auth::{
             generate_jwt,
             guards::{
-                Empty, require_admin, require_assigned_to_module, require_assistant_lecturer,
-                require_authenticated, require_lecturer, require_lecturer_or_assistant_lecturer,
-                require_lecturer_or_tutor, require_ready_assignment, require_student,
-                require_tutor, validate_known_ids,
+                Empty, allow_admin, allow_assigned_to_module, allow_assistant_lecturer,
+                allow_authenticated, allow_lecturer, allow_ready_assignment, allow_student,
+                allow_tutor, validate_known_ids,
             },
         },
         response::ApiResponse,
@@ -138,7 +137,8 @@ mod tests {
                 get(test_handler)
                     .route_layer(middleware::from_fn_with_state(app_state.clone(), guard)),
             )
-            .layer(middleware::from_fn(require_authenticated))
+            .layer(middleware::from_fn(allow_authenticated))
+            .with_state(app_state)
     }
 
     fn build_request(uri: &str, token: Option<&str>) -> Request<Body> {
@@ -149,27 +149,15 @@ mod tests {
         builder.body(Body::empty()).unwrap()
     }
 
-    mod test_require_admin {
+    mod test_allow_admin {
         use super::*;
-
-        fn create_admin_router<G, Fut>(guard: G) -> Router
-        where
-            G: Clone + Send + Sync + 'static,
-            Fut: Future<Output = Result<Response, (StatusCode, Json<ApiResponse<Empty>>)>>
-                + Send
-                + 'static,
-            G: Fn(Request<Body>, Next) -> Fut,
-        {
-            async fn test_handler() -> &'static str {
-                "OK"
-            }
-
-            Router::new()
-                .route(
-                    "/test/{module_id}",
-                    get(test_handler).route_layer(middleware::from_fn(guard)),
-                )
-                .layer(middleware::from_fn(require_authenticated))
+        async fn admin_guard_adapter(
+            _s: State<AppState>,
+            _p: Path<HashMap<String, String>>,
+            req: Request<Body>,
+            next: Next,
+        ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+            allow_admin(req, next).await
         }
 
         #[tokio::test]
@@ -206,14 +194,14 @@ mod tests {
         }
     }
 
-    mod test_require_lecturer {
+    mod test_allow_lecturer {
         use super::*;
 
         #[tokio::test]
         #[serial]
         async fn succeeds_for_lecturer() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_lecturer);
+            let app = create_test_router(ctx.app_state.clone(), allow_lecturer);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.lecturer_token),
@@ -226,7 +214,7 @@ mod tests {
         #[serial]
         async fn succeeds_for_admin() {
             let ctx = setup().await;
-            let app = create_test_router(require_lecturer);
+            let app = create_test_router(ctx.app_state.clone(), allow_lecturer);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
@@ -236,21 +224,32 @@ mod tests {
         #[serial]
         async fn fails_for_tutor() {
             let ctx = setup().await;
-            let app = create_test_router(require_lecturer);
+            let app = create_test_router(ctx.app_state.clone(), allow_lecturer);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+        #[tokio::test]
+        async fn fails_for_student() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), allow_lecturer);
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.student_token),
+            );
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::FORBIDDEN);
         }
     }
 
-    mod test_require_assistant_lecturer {
+    mod test_allow_assistant_lecturer {
         use super::*;
 
         #[tokio::test]
         #[serial]
         async fn succeeds_for_assistant_lecturer() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_assistant_lecturer);
+            let app = create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.assistant_lecturer_token),
@@ -263,30 +262,29 @@ mod tests {
         #[serial]
         async fn succeeds_for_admin() {
             let ctx = setup().await;
-            let app = create_test_router(require_assistant_lecturer);
+            let app = create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }
 
         #[tokio::test]
-        #[serial]
-        async fn fails_for_lecturer() {
+        async fn succeeds_for_lecturer() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_assistant_lecturer);
+            let app = create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.lecturer_token),
             );
             let res = app.oneshot(req).await.unwrap();
-            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+            assert_eq!(res.status(), StatusCode::OK);
         }
 
         #[tokio::test]
         #[serial]
         async fn fails_for_tutor() {
             let ctx = setup().await;
-            let app = create_test_router(require_assistant_lecturer);
+            let app = create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::FORBIDDEN);
@@ -296,7 +294,7 @@ mod tests {
         #[serial]
         async fn fails_for_student() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_assistant_lecturer);
+            let app = create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.student_token),
@@ -306,14 +304,14 @@ mod tests {
         }
     }
 
-    mod test_require_tutor {
+    mod test_allow_tutor {
         use super::*;
 
         #[tokio::test]
         #[serial]
         async fn succeeds_for_tutor() {
             let ctx = setup().await;
-            let app = create_test_router(require_tutor);
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
@@ -323,34 +321,44 @@ mod tests {
         #[serial]
         async fn succeeds_for_admin() {
             let ctx = setup().await;
-            let app = create_test_router(require_tutor);
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }
 
         #[tokio::test]
-        #[serial]
-        async fn fails_for_lecturer() {
+        async fn succeeds_for_lecturer() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_tutor);
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.lecturer_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+        #[tokio::test]
+        async fn fails_for_student() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.student_token),
             );
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::FORBIDDEN);
         }
     }
 
-    mod test_require_student {
+    mod test_allow_student {
         use super::*;
 
         #[tokio::test]
         #[serial]
         async fn succeeds_for_student() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_student);
+            let app = create_test_router(ctx.app_state.clone(), allow_student);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.student_token),
@@ -363,159 +371,41 @@ mod tests {
         #[serial]
         async fn succeeds_for_admin() {
             let ctx = setup().await;
-            let app = create_test_router(require_student);
+            let app = create_test_router(ctx.app_state.clone(), allow_student);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }
 
         #[tokio::test]
-        #[serial]
-        async fn fails_for_tutor() {
-            let ctx = setup().await;
-            let app = create_test_router(require_student);
-            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
-            let res = app.oneshot(req).await.unwrap();
-            assert_eq!(res.status(), StatusCode::FORBIDDEN);
-        }
-    }
-
-    mod test_require_lecturer_or_assistant_lecturer {
-        use super::*;
-
-        #[tokio::test]
-        #[serial]
-        async fn succeeds_for_lecturer() {
-            let ctx = setup().await;
-            let app = create_test_router(
-                ctx.app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
-            );
-            let req = build_request(
-                &format!("/test/{}", ctx.module_id),
-                Some(&ctx.lecturer_token),
-            );
-            let res = app.oneshot(req).await.unwrap();
-            assert_eq!(res.status(), StatusCode::OK);
-        }
-
-        #[tokio::test]
-        #[serial]
-        async fn succeeds_for_assistant_lecturer() {
-            let ctx = setup().await;
-            let app = create_test_router(
-                ctx.app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
-            );
-            let req = build_request(
-                &format!("/test/{}", ctx.module_id),
-                Some(&ctx.assistant_lecturer_token),
-            );
-            let res = app.oneshot(req).await.unwrap();
-            assert_eq!(res.status(), StatusCode::OK);
-        }
-
-        #[tokio::test]
-        #[serial]
-        async fn succeeds_for_admin() {
-            let ctx = setup().await;
-            let app = create_test_router(
-                ctx.app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
-            );
-            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
-            let res = app.oneshot(req).await.unwrap();
-            assert_eq!(res.status(), StatusCode::OK);
-        }
-
-        #[tokio::test]
-        #[serial]
-        async fn fails_for_tutor() {
-            let ctx = setup().await;
-            let app = create_test_router(
-                ctx.app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
-            );
-            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
-            let res = app.oneshot(req).await.unwrap();
-            assert_eq!(res.status(), StatusCode::FORBIDDEN);
-        }
-
-        #[tokio::test]
-        #[serial]
-        async fn fails_for_student() {
-            let ctx = setup().await;
-            let app = create_test_router(
-                ctx.app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
-            );
-            let req = build_request(
-                &format!("/test/{}", ctx.module_id),
-                Some(&ctx.student_token),
-            );
-            let res = app.oneshot(req).await.unwrap();
-            assert_eq!(res.status(), StatusCode::FORBIDDEN);
-        }
-    }
-
-    mod test_require_lecturer_or_tutor {
-        use super::*;
-
-        #[tokio::test]
-        #[serial]
-        async fn succeeds_for_lecturer() {
-            let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_lecturer_or_tutor);
-            let req = build_request(
-                &format!("/test/{}", ctx.module_id),
-                Some(&ctx.lecturer_token),
-            );
-            let res = app.oneshot(req).await.unwrap();
-            assert_eq!(res.status(), StatusCode::OK);
-        }
-
-        #[tokio::test]
-        #[serial]
         async fn succeeds_for_tutor() {
             let ctx = setup().await;
-            let app = create_test_router(require_lecturer_or_tutor);
+            let app = create_test_router(ctx.app_state.clone(), allow_student);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }
-
         #[tokio::test]
-        #[serial]
-        async fn succeeds_for_admin() {
+        async fn succeeds_for_lecturer() {
             let ctx = setup().await;
-            let app = create_test_router(require_lecturer_or_tutor);
-            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
+            let app = create_test_router(ctx.app_state.clone(), allow_student);
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.lecturer_token),
+            );
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
         }
-
-        #[tokio::test]
-        #[serial]
-        async fn fails_for_student() {
-            let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_lecturer_or_tutor);
-            let req = build_request(
-                &format!("/test/{}", ctx.module_id),
-                Some(&ctx.student_token),
-            );
-            let res = app.oneshot(req).await.unwrap();
-            assert_eq!(res.status(), StatusCode::FORBIDDEN);
-        }
     }
 
-    mod test_require_assigned_to_module {
+    mod test_allow_lecturer_or_assistant_lecturer {
         use super::*;
 
         #[tokio::test]
         #[serial]
         async fn succeeds_for_lecturer() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_assigned_to_module);
+            let app = create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.lecturer_token),
@@ -528,7 +418,7 @@ mod tests {
         #[serial]
         async fn succeeds_for_assistant_lecturer() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_assigned_to_module);
+            let app = create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.assistant_lecturer_token),
@@ -539,9 +429,150 @@ mod tests {
 
         #[tokio::test]
         #[serial]
+        async fn succeeds_for_admin() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        #[serial]
+        async fn fails_for_tutor() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+
+        #[tokio::test]
+        #[serial]
+        async fn fails_for_student() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), allow_assistant_lecturer);
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.student_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+    }
+
+    mod test_allow_lecturer_or_tutor {
+        use super::*;
+
+        #[tokio::test]
+        #[serial]
+        async fn succeeds_for_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.lecturer_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_assistant_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.assistant_lecturer_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_tutor() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        #[serial]
+        async fn succeeds_for_admin() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        #[serial]
+        async fn fails_for_student() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), allow_tutor);
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.student_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
+    }
+
+    mod test_allow_assigned_to_module {
+        use super::*;
+
+        async fn guard_adapter(
+            s: State<AppState>,
+            p: Path<HashMap<String, String>>,
+            req: Request<Body>,
+            next: Next,
+        ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+            allow_assigned_to_module(s, p, req, next).await
+        }
+
+        #[tokio::test]
+        #[serial]
+        async fn succeeds_for_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), guard_adapter);
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.lecturer_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        #[serial]
+        async fn succeeds_for_assistant_lecturer() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), guard_adapter);
+            let req = build_request(
+                &format!("/test/{}", ctx.module_id),
+                Some(&ctx.assistant_lecturer_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn succeeds_for_tutor() {
+            let ctx = setup().await;
+            let app = create_test_router(ctx.app_state.clone(), guard_adapter);
+            let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.tutor_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
         async fn succeeds_for_student() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_assigned_to_module);
+            let app = create_test_router(ctx.app_state.clone(), guard_adapter);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.student_token),
@@ -554,7 +585,7 @@ mod tests {
         #[serial]
         async fn succeeds_for_admin() {
             let ctx = setup().await;
-            let app = create_test_router(require_assigned_to_module);
+            let app = create_test_router(ctx.app_state.clone(), guard_adapter);
             let req = build_request(&format!("/test/{}", ctx.module_id), Some(&ctx.admin_token));
             let res = app.oneshot(req).await.unwrap();
             assert_eq!(res.status(), StatusCode::OK);
@@ -564,7 +595,7 @@ mod tests {
         #[serial]
         async fn fails_for_unassigned_user() {
             let ctx = setup().await;
-            let app = create_test_router(ctx.app_state.clone(), require_assigned_to_module);
+            let app = create_test_router(ctx.app_state.clone(), guard_adapter);
             let req = build_request(
                 &format!("/test/{}", ctx.module_id),
                 Some(&ctx.unassigned_user_token),
@@ -574,7 +605,7 @@ mod tests {
         }
     }
 
-    mod test_require_ready_assignment {
+    mod test_allow_ready_assignment {
         use super::*;
         use sea_orm::{ActiveModelTrait, Set};
 
@@ -598,7 +629,8 @@ mod tests {
                     "/modules/{module_id}/assignments/{assignment_id}",
                     get(test_handler).route_layer(middleware::from_fn(guard)),
                 )
-                .layer(middleware::from_fn(require_authenticated))
+                .layer(middleware::from_fn(allow_authenticated))
+                .with_state(app_state)
         }
 
         #[tokio::test]
@@ -622,7 +654,7 @@ mod tests {
             am.status = Set(db::models::assignment::Status::Setup);
             am.update(db).await.unwrap();
 
-            let app = create_assignment_router(require_ready_assignment);
+            let app = create_assignment_router(ctx.app_state.clone(), allow_ready_assignment);
             let uri = format!("/modules/{}/assignments/{}", ctx.module_id, assignment.id);
             let res = app
                 .oneshot(build_request(&uri, Some(&ctx.admin_token)))
@@ -652,7 +684,7 @@ mod tests {
             am.status = Set(db::models::assignment::Status::Ready);
             am.update(db).await.unwrap();
 
-            let app = create_assignment_router(require_ready_assignment);
+            let app = create_assignment_router(ctx.app_state.clone(), allow_ready_assignment);
             let uri = format!("/modules/{}/assignments/{}", ctx.module_id, assignment.id);
             let res = app
                 .oneshot(build_request(&uri, Some(&ctx.admin_token)))
@@ -683,7 +715,7 @@ mod tests {
             am_open.status = Set(db::models::assignment::Status::Open);
             am_open.update(db).await.unwrap();
 
-            let app = create_assignment_router(ctx.app_state.clone(), require_ready_assignment);
+            let app = create_assignment_router(ctx.app_state.clone(), allow_ready_assignment);
             let uri_open = format!(
                 "/modules/{}/assignments/{}",
                 ctx.module_id, assignment_open.id
@@ -728,7 +760,7 @@ mod tests {
         async fn returns_not_found_when_assignment_missing() {
             let ctx = setup().await;
             let non_existent_assignment_id = 99999;
-            let app = create_assignment_router(ctx.app_state.clone(), require_ready_assignment);
+            let app = create_assignment_router(ctx.app_state.clone(), allow_ready_assignment);
             let uri = format!(
                 "/modules/{}/assignments/{}",
                 ctx.module_id, non_existent_assignment_id
@@ -764,14 +796,15 @@ mod tests {
                     "/test/{module_id}/other/{other_id}",
                     get(test_handler).route_layer(middleware::from_fn(guard)),
                 )
-                .layer(middleware::from_fn(require_authenticated))
+                .layer(middleware::from_fn(allow_authenticated))
+                .with_state(app_state)
         }
 
         #[tokio::test]
         #[serial]
         async fn succeeds_for_lecturer_with_multi_param() {
             let ctx = setup().await;
-            let app = create_multi_param_router(ctx.app_state.clone(), require_lecturer);
+            let app = create_multi_param_router(ctx.app_state.clone(), allow_lecturer);
             let req = build_request(
                 &format!("/test/{}/other/42", ctx.module_id),
                 Some(&ctx.lecturer_token),
@@ -784,7 +817,7 @@ mod tests {
         #[serial]
         async fn fails_for_unassigned_user_with_multi_param() {
             let ctx = setup().await;
-            let app = create_multi_param_router(ctx.app_state.clone(), require_lecturer);
+            let app = create_multi_param_router(ctx.app_state.clone(), allow_lecturer);
             let req = build_request(
                 &format!("/test/{}/other/42", ctx.module_id),
                 Some(&ctx.unassigned_user_token),
@@ -797,7 +830,7 @@ mod tests {
         #[serial]
         async fn succeeds_for_admin_with_multi_param() {
             let ctx = setup().await;
-            let app = create_multi_param_router(ctx.app_state.clone(), require_lecturer);
+            let app = create_multi_param_router(ctx.app_state.clone(), allow_lecturer);
             let req = build_request(
                 &format!("/test/{}/other/42", ctx.module_id),
                 Some(&ctx.admin_token),
@@ -817,7 +850,7 @@ mod tests {
 
             Router::new()
                 .route(path, get(handler))
-                .layer(middleware::from_fn(require_authenticated))
+                .layer(middleware::from_fn(allow_authenticated))
                 .with_state(app_state.clone())
                 .route_layer(middleware::from_fn_with_state(
                     app_state,

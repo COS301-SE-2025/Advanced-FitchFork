@@ -63,7 +63,7 @@ impl Model {
             let path = output.full_path();
             if path.exists() {
                 if let Err(e) = fs::remove_file(&path) {
-                    eprintln!("Failed to delete file {:?}: {}", path, e);
+                    eprintln!("Failed to delete file {path:?}: {e}");
                 }
             }
             let am: ActiveModel = output.into();
@@ -104,13 +104,13 @@ impl Model {
         let submission = super::assignment_submission::Entity::find_by_id(submission_id)
             .one(db)
             .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding submission: {}", e)))?
+            .map_err(|e| DbErr::Custom(format!("DB error finding submission: {e}")))?
             .ok_or_else(|| DbErr::Custom("Submission not found".to_string()))?;
 
         let assignment = super::assignment::Entity::find_by_id(submission.assignment_id)
             .one(db)
             .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding assignment: {}", e)))?
+            .map_err(|e| DbErr::Custom(format!("DB error finding assignment: {e}")))?
             .ok_or_else(|| DbErr::Custom("Assignment not found".to_string()))?;
 
         let dir_path = submission_output_dir(
@@ -149,7 +149,7 @@ impl Model {
         let submission = assignment_submission::Entity::find_by_id(submission_id)
             .one(db)
             .await
-            .map_err(|e| io::Error::new(ErrorKind::Other, format!("DB error: {}", e)))?
+            .map_err(|e| io::Error::other(format!("DB error: {e}")))?
             .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "Submission not found"))?;
 
         let base_dir_path = submission_output_dir(
@@ -162,10 +162,7 @@ impl Model {
         if !base_dir_path.exists() {
             return Err(io::Error::new(
                 ErrorKind::NotFound,
-                format!(
-                    "Submission output directory {:?} does not exist",
-                    base_dir_path
-                ),
+                format!("Submission output directory {base_dir_path:?} does not exist"),
             ));
         }
 
@@ -176,10 +173,10 @@ impl Model {
                 let file_path = entry.path();
                 if let Some(stem) = file_path.file_stem().and_then(|n| n.to_str()) {
                     if let Ok(output_id) = stem.parse::<i64>() {
-                        if let Some(output) =
-                            Entity::find_by_id(output_id).one(db).await.map_err(|e| {
-                                io::Error::new(ErrorKind::Other, format!("DB error: {}", e))
-                            })?
+                        if let Some(output) = Entity::find_by_id(output_id)
+                            .one(db)
+                            .await
+                            .map_err(|e| io::Error::other(format!("DB error: {e}")))?
                         {
                             let content = fs::read_to_string(&file_path)?;
                             results.push((output.task_id, content));

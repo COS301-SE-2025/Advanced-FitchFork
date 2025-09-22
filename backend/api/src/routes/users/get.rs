@@ -3,19 +3,16 @@ use crate::routes::common::UserModule;
 use axum::body::Body;
 use axum::{
     Json,
-    extract::{Path, Query},
+    extract::{Path, Query, State},
     http::{Response, StatusCode},
     response::IntoResponse,
 };
 use db::models::user::{Column as UserColumn, Entity as UserEntity, Model as UserModel};
 use mime_guess::from_path;
+use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
-use services::service::Service;
-use services::user::{User, UserService};
-use services::user_module_role::UserModuleRoleService;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
-use util::filters::{FilterParam, QueryParam};
 use util::{paths::user_profile_path, state::AppState};
 use validator::Validate;
 
@@ -117,7 +114,12 @@ impl From<User> for UserListItem {
 /// - `401 Unauthorized` - Missing or invalid JWT
 /// - `403 Forbidden` - Authenticated but not admin user
 /// - `500 Internal Server Error` - Database error
-pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoResponse {
+pub async fn list_users(
+    State(app_state): State<AppState>,
+    Query(query): Query<ListUsersQuery>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
     if let Err(e) = query.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -193,8 +195,13 @@ pub async fn list_users(Query(query): Query<ListUsersQuery>) -> impl IntoRespons
 /// - `400 Bad Request`: Invalid ID format
 /// - `404 Not Found`: User does not exist
 /// - `500 Internal Server Error`: DB error
-pub async fn get_user(Path(user_id): Path<i64>) -> impl IntoResponse {
-    match UserService::find_by_id(user_id).await {
+pub async fn get_user(
+    State(app_state): State<AppState>,
+    Path(user_id): Path<i64>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
+    match UserEntity::find_by_id(user_id).one(db).await {
         Ok(Some(user)) => {
             let user_item = UserListItem::from(user);
             (
@@ -273,8 +280,13 @@ pub async fn get_user(Path(user_id): Path<i64>) -> impl IntoResponse {
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn get_user_modules(Path(user_id): Path<i64>) -> impl IntoResponse {
-    let roles = match UserModuleRoleService::get_module_roles(user_id).await {
+pub async fn get_user_modules(
+    State(app_state): State<AppState>,
+    Path(user_id): Path<i64>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
+    let roles = match UserModel::get_module_roles(db, user_id).await {
         Ok(r) => r,
         Err(e) => {
             return (

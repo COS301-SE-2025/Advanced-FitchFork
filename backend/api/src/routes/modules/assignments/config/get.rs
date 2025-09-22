@@ -1,5 +1,16 @@
 use crate::response::ApiResponse;
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
+use db::models::assignment_file::{
+    Column as AssignmentFileColumn, Entity as AssignmentFile, FileType,
+    Model as AssignmentFileModel,
+};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::to_value;
 use services::assignment::AssignmentService;
 use services::assignment_file::AssignmentFileService;
@@ -111,40 +122,51 @@ pub async fn get_assignment_config(
 
     // Load the config from the file model
     match config_file {
-        Some(_) => {
-            match AssignmentFileService::load_execution_config(module_id, assignment_id).await {
-                Ok(cfg) => {
-                    let json = to_value(cfg).unwrap_or_else(|_| serde_json::json!({}));
-                    (
-                        StatusCode::OK,
-                        Json(ApiResponse::success(
-                            json,
-                            "Assignment configuration retrieved successfully",
-                        )),
-                    )
-                        .into_response()
-                }
-                Err(err) => {
-                    eprintln!("Failed to load config from disk: {}", err);
-                    (
-                        StatusCode::OK,
-                        Json(ApiResponse::success(
-                            serde_json::json!({}),
-                            "No configuration set for this assignment",
-                        )),
-                    )
-                        .into_response()
-                }
+        Some(file_model) => match file_model.load_execution_config(module_id) {
+            Ok(cfg) => {
+                let json = to_value(cfg).unwrap_or_else(|_| serde_json::json!({}));
+                (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(
+                        json,
+                        "Assignment configuration retrieved successfully",
+                    )),
+                )
+                    .into_response()
             }
-        }
-        None => (
-            StatusCode::OK,
-            Json(ApiResponse::success(
-                serde_json::json!({}),
-                "No configuration set for this assignment",
-            )),
-        )
-            .into_response(),
+            Err(err) => {
+                eprintln!("Failed to load config from disk: {}", err);
+                (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(
+                        serde_json::json!({}),
+                        "No configuration set for this assignment",
+                    )),
+                )
+                    .into_response()
+            }
+        },
+        None => match ExecutionConfig::get_execution_config(module_id, assignment_id) {
+            Ok(cfg) => {
+                let json = to_value(cfg).unwrap_or_else(|_| serde_json::json!({}));
+                (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(
+                        json,
+                        "Assignment configuration retrieved successfully",
+                    )),
+                )
+                    .into_response()
+            }
+            Err(_) => (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    serde_json::json!({}),
+                    "No configuration set for this assignment",
+                )),
+            )
+                .into_response(),
+        },
     }
 }
 

@@ -6,19 +6,11 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
-    use db::{
-        models::{
-            announcements::Model as AnnouncementModel,
-            module::Model as ModuleModel,
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRole, Role},
-        },
-        repositories::user_repository::UserRepository,
-    };
-    use serial_test::serial;
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
+    use db::models::{
+        announcements::Model as AnnouncementModel,
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRole, Role},
     };
     use tower::ServiceExt;
 

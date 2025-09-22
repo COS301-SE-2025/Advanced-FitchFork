@@ -1,10 +1,11 @@
-import React from 'react';
-import { Button, Input, Switch, Skeleton } from 'antd';
-import { SaveOutlined } from '@ant-design/icons';
+import React, { useEffect } from 'react';
+import { Button, Input, Switch, Skeleton, Modal, Typography } from 'antd';
+import { DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import SettingsGroup from '@/components/SettingsGroup';
 import { useTasksPage } from './context';
 import OverwriteFilesSection from './sections/OverwriteFilesSection';
 import AssessmentSection from './sections/AssessmentSection';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const TaskSkeleton: React.FC = () => (
   <div className="space-y-6">
@@ -51,6 +52,9 @@ const TaskSkeleton: React.FC = () => (
 const TaskView: React.FC = () => {
   const {
     loading,
+    moduleId,
+    assignmentId,
+    selectedTask,
     editedName,
     setEditedName,
     editedCommand,
@@ -58,18 +62,58 @@ const TaskView: React.FC = () => {
     editedCoverage,
     setEditedCoverage,
     saveTask,
+    deleteTask,
   } = useTasksPage();
+  const { setValue, setBackTo } = useViewSlot();
+
+  useEffect(() => {
+    return () => {
+      setBackTo(null);
+      setValue(
+        <Typography.Text
+          className="text-base font-medium text-gray-900 dark:text-gray-100 truncate"
+          title="Tasks"
+        >
+          Tasks
+        </Typography.Text>,
+      );
+    };
+  }, [setBackTo, setValue]);
+
+  useEffect(() => {
+    if (!selectedTask) return;
+    const label = (selectedTask.name && selectedTask.name.trim())
+      || `Task ${selectedTask.task_number ?? selectedTask.id}`;
+    setValue(
+      <Typography.Text
+        className="text-base font-medium text-gray-900 dark:text-gray-100 truncate"
+        title={label}
+      >
+        {label}
+      </Typography.Text>,
+    );
+    setBackTo(`/modules/${moduleId}/assignments/${assignmentId}/tasks`);
+  }, [selectedTask, setValue, setBackTo, moduleId, assignmentId]);
+
+  const handleDelete = () => {
+    if (!selectedTask) return;
+    Modal.confirm({
+      title: 'Delete this task?',
+      content: 'This task and its configuration will be removed.',
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: () => deleteTask(selectedTask.id),
+    });
+  };
 
   if (loading) return <TaskSkeleton />;
 
-  // if (!selectedTask) {
-  //   return (
-  //     <Empty
-  //       image={Empty.PRESENTED_IMAGE_SIMPLE}
-  //       description={<div className="text-gray-700 dark:text-gray-300">No Task Selected</div>}
-  //     />
-  //   );
-  // }
+  if (!selectedTask) {
+    return (
+      <div className="text-gray-400 dark:text-gray-500">Select a task to view its details.</div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -100,9 +144,22 @@ const TaskView: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <Button icon={<SaveOutlined />} type="primary" onClick={saveTask}>
+          <div className="flex flex-col sm:flex-row gap-2 justify-end">
+            <Button
+              icon={<SaveOutlined />}
+              type="primary"
+              onClick={saveTask}
+              className="w-full sm:w-auto"
+            >
               Save Task
+            </Button>
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              onClick={handleDelete}
+              className="w-full sm:w-auto"
+            >
+              Delete Task
             </Button>
           </div>
         </div>

@@ -90,11 +90,11 @@ impl Model {
 
         let dir_path = interpreter_dir(module_id, assignment_id);
         fs::create_dir_all(&dir_path)
-            .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to create directory: {}", e)))?;
+            .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to create directory: {e}")))?;
 
         let file_path = dir_path.join(&stored_filename);
         fs::write(&file_path, bytes)
-            .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to write file: {}", e)))?;
+            .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to write file: {e}")))?;
 
         let relative_path = file_path
             .strip_prefix(storage_root())

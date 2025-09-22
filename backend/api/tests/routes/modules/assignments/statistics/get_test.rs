@@ -18,7 +18,7 @@ mod tests {
     use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use util::{
-        execution_config::{ExecutionConfig, execution_config::GradingPolicy},
+        execution_config::{ExecutionConfig, GradingPolicy},
         paths::submission_report_path,
     };
 

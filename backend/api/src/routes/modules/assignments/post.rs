@@ -13,8 +13,14 @@
 
 use crate::response::ApiResponse;
 use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use chrono::{DateTime, Utc};
+use db::models::assignment::{AssignmentType, Model as AssignmentModel};
 use db::models::assignment::{Column as AssignmentCol, Entity as AssignmentEntity};
 use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
 use serde::Deserialize;
@@ -76,6 +82,19 @@ pub async fn create_assignment(
     Path(module_id): Path<i64>,
     Json(req): Json<AssignmentRequest>,
 ) -> impl IntoResponse {
+    let available_from =
+        match DateTime::parse_from_rfc3339(&req.available_from).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(date) => date,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid available_from datetime",
+                    )),
+                );
+            }
+        };
+
     let available_from =
         match DateTime::parse_from_rfc3339(&req.available_from).map(|dt| dt.with_timezone(&Utc)) {
             Ok(date) => date,

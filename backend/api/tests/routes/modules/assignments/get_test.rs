@@ -17,7 +17,7 @@ mod tests {
 
     use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
-    use util::execution_config::{ExecutionConfig, execution_config::GradingPolicy};
+    use util::execution_config::{ExecutionConfig, GradingPolicy};
 
     struct TestData {
         admin_user: UserModel,

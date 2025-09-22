@@ -26,41 +26,16 @@ mod tests {
         let module = ModuleModel::create(db, "COS999", 2025, Some("Test Module"), 12)
             .await
             .unwrap();
-        let service = UserService::new(UserRepository::new(db.clone()));
-        let admin = service
-            .create(CreateUser {
-                username: "admin".to_string(),
-                email: "admin@test.com".to_string(),
-                password: "pw".to_string(),
-                admin: true,
-            })
+        let admin = UserModel::create(db, "admin", "admin@test.com", "pw", true)
             .await
             .unwrap();
-        let lecturer = service
-            .create(CreateUser {
-                username: "lect1".to_string(),
-                email: "lect@test.com".to_string(),
-                password: "pw".to_string(),
-                admin: false,
-            })
+        let lecturer = UserModel::create(db, "lect1", "lect@test.com", "pw", false)
             .await
             .unwrap();
-        let student = service
-            .create(CreateUser {
-                username: "stud1".to_string(),
-                email: "stud@test.com".to_string(),
-                password: "pw".to_string(),
-                admin: false,
-            })
+        let student = UserModel::create(db, "stud1", "stud@test.com", "pw", false)
             .await
             .unwrap();
-        let outsider = service
-            .create(CreateUser {
-                username: "outsider".to_string(),
-                email: "out@test.com".to_string(),
-                password: "pw".to_string(),
-                admin: false,
-            })
+        let outsider = UserModel::create(db, "outsider", "out@test.com", "pw", false)
             .await
             .unwrap();
         UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer)

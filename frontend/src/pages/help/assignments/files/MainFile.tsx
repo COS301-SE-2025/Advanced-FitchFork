@@ -13,13 +13,12 @@ import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 const { Title, Paragraph, Text } = Typography;
 
 const toc = [
-  { key: 'what', href: '#what', title: 'What is the Main File?' },
-  { key: 'where', href: '#where', title: 'Where to Upload' },
-  { key: 'how-used', href: '#how-used', title: 'How the System Uses Main' },
-  { key: 'language', href: '#language', title: 'Language & Entry Filename' },
-  { key: 'structure', href: '#structure', title: 'Archive Structure' },
-  { key: 'args', href: '#args', title: 'Argument-Driven Tasks (CLI)' },
-  { key: 'delimiter', href: '#delimiter', title: 'Subsections via Delimiter (in Main)' },
+  { key: 'overview', href: '#overview', title: 'Why Main Matters' },
+  { key: 'lifecycle', href: '#lifecycle', title: 'How Fitchfork Runs Main' },
+  { key: 'requirements', href: '#requirements', title: 'Archive & Entry Requirements' },
+  { key: 'storage', href: '#storage', title: 'After You Upload' },
+  { key: 'tasks', href: '#tasks', title: 'Task Arguments & CLI' },
+  { key: 'delimiter', href: '#delimiter', title: 'Subsections with the Delimiter' },
   { key: 'best', href: '#best', title: 'Best Practices' },
   { key: 'faq', href: '#faq', title: 'FAQ' },
   { key: 'trouble', href: '#trouble', title: 'Troubleshooting' },
@@ -30,9 +29,32 @@ const langRows = [
     key: 'java',
     lang: 'Java',
     example: 'Main.java',
-    notes: 'Public class Main; class name = filename.',
+    notes: 'Public class Main; keep main(String[] args) entry point.',
   },
-  { key: 'cpp', lang: 'C++', example: 'Main.cpp', notes: 'Deterministic I/O; end lines with \\n.' },
+  {
+    key: 'cpp',
+    lang: 'C++',
+    example: 'Main.cpp',
+    notes: 'Flush stdout; disable sync_with_stdio for performance.',
+  },
+  {
+    key: 'c',
+    lang: 'C',
+    example: 'main.c',
+    notes: 'Provide an int main(void) entry point and flush output.',
+  },
+  {
+    key: 'python',
+    lang: 'Python',
+    example: 'main.py',
+    notes: 'Read task argument from sys.argv; avoid random stdout ordering.',
+  },
+  {
+    key: 'rust',
+    lang: 'Rust',
+    example: 'main.rs',
+    notes: 'Use std::env::args() for task selection; cargo builds via Makefile.',
+  },
 ];
 
 const langCols = [
@@ -121,12 +143,10 @@ export default function MainFile() {
     extra: (
       <Card className="mt-4" size="small" title="Quick facts" bordered>
         <ul className="list-disc pl-5">
-          <li>Archive: zip / tar / tgz / gz</li>
-          <li>Max size: 50MB</li>
-          <li>Used in memo & student runs</li>
-          <li>
-            Delimiter for subsections in Main: <Text code>&amp;-=-&amp;</Text>
-          </li>
+          <li>Upload under <Text code>Assignments → Config → Files</Text></li>
+          <li>Archive format: .zip / .tar / .tgz / .gz (≤50&nbsp;MB)</li>
+          <li>Run order: Memo generation first, then every student run</li>
+          <li>Subsection delimiter inside Main: <Text code>&amp;-=-&amp;</Text></li>
         </ul>
       </Card>
     ),
@@ -139,83 +159,105 @@ export default function MainFile() {
         Main File
       </Title>
 
-      <section id="what" className="scroll-mt-24" />
-      <Title level={3}>What is the Main File?</Title>
+      <section id="overview" className="scroll-mt-24" />
+      <Title level={3}>Why Main Matters</Title>
       <Paragraph className="mb-0">
-        <b>Main</b> is the program that runs your test cases against code. First, during{' '}
-        <b>Memo generation</b>, it runs with your memo (reference) solution to create the{' '}
-        <b>Memo Output</b>. Later, for <b>student runs</b>, it runs the same tests on the student’s
-        submission. The two outputs are then <b>compared</b> to decide correctness and marks.
+        <strong>Main</strong> is the harness Fitchfork uses to exercise every submission. It couples with
+        your <strong>Makefile</strong> and <strong>Memo</strong> archives to generate reference outputs, and the
+        same trio is replayed for each student attempt. Because Main controls the test flow, it also
+        decides how tasks are invoked, which files are compiled, and how marks are segmented.
       </Paragraph>
       <Paragraph className="mt-3 mb-0">
-        The <b>Main archive</b> contains exactly one entry file at the root:{' '}
-        <Text code>Main.java</Text> or <Text code>Main.cpp</Text>. No other files or folders.
+        Upload Main under <Text code>Assignments → Config → Files</Text>. Lecturers (or assistant
+        lecturers) own this archive; students never see or submit it. In Manual submission mode Main is
+        required. If you switch the assignment to GATLAM, the <strong>Interpreter</strong> replaces Main and this
+        archive can stay empty.
       </Paragraph>
 
       <Descriptions bordered size="middle" column={1} className="mt-3">
-        <Descriptions.Item label="Accepted formats">
-          <Tag>.zip</Tag> <Tag>.tar</Tag> <Tag>.tgz</Tag> <Tag>.gz</Tag> (max&nbsp;50&nbsp;MB)
-        </Descriptions.Item>
-        <Descriptions.Item label="Used by">
+        <Descriptions.Item label="Runs with">
           <Tag color="blue">Memo Output</Tag> <Tag color="green">Student Submissions</Tag>
         </Descriptions.Item>
-        <Descriptions.Item label="Contains">One entry file at archive root.</Descriptions.Item>
+        <Descriptions.Item label="Upload role">Lecturer / Assistant Lecturer only</Descriptions.Item>
+        <Descriptions.Item label="Archive formats">
+          <Tag>.zip</Tag> <Tag>.tar</Tag> <Tag>.tgz</Tag> <Tag>.gz</Tag> (≤50&nbsp;MB)
+        </Descriptions.Item>
       </Descriptions>
 
-      <section id="where" className="scroll-mt-24" />
-      <Title level={3}>Where to Upload</Title>
-      <Paragraph className="mb-0">
-        Go to <Text code>Assignments → Config → Files</Text> and upload the <b>Main</b> archive. The{' '}
-        <b>lecturer or assistant lecturer</b> uploads Main; students never upload it.
-      </Paragraph>
-
-      <section id="how-used" className="scroll-mt-24" />
-      <Title level={3}>How the System Uses Main</Title>
+      <section id="lifecycle" className="scroll-mt-24" />
+      <Title level={3}>How Fitchfork Runs Main</Title>
       <Timeline
         className="mb-2"
         items={[
-          { color: 'blue', dot: <FileZipOutlined />, children: 'Upload Main, Makefile, and Memo.' },
+          {
+            color: 'blue',
+            dot: <FileZipOutlined />,
+            children: 'Upload Main, Memo, and Makefile archives under Files & Resources.',
+          },
           {
             color: 'blue',
             dot: <LoadingOutlined />,
-            children: 'Memo generation: run Main + Memo + Makefile → Memo Output.',
+            children:
+              'Generate Memo Output: Fitchfork unpacks the three archives and runs your Main for each task to record reference output.',
           },
           {
             color: 'green',
             dot: <PlayCircleOutlined />,
-            children: 'Student run: run Main + Student + Makefile → Student Output.',
+            children:
+              'Student run: the same Main + Makefile pipeline runs against the student submission in an isolated container.',
           },
           {
             color: 'gray',
             dot: <DiffOutlined />,
-            children: 'Compare Student Output to Memo Output to mark.',
+            children:
+              'Compare outputs: student results are diffed against the memo output to award marks and detect subsection status.',
           },
         ]}
       />
+      <Paragraph>
+        If any required archive is missing, Fitchfork stops here with a clear error (e.g. “Main files
+        (.zip) not found”). The same validation runs before memo generation <em>and</em> before each student
+        attempt so missing or outdated Main archives are caught early.
+      </Paragraph>
 
-      <section id="language" className="scroll-mt-24" />
-      <Title level={3}>Language & Entry Filename</Title>
+      <section id="requirements" className="scroll-mt-24" />
+      <Title level={3}>Archive &amp; Entry Requirements</Title>
       <Card>
-        <Paragraph>
-          Your <Text code>config.json → project.language</Text> sets the expected entry filename.
+        <Paragraph className="mb-2">
+          The expected entry filename comes from <Text code>config.json → project.language</Text>. Use the
+          language picker in Assignment Config to keep Main aligned with the Makefile commands you run.
         </Paragraph>
         <Table size="small" columns={langCols} dataSource={langRows} pagination={false} />
       </Card>
-
-      <section id="structure" className="scroll-mt-24" />
-      <Title level={3}>Archive Structure</Title>
-      <Paragraph className="mb-0">
-        The archive must contain <b>exactly one file at the root</b>: the entry file listed above
-        (e.g., <Text code>Main.java</Text> or <Text code>Main.cpp</Text>). Do not include any
-        folders or extra files.
+      <Paragraph className="mt-3 mb-0">
+        Pack <strong>exactly one entry file at the archive root</strong>. Do not nest it in folders or ship
+        helper source files—pull helpers in via the Memo or Makefile instead. The runner extracts the
+        archive into the working directory for each task, so any extra files can mask student output or
+        break deterministic comparisons.
       </Paragraph>
 
-      <section id="args" className="scroll-mt-24" />
-      <Title level={3}>Argument-Driven Tasks (CLI)</Title>
+      <section id="storage" className="scroll-mt-24" />
+      <Title level={3}>After You Upload</Title>
+      <Paragraph className="mb-0">
+        Fitchfork stores the archive alongside the assignment in its <Text code>main/</Text> folder and
+        records the upload in the assignment files list. Readiness reports and the Setup Checklist look for
+        that stored archive when deciding if an assignment is launch-ready. Generate Memo Output and student
+        runs use the same stored file, so you only need to upload Main once per update.
+      </Paragraph>
+      <Paragraph className="mt-3 mb-0">
+        Need to replace Main? Uploading a new archive overwrites the stored copy and immediately affects the
+        next memo generation or student attempt. Keep the previous version in source control in case you need
+        to roll back.
+      </Paragraph>
+
+      <section id="tasks" className="scroll-mt-24" />
+      <Title level={3}>Task Arguments &amp; CLI</Title>
       <Card>
         <Paragraph className="mb-3">
-          Let <b>Main</b> accept a single task argument (e.g., <Text code>task1</Text>,{' '}
-          <Text code>task2</Text>). If no argument is provided, default to <Text code>task1</Text>.
+          Tasks defined under <Text code>Assignments → Tasks</Text> pass a single CLI argument to Main.
+          Accept values such as <Text code>task1</Text> and <Text code>task2</Text>, and fall back to
+          <Text code>task1</Text> if no argument is supplied. This keeps your Makefile targets, task
+          commands, and Main in sync.
         </Paragraph>
         <Tabs
           items={[

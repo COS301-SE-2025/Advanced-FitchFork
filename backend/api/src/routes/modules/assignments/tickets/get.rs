@@ -19,6 +19,17 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
+use db::models::user::Entity as UserEntity;
+use db::models::{
+    tickets::{Column as TicketColumn, Entity as TicketEntity, TicketStatus},
+    user,
+    user_module_role::{self, Role},
+};
+use migration::Expr;
+use sea_orm::{
+    ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
+    QueryOrder, QuerySelect, RelationTrait,
+};
 use serde::{Deserialize, Serialize};
 use services::service::Service;
 use services::ticket::{TicketService, TicketStatus};
@@ -310,12 +321,72 @@ pub async fn get_tickets(
     let ticket_responses: Vec<TicketResponse> =
         tickets.into_iter().map(TicketResponse::from).collect();
 
-    let response = FilterResponse::new(ticket_responses, page, per_page, total);
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(
-            response,
-            "Tickets retrieved successfully",
-        )),
-    )
+            query = match field {
+                "created_at" => {
+                    if asc {
+                        query.order_by_asc(TicketColumn::CreatedAt)
+                    } else {
+                        query.order_by_desc(TicketColumn::CreatedAt)
+                    }
+                }
+                "updated_at" => {
+                    if asc {
+                        query.order_by_asc(TicketColumn::UpdatedAt)
+                    } else {
+                        query.order_by_desc(TicketColumn::UpdatedAt)
+                    }
+                }
+                "status" => {
+                    if asc {
+                        query.order_by_asc(TicketColumn::Status)
+                    } else {
+                        query.order_by_desc(TicketColumn::Status)
+                    }
+                }
+                _ => query,
+            };
+        }
+    }
+
+    let paginator = query.clone().paginate(db, per_page as u64);
+    let total = match paginator.num_items().await {
+        Ok(n) => n as i32,
+        Err(e) => {
+            eprintln!("Error counting tickets: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<FilterResponse>::error(
+                    "Error counting tickets",
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    match paginator.fetch_page((page - 1) as u64).await {
+        Ok(results) => {
+            let tickets: Vec<TicketResponse> =
+                results.into_iter().map(TicketResponse::from).collect();
+
+            let response = FilterResponse::new(tickets, page, per_page, total);
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    response,
+                    "Tickets retrieved successfully",
+                )),
+            )
+                .into_response()
+        }
+        Err(err) => {
+            eprintln!("Error fetching tickets: {:?}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<FilterResponse>::error(
+                    "Failed to retrieve tickets",
+                )),
+            )
+                .into_response()
+        }
+    }
 }

@@ -7,23 +7,16 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{Duration, Utc};
-    use db::{
-        models::{
-            assignment::Model as AssignmentModel,
-            assignment_submission::Model as AssignmentSubmissionModel,
-            module::Model as ModuleModel,
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
+    use db::models::{
+        assignment::Model as AssignmentModel,
+        assignment_submission::Model as AssignmentSubmissionModel,
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use sea_orm::{ActiveModelTrait, Set};
     use serde_json::{Value, json};
     use serial_test::serial;
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
     use std::fs;
     use tower::ServiceExt;
     use util::paths::submission_report_path;
@@ -41,34 +34,18 @@ mod tests {
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
             .await
             .unwrap();
-        let service = UserService::new(UserRepository::new(db.clone()));
-        let lecturer_user = service
-            .create(CreateUser {
-                username: "lecturer1".to_string(),
-                email: "lecturer1@test.com".to_string(),
-                password: "password1".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
-        let student_user = service
-            .create(CreateUser {
-                username: "student1".to_string(),
-                email: "student1@test.com".to_string(),
-                password: "password2".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
-        let forbidden_user = service
-            .create(CreateUser {
-                username: "forbidden".to_string(),
-                email: "forbidden@test.com".to_string(),
-                password: "password3".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
+        let lecturer_user =
+            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
+                .await
+                .unwrap();
+        let student_user =
+            UserModel::create(db, "student1", "student1@test.com", "password2", false)
+                .await
+                .unwrap();
+        let forbidden_user =
+            UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false)
+                .await
+                .unwrap();
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
             .unwrap();
@@ -647,5 +624,207 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_list_contains_status_field_student() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+
+        // Update one submission to have a different status
+        use db::models::assignment_submission::Model as SubmissionModel;
+        let _ = SubmissionModel::set_running(app_state.db(), data.submissions[1].id).await;
+
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], true);
+
+        let submissions = json["data"]["submissions"].as_array().unwrap();
+        assert_eq!(submissions.len(), 3); // Student only sees their own submissions
+
+        // Every submission should have a status field
+        for submission in submissions {
+            assert!(
+                submission["status"].is_string(),
+                "Submission should have status field"
+            );
+            let status = submission["status"].as_str().unwrap();
+            // Status should be one of the valid submission statuses
+            assert!(
+                matches!(
+                    status,
+                    "queued"
+                        | "running"
+                        | "grading"
+                        | "graded"
+                        | "failed_upload"
+                        | "failed_compile"
+                        | "failed_execution"
+                        | "failed_grading"
+                        | "failed_internal"
+                ),
+                "Invalid status value: {}",
+                status
+            );
+        }
+
+        // Check that we have at least one submission with "running" status
+        let has_running = submissions.iter().any(|s| s["status"] == "running");
+        assert!(
+            has_running,
+            "Should have at least one submission with running status"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_list_contains_status_field_lecturer() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+
+        // Set different statuses for different submissions to test variety
+        use db::models::assignment_submission::{Model as SubmissionModel, SubmissionStatus};
+        let _ = SubmissionModel::set_grading(app_state.db(), data.submissions[0].id).await;
+        let _ = SubmissionModel::set_graded(app_state.db(), data.submissions[1].id).await;
+        let _ = SubmissionModel::set_failed(
+            app_state.db(),
+            data.submissions[2].id,
+            SubmissionStatus::FailedCompile,
+        )
+        .await;
+
+        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+        let req = Request::builder()
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["success"], true);
+
+        let submissions = json["data"]["submissions"].as_array().unwrap();
+        assert_eq!(submissions.len(), 4); // Lecturer sees all submissions
+
+        // Every submission should have a status field
+        for submission in submissions {
+            assert!(
+                submission["status"].is_string(),
+                "Submission should have status field"
+            );
+        }
+
+        // Collect all status values
+        let statuses: Vec<&str> = submissions
+            .iter()
+            .map(|s| s["status"].as_str().unwrap())
+            .collect();
+
+        // We should have different statuses due to our updates above
+        assert!(
+            statuses.contains(&"grading"),
+            "Should have at least one grading status"
+        );
+        assert!(
+            statuses.contains(&"graded"),
+            "Should have at least one graded status"
+        );
+        assert!(
+            statuses.contains(&"failed_compile"),
+            "Should have at least one failed_compile status"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_submission_status_values_are_correct() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+
+        // Test various status transitions and verify they appear correctly in API
+        use db::models::assignment_submission::{Model as SubmissionModel, SubmissionStatus};
+
+        // Test each status type
+        let test_cases = vec![
+            (data.submissions[0].id, SubmissionStatus::Running, "running"),
+            (data.submissions[1].id, SubmissionStatus::Grading, "grading"),
+            (data.submissions[2].id, SubmissionStatus::Graded, "graded"),
+        ];
+
+        for (submission_id, db_status, expected_api_status) in test_cases {
+            // Update submission to specific status using the same app_state
+            match db_status {
+                SubmissionStatus::Running => {
+                    let _ = SubmissionModel::set_running(app_state.db(), submission_id).await;
+                }
+                SubmissionStatus::Grading => {
+                    let _ = SubmissionModel::set_grading(app_state.db(), submission_id).await;
+                }
+                SubmissionStatus::Graded => {
+                    let _ = SubmissionModel::set_graded(app_state.db(), submission_id).await;
+                }
+                _ => {} // Skip other statuses for this test
+            }
+
+            // Fetch submissions and verify status
+            let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+            let uri = format!(
+                "/api/modules/{}/assignments/{}/submissions",
+                data.module.id, data.assignment.id
+            );
+            let req = Request::builder()
+                .uri(&uri)
+                .header("Authorization", format!("Bearer {}", token))
+                .body(Body::empty())
+                .unwrap();
+
+            let response = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let json: Value = serde_json::from_slice(&body).unwrap();
+
+            let submissions = json["data"]["submissions"].as_array().unwrap();
+            let target_submission = submissions
+                .iter()
+                .find(|s| s["id"].as_i64().unwrap() == submission_id)
+                .expect("Should find submission");
+
+            assert_eq!(
+                target_submission["status"].as_str().unwrap(),
+                expected_api_status,
+                "Status mismatch for submission {}",
+                submission_id
+            );
+        }
     }
 }

@@ -7,10 +7,16 @@
 //! All responses follow the standard `ApiResponse` format.
 
 use crate::response::ApiResponse;
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use db::models::module;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use services::module::ModuleService;
-use services::service::Service;
+use util::state::AppState;
 use validator::Validate;
 
 /// DELETE /api/modules/{module_id}
@@ -46,14 +52,36 @@ use validator::Validate;
 ///   "message": "Module not found"
 /// }
 /// ```
-pub async fn delete_module(Path(module_id): Path<i64>) -> impl IntoResponse {
-    match ModuleService::delete_by_id(module_id).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(ApiResponse::<()>::success(
-                (),
-                "Module deleted successfully",
-            )),
+pub async fn delete_module(
+    State(state): State<AppState>,
+    Path(module_id): Path<i64>,
+) -> impl IntoResponse {
+    let db = state.db();
+
+    match module::Entity::find()
+        .filter(module::Column::Id.eq(module_id))
+        .one(db)
+        .await
+    {
+        Ok(Some(m)) => match m.delete(db).await {
+            Ok(_) => (
+                StatusCode::OK,
+                Json(ApiResponse::<()>::success(
+                    (),
+                    "Module deleted successfully",
+                )),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!(
+                    "Failed to delete module: {}",
+                    e
+                ))),
+            ),
+        },
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("Module not found")),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -132,8 +160,26 @@ pub async fn bulk_delete_modules(Json(req): Json<BulkDeleteRequest>) -> impl Int
     let mut failed = Vec::new();
 
     for &id in &req.module_ids {
-        match ModuleService::delete_by_id(id).await {
-            Ok(_) => deleted_count += 1,
+        match module::Entity::find()
+            .filter(module::Column::Id.eq(id))
+            .one(db)
+            .await
+        {
+            Ok(Some(module_model)) => match module_model.delete(db).await {
+                Ok(_) => deleted_count += 1,
+                Err(e) => {
+                    failed.push(FailedDelete {
+                        id,
+                        error: format!("Failed to delete module: {}", e),
+                    });
+                }
+            },
+            Ok(None) => {
+                failed.push(FailedDelete {
+                    id,
+                    error: "Module not found".into(),
+                });
+            }
             Err(e) => {
                 failed.push(FailedDelete {
                     id,

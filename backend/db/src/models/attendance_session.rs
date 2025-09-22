@@ -96,7 +96,7 @@ impl Model {
         let val = u32::from_be_bytes([slice[0], slice[1], slice[2], slice[3]]) & 0x7fff_ffff;
 
         let modulus = 10u32.pow(DIGITS);
-        let num = (val % modulus) as u32;
+        let num = val % modulus;
 
         let mut s = num.to_string();
         while s.len() < DIGITS as usize {

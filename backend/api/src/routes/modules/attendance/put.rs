@@ -1,5 +1,3 @@
-// api/src/routes/modules/attendance/put.rs
-
 use axum::{
     Json,
     extract::{Path, State},
@@ -9,6 +7,8 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use util::state::AppState;
 
 use crate::response::ApiResponse;
+use crate::ws::attendance::topics::attendance_session_topic; // NEW
+use serde_json::json; // NEW
 
 use super::common::{AttendanceSessionResponse, EditSessionReq};
 use db::models::attendance_session::{
@@ -66,13 +66,32 @@ pub async fn edit_session(
 
     // Persist update
     match am.update(db).await {
-        Ok(updated) => (
-            StatusCode::OK,
-            Json(ApiResponse::success(
-                AttendanceSessionResponse::from(updated),
-                "Attendance session updated",
-            )),
-        ),
+        Ok(updated) => {
+            // --- NEW: broadcast session_updated so other tabs sync immediately
+            let ws = state.ws_clone();
+            let topic = attendance_session_topic(updated.id);
+            let event = json!({
+                "event": "session_updated",
+                "payload": {
+                    "session_id": updated.id,
+                    "active": updated.active,
+                    "rotation_seconds": updated.rotation_seconds,
+                    "title": updated.title,
+                    "restrict_by_ip": updated.restrict_by_ip,
+                    "allowed_ip_cidr": updated.allowed_ip_cidr,
+                    "created_from_ip": updated.created_from_ip,
+                }
+            });
+            ws.broadcast(&topic, event.to_string()).await;
+
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    AttendanceSessionResponse::from(updated),
+                    "Attendance session updated",
+                )),
+            )
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::error(format!(

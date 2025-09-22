@@ -1,5 +1,5 @@
 use super::ws_types::DefaultIncoming;
-use crate::ws::handler_trait::WsHandler;
+use crate::ws::handler_trait::{WsHandler, async_trait};
 use crate::ws::runtime::WsContext;
 
 pub struct DefaultWsHandler;

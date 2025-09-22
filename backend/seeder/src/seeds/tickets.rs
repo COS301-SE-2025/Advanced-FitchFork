@@ -1,11 +1,9 @@
 use crate::seed::Seeder;
+use chrono::Utc;
+use db::models::{assignment, tickets, user};
 use rand::rngs::{OsRng, StdRng};
 use rand::{SeedableRng, seq::SliceRandom};
-use services::assignment::AssignmentService;
-use services::service::{AppError, Service};
-use services::ticket::{CreateTicket, TicketService};
-use services::user::UserService;
-use std::pin::Pin;
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 pub struct TicketSeeder;
 
@@ -45,17 +43,18 @@ impl Seeder for TicketSeeder {
                 let description = descriptions.choose(&mut rng).unwrap().to_string();
                 let status = statuses.choose(&mut rng).unwrap();
 
-                TicketService::create(CreateTicket {
-                    assignment_id: assignment.id,
-                    user_id: user.id,
-                    title: title,
-                    description: description,
-                    status: status.to_string(),
-                })
-                .await?;
-            }
+            let ticket = tickets::ActiveModel {
+                assignment_id: Set(assignment.id),
+                user_id: Set(user.id),
+                title: Set(title),
+                description: Set(description),
+                status: Set(status.parse().unwrap()),
+                created_at: Set(Utc::now()),
+                updated_at: Set(Utc::now()),
+                ..Default::default()
+            };
 
-            Ok(())
-        })
+            let _ = ticket.insert(db).await;
+        }
     }
 }

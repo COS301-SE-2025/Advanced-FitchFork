@@ -85,7 +85,7 @@ impl Model {
         let assignment = super::assignment::Entity::find_by_id(assignment_id)
             .one(db)
             .await
-            .map_err(|e| DbErr::Custom(format!("DB error finding assignment: {}", e)))?
+            .map_err(|e| DbErr::Custom(format!("DB error finding assignment: {e}")))?
             .ok_or_else(|| DbErr::Custom("Assignment not found".to_string()))?;
 
         let module_id = assignment.module_id;

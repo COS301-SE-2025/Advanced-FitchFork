@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use sea_orm::EntityTrait;
 use sea_orm::entity::prelude::*;
+use sea_orm::{ActiveValue::Set, DatabaseConnection, DbErr, EntityTrait};
 
 /// Represents a detected plagiarism case between two submissions.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]

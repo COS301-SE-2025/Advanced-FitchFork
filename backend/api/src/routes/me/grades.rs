@@ -1,7 +1,23 @@
 use crate::{auth::claims::AuthUser, response::ApiResponse};
-use axum::{Extension, Json, extract::Query, http::StatusCode, response::IntoResponse};
+use axum::{
+    Extension, Json,
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use common::format_validation_errors;
+use db::models::{
+    assignment,
+    assignment_submission::{self, Column as GradeColumn, Entity as GradeEntity},
+    module, user,
+    user_module_role::{self, Column as RoleColumn, Role},
+};
+use sea_orm::{
+    ColumnTrait, Condition, EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect, RelationTrait,
+};
 use serde::{Deserialize, Serialize};
+use util::state::AppState;
 use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]

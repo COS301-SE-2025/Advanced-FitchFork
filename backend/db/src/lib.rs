@@ -20,7 +20,7 @@ pub async fn connect() -> DatabaseConnection {
         if let Some(parent) = Path::new(&path_or_url).parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        format!("sqlite://{}", path_or_url) // yields sqlite:///abs/path for absolute paths
+        format!("sqlite://{path_or_url}") // yields sqlite:///abs/path for absolute paths
     };
 
     Database::connect(&url)

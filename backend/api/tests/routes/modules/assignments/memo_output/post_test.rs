@@ -18,7 +18,7 @@ mod tests {
     use std::{fs, io::Write};
     use tower::ServiceExt;
     use util::{
-        execution_config::{ExecutionConfig, execution_config::SubmissionMode},
+        execution_config::{ExecutionConfig, SubmissionMode},
         languages::Language,
         paths::{main_dir, makefile_dir, mark_allocator_dir, memo_dir, memo_output_dir},
     };

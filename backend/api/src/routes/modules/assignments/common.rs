@@ -9,9 +9,11 @@
 //! - `BulkUpdateRequest` – payload for updating multiple assignments.
 //! - `BulkUpdateResult` and `FailedUpdate` – results of bulk update operations.
 
+use db::models::{
+    assignment::Model as AssignmentModel,
+    assignment_file, // 👈 for conversion to File
+};
 use serde::{Deserialize, Serialize};
-use services::assignment::Assignment;
-use services::assignment_file::AssignmentFile;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct File {

@@ -1,6 +1,5 @@
 use serde::Deserialize;
 use serde::Serialize;
-use services::user::User;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserModule {

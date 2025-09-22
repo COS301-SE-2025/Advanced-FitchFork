@@ -33,6 +33,18 @@ pub fn storage_root() -> PathBuf {
     }
 }
 
+// ─── System-level app paths ─────────────────────────────────────────
+
+/// Root folder for system-level artifacts under storage root.
+pub fn system_dir() -> PathBuf {
+    storage_root().join("system")
+}
+
+/// Path to the CSV time-series file for system metrics.
+pub fn system_metrics_csv_path() -> PathBuf {
+    system_dir().join("system_metrics.csv")
+}
+
 /// A single module folder: {STORAGE_ROOT}/module_{module_id}
 pub fn module_dir(module_id: i64) -> PathBuf {
     storage_root().join(format!("module_{module_id}"))

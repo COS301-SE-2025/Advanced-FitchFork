@@ -1,9 +1,19 @@
 use crate::{auth::claims::AuthUser, response::ApiResponse};
-use axum::{Json, extract::Query, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use common::format_validation_errors;
+use db::models::{assignment, module, user_module_role};
+use sea_orm::{
+    ColumnTrait, Condition, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use util::state::AppState;
 use validator::Validate;
 
 /// Query parameters for filtering events.

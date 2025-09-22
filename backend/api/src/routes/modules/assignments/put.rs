@@ -15,10 +15,19 @@
 
 use super::common::{AssignmentRequest, AssignmentResponse, BulkUpdateRequest, BulkUpdateResult};
 use crate::response::ApiResponse;
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use chrono::{DateTime, Utc};
-use services::assignment::{AssignmentService, AssignmentType, Status, UpdateAssignment};
-use services::service::Service;
+use db::models::assignment::{self, AssignmentType, Status};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DbErr, EntityTrait, IntoActiveModel,
+    QueryFilter,
+};
+use util::state::AppState;
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}
 ///
@@ -92,6 +101,19 @@ pub async fn edit_assignment(
             }
         };
 
+    let available_from =
+        match DateTime::parse_from_rfc3339(&req.available_from).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(dt) => dt,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid available_from datetime format",
+                    )),
+                );
+            }
+        };
+
     let due_date =
         match DateTime::parse_from_rfc3339(&req.due_date).map(|dt| dt.with_timezone(&Utc)) {
             Ok(dt) => dt,
@@ -138,6 +160,16 @@ pub async fn edit_assignment(
                 )),
             )
         }
+        Err(DbErr::RecordNotFound(_)) => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<AssignmentResponse>::error(
+                "Assignment not found",
+            )),
+        ),
+        Err(DbErr::Custom(msg)) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<AssignmentResponse>::error(&msg)),
+        ),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<AssignmentResponse>::error(

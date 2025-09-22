@@ -10,7 +10,7 @@
 //! - Students see only their own grade (list endpoint)
 //! - Staff-only access for export (enforced upstream as per router setup)
 
-use crate::auth::guards::require_lecturer_or_assistant_lecturer;
+use crate::auth::guards::allow_assistant_lecturer;
 use axum::{Router, middleware::from_fn_with_state, routing::get};
 use get::{export_grades, list_grades};
 use util::state::AppState;
@@ -31,14 +31,14 @@ pub fn grade_routes() -> Router {
             "/",
             get(list_grades).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/export",
             get(export_grades).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
 }

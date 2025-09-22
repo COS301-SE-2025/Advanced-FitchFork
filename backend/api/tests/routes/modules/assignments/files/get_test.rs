@@ -7,22 +7,15 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{TimeZone, Utc};
-    use db::{
-        models::{
-            assignment::Model as AssignmentModel,
-            assignment_file::{FileType, Model as AssignmentFileModel},
-            module::Model as ModuleModel,
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
+    use db::models::{
+        assignment::Model as AssignmentModel,
+        assignment_file::{FileType, Model as AssignmentFileModel},
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use sea_orm::DatabaseConnection;
     use serde_json::Value;
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
     use tower::ServiceExt;
 
     struct TestData {
@@ -39,34 +32,18 @@ mod tests {
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
             .await
             .unwrap();
-        let service = UserService::new(UserRepository::new(db.clone()));
-        let lecturer_user = service
-            .create(CreateUser {
-                username: "lecturer1".to_string(),
-                email: "lecturer1@test.com".to_string(),
-                password: "password1".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
-        let student_user = service
-            .create(CreateUser {
-                username: "student1".to_string(),
-                email: "student1@test.com".to_string(),
-                password: "password2".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
-        let forbidden_user = service
-            .create(CreateUser {
-                username: "forbidden".to_string(),
-                email: "forbidden@test.com".to_string(),
-                password: "password3".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
+        let lecturer_user =
+            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
+                .await
+                .unwrap();
+        let student_user =
+            UserModel::create(db, "student1", "student1@test.com", "password2", false)
+                .await
+                .unwrap();
+        let forbidden_user =
+            UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false)
+                .await
+                .unwrap();
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
             .unwrap();
@@ -142,8 +119,18 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        assert_eq!(json["data"].as_array().unwrap().len(), 1);
-        assert_eq!(json["data"][0]["filename"], "spec.txt");
+
+        let files = json["data"].as_array().unwrap();
+        // Expect the explicitly-added file *and* the auto-created default config.json
+        assert_eq!(files.len(), 2);
+
+        let names: Vec<String> = files
+            .iter()
+            .map(|f| f["filename"].as_str().unwrap().to_string())
+            .collect();
+
+        assert!(names.contains(&"spec.txt".to_string()));
+        assert!(names.contains(&"config.json".to_string()));
     }
 
     #[tokio::test]
@@ -326,7 +313,11 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        assert_eq!(json["data"].as_array().unwrap().len(), 0);
+
+        let files = json["data"].as_array().unwrap();
+        // No user-added files, but the model creates a default config.json
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0]["filename"], "config.json");
     }
 
     #[tokio::test]

@@ -1,8 +1,6 @@
 use api::{auth::guards::validate_known_ids, routes::routes, ws::ws_routes};
-use axum::{Router, body::Body, http::Request, middleware::from_fn, response::Response};
-use ctor::{ctor, dtor};
+use axum::{Router, body::Body, http::Request, middleware::from_fn_with_state, response::Response};
 use sea_orm::DatabaseConnection;
-use services::util::UtilService;
 use std::convert::Infallible;
 use tempfile::TempDir;
 use tower::ServiceExt;

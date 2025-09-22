@@ -164,8 +164,8 @@ pub async fn edit_ticket_message(
             "user": null
         }
     });
-    AppState::get()
-        .ws()
+    app_state
+        .ws_clone()
         .broadcast(&topic, payload.to_string())
         .await;
 

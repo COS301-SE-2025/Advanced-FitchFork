@@ -6,6 +6,13 @@
 //! - `is_valid`: checks whether a user is authorized to access or modify a ticket.
 //! - `TicketResponse`: a serializable response type for ticket API endpoints.
 
+use db::models::user::Model as UserModel;
+use db::models::{
+    UserModuleRole as Entity,
+    tickets::Model as TicketModel,
+    user_module_role::{Column, Role},
+};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use services::service::Service;
 use services::ticket::{Ticket, TicketService};

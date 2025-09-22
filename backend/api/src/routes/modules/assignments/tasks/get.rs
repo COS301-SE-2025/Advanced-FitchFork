@@ -10,6 +10,11 @@ use db::models::assignment_memo_output::{Column as MemoCol, Entity as MemoEntity
 use db::models::assignment_overwrite_file::{
     Column as OverwriteFileColumn, Entity as OverwriteFileEntity,
 };
+use db::models::assignment::Entity as AssignmentEntity;
+use db::models::assignment_memo_output::{Column as MemoCol, Entity as MemoEntity};
+use db::models::assignment_overwrite_file::{
+    Column as OverwriteFileColumn, Entity as OverwriteFileEntity,
+};
 use db::models::assignment_task::{Column, Entity};
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
@@ -17,7 +22,7 @@ use serde_json::Value;
 use std::fs;
 use util::paths::memo_output_dir;
 use util::{execution_config::ExecutionConfig, state::AppState};
-use util::{mark_allocator::mark_allocator::load_allocator, paths::storage_root};
+use util::{mark_allocator::load_allocator, paths::storage_root};
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
 #[derive(Serialize)]

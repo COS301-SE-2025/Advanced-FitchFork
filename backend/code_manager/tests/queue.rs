@@ -239,3 +239,40 @@ async fn test_concurrent_managers() {
         assert!(output.contains(&format!("mgr2_task_{}.py", i)));
     }
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_stats_reports_waiting_jobs() {
+    let manager = ContainerManager::new(1);
+    let running_count = Arc::new(AtomicUsize::new(0));
+    let max_observed = Arc::new(AtomicUsize::new(0));
+
+    let job1 = {
+        let mgr = manager.clone();
+        let rc = Arc::clone(&running_count);
+        let mo = Arc::clone(&max_observed);
+        tokio::spawn(async move {
+            let files = vec!["job1.rs".to_string()];
+            mgr.run_mock("rust", &files, rc, mo).await
+        })
+    };
+
+    let job2 = {
+        let mgr = manager.clone();
+        let rc = Arc::clone(&running_count);
+        let mo = Arc::clone(&max_observed);
+        tokio::spawn(async move {
+            let files = vec!["job2.rs".to_string()];
+            mgr.run_mock("rust", &files, rc, mo).await
+        })
+    };
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let (running, waiting, max_concurrent) = manager.get_stats().await;
+    assert_eq!(running, 1, "one job should be running");
+    assert_eq!(waiting, 1, "one job should be waiting in the queue");
+    assert_eq!(max_concurrent, 1, "max concurrent should remain unchanged");
+
+    job1.await.expect("job1 should finish");
+    job2.await.expect("job2 should finish");
+}

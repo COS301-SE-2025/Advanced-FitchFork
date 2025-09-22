@@ -4,13 +4,14 @@ use super::serve::{WsServerOptions, serve_topic};
 use crate::state::AppState;
 use axum::{
     Extension,
-    extract::{WebSocketUpgrade, ws::WebSocket},
+    extract::{State, WebSocketUpgrade, ws::WebSocket},
     response::IntoResponse,
 };
 use std::sync::Arc;
 
 pub async fn ws_route<H, FTopic, Uid>(
     ws: WebSocketUpgrade,
+    State(state): State<AppState>,
     Extension(user_id): Extension<Uid>, // could be Option<AuthUser> or AuthUser
     topic_fn: FTopic,
     handler: Arc<H>,

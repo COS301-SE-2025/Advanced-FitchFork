@@ -7,5 +7,6 @@ pub mod mark_allocator;
 pub mod paths;
 pub mod scan_code_content;
 pub mod state;
+pub mod system_health;
 pub mod test_helpers;
 pub mod ws;

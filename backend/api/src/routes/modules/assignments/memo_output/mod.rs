@@ -4,6 +4,7 @@ use axum::{
 };
 use get::get_all_memo_outputs;
 use post::generate_memo_output;
+use util::state::AppState;
 
 pub mod get;
 pub mod post;

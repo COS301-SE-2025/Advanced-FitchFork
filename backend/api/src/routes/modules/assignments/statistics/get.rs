@@ -15,7 +15,7 @@ use sea_orm::{ColumnTrait, EntityTrait, Order, QueryFilter, QueryOrder};
 use serde::Serialize;
 use serde_json::Value;
 use util::{
-    execution_config::{ExecutionConfig, execution_config::GradingPolicy},
+    execution_config::{ExecutionConfig, GradingPolicy},
     paths::submission_report_path,
     state::AppState,
 };

@@ -5,10 +5,10 @@
 
 use crate::response::ApiResponse;
 use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
-use axum::{Json, http::StatusCode, response::IntoResponse};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use chrono::{Datelike, Utc};
-use services::module::{CreateModule, ModuleService};
-use services::service::{AppError, Service};
+use db::models::module::Model as Module;
+use util::state::AppState;
 use validator::Validate;
 
 /// POST /api/modules
@@ -81,7 +81,12 @@ use validator::Validate;
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn create(Json(req): Json<ModuleRequest>) -> impl IntoResponse {
+pub async fn create(
+    State(state): State<AppState>,
+    Json(req): Json<ModuleRequest>,
+) -> impl IntoResponse {
+    let db = state.db();
+
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -121,7 +126,7 @@ pub async fn create(Json(req): Json<ModuleRequest>) -> impl IntoResponse {
             )
         }
         Err(e) => {
-            if let AppError::Database(err) = &e {
+            if let sea_orm::DbErr::Exec(err) = &e {
                 if err
                     .to_string()
                     .contains("UNIQUE constraint failed: modules.code")

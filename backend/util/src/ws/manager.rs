@@ -21,7 +21,7 @@ type Receiver = broadcast::Receiver<String>;
 /// - Lazily creates broadcast channels per topic on first subscription
 /// - Removes topics when their subscriber count drops to zero after sending
 /// - Tracks user presence per topic using a refcount (supports multiple tabs)
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct WebSocketManager {
     /// Map of topics to broadcast senders.
     pub inner: Arc<RwLock<HashMap<Topic, Sender>>>,
@@ -32,10 +32,7 @@ pub struct WebSocketManager {
 impl WebSocketManager {
     /// Creates a new, empty `WebSocketManager`.
     pub fn new() -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(HashMap::new())),
-            presence: Arc::new(RwLock::new(HashMap::new())),
-        }
+        Self::default()
     }
 
     /// Subscribes to the given topic, creating it if necessary.

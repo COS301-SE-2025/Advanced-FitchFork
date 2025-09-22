@@ -7,22 +7,15 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{DateTime, TimeZone, Utc};
-    use db::{
-        models::{
-            assignment::{AssignmentType, Model as AssignmentModel, Status},
-            module::{ActiveModel as ModuleActiveModel, Model as ModuleModel},
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
+    use db::models::{
+        assignment::{AssignmentType, Model as AssignmentModel, Status},
+        module::{ActiveModel as ModuleActiveModel, Model as ModuleModel},
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use dotenvy;
     use sea_orm::{ActiveModelTrait, EntityTrait, Set};
     use serde_json::{Value, json};
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
     use tower::ServiceExt;
 
     struct TestData {
@@ -45,43 +38,21 @@ mod tests {
         let empty_module = ModuleModel::create(db, "EMPTY101", 2024, Some("Empty Module"), 16)
             .await
             .unwrap();
-        let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service
-            .create(CreateUser {
-                username: "admin1".to_string(),
-                email: "admin1@test.com".to_string(),
-                password: "password".to_string(),
-                admin: true,
-            })
+        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true)
             .await
             .unwrap();
-        let lecturer_user = service
-            .create(CreateUser {
-                username: "lecturer1".to_string(),
-                email: "lecturer1@test.com".to_string(),
-                password: "password1".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
-        let student_user = service
-            .create(CreateUser {
-                username: "student1".to_string(),
-                email: "student1@test.com".to_string(),
-                password: "password2".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
-        let forbidden_user = service
-            .create(CreateUser {
-                username: "forbidden".to_string(),
-                email: "forbidden@test.com".to_string(),
-                password: "password3".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
+        let lecturer_user =
+            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
+                .await
+                .unwrap();
+        let student_user =
+            UserModel::create(db, "student1", "student1@test.com", "password2", false)
+                .await
+                .unwrap();
+        let forbidden_user =
+            UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false)
+                .await
+                .unwrap();
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
             .unwrap();
@@ -574,10 +545,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -613,10 +581,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Closed);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
@@ -645,10 +610,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Archived);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -677,10 +639,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -709,10 +668,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
@@ -767,10 +723,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -829,10 +782,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Ready);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
@@ -881,10 +831,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -920,10 +867,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
@@ -1027,10 +971,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!(
@@ -1059,10 +1000,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -1121,10 +1059,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
@@ -1173,10 +1108,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!(
@@ -1205,10 +1137,7 @@ mod tests {
             data.assignments[0].clone().into();
         active_assignment.status = Set(Status::Open);
         active_assignment.updated_at = Set(Utc::now());
-        let assignment = active_assignment
-            .update(db::get_connection().await)
-            .await
-            .unwrap();
+        let assignment = active_assignment.update(app_state.db()).await.unwrap();
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/99999/assignments/{}/close", assignment.id);

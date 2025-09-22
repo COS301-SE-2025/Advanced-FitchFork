@@ -25,28 +25,24 @@
 use crate::routes::modules::assignments::common::{AssignmentResponse, File};
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
-    extract::{Path, Query},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
 use chrono::{DateTime, Utc};
+use db::models::{
+    assignment::{
+        self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
+        Model as AssignmentModel,
+    },
+    assignment_file, assignment_submission, user,
+};
 use sea_orm::{
     ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, sea_query::Expr,
 };
 use serde::{Deserialize, Serialize};
-use services::assignment::{Assignment, AssignmentService};
-use services::assignment_file::AssignmentFileService;
-use services::assignment_submission::AssignmentSubmissionService;
-use services::service::Service;
-use services::user::UserService;
-use services::user_module_role::UserModuleRoleService;
-use std::collections::HashMap;
-use util::filters::{FilterParam, QueryParam};
 use util::{
-    execution_config::{
-        ExecutionConfig,
-        execution_config::{GradingPolicy, SubmissionMode},
-    },
+    execution_config::{ExecutionConfig, GradingPolicy, SubmissionMode},
     state::AppState,
 };
 
@@ -364,7 +360,7 @@ pub struct FilterResponse {
 }
 
 impl FilterResponse {
-    fn new(assignments: Vec<AssignmentResponse>, page: u64, per_page: u64, total: u64) -> Self {
+    fn new(assignments: Vec<AssignmentResponse>, page: i32, per_page: i32, total: i32) -> Self {
         Self {
             assignments,
             page,
@@ -442,9 +438,10 @@ pub async fn get_assignments(
     Path(module_id): Path<i64>,
     Query(query): Query<FilterReq>,
 ) -> impl IntoResponse {
-    let page = query.page.unwrap_or(1).max(1);
-    let per_page = query.per_page.unwrap_or(20).min(100).max(1);
-    let sort = query.sort.clone();
+    let db = app_state.db();
+
+    let page = params.page.unwrap_or(1).max(1);
+    let per_page = params.per_page.unwrap_or(20).min(100).max(1);
 
     let mut filters = vec![FilterParam::eq("module_id", module_id)];
     let mut queries = Vec::new();
@@ -475,14 +472,28 @@ pub async fn get_assignments(
         }
     }
 
-    if let Some(available_after) = query.available_after {
-        if let Ok(date) = DateTime::parse_from_rfc3339(&available_after) {
-            filters.push(FilterParam::gt("available_from", date.with_timezone(&Utc)));
-        } else {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::error("Invalid available_after date format")),
-            );
+    match paginator.fetch_page((page - 1) as u64).await {
+        Ok(results) => {
+            let assignments: Vec<AssignmentResponse> =
+                results.into_iter().map(AssignmentResponse::from).collect();
+
+            let response = FilterResponse::new(assignments, page, per_page, total);
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    response,
+                    "Assignments retrieved successfully",
+                )),
+            )
+        }
+        Err(err) => {
+            eprintln!("DB error: {:?}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<FilterResponse>::error(
+                    "Failed to retrieve assignments",
+                )),
+            )
         }
     }
 

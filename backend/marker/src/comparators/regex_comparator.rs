@@ -46,6 +46,11 @@ impl OutputComparator for RegexComparator {
                 possible: section.value,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: student_lines.to_vec(),
+                memo_output: memo_lines.to_vec(),
+                stderr: None,
+                return_code: None,
+                manual_feedback: section.feedback.clone(),
             };
         }
 
@@ -58,7 +63,7 @@ impl OutputComparator for RegexComparator {
                 Ok(re) => re,
                 Err(_) => {
                     missed_patterns.push(format!("Invalid regex pattern: {}", pattern));
-                    continue; // Skip invalid regex patterns
+                    continue;
                 }
             };
 
@@ -96,6 +101,11 @@ impl OutputComparator for RegexComparator {
             possible: section.value,
             matched_patterns,
             missed_patterns,
+            student_output: student_lines.to_vec(),
+            memo_output: memo_lines.to_vec(),
+            stderr: None,
+            return_code: None,
+            manual_feedback: section.feedback.clone(),
         }
     }
 }
@@ -114,6 +124,8 @@ mod tests {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,
+            feedback: None,
+            regex: None,
         }
     }
 

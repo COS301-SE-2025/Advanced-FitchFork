@@ -113,6 +113,43 @@ jobs:
   #     - name: Stop servers
   #       if: always()
   #       run: bash /tmp/stop_servers.sh
+  lint:
+    name: Lint (rustfmt only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Rust toolchain + rustfmt component
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt
+
+      # Cache Cargo registry, git, and target (same keying as integration)
+      - name: Cache Cargo registry + git + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # Formatting check (fails if changes would be made)
+      - name: Check formatting (rustfmt)
+        working-directory: backend
+        run: cargo fmt --all -- --check
+
+      # If/when you want Clippy back, re-add:
+      # - name: Run Clippy
+      #   working-directory: backend
+      #   run: cargo clippy --all-targets --all-features -- -D warnings
 
   integration:
     name: Integration Tests (Rust)

@@ -7,22 +7,15 @@ mod tests {
         http::{Request, StatusCode},
     };
     use chrono::{TimeZone, Utc};
-    use db::{
-        models::{
-            assignment::Model as AssignmentModel,
-            assignment_file::{FileType, Model as AssignmentFileModel},
-            module::Model as ModuleModel,
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
+    use db::models::{
+        assignment::Model as AssignmentModel,
+        assignment_file::{FileType, Model as AssignmentFileModel},
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use sea_orm::DatabaseConnection;
     use serde_json::json;
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
     use tower::ServiceExt;
 
     struct TestData {
@@ -38,25 +31,14 @@ mod tests {
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
             .await
             .unwrap();
-        let service = UserService::new(UserRepository::new(db.clone()));
-        let lecturer_user = service
-            .create(CreateUser {
-                username: "lecturer1".to_string(),
-                email: "lecturer1@test.com".to_string(),
-                password: "password1".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
-        let student_user = service
-            .create(CreateUser {
-                username: "student1".to_string(),
-                email: "student1@test.com".to_string(),
-                password: "password2".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
+        let lecturer_user =
+            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
+                .await
+                .unwrap();
+        let student_user =
+            UserModel::create(db, "student1", "student1@test.com", "password2", false)
+                .await
+                .unwrap();
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
             .unwrap();

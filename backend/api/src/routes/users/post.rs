@@ -7,9 +7,9 @@
 
 use crate::response::ApiResponse;
 use crate::routes::users::common::{BulkCreateUsersRequest, CreateUserRequest, UserResponse};
-use axum::{Json, http::StatusCode, response::IntoResponse};
-use services::service::Service;
-use services::user::{CreateUser, UserService};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use db::models::user::Model as UserModel;
+use util::state::AppState;
 use validator::Validate;
 
 /// POST /api/users
@@ -100,13 +100,13 @@ pub async fn bulk_create_users(Json(req): Json<BulkCreateUsersRequest>) -> impl 
     let mut results = Vec::new();
 
     for user_req in req.users {
-        match UserService::create(CreateUser {
-            id: None,
-            username: user_req.username.clone(),
-            email: user_req.email,
-            password: user_req.password,
-            admin: false,
-        })
+        match UserModel::create(
+            db,
+            &user_req.username,
+            &user_req.email,
+            &user_req.password,
+            false,
+        )
         .await
         {
             Ok(u) => results.push(UserResponse::from(u)),

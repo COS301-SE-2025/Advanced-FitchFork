@@ -11,8 +11,12 @@ use crate::{
 };
 use axum::{Extension, Json, extract::Path, http::StatusCode, response::IntoResponse};
 use serde::Deserialize;
-use services::service::Service;
-use services::ticket::{CreateTicket, TicketService};
+use util::state::AppState;
+
+use crate::{
+    auth::AuthUser, response::ApiResponse,
+    routes::modules::assignments::tickets::common::TicketResponse,
+};
 
 /// Request payload for creating a ticket.
 #[derive(Debug, Deserialize)]

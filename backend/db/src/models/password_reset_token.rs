@@ -1,4 +1,8 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
+use rand::distributions::Alphanumeric;
+use rand::{Rng, thread_rng};
+use sea_orm::ActiveValue::{NotSet, Set};
+use sea_orm::IntoActiveModel;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -33,3 +37,52 @@ impl Related<super::user::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl Model {
+    pub fn new(user_id: i64, expiry_minutes: i64) -> Self {
+        let token = thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(32)
+            .map(char::from)
+            .collect::<String>();
+
+        Self {
+            id: 0,
+            user_id,
+            token,
+            expires_at: Utc::now() + Duration::minutes(expiry_minutes),
+            used: false,
+            created_at: Utc::now(),
+        }
+    }
+
+    pub async fn create(
+        db: &DatabaseConnection,
+        user_id: i64,
+        expiry_minutes: i64,
+    ) -> Result<Self, DbErr> {
+        let model = Self::new(user_id, expiry_minutes);
+        let mut active_model = model.into_active_model();
+        active_model.id = NotSet;
+        active_model.insert(db).await
+    }
+
+    pub async fn find_valid_token(
+        db: &DatabaseConnection,
+        token: &str,
+    ) -> Result<Option<Self>, DbErr> {
+        Entity::find()
+            .filter(Column::Token.eq(token))
+            .filter(Column::Used.eq(false))
+            .filter(Column::ExpiresAt.gt(Utc::now()))
+            .one(db)
+            .await
+    }
+
+    pub async fn mark_as_used(&self, db: &DatabaseConnection) -> Result<(), DbErr> {
+        let mut active_model: ActiveModel = self.clone().into();
+        active_model.used = Set(true);
+        active_model.update(db).await?;
+        Ok(())
+    }
+}

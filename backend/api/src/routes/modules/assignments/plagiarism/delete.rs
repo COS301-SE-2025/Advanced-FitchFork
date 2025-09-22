@@ -1,6 +1,11 @@
 use std::fs;
 
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use db::models::{
     moss_report::{Column as MossReportColumn, Entity as MossReportEntity},
     plagiarism_case::{Column as PlagiarismColumn, Entity as PlagiarismEntity},
@@ -69,13 +74,25 @@ use util::filters::FilterParam;
 pub async fn delete_plagiarism_case(
     Path((_, _, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
-    match PlagiarismCaseService::delete_by_id(case_id).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(ApiResponse::success_without_data(
-                "Plagiarism case deleted successfully",
-            )),
-        ),
+    match PlagiarismEntity::delete_by_id(case_id)
+        .exec(app_state.db())
+        .await
+    {
+        Ok(result) => {
+            if result.rows_affected == 0 {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<()>::error("Plagiarism case not found")),
+                );
+            }
+
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success_without_data(
+                    "Plagiarism case deleted successfully",
+                )),
+            )
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<()>::error(format!(
@@ -175,15 +192,24 @@ pub async fn bulk_delete_plagiarism_cases(
         );
     }
 
-    let existing_cases = match PlagiarismCaseService::find_all(
-        &vec![
-            FilterParam::eq("id", payload.case_ids.clone()),
-            FilterParam::eq("assignment_id", assignment_id),
-        ],
-        &vec![],
-        None,
-    )
-    .await
+    let txn = match app_state.db().begin().await {
+        Ok(txn) => txn,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!(
+                    "Failed to start transaction: {}",
+                    e
+                ))),
+            );
+        }
+    };
+
+    let existing_cases = match PlagiarismEntity::find()
+        .filter(PlagiarismColumn::Id.is_in(payload.case_ids.clone()))
+        .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
+        .all(&txn)
+        .await
     {
         Ok(cases) => cases,
         Err(e) => {
@@ -237,8 +263,12 @@ pub async fn bulk_delete_plagiarism_cases(
         StatusCode::OK,
         Json(ApiResponse::success_without_data(&format!(
             "{} plagiarism case{} deleted successfully",
-            delete_result,
-            if delete_result == 1 { "" } else { "s" }
+            delete_result.rows_affected,
+            if delete_result.rows_affected == 1 {
+                ""
+            } else {
+                "s"
+            }
         ))),
     )
 }

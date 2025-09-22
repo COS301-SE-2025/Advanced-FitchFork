@@ -6,21 +6,14 @@ mod tests {
         body::Body as AxumBody,
         http::{Request, StatusCode, header},
     };
-    use db::{
-        models::{
-            module::Model as ModuleModel,
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
+    use db::models::{
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use sea_orm::{ActiveModelTrait, Set};
     use serde_json::Value;
     use serial_test::serial;
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
     use std::io::Write;
     use tempfile::{TempDir, tempdir};
     use tower::ServiceExt;
@@ -42,25 +35,13 @@ mod tests {
             );
         }
 
-        let service = UserService::new(UserRepository::new(db.clone()));
-        let regular_user = service
-            .create(CreateUser {
-                username: "regular_user".to_string(),
-                email: "regular@test.com".to_string(),
-                password: "password123".to_string(),
-                admin: false,
-            })
+        let regular_user =
+            UserModel::create(db, "regular_user", "regular@test.com", "password123", false)
+                .await
+                .expect("Failed to create regular user");
+        let admin_user = UserModel::create(db, "admin_user", "admin@test.com", "password456", true)
             .await
-            .unwrap();
-        let admin_user = service
-            .create(CreateUser {
-                username: "admin_user".to_string(),
-                email: "admin@test.com".to_string(),
-                password: "password456".to_string(),
-                admin: true,
-            })
-            .await
-            .unwrap();
+            .expect("Failed to create admin user");
         let module = ModuleModel::create(db, "AUTH101", 2024, Some("Auth Test Module"), 16)
             .await
             .expect("Failed to create test module");
@@ -518,15 +499,10 @@ mod tests {
         let (data, _temp_dir) = setup_test_data(app_state.db()).await;
 
         // Create a new module that user is not assigned to
-        let new_module = ModuleModel::create(
-            db::get_connection().await,
-            "MATH101",
-            2024,
-            Some("Math Module"),
-            16,
-        )
-        .await
-        .expect("Failed to create test module");
+        let new_module =
+            ModuleModel::create(app_state.db(), "MATH101", 2024, Some("Math Module"), 16)
+                .await
+                .expect("Failed to create test module");
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = format!("/api/auth/module-role?module_id={}", new_module.id);

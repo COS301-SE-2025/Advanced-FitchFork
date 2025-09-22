@@ -3,22 +3,15 @@ mod common {
     use api::auth::generate_jwt;
     use axum::{body::Body as AxumBody, http::Request};
     use chrono::{Datelike, TimeZone, Utc};
-    use db::{
-        models::{
-            assignment::{AssignmentType, Model as AssignmentModel},
-            assignment_submission::Model as SubmissionModel,
-            module::Model as ModuleModel,
-            plagiarism_case::Model as PlagiarismCaseModel,
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
+    use db::models::{
+        assignment::{AssignmentType, Model as AssignmentModel},
+        assignment_submission::Model as SubmissionModel,
+        module::Model as ModuleModel,
+        plagiarism_case::Model as PlagiarismCaseModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use sea_orm::DatabaseConnection;
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
 
     pub struct TestData {
         pub lecturer_user: UserModel,
@@ -65,15 +58,11 @@ mod common {
             })
             .await
             .expect("Failed to create tutor user");
-        let student_user = service
-            .create(CreateUser {
-                username: "student".into(),
-                email: "student@test.com".into(),
-                password: "password".into(),
-                admin: false,
-            })
+        let student_user = UserModel::create(db, "student", "student@test.com", "password", false)
             .await
             .expect("Failed to create student user");
+
+        // Assign roles
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
             .expect("Failed to assign lecturer role");
@@ -350,7 +339,6 @@ mod bulk_delete_plagiarism_tests {
     };
     use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
     use serde_json::{Value, json};
-    use serial_test::serial;
     use tower::ServiceExt;
 
     async fn setup_bulk_test_data(db: &DatabaseConnection) -> (TestData, Vec<PlagiarismCaseModel>) {
@@ -475,7 +463,7 @@ mod bulk_delete_plagiarism_tests {
                     extra_cases[1].id,
                 ]),
             )
-            .all(db::get_connection().await)
+            .all(app_state.db())
             .await
             .unwrap();
         assert!(remaining_cases.is_empty());

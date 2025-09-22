@@ -14,6 +14,7 @@
 //! Call `me_routes()` to get a configured `Router` for `/me` endpoints to be mounted in the main app.
 
 use axum::{Router, routing::get};
+use util::state::AppState;
 
 pub mod announcements;
 pub mod assignments;

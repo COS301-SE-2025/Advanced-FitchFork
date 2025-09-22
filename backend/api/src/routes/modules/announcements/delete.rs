@@ -5,9 +5,14 @@
 //! **Permissions:** Only users with the proper roles (e.g., lecturer/assistant) can delete announcements.
 
 use crate::response::ApiResponse;
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
-use services::announcement::AnnouncementService;
-use services::service::Service;
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use db::models::announcements::Model as AnnouncementModel;
+use util::state::AppState;
 
 /// DELETE /api/modules/{module_id}/announcements/{announcement_id}
 ///

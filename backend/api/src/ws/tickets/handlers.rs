@@ -3,10 +3,11 @@ use super::ws_handlers::TicketWsHandler;
 use crate::auth::AuthUser;
 use axum::{
     Extension,
-    extract::{Path, WebSocketUpgrade},
+    extract::{Path, State, WebSocketUpgrade},
     response::IntoResponse,
 };
 use std::sync::Arc;
+use util::state::AppState;
 use util::ws::axum_adapter::ws_route;
 use util::ws::serve::WsServerOptions;
 

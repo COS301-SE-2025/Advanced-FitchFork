@@ -4,6 +4,7 @@ import { useModule } from '@/context/ModuleContext';
 import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
 import { generateMemoOutput } from '@/services/modules/assignments/memo-output';
 import { generateMarkAllocator } from '@/services/modules/assignments/mark-allocator';
+import Tip from '@/components/common/Tip';
 
 const { Title, Paragraph, Text } = Typography;
 const { Step } = Steps;
@@ -59,7 +60,11 @@ const StepMemoAndAllocator = () => {
 
   return (
     <div className="max-w-3xl space-y-6 px-6 py-8 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-black/10">
-      <Title level={3}>Memo Output & Mark Allocator</Title>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Title level={3} className="!mb-0">
+          Memo Output &amp; Mark Allocator
+        </Title>
+      </div>
       <Paragraph type="secondary">Run both stages sequentially. Status is shown below.</Paragraph>
 
       <Steps
@@ -68,7 +73,20 @@ const StepMemoAndAllocator = () => {
         status={errMemo || errAlloc ? 'error' : undefined}
       >
         <Step
-          title="Memo Output"
+          title={
+            <div className="flex items-center gap-2">
+              <Typography.Text strong className="!text-lg">
+                Memo Output
+              </Typography.Text>
+
+              <Tip
+                iconOnly
+                newTab
+                to="/help/assignments/memo-output#overview"
+                text="Memo output help"
+              />
+            </div>
+          }
           description={
             <Text type={errMemo ? 'danger' : 'secondary'}>
               {errMemo ? errMemo : readiness?.memo_output_present ? 'Generated' : 'Pending'}
@@ -76,7 +94,20 @@ const StepMemoAndAllocator = () => {
           }
         />
         <Step
-          title="Mark Allocator"
+          title={
+            <div className="flex items-center gap-2">
+              <Typography.Text strong className="!text-lg">
+                Mark Allocator
+              </Typography.Text>
+
+              <Tip
+                iconOnly
+                newTab
+                to="/help/assignments/mark-allocator#what"
+                text="Mark allocation help"
+              />
+            </div>
+          }
           description={
             <Text type={errAlloc ? 'danger' : 'secondary'}>
               {errAlloc ? errAlloc : readiness?.mark_allocator_present ? 'Generated' : 'Pending'}

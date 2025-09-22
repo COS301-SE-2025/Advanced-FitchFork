@@ -22,6 +22,7 @@ use delete::delete_user;
 use get::{get_user, get_user_modules, list_users};
 use post::{bulk_create_users, create_user};
 use put::update_user;
+use util::state::AppState;
 
 pub mod common;
 pub mod delete;

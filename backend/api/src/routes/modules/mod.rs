@@ -12,8 +12,9 @@
 //! ## Usage
 //! Call `modules_routes()` to get a configured `Router` for `/modules` to be mounted in the main app.
 
+use crate::auth::guards::{allow_admin, allow_lecturer};
 use crate::{
-    auth::guards::{require_admin, require_assigned_to_module, require_lecturer},
+    auth::guards::allow_student,
     routes::modules::{
         announcements::announcement_routes, attendance::attendance_routes,
         personnel::personnel_routes,
@@ -22,7 +23,7 @@ use crate::{
 use assignments::assignment_routes;
 use axum::{
     Router,
-    middleware::from_fn,
+    middleware::{from_fn, from_fn_with_state},
     routing::{delete, get, post, put},
 };
 use delete::{bulk_delete_modules, delete_module};
@@ -60,24 +61,24 @@ pub fn modules_routes() -> Router {
         .route("/me", get(get_my_details))
         .route(
             "/{module_id}",
-            get(get_module).route_layer(from_fn(require_assigned_to_module)),
+            get(get_module).route_layer(from_fn_with_state(app_state.clone(), allow_student)),
         )
-        .route("/", post(create).route_layer(from_fn(require_admin)))
+        .route("/", post(create).route_layer(from_fn(allow_admin)))
         .route(
             "/{module_id}",
-            put(edit_module).route_layer(from_fn(require_admin)),
+            put(edit_module).route_layer(from_fn(allow_admin)),
         )
         .route(
             "/{module_id}",
-            delete(delete_module).route_layer(from_fn(require_admin)),
+            delete(delete_module).route_layer(from_fn(allow_admin)),
         )
         .route(
             "/bulk",
-            delete(bulk_delete_modules).route_layer(from_fn(require_admin)),
+            delete(bulk_delete_modules).route_layer(from_fn(allow_admin)),
         )
         .route(
             "/bulk",
-            put(bulk_edit_modules).route_layer(from_fn(require_admin)),
+            put(bulk_edit_modules).route_layer(from_fn(allow_admin)),
         )
         .nest(
             "/{module_id}/assignments",
@@ -85,20 +86,16 @@ pub fn modules_routes() -> Router {
         )
         .nest(
             "/{module_id}/personnel",
-            personnel_routes().route_layer(from_fn_with_state(app_state.clone(), require_lecturer)),
+            personnel_routes().route_layer(from_fn_with_state(app_state.clone(), allow_lecturer)),
         )
         .nest(
             "/{module_id}/announcements",
-            announcement_routes(app_state.clone()).route_layer(from_fn_with_state(
-                app_state.clone(),
-                require_assigned_to_module,
-            )),
+            announcement_routes(app_state.clone())
+                .route_layer(from_fn_with_state(app_state.clone(), allow_student)),
         )
         .nest(
             "/{module_id}/attendance",
-            attendance_routes(app_state.clone()).route_layer(from_fn_with_state(
-                app_state.clone(),
-                require_assigned_to_module,
-            )),
+            attendance_routes(app_state.clone())
+                .route_layer(from_fn_with_state(app_state.clone(), allow_student)),
         )
 }

@@ -230,7 +230,7 @@ fn parse_name_and_pct(s: &str, re: &Regex) -> (String, Option<u32>) {
 
 fn file_identity(f: &PairRef) -> String {
     match (&f.username, &f.submission_id, &f.filename) {
-        (Some(u), Some(id), Some(fn_)) => format!("{}|{}|{}", u, id, fn_),
+        (Some(u), Some(id), Some(fn_)) => format!("{u}|{id}|{fn_}"),
         _ => f.raw.clone(),
     }
 }

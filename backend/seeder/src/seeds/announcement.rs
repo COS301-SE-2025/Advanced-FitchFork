@@ -1,14 +1,13 @@
 use crate::seed::Seeder;
 use chrono::{Duration, Utc};
+use db::models::{
+    announcements::{ActiveModel as AnnouncementActiveModel, Entity as AnnouncementEntity},
+    module, user,
+    user_module_role::{self, Role as ModuleRole},
+};
 use rand::rngs::{OsRng, StdRng};
 use rand::{Rng, SeedableRng, seq::SliceRandom};
-use services::announcement::{AnnouncementService, CreateAnnouncement};
-use services::module::ModuleService;
-use services::service::{AppError, Service};
-use services::user::UserService;
-use services::user_module_role::UserModuleRoleService;
-use std::pin::Pin;
-use util::filters::FilterParam;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
 pub struct AnnouncementSeeder;
 
@@ -40,24 +39,18 @@ impl Seeder for AnnouncementSeeder {
                 "Reading list update",
             ];
 
-            for m in modules {
-                // Prefer module staff as authors
-                let staff_user_ids: Vec<i64> = UserModuleRoleService::find_all(
-                    &vec![
-                        FilterParam::eq("module_id", m.id),
-                        FilterParam::eq(
-                            "role",
-                            vec![
-                                "lecturer".to_string(),
-                                "assistant_lecturer".to_string(),
-                                "tutor".to_string(),
-                            ],
-                        ),
-                    ],
-                    &vec![],
-                    None,
-                )
-                .await?
+        for m in modules {
+            // Prefer module staff as authors
+            let staff_user_ids: Vec<i64> = user_module_role::Entity::find()
+                .filter(user_module_role::Column::ModuleId.eq(m.id))
+                .filter(user_module_role::Column::Role.is_in(vec![
+                    ModuleRole::Lecturer,
+                    ModuleRole::AssistantLecturer,
+                    ModuleRole::Tutor,
+                ]))
+                .all(db)
+                .await
+                .unwrap_or_default()
                 .into_iter()
                 .map(|r| r.user_id)
                 .collect();

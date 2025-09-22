@@ -1,15 +1,22 @@
 use crate::auth::AuthUser;
 use crate::{auth::generate_jwt, response::ApiResponse, services::email::EmailService};
-use axum::{Json, extract::Multipart, http::StatusCode, response::IntoResponse};
-use chrono::{Duration, Utc};
-use serde::{Deserialize, Serialize};
-use services::password_reset_token::{
-    CreatePasswordResetToken, PasswordResetTokenService, UpdatePasswordResetToken,
+use axum::{
+    Json,
+    extract::{Multipart, State},
+    http::StatusCode,
+    response::IntoResponse,
 };
-use services::service::Service;
-use services::user::{CreateUser, UpdateUser, UserService};
+use chrono::{Duration, Utc};
+use db::models::{
+    password_reset_token::{self, Model as PasswordResetTokenModel},
+    user::{self, Model as UserModel},
+};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, IntoActiveModel, PaginatorTrait,
+    QueryFilter,
+};
+use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
-use util::filters::FilterParam;
 use util::{
     config,
     paths::{ensure_parent_dir, user_profile_path},
@@ -93,7 +100,12 @@ pub struct UserResponse {
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
+pub async fn register(
+    State(app_state): State<AppState>,
+    Json(req): Json<RegisterRequest>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -129,53 +141,43 @@ pub async fn register(Json(req): Json<RegisterRequest>) -> impl IntoResponse {
         }
     };
 
-    match UserService::find_one(
-        &vec![FilterParam::eq("username", req.username.clone())],
-        &vec![],
-        None,
-    )
-    .await
-    {
-        Ok(Some(_)) => {
-            return (
-                StatusCode::CONFLICT,
-                Json(ApiResponse::<UserResponse>::error(
-                    "A user with this student number already exists",
-                )),
-            );
-        }
-        Ok(None) => {}
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UserResponse>::error(format!(
-                    "Database error: {}",
-                    e
-                ))),
-            );
-        }
+    if email_exists.is_some() {
+        return (
+            StatusCode::CONFLICT,
+            Json(ApiResponse::<UserResponse>::error(
+                "A user with this email already exists",
+            )),
+        );
     }
 
-    let inserted_user = match UserService::create(CreateUser {
-        id: None,
-        username: req.username,
-        email: req.email,
-        password: req.password,
-        admin: false,
-    })
-    .await
-    {
-        Ok(user) => user,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UserResponse>::error(format!(
-                    "Database error: {}",
-                    e
-                ))),
-            );
-        }
-    };
+    let sn_exists = user::Entity::find()
+        .filter(user::Column::Username.eq(req.username.clone()))
+        .one(db)
+        .await
+        .unwrap();
+
+    if sn_exists.is_some() {
+        return (
+            StatusCode::CONFLICT,
+            Json(ApiResponse::<UserResponse>::error(
+                "A user with this student number already exists",
+            )),
+        );
+    }
+
+    let inserted_user =
+        match UserModel::create(&db, &req.username, &req.email, &req.password, false).await {
+            Ok(user) => user,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<UserResponse>::error(format!(
+                        "Database error: {}",
+                        e
+                    ))),
+                );
+            }
+        };
 
     let (token, expiry) = generate_jwt(inserted_user.id, inserted_user.admin);
     let user_response = UserResponse {
@@ -247,7 +249,12 @@ pub struct LoginRequest {
 ///   "message": "Database error: detailed error here"
 /// }
 /// ```
-pub async fn login(Json(req): Json<LoginRequest>) -> impl IntoResponse {
+pub async fn login(
+    State(app_state): State<AppState>,
+    Json(req): Json<LoginRequest>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -345,6 +352,7 @@ pub struct RequestPasswordResetRequest {
 /// }
 /// ```
 pub async fn request_password_reset(
+    State(app_state): State<AppState>,
     Json(req): Json<RequestPasswordResetRequest>,
 ) -> impl IntoResponse {
     if let Err(validation_errors) = req.validate() {
@@ -488,7 +496,12 @@ pub struct VerifyResetTokenResponse {
 ///   "message": "Invalid or expired token."
 /// }
 /// ```
-pub async fn verify_reset_token(Json(req): Json<VerifyResetTokenRequest>) -> impl IntoResponse {
+pub async fn verify_reset_token(
+    State(app_state): State<AppState>,
+    Json(req): Json<VerifyResetTokenRequest>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -499,8 +512,8 @@ pub async fn verify_reset_token(Json(req): Json<VerifyResetTokenRequest>) -> imp
         );
     }
 
-    match PasswordResetTokenService::find_valid_token(req.token).await {
-        Ok(Some(token)) => match UserService::find_by_id(token.user_id).await {
+    match PasswordResetTokenModel::find_valid_token(db, &req.token).await {
+        Ok(Some(token)) => match user::Entity::find_by_id(token.user_id).one(db).await {
             Ok(Some(user)) => {
                 let email_parts: Vec<&str> = user.email.split('@').collect();
                 let username = email_parts[0];
@@ -594,7 +607,12 @@ pub struct ResetPasswordRequest {
 ///   "message": "Reset failed. The token may be invalid or expired."
 /// }
 /// ```
-pub async fn reset_password(Json(req): Json<ResetPasswordRequest>) -> impl IntoResponse {
+pub async fn reset_password(
+    State(app_state): State<AppState>,
+    Json(req): Json<ResetPasswordRequest>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
     if let Err(validation_errors) = req.validate() {
         let error_message = common::format_validation_errors(&validation_errors);
         return (
@@ -603,29 +621,17 @@ pub async fn reset_password(Json(req): Json<ResetPasswordRequest>) -> impl IntoR
         );
     }
 
-    match PasswordResetTokenService::find_valid_token(req.token).await {
-        Ok(Some(token)) => match UserService::find_by_id(token.user_id).await {
+    match PasswordResetTokenModel::find_valid_token(db, &req.token).await {
+        Ok(Some(token)) => match user::Entity::find_by_id(token.user_id).one(db).await {
             Ok(Some(user)) => {
                 let user_email = user.email.clone();
 
-                match UserService::update(UpdateUser {
-                    id: token.user_id,
-                    username: None,
-                    email: None,
-                    password: Some(req.new_password),
-                    admin: None,
-                    profile_picture_path: None,
-                })
-                .await
-                {
+                let mut active_model: user::ActiveModel = user.into();
+                active_model.password_hash = Set(UserModel::hash_password(&req.new_password));
+
+                match active_model.update(db).await {
                     Ok(_) => {
-                        if let Err(e) =
-                            PasswordResetTokenService::update(UpdatePasswordResetToken {
-                                id: token.id,
-                                used: Some(true),
-                            })
-                            .await
-                        {
+                        if let Err(e) = token.mark_as_used(db).await {
                             eprintln!("Failed to mark token as used: {}", e);
                         }
 
@@ -897,16 +903,10 @@ pub async fn change_password(
         );
     }
 
-    match UserService::update(UpdateUser {
-        id: claims.sub,
-        username: None,
-        email: None,
-        password: Some(req.new_password),
-        admin: None,
-        profile_picture_path: None,
-    })
-    .await
-    {
+    let mut active_user = user.into_active_model();
+    active_user.password_hash = Set(UserModel::hash_password(&req.new_password));
+
+    match active_user.update(db).await {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::success((), "Password changed successfully.")),

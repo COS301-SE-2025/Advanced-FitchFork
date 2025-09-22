@@ -1,10 +1,13 @@
-use std::vec;
-
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use db::models::assignment_file;
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::json;
-use services::assignment_file::AssignmentFileService;
-use services::service::Service;
-use util::filters::FilterParam;
+use util::state::AppState;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/files
 ///
@@ -71,15 +74,19 @@ pub async fn delete_files(
         );
     }
 
-    let found_models = match AssignmentFileService::find_all(
-        &vec![
-            FilterParam::eq("assignment_id", assignment_id),
-            FilterParam::eq("id", file_ids.clone()),
-        ],
-        &vec![],
-        None,
-    )
-    .await
+    let found_models = match assignment_file::Entity::find()
+        .filter(assignment_file::Column::AssignmentId.eq(assignment_id as i32))
+        .filter(
+            assignment_file::Column::Id.is_in(
+                file_ids
+                    .iter()
+                    .copied()
+                    .map(|id| id as i32)
+                    .collect::<Vec<_>>(),
+            ),
+        )
+        .all(db)
+        .await
     {
         Ok(models) => models,
         Err(_) => {

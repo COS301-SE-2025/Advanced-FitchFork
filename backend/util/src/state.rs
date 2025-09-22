@@ -1,10 +1,10 @@
-use crate::ws::WebSocketManager;
-use dotenvy::dotenv;
-use jsonwebtoken::{DecodingKey, EncodingKey};
-use std::env;
-use std::sync::OnceLock;
+//! Application state container shared across Axum route handlers and services.
+//!
+//! This struct holds shared resources such as the database connection and WebSocket manager.
+//! It is typically wrapped in an `Arc` and passed into route handlers via Axum's `State<T>` extractor.
 
-static APP_STATE: OnceLock<AppState> = OnceLock::new();
+use crate::ws::WebSocketManager;
+use sea_orm::DatabaseConnection;
 
 #[derive(Clone)]
 pub struct AppState {

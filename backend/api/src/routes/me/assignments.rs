@@ -7,8 +7,20 @@
 //! is associated with are returned.
 
 use crate::{auth::AuthUser, response::ApiResponse};
-use axum::{Extension, Json, extract::Query, http::StatusCode, response::IntoResponse};
+use axum::{
+    Extension, Json,
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use db::models::{assignment, module, user_module_role};
+use migration::Expr;
+use sea_orm::{
+    ColumnTrait, Condition, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect, RelationTrait,
+};
 use serde::{Deserialize, Serialize};
+use util::state::AppState;
 
 /// Query parameters for filtering, sorting, and pagination of assignments
 #[derive(Debug, Deserialize)]

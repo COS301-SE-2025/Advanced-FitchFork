@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::helpers::app::make_test_app_with_storage;
+    use crate::helpers::{app::make_test_app_with_storage, config_assert::assert_default_config};
     use api::auth::generate_jwt;
     use axum::{
         body::Body,
@@ -8,20 +8,13 @@ mod tests {
     };
     use chrono::{TimeZone, Utc};
     use db::models::assignment_file::{FileType, Model as AssignmentFile};
-    use db::{
-        models::{
-            assignment::{AssignmentType, Model as AssignmentModel},
-            module::Model as ModuleModel,
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
+    use db::models::{
+        assignment::{AssignmentType, Model as AssignmentModel},
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use serde_json::Value;
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
     use tower::ServiceExt;
 
     struct TestData {
@@ -37,43 +30,21 @@ mod tests {
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16)
             .await
             .unwrap();
-        let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service
-            .create(CreateUser {
-                username: "admin1".to_string(),
-                email: "admin1@test.com".to_string(),
-                password: "password".to_string(),
-                admin: true,
-            })
+        let admin_user = UserModel::create(db, "admin1", "admin1@test.com", "password", true)
             .await
             .unwrap();
-        let lecturer_user = service
-            .create(CreateUser {
-                username: "lecturer1".to_string(),
-                email: "lecturer1@test.com".to_string(),
-                password: "password1".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
-        let student_user = service
-            .create(CreateUser {
-                username: "student1".to_string(),
-                email: "student1@test.com".to_string(),
-                password: "password2".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
-        let forbidden_user = service
-            .create(CreateUser {
-                username: "forbidden".to_string(),
-                email: "forbidden@test.com".to_string(),
-                password: "password3".to_string(),
-                admin: false,
-            })
-            .await
-            .unwrap();
+        let lecturer_user =
+            UserModel::create(db, "lecturer1", "lecturer1@test.com", "password1", false)
+                .await
+                .unwrap();
+        let student_user =
+            UserModel::create(db, "student1", "student1@test.com", "password2", false)
+                .await
+                .unwrap();
+        let forbidden_user =
+            UserModel::create(db, "forbidden", "forbidden@test.com", "password3", false)
+                .await
+                .unwrap();
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
             .unwrap();
@@ -311,11 +282,11 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
-    async fn test_get_config_no_config_set() {
+    async fn test_get_config_defaults_exact() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
+        // call GET as admin against an assignment created by setup_test_data()
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/config",
@@ -327,15 +298,17 @@ mod tests {
             .body(Body::empty())
             .unwrap();
 
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
-        assert!(json["data"].as_object().unwrap().is_empty());
+
+        // verify exact defaults via the shared helper
+        assert_default_config(&json["data"]);
     }
 
     #[tokio::test]

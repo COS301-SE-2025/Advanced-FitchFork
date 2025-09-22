@@ -28,12 +28,12 @@ import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 const { Title, Paragraph, Text } = Typography;
 
 const toc = [
-  { key: 'what', href: '#what', title: 'What is the Makefile archive?' },
-  { key: 'why', href: '#why', title: 'Why separate from Main & Memo' },
-  { key: 'where', href: '#where', title: 'Where to Upload' },
-  { key: 'how', href: '#how', title: 'How the Runner Uses It' },
-  { key: 'examples', href: '#examples', title: 'Examples (C++ / Java)' },
-  { key: 'tasks', href: '#tasks', title: 'Defining Task Commands' },
+  { key: 'overview', href: '#overview', title: 'Why the Makefile Matters' },
+  { key: 'lifecycle', href: '#lifecycle', title: 'How Fitchfork Uses the Makefile' },
+  { key: 'requirements', href: '#requirements', title: 'Archive & Target Requirements' },
+  { key: 'storage', href: '#storage', title: 'After You Upload' },
+  { key: 'tasks', href: '#tasks', title: 'Mapping Tasks to Targets' },
+  { key: 'examples', href: '#examples', title: 'Examples & Patterns' },
   { key: 'output', href: '#output', title: 'What Output is Captured' },
   { key: 'limits', href: '#limits', title: 'Execution Limits' },
   { key: 'best', href: '#best', title: 'Best Practices' },
@@ -52,6 +52,24 @@ const langRows = [
     lang: 'Java',
     target: 'make task1',
     note: 'Compile to ./out and run: java -cp out Main task1 (or task2, …).',
+  },
+  {
+    key: 'python',
+    lang: 'Python',
+    target: 'make task1',
+    note: 'Install deps if needed, then call python3 main.py task1.',
+  },
+  {
+    key: 'rust',
+    lang: 'Rust',
+    target: 'make task1',
+    note: 'Use cargo build --release; run ./target/release/app task1.',
+  },
+  {
+    key: 'mixed',
+    lang: 'Multi-language',
+    target: 'make task1',
+    note: 'Orchestrate scripts or binaries; ensure relative paths match the extracted workspace.',
   },
 ];
 
@@ -123,16 +141,10 @@ export default function MakefileHelp() {
     extra: (
       <Card className="mt-4" size="small" title="Quick facts" bordered>
         <ul className="list-disc pl-5">
-          <li>
-            Archive contains <b>only</b> a root-level <Text code>Makefile</Text>
-          </li>
-          <li>
-            Make <b>targets = Tasks</b> (e.g., <Text code>make task1</Text>)
-          </li>
-          <li>
-            Targets build then run <Text code>Main &lt;task&gt;</Text>
-          </li>
-          <li>Regenerate Memo Output after Makefile changes</li>
+          <li>Upload under <Text code>Assignments → Config → Files</Text></li>
+          <li>Archive format: .zip / .tar / .tgz / .gz (≤50&nbsp;MB) with a single <Text code>Makefile</Text></li>
+          <li>Make targets mirror Tasks; each runs <Text code>Main &lt;task&gt;</Text></li>
+          <li>Regenerate Memo Output whenever the Makefile changes</li>
         </ul>
       </Card>
     ),
@@ -145,78 +157,126 @@ export default function MakefileHelp() {
         Makefile
       </Title>
 
-      <section id="what" className="scroll-mt-24" />
-      <Title level={3}>What is the Makefile archive?</Title>
+      <section id="overview" className="scroll-mt-24" />
+      <Title level={3}>Why the Makefile Matters</Title>
       <Paragraph className="mb-0">
-        The <b>Makefile archive</b> is a single archive that contains <b>only</b> a{' '}
-        <Text code>Makefile</Text> at its root. The Makefile defines <b>targets</b> that correspond
-        to your assignment <b>Tasks</b> and invoke your <b>Main</b> program with the proper task
-        argument (e.g., <Text code>task1</Text>, <Text code>task2</Text>).
+        The <strong>Makefile</strong> teaches Fitchfork how to build and execute your tests. Main drives the
+        logic, Memo supplies the reference answers, and the Makefile stitches everything together by turning
+        each Task into a repeatable shell command. Keeping it separate lets you tweak build flags or tooling
+        without touching Main or Memo archives.
       </Paragraph>
+      <Paragraph className="mt-3 mb-0">
+        Upload the Makefile archive under <Text code>Assignments → Config → Files</Text>. Lecturers or assistant
+        lecturers own this upload. In Manual submission mode it is required; in GATLAM mode the Interpreter is
+        responsible for compiling/running, so the Makefile can be left empty.
+      </Paragraph>
+
       <Descriptions bordered size="middle" column={1} className="mt-3">
-        <Descriptions.Item label="Accepted formats">
-          <Tag>.zip</Tag> <Tag>.tar</Tag> <Tag>.tgz</Tag> <Tag>.gz</Tag>
+        <Descriptions.Item label="Archive contents">
+          Exactly one root-level <Text code>Makefile</Text> (no folders, binaries, or helper files).
         </Descriptions.Item>
-        <Descriptions.Item label="Must contain">
-          Exactly one file at the archive root: <Text code>Makefile</Text> (no folders or extras).
+        <Descriptions.Item label="Formats">
+          <Tag>.zip</Tag> <Tag>.tar</Tag> <Tag>.tgz</Tag> <Tag>.gz</Tag> (≤50&nbsp;MB)
         </Descriptions.Item>
       </Descriptions>
 
-      <section id="why" className="scroll-mt-24" />
-      <Title level={3}>Why separate from Main & Memo</Title>
+      <section id="lifecycle" className="scroll-mt-24" />
+      <Title level={3}>How Fitchfork Uses the Makefile</Title>
       <Timeline
         className="mb-2"
         items={[
           {
             color: 'blue',
             dot: <FileZipOutlined />,
-            children: (
-              <>
-                You upload three archives: <b>Main</b> (runtime & CLI), <b>Makefile</b> (build/run
-                targets), and <b>Memo</b> (reference solution).
-              </>
-            ),
+            children:
+              'Upload Main, Makefile, and Memo archives. Each is validated to ensure a .zip/.tar/.tgz/.gz exists.',
           },
           {
             color: 'blue',
             dot: <BuildOutlined />,
-            children: (
-              <>The Makefile keeps “how to build & run” stable across memo and student runs.</>
-            ),
+            children:
+              'Generate Memo Output: Fitchfork unpacks the trio into an isolated workspace and runs your Make targets to capture reference output.',
           },
           {
             color: 'green',
             dot: <PlayCircleOutlined />,
-            children: <>Each Task executes a Make target that runs Main for that specific task.</>,
+            children:
+              'Student runs call the same Make targets in fresh containers, ensuring students build with the exact flags you expect.',
+          },
+          {
+            color: 'gray',
+            dot: <SettingOutlined />,
+            children:
+              'If the Makefile archive is missing or lacks a .zip, memo generation and student attempts fail fast with an explicit “Makefile archive not found” error.',
           },
         ]}
       />
 
-      <section id="where" className="scroll-mt-24" />
-      <Title level={3}>Where to Upload</Title>
+      <section id="requirements" className="scroll-mt-24" />
+      <Title level={3}>Archive &amp; Target Requirements</Title>
       <Paragraph className="mb-0">
-        Go to <Text code>Assignments → Config → Files</Text> and upload the archive into the{' '}
-        <b>Makefile</b> slot. The archive must have a single root-level <Text code>Makefile</Text>.
+        Treat the Makefile as the authoritative source for build commands. Set up phony targets that compile in
+        a <Text code>build</Text> step (if necessary) and then run <Text code>Main &lt;task&gt;</Text>. Use relative
+        paths because Fitchfork extracts everything into the workspace root before executing targets.
       </Paragraph>
 
-      <section id="how" className="scroll-mt-24" />
-      <Title level={3}>How the Runner Uses It</Title>
+      <section id="storage" className="scroll-mt-24" />
+      <Title level={3}>After You Upload</Title>
       <Paragraph className="mb-2">
-        For each Task you configure, the platform runs the corresponding <b>Make target</b>. Those
-        targets should <b>build</b> (if needed) and then run <Text code>Main &lt;task&gt;</Text> so
-        your CLI in Main selects the correct task.
+        Fitchfork stores the archive in the assignment’s <Text code>makefile/</Text> folder and tracks it in the
+        assignment files list. Readiness checks, the Setup Checklist, and memo generation all look for that stored
+        archive. Uploading a new version overwrites the existing file; the next memo generation or student run uses
+        it immediately, so keep prior versions in source control if you may need to revert.
       </Paragraph>
       <Descriptions bordered size="middle" column={1}>
-        <Descriptions.Item label="Where it runs">
-          Main, Makefile, and Memo/Student code are extracted together into an isolated workspace.
+        <Descriptions.Item label="Readiness flag">
+          Assignments register <Text code>makefile_present</Text> once a valid archive is stored. Manual mode requires
+          this flag to be true before the assignment is considered ready.
         </Descriptions.Item>
-        <Descriptions.Item label="Task command">
-          Set each Task’s command to a Make target (e.g., <Text code>make task1</Text>).
+        <Descriptions.Item label="Validation">
+          Missing or empty Makefile directories trigger “Makefile archive (.zip) not found” errors during memo
+          generation and student attempts.
         </Descriptions.Item>
       </Descriptions>
 
+      <section id="tasks" className="scroll-mt-24" />
+      <Title level={3}>Mapping Tasks to Targets</Title>
+      <Card>
+        <Paragraph>
+          Create one Make target per Task (e.g., <Text code>task1</Text>, <Text code>task2</Text>). Each target should
+          prepare any build artefacts, then invoke <Text code>Main &lt;task&gt;</Text>. The Tasks screen simply shells out to
+          the command you provide, so keeping the naming aligned avoids “target not found” failures at run time.
+        </Paragraph>
+        <Steps
+          direction="vertical"
+          items={[
+            {
+              title: 'Open Tasks',
+              description: (
+                <>
+                  Go to <Text code>Assignments → Tasks</Text>.
+                </>
+              ),
+            },
+            {
+              title: 'Set command',
+              description: (
+                <>
+                  Use a Make target, e.g., <Text code>make task1</Text> or{' '}
+                  <Text code>make task2</Text>.
+                </>
+              ),
+            },
+            {
+              title: 'Save & test',
+              description: <>Generate Memo Output to validate the full build–run cycle.</>,
+            },
+          ]}
+        />
+      </Card>
+
       <section id="examples" className="scroll-mt-24" />
-      <Title level={3}>Examples</Title>
+      <Title level={3}>Examples &amp; Patterns</Title>
       <Card>
         <Tabs
           items={[
@@ -260,41 +320,6 @@ export default function MakefileHelp() {
               children: (
                 <Table columns={langCols} dataSource={langRows} pagination={false} size="small" />
               ),
-            },
-          ]}
-        />
-      </Card>
-
-      <section id="tasks" className="scroll-mt-24" />
-      <Title level={3}>Defining Task Commands</Title>
-      <Card>
-        <Paragraph>
-          Create one Make target per Task (e.g., <Text code>task1</Text>, <Text code>task2</Text>).
-          Each target should build if needed and then run <Text code>Main &lt;task&gt;</Text>.
-        </Paragraph>
-        <Steps
-          direction="vertical"
-          items={[
-            {
-              title: 'Open Tasks',
-              description: (
-                <>
-                  Go to <Text code>Assignments → Tasks</Text>.
-                </>
-              ),
-            },
-            {
-              title: 'Set command',
-              description: (
-                <>
-                  Use a Make target, e.g., <Text code>make task1</Text> or{' '}
-                  <Text code>make task2</Text>.
-                </>
-              ),
-            },
-            {
-              title: 'Save & test',
-              description: <>Generate Memo Output to validate the full build–run cycle.</>,
             },
           ]}
         />
@@ -348,6 +373,13 @@ export default function MakefileHelp() {
         <li>
           <b>Separate build & run</b>: compile in <Text code>build</Text>, run in per-task targets.
         </li>
+        <li>
+          <b>Stay self-contained</b>: rely on files from Main/Memo archives; avoid network installs or
+          absolute paths.
+        </li>
+        <li>
+          <b>Use phony targets</b> so repeated runs do not skip commands because artefacts already exist.
+        </li>
       </ul>
 
       <section id="trouble" className="scroll-mt-24" />
@@ -360,7 +392,8 @@ export default function MakefileHelp() {
             children: (
               <Paragraph>
                 Upload exactly one archive to the Makefile slot and ensure it contains a single
-                root-level <Text code>Makefile</Text>.
+                root-level <Text code>Makefile</Text>. The readiness checklist will flip
+                <Text code>makefile_present</Text> back to true once the new archive is stored.
               </Paragraph>
             ),
           },

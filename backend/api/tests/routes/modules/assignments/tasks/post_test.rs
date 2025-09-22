@@ -7,21 +7,14 @@ mod tests {
         http::{Request, StatusCode, header::CONTENT_TYPE},
     };
     use chrono::{TimeZone, Utc};
-    use db::{
-        models::{
-            assignment::{AssignmentType, Model as AssignmentModel},
-            module::Model as ModuleModel,
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
+    use db::models::{
+        assignment::{AssignmentType, Model as AssignmentModel},
+        module::Model as ModuleModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use serde_json::{Value, json};
     use serial_test::serial;
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
     use tower::ServiceExt;
 
     struct TestData {
@@ -36,34 +29,28 @@ mod tests {
         let module = ModuleModel::create(db, "TASK101", 2024, Some("Test Task Module"), 16)
             .await
             .expect("Failed to create test module");
-        let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service
-            .create(CreateUser {
-                username: "task_admin".to_string(),
-                email: "task_admin@test.com".to_string(),
-                password: "password".to_string(),
-                admin: true,
-            })
-            .await
-            .expect("Failed to create admin user");
-        let forbidden_user = service
-            .create(CreateUser {
-                username: "task_unauthed".to_string(),
-                email: "task_unauthed@test.com".to_string(),
-                password: "password".to_string(),
-                admin: false,
-            })
-            .await
-            .expect("Failed to create forbidden user");
-        let lecturer1 = service
-            .create(CreateUser {
-                username: "task_lecturer1".to_string(),
-                email: "task_lecturer1@test.com".to_string(),
-                password: "password1".to_string(),
-                admin: false,
-            })
-            .await
-            .expect("Failed to create lecturer1");
+        let admin_user =
+            UserModel::create(db, "task_admin", "task_admin@test.com", "password", true)
+                .await
+                .expect("Failed to create admin user");
+        let forbidden_user = UserModel::create(
+            db,
+            "task_unauthed",
+            "task_unauthed@test.com",
+            "password",
+            false,
+        )
+        .await
+        .expect("Failed to create forbidden user");
+        let lecturer1 = UserModel::create(
+            db,
+            "task_lecturer1",
+            "task_lecturer1@test.com",
+            "password1",
+            false,
+        )
+        .await
+        .expect("Failed to create lecturer1");
         UserModuleRoleModel::assign_user_to_module(db, lecturer1.id, module.id, Role::Lecturer)
             .await
             .expect("Failed to assign lecturer1 to module");
@@ -202,7 +189,7 @@ mod tests {
         let data = setup_test_data(app_state.db()).await;
 
         let module2 = ModuleModel::create(
-            db::get_connection().await,
+            app_state.db(),
             "MISMTCH101",
             2024,
             Some("Mismatch Module"),

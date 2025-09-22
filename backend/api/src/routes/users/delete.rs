@@ -1,12 +1,13 @@
 use crate::{auth::claims::AuthUser, response::ApiResponse};
 use axum::{
     Json,
-    extract::{Extension, Path},
+    extract::{Extension, Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
-use services::service::Service;
-use services::user::UserService;
+use db::models::user::Entity as UserEntity;
+use sea_orm::EntityTrait;
+use util::state::AppState;
 
 /// DELETE /users/{user_id}
 ///

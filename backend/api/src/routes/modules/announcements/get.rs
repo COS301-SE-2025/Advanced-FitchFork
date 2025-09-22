@@ -10,10 +10,13 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
+use db::models::announcements::{
+    Column as AnnouncementColumn, Entity as AnnouncementEntity, Model as AnnouncementModel,
+};
+use db::models::user::Entity as UserEntity;
+use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
-use services::announcement::{Announcement, AnnouncementService};
-use services::service::Service;
-use util::filters::{FilterParam, QueryParam};
+use util::state::AppState;
 
 #[derive(Serialize)]
 pub struct MinimalUser {
@@ -151,11 +154,18 @@ pub async fn get_announcements(
     let mut filters = vec![FilterParam::eq("module_id", module_id)];
     let mut queries = Vec::new();
 
-    if let Some(query_text) = query.query {
-        queries.push(QueryParam::new(
-            vec!["title".to_string(), "body".to_string()],
-            query_text,
-        ));
+    if let Some(sort_field) = &params.sort {
+        let valid_fields = ["created_at", "updated_at", "title", "pinned"];
+        for field in sort_field.split(',') {
+            let field = field.trim().trim_start_matches('-');
+            if !valid_fields.contains(&field) {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
+                )
+                    .into_response();
+            }
+        }
     }
 
     if let Some(pinned_str) = query.pinned {
@@ -167,7 +177,8 @@ pub async fn get_announcements(
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(ApiResponse::<FilterResponse>::error("Invalid pinned value")),
-                );
+                )
+                    .into_response();
             }
         }
     }
@@ -181,35 +192,49 @@ pub async fn get_announcements(
     }
 
     if !applied_pinned_sort {
-        let default_sort = "-pinned,-created_at";
-        sort = match sort {
-            Some(existing_sort) => Some(format!("{},{}", existing_sort, default_sort)),
-            None => Some(default_sort.to_string()),
-        };
+        query = query
+            .order_by_desc(AnnouncementColumn::Pinned)
+            .order_by_desc(AnnouncementColumn::CreatedAt);
     }
 
-    let (announcements, total) =
-        match AnnouncementService::filter(&filters, &queries, page, per_page, sort).await {
-            Ok(result) => result,
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<FilterResponse>::error(format!(
-                        "Database error: {}",
-                        e
-                    ))),
-                );
-            }
-        };
+    let paginator = query.clone().paginate(db, per_page as u64);
+    let total = match paginator.num_items().await {
+        Ok(n) => n as i32,
+        Err(e) => {
+            eprintln!("Error counting announcements: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<FilterResponse>::error(
+                    "Error counting announcements",
+                )),
+            )
+                .into_response();
+        }
+    };
 
-    let response = FilterResponse::new(announcements, page, per_page, total);
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(
-            response,
-            "Announcements retrieved successfully",
-        )),
-    )
+    match paginator.fetch_page((page - 1) as u64).await {
+        Ok(results) => {
+            let response = FilterResponse::new(results, page, per_page, total);
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    response,
+                    "Announcements retrieved successfully",
+                )),
+            )
+                .into_response()
+        }
+        Err(err) => {
+            eprintln!("Error fetching announcements: {:?}", err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<FilterResponse>::error(
+                    "Failed to retrieve announcements",
+                )),
+            )
+                .into_response()
+        }
+    }
 }
 
 /// GET /api/modules/{module_id}/announcements/{announcement_id}

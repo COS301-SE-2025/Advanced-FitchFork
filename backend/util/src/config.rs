@@ -2,8 +2,10 @@
 //! No global singleton; each call reads current process env.
 //! All variables are REQUIRED.
 
+use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Once;
+use std::sync::{OnceLock, RwLock};
 
 #[inline]
 fn ensure_dotenv() {
@@ -56,6 +58,8 @@ pub struct AppConfig {
     pub code_manager_host: String,
     pub code_manager_port: u16,
     pub max_number_containers: usize,
+    pub system_health_broadcast_ms: u64,
+    pub system_health_persist_seconds: u64,
     pub jwt_secret: String,
     pub jwt_duration_minutes: u64,
     pub reset_token_expiry_minutes: u64,
@@ -66,6 +70,7 @@ pub struct AppConfig {
     pub email_from_name: String,
     pub gemini_api_key: String,
     pub moss_user_id: String,
+    pub superuser_ids: HashSet<i64>,
 }
 
 impl AppConfig {
@@ -84,6 +89,8 @@ impl AppConfig {
             code_manager_host: code_manager_host(),
             code_manager_port: code_manager_port(),
             max_number_containers: max_number_containers(),
+            system_health_broadcast_ms: system_health_broadcast_ms(),
+            system_health_persist_seconds: system_health_persist_seconds(),
             jwt_secret: jwt_secret(),
             jwt_duration_minutes: jwt_duration_minutes(),
             reset_token_expiry_minutes: reset_token_expiry_minutes(),
@@ -94,6 +101,7 @@ impl AppConfig {
             email_from_name: email_from_name(),
             gemini_api_key: gemini_api_key(),
             moss_user_id: moss_user_id(),
+            superuser_ids: super_users(),
         }
     }
 }
@@ -154,6 +162,24 @@ pub fn max_number_containers() -> usize {
     parse(require("MAX_NUM_CONTAINERS"), "MAX_NUM_CONTAINERS")
 }
 
+/// Interval for system health broadcast over WebSockets in milliseconds.
+pub fn system_health_broadcast_ms() -> u64 {
+    ensure_dotenv();
+    parse(
+        require("SYSTEM_HEALTH_BROADCAST_MS"),
+        "SYSTEM_HEALTH_BROADCAST_MS",
+    )
+}
+
+/// Interval in seconds for persisting system health metrics to the database.
+pub fn system_health_persist_seconds() -> u64 {
+    ensure_dotenv();
+    parse(
+        require("SYSTEM_HEALTH_PERSIST_SECONDS"),
+        "SYSTEM_HEALTH_PERSIST_SECONDS",
+    )
+}
+
 pub fn jwt_secret() -> String {
     ensure_dotenv();
     require("JWT_SECRET")
@@ -202,6 +228,34 @@ pub fn moss_user_id() -> String {
     require("MOSS_USER_ID")
 }
 
+pub fn super_users() -> HashSet<i64> {
+    ensure_dotenv();
+    static SUPER_USERS: OnceLock<RwLock<HashSet<i64>>> = OnceLock::new();
+    let lock = SUPER_USERS.get_or_init(|| RwLock::new(HashSet::new()));
+    {
+        let read_guard = lock.read().unwrap();
+        if !read_guard.is_empty() {
+            return read_guard.clone();
+        }
+    }
+    let mut write_guard = lock.write().unwrap();
+    if !write_guard.is_empty() {
+        return write_guard.clone();
+    }
+    let s = require("SUPERUSER_IDS");
+    let set: HashSet<i64> = s
+        .split(',')
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .map(|x| {
+            x.parse()
+                .unwrap_or_else(|e| panic!("invalid SUPERUSER_ID {x}: {e}"))
+        })
+        .collect();
+    *write_guard = set.clone();
+    set
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,6 +276,8 @@ mod tests {
         "CODE_MANAGER_HOST",
         "CODE_MANAGER_PORT",
         "MAX_NUM_CONTAINERS",
+        "SYSTEM_HEALTH_BROADCAST_MS",
+        "SYSTEM_HEALTH_PERSIST_SECONDS",
         "JWT_SECRET",
         "JWT_DURATION_MINUTES",
         "RESET_TOKEN_EXPIRY_MINUTES",
@@ -232,6 +288,7 @@ mod tests {
         "EMAIL_FROM_NAME",
         "GEMINI_API_KEY",
         "MOSS_USER_ID",
+        "SUPERUSER_IDS",
     ];
 
     fn clear_all_env() {
@@ -259,6 +316,8 @@ mod tests {
             std::env::set_var("CODE_MANAGER_PORT", "5050");
 
             std::env::set_var("MAX_NUM_CONTAINERS", "42");
+            std::env::set_var("SYSTEM_HEALTH_BROADCAST_MS", "2000");
+            std::env::set_var("SYSTEM_HEALTH_PERSIST_SECONDS", "60");
 
             std::env::set_var("JWT_SECRET", "sekret");
             std::env::set_var("JWT_DURATION_MINUTES", "120");
@@ -271,6 +330,7 @@ mod tests {
             std::env::set_var("EMAIL_FROM_NAME", "FitchFork");
             std::env::set_var("GEMINI_API_KEY", "g-abc");
             std::env::set_var("MOSS_USER_ID", "123");
+            std::env::set_var("SUPERUSER_IDS", "1, 2,3,  42");
         }
     }
 
@@ -302,7 +362,7 @@ mod tests {
         unsafe {
             std::env::set_var("LOG_TO_STDOUT", "yes");
         }
-        assert_eq!(super::log_to_stdout(), true);
+        assert!(super::log_to_stdout());
 
         unsafe {
             std::env::set_var("HOST", "127.0.0.1");
@@ -328,6 +388,16 @@ mod tests {
             std::env::set_var("MAX_NUM_CONTAINERS", "5");
         }
         assert_eq!(super::max_number_containers(), 5);
+
+        unsafe {
+            std::env::set_var("SYSTEM_HEALTH_BROADCAST_MS", "1500");
+        }
+        assert_eq!(super::system_health_broadcast_ms(), 1500);
+
+        unsafe {
+            std::env::set_var("SYSTEM_HEALTH_PERSIST_SECONDS", "45");
+        }
+        assert_eq!(super::system_health_persist_seconds(), 45);
 
         unsafe {
             std::env::set_var("JWT_SECRET", "abc");
@@ -388,6 +458,14 @@ mod tests {
             std::env::set_var("MOSS_USER_ID", "mid");
         }
         assert_eq!(super::moss_user_id(), "mid");
+
+        unsafe {
+            std::env::set_var("SUPERUSER_IDS", "10,20,30");
+        }
+        let su = super::super_users();
+        assert!(su.contains(&10));
+        assert!(su.contains(&20));
+        assert!(su.contains(&30));
     }
 
     #[test]
@@ -457,6 +535,14 @@ mod tests {
             let _ = super::max_number_containers();
         });
         assert!(res.is_err());
+
+        unsafe {
+            std::env::set_var("SYSTEM_HEALTH_BROADCAST_MS", "bad");
+        }
+        let res = panic::catch_unwind(|| {
+            let _ = super::system_health_broadcast_ms();
+        });
+        assert!(res.is_err());
     }
 
     #[test]
@@ -493,7 +579,7 @@ mod tests {
         assert_eq!(cfg.project_name, "proj");
         assert_eq!(cfg.log_level, "debug");
         assert_eq!(cfg.log_file, "server.log");
-        assert_eq!(cfg.log_to_stdout, true);
+        assert!(cfg.log_to_stdout);
 
         assert_eq!(cfg.database_path, "/tmp/app.db");
         assert_eq!(cfg.storage_root, "/tmp/storage");
@@ -505,6 +591,8 @@ mod tests {
         assert_eq!(cfg.code_manager_port, 5050);
 
         assert_eq!(cfg.max_number_containers, 42);
+        assert_eq!(cfg.system_health_broadcast_ms, 2000);
+        assert_eq!(cfg.system_health_persist_seconds, 60);
 
         assert_eq!(cfg.jwt_secret, "sekret");
         assert_eq!(cfg.jwt_duration_minutes, 120);
@@ -541,6 +629,8 @@ mod tests {
             std::env::set_var("CODE_MANAGER_PORT", "5050");
 
             std::env::set_var("MAX_NUM_CONTAINERS", "42");
+            std::env::set_var("SYSTEM_HEALTH_BROADCAST_MS", "2000");
+            std::env::set_var("SYSTEM_HEALTH_PERSIST_SECONDS", "60");
 
             std::env::set_var("JWT_SECRET", "sekret");
             std::env::set_var("JWT_DURATION_MINUTES", "120");

@@ -6,12 +6,22 @@
 
 use crate::response::ApiResponse;
 use crate::routes::modules::common::{ModuleRequest, ModuleResponse};
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use chrono::Utc;
+use db::models::module::{
+    self, ActiveModel as ModuleActiveModel, Column as ModuleCol, Entity as ModuleEntity,
+};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, EntityTrait, IntoActiveModel, QueryFilter, Set,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use services::module::{ModuleService, UpdateModule};
-use services::service::Service;
-use util::filters::FilterParam;
+use util::state::AppState;
 use validator::Validate;
 
 /// PUT /api/modules/{module_id}
@@ -101,32 +111,22 @@ pub async fn edit_module(
         );
     }
 
-    match ModuleService::exists(
-        &vec![
-            FilterParam::eq("code", req.code.clone()),
-            FilterParam::ne("id", module_id),
-        ],
-        &vec![],
-    )
-    .await
-    {
-        Ok(true) => {
-            return (
-                StatusCode::CONFLICT,
-                Json(ApiResponse::<ModuleResponse>::error(
-                    "Module code already exists",
-                )),
-            );
-        }
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ModuleResponse>::error(
-                    "Database error while checking module code uniqueness",
-                )),
-            );
-        }
-        _ => {}
+    let duplicate = ModuleEntity::find()
+        .filter(
+            Condition::all()
+                .add(ModuleCol::Code.eq(req.code.clone()))
+                .add(ModuleCol::Id.ne(module_id)),
+        )
+        .one(db)
+        .await;
+
+    if let Ok(Some(_)) = duplicate {
+        return (
+            StatusCode::CONFLICT,
+            Json(ApiResponse::<ModuleResponse>::error(
+                "Module code already exists",
+            )),
+        );
     }
 
     match ModuleService::update(UpdateModule {

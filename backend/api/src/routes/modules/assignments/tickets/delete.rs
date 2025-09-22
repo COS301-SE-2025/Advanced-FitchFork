@@ -9,7 +9,7 @@ use crate::routes::modules::assignments::tickets::common::is_valid;
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     Extension,
-    extract::Path,
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
@@ -57,7 +57,7 @@ pub async fn delete_ticket(
 ) -> impl IntoResponse {
     let user_id = claims.sub;
 
-    if !is_valid(user_id, ticket_id, module_id, claims.admin).await {
+    if !is_valid(user_id, ticket_id, module_id, claims.admin, db).await {
         return (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::error("Forbidden")),

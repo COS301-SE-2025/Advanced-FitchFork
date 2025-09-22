@@ -387,7 +387,7 @@ async fn try_generate_allocator(
     db: &sea_orm::DatabaseConnection,
 ) -> Result<(), String> {
     use db::models::{assignment_memo_output, assignment_task};
-    use util::mark_allocator::mark_allocator::{SaveError, TaskInfo, generate_allocator};
+    use util::mark_allocator::{SaveError, TaskInfo, generate_allocator};
 
     let tasks = assignment_task::Entity::find()
         .filter(assignment_task::Column::AssignmentId.eq(assignment_id))

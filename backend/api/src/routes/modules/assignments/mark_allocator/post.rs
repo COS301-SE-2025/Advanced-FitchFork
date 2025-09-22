@@ -3,9 +3,8 @@ use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use db::models::assignment_memo_output;
 use db::models::assignment_task;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-use std::vec;
-use util::mark_allocator::mark_allocator::TaskInfo;
-use util::mark_allocator::mark_allocator::{SaveError, generate_allocator};
+use util::mark_allocator::TaskInfo;
+use util::mark_allocator::{SaveError, generate_allocator};
 use util::paths::{memo_output_dir, storage_root};
 use util::state::AppState;
 

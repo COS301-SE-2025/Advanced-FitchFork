@@ -1,6 +1,7 @@
 use super::common::TicketIncoming;
 use serde_json::json;
 use util::ws::handler_trait::WsHandler;
+use util::ws::handler_trait::async_trait;
 use util::ws::runtime::WsContext;
 
 pub struct TicketWsHandler;

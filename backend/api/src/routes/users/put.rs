@@ -1,13 +1,19 @@
 use crate::response::ApiResponse;
 use crate::routes::common::UserResponse;
 use axum::extract::Multipart;
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use common::format_validation_errors;
+use db::models::user;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, EntityTrait, IntoActiveModel, QueryFilter, Set,
+};
 use serde::Deserialize;
-use services::service::Service;
-use services::user::{UpdateUser, UserService};
 use tokio::io::AsyncWriteExt;
-use util::filters::FilterParam;
 use util::{
     paths::{ensure_dir, user_profile_dir, user_profile_path},
     state::AppState,
@@ -115,15 +121,11 @@ pub async fn update_user(
         );
     }
 
-    let current_user = match UserService::find_by_id(user_id).await {
-        Ok(Some(user)) => user,
-        Ok(None) | Err(_) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<UserResponse>::error("User not found")),
-            );
-        }
-    };
+    let current_user = user::Entity::find_by_id(user_id)
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap();
 
     // TODO: Should probably make a more robust system with a super admin
     if let Some(_) = req.admin {

@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use log::{info, warn};
-use sea_orm::EntityTrait;
 use sea_orm::entity::prelude::*;
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 use std::fs;
 use util::paths::module_dir;
 
@@ -109,7 +109,7 @@ impl Model {
         credits: i32,
     ) -> Result<Self, DbErr> {
         let Some(module) = Entity::find_by_id(id).one(db).await? else {
-            return Err(DbErr::RecordNotFound(format!("Module ID {} not found", id)));
+            return Err(DbErr::RecordNotFound(format!("Module ID {id} not found")));
         };
 
         let mut active: ActiveModel = module.into();

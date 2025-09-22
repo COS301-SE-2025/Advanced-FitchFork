@@ -1,13 +1,14 @@
 use crate::response::ApiResponse;
 use axum::{
-    extract::{Json, Path},
+    extract::{Json, Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
+use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
+use db::models::assignment_file::{FileType, Model as AssignmentFile};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::Value;
-use services::assignment_file::{AssignmentFileService, CreateAssignmentFile};
-use services::service::Service;
-use util::execution_config::ExecutionConfig;
+use util::{execution_config::ExecutionConfig, state::AppState};
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -157,6 +158,33 @@ pub async fn set_assignment_config(
 pub async fn reset_assignment_config(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
+
+    // Ensure the assignment exists and belongs to the module
+    let assignment = match AssignmentEntity::find()
+        .filter(AssignmentColumn::Id.eq(assignment_id as i32))
+        .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
+        .one(db)
+        .await
+    {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<ExecutionConfig>::error(
+                    "Assignment or module not found",
+                )),
+            );
+        }
+        Err(e) => {
+            eprintln!("DB error: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ExecutionConfig>::error("Database error")),
+            );
+        }
+    };
+
     // Build defaults
     let default_cfg = ExecutionConfig::default_config();
 

@@ -164,62 +164,57 @@ impl LanguageExt for Language {
         Some(match self {
             Language::Rust => format!(
                 r#"fn main() {{
-    println!("{}");
-}}"#,
-                msg
+        println!("{msg}");
+    }}"#
             ),
             Language::Go => format!(
                 r#"package main
-import "fmt"
-func main() {{
-    fmt.Println("{}")
-}}"#,
-                msg
+    import "fmt"
+    func main() {{
+        fmt.Println("{msg}")
+    }}"#
             ),
             Language::Cpp => format!(
                 r#"#include <bits/stdc++.h>
-int main() {{
-    std::cout << "{}" << std::endl;
-    return 0;
-}}"#,
-                msg
+    int main() {{
+        std::cout << "{msg}" << std::endl;
+        return 0;
+    }}"#
             ),
             Language::C => format!(
                 r#"#include <stdio.h>
-int main() {{
-    printf("{}\n");
-    return 0;
-}}"#,
-                msg
+    int main() {{
+        printf("{msg}\n");
+        return 0;
+    }}"#
             ),
             Language::Java => format!(
                 r#"public class Main {{
-    public static void main(String[] args) {{
-        System.out.println("{}");
-    }}
-}}"#,
-                msg
+        public static void main(String[] args) {{
+            System.out.println("{msg}");
+        }}
+    }}"#
             ),
-            Language::Python => format!(r#"print("{}")"#, msg),
-            Language::JavaScript => format!(r#"console.log("{}");"#, msg),
+            Language::Python => format!(r#"print("{msg}")"#),
+            Language::JavaScript => format!(r#"console.log("{msg}");"#),
             Language::CSharp => format!(
                 r#"using System;
-class Program {{
-    static void Main() {{
-        Console.WriteLine("{0}");
-    }}
-}}"#,
-                msg
+    class Program {{
+        static void Main() {{
+            Console.WriteLine("{msg}");
+        }}
+    }}"#
             ),
-            Language::Pascal => format!(
-                r#"program Main;
-begin
-    writeln('{0}');
-end."#,
-                msg.replace('\'', "''")
-            ),
-            Language::Haskell => format!("main = putStrLn \"{}\"", msg),
-            // For everything else, we don’t know the template → return None
+            Language::Pascal => {
+                let pmsg = msg.replace('\'', "''");
+                format!(
+                    r#"program Main;
+    begin
+        writeln('{pmsg}');
+    end."#
+                )
+            }
+            Language::Haskell => format!("main = putStrLn \"{msg}\""),
             _ => return None,
         })
     }

@@ -6,6 +6,7 @@ import { useAssignment } from '@/context/AssignmentContext';
 import { message } from '@/utils/message';
 import { listAssignmentFiles, downloadAssignmentFile } from '@/services/modules/assignments';
 import { getAssignmentConfig, setAssignmentConfig } from '@/services/modules/assignments/config';
+import Tip from '@/components/common/Tip';
 
 type MenuKey =
   | 'assignment'
@@ -171,10 +172,10 @@ const ConfigLayout = () => {
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col">
-      <div className="hidden sm:flex flex-1 min-h-0 bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800 overflow-hidden">
+    <div className="flex flex-col gap-4">
+      <div className="hidden sm:grid w-full grid-cols-[240px_minmax(0,1fr)] bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800">
         {/* Sidebar */}
-        <div className="w-[240px] flex-shrink-0 bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2 overflow-auto">
+        <div className="bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2">
           <Menu
             mode="inline"
             selectedKeys={[selectedKey]}
@@ -185,11 +186,19 @@ const ConfigLayout = () => {
         </div>
 
         {/* Main */}
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex flex-col">
           <div className="flex justify-between items-center flex-wrap gap-2 border-b border-gray-200 dark:border-gray-800 p-4">
-            <Typography.Title level={4} className="!mb-0">
-              Assignment Configuration
-            </Typography.Title>
+            <Space align="center" size={6} className="flex-wrap">
+              <Typography.Title level={4} className="!mb-0">
+                Assignment Configuration
+              </Typography.Title>
+              <Tip
+                iconOnly
+                newTab
+                to="/help/assignments/config/overview#overview"
+                text="Config overview help"
+              />
+            </Space>
 
             {/* Top-right actions */}
             <Space align="center" wrap>
@@ -209,14 +218,14 @@ const ConfigLayout = () => {
             </Space>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-auto flex flex-col p-4">
+          <div className="flex flex-col p-4">
             <Outlet />
           </div>
         </div>
       </div>
 
       {/* Mobile */}
-      <div className="block sm:hidden flex-1 min-h-0 overflow-auto">
+      <div className="block sm:hidden">
         <Outlet />
       </div>
     </div>

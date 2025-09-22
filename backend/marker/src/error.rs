@@ -31,14 +31,12 @@ pub enum MarkerError {
     MissingField(String),
     /// I/O error (file not found, unreadable, etc.).
     IoError(String),
-    /// A required task ID is missing in coverage or complexity report.
+    /// A required task ID is missing in coverage report.
     MissingTaskId(String),
     /// Error parsing coverage report (schema or content error).
     ParseCoverageError(String),
     /// Error parsing mark allocator (schema or content error).
     ParseAllocatorError(String),
-    /// Error parsing complexity report (schema or content error).
-    ParseComplexityError(String),
     /// Error parsing output file format (invalid structure or content).
     ParseOutputError(String),
 }

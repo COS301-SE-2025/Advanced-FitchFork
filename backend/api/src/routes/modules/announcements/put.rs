@@ -5,9 +5,14 @@
 //! **Permissions:** Only authorized users (lecturer/assistant) can edit announcements.
 
 use crate::{response::ApiResponse, routes::modules::announcements::common::AnnouncementRequest};
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
-use services::announcement::{AnnouncementService, UpdateAnnouncement};
-use services::service::Service;
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use db::models::announcements::Model as AnnouncementModel;
+use util::state::AppState;
 
 /// PUT /api/modules/{module_id}/announcements/{announcement_id}
 ///

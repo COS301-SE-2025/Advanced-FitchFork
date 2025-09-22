@@ -9,7 +9,7 @@
 //! ## Usage
 //! The `auth_routes()` function returns a `Router` which is nested under `/auth` in the main application.
 
-use crate::auth::guards::require_authenticated;
+use crate::auth::guards::allow_authenticated;
 use axum::{
     Router,
     middleware::from_fn,
@@ -20,6 +20,7 @@ use post::{
     change_password, login, register, request_password_reset, reset_password,
     upload_profile_picture, verify_reset_token,
 };
+use util::state::AppState;
 
 pub mod get;
 pub mod post;
@@ -47,7 +48,7 @@ pub mod post;
 // ## Usage
 // Use the `auth_routes()` function to mount all `/auth` endpoints under the main application router.
 
-pub fn auth_routes() -> Router {
+pub fn auth_routes() -> Router<AppState> {
     Router::new()
         .route("/register", post(register))
         .route("/login", post(login))
@@ -61,6 +62,6 @@ pub fn auth_routes() -> Router {
         .route("/module-role", get(get_module_role))
         .route(
             "/change-password",
-            post(change_password).route_layer(from_fn(require_authenticated)),
+            post(change_password).route_layer(from_fn(allow_authenticated)),
         )
 }

@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, collections::HashMap};
 use util::state::AppState;
 use util::{
-    execution_config::{ExecutionConfig, execution_config::GradingPolicy},
+    execution_config::{ExecutionConfig, GradingPolicy},
     paths::submission_report_path,
 };
 

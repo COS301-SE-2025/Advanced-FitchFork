@@ -1,13 +1,9 @@
 use crate::seed::Seeder;
+use db::models::user_module_role::{self, Role};
+use db::models::{module, user};
 use rand::rngs::{OsRng, StdRng};
 use rand::{Rng, SeedableRng, seq::SliceRandom};
-use services::module::{Module, ModuleService};
-use services::service::{AppError, Service};
-use services::user::UserService;
-use services::user_module_role::{
-    CreateUserModuleRole, UpdateUserModuleRole, UserModuleRoleService,
-};
-use std::pin::Pin;
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 
 pub struct UserRoleSeeder;
 
@@ -31,125 +27,134 @@ impl Seeder for UserRoleSeeder {
                 }
             }
 
-            for u in users {
-                // Skip only `admin` (admin)
-                if u.username == "admin" {
-                    continue;
+            match u.username.as_str() {
+                // Existing single-role fixtures
+                "lecturer" => {
+                    assign_all_as(db, &modules, u.id, Role::Lecturer).await;
+                }
+                "assistant_lecturer" => {
+                    assign_all_as(db, &modules, u.id, Role::AssistantLecturer).await;
+                }
+                "tutor" => {
+                    assign_all_as(db, &modules, u.id, Role::Tutor).await;
+                }
+                "student" => {
+                    assign_all_as(db, &modules, u.id, Role::Student).await;
                 }
 
-                match u.username.as_str() {
-                    // Existing single-role fixtures
-                    "lecturer" => {
-                        assign_all_as(&modules, u.id, "lecturer").await;
+                // student_tutor => split half Student, half Tutor
+                "student_tutor" => {
+                    if modules.is_empty() {
+                        continue;
                     }
-                    "assistant_lecturer" => {
-                        assign_all_as(&modules, u.id, "assistant_lecturer").await;
+                    let mut shuffled = modules.clone();
+                    shuffled.shuffle(&mut rng);
+                    let mid = shuffled.len() / 2;
+
+                    for m in &shuffled[..mid] {
+                        let _ = user_module_role::ActiveModel {
+                            user_id: Set(u.id),
+                            module_id: Set(m.id),
+                            role: Set(Role::Student),
+                            ..Default::default()
+                        }
+                        .insert(db)
+                        .await;
                     }
-                    "tutor" => {
-                        assign_all_as(&modules, u.id, "tutor").await;
+                    for m in &shuffled[mid..] {
+                        let _ = user_module_role::ActiveModel {
+                            user_id: Set(u.id),
+                            module_id: Set(m.id),
+                            role: Set(Role::Tutor),
+                            ..Default::default()
+                        }
+                        .insert(db)
+                        .await;
                     }
-                    "student" => {
-                        assign_all_as(&modules, u.id, "student").await;
+                }
+
+                // all_staff => round-robin Lecturer -> AssistantLecturer -> Tutor
+                "all_staff" => {
+                    if modules.is_empty() {
+                        continue;
+                    }
+                    let mut rr = [Role::Lecturer, Role::AssistantLecturer, Role::Tutor]
+                        .iter()
+                        .cycle();
+                    for m in &modules {
+                        let r = rr.next().unwrap().clone();
+                        let _ = user_module_role::ActiveModel {
+                            user_id: Set(u.id),
+                            module_id: Set(m.id),
+                            role: Set(r),
+                            ..Default::default()
+                        }
+                        .insert(db)
+                        .await;
+                    }
+                }
+
+                // lecturer_assistant => round-robin Lecturer -> AssistantLecturer
+                "lecturer_assistant" => {
+                    if modules.is_empty() {
+                        continue;
+                    }
+                    let mut rr = [Role::Lecturer, Role::AssistantLecturer].iter().cycle();
+                    for m in &modules {
+                        let r = rr.next().unwrap().clone();
+                        let _ = user_module_role::ActiveModel {
+                            user_id: Set(u.id),
+                            module_id: Set(m.id),
+                            role: Set(r),
+                            ..Default::default()
+                        }
+                        .insert(db)
+                        .await;
+                    }
+                }
+
+                // NEW: all => round-robin Student -> Tutor -> AssistantLecturer -> Lecturer
+                "all" => {
+                    if modules.is_empty() {
+                        continue;
+                    }
+                    let mut rr = [
+                        Role::Student,
+                        Role::Tutor,
+                        Role::AssistantLecturer,
+                        Role::Lecturer,
+                    ]
+                    .iter()
+                    .cycle();
+                    for m in &modules {
+                        let r = rr.next().unwrap().clone();
+                        let _ = user_module_role::ActiveModel {
+                            user_id: Set(u.id),
+                            module_id: Set(m.id),
+                            role: Set(r),
+                            ..Default::default()
+                        }
+                        .insert(db)
+                        .await;
                     }
 
-                    // student_tutor => split half Student, half Tutor
-                    "student_tutor" => {
-                        if modules.is_empty() {
-                            continue;
-                        }
-                        let mut shuffled = modules.clone();
-                        shuffled.shuffle(&mut rng);
-                        let mid = shuffled.len() / 2;
-
-                        for m in &shuffled[..mid] {
-                            let _ = UserModuleRoleService::update(UpdateUserModuleRole {
-                                user_id: u.id,
-                                module_id: m.id,
-                                role: Some("student".to_string()),
-                            })
-                            .await;
-                        }
-                        for m in &shuffled[mid..] {
-                            let _ = UserModuleRoleService::update(UpdateUserModuleRole {
-                                user_id: u.id,
-                                module_id: m.id,
-                                role: Some("tutor".to_string()),
-                            })
-                            .await;
-                        }
+                // Everyone else: random 3–6 modules as Student
+                _ => {
+                    if modules.is_empty() {
+                        continue;
                     }
+                    let count = rng.gen_range(3..=6).min(modules.len());
+                    let assigned = modules
+                        .choose_multiple(&mut rng, count)
+                        .cloned()
+                        .collect::<Vec<_>>();
 
-                    // all_staff => round-robin Lecturer -> AssistantLecturer -> Tutor
-                    "all_staff" => {
-                        if modules.is_empty() {
-                            continue;
-                        }
-                        let mut rr = ["lecturer", "assistant_lecturer", "tutor"].iter().cycle();
-                        for m in &modules {
-                            let r = rr.next().unwrap();
-                            let _ = UserModuleRoleService::update(UpdateUserModuleRole {
-                                user_id: u.id,
-                                module_id: m.id,
-                                role: Some(r.to_string()),
-                            })
-                            .await;
-                        }
-                    }
-
-                    // lecturer_assistant => round-robin Lecturer -> AssistantLecturer
-                    "lecturer_assistant" => {
-                        if modules.is_empty() {
-                            continue;
-                        }
-                        let mut rr = ["lecturer", "assistant_lecturer"].iter().cycle();
-                        for m in &modules {
-                            let r = rr.next().unwrap();
-                            let _ = UserModuleRoleService::update(UpdateUserModuleRole {
-                                user_id: u.id,
-                                module_id: m.id,
-                                role: Some(r.to_string()),
-                            })
-                            .await;
-                        }
-                    }
-
-                    // NEW: all => round-robin Student -> Tutor -> AssistantLecturer -> Lecturer
-                    "all" => {
-                        if modules.is_empty() {
-                            continue;
-                        }
-                        let mut rr = ["lecturer", "assistant_lecturer", "tutor", "student"]
-                            .iter()
-                            .cycle();
-                        for m in &modules {
-                            let r = rr.next().unwrap();
-                            let _ = UserModuleRoleService::update(UpdateUserModuleRole {
-                                user_id: u.id,
-                                module_id: m.id,
-                                role: Some(r.to_string()),
-                            })
-                            .await;
-                        }
-                    }
-
-                    // Everyone else: random 3–6 modules as Student
-                    _ => {
-                        if modules.is_empty() {
-                            continue;
-                        }
-                        let count = rng.gen_range(3..=6).min(modules.len());
-                        let assigned = modules
-                            .choose_multiple(&mut rng, count)
-                            .cloned()
-                            .collect::<Vec<_>>();
-
-                        for m in assigned {
-                            let _ = UserModuleRoleService::update(UpdateUserModuleRole {
-                                user_id: u.id,
-                                module_id: m.id,
-                                role: Some("student".to_string()),
-                            })
-                            .await;
+                    for m in assigned {
+                        let _ = user_module_role::ActiveModel {
+                            user_id: Set(u.id),
+                            module_id: Set(m.id),
+                            role: Set(Role::Student),
+                            ..Default::default()
                         }
                     }
                 }

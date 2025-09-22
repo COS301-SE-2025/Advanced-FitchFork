@@ -23,7 +23,7 @@ use std::fs;
 use std::net::IpAddr;
 use strum::{Display, EnumIter, EnumString};
 use util::execution_config::ExecutionConfig;
-use util::execution_config::execution_config::SubmissionMode;
+use util::execution_config::SubmissionMode;
 use util::paths::{assignment_dir, interpreter_dir, memo_output_dir};
 
 /// Assignment model representing the `assignments` table in the database.
@@ -62,6 +62,8 @@ impl Related<moss_report::Entity> for Entity {
         Relation::MossReports.def()
     }
 }
+
+impl ActiveModelBehavior for ActiveModel {}
 
 #[derive(
     Debug, Clone, PartialEq, Display, EnumIter, EnumString, Serialize, Deserialize, DeriveActiveEnum,
@@ -177,12 +179,46 @@ impl Model {
 
         let created = active.insert(db).await?;
 
-        // auto-create default config.json
-        if let Err(e) = ExecutionConfig::default_config().save(module_id, created.id) {
-            eprintln!(
-                "Warning: failed to save default execution config for assignment {}: {}",
-                created.id, e
-            );
+        // auto-create default config.json (mirror on disk + DB record)
+        let default_config = ExecutionConfig::default_config();
+        match serde_json::to_vec(&default_config) {
+            Ok(bytes) => {
+                if let Err(e) = AssignmentFileModel::save_file(
+                    db,
+                    created.id,
+                    module_id,
+                    FileType::Config,
+                    "config.json",
+                    &bytes,
+                )
+                .await
+                {
+                    eprintln!(
+                        "Warning: failed to store default execution config record for assignment {}: {}",
+                        created.id, e
+                    );
+
+                    if let Err(e) = default_config.save(module_id, created.id) {
+                        eprintln!(
+                            "Warning: failed to save default execution config for assignment {}: {}",
+                            created.id, e
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!(
+                    "Warning: failed to serialize default execution config for assignment {}: {}",
+                    created.id, e
+                );
+
+                if let Err(e) = default_config.save(module_id, created.id) {
+                    eprintln!(
+                        "Warning: failed to save default execution config for assignment {}: {}",
+                        created.id, e
+                    );
+                }
+            }
         }
 
         Ok(created)
@@ -583,9 +619,10 @@ impl Model {
 
     /// Decide whether the user can submit given `is_practice`.
     ///
-    /// Staff (lecturer/assistant/tutor):
+    ///     Staff (lecturer/assistant/tutor):
     ///   - Always allowed, practice or not.
-    /// Students:
+    ///
+    ///     Students:
     ///   - Practice requires `allow_practice_submissions == true`.
     ///   - Non-practice uses attempt-limit rules.
     pub async fn can_submit_for(

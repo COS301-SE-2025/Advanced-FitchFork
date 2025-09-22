@@ -1,6 +1,5 @@
 use super::runtime::WsContext;
 use serde::de::DeserializeOwned;
-use std::future::Future;
 
 pub trait WsHandler: Send + Sync + 'static {
     /// The incoming message type your handler understands (tagged enum recommended)

@@ -5,6 +5,7 @@
 
 use crate::response::ApiResponse;
 use axum::{Json, Router, response::IntoResponse, routing::get};
+use util::state::AppState;
 
 /// Builds the `/health` route group.
 ///

@@ -113,46 +113,58 @@ impl Feedback for AiFeedback {
     /// # Returns
     ///
     /// A `Result` containing a vector of [`FeedbackEntry`]s or a [`MarkerError`].
-    fn assemble_feedback<'a>(
-        &'a self,
-        results: &'a [TaskResult],
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<FeedbackEntry>, MarkerError>> + Send + 'a>> {
-        Box::pin(async move {
-            dotenvy::dotenv().ok();
+    async fn assemble_feedback(
+        &self,
+        results: &[TaskResult],
+    ) -> Result<Vec<FeedbackEntry>, MarkerError> {
+        dotenvy::dotenv().ok();
 
             let api_key = config::gemini_api_key();
 
             let client = reqwest::Client::new();
             let mut feedback_entries = Vec::new();
 
-            for result in results {
-                let message = if result.missed_patterns.is_empty() {
-                    "All patterns matched".to_string()
-                } else {
-                    let prompt = format!(
-                        "For a task named '{}', the student missed the following patterns:\n{}\nPlease provide a short and concise hint to the student without giving away the answer.",
-                        result.name,
-                        result.missed_patterns.join("\n")
-                    );
+        for result in results {
+            let message = if result.missed_patterns.is_empty() {
+                "All patterns matched".to_string()
+            } else {
+                let prompt = format!(
+                    "For a task named '{}', the student missed the following patterns:\n{}\nThis was their output:\n{}\nPlease provide a short and concise hint to the student without giving away the answer.",
+                    result.name,
+                    result.missed_patterns.join("\n"),
+                    result.student_output.join("\n"),
+                );
 
-                    let request_body = GeminiRequest {
-                        contents: vec![Content {
-                            parts: vec![Part { text: prompt }],
-                        }],
-                        generation_config: Some(GenerationConfig {
-                            thinking_config: ThinkingConfig { thinking_budget: 0 },
-                        }),
-                    };
+                let request_body = GeminiRequest {
+                    contents: vec![Content {
+                        parts: vec![Part { text: prompt }],
+                    }],
+                    generation_config: Some(GenerationConfig {
+                        thinking_config: ThinkingConfig { thinking_budget: 0 },
+                    }),
+                };
 
-                    let response = client
-                        .post(format!(
-                            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
-                            api_key
+                let response = client
+                    .post(format!(
+                        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
+                        api_key
+                    ))
+                    .json(&request_body)
+                    .send()
+                    .await
+                    .map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
+
+                let response_text = response
+                    .text()
+                    .await
+                    .map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
+                let response =
+                    serde_json::from_str::<GeminiResponse>(&response_text).map_err(|e| {
+                        MarkerError::InputMismatch(format!(
+                            "error decoding response body: {}. Full response: {}",
+                            e, response_text
                         ))
-                        .json(&request_body)
-                        .send()
-                        .await
-                        .map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
+                    })?;
 
                     let response_text = response
                         .text()
@@ -207,6 +219,14 @@ mod tests {
                 ],
                 awarded: 0,
                 possible: 10,
+                student_output: vec!["factorial(5) = 120".to_string()],
+                memo_output: vec![
+                    "factorial(0) = 1".to_string(),
+                    "factorial(5) = 120".to_string(),
+                ],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
             TaskResult {
                 name: "Check for palindrome".to_string(),
@@ -214,6 +234,11 @@ mod tests {
                 missed_patterns: vec![],
                 awarded: 5,
                 possible: 5,
+                student_output: vec!["palindrome('racecar') = true".to_string()],
+                memo_output: vec!["palindrome('racecar') = true".to_string()],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
         ];
 
@@ -233,6 +258,7 @@ mod tests {
                 .message
                 .contains("Could not generate AI feedback.")
         );
+        println!("Factorial AI Feedback: {}", factorial_feedback.message);
 
         let palindrome_feedback = &feedback[1];
         assert_eq!(palindrome_feedback.task, "Check for palindrome");

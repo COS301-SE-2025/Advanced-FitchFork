@@ -1,9 +1,15 @@
 use crate::response::ApiResponse;
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use chrono::{DateTime, Utc};
+use db::models::plagiarism_case::{Column as PlagiarismColumn, Entity as PlagiarismEntity, Status};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
 use serde::Serialize;
-use services::plagiarism_case::{PlagiarismCaseService, Status, UpdatePlagiarismCase};
-use services::service::Service;
+use util::state::AppState;
 
 #[derive(Debug, Serialize)]
 pub struct FlaggedCaseResponse {
@@ -81,6 +87,26 @@ pub async fn patch_plagiarism_flag(
     })
     .await
     {
+        Ok(Some(case)) => case,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::error("Plagiarism case not found")),
+            );
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(format!("Database error: {}", e))),
+            );
+        }
+    };
+
+    let mut active_case = case.into_active_model();
+    active_case.status = Set(Status::Flagged);
+    active_case.updated_at = Set(Utc::now());
+
+    let updated_case = match active_case.update(app_state.db()).await {
         Ok(case) => case,
         Err(e) => {
             return (
@@ -184,6 +210,26 @@ pub async fn patch_plagiarism_review(
     })
     .await
     {
+        Ok(Some(case)) => case,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::error("Plagiarism case not found")),
+            );
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(format!("Database error: {}", e))),
+            );
+        }
+    };
+
+    let mut active_case = case.into_active_model();
+    active_case.status = Set(Status::Reviewed);
+    active_case.updated_at = Set(Utc::now());
+
+    let updated_case = match active_case.update(app_state.db()).await {
         Ok(case) => case,
         Err(e) => {
             return (

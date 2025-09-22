@@ -6,12 +6,8 @@ mod tests {
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
-    use db::{models::user::Model as UserModel, repositories::user_repository::UserRepository};
+    use db::models::user::Model as UserModel;
     use serde_json::Value;
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
     use tower::ServiceExt;
 
     struct TestData {
@@ -23,34 +19,33 @@ mod tests {
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service
-            .create(CreateUser {
-                username: "delete_admin".to_string(),
-                email: "delete_admin@test.com".to_string(),
-                password: "adminpass".to_string(),
-                admin: true,
-            })
-            .await
-            .expect("Failed to create admin user for DELETE tests");
-        let non_admin_user = service
-            .create(CreateUser {
-                username: "delete_regular".to_string(),
-                email: "delete_regular@test.com".to_string(),
-                password: "userpass".to_string(),
-                admin: false,
-            })
-            .await
-            .expect("Failed to create regular user for DELETE tests");
-        let user_to_delete = service
-            .create(CreateUser {
-                username: "target_for_deletion".to_string(),
-                email: "target_delete@test.com".to_string(),
-                password: "deletepass".to_string(),
-                admin: false,
-            })
-            .await
-            .expect("Failed to create target user for deletion");
+        let admin_user = UserModel::create(
+            db,
+            "delete_admin",
+            "delete_admin@test.com",
+            "adminpass",
+            true,
+        )
+        .await
+        .expect("Failed to create admin user for DELETE tests");
+        let non_admin_user = UserModel::create(
+            db,
+            "delete_regular",
+            "delete_regular@test.com",
+            "userpass",
+            false,
+        )
+        .await
+        .expect("Failed to create regular user for DELETE tests");
+        let user_to_delete = UserModel::create(
+            db,
+            "target_for_deletion",
+            "target_delete@test.com",
+            "deletepass",
+            false,
+        )
+        .await
+        .expect("Failed to create target user for deletion");
 
         TestData {
             admin_user,

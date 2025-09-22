@@ -9,8 +9,6 @@
 
 use chrono::{Datelike, Utc};
 use serde::{Deserialize, Serialize};
-use services::module::Module;
-use services::user::User;
 use validator::Validate;
 
 #[derive(Debug, Deserialize)]

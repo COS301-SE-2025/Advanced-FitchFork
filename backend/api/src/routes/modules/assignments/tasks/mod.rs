@@ -10,6 +10,7 @@ use delete::delete_task;
 use get::{get_task_details, list_tasks};
 use post::create_task;
 use put::edit_task;
+use util::state::AppState;
 
 pub mod common;
 pub mod delete;
@@ -31,7 +32,7 @@ pub mod put;
 ///
 /// # Returns
 /// An [`axum::Router`] with the task endpoints and their associated middleware.
-pub fn tasks_routes() -> Router {
+pub fn tasks_routes() -> Router<AppState> {
     Router::new()
         .route("/", get(list_tasks))
         .route("/", post(create_task))

@@ -117,8 +117,14 @@ const MENU_ITEMS: MenuItem[] = [
         label: 'Submissions',
         children: [
           { key: 'assignments/submissions/how-to-submit', label: 'How to Submit' },
-          { key: 'assignments/submissions/policy', label: 'Submission Policy' },
         ],
+      },
+
+      // --- Plagiarism ---
+      {
+        type: 'group',
+        label: 'Plagiarism',
+        children: [{ key: 'assignments/plagiarism/moss', label: 'Plagiarism & MOSS' }],
       },
 
       // --- Grading (own group) ---
@@ -128,10 +134,6 @@ const MENU_ITEMS: MenuItem[] = [
         children: [
           { key: 'assignments/memo-output', label: 'Memo Output' },
           { key: 'assignments/mark-allocator', label: 'Mark Allocation' },
-          {
-            key: 'assignments/submissions/understanding-results',
-            label: 'Understanding Results & Reports',
-          },
         ],
       },
     ],
@@ -142,6 +144,7 @@ const MENU_ITEMS: MenuItem[] = [
     label: 'Support',
     children: [
       { key: 'support/troubleshooting', label: 'Troubleshooting' },
+      { key: 'support/system-monitoring', label: 'System Monitoring' },
       { key: 'support/contact', label: 'Contact' },
     ],
   },

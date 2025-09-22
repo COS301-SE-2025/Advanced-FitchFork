@@ -1,7 +1,7 @@
 use crate::response::ApiResponse;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use serde_json::Value;
-use util::mark_allocator::mark_allocator::{SaveError, save_allocator};
+use util::mark_allocator::{SaveError, save_allocator};
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///

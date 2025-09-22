@@ -8,25 +8,16 @@ mod update_plagiarism_tests {
         http::{Request, StatusCode},
     };
     use chrono::{Datelike, TimeZone, Utc};
-    use db::{
-        models::{
-            assignment::{AssignmentType, Model as AssignmentModel},
-            assignment_submission::Model as SubmissionModel,
-            module::Model as ModuleModel,
-            plagiarism_case::{
-                Entity as PlagiarismCaseEntity, Model as PlagiarismCaseModel, Status,
-            },
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
+    use db::models::{
+        assignment::{AssignmentType, Model as AssignmentModel},
+        assignment_submission::Model as SubmissionModel,
+        module::Model as ModuleModel,
+        plagiarism_case::{Entity as PlagiarismCaseEntity, Model as PlagiarismCaseModel, Status},
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use sea_orm::{DatabaseConnection, EntityTrait};
     use serde_json::Value;
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
     use tower::ServiceExt;
 
     // small helper for float compares in JSON
@@ -95,6 +86,7 @@ mod update_plagiarism_tests {
         )
         .await
         .unwrap();
+
         let submission1 = SubmissionModel::save_file(
             db,
             assignment.id,
@@ -109,6 +101,7 @@ mod update_plagiarism_tests {
         )
         .await
         .unwrap();
+
         let submission2 = SubmissionModel::save_file(
             db,
             assignment.id,

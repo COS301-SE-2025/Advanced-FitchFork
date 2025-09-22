@@ -7,24 +7,16 @@ mod plagiarism_tests {
         http::{Request, StatusCode},
     };
     use chrono::{Datelike, TimeZone, Utc};
-    use db::{
-        models::{
-            assignment::{AssignmentType, Model as AssignmentModel},
-            assignment_submission::Model as SubmissionModel,
-            module::Model as ModuleModel,
-            plagiarism_case::{Model as PlagiarismCaseModel, Status},
-            user::Model as UserModel,
-            user_module_role::{Model as UserModuleRoleModel, Role},
-        },
-        repositories::user_repository::UserRepository,
+    use db::models::{
+        assignment::{AssignmentType, Model as AssignmentModel},
+        assignment_submission::Model as SubmissionModel,
+        module::Model as ModuleModel,
+        plagiarism_case::{Model as PlagiarismCaseModel, Status},
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use sea_orm::{ActiveModelTrait, DatabaseConnection, IntoActiveModel, Set};
     use serde_json::Value;
-    use serial_test::serial;
-    use services::{
-        service::Service,
-        user::{CreateUser, UserService},
-    };
     use tower::ServiceExt;
 
     struct TestData {
@@ -47,61 +39,28 @@ mod plagiarism_tests {
         let module = ModuleModel::create(db, "CS101", Utc::now().year(), Some("Intro to CS"), 5)
             .await
             .expect("Failed to create test module");
-        let service = UserService::new(UserRepository::new(db.clone()));
-        let admin_user = service
-            .create(CreateUser {
-                username: "admin".into(),
-                email: "admin@test.com".into(),
-                password: "password".into(),
-                admin: true,
-            })
+        let admin_user = UserModel::create(db, "admin", "admin@test.com", "password", true)
             .await
             .expect("Failed to create admin user");
-        let lecturer_user = service
-            .create(CreateUser {
-                username: "lecturer".into(),
-                email: "lecturer@test.com".into(),
-                password: "password".into(),
-                admin: false,
-            })
-            .await
-            .expect("Failed to create lecturer user");
-        let assistant_user = service
-            .create(CreateUser {
-                username: "assistant".into(),
-                email: "assistant@test.com".into(),
-                password: "password".into(),
-                admin: false,
-            })
-            .await
-            .expect("Failed to create assistant user");
-        let tutor_user = service
-            .create(CreateUser {
-                username: "tutor".into(),
-                email: "tutor@test.com".into(),
-                password: "password".into(),
-                admin: false,
-            })
+        let lecturer_user =
+            UserModel::create(db, "lecturer", "lecturer@test.com", "password", false)
+                .await
+                .expect("Failed to create lecturer user");
+        let assistant_user =
+            UserModel::create(db, "assistant", "assistant@test.com", "password", false)
+                .await
+                .expect("Failed to create assistant user");
+        let tutor_user = UserModel::create(db, "tutor", "tutor@test.com", "password", false)
             .await
             .expect("Failed to create tutor user");
-        let student_user1 = service
-            .create(CreateUser {
-                username: "student1".into(),
-                email: "student1@test.com".into(),
-                password: "password".into(),
-                admin: false,
-            })
-            .await
-            .expect("Failed to create student1 user");
-        let student_user2 = service
-            .create(CreateUser {
-                username: "student2".into(),
-                email: "student2@test.com".into(),
-                password: "password".into(),
-                admin: false,
-            })
-            .await
-            .expect("Failed to create student2 user");
+        let student_user1 =
+            UserModel::create(db, "student1", "student1@test.com", "password", false)
+                .await
+                .expect("Failed to create student1 user");
+        let student_user2 =
+            UserModel::create(db, "student2", "student2@test.com", "password", false)
+                .await
+                .expect("Failed to create student2 user");
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
             .expect("Failed to assign lecturer role");

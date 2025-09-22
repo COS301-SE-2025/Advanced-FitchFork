@@ -31,6 +31,7 @@ import {
   getInterpreterInfo,
 } from '@/services/modules/assignments/interpreter';
 import type { InterpreterInfo } from '@/types/modules/assignments/interpreter';
+import Tip from '@/components/common/Tip';
 
 const { Text } = Typography;
 
@@ -43,9 +44,12 @@ export default function InterpreterPage() {
 
   useEffect(() => {
     setValue(
-      <Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
-        Interpreter
-      </Text>,
+      <Space align="center" size={6} className="flex-wrap">
+        <Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+          Interpreter
+        </Text>
+        <Tip iconOnly newTab to="/help/assignments/gatlam#interpreter" text="Interpreter help" />
+      </Space>,
     );
   }, [setValue]);
 

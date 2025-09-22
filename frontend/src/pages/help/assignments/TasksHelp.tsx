@@ -7,16 +7,16 @@ import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 const { Title, Paragraph, Text } = Typography;
 
 const toc = [
-  { key: 'what', href: '#what', title: 'What are Tasks?' },
-  { key: 'where', href: '#where', title: 'Where to find Tasks' },
+  { key: 'overview', href: '#overview', title: 'Why Tasks Matter' },
+  { key: 'lifecycle', href: '#lifecycle', title: 'How Fitchfork Runs Tasks' },
   { key: 'fields', href: '#fields', title: 'Fields & defaults' },
   { key: 'create', href: '#create', title: 'Create a Task' },
-  { key: 'edit', href: '#edit', title: 'Edit, reorder, delete' },
+  { key: 'edit', href: '#edit', title: 'Manage Tasks' },
   { key: 'labels', href: '#labels', title: 'Subsections (labels)' },
   { key: 'overwrite', href: '#overwrite', title: 'Overwrite files (per‑task)' },
   { key: 'coverage', href: '#coverage', title: 'Code Coverage flag' },
   { key: 'tips', href: '#tips', title: 'Tips' },
-  { key: 'trouble', href: '#trouble', title: 'Troubleshooting' }, // keep last
+  { key: 'trouble', href: '#trouble', title: 'Troubleshooting' },
 ];
 
 // UI table for task fields
@@ -70,18 +70,10 @@ export default function TasksHelp() {
     extra: (
       <Card className="mt-4" size="small" title="Quick facts" bordered>
         <ul className="list-disc pl-5">
-          <li>A Task is a single runnable check in an assignment.</li>
-          <li>
-            Define Tasks after uploading your Makefile/Main (or Interpreter in GATLAM) and Memo
-            files.
-          </li>
-          <li>
-            Outputs must include labeled sections using your delimiter (default{' '}
-            <Text code>&-=-&</Text>).
-          </li>
-          <li>
-            Memo Output is generated per task; each task’s memo is saved as its own text file.
-          </li>
+          <li>Tasks are the runnable units that produce memo and student output for comparison.</li>
+          <li>Set them up after uploading Makefile/Main (or Interpreter) and Memo files.</li>
+          <li>Commands must print labeled sections using your delimiter (default <Text code>&-=-&</Text>).</li>
+          <li>Each task stores its own memo output text file and optional overwrite archive.</li>
         </ul>
       </Card>
     ),
@@ -94,27 +86,32 @@ export default function TasksHelp() {
         Tasks
       </Title>
 
-      <section id="what" className="scroll-mt-24" />
-      <Title level={3}>What are Tasks?</Title>
+      <section id="overview" className="scroll-mt-24" />
+      <Title level={3}>Why Tasks Matter</Title>
       <Paragraph className="mb-0">
-        Tasks split an assignment into independently runnable checks. Each task runs a configured{' '}
-        <b>command</b>, captures output, and is graded against your{' '}
-        <a href="/help/assignments/memo-output">Memo Output</a> and{' '}
-        <a href="/help/assignments/config/marking">Marking</a> rules. Tasks also host their{' '}
-        <b>subsections</b> (labels) where you allocate{' '}
-        <a href="/help/assignments/mark-allocator">Marks</a>.
+        Tasks are the execution units that produce both Memo Output and student output. Each task shells out to your
+        configured command (often a Make target) and logs labeled sections that your Mark Allocator scores. Keeping tasks
+        tidy ensures memo generation, student grading, and plagiarism overlays all line up.
       </Paragraph>
 
-      <section id="where" className="scroll-mt-24" />
-      <Title level={3}>Where to find Tasks</Title>
+      <section id="lifecycle" className="scroll-mt-24" />
+      <Title level={3}>How Fitchfork Runs Tasks</Title>
       <Descriptions bordered size="middle" column={1} className="mt-2">
         <Descriptions.Item label="Navigation">
-          Open the assignment, then go to the <b>Tasks</b> page. Pick a task to see its subsections
-          and memo output per label.
+          Open the assignment and select <b>Tasks</b>. Choose a task to view its command, subsections, memo output, and
+          any overwrite files.
+        </Descriptions.Item>
+        <Descriptions.Item label="Pipeline">
+          <ul className="list-disc pl-5">
+            <li>During memo generation, each task command runs with Main + Memo (plus any per-task overwrite files) to
+              produce reference output.</li>
+            <li>For student attempts, the same command runs in a fresh workspace with Main + student submission + optional
+              overwrite files.</li>
+            <li>Outputs per task are diffed against memo output; subsections map to the labels you print in Main.</li>
+          </ul>
         </Descriptions.Item>
         <Descriptions.Item label="Prerequisites">
-          Upload files first (Makefile, Main or Interpreter for GATLAM, Memo files). See the{' '}
-          <a href="/help/assignments/setup">Full Setup Guide</a>.
+          Upload Makefile/Main (or Interpreter) and Memo files first so task commands have everything they need.
         </Descriptions.Item>
       </Descriptions>
 
@@ -137,7 +134,8 @@ export default function TasksHelp() {
             The command should run non-interactively, finish within your{' '}
             <a href="/help/assignments/config/execution">Execution</a> limits, and print
             deterministic, labeled output blocks. Common patterns are <Text code>make task1</Text>{' '}
-            or running a compiled binary.
+            or running a compiled binary. If the task has overwrite files, they are merged just
+            before this command runs.
           </>
         }
       />
@@ -192,38 +190,37 @@ export default function TasksHelp() {
         <a href="/help/assignments/mark-allocator">Mark Allocation</a> to assign marks per label.
   </Paragraph>
 
-  <section id="overwrite" className="scroll-mt-24" />
-  <Title level={3}>Overwrite files (per‑task)</Title>
-  <Paragraph className="mb-0">
-    For each task you can upload a small archive of files that is applied on top of the student’s
-    submission when that task runs. Think of it as a temporary “overlay”: files with the same
-    paths replace the student’s versions; new files are added for that run only.
-  </Paragraph>
-  <Descriptions bordered size="middle" column={1} className="mt-2">
-    <Descriptions.Item label="Why use it?">
-      <ul className="list-disc pl-5">
-        <li>Add fixed inputs, test data, or golden resources the task needs.</li>
-        <li>Pin a config file or small script so all students run with known settings.</li>
-        <li>Provide stubs/wrappers for tools not included in student submissions.</li>
-      </ul>
-    </Descriptions.Item>
-    <Descriptions.Item label="How it works">
-      <ul className="list-disc pl-5">
-        <li>Upload a <Text code>.zip</Text> under the specific task.</li>
-        <li>The contents are merged at the project root for that task’s execution.</li>
-        <li>Matching paths overwrite the student’s files; new paths are added.</li>
-        <li>The newest upload is used. You can download or delete the current overlay.</li>
-        <li>Overlays are per‑task and do not affect other tasks.</li>
-      </ul>
-    </Descriptions.Item>
-    <Descriptions.Item label="Good practice">
-      <ul className="list-disc pl-5">
-        <li>Keep overlays small and only what’s necessary for the task.</li>
-        <li>Do not include secrets or credentials — students’ code can read these files.</li>
-        <li>Regenerate Memo Output if the overlay changes expected output.</li>
-      </ul>
-    </Descriptions.Item>
-  </Descriptions>
+      <section id="overwrite" className="scroll-mt-24" />
+      <Title level={3}>Overwrite files (per‑task)</Title>
+      <Paragraph className="mb-0">
+        Each task can host an “overlay” archive. When the task command runs, Fitchfork extracts the archive into the
+        workspace after the student’s submission and before the command executes. Matching paths overwrite the student’s
+        files; new paths are added for that task only.
+      </Paragraph>
+      <Descriptions bordered size="middle" column={1} className="mt-2">
+        <Descriptions.Item label="Why use it?">
+          <ul className="list-disc pl-5">
+            <li>Add fixed inputs, datasets, or golden answers that shouldn’t live in student repos.</li>
+            <li>Ship small configuration files or scripts to standardize execution per task.</li>
+            <li>Patch known issues or provide shim binaries the grader requires.</li>
+          </ul>
+        </Descriptions.Item>
+        <Descriptions.Item label="How it works">
+          <ul className="list-disc pl-5">
+            <li>Upload a <Text code>.zip</Text> under the desired task. Fitchfork stores it in <Text code>overwrite_files/task_X/</Text>.</li>
+            <li>When memo generation or student runs execute the task, the archive is merged after extracting Main/Memo or Main/student files.</li>
+            <li>Later uploads replace earlier ones; you can download or delete the current overlay.</li>
+            <li>Overlays are scoped per task and never leak into other tasks.</li>
+          </ul>
+        </Descriptions.Item>
+        <Descriptions.Item label="Good practice">
+          <ul className="list-disc pl-5">
+            <li>Keep overlays minimal. Large binaries slow every run.</li>
+            <li>Avoid secrets or credentials—student code can read these files.</li>
+            <li>Regenerate Memo Output whenever overlays change expected output.</li>
+          </ul>
+        </Descriptions.Item>
+      </Descriptions>
 
       <section id="coverage" className="scroll-mt-24" />
       <Title level={3}>Code Coverage flag</Title>

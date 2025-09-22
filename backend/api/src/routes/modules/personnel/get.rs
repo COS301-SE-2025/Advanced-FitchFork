@@ -1,14 +1,26 @@
+use axum::{
+    Json,
+    extract::{Extension, Path, Query, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
+use sea_orm::{
+    ColumnTrait, Condition, EntityTrait, JoinType, Order, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect,
+};
+
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
     routes::modules::common::{PaginatedRoleResponse, RoleQuery, RoleResponse},
 };
-use axum::{
-    Json,
-    extract::{Extension, Path, Query},
-    http::StatusCode,
-    response::IntoResponse,
+use db::models::{
+    user,
+    user::Model as UserModel,
+    user_module_role::{self, Column as RoleCol, Role},
 };
+use util::state::AppState;
+
 use serde::{Deserialize, Serialize};
 use services::service::Service;
 use services::user::{User, UserService};
@@ -107,44 +119,35 @@ pub async fn get_personnel(
         if requested_role == "lecturer" {
             return (
                 StatusCode::FORBIDDEN,
-                Json(ApiResponse::<PaginatedRoleResponse>::error(
-                    "Only admins can view lecturers",
-                )),
-            );
+                Json(ApiResponse::<()>::error("Only admins can view lecturers")),
+            )
+                .into_response();
         }
 
-        match UserModuleRoleService::find_one(
-            &vec![
-                FilterParam::eq("user_id", user_id),
-                FilterParam::eq("module_id", module_id),
-            ],
-            &vec![],
-            None,
-        )
-        .await
-        {
-            Ok(is_member) => {
-                if is_member.is_none() {
-                    return (
-                        StatusCode::FORBIDDEN,
-                        Json(ApiResponse::<PaginatedRoleResponse>::error(
-                            "You do not have permission to view this module's users",
-                        )),
-                    );
-                }
-            }
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<PaginatedRoleResponse>::error(format!(
-                        "Database error: {}",
-                        e
-                    ))),
-                );
-            }
+        // For other roles, user must be part of the module
+        let is_member = user_module_role::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(RoleCol::UserId.eq(user_id))
+                    .add(RoleCol::ModuleId.eq(module_id)),
+            )
+            .one(db)
+            .await
+            .map(|opt| opt.is_some())
+            .unwrap_or(false);
+
+        if !is_member {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(ApiResponse::<()>::error(
+                    "You do not have permission to view this module's users",
+                )),
+            )
+                .into_response();
         }
     }
 
+    // === Data Query ===
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).clamp(1, 100);
     let sort = params.sort.clone();
@@ -185,12 +188,13 @@ pub async fn get_personnel(
 
     let user_responses: Vec<RoleResponse> = users.into_iter().map(RoleResponse::from).collect();
 
-    let response = PaginatedRoleResponse {
-        users: user_responses,
-        page,
-        per_page,
-        total,
-    };
+    let paginator = query.paginate(db, per_page.into());
+    let total = paginator.num_items().await.unwrap_or(0);
+    let users = paginator
+        .fetch_page((page - 1) as u64)
+        .await
+        .unwrap_or_default();
+    let result = users.into_iter().map(RoleResponse::from).collect();
 
     (
         StatusCode::OK,
@@ -333,18 +337,20 @@ pub async fn get_eligible_users_for_module(
         }
     };
 
-    let user_responses: Vec<MinimalUserResponse> =
-        users.into_iter().map(MinimalUserResponse::from).collect();
-
-    let response = EligibleUserListResponse {
-        users: user_responses,
-        page,
-        per_page,
-        total,
-    };
+    let paginator = query.paginate(db, per_page.into());
+    let total = paginator.num_items().await.unwrap_or(0);
+    let raw_users = paginator
+        .fetch_page((page - 1).into())
+        .await
+        .unwrap_or_default();
+    let users = raw_users
+        .into_iter()
+        .map(MinimalUserResponse::from)
+        .collect();
 
     (
         StatusCode::OK,
         Json(ApiResponse::success(response, "Eligible users fetched")),
     )
+        .into_response()
 }

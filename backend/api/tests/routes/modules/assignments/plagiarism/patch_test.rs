@@ -73,15 +73,11 @@ mod patch_plagiarism_tests {
             })
             .await
             .expect("Failed to create tutor user");
-        let student_user = service
-            .create(CreateUser {
-                username: "student".to_string(),
-                email: "student@test.com".to_string(),
-                password: "password".to_string(),
-                admin: false,
-            })
+        let student_user = UserModel::create(db, "student", "student@test.com", "password", false)
             .await
             .expect("Failed to create student user");
+
+        // Assign roles
         UserModuleRoleModel::assign_user_to_module(db, lecturer_user.id, module.id, Role::Lecturer)
             .await
             .expect("Failed to assign lecturer role");

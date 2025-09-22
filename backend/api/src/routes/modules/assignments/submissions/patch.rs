@@ -13,11 +13,18 @@
 //! - An `ignored` submission should be excluded from grading/analytics where applicable.
 //! - The endpoint validates that the submission belongs to the target assignment.
 
-use crate::response::ApiResponse;
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use services::assignment_submission::{AssignmentSubmissionService, UpdateAssignmentSubmission};
-use services::service::Service;
+
+use crate::response::ApiResponse;
+use db::models::assignment_submission as submission;
+use util::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct SetIgnoredReq {
@@ -78,6 +85,29 @@ pub async fn set_submission_ignored(
     })
     .await
     {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<SetIgnoredData>::error(format!(
+                    "No submission {} found for assignment {}",
+                    submission_id, assignment_id
+                ))),
+            );
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SetIgnoredData>::error(format!(
+                    "DB error: {}",
+                    e
+                ))),
+            );
+        }
+    };
+
+    // Update flag (using the model helper you added)
+    match submission::Model::set_ignored(db, sub.id, req.ignored).await {
         Ok(updated) => {
             let data = SetIgnoredData {
                 id: updated.id,
