@@ -68,7 +68,7 @@ const PlagiarismCaseCard = ({ caseItem, actions, onClick }: Props) => {
             decimals={0}
             suffix="%"
             // Higher similarity should look worse -> red toward 100
-            palette="redGreen"
+            scheme="red-green"
             className="leading-[18px]"
           />
           <Text type="secondary" className="leading-[18px]">

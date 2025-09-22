@@ -1,26 +1,38 @@
 {
   "generated_at": "2025-06-20T12:00:00+02:00",
+  "total_value": 30,
   "tasks": [
     {
-      "task1": {
-        "name": "Reverse String",
-        "value": 10,
-        "subsections": [
-          { "name": "Reverse abc", "value": 5 },
-          { "name": "Reverse xyz", "value": 5 }
-        ]
-      }
+      "task_number": 1,
+      "name": "Reverse String",
+      "value": 10,
+      "code_coverage": false,
+      "subsections": [
+        {
+          "name": "Reverse abc",
+          "value": 5
+        },
+        {
+          "name": "Reverse xyz",
+          "value": 5
+        }
+      ]
     },
     {
-      "task2": {
-        "name": "Sort Numbers",
-        "value": 20,
-        "subsections": [
-          { "name": "Sort ascending", "value": 10 },
-          { "name": "Sort descending", "value": 10 }
-        ]
-      }
+      "task_number": 2,
+      "name": "Sort Numbers",
+      "value": 20,
+      "code_coverage": false,
+      "subsections": [
+        {
+          "name": "Sort ascending",
+          "value": 10
+        },
+        {
+          "name": "Sort descending",
+          "value": 10
+        }
+      ]
     }
-  ],
-  "total_value": 30
-} 
+  ]
+}

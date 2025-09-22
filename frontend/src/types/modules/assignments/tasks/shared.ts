@@ -12,5 +12,7 @@ export interface Task extends Timestamp {
 export interface SubsectionDetail {
   name: string;
   value: number;
-  memo_output: string;
+  memo_output: string | null;
+  feedback?: string;
+  regex?: string[];
 }

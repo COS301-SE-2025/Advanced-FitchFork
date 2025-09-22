@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react';
 import { Typography, Card, Alert, Space, Collapse, Table, Descriptions, Tag } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -46,6 +47,16 @@ const sampleRows = [
 export default function MarkAllocatorHelp() {
   const { setBreadcrumbLabel } = useBreadcrumbContext();
   const ids = useMemo(() => toc.map((t) => t.href.slice(1)), []);
+  const { setValue, setBackTo } = useViewSlot();
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+        Mark Allocator
+      </Typography.Text>,
+    );
+    setBackTo('/help');
+  }, []);
 
   useEffect(() => {
     setBreadcrumbLabel('help/assignments/mark-allocator', 'Mark Allocation');
@@ -128,9 +139,43 @@ export default function MarkAllocatorHelp() {
         </Descriptions.Item>
       </Descriptions>
 
+      <section id="example" className="scroll-mt-24" />
       <Card className="mt-3" bordered>
         <Paragraph className="mb-2">Example allocation for one task:</Paragraph>
-        <Table size="small" columns={sampleCols} dataSource={sampleRows} pagination={false} />
+
+        {/* Desktop table */}
+        <div className="hidden md:block">
+          <Table
+            size="small"
+            columns={sampleCols}
+            dataSource={sampleRows}
+            pagination={false}
+            scroll={{ x: true }}
+          />
+        </div>
+
+        {/* Mobile cards */}
+        <div className="block md:hidden !space-y-3">
+          {sampleRows.map((r) => (
+            <Card
+              key={r.key}
+              size="small"
+              title={<div className="font-semibold">{r.label}</div>}
+              extra={
+                <Tag color="purple">
+                  {r.marks} mark{r.marks === 1 ? '' : 's'}
+                </Tag>
+              }
+              bordered
+            >
+              <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+                Notes
+              </div>
+              <div className="text-sm">{r.notes}</div>
+            </Card>
+          ))}
+        </div>
+
         <Paragraph className="mt-2 mb-0">
           In this example, the task total is <b>9 marks</b> (3 + 3 + 3).
         </Paragraph>

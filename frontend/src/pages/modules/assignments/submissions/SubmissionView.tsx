@@ -137,6 +137,7 @@ const SubmissionView = () => {
           tasks={tasks ?? []}
           memoOutput={memoOutput}
           submisisonOutput={submissionOutput}
+          codeCoverage={submission.code_coverage}
         />
       </div>
 

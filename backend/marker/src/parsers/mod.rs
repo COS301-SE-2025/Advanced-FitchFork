@@ -8,10 +8,8 @@
 //! ensuring a consistent interface for parsing different report formats.
 //
 //! The available parsers are:
-//! - [`allocator_parser`]: For parsing memory allocation reports.
 //! - [`coverage_parser`]: For parsing code coverage reports.
 //! - [`output_parser`]: For parsing output files (memo/student) into structured tasks/subtasks.
 
-pub mod allocator_parser;
 pub mod coverage_parser;
 pub mod output_parser;

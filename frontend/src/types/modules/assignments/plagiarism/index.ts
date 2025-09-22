@@ -83,3 +83,36 @@ export interface MossReport {
 export type MossReportListResponse = ApiResponse<{
   reports: MossReport[];
 }>;
+
+export interface HashScanPayload {
+  /** When true, auto-create plagiarism cases for each unique pair in a collision group. */
+  create_cases?: boolean;
+}
+
+export interface HashScanSubmissionInfo {
+  submission_id: number;
+  user_id: number;
+  attempt: number;
+  filename: string;
+  /** RFC 3339 */
+  created_at: string;
+}
+
+export interface HashScanCollisionGroup {
+  file_hash: string;
+  submissions: HashScanSubmissionInfo[];
+}
+
+export interface HashScanCreatedCases {
+  created: PlagiarismCase[];   // server returns full cases (matches your example)
+  skipped_existing: number;
+}
+
+export interface HashScanData {
+  assignment_id: number;
+  /** "Best" | "Last" as sent by backend; keep string to be future-proof */
+  policy_used: string;
+  group_count: number;
+  groups: HashScanCollisionGroup[];
+  cases: HashScanCreatedCases;
+}

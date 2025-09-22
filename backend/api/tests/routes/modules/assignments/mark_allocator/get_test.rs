@@ -76,10 +76,32 @@ mod tests {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
+        // --- write normalized allocator.json ---
         let allocator_path = mark_allocator_path(data.module.id, data.assignment.id);
         fs::create_dir_all(allocator_path.parent().unwrap()).unwrap();
-        fs::write(&allocator_path, r#"{"tasks":[{"task_number":1,"weight":1.0,"criteria":[{"name":"Correctness","weight":1.0}]}],"total_weight":1.0}"#).unwrap();
 
+        let now = Utc::now().to_rfc3339();
+        let alloc_json = format!(
+            r#"{{
+            "generated_at": "{now}",
+            "total_value": 10,
+            "tasks": [
+            {{
+                "task_number": 1,
+                "name": "Task 1",
+                "value": 10,
+                "code_coverage": false,
+                "subsections": [
+                {{ "name": "Sub1", "value": 10, "regex": null, "feedback": null }}
+                ]
+            }}
+            ]
+        }}"#
+        );
+
+        fs::write(&allocator_path, alloc_json).unwrap();
+
+        // --- request ---
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
             "/api/modules/{}/assignments/{}/mark_allocator",
@@ -94,12 +116,19 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
+        // --- assertions for normalized shape ---
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
+
         assert_eq!(json["success"], true);
-        assert_eq!(json["data"]["total_weight"], 1.0);
+        assert_eq!(json["data"]["total_value"], 10);
+        assert_eq!(json["data"]["tasks"][0]["task_number"], 1);
+        assert_eq!(json["data"]["tasks"][0]["name"], "Task 1");
+        assert_eq!(json["data"]["tasks"][0]["value"], 10);
+        assert_eq!(json["data"]["tasks"][0]["subsections"][0]["name"], "Sub1");
+        assert_eq!(json["data"]["tasks"][0]["subsections"][0]["value"], 10);
     }
 
     #[tokio::test]

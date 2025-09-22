@@ -1,15 +1,18 @@
 {
     "generated_at": "2025-06-20T12:00:00+02:00",
+    "total_value": 10,
     "tasks": [
         {
-            "task1": {
-                "name": "Task 1",
-                "value": 10,
-                "subsections": [
-                    { "name": "Sub1", "value": 10 }
-                ]
-            }
+            "task_number": 1,
+            "name": "Task 1",
+            "value": 10,
+            "code_coverage": false,
+            "subsections": [
+                {
+                    "name": "Sub1",
+                    "value": 10
+                }
+            ]
         }
-    ],
-  "total_value": 10
-}  
+    ]
+}

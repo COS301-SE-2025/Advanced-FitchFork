@@ -22,7 +22,7 @@ export type AdminPayload = {
 };
 
 export function useSystemHealthAdminWs() {
-  const { token } = useAuth();
+  const { token, isAdmin } = useAuth();
   const [data, setData] = useState<AdminPayload | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,9 +31,9 @@ export function useSystemHealthAdminWs() {
   const wsRef = useRef<WebSocket | null>(null);
 
   const url = useMemo(() => {
-    if (!token) return null;
+    if (!token || !isAdmin) return null;
     return `${WS_BASE_URL}/system/health/admin?token=${encodeURIComponent(token)}`;
-  }, [token]);
+  }, [token, isAdmin]);
 
   const reconnectRef = useRef<number | undefined>(undefined);
   const backoffRef = useRef(0);
@@ -45,6 +45,11 @@ export function useSystemHealthAdminWs() {
       try { wsRef.current?.close(); } catch {}
       wsRef.current = null;
       if (reconnectRef.current) { window.clearTimeout(reconnectRef.current); reconnectRef.current = undefined; }
+      if (!isAdmin) {
+        setData(null);
+        setMaxConcurrentState(null);
+        setError(null);
+      }
       return;
     }
 
@@ -120,14 +125,20 @@ export function useSystemHealthAdminWs() {
   }, [url]);
 
   const refreshMaxConcurrent = useCallback(async () => {
+    if (!isAdmin) {
+      return { success: false, data: null, message: 'Admin access required' } as const;
+    }
     const res = await getMaxConcurrent();
     if (res.success && typeof res.data === 'number') {
       setMaxConcurrentState(res.data);
     }
     return res;
-  }, []);
+  }, [isAdmin]);
 
   const updateMaxConcurrent = useCallback(async (value: number) => {
+    if (!isAdmin) {
+      return { success: false, data: null, message: 'Admin access required' } as const;
+    }
     setSaving(true);
     try {
       const res = await setMaxConcurrent(value);
@@ -136,7 +147,7 @@ export function useSystemHealthAdminWs() {
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   return { data, connected, error, maxConcurrent, saving, refreshMaxConcurrent, updateMaxConcurrent };
 }

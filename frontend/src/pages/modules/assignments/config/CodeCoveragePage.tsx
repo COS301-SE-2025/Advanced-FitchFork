@@ -11,7 +11,7 @@ import Tip from '@/components/common/Tip';
 export default function CodeCoveragePage() {
   const { setValue } = useViewSlot();
   const { config, updateConfig } = useAssignment();
-  const [form] = Form.useForm<{ code_coverage_required: number }>();
+  const [form] = Form.useForm<{ code_coverage_weight: number }>();
 
   useEffect(() => {
     setValue(
@@ -19,12 +19,7 @@ export default function CodeCoveragePage() {
         <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
           Code Coverage
         </Typography.Text>
-        <Tip
-          iconOnly
-          newTab
-          to="/help/assignments/coverage#overview"
-          text="Coverage help"
-        />
+        <Tip iconOnly newTab to="/help/assignments/coverage#overview" text="Coverage help" />
       </Space>,
     );
   }, [setValue]);
@@ -32,7 +27,12 @@ export default function CodeCoveragePage() {
   useEffect(() => {
     const cc = config?.code_coverage;
     if (!cc) return;
-    form.setFieldsValue({ code_coverage_required: cc.code_coverage_required ?? 80 });
+    // Backend accepts either fraction (0.10) or percent (10.0).
+    // We keep the UI in percent and store directly as provided.
+    form.setFieldsValue({
+      code_coverage_weight:
+        typeof cc.code_coverage_weight === 'number' ? cc.code_coverage_weight : 10,
+    });
   }, [config?.code_coverage, form]);
 
   const onSave = useCallback(async () => {
@@ -40,12 +40,12 @@ export default function CodeCoveragePage() {
     const values = await form.validateFields();
     try {
       const patch: Partial<AssignmentConfig> = {
-        code_coverage: { code_coverage_required: values.code_coverage_required },
+        code_coverage: { code_coverage_weight: values.code_coverage_weight },
       };
       await updateConfig(patch);
-      message.success('Coverage target saved');
+      message.success('Coverage weight saved');
     } catch (e: any) {
-      message.error(e?.message ?? 'Failed to save coverage target');
+      message.error(e?.message ?? 'Failed to save coverage weight');
     }
   }, [config, form, updateConfig]);
 
@@ -54,25 +54,25 @@ export default function CodeCoveragePage() {
   return (
     <SettingsGroup
       title="Code Coverage"
-      description="Set a target percentage for assignments that measure code coverage."
+      description="Pick the percentage of marks awarded for code coverage."
     >
       <Form layout="vertical" form={form} className="space-y-6" disabled={disabled}>
         <Form.Item
-          name="code_coverage_required"
-          label="Required Coverage (%)"
+          name="code_coverage_weight"
+          label="Coverage Weight (%)"
           className="w-full max-w-xs"
           rules={[
             { required: true, message: 'Enter a percentage' },
-            { type: 'number', min: 0, max: 100, message: 'Must be 0–100' },
+            { type: 'number', min: 0, max: 95, message: 'Recommended 0-95' },
           ]}
-          extra="Used in coverage workflows and reports."
+          extra="Example: 10 means ~10% of marks come from coverage."
         >
-          <InputNumber className="w-full" min={0} max={100} precision={0} />
+          <InputNumber className="w-full" min={0} max={100} precision={2} step={0.25} />
         </Form.Item>
 
         <div className="pt-2">
           <AssignmentConfigActions
-            primaryText="Save Coverage Target"
+            primaryText="Save Coverage Weight"
             onPrimary={onSave}
             disabled={disabled}
           />

@@ -127,7 +127,7 @@ const Dashboard: React.FC = () => {
   return (
     <div className="h-full flex flex-col overflow-x-hidden">
       <div
-        className={`flex-1 p-4 flex flex-col gap-4 ${isLg ? 'overflow-hidden' : 'overflow-y-auto'}`}
+        className={`flex-1 p-4 flex flex-col gap-4 ${isLg ? 'overflow-hidden' : 'overflow-y-auto mb-4'}`}
       >
         <RoleSummary scope={scope} availableScopes={availableScopes} onScopeChange={setScope} />
 

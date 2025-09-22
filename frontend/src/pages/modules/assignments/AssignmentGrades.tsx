@@ -166,7 +166,7 @@ const AssignmentGrades = () => {
       align: 'right',
       sorter: { multiple: 3 }, // any priority is fine; it’s last visually
       render: (_: unknown, g: GradeResponse) => (
-        <PercentageTag value={g.score} decimals={1} palette="redGreen" />
+        <PercentageTag value={g.score} decimals={1} scheme="red-green" />
       ),
     }),
     [],

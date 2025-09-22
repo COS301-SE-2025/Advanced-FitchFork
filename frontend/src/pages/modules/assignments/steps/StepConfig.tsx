@@ -81,7 +81,7 @@ const DEFAULT_CONFIG: AssignmentConfig = {
     bind_cookie_to_user: true,
     allowed_cidrs: [],
   },
-  code_coverage: { code_coverage_required: 80 },
+  code_coverage: { code_coverage_weight: 10 },
 };
 
 // Merge “cfg” over defaults (prevents undefined access)
@@ -178,7 +178,7 @@ const StepConfig = () => {
       verbose: c.gatlam.verbose,
       max_parallel_chromosomes: c.gatlam.max_parallel_chromosomes,
       // Coverage
-      code_coverage_required: c.code_coverage.code_coverage_required,
+      code_coverage_required: c.code_coverage.code_coverage_weight,
     });
   }, [safeConfig, form]);
 
@@ -264,7 +264,7 @@ const StepConfig = () => {
           verbose: v.verbose,
           max_parallel_chromosomes: v.max_parallel_chromosomes,
         },
-        code_coverage: { ...c.code_coverage, code_coverage_required: v.code_coverage_required },
+        code_coverage: { ...c.code_coverage, code_coverage_weight: v.code_coverage_required },
       };
 
       const res = await setAssignmentConfig(module.id, assignmentId, updated);
@@ -329,7 +329,11 @@ const StepConfig = () => {
     },
     {
       key: 'execution',
-      label: sectionLabel('Execution Limits', '/help/assignments/config/execution', 'Execution limits help'),
+      label: sectionLabel(
+        'Execution Limits',
+        '/help/assignments/config/execution',
+        'Execution limits help',
+      ),
       children: (
         <Space direction="vertical" size="large" className="w-full">
           <Typography.Paragraph type="secondary" className="!mb-0">
@@ -366,8 +370,8 @@ const StepConfig = () => {
         <>
           <Space direction="vertical" size="large" className="w-full">
             <Typography.Paragraph type="secondary" className="!mb-0">
-              Choose how outputs are compared and which feedback students see. Set your delimiter
-              to match labels in program output.
+              Choose how outputs are compared and which feedback students see. Set your delimiter to
+              match labels in program output.
             </Typography.Paragraph>
             <Space wrap size="large">
               <Form.Item name="marking_scheme" label="Marking Scheme" rules={[{ required: true }]}>
@@ -610,12 +614,14 @@ const StepConfig = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <Title level={3} className="!mb-0">Assignment Configuration</Title>
+        <Title level={3} className="!mb-0">
+          Assignment Configuration
+        </Title>
         <Tip iconOnly newTab to="/help/assignments/config/overview" text="Config help" />
       </div>
       <Paragraph type="secondary" className="!mb-2">
-        Defaults are applied automatically. Tweak any section below. Save in place or <b>Save &amp;
-        Continue</b> to move on.
+        Defaults are applied automatically. Tweak any section below. Save in place or{' '}
+        <b>Save &amp; Continue</b> to move on.
       </Paragraph>
 
       <Form form={form} layout="vertical">

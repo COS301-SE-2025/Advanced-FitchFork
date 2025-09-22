@@ -18,7 +18,6 @@ use db::models::assignment_overwrite_file::{
 use db::models::assignment_task::{Column, Entity};
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
-use serde_json::Value;
 use std::fs;
 use util::paths::memo_output_dir;
 use util::{execution_config::ExecutionConfig, state::AppState};
@@ -33,6 +32,8 @@ pub struct SubsectionDetail {
     pub value: i64,
     /// The memo output content for this subsection, if available.
     pub memo_output: Option<String>,
+    pub feedback: Option<String>,
+    pub regex: Option<Vec<String>>,
 }
 
 /// The response structure for detailed information about a task, including its subsections.
@@ -245,19 +246,16 @@ pub async fn get_task_details(
         .await
     {
         Ok(Some(mo)) => {
-            // The model stores a relative path from its storage root
-            let full = storage_root().join(&mo.path);
+            let full = storage_root().join(&mo.path); // relative to storage root
             fs::read_to_string(full).ok()
         }
         _ => {
-            // Fallback: look for a txt file in the central memo_output dir
             let dir = memo_output_dir(module_id, assignment_id);
-            // First try conventional "task_{n}.txt"
             let conventional = dir.join(format!("task_{}.txt", task.task_number));
             if let Ok(s) = fs::read_to_string(&conventional) {
                 Some(s)
             } else {
-                // Else, pick the first *.txt file (stable-ish order by name)
+                // Otherwise first *.txt by name
                 let mut picked: Option<String> = None;
                 if let Ok(rd) = fs::read_dir(&dir) {
                     let mut txts: Vec<_> = rd
@@ -281,10 +279,10 @@ pub async fn get_task_details(
     // Load ExecutionConfig delimiter
     let separator = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
         Ok(cfg) => cfg.marking.deliminator,
-        Err(_) => "&-=-&".to_string(), // sensible fallback
+        Err(_) => "&-=-&".to_string(),
     };
 
-    // Parse memo outputs into Optional lines per subsection (skip the leading chunk)
+    // Split memo into chunks per subsection; drop the leading chunk before the first delimiter
     let parts: Vec<Option<String>> = if let Some(ref memo) = memo_content {
         memo.split(&separator)
             .map(|s| {
@@ -301,79 +299,49 @@ pub async fn get_task_details(
     };
     let mut subsection_outputs: Vec<Option<String>> = parts.into_iter().skip(1).collect();
 
-    // ── Load allocator and extract this task’s subsections (new keyed or legacy flat) ─────
-    let allocator_json = load_allocator(module_id, assignment_id).await.ok();
-    let (_, subsections_arr): (i64, Vec<Value>) = if let Some(tasks_arr) = allocator_json
-        .as_ref()
-        .and_then(|v| v.get("tasks"))
-        .and_then(|t| t.as_array())
-    {
-        // Try new keyed shape: { "tasks": [ { "task{n}": { ... } }, ... ] }
-        let desired_key = format!("task{}", task.task_number);
-        if let Some((val, subs)) = tasks_arr.iter().find_map(|entry| {
-            entry.as_object().and_then(|obj| {
-                obj.get(&desired_key).and_then(|inner| {
-                    inner.as_object().map(|o| {
-                        let val = o.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
-                        let subs = o
-                            .get("subsections")
-                            .and_then(|v| v.as_array())
-                            .cloned()
-                            .unwrap_or_default();
-                        (val, subs)
-                    })
-                })
-            })
-        }) {
-            (val, subs)
-        } else {
-            // Legacy flat: { "tasks": [ { "task_number": n, "value": ..., "subsections": [...] }, ...] }
-            tasks_arr
-                .iter()
-                .find_map(|entry| {
-                    let obj = entry.as_object()?;
-                    let tn = obj.get("task_number")?.as_i64()?; // safely extract task_number
-                    if tn == task.task_number {
-                        let val = obj.get("value").and_then(|v| v.as_i64()).unwrap_or(0);
-                        let subs = obj
-                            .get("subsections")
-                            .and_then(|v| v.as_array())
-                            .cloned()
-                            .unwrap_or_default();
-                        Some((val, subs))
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or((0, vec![]))
+    // ── Load allocator (normalized) and get this task’s subsections ───────────────────────
+    let allocator = match load_allocator(module_id, assignment_id) {
+        Ok(a) => a,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to load mark allocator")),
+            )
+                .into_response();
         }
-    } else {
-        (0, vec![])
     };
 
-    // Align memo outputs to subsections length
-    if subsection_outputs.len() < subsections_arr.len() {
-        subsection_outputs.resize(subsections_arr.len(), None);
+    let alloc_task = match allocator
+        .tasks
+        .iter()
+        .find(|t| t.task_number == task.task_number)
+    {
+        Some(t) => t,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Task not found in allocator")),
+            )
+                .into_response();
+        }
+    };
+
+    // Align memo outputs with subsections
+    if subsection_outputs.len() < alloc_task.subsections.len() {
+        subsection_outputs.resize(alloc_task.subsections.len(), None);
     }
 
-    // Build detailed subsections
-    let subsections: Vec<SubsectionDetail> = subsections_arr
+    // Build response subsections (preserve regex exactly, including empty strings)
+    let subsections: Vec<SubsectionDetail> = alloc_task
+        .subsections
         .iter()
         .enumerate()
-        .filter_map(|(i, v)| {
-            let o = v.as_object()?;
-            let name = o
-                .get("name")
-                .and_then(|n| n.as_str())
-                .unwrap_or("<unnamed>")
-                .to_string();
-            let value = o.get("value").and_then(|x| x.as_i64()).unwrap_or(0);
-            let memo_output = subsection_outputs.get(i).cloned().flatten();
-            Some(SubsectionDetail {
-                name,
-                value,
-                memo_output,
-            })
+        .map(|(i, s)| SubsectionDetail {
+            name: s.name.clone(),
+            value: s.value,
+            memo_output: subsection_outputs.get(i).cloned().flatten(),
+            feedback: s.feedback.clone(),
+            regex: s.regex.clone(), // keep empties; each element corresponds to a memo line
         })
         .collect();
 

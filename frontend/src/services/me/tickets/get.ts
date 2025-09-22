@@ -8,7 +8,8 @@ import { api } from "@/utils/api";
 type MyTicketsOptions = {
   role?: ModuleRole;
   year?: number;
-  status?: TicketStatus
+  status?: TicketStatus;
+  module_id?: number;
 } & PaginationRequest;
 
 type MyTicketItem = {

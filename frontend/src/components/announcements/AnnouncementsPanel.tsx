@@ -27,7 +27,8 @@ const AnnouncementsPanel: React.FC<{
   role?: ModuleRole;
   year?: number;
   perPage?: number;
-}> = ({ role, year, perPage = 20 }) => {
+  moduleId?: number;
+}> = ({ role, year, perPage = 20, moduleId }) => {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<'all' | 'pinned'>('all');
   const [items, setItems] = useState<MyAnnouncementItem[]>([]);
@@ -48,6 +49,7 @@ const AnnouncementsPanel: React.FC<{
         sort: DEFAULT_SORT,
         role,
         year,
+        module_id: moduleId,
         pinned: filter === 'pinned' ? true : undefined, // let server filter pinned when needed
       });
 
@@ -69,7 +71,7 @@ const AnnouncementsPanel: React.FC<{
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, role, year, filter]);
+  }, [page, perPage, role, year, moduleId, filter]);
 
   useEffect(() => {
     // reset to page 1 when filter changes
@@ -95,7 +97,7 @@ const AnnouncementsPanel: React.FC<{
   ];
 
   return (
-    <div className="h-full min-h-0 flex flex-col w-full bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden w-full bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800">
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center justify-between gap-2">
