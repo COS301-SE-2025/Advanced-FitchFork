@@ -272,43 +272,6 @@ where
             .await
             .map_err(|e| e.to_string())?;
 
-            //TODO - LUKE THIS IS CODE COVERAGE
-
-            // let task_code_coverage: Vec<(i64, String)> =
-            //     Output::get_submission_output_code_coverage(
-            //         db,
-            //         module_id,
-            //         assignment_id,
-            //         user_id,
-            //         attempt_number,
-            //     )
-            //     .await
-            //     .map_err(|e| e.to_string())?;
-
-            // let task_code_coverage: Vec<(i64, String)> =
-            //     Output::get_submission_output_code_coverage(
-            //         db,
-            //         module_id,
-            //         assignment_id,
-            //         user_id,
-            //         attempt_number,
-            //     )
-            //     .await
-            //     .map_err(|e| e.to_string())?;
-
-            // let total_coverage_percent =
-            //     if let Some((_task_id, coverage_json)) = task_code_coverage.first() {
-            //         let parsed: Value = serde_json::from_str(coverage_json)
-            //             .map_err(|e| format!("Failed to parse coverage JSON: {}", e))?;
-            //         parsed
-            //             .get("summary")
-            //             .and_then(|s| s.get("coverage_percent"))
-            //             .and_then(|v| v.as_f64())
-            //             .unwrap_or(0.0)
-            //     } else {
-            //         0.0
-            //     };
-
             let memo_task_outputs: Vec<(i64, String)> =
                 Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
 
