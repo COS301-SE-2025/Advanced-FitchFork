@@ -1,5 +1,5 @@
-use util::mark_allocator;
 use crate::types::TaskResult;
+use util::mark_allocator;
 
 /// OutputComparator is a strategy trait for comparing outputs.
 /// Each implementation provides a specific logic for comparing a single subsection

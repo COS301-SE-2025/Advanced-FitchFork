@@ -1,5 +1,10 @@
 use crate::response::ApiResponse;
-use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use db::models::{assignment_memo_output, assignment_task};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
@@ -7,7 +12,8 @@ use util::paths::{assignment_dir, memo_output_dir, storage_root};
 use util::state::AppState;
 
 use util::mark_allocator::{
-    generate_allocator, save_allocator,
+    generate_allocator,
+    save_allocator,
     // optional: validate_markallocator
 };
 
@@ -52,7 +58,9 @@ pub async fn generate(
     if !assign_path.exists() {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module or assignment folder does not exist")),
+            Json(ApiResponse::<()>::error(
+                "Module or assignment folder does not exist",
+            )),
         )
             .into_response();
     }
@@ -115,7 +123,9 @@ pub async fn generate(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(&format!("Failed to generate mark allocator: {e}"))),
+                Json(ApiResponse::<()>::error(&format!(
+                    "Failed to generate mark allocator: {e}"
+                ))),
             )
                 .into_response();
         }
@@ -133,7 +143,9 @@ pub async fn generate(
     if let Err(e) = save_allocator(module_id, assignment_id, &alloc) {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(&format!("Failed to persist allocator: {e}"))),
+            Json(ApiResponse::<()>::error(&format!(
+                "Failed to persist allocator: {e}"
+            ))),
         )
             .into_response();
     }

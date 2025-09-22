@@ -22,9 +22,9 @@ import AssignmentStatusTag from '@/components/assignments/AssignmentStatusTag';
 import { useUI } from '@/context/UIContext';
 import SubmitAssignmentModal from '@/components/submissions/SubmitAssignmentModal';
 import SetupChecklist from '@/components/assignments/SetupChecklist';
-import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
 import Tip from '@/components/common/Tip';
 import { SubmissionProgressOverlay } from '@/components/submissions';
+import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
 
 const { Title, Paragraph } = Typography;
 

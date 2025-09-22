@@ -1,13 +1,15 @@
 use std::{cmp::Ordering, collections::HashMap};
 
 use sea_orm::{
-    ColumnTrait, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
-    QueryTrait, RelationTrait,
+    ColumnTrait, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
+    QueryOrder, QuerySelect, QueryTrait, RelationTrait,
 };
 
 use crate::models::{
     assignment,
-    assignment_submission::{Column as SubCol, Entity as SubmissionEntity, Model as SubmissionModel, Relation as SubRel},
+    assignment_submission::{
+        Column as SubCol, Entity as SubmissionEntity, Model as SubmissionModel, Relation as SubRel,
+    },
     user::{Column as UserCol, Entity as UserEntity, Model as UserModel},
     user_module_role::{Column as UmrCol, Entity as UmrEntity, Role as ModuleRole},
 };
@@ -67,26 +69,39 @@ pub fn percentage(earned: i64, total: i64) -> f32 {
     }
 }
 
-fn apply_policy(policy: GradingPolicy, attempts: Vec<(SubmissionModel, UserModel)>) -> Option<(SubmissionModel, UserModel)> {
+fn apply_policy(
+    policy: GradingPolicy,
+    attempts: Vec<(SubmissionModel, UserModel)>,
+) -> Option<(SubmissionModel, UserModel)> {
     match policy {
         GradingPolicy::Last => attempts.into_iter().next(),
-        GradingPolicy::Best => attempts.into_iter().max_by(|(a_submission, _), (b_submission, _)| {
-            let a_ratio = a_submission.earned as f64 / a_submission.total.max(1) as f64;
-            let b_ratio = b_submission.earned as f64 / b_submission.total.max(1) as f64;
+        GradingPolicy::Best => {
+            attempts
+                .into_iter()
+                .max_by(|(a_submission, _), (b_submission, _)| {
+                    let a_ratio = a_submission.earned as f64 / a_submission.total.max(1) as f64;
+                    let b_ratio = b_submission.earned as f64 / b_submission.total.max(1) as f64;
 
-            match a_ratio.partial_cmp(&b_ratio).unwrap_or(Ordering::Equal) {
-                Ordering::Equal => match a_submission.created_at.cmp(&b_submission.created_at) {
-                    Ordering::Equal => a_submission.attempt.cmp(&b_submission.attempt),
-                    ord => ord,
-                },
-                ord => ord,
-            }
-        }),
+                    match a_ratio.partial_cmp(&b_ratio).unwrap_or(Ordering::Equal) {
+                        Ordering::Equal => {
+                            match a_submission.created_at.cmp(&b_submission.created_at) {
+                                Ordering::Equal => a_submission.attempt.cmp(&b_submission.attempt),
+                                ord => ord,
+                            }
+                        }
+                        ord => ord,
+                    }
+                })
+        }
     }
 }
 
-async fn load_execution_config(module_id: i64, assignment_id: i64) -> Result<ExecutionConfig, GradeComputationError> {
-    ExecutionConfig::get_execution_config(module_id, assignment_id).map_err(GradeComputationError::ExecutionConfig)
+async fn load_execution_config(
+    module_id: i64,
+    assignment_id: i64,
+) -> Result<ExecutionConfig, GradeComputationError> {
+    ExecutionConfig::get_execution_config(module_id, assignment_id)
+        .map_err(GradeComputationError::ExecutionConfig)
 }
 
 /// Compute grades for an assignment based on the execution config policy.
@@ -143,7 +158,10 @@ pub async fn compute_assignment_grades(
     let mut per_user: HashMap<i64, Vec<(SubmissionModel, UserModel)>> = HashMap::new();
     for (submission, user_opt) in rows {
         if let Some(user) = user_opt {
-            per_user.entry(submission.user_id).or_default().push((submission, user));
+            per_user
+                .entry(submission.user_id)
+                .or_default()
+                .push((submission, user));
         }
     }
 

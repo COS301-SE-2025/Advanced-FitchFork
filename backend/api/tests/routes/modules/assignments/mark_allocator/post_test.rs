@@ -13,12 +13,12 @@ mod tests {
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use serial_test::serial;
-    use tower::ServiceExt;
+    use db::models::{assignment_memo_output, assignment_task};
     use sea_orm::{ActiveModelTrait, Set};
     use serde_json::Value;
+    use serial_test::serial;
+    use tower::ServiceExt;
     use util::paths::{mark_allocator_path, memo_output_dir};
-    use db::models::{assignment_task, assignment_memo_output};
 
     struct TestData {
         lecturer_user: UserModel,
@@ -81,17 +81,23 @@ mod tests {
         let task = assignment_task::Model::create(
             app_state.db(),
             data.assignment.id,
-            1,               // task_number
-            "",              // name -> will default to "Task 1" in allocator
-            "echo ok",       // <-- provide any command string (NOT NULL)
-            false,           // code_coverage
-        ).await.unwrap();
+            1,         // task_number
+            "",        // name -> will default to "Task 1" in allocator
+            "echo ok", // <-- provide any command string (NOT NULL)
+            false,     // code_coverage
+        )
+        .await
+        .unwrap();
 
         // 2) Write memo file to disk
         let memo_dir = memo_output_dir(data.module.id, data.assignment.id);
         std::fs::create_dir_all(&memo_dir).unwrap();
         let memo_file_name = "task_1.txt";
-        std::fs::write(memo_dir.join(memo_file_name), "&-=-& Sub1\nline A\nline B\n").unwrap();
+        std::fs::write(
+            memo_dir.join(memo_file_name),
+            "&-=-& Sub1\nline A\nline B\n",
+        )
+        .unwrap();
 
         // 3) Insert memo-output DB row pointing to the file (path relative to storage_root)
         let rel_path = format!(
@@ -108,7 +114,10 @@ mod tests {
             // created_at: Set(Utc::now()),
             // updated_at: Set(Utc::now()),
             ..Default::default()
-        }.insert(app_state.db()).await.unwrap();
+        }
+        .insert(app_state.db())
+        .await
+        .unwrap();
 
         // 4) Hit the endpoint
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -136,7 +145,10 @@ mod tests {
 
         // top-level
         assert!(json.get("generated_at").is_some(), "missing generated_at");
-        assert_eq!(json["total_value"], 2, "total_value should match sum of task values");
+        assert_eq!(
+            json["total_value"], 2,
+            "total_value should match sum of task values"
+        );
 
         // tasks
         let tasks = json["tasks"].as_array().expect("tasks not array");
@@ -147,14 +159,15 @@ mod tests {
         assert_eq!(tasks[0]["code_coverage"], false);
 
         // subsections
-        let subs = tasks[0]["subsections"].as_array().expect("subsections not array");
+        let subs = tasks[0]["subsections"]
+            .as_array()
+            .expect("subsections not array");
         assert_eq!(subs.len(), 1);
         assert_eq!(subs[0]["name"], "Sub1");
         assert_eq!(subs[0]["value"], 2);
 
         // Note: regex/feedback may be omitted (None) unless scheme=Regex; don't assert presence.
     }
-
 
     //Commented out due to change in mark_allocator functionality - test no longer applies
 

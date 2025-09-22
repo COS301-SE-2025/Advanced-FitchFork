@@ -1,6 +1,6 @@
 use super::common::SubmissionIncoming;
 use serde_json::json;
-use util::ws::handler_trait::{async_trait, WsHandler};
+use util::ws::handler_trait::{WsHandler, async_trait};
 use util::ws::runtime::WsContext;
 
 pub struct SubmissionWsHandler;
@@ -16,10 +16,15 @@ impl WsHandler for SubmissionWsHandler {
 
     async fn on_open(&self, ctx: &WsContext) {
         // minimal "I'm ready" signal
-        let _ = ctx.emit("ready", &json!({
-            "event": "ready",
-            "ts": now_ts(),
-        })).await;
+        let _ = ctx
+            .emit(
+                "ready",
+                &json!({
+                    "event": "ready",
+                    "ts": now_ts(),
+                }),
+            )
+            .await;
     }
 
     async fn on_message(&self, ctx: &WsContext, msg: Self::In) {

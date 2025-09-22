@@ -342,7 +342,7 @@ mod tests {
     async fn test_put_then_get_mark_allocator() {
         use axum::body::to_bytes;
         use chrono::{DateTime, Utc};
-        use serde_json::{json, Value};
+        use serde_json::{Value, json};
 
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
@@ -391,7 +391,9 @@ mod tests {
         assert_eq!(get_response.status(), StatusCode::OK);
 
         // Parse response
-        let body_bytes = to_bytes(get_response.into_body(), usize::MAX).await.unwrap();
+        let body_bytes = to_bytes(get_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let body_json: Value = serde_json::from_slice(&body_bytes).unwrap();
 
         // ---- Assertions that tolerate "Z" vs "+00:00" and optional null fields ----
@@ -399,14 +401,20 @@ mod tests {
         // Top-level structure exists
         let data = body_json.get("data").expect("missing data");
         // generated_at is a valid RFC3339 timestamp
-        let ga_str = data.get("generated_at").and_then(|v| v.as_str()).expect("missing generated_at");
-        let _ : DateTime<Utc> = ga_str.parse().expect("generated_at not RFC3339");
+        let ga_str = data
+            .get("generated_at")
+            .and_then(|v| v.as_str())
+            .expect("missing generated_at");
+        let _: DateTime<Utc> = ga_str.parse().expect("generated_at not RFC3339");
 
         // total_value
         assert_eq!(data.get("total_value").and_then(|v| v.as_i64()), Some(1));
 
         // tasks
-        let tasks = data.get("tasks").and_then(|v| v.as_array()).expect("tasks not array");
+        let tasks = data
+            .get("tasks")
+            .and_then(|v| v.as_array())
+            .expect("tasks not array");
         assert_eq!(tasks.len(), 1);
 
         let t0 = &tasks[0];
@@ -416,11 +424,17 @@ mod tests {
 
         // code_coverage is optional; if present, allow null or bool.
         if let Some(cc) = t0.get("code_coverage") {
-            assert!(cc.is_null() || cc.is_boolean(), "code_coverage must be null or bool");
+            assert!(
+                cc.is_null() || cc.is_boolean(),
+                "code_coverage must be null or bool"
+            );
         }
 
         // subsections
-        let subs = t0.get("subsections").and_then(|v| v.as_array()).expect("subsections not array");
+        let subs = t0
+            .get("subsections")
+            .and_then(|v| v.as_array())
+            .expect("subsections not array");
         assert_eq!(subs.len(), 1);
 
         let s0 = &subs[0];
@@ -432,8 +446,10 @@ mod tests {
             assert!(r.is_null() || r.is_array(), "regex must be null or array");
         }
         if let Some(fb) = s0.get("feedback") {
-            assert!(fb.is_null() || fb.is_string(), "feedback must be null or string");
+            assert!(
+                fb.is_null() || fb.is_string(),
+                "feedback must be null or string"
+            );
         }
     }
-
 }

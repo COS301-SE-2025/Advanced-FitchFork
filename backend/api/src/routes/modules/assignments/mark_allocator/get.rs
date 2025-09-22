@@ -1,5 +1,5 @@
 use crate::response::ApiResponse;
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use util::mark_allocator::load_allocator;
 use util::paths::{assignment_dir, mark_allocator_path};
 
@@ -46,7 +46,9 @@ pub async fn load(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl In
     if !assign_path.exists() {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module or assignment folder does not exist")),
+            Json(ApiResponse::<()>::error(
+                "Module or assignment folder does not exist",
+            )),
         )
             .into_response();
     }
@@ -54,7 +56,9 @@ pub async fn load(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl In
     if !alloc_path.exists() {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Mark allocator file not found for this assignment")),
+            Json(ApiResponse::<()>::error(
+                "Mark allocator file not found for this assignment",
+            )),
         )
             .into_response();
     }
@@ -70,7 +74,9 @@ pub async fn load(Path((module_id, assignment_id)): Path<(i64, i64)>) -> impl In
             .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(&format!("Failed to load allocator: {e}"))),
+            Json(ApiResponse::<()>::error(&format!(
+                "Failed to load allocator: {e}"
+            ))),
         )
             .into_response(),
     }

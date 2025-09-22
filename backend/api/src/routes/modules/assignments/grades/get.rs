@@ -19,10 +19,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use db::grade::{
-    compute_assignment_grades,
-    percentage,
-    GradeComputationError,
-    GradeComputationOptions,
+    GradeComputationError, GradeComputationOptions, compute_assignment_grades, percentage,
 };
 use db::models::{
     assignment::{Column as AssignmentCol, Entity as AssignmentEntity},
@@ -33,8 +30,8 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use util::state::AppState;
 use util::paths::submission_report_path;
+use util::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct ListGradeQueryParams {

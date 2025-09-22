@@ -49,9 +49,14 @@ mod tests {
         UserModuleRoleModel::assign_user_to_module(db, lecturer.id, module.id, Role::Lecturer)
             .await
             .unwrap();
-        UserModuleRoleModel::assign_user_to_module(db, assistant.id, module.id, Role::AssistantLecturer)
-            .await
-            .unwrap();
+        UserModuleRoleModel::assign_user_to_module(
+            db,
+            assistant.id,
+            module.id,
+            Role::AssistantLecturer,
+        )
+        .await
+        .unwrap();
         UserModuleRoleModel::assign_user_to_module(db, student_a.id, module.id, Role::Student)
             .await
             .unwrap();
@@ -149,7 +154,10 @@ mod tests {
         let cases = json["data"]["cases"].as_array().unwrap();
         assert_eq!(cases.len(), 1);
         assert_eq!(cases[0]["id"].as_i64().unwrap(), data.case.id);
-        assert_eq!(cases[0]["assignment"]["id"].as_i64().unwrap(), data.assignment.id);
+        assert_eq!(
+            cases[0]["assignment"]["id"].as_i64().unwrap(),
+            data.assignment.id
+        );
     }
 
     #[tokio::test]

@@ -98,24 +98,23 @@ pub async fn get_my_plagiarism_cases(
     let allowed_roles = vec!["lecturer", "assistant_lecturer", "tutor"];
 
     // Normalize/validate optional requested role (?role=lecturer|assistant_lecturer|tutor)
-    let requested_role = query
-        .role
-        .as_ref()
-        .and_then(|r| {
-            let r = r.to_lowercase();
-            if allowed_roles.iter().any(|x| *x == r) { Some(r) } else { None }
-        });
+    let requested_role = query.role.as_ref().and_then(|r| {
+        let r = r.to_lowercase();
+        if allowed_roles.iter().any(|x| *x == r) {
+            Some(r)
+        } else {
+            None
+        }
+    });
 
     // Staff-only access (now includes Tutor).
     let memberships = user_module_role::Entity::find()
         .filter(user_module_role::Column::UserId.eq(user_id))
-        .filter(
-            user_module_role::Column::Role.is_in(vec![
-                Role::Lecturer,
-                Role::AssistantLecturer,
-                Role::Tutor,
-            ]),
-        )
+        .filter(user_module_role::Column::Role.is_in(vec![
+            Role::Lecturer,
+            Role::AssistantLecturer,
+            Role::Tutor,
+        ]))
         .all(db)
         .await
         .unwrap_or_default();
@@ -163,8 +162,8 @@ pub async fn get_my_plagiarism_cases(
             .into_response();
     }
 
-    let mut assignments_query = assignment::Entity::find()
-        .filter(assignment::Column::ModuleId.is_in(module_ids.clone()));
+    let mut assignments_query =
+        assignment::Entity::find().filter(assignment::Column::ModuleId.is_in(module_ids.clone()));
 
     if let Some(assignment_id) = query.assignment_id {
         assignments_query = assignments_query.filter(assignment::Column::Id.eq(assignment_id));
@@ -204,10 +203,8 @@ pub async fn get_my_plagiarism_cases(
         .await
         .unwrap_or_default();
     let module_map: HashMap<i64, module::Model> = modules.into_iter().map(|m| (m.id, m)).collect();
-    let assignment_map: HashMap<i64, assignment::Model> = assignments
-        .into_iter()
-        .map(|a| (a.id, a))
-        .collect();
+    let assignment_map: HashMap<i64, assignment::Model> =
+        assignments.into_iter().map(|a| (a.id, a)).collect();
 
     let mut cases_query = PlagiarismEntity::find()
         .filter(plagiarism_case::Column::AssignmentId.is_in(assignment_ids.clone()));
@@ -238,7 +235,9 @@ pub async fn get_my_plagiarism_cases(
                 "created_at" => cases_query.order_by(plagiarism_case::Column::CreatedAt, order),
                 "updated_at" => cases_query.order_by(plagiarism_case::Column::UpdatedAt, order),
                 "similarity" => cases_query.order_by(plagiarism_case::Column::Similarity, order),
-                "lines_matched" => cases_query.order_by(plagiarism_case::Column::LinesMatched, order),
+                "lines_matched" => {
+                    cases_query.order_by(plagiarism_case::Column::LinesMatched, order)
+                }
                 "status" => cases_query.order_by(plagiarism_case::Column::Status, order),
                 _ => cases_query,
             };

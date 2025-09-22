@@ -1821,7 +1821,10 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["success"], true);
-        assert_eq!(json["data"]["failed"][0]["error"], "Failed to load mark allocator: File not found");
+        assert_eq!(
+            json["data"]["failed"][0]["error"],
+            "Failed to load mark allocator: File not found"
+        );
     }
 
     /// Test 8: Failed during grading of a submission

@@ -287,7 +287,11 @@ pub async fn get_task_details(
         memo.split(&separator)
             .map(|s| {
                 let t = s.trim();
-                if t.is_empty() { None } else { Some(t.to_string()) }
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
             })
             .collect()
     } else {
@@ -376,7 +380,6 @@ pub async fn get_task_details(
     )
         .into_response()
 }
-
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/tasks
 ///

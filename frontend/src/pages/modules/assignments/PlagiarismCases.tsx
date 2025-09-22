@@ -508,7 +508,7 @@ const PlagiarismCases = () => {
                 width: 160,
                 sorter: { multiple: 2 },
                 render: (_, c) => (
-                  <PercentageTag value={c.similarity} decimals={1} palette="greenRed" />
+                  <PercentageTag value={c.similarity} decimals={1} scheme="green-red" />
                 ),
               },
               // NEW: Lines matched

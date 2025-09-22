@@ -1,5 +1,5 @@
 use crate::response::ApiResponse;
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use util::execution_config::{ExecutionConfig, MarkingScheme};
 use util::paths::assignment_dir;
 
@@ -32,7 +32,9 @@ pub async fn save(
     if !assign_path.exists() {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Module or assignment directory does not exist")),
+            Json(ApiResponse::<()>::error(
+                "Module or assignment directory does not exist",
+            )),
         )
             .into_response();
     }
@@ -52,7 +54,8 @@ pub async fn save(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<()>::error(&format!(
-                    "tasks[{}].task_number must be > 0", tidx
+                    "tasks[{}].task_number must be > 0",
+                    tidx
                 ))),
             )
                 .into_response();
@@ -61,7 +64,8 @@ pub async fn save(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<()>::error(&format!(
-                    "tasks[{}].name must be a non-empty string", tidx
+                    "tasks[{}].name must be a non-empty string",
+                    tidx
                 ))),
             )
                 .into_response();
@@ -70,7 +74,8 @@ pub async fn save(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<()>::error(&format!(
-                    "tasks[{}].value must be >= 0", tidx
+                    "tasks[{}].value must be >= 0",
+                    tidx
                 ))),
             )
                 .into_response();
@@ -157,7 +162,9 @@ pub async fn save(
     if let Err(e) = save_allocator(module_id, assignment_id, &alloc) {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(&format!("Failed to persist allocator: {e}"))),
+            Json(ApiResponse::<()>::error(&format!(
+                "Failed to persist allocator: {e}"
+            ))),
         )
             .into_response();
     }

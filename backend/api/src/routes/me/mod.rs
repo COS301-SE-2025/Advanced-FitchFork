@@ -20,9 +20,9 @@ pub mod announcements;
 pub mod assignments;
 pub mod events;
 pub mod grades;
+pub mod plagiarism;
 pub mod submissions;
 pub mod tickets;
-pub mod plagiarism;
 
 /// Builds and returns the `/me` route group.
 ///

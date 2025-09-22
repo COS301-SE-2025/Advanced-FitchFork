@@ -14,10 +14,8 @@ use axum::{
     response::IntoResponse,
 };
 use db::grade::{
-    compute_assignment_grade_for_student,
+    GradeComputationError, GradeComputationOptions, compute_assignment_grade_for_student,
     compute_assignment_grades,
-    GradeComputationError,
-    GradeComputationOptions,
 };
 use db::models::{
     assignment::{self, Status as AssignmentStatus},
@@ -314,23 +312,19 @@ pub async fn get_my_assignments(
 
                 let roles = module_role_map.get(&m.id).cloned().unwrap_or_default();
                 let is_student = roles.iter().any(|r| matches!(r, ModuleRole::Student));
-                let is_staff = roles
-                    .iter()
-                    .any(|r| matches!(r, ModuleRole::Lecturer | ModuleRole::AssistantLecturer | ModuleRole::Tutor));
+                let is_staff = roles.iter().any(|r| {
+                    matches!(
+                        r,
+                        ModuleRole::Lecturer | ModuleRole::AssistantLecturer | ModuleRole::Tutor
+                    )
+                });
                 let is_lecturer_or_assistant = roles
                     .iter()
                     .any(|r| matches!(r, ModuleRole::Lecturer | ModuleRole::AssistantLecturer));
 
                 let mut grade: Option<AssignmentGrade> = None;
                 if is_student {
-                    match compute_assignment_grade_for_student(
-                        db,
-                        m.id,
-                        a.id,
-                        user_id,
-                    )
-                    .await
-                    {
+                    match compute_assignment_grade_for_student(db, m.id, a.id, user_id).await {
                         Ok(Some(selection)) => {
                             grade = Some(AssignmentGrade {
                                 percentage: selection.score_pct,
@@ -362,12 +356,15 @@ pub async fn get_my_assignments(
 
                 let mut submission_summary: Option<AssignmentSubmissionSummary> = None;
                 if is_staff {
-                    let total_students = if let Some(count) = module_student_count_cache.get(&m.id) {
+                    let total_students = if let Some(count) = module_student_count_cache.get(&m.id)
+                    {
                         *count
                     } else {
                         let count = match user_module_role::Entity::find()
                             .filter(user_module_role::Column::ModuleId.eq(m.id))
-                            .filter(user_module_role::Column::Role.eq(user_module_role::Role::Student))
+                            .filter(
+                                user_module_role::Column::Role.eq(user_module_role::Role::Student),
+                            )
                             .count(db)
                             .await
                         {

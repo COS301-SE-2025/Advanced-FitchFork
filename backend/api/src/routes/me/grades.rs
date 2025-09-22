@@ -5,9 +5,9 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use common::format_validation_errors;
 use chrono::{DateTime, Utc};
-use db::grade::{compute_assignment_grade_for_student, GradeComputationError};
+use common::format_validation_errors;
+use db::grade::{GradeComputationError, compute_assignment_grade_for_student};
 use db::models::{
     assignment,
     assignment_submission::{self, Column as GradeColumn, Entity as GradeEntity},
@@ -18,9 +18,9 @@ use sea_orm::{
     ColumnTrait, Condition, EntityTrait, FromQueryResult, QueryFilter, QuerySelect, RelationTrait,
 };
 use serde::{Deserialize, Serialize};
+use std::{cmp::Ordering, collections::HashSet};
 use util::state::AppState;
 use validator::Validate;
-use std::{cmp::Ordering, collections::HashSet};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct GetGradesQuery {
@@ -259,7 +259,14 @@ pub async fn get_my_grades(
     let mut grade_rows: Vec<GradeWithMeta> = Vec::with_capacity(scoped.len());
 
     for row in scoped {
-        match compute_assignment_grade_for_student(db, row.module_id, row.assignment_id, row.user_id).await {
+        match compute_assignment_grade_for_student(
+            db,
+            row.module_id,
+            row.assignment_id,
+            row.user_id,
+        )
+        .await
+        {
             Ok(Some(selection)) => {
                 let created_at_dt = selection.submission.created_at;
                 let updated_at_dt = selection.submission.updated_at;
@@ -366,19 +373,11 @@ pub async fn get_my_grades(
                     .percentage
                     .partial_cmp(&b.percentage)
                     .unwrap_or(Ordering::Equal);
-                if *desc {
-                    cmp.reverse()
-                } else {
-                    cmp
-                }
+                if *desc { cmp.reverse() } else { cmp }
             }),
             "created_at" => grade_rows.sort_by(|a, b| {
                 let cmp = a.created_at.cmp(&b.created_at);
-                if *desc {
-                    cmp.reverse()
-                } else {
-                    cmp
-                }
+                if *desc { cmp.reverse() } else { cmp }
             }),
             _ => {}
         }

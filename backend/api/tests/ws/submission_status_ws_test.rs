@@ -15,15 +15,27 @@ mod tests {
     };
     use futures_util::{SinkExt, StreamExt};
     use sea_orm::{ActiveModelTrait, Set};
-    use tokio_tungstenite::tungstenite::{protocol::Message, Error};
+    use tokio_tungstenite::tungstenite::{Error, protocol::Message};
 
     /// seed: one module, one assignment, three users (owner / other / admin)
     async fn seed(
         db: &sea_orm::DatabaseConnection,
-    ) -> (module::Model, db::models::assignment::Model, UserModel, UserModel, UserModel) {
-        let owner = UserModel::create(db, "u-owner", "owner@test.com", "pw", false).await.unwrap();
-        let other = UserModel::create(db, "u-other", "other@test.com", "pw", false).await.unwrap();
-        let admin = UserModel::create(db, "u-admin", "admin@test.com", "pw", true).await.unwrap();
+    ) -> (
+        module::Model,
+        db::models::assignment::Model,
+        UserModel,
+        UserModel,
+        UserModel,
+    ) {
+        let owner = UserModel::create(db, "u-owner", "owner@test.com", "pw", false)
+            .await
+            .unwrap();
+        let other = UserModel::create(db, "u-other", "other@test.com", "pw", false)
+            .await
+            .unwrap();
+        let admin = UserModel::create(db, "u-admin", "admin@test.com", "pw", true)
+            .await
+            .unwrap();
 
         let m = module::ActiveModel {
             code: Set("COS999".into()),
@@ -73,8 +85,9 @@ mod tests {
             m.id, a.id, owner.id
         );
 
-        let (mut ws, _) =
-            connect_ws(&addr.to_string(), &topic, Some(&token)).await.expect("owner connect failed");
+        let (mut ws, _) = connect_ws(&addr.to_string(), &topic, Some(&token))
+            .await
+            .expect("owner connect failed");
 
         // Some handlers emit an initial "ready" event as soon as the socket opens.
         // If we get it, just ignore and proceed.
@@ -92,7 +105,9 @@ mod tests {
 
         // Now ping -> expect a subsequent pong (skip any non-pong noise just in case)
         let ping = serde_json::json!({ "type": "ping" });
-        ws.send(Message::Text(ping.to_string().into())).await.unwrap();
+        ws.send(Message::Text(ping.to_string().into()))
+            .await
+            .unwrap();
 
         loop {
             match ws.next().await {
@@ -109,7 +124,6 @@ mod tests {
 
         ws.close(None).await.unwrap();
     }
-
 
     #[tokio::test]
     async fn admin_cannot_connect_to_owners_stream() {
@@ -265,10 +279,12 @@ mod tests {
                 assert_eq!(resp.status(), 400);
                 let body = std::str::from_utf8(resp.body().as_ref().unwrap()).unwrap();
                 let json: serde_json::Value = serde_json::from_str(body).unwrap();
-                assert!(json["message"]
-                    .as_str()
-                    .unwrap()
-                    .starts_with("Missing or invalid"));
+                assert!(
+                    json["message"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with("Missing or invalid")
+                );
             }
             Err(e) => panic!("unexpected error: {:?}", e),
         }

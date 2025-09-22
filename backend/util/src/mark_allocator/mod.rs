@@ -60,7 +60,9 @@ pub fn load_allocator(module_id: i64, assignment_id: i64) -> Result<MarkAllocato
         Err(e) => {
             let msg = match e.kind() {
                 ErrorKind::NotFound => "File not found".to_string(),
-                ErrorKind::PermissionDenied => "Permission denied reading mark allocator".to_string(),
+                ErrorKind::PermissionDenied => {
+                    "Permission denied reading mark allocator".to_string()
+                }
                 ErrorKind::InvalidData => "Allocator file is not valid UTF-8".to_string(),
                 _ => format!("Failed to read mark allocator ({})", e.kind()),
             };
@@ -73,9 +75,12 @@ pub fn load_allocator(module_id: i64, assignment_id: i64) -> Result<MarkAllocato
         .map_err(|_| "Invalid allocator JSON (normalized expected)".to_string())
 }
 
-
 /// Save allocator.json as **normalized** (atomic-ish write).
-pub fn save_allocator(module_id: i64, assignment_id: i64, alloc: &MarkAllocator) -> Result<(), String> {
+pub fn save_allocator(
+    module_id: i64,
+    assignment_id: i64,
+    alloc: &MarkAllocator,
+) -> Result<(), String> {
     use std::io::ErrorKind;
 
     let dir = mark_allocator_dir(module_id, assignment_id);
@@ -96,10 +101,10 @@ pub fn save_allocator(module_id: i64, assignment_id: i64, alloc: &MarkAllocator)
         })?;
         f.write_all(pretty.as_bytes())
             .map_err(|_| "Failed to write temp file".to_string())?;
-        f.flush().map_err(|_| "Failed to flush temp file".to_string())?;
+        f.flush()
+            .map_err(|_| "Failed to flush temp file".to_string())?;
     }
-    fs::rename(&tmp, &path)
-        .map_err(|_| "Failed to move temp file into place".to_string())?;
+    fs::rename(&tmp, &path).map_err(|_| "Failed to move temp file into place".to_string())?;
     Ok(())
 }
 
@@ -129,21 +134,24 @@ pub async fn generate_allocator(
     tasks_info: &[(TaskInfo, PathBuf)],
 ) -> Result<MarkAllocator, String> {
     // Read config once up-front
-    let (separator, want_regex, cover_weight_frac) = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
-        Ok(cfg) => {
-            let want_regex = matches!(cfg.marking.marking_scheme, MarkingScheme::Regex);
+    let (separator, want_regex, cover_weight_frac) =
+        match ExecutionConfig::get_execution_config(module_id, assignment_id) {
+            Ok(cfg) => {
+                let want_regex = matches!(cfg.marking.marking_scheme, MarkingScheme::Regex);
 
-            // Normalize weight: treat >= 1.0 as percent; otherwise assume fraction.
-            // e.g. 10.0 -> 0.10; 0.10 -> 0.10
-            let mut w = cfg.code_coverage.code_coverage_weight as f64;
-            if w >= 1.0 { w /= 100.0; }
-            // Clamp to sane range [0.0, 0.95] to avoid division blow-ups (you can choose a different cap)
-            let w = w.clamp(0.0, 0.95);
+                // Normalize weight: treat >= 1.0 as percent; otherwise assume fraction.
+                // e.g. 10.0 -> 0.10; 0.10 -> 0.10
+                let mut w = cfg.code_coverage.code_coverage_weight as f64;
+                if w >= 1.0 {
+                    w /= 100.0;
+                }
+                // Clamp to sane range [0.0, 0.95] to avoid division blow-ups (you can choose a different cap)
+                let w = w.clamp(0.0, 0.95);
 
-            (cfg.marking.deliminator, want_regex, w)
-        }
-        Err(_) => ("&-=-&".to_string(), false, 0.10) // fallback: 10%
-    };
+                (cfg.marking.deliminator, want_regex, w)
+            }
+            Err(_) => ("&-=-&".to_string(), false, 0.10), // fallback: 10%
+        };
 
     let dir = mark_allocator_dir(module_id, assignment_id);
     fs::create_dir_all(&dir)
@@ -151,7 +159,7 @@ pub async fn generate_allocator(
 
     // -------- Pass 1: build all tasks (with parsed values for non-coverage) --------
     let mut tasks: Vec<Task> = Vec::with_capacity(tasks_info.len());
-    let mut base_total: i64 = 0;          // sum of non-coverage tasks
+    let mut base_total: i64 = 0; // sum of non-coverage tasks
     let mut coverage_indices: Vec<usize> = Vec::new();
 
     for (idx, (info, maybe_path)) in tasks_info.iter().enumerate() {
@@ -175,10 +183,14 @@ pub async fn generate_allocator(
                             name: current_section.clone(),
                             value: mark_counter,
                             regex: if want_regex {
-                                Some(std::iter::repeat(String::new())
-                                    .take(mark_counter.max(0) as usize)
-                                    .collect())
-                            } else { None },
+                                Some(
+                                    std::iter::repeat(String::new())
+                                        .take(mark_counter.max(0) as usize)
+                                        .collect(),
+                                )
+                            } else {
+                                None
+                            },
                             feedback: None,
                         });
                         task_value += mark_counter;
@@ -195,10 +207,14 @@ pub async fn generate_allocator(
                     name: current_section,
                     value: mark_counter,
                     regex: if want_regex {
-                        Some(std::iter::repeat(String::new())
-                            .take(mark_counter.max(0) as usize)
-                            .collect())
-                    } else { None },
+                        Some(
+                            std::iter::repeat(String::new())
+                                .take(mark_counter.max(0) as usize)
+                                .collect(),
+                        )
+                    } else {
+                        None
+                    },
                     feedback: None,
                 });
                 task_value += mark_counter;
@@ -234,14 +250,18 @@ pub async fn generate_allocator(
         };
 
         let n = coverage_indices.len() as i64;
-        let per = c.div_euclid(n.max(1));       // even split
-        let rem = c.rem_euclid(n.max(1));       // distribute remainder +1 to first 'rem' tasks
+        let per = c.div_euclid(n.max(1)); // even split
+        let rem = c.rem_euclid(n.max(1)); // distribute remainder +1 to first 'rem' tasks
 
         for (j, &ti) in coverage_indices.iter().enumerate() {
             let mut v = per;
-            if (j as i64) < rem { v += 1; }
+            if (j as i64) < rem {
+                v += 1;
+            }
             // Ensure non-negative
-            if v < 0 { v = 0; }
+            if v < 0 {
+                v = 0;
+            }
             if let Some(t) = tasks.get_mut(ti) {
                 t.value = v;
                 // Keep subsections empty for coverage tasks

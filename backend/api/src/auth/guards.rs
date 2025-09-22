@@ -1132,14 +1132,10 @@ pub async fn allow_submission_ws_owner_only(
     let db = app_state.db();
 
     // Auth was done by the top-level .route_layer(from_fn(allow_authenticated))
-    let user = req
-        .extensions()
-        .get::<AuthUser>()
-        .cloned()
-        .ok_or((
-            StatusCode::UNAUTHORIZED,
-            axum::Json(ApiResponse::error("Authentication required")),
-        ))?;
+    let user = req.extensions().get::<AuthUser>().cloned().ok_or((
+        StatusCode::UNAUTHORIZED,
+        axum::Json(ApiResponse::error("Authentication required")),
+    ))?;
 
     let module_id = params
         .get("module_id")

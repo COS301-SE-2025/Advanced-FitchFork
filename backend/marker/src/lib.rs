@@ -128,24 +128,34 @@ impl<'a> MarkingJob<'a> {
         let memo_contents: Vec<String> = self
             .memo_outputs
             .iter()
-            .map(|p| fs::read_to_string(p).map_err(|e| MarkerError::InputMismatch(format!("Failed to read memo file {:?}: {e}", p))))
+            .map(|p| {
+                fs::read_to_string(p).map_err(|e| {
+                    MarkerError::InputMismatch(format!("Failed to read memo file {:?}: {e}", p))
+                })
+            })
             .collect::<Result<_, _>>()?;
 
         let student_contents: Vec<String> = self
             .student_outputs
             .iter()
-            .map(|p| fs::read_to_string(p).map_err(|e| MarkerError::InputMismatch(format!("Failed to read student file {:?}: {e}", p))))
+            .map(|p| {
+                fs::read_to_string(p).map_err(|e| {
+                    MarkerError::InputMismatch(format!("Failed to read student file {:?}: {e}", p))
+                })
+            })
             .collect::<Result<_, _>>()?;
 
         // Optional: coverage raw JSON value
         let coverage_raw: Option<serde_json::Value> = match &self.coverage_report {
             Some(path) => {
-                let s = fs::read_to_string(path)
-                    .map_err(|e| MarkerError::InputMismatch(
-                        format!("Failed to read coverage file {:?}: {e}", path)
-                    ))?;
-                let v: serde_json::Value =
-                    serde_json::from_str(&s).map_err(|e| MarkerError::InvalidJson(format!("Invalid coverage JSON: {e}")))?;
+                let s = fs::read_to_string(path).map_err(|e| {
+                    MarkerError::InputMismatch(format!(
+                        "Failed to read coverage file {:?}: {e}",
+                        path
+                    ))
+                })?;
+                let v: serde_json::Value = serde_json::from_str(&s)
+                    .map_err(|e| MarkerError::InvalidJson(format!("Invalid coverage JSON: {e}")))?;
                 Some(v)
             }
             None => None,
@@ -183,7 +193,10 @@ impl<'a> MarkingJob<'a> {
 
             // submission uses ids like "task1", "task2", ...
             let expected_id = format!("task{}", task_entry.task_number);
-            let submission_task = submission.tasks.iter().find(|t| t.task_id.eq_ignore_ascii_case(&expected_id));
+            let submission_task = submission
+                .tasks
+                .iter()
+                .find(|t| t.task_id.eq_ignore_ascii_case(&expected_id));
 
             let mut subsections: Vec<crate::report::ReportSubsection> = Vec::new();
             let mut task_earned = 0;
@@ -198,7 +211,8 @@ impl<'a> MarkingJob<'a> {
                         .map(|s| s.lines.clone())
                         .unwrap_or_default();
 
-                    let memo_or_regex_lines: Vec<String> = match self.config.marking.marking_scheme {
+                    let memo_or_regex_lines: Vec<String> = match self.config.marking.marking_scheme
+                    {
                         MarkingScheme::Regex => subsection.regex.clone().unwrap_or_default(),
                         _ => task_output
                             .memo_output
@@ -208,7 +222,9 @@ impl<'a> MarkingJob<'a> {
                             .unwrap_or_default(),
                     };
 
-                    let mut result = self.comparator.compare(subsection, &memo_or_regex_lines, &student_lines);
+                    let mut result =
+                        self.comparator
+                            .compare(subsection, &memo_or_regex_lines, &student_lines);
                     result.stderr = task_output.stderr.clone();
                     result.return_code = task_output.return_code;
 
@@ -661,7 +677,10 @@ mod tests {
         let result = job.mark().await;
 
         // Must be an error
-        assert!(result.is_err(), "Marking should fail due to missing student file");
+        assert!(
+            result.is_err(),
+            "Marking should fail due to missing student file"
+        );
 
         // Match the specific error variant and message shape
         match result {

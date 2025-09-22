@@ -142,8 +142,8 @@ pub async fn get_my_events(
         .filter(user_module_role::Column::UserId.eq(user_id));
 
     if let Some(role_filter) = &query.role {
-        assignment_query = assignment_query
-            .filter(user_module_role::Column::Role.eq(role_filter.clone()));
+        assignment_query =
+            assignment_query.filter(user_module_role::Column::Role.eq(role_filter.clone()));
     }
 
     if let Some(module_filter) = query.module_id {

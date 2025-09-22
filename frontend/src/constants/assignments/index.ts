@@ -59,6 +59,6 @@ export const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
   allowed_cidrs: []
   },
   code_coverage: {
-    code_coverage_required: 0.0,
+    code_coverage_weight: 10.0,
   }
 };

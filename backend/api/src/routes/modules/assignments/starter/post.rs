@@ -22,16 +22,16 @@ use db::models::{
     assignment_memo_output::{Column as MemoOutCol, Entity as MemoOutEntity},
     assignment_task::{Column as TaskCol, Entity as TaskEntity, Model as TaskModel},
 };
+use db::models::{assignment_memo_output, assignment_task};
 use util::{
     execution_config::ExecutionConfig,
+    mark_allocator::{TaskInfo, generate_allocator, save_allocator},
     paths::{
         assignment_dir, config_dir, ensure_dir, main_dir, makefile_dir, mark_allocator_dir,
         mark_allocator_path, memo_dir, memo_output_dir, spec_dir, storage_root,
     },
-    mark_allocator::{TaskInfo, generate_allocator, save_allocator},
     state::AppState,
 };
-use db::models::{assignment_memo_output, assignment_task};
 
 static STARTERS_ROOT: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/assets/starters");
 

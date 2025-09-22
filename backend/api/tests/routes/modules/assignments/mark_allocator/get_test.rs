@@ -81,7 +81,8 @@ mod tests {
         fs::create_dir_all(allocator_path.parent().unwrap()).unwrap();
 
         let now = Utc::now().to_rfc3339();
-        let alloc_json = format!(r#"{{
+        let alloc_json = format!(
+            r#"{{
             "generated_at": "{now}",
             "total_value": 10,
             "tasks": [
@@ -95,7 +96,8 @@ mod tests {
                 ]
             }}
             ]
-        }}"#);
+        }}"#
+        );
 
         fs::write(&allocator_path, alloc_json).unwrap();
 
@@ -115,7 +117,9 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         // --- assertions for normalized shape ---
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);

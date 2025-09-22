@@ -128,7 +128,7 @@ pub struct SubmissionDetailResponse {
 #[derive(serde::Serialize)]
 pub struct SubmitAck {
     pub id: i64,
-    pub status: String,     // e.g. "queued", "failed_upload"
+    pub status: String, // e.g. "queued", "failed_upload"
     pub attempt: i64,
     pub is_practice: bool,
     pub filename: String,

@@ -30,7 +30,7 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use chrono::{DateTime, Utc};
-use db::grade::{compute_assignment_grade_for_student, GradeComputationError};
+use db::grade::{GradeComputationError, compute_assignment_grade_for_student};
 use db::models::{
     assignment::{
         self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
@@ -267,7 +267,14 @@ pub async fn get_assignment(
                         .await
                         .unwrap_or(false)
                     {
-                        match compute_assignment_grade_for_student(db, module_id, assignment_id, user_id).await {
+                        match compute_assignment_grade_for_student(
+                            db,
+                            module_id,
+                            assignment_id,
+                            user_id,
+                        )
+                        .await
+                        {
                             Ok(Some(selection)) => {
                                 let submission = selection.submission;
                                 best_mark = Some(BestMark {

@@ -29,17 +29,6 @@ import {
 } from '@/utils/makefile_tasks';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 
-// Normalize memo text into lines
-const splitLines = (s: string | null | undefined): string[] =>
-  (typeof s === 'string' ? s : '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-
-// Ensure an array has at least `len` entries (padding with "")
-const padTo = (arr: string[] | undefined, len: number): string[] => {
-  const base = Array.isArray(arr) ? [...arr] : [];
-  while (base.length < len) base.push('');
-  return base;
-};
-
 function normalizeSubsections(subs: any[]) {
   if (!subs) return [];
   return subs.map((s: any) => {

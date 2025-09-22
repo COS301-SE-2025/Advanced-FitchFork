@@ -53,7 +53,7 @@ const SubmissionListItem = ({ submission, onClick }: Props) => {
             <Space wrap>
               <SubmissionStatusTag status={status} />
               {showPct ? (
-                <PercentageTag value={pct ?? 0} palette="redGreen" />
+                <PercentageTag value={pct ?? 0} scheme="red-green" />
               ) : (
                 <Tag>Not marked</Tag>
               )}

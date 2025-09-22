@@ -18,7 +18,10 @@ mod tests {
     use serial_test::serial;
     use std::fs;
     use tower::ServiceExt;
-    use util::{mark_allocator::{save_allocator, MarkAllocator, Subsection, Task}, paths::memo_output_dir};
+    use util::{
+        mark_allocator::{MarkAllocator, Subsection, Task, save_allocator},
+        paths::memo_output_dir,
+    };
 
     struct TestData {
         admin_user: UserModel,
@@ -93,7 +96,7 @@ mod tests {
         .await
         .expect("Failed to create task 2");
 
-        let allocator = MarkAllocator{
+        let allocator = MarkAllocator {
             generated_at: Utc::now(),
             total_value: 55,
             tasks: vec![

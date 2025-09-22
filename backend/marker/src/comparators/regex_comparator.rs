@@ -40,7 +40,11 @@ impl OutputComparator for RegexComparator {
         if memo_lines.is_empty() {
             return TaskResult {
                 name: section.name.clone(),
-                awarded: if student_lines.is_empty() { section.value } else { 0 },
+                awarded: if student_lines.is_empty() {
+                    section.value
+                } else {
+                    0
+                },
                 possible: section.value,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
@@ -91,7 +95,10 @@ impl OutputComparator for RegexComparator {
                 }
             };
 
-            if student_lines.get(i).map_or(false, |line| regex.is_match(line)) {
+            if student_lines
+                .get(i)
+                .map_or(false, |line| regex.is_match(line))
+            {
                 awarded_marks += 1;
                 matched_patterns.push(pattern.clone());
             } else {
@@ -101,7 +108,11 @@ impl OutputComparator for RegexComparator {
 
         let total_patterns = memo_norm.len();
         let mut awarded = if total_patterns == 0 {
-            if student_lines.is_empty() { section.value } else { 0 }
+            if student_lines.is_empty() {
+                section.value
+            } else {
+                0
+            }
         } else {
             let ratio = awarded_marks as f32 / total_patterns as f32;
             (section.value as f32 * ratio).round() as i64
