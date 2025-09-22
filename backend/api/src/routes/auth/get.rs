@@ -1,4 +1,3 @@
-use std::{path::PathBuf, vec};
 use axum::{
     extract::{Query, Path},
     http::{StatusCode, header, HeaderMap, HeaderValue},
@@ -8,6 +7,7 @@ use axum::{
 use tokio::fs::File as FsFile;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
+use util::{paths::user_profile_path, state::AppState};
 use crate::{
     auth::claims::AuthUser,
     response::ApiResponse,
@@ -228,9 +228,7 @@ pub async fn get_avatar(
             .into_response();
     };
 
-    let root = std::env::var("USER_PROFILE_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/user_profile_pictures".to_string());
-    let fs_path = PathBuf::from(root).join(path);
+    let fs_path = user_profile_path(user.id, &path);
 
     if tokio::fs::metadata(&fs_path).await.is_err() {
         return (

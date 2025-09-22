@@ -5,6 +5,7 @@ export interface Task extends Timestamp {
   assignment_id: number;
   task_number: number;
   name: string;
+  code_coverage: boolean;
   command: string;
 }
 

@@ -16,7 +16,7 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::{Value, json};
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::{make_test_app, make_test_app_with_storage};
     use tempfile::tempdir;
     use serial_test::serial;
 
@@ -471,17 +471,17 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_profile_picture_success() {
-        let app = make_test_app().await;
+        let (app, app_state, temp_dir) = make_test_app_with_storage().await;
 
-        let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
-        let user = service.create(CreateUser { username: "avataruser".to_string(), email: "avatar@test.com".to_string(), password: "avatarpass".to_string(), admin: false })
+        // Create a test user
+        let user = UserModel::create(app_state.db(), "avataruser", "avatar@test.com", "avatarpass", false)
             .await
             .expect("Failed to create user for avatar upload");
 
-        let temp_dir = tempdir().expect("Failed to create temporary directory for avatars");
-        unsafe { std::env::set_var("USER_PROFILE_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
-
+        // Generate an auth token
         let (token, _) = generate_jwt(user.id, user.admin);
+
+        // Build multipart body with fake file content
         let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
         let file_content = b"fake_jpeg_data_content";
         let multipart_body = format!(
@@ -490,10 +490,11 @@ mod tests {
             std::str::from_utf8(file_content).unwrap(),
             boundary
         );
-        let uri = "/api/auth/upload-profile-picture";
+
+        // Send request
         let req = Request::builder()
             .method("POST")
-            .uri(uri)
+            .uri("/api/auth/upload-profile-picture")
             .header("Authorization", format!("Bearer {}", token))
             .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
             .body(AxumBody::from(multipart_body))
@@ -502,20 +503,28 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
+        // Parse JSON response
         let json = get_json_body(response).await;
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Profile picture uploaded.");
-        let data = &json["data"];
-        let path = data["profile_picture_path"].as_str().expect("Path should be a string");
+        assert!(json.get("data").is_none() || json["data"].is_null());
 
-        assert!(path.starts_with(&format!("user_{}", user.id)), "Path '{}' does not start with expected prefix 'user_{}'", path, user.id);
-        assert!(path.ends_with(".jpg"));
-
-        let full_path = temp_dir.path().join(path);
-        assert!(std::fs::metadata(&full_path).is_ok());
+        // Verify file was written to STORAGE_ROOT/users/user_{id}/profile/avatar.jpg
+        let full_path = temp_dir
+            .path()
+            .join("users")
+            .join(format!("user_{}", user.id))
+            .join("profile")
+            .join("avatar.jpg");
+        assert!(
+            std::fs::metadata(&full_path).is_ok(),
+            "Expected avatar file at {:?}",
+            full_path
+        );
         let saved_content = std::fs::read(&full_path).expect("Failed to read saved avatar file");
         assert_eq!(saved_content, file_content);
     }
+
 
     /// Test Case: Profile Picture Upload with Unsupported File Type
     #[tokio::test]

@@ -1,13 +1,6 @@
 use util::execution_config::ExecutionConfig;
 use crate::HashMap;
 
-// IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
-#[derive(Debug, Clone, Copy)]
-pub enum Language {
-    Cpp,
-    Java,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Property {
     Safety,            // G(¬unsafe)
@@ -41,21 +34,19 @@ impl Default for TaskSpec {
         }
     }
 }
-use util::execution_config::execution_config::Language as ExecLanguage;
+use util::languages::{Language};
 
 impl TaskSpec {
     pub fn from_execution_config(config: &ExecutionConfig) -> Self {
         Self {
-            language: match config.project.language {
-                ExecLanguage::Cpp => Language::Cpp,
-                ExecLanguage::Java => Language::Java,
-            },
+            language: config.project.language,
             valid_return_codes: Some(config.gatlam.task_spec.valid_return_codes.clone()),
             max_runtime_ms: config.gatlam.task_spec.max_runtime_ms,
             forbidden_outputs: config.gatlam.task_spec.forbidden_outputs.clone(),
         }
     }
 }
+
 
 #[derive(Debug, Clone, Default)]
 pub struct TaskView {
@@ -413,7 +404,6 @@ fn normalized_lines(s: &str) -> Vec<String> {
 // IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
 fn violates_safety(lang: Language, stderr: &str) -> bool {
     let s = stderr.to_ascii_lowercase();
-
     match lang {
         Language::Cpp => {
             s.contains("double free")
@@ -427,14 +417,15 @@ fn violates_safety(lang: Language, stderr: &str) -> bool {
                 || s.contains("asan:")
         }
         Language::Java => {
-            s.contains("hs_err_pid")                      // JVM fatal log header
+            s.contains("hs_err_pid")
                 || s.contains("a fatal error has been detected by the java runtime environment")
-                || s.contains("sigsegv")                  // native segv bubbled up by JVM
+                || s.contains("sigsegv")
                 || s.contains("exception_access_violation")
                 || s.contains("problematic frame:")
-                || s.contains("outofmemoryerror: direct buffer memory") // catastrophic OOM kind
-                || s.contains("internal error (") // hotspot internal error
+                || s.contains("outofmemoryerror: direct buffer memory")
+                || s.contains("internal error (")
         }
+        _ => false, // safe default for other languages
     }
 }
 
@@ -448,6 +439,7 @@ fn has_segfault(lang: Language, stderr: &str) -> bool {
                 || s.contains("hs_err_pid")
                 || s.contains("problematic frame:")
         }
+        _ => false,
     }
 }
 
@@ -473,8 +465,10 @@ fn has_exception(lang: Language, stderr: &str) -> bool {
                 || s.contains("exception:")
                 || s.contains("error:")
         }
+        _ => false,
     }
 }
+
 
 fn is_valid_return_code(exit: Option<i32>, valid: Option<&[i32]>) -> bool {
     match (exit, valid) {

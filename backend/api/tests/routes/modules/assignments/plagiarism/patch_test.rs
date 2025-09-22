@@ -24,8 +24,8 @@ mod patch_plagiarism_tests {
     use sea_orm::{DatabaseConnection, EntityTrait};
     use serde_json::Value;
     use tower::ServiceExt;
-    use crate::helpers::app::make_test_app;
-    use serial_test::serial;
+
+    use crate::helpers::app::make_test_app_with_storage;
 
     pub struct TestData {
         pub lecturer_user: UserModel,
@@ -89,10 +89,10 @@ mod patch_plagiarism_tests {
             submission1.id,
             submission2.id,
             "Initial description",
-            0.0
-        )
-        .await
-        .unwrap();
+            0.0,    // similarity
+            0,  // lines_matched
+            None,   // report_id
+        ).await.unwrap();
 
         TestData {
             lecturer_user,
@@ -128,8 +128,8 @@ mod patch_plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_flag_plagiarism_case_success_as_lecturer() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_patch_request(
             &data.lecturer_user,
@@ -161,8 +161,8 @@ mod patch_plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_flag_plagiarism_case_success_as_assistant() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_patch_request(
             &data.assistant_user,
@@ -185,8 +185,8 @@ mod patch_plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_flag_plagiarism_case_forbidden_roles() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         // Test tutor
         let req = make_patch_request(
@@ -212,8 +212,8 @@ mod patch_plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_flag_plagiarism_case_not_found() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_patch_request(
             &data.lecturer_user,
@@ -229,8 +229,8 @@ mod patch_plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_flag_plagiarism_case_unauthorized() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/plagiarism/{}/flag",
@@ -275,7 +275,7 @@ mod review_plagiarism_tests {
     use tower::ServiceExt;
     use serial_test::serial;
 
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     fn make_review_request(
         user: &UserModel,
@@ -300,8 +300,8 @@ mod review_plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_review_plagiarism_case_success_as_lecturer() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_review_request(
             &data.lecturer_user,
@@ -333,8 +333,8 @@ mod review_plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_review_plagiarism_case_success_as_assistant() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_review_request(
             &data.assistant_user,
@@ -357,8 +357,8 @@ mod review_plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_review_plagiarism_case_forbidden_roles() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         // Test tutor
         let req = make_review_request(
@@ -384,8 +384,8 @@ mod review_plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_review_plagiarism_case_not_found() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_review_request(
             &data.lecturer_user,
@@ -401,8 +401,8 @@ mod review_plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_review_plagiarism_case_unauthorized() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/plagiarism/{}/review",

@@ -4,3 +4,4 @@
 
 pub mod email;
 pub mod moss;
+pub mod moss_archiver;

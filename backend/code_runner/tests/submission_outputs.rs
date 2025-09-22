@@ -1,13 +1,17 @@
 use chrono::Utc;
 use code_runner::create_submission_outputs_for_all_tasks;
-use util::state::AppState;
-use util::filters::FilterParam;
-use services::service::Service;
-use services::user::{UserService, CreateUser};
-use services::module::{ModuleService, CreateModule};
-use services::assignment::{AssignmentService, AssignmentType, CreateAssignment};
-use services::assignment_submission::{AssignmentSubmissionService, AssignmentSubmission, CreateAssignmentSubmission};
-use services::assignment_task::{AssignmentTaskService, CreateAssignmentTask};
+use db::models::assignment::AssignmentType;
+use db::models::assignment::{ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity};
+use db::models::assignment_submission::{
+    ActiveModel as SubmissionActiveModel, Model as SubmissionModel,
+};
+use db::models::assignment_task::Model as AssignmentTaskModel;
+use db::models::module::{ActiveModel as ModuleActiveModel, Entity as ModuleEntity};
+use db::models::user::{ActiveModel as UserActiveModel, Entity as UserEntity};
+use db::test_utils::setup_test_db;
+use sea_orm::DatabaseConnection;
+use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+use util::paths::{storage_root, attempt_dir};
 
 async fn seed_user() -> i64 {
     let user_id = 1;
@@ -25,20 +29,49 @@ async fn seed_user() -> i64 {
     user_id
 }
 
-async fn seed_submission(assignment_id: i64) -> AssignmentSubmission {
-    AssignmentSubmissionService::create(
-        CreateAssignmentSubmission {
-            assignment_id,
-            user_id: 1,
-            attempt: 1,
-            earned: 80,
-            total: 100,
-            is_practice: false,
-            filename: "submission.zip".to_string(),
-            file_hash: "0".to_string(),
-            bytes: vec![],
-        }
-    ).await.expect("Failed to insert submission")
+async fn seed_submission(db: &DatabaseConnection, assignment_id: i64) -> SubmissionModel {
+    let user_id = 1;
+    let attempt = 1;
+    let filename = "submission.zip";
+
+    let assignment = AssignmentEntity::find_by_id(assignment_id)
+        .one(db)
+        .await
+        .expect("Failed to lookup assignment")
+        .expect("Assignment not found");
+
+    let module_id = assignment.module_id;
+
+    let submission_dir = attempt_dir(module_id, assignment_id, user_id, attempt);
+    std::fs::create_dir_all(&submission_dir).expect("Failed to create attempt dir");
+
+    let file_path = submission_dir.join("481.zip");
+
+    let relative_path = file_path
+        .strip_prefix(storage_root())
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+
+    let now = Utc::now();
+
+    let submission = SubmissionActiveModel {
+        assignment_id: Set(assignment_id),
+        user_id: Set(user_id),
+        attempt: Set(attempt),
+        filename: Set(filename.to_string()),
+        file_hash: Set("0".to_string()),
+        path: Set(relative_path),
+        is_practice: Set(false),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    };
+
+    submission
+        .insert(db)
+        .await
+        .expect("Failed to insert submission")
 }
 
 async fn seed_module(module_id: i64, code: &str) {

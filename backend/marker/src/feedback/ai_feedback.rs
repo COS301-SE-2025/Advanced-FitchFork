@@ -25,7 +25,7 @@ use crate::error::MarkerError;
 use crate::traits::feedback::{Feedback, FeedbackEntry};
 use crate::types::TaskResult;
 use serde::{Deserialize, Serialize};
-use std::{env, pin::Pin};
+use util::config;
 use serde_json;
 
 /// AI feedback strategy: generates feedback using a Large Language Model (LLM).
@@ -117,8 +117,7 @@ impl Feedback for AiFeedback {
         Box::pin(async move {
             dotenvy::dotenv().ok();
 
-            let api_key = env::var("GEMINI_API_KEY")
-                .map_err(|_| MarkerError::InputMismatch("GEMINI_API_KEY environment variable not set".into()))?;
+        let api_key = config::gemini_api_key();
 
             let client = reqwest::Client::new();
             let mut feedback_entries = Vec::new();

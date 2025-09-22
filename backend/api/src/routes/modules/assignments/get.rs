@@ -30,6 +30,11 @@ use axum::{
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sea_orm::{
+    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter,
+    QueryOrder, sea_query::Expr,
+};
+use util::{execution_config::{execution_config::{GradingPolicy, SubmissionMode}, ExecutionConfig}, state::AppState};
 use crate::{auth::AuthUser, response::ApiResponse};
 use crate::routes::modules::assignments::common::{File, AssignmentResponse};
 use util::filters::{FilterParam, QueryParam};
@@ -46,6 +51,11 @@ pub struct AssignmentFileResponse {
     pub files: Vec<File>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub best_mark: Option<BestMark>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempts: Option<AttemptsInfo>,
+    // NEW: policy hints that are safe to show to students
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy: Option<AssignmentPolicy>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -56,8 +66,29 @@ pub struct BestMark {
     pub submission_id: i64,
 }
 
-impl From<Assignment> for AssignmentFileResponse {
-    fn from(assignment: Assignment) -> Self {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AttemptsInfo {
+    pub used: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remaining: Option<u32>,
+    pub can_submit: bool,
+    pub limit_attempts: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AssignmentPolicy {
+    pub allow_practice_submissions: bool,
+    pub submission_mode: SubmissionMode,
+    pub grading_policy: GradingPolicy,
+    pub limit_attempts: bool,
+    pub pass_mark: u32,
+}
+
+
+impl From<AssignmentModel> for AssignmentFileResponse {
+    fn from(assignment: AssignmentModel) -> Self {
         Self {
             assignment: AssignmentResponse {
                 id: assignment.id,
@@ -73,6 +104,8 @@ impl From<Assignment> for AssignmentFileResponse {
             },
             files: Vec::new(),
             best_mark: None,
+            attempts: None, 
+            policy: None,
         }
     }
 }
@@ -81,9 +114,19 @@ impl From<Assignment> for AssignmentFileResponse {
 /// GET /api/modules/{module_id}/assignments/{assignment_id}
 ///
 /// Retrieve a specific assignment along with its associated files.  
-/// Accessible to all users assigned to the module.  
-/// If the authenticated user is a **student**, the response will also include
-/// their current **best mark** for this assignment, based on the grading policy.
+/// Accessible to all users assigned to the module.
+///
+/// The response also includes a **student-safe policy summary** (`policy`) with
+/// the key settings needed by the UI (e.g., practice allowed, attempt limits,
+/// pass mark, submission mode, grading policy). Students cannot fetch the full
+/// raw config; this `policy` is the safe subset exposed to all callers.
+///
+/// If the authenticated user is a **student** in this module, the response will
+/// additionally include:
+/// - `best_mark`: Their current best/last mark according to the assignment's grading policy
+///   (practice and ignored submissions are excluded from this calculation)
+/// - `attempts`: Attempt usage and remaining attempts derived from the assignment's policy
+///   (only **non-practice** and **non-ignored** submissions count toward `used`)
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): The ID of the module containing the assignment
@@ -102,7 +145,7 @@ impl From<Assignment> for AssignmentFileResponse {
 ///       "module_id": 456,
 ///       "name": "Assignment 1",
 ///       "description": "This is a sample assignment",
-///       "assignment_type": "Assignment",
+///       "assignment_type": "assignment",
 ///       "status": "open",
 ///       "available_from": "2024-01-01T00:00:00Z",
 ///       "due_date": "2024-01-31T23:59:59Z",
@@ -119,49 +162,101 @@ impl From<Assignment> for AssignmentFileResponse {
 ///         "updated_at": "2024-01-01T00:00:00Z"
 ///       }
 ///     ],
+///     "policy": {
+///       "allow_practice_submissions": true,
+///       "submission_mode": "manual",
+///       "grading_policy": "last",
+///       "limit_attempts": true,
+///       "pass_mark": 50
+///     },
 ///     "best_mark": {
 ///       "earned": 85,
 ///       "total": 100,
 ///       "attempt": 2,
 ///       "submission_id": 4567
+///     },
+///     "attempts": {
+///       "used": 2,
+///       "max": 3,
+///       "remaining": 1,
+///       "can_submit": true,
+///       "limit_attempts": true
 ///     }
 ///   }
 /// }
 /// ```
 ///
+/// > Notes:
+/// > - `policy` is included for all callers and exposes only safe fields needed by the UI.
+/// > - `best_mark` and `attempts` are **omitted** when the caller is not a student in this module.
+/// > - `attempts.used` counts only **non-practice** and **non-ignored** submissions.
+/// > - `attempts.can_submit` refers to whether the user may submit another **non-practice** attempt
+/// >   (students obey `limit_attempts`; staff are always allowed).
+/// > - `attempts.max` and `policy.max_attempts` are `null` when `limit_attempts` is `false`
+/// >   (i.e., effectively unlimited).
+///
 /// - `404 Not Found`  
 /// Assignment does not exist in this module.
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Assignment not found"
-/// }
+/// { "success": false, "message": "Assignment not found" }
 /// ```
 ///
 /// - `500 Internal Server Error`  
 /// Returned if the database or file fetch fails.
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Failed to retrieve files: <error details>"
-/// }
+/// { "success": false, "message": "Failed to retrieve files: <error details>" }
 /// ```
 pub async fn get_assignment(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     AuthUser(user): AuthUser,
 ) -> impl IntoResponse {
-    match AssignmentService::find_by_id(assignment_id).await {
-        Ok(Some(a)) => {
-            match AssignmentFileService::find_all(
-                &vec![
-                    FilterParam::eq("assignment_id", assignment_id),
-                ],
-                &vec![],
-                None,
-            ).await {
+    let db = app_state.db();
+
+    let assignment_res = assignment::Entity::find()
+        .filter(assignment::Column::Id.eq(assignment_id as i32))
+        .filter(assignment::Column::ModuleId.eq(module_id as i32))
+        .one(db)
+        .await;
+
+    match assignment_res {
+        Ok(Some(mut a)) => {
+            // --- auto-adjust status (adjacent Ready↔Open↔Closed) ---
+            match a.auto_open_or_close(db).await {
+                Ok(Some(_new_status)) => {
+                    // refresh `a` so we return the updated status
+                    if let Ok(Some(refreshed)) = assignment::Entity::find_by_id(a.id).one(db).await {
+                        a = refreshed;
+                    }
+                }
+                Ok(None) => { /* no change */ }
+                Err(e) => {
+                    // non-fatal; continue with the current record
+                    eprintln!("auto_open_or_close failed: {e}");
+                }
+            }
+
+            let files_res = assignment_file::Entity::find()
+                .filter(assignment_file::Column::AssignmentId.eq(a.id))
+                .all(db)
+                .await;
+
+            match files_res {
                 Ok(files) => {
-                    let converted_files: Vec<File> =files.into_iter().map(File::from).collect();
+                    let converted_files: Vec<File> = files.into_iter().map(File::from).collect();
+
                     let mut best_mark = None;
+                    let mut attempts: Option<AttemptsInfo> = None;
+
+                    // --- NEW: compute student-safe policy (works for any caller) ---
+                    let cfg = a.config().unwrap_or_else(ExecutionConfig::default_config);
+                    let policy = AssignmentPolicy {
+                        allow_practice_submissions: cfg.marking.allow_practice_submissions,
+                        submission_mode: cfg.project.submission_mode,
+                        grading_policy: cfg.marking.grading_policy,
+                        limit_attempts: cfg.marking.limit_attempts,
+                        pass_mark: cfg.marking.pass_mark,
+                    };
+                    // ---------------------------------------------------------------
 
                     // only if user is a student in this module
                     if let Ok(true) = UserModuleRoleService::is_in_role(user.sub, module_id, "student".to_string()).await {
@@ -173,12 +268,31 @@ pub async fn get_assignment(
                                 submission_id: sub.id,
                             });
                         }
+
+                        if let Ok(summary) = a.attempts_summary_for_user(db, user_id).await {
+                            let can_submit = a.can_submit(db, user_id).await.unwrap_or(false);
+                            let (max_opt, remaining_opt) = if summary.limit_attempts {
+                                (Some(summary.max), Some(summary.remaining))
+                            } else {
+                                (None, None)
+                            };
+
+                            attempts = Some(AttemptsInfo {
+                                used: summary.used,
+                                max: max_opt,
+                                remaining: remaining_opt,
+                                can_submit,
+                                limit_attempts: summary.limit_attempts,
+                            });
+                        }
                     }
 
                     let response = AssignmentFileResponse {
                         assignment: AssignmentResponse::from(a),
                         files: converted_files,
                         best_mark,
+                        attempts,
+                        policy: Some(policy),
                     };
 
                     (
@@ -200,9 +314,7 @@ pub async fn get_assignment(
         }
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<AssignmentFileResponse>::error(
-                "Assignment not found",
-            )),
+            Json(ApiResponse::<AssignmentFileResponse>::error("Assignment not found")),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -213,6 +325,7 @@ pub async fn get_assignment(
         ),
     }
 }
+
 
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
@@ -419,205 +532,17 @@ pub async fn get_assignments(
     )
 }
 
-#[derive(Debug, Serialize)]
-pub struct PerStudentSubmission {
-    pub user_id: i64,
-    pub username: String,
-    pub count: i8,
-    pub latest_at: DateTime<Utc>,
-    pub latest_late: bool
-}
-
-#[derive(Debug, Serialize)]
-pub struct StatResponse {
-    pub assignment_id: i64,
-    pub total_submissions: i8,
-    pub unique_submitters: i8,
-    pub late_submissions: i8,
-    pub per_student_submission_count: Vec<PerStudentSubmission>
-}
-
 pub fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
 }
 
-/// GET /api/modules/{module_id}/assignments/{assignment_id}/stats
-///
-/// Retrieve submission statistics for a specific assignment. Only accessible by lecturers assigned to the module.
-///
-/// ### Path Parameters
-/// - `module_id` (i64): The ID of the module containing the assignment
-/// - `assignment_id` (i64): The ID of the assignment to get statistics for
-///
-/// ### Responses
-///
-/// - `200 OK`
-/// ```json
-/// {
-///   "success": true,
-///   "message": "Stats retrieved successfully",
-///   "data": {
-///     "assignment_id": 123,
-///     "total_submissions": 15,
-///     "unique_submitters": 12,
-///     "late_submissions": 3,
-///     "per_student_submission_count": [
-///       {
-///         "user_id": 456,
-///         "username": "john.doe",
-///         "count": 2,
-///         "latest_at": "2024-01-31T23:59:59Z",
-///         "latest_late": false
-///       },
-///       {
-///         "user_id": 789,
-///         "username": "jane.smith",
-///         "count": 1,
-///         "latest_at": "2024-02-01T01:30:00Z",
-///         "latest_late": true
-///       }
-///     ]
-///   }
-/// }
-/// ```
-///
-/// - `404 Not Found`
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Assignment not found"
-/// }
-/// ```
-///
-/// - `500 Internal Server Error`
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Database error" // or "Failed to fetch student numbers"
-/// }
-/// ```
-pub async fn get_assignment_stats(
-    Path((_, assignment_id)): Path<(i64, i64)>
-) -> impl IntoResponse {
-    let assignment = match AssignmentService::find_by_id(assignment_id).await {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<StatResponse>::error("Assignment not found")),
-            )
-                .into_response();
-        }
-        Err(err) => {
-            eprintln!("DB error fetching assignment: {:?}", err);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<StatResponse>::error("Database error")),
-            )
-                .into_response();
-        }
-    };
-
-    match AssignmentSubmissionService::find_all(
-        &vec![
-            FilterParam::eq("assignment_id", assignment_id),
-        ],
-        &vec![],
-        Some("-created_at".to_string()),
-    ).await {
-        Ok(submissions) => {
-            let mut total_submissions = 0;
-            let mut late_submissions = 0;
-            let mut unique_users: HashMap<i64, Vec<DateTime<Utc>>> = HashMap::new();
-
-            for sub in &submissions {
-                total_submissions += 1;
-                if is_late(sub.created_at, assignment.due_date) {
-                    late_submissions += 1;
-                }
-
-                unique_users
-                    .entry(sub.user_id)
-                    .or_insert_with(Vec::new)
-                    .push(sub.created_at);
-            }
-
-            let user_ids: Vec<i64> = unique_users.keys().copied().collect();
-            
-            let user_models = UserService::find_all(
-                &vec![
-                    FilterParam::eq("id", user_ids),
-                ],
-                &vec![],
-                None,
-            ).await;
-
-            let mut user_id_to_username = HashMap::new();
-            match user_models {
-                Ok(users) => {
-                    for user in users {
-                        user_id_to_username.insert(user.id, user.username);
-                    }
-                }
-                Err(err) => {
-                    eprintln!("DB error fetching student numbers: {:?}", err);
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<StatResponse>::error("Failed to fetch student numbers")),
-                    )
-                        .into_response();
-                }
-            }
-
-            let mut per_student_submission_count = Vec::new();
-
-            for (user_id, created_times) in unique_users.iter() {
-                let latest_at = *created_times.iter().max().unwrap();
-                let latest_late = is_late(latest_at, assignment.due_date);
-                let username = user_id_to_username
-                    .get(user_id)
-                    .cloned()
-                    .unwrap_or_else(|| "UNKNOWN".to_string());
-
-                per_student_submission_count.push(PerStudentSubmission {
-                    user_id: *user_id,
-                    username,
-                    count: created_times.len() as i8,
-                    latest_at,
-                    latest_late,
-                });
-            }
-
-            let response = StatResponse {
-                assignment_id,
-                total_submissions,
-                unique_submitters: unique_users.len() as i8,
-                late_submissions,
-                per_student_submission_count,
-            };
-
-            (
-                StatusCode::OK,
-                Json(ApiResponse::success(response, "Stats retrieved successfully")),
-            )
-                .into_response()
-        }
-        Err(err) => {
-            eprintln!("DB error fetching submissions for stats: {:?}", err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<StatResponse>::error("Database error")),
-            )
-                .into_response()
-        }
-    }
-}
-
 #[derive(Debug, Serialize)]
 pub struct AssignmentReadiness {
+    pub submission_mode: SubmissionMode,
     pub config_present: bool,
     pub tasks_present: bool,
     pub main_present: bool,
+    pub interpreter_present: bool,
     pub memo_present: bool,
     pub makefile_present: bool,
     pub memo_output_present: bool,
@@ -628,11 +553,15 @@ pub struct AssignmentReadiness {
 /// GET /api/modules/:module_id/assignments/:assignment_id/readiness
 ///
 /// Retrieve a detailed readiness report for a specific assignment.
-/// The report includes boolean flags indicating whether each required
-/// component of the assignment is present on disk or in the database.
 ///
-/// This endpoint is useful to check if an assignment is fully set up
-/// and eligible to transition from `Setup` to `Ready` state.
+/// The report includes boolean flags indicating whether each component is present
+/// and the resolved `submission_mode` from `config.json`. Readiness is **conditional**:
+/// - If `submission_mode` is **manual** → a **main** file must be present.
+/// - If `submission_mode` is **gatlam** → an **interpreter** must be present.
+/// - Other modes (e.g., `rng`, `codecoverage`) do not require main/interpreter.
+///
+/// This endpoint is useful to check if an assignment is fully set up and eligible
+/// to transition from `Setup` to `Ready`.
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): The ID of the module containing the assignment.
@@ -646,9 +575,11 @@ pub struct AssignmentReadiness {
 ///   "success": true,
 ///   "message": "Assignment readiness checked successfully",
 ///   "data": {
+///     "submission_mode": "manual",
 ///     "config_present": true,
 ///     "tasks_present": true,
 ///     "main_present": true,
+///     "interpreter_present": false,
 ///     "memo_present": true,
 ///     "makefile_present": true,
 ///     "memo_output_present": true,
@@ -671,6 +602,7 @@ pub async fn get_assignment_readiness(
 ) -> (StatusCode, Json<ApiResponse<AssignmentReadiness>>) {
     match AssignmentService::compute_readiness_report(module_id, assignment_id).await {
         Ok(report) => {
+            // If fully ready, try to flip Setup → Ready (best-effort)
             if report.is_ready() {
                 if let Err(e) =
                     AssignmentService::try_transition_to_ready(module_id, assignment_id).await
@@ -684,9 +616,11 @@ pub async fn get_assignment_readiness(
             }
 
             let response = AssignmentReadiness {
+                submission_mode: report.submission_mode,
                 config_present: report.config_present,
                 tasks_present: report.tasks_present,
                 main_present: report.main_present,
+                interpreter_present: report.interpreter_present,
                 memo_present: report.memo_present,
                 makefile_present: report.makefile_present,
                 memo_output_present: report.memo_output_present,

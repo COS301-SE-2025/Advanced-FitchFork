@@ -1,9 +1,10 @@
-use crate::execution_config::execution_config::Language;
 use chrono::Utc;
 use regex::Regex;
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
+
+use crate::languages::Language;
 
 #[derive(Debug, Serialize)]
 pub struct CoverageSummary {
@@ -35,6 +36,10 @@ impl CoverageProcessor {
         match language {
             Language::Cpp => Self::parse_cpp_report(report_path),
             Language::Java => Self::parse_java_report(report_path),
+            other => Err(format!(
+                "Code coverage parsing not supported for {:?}",
+                other
+            )),
         }
     }
 

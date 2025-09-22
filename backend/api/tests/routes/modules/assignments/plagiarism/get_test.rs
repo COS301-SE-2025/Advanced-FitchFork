@@ -23,7 +23,7 @@ mod plagiarism_tests {
     use tower::ServiceExt;
     use serde_json::Value;
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use chrono::{Datelike, Utc, TimeZone};
     use serial_test::serial;
 
@@ -60,7 +60,16 @@ mod plagiarism_tests {
         let assignment = AssignmentModel::create(db, module.id, "Assignment 1", Some("Desc 1"), AssignmentType::Assignment, Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(), Utc.with_ymd_and_hms(2024, 1, 31, 23, 59, 59).unwrap()).await.unwrap();
         let submission1 = SubmissionModel::save_file(db, assignment.id, student_user1.id, 1, 10, 10, false, "sub1.txt", "hash123#", b"ontime").await.unwrap();
         let submission2 = SubmissionModel::save_file(db, assignment.id, student_user2.id, 1, 10, 10, false, "sub2.txt", "hash123#", b"ontime").await.unwrap();
-        let plagiarism_case = PlagiarismCaseModel::create_case(db, assignment.id, submission1.id, submission2.id, "High similarity detected", 0.0).await.unwrap();
+        let plagiarism_case = PlagiarismCaseModel::create_case(
+            db,
+            assignment.id,
+            submission1.id,
+            submission2.id,
+            "High similarity detected",
+            0.0,       // similarity
+            0,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
 
         TestData {
             admin_user,
@@ -92,9 +101,16 @@ mod plagiarism_tests {
             .await
             .unwrap();
 
-        let mut case1 = PlagiarismCaseModel::create_case(db, assignment_id, sub3.id, sub4.id, "Resolved case", 0.0)
-            .await
-            .unwrap();
+        let mut case1 = PlagiarismCaseModel::create_case(
+            db,
+            assignment_id,
+            sub3.id,
+            sub4.id,
+            "Resolved case",
+            0.0,       // similarity
+            0,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
 
         let mut active_case1 = case1.into_active_model();
         active_case1.status = Set(Status::Flagged);
@@ -103,9 +119,16 @@ mod plagiarism_tests {
         case1 = active_case1.update(db).await.unwrap();
         cases.push(case1);
 
-        let mut case2 = PlagiarismCaseModel::create_case(db, assignment_id, sub3.id, sub4.id, "Pending case", 0.0)
-            .await
-            .unwrap();
+        let mut case2 = PlagiarismCaseModel::create_case(
+            db,
+            assignment_id,
+            sub3.id,
+            sub4.id,
+            "Pending case",
+            0.0,       // similarity
+            0_i64,     // lines_matched
+            None,      // report_id
+        ).await.unwrap();
 
         let mut active_case2 = case2.into_active_model();
         active_case2.status = Set(Status::Reviewed);
@@ -147,8 +170,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_success_as_admin() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
             &data.admin_user,
@@ -190,8 +213,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_success_as_lecturer() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
             &data.lecturer_user,
@@ -212,8 +235,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_success_as_assistant_lecturer() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
             &data.assistant_user,
@@ -234,8 +257,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_forbidden_for_tutor() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
             &data.tutor_user,
@@ -252,8 +275,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_forbidden_for_student() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
             &data.student_user1,
@@ -270,8 +293,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_empty() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let new_assignment = AssignmentModel::create(
             db::get_connection().await,
@@ -305,8 +328,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_filter_by_review_status() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         
         let _ = create_additional_plagiarism_cases(
             db::get_connection().await,
@@ -337,8 +360,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_filter_by_flagged_status() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         
         let _ = create_additional_plagiarism_cases(
             db::get_connection().await,
@@ -369,8 +392,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_filter_by_reviewed_status() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         
         let _ = create_additional_plagiarism_cases(
             db::get_connection().await,
@@ -401,8 +424,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_search_by_username() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
             &data.admin_user,
@@ -430,8 +453,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_sorting() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         
         let _ = create_additional_plagiarism_cases(
             db::get_connection().await,
@@ -473,8 +496,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_pagination() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         
         for _ in 0..15 {
             let sub = SubmissionModel::save_file(
@@ -496,7 +519,9 @@ mod plagiarism_tests {
                 data.submission1.id,
                 sub.id,
                 "Test case description",
-                0.0
+                0.0,       // similarity
+                0,     // lines_matched
+                None,      // report_id
             ).await.unwrap();
         }
 
@@ -533,8 +558,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_unauthorized_missing_header() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/plagiarism",
@@ -554,8 +579,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_unauthorized_invalid_token() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/plagiarism",
@@ -576,8 +601,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_non_existent_assignment() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
             &data.admin_user,
@@ -599,8 +624,8 @@ mod plagiarism_tests {
     #[tokio::test]
     #[serial]
     async fn test_list_plagiarism_cases_invalid_status() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let req = make_request(
             &data.admin_user,

@@ -37,7 +37,8 @@ const LABELS: Record<VisibleFileType, string> = {
 // Allowed extensions (client-side)
 const COMPRESSED = '.zip,.tar,.gz,.tgz,.bz2,.tbz2,.7z';
 const ACCEPTS_BY_TYPE: Record<VisibleFileType, string> = {
-  spec: '.pdf,.md,.txt',
+  // Allow a single doc OR an archive (e.g., include PDF + skeleton code)
+  spec: `${COMPRESSED},.pdf,.md,.txt`,
   main: COMPRESSED,
   memo: COMPRESSED,
   makefile: COMPRESSED,
@@ -72,7 +73,7 @@ export default function AssignmentFilePage() {
   const safeType: VisibleFileType = isVisibleType ? (type as VisibleFileType) : 'main';
   const label = LABELS[safeType];
 
-  const { assignment, refreshAssignment } = useAssignment();
+  const { assignment, assignmentFiles, refreshAssignment } = useAssignment();
   const module = useModule();
   const { setValue } = useViewSlot();
 
@@ -85,7 +86,7 @@ export default function AssignmentFilePage() {
   }, [label, setValue]);
 
   // Derive the current file for this type (latest wins)
-  const files = assignment.files ?? [];
+  const files = assignmentFiles ?? [];
   const current = useMemo(() => files.find((f) => f.file_type === safeType), [files, safeType]);
 
   const [uploading, setUploading] = useState(false);
@@ -96,7 +97,7 @@ export default function AssignmentFilePage() {
       if (!hasAllowedExtension(file.name, accept)) {
         message.error(
           safeType === 'spec'
-            ? 'Specification must be .pdf, .md, or .txt.'
+            ? 'Specification must be a .pdf/.md/.txt or a compressed archive (.zip, .tar.gz, .7z) containing the spec (e.g., PDF) and optional skeleton code.'
             : 'This type must be uploaded as a compressed archive (e.g., .zip, .tar.gz, .7z).',
         );
         return false;
@@ -153,13 +154,12 @@ export default function AssignmentFilePage() {
     safeType === 'spec' ? 'Upload Policy • Specification' : `Upload Policy • ${label}`;
   const policyDesc =
     safeType === 'spec'
-      ? 'Allowed formats: .pdf, .md, .txt. Uploading a new file replaces the current one.'
+      ? 'Upload either a single document (.pdf, .md, .txt) OR a compressed archive (.zip, .tar.gz, .7z) that contains your specification (e.g., a PDF) plus any starter skeleton code, examples, or resources. Uploading a new file replaces the current one.'
       : 'Upload a compressed archive (e.g., .zip, .tar.gz, .7z). Uploading a new file replaces the current one.';
 
   return (
     <div className="w-full max-w-6xl overflow-x-hidden">
       <Row
-        // 0 horizontal gutter on XS to avoid Row’s negative margins causing overflow
         gutter={[{ xs: 0, sm: 16, md: 16 }, 16]}
         wrap
         style={{ marginInline: 0 }}
@@ -191,7 +191,11 @@ export default function AssignmentFilePage() {
                   <UploadOutlined />
                 </p>
                 <p className="text-sm text-gray-700 dark:text-gray-200">
-                  {uploading ? 'Upload in progress…' : `Click or drag ${label} here to upload`}
+                  {uploading
+                    ? 'Upload in progress…'
+                    : safeType === 'spec'
+                      ? `Click or drag your ${label} here — either a single .pdf/.md/.txt, or a .zip/.tar.gz/.7z containing the PDF and any skeleton code.`
+                      : `Click or drag ${label} here to upload`}
                 </p>
                 {!uploading && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">

@@ -16,7 +16,7 @@ mod tests {
     use serial_test::serial;
     use serde_json::Value;
     use tower::ServiceExt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         student1: UserModel,
@@ -114,7 +114,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_as_student_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student1.id, false);
@@ -142,7 +142,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_as_lecturer_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -169,7 +169,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_unauthorized() {
-        let (app, _) = make_test_app().await;
+        let (app, _app_state, _tmp) = make_test_app_with_storage().await;
         let req = Request::builder()
             .method("GET")
             .uri("/api/me/grades")
@@ -183,7 +183,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_filter_by_year() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -208,7 +208,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_filter_by_query() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -234,7 +234,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_sort_by_score_asc() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -260,7 +260,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_sort_by_score_desc() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -286,7 +286,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_pagination() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -313,7 +313,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_invalid_page() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -331,7 +331,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_no_grades_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);

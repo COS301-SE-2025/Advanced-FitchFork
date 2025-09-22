@@ -1,9 +1,10 @@
+use db::models::assignment_submission_output::Entity as SubmissionOutputEntity;
+use db::models::assignment_task::Entity as AssignmentTaskEntity;
+
+use sea_orm::EntityTrait;
 use std::fs;
 use std::io::{self, ErrorKind};
-use services::service::Service;
-use services::assignment_memo_output::AssignmentMemoOutputService;
-use services::assignment_submission_output::AssignmentSubmissionOutputService;
-use services::assignment_task::AssignmentTaskService;
+use util::paths::{memo_output_dir, submission_output_dir};
 
 #[allow(dead_code)]
 pub struct Output;
@@ -13,10 +14,7 @@ impl Output {
     /// returning Vec<(task_number, file_contents_as_string)>
     #[allow(dead_code)]
     pub fn get_memo_output(module_id: i64, assignment_id: i64) -> io::Result<Vec<(i64, String)>> {
-        let dir_path = AssignmentMemoOutputService::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join("memo_output");
+        let dir_path = memo_output_dir(module_id, assignment_id);
 
         if !dir_path.exists() {
             return Err(io::Error::new(
@@ -45,7 +43,7 @@ impl Output {
     }
 
     /// Get all submission output files for the given parameters,
-    /// returning Vec<(task_number, file_contents_as_string)>
+    /// returning Vec<(task_id, file_contents_as_string)>
     #[allow(dead_code)]
     pub async fn get_submission_output_no_coverage(
         module_id: i64,
@@ -87,13 +85,8 @@ impl Output {
         attempt_number: i64,
         code_coverage: bool,
     ) -> io::Result<Vec<(i64, String)>> {
-        let dir_path = AssignmentMemoOutputService::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join("assignment_submissions")
-            .join(format!("user_{user_id}"))
-            .join(format!("attempt_{attempt_number}"))
-            .join("submission_output");
+        let dir_path =
+            submission_output_dir(module_id, assignment_id, user_id, attempt_number);
 
         if !dir_path.exists() {
             return Err(io::Error::new(
@@ -120,7 +113,8 @@ impl Output {
                     if let Ok(Some(output)) = AssignmentSubmissionOutputService::find_by_id(output_id).await
                     {
                         // Look up the task to check code_coverage
-                        if let Ok(Some(task)) = AssignmentTaskService::find_by_id(output.task_id).await
+                        if let Ok(Some(task)) =
+                            AssignmentTaskEntity::find_by_id(output.task_id).one(db).await
                         {
                             if task.code_coverage == code_coverage {
                                 let content = fs::read_to_string(&path)?;

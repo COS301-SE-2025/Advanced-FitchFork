@@ -22,8 +22,7 @@ mod tests {
     use api::auth::generate_jwt;
     use chrono::{Utc, TimeZone};
     use db::models::assignment_file::{FileType, Model as AssignmentFile};
-    use crate::helpers::app::make_test_app;
-    use serial_test::serial;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin_user: UserModel,
@@ -75,8 +74,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_config_success_as_admin() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let config = serde_json::json!({
             "execution": {
@@ -135,8 +134,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_config_success_as_lecturer() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         // Save a valid config using disk-backed storage
         let config = serde_json::json!({
@@ -197,8 +196,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_config_forbidden_for_student() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
@@ -215,8 +214,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_config_forbidden_for_unassigned_user() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
@@ -233,8 +232,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_config_not_found() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/9999/config", data.module.id);
@@ -251,8 +250,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_config_unauthorized() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
         let req = Request::builder()
@@ -267,8 +266,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_config_no_config_set() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/config", data.module.id, data.assignments[0].id);
@@ -290,8 +289,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_config_invalid_config_format() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         // Intentionally save invalid JSON (e.g., a primitive instead of object)
         let bad_json = b"12345";

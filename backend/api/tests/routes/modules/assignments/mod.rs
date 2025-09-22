@@ -10,3 +10,7 @@ pub mod put_test;
 pub mod delete_test;
 pub mod tickets;
 pub mod plagiarism;
+pub mod grades;
+pub mod statistics;
+pub mod assignment_access_test;
+pub mod starter;

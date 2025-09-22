@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use axum::{
         body::{Body, to_bytes},
@@ -16,7 +16,8 @@ mod tests {
     };
     use serde_json::Value;
     use serial_test::serial;
-    use std::{fs, path::PathBuf};
+    use util::paths::memo_output_dir;
+    use std::fs;
     use tower::ServiceExt;
 
     struct TestData {
@@ -27,16 +28,7 @@ mod tests {
         module: ModuleModel,
         assignment: AssignmentModel,
     }
-
-    fn set_test_assignment_root() -> String {
-        let tmp_dir = "./tmp".to_string();
-        unsafe {
-            std::env::set_var("ASSIGNMENT_STORAGE_ROOT", &tmp_dir);
-        }
-
-        tmp_dir
-    }
-
+    
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         let module = ModuleModel::create(db, "COS101", 2024, Some("Test Module"), 16).await.unwrap();
         let service = UserService::new(UserRepository::new(db.clone()));
@@ -73,11 +65,8 @@ mod tests {
         task_number: i64,
     ) -> assignment_memo_output::Model {
         // 1. Ensure directory exists
-        let memo_output_path = PathBuf::from("./tmp")
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("memo_output");
-        fs::create_dir_all(&memo_output_path).unwrap();
+        let memo_output_directory = memo_output_dir(module_id, assignment_id);
+        fs::create_dir_all(&memo_output_directory).unwrap();
 
         // 2. Create a task in DB
         let task = assignment_task::Model::create(
@@ -104,15 +93,10 @@ mod tests {
         .unwrap()
     }
 
-    fn cleanup_tmp() {
-        let _ = fs::remove_dir_all("./tmp");
-    }
-
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_success_as_lecturer() {
-        set_test_assignment_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         setup_memo_output_file(app_state.db(), data.module.id, data.assignment.id, 1).await;
 
@@ -142,15 +126,12 @@ mod tests {
             data_arr[0].get("raw").and_then(|r| r.as_str()),
             Some("This is a test memo output.")
         );
-
-        cleanup_tmp();
     }
 
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_success_as_admin() {
-        set_test_assignment_root();
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         setup_memo_output_file(app_state.db(), data.module.id, data.assignment.id, 1).await;
 
@@ -167,14 +148,12 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-
-        cleanup_tmp();
     }
 
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_forbidden_for_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         setup_memo_output_file(app_state.db(), data.module.id, data.assignment.id, 1).await;
 
@@ -191,14 +170,12 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
-
-        cleanup_tmp();
     }
 
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_forbidden_for_unassigned_user() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         setup_memo_output_file(app_state.db(), data.module.id, data.assignment.id, 1).await;
 
@@ -214,15 +191,14 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-        cleanup_tmp();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN)
     }
 
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_not_found_if_file_doesnt_exist() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -237,15 +213,13 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-        cleanup_tmp();
     }
 
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_assignment_not_found() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!(
@@ -260,15 +234,13 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-        cleanup_tmp();
     }
 
     #[tokio::test]
     #[serial]
     async fn test_get_memo_output_unauthorized() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/memo_output",
@@ -278,7 +250,5 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-        cleanup_tmp();
     }
 }

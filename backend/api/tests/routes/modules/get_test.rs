@@ -19,7 +19,7 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::Value;
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use chrono::{Datelike, Utc};
     use serial_test::serial;
 
@@ -60,8 +60,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_success_as_admin() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -107,8 +107,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_success_as_lecturer() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -127,8 +127,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_success_as_tutor() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.tutor_user.id, data.tutor_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -147,8 +147,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_success_as_student() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -167,8 +167,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_not_found() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", 99999);
@@ -192,8 +192,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_forbidden_user() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -212,8 +212,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_missing_auth_header() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -230,8 +230,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_invalid_token() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -249,8 +249,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_personnel_user_details() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -294,8 +294,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_no_personnel() {
-        let app = make_test_app().await;
-        let _ = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let _ = setup_test_data(app_state.db()).await;
 
         let empty_module = ModuleModel::create(db::get_connection().await, "EMPTY101", Utc::now().year() - 1, Some("Empty Module"), 10).await.expect("Failed to create empty module");
         let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
@@ -336,9 +336,9 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_module_multiple_personnel_per_role() {
-        let app = make_test_app().await;
-        let db = db::get_connection().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(app_state.db()).await;
 
         let service = UserService::new(UserRepository::new(db.clone()));
         let lecturer2 = service.create(CreateUser{ username: "module_lecturer2".to_string(), email: "module_lecturer2@test.com".to_string(), password: "password".to_string(), admin: false }).await.expect("Failed to create second lecturer");

@@ -15,8 +15,7 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::{json, Value};
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
-    use serial_test::serial;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin_user: UserModel,
@@ -45,8 +44,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_user_success_as_admin() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
@@ -75,8 +74,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_user_forbidden_as_non_admin() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
         let req_body = json!({
@@ -101,8 +100,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_create_user_validation_failure() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
@@ -127,8 +126,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_bulk_create_users_success_as_admin() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
@@ -158,8 +157,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_bulk_create_users_validation_failure() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let req_body = json!({
@@ -184,8 +183,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_bulk_create_users_conflict() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let service = UserService::new(UserRepository::new(db::get_connection().await.clone()));
         service.create(CreateUser{ username: "dupe".to_string(), email: "dupe@test.com".to_string(), password: "pass1234".to_string(), admin: false }).await.unwrap();

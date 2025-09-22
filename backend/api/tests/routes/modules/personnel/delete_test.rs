@@ -11,13 +11,7 @@ mod tests {
             user_module_role::{Model as UserModuleRoleModel, Role},
         },
     };
-    use crate::helpers::app::make_test_app;
-    use services::{
-        service::Service,
-        user::{UserService, CreateUser}
-    };
-    use db::repositories::user_repository::UserRepository;
-    use serial_test::serial;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         admin: UserModel,
@@ -42,8 +36,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn remove_personnel_as_admin_success() {
-        let app = make_test_app().await;
-        let data = setup_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -66,8 +60,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn remove_personnel_as_lecturer_success() {
-        let app = make_test_app().await;
-        let data = setup_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -90,8 +84,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn remove_personnel_as_lecturer_forbidden_target_lecturer() {
-        let app = make_test_app().await;
-        let data = setup_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -114,8 +108,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn remove_personnel_as_outsider_forbidden() {
-        let app = make_test_app().await;
-        let data = setup_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.outsider.id, false);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -138,8 +132,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn remove_personnel_user_not_found() {
-        let app = make_test_app().await;
-        let data = setup_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -162,8 +156,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn remove_personnel_empty_user_ids() {
-        let app = make_test_app().await;
-        let data = setup_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);
@@ -186,8 +180,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn remove_personnel_conflict_user_not_assigned() {
-        let app = make_test_app().await;
-        let data = setup_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin.id, true);
         let uri = format!("/api/modules/{}/personnel", data.module.id);

@@ -21,7 +21,7 @@ use crate::routes::{
     test::test_routes,
 };
 use axum::{middleware::from_fn, routing::get, Router};
-use util::config::AppConfig;
+use util::{config, state::AppState};
 use crate::routes::me::me_routes;
 
 pub mod auth;
@@ -63,7 +63,7 @@ pub fn routes() -> Router {
     //
     // This keeps development and test-only APIs out of the production environment,
     // but still makes them available in `development` or `test` modes.
-    let env = AppConfig::global().env.to_lowercase();
+    let env = config::env().to_lowercase();
     if env != "production" {
         router = router.nest("/test", test_routes());
         tracing::info!("[dev/test] Mounted /test routes (env = {env})");

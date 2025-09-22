@@ -1,141 +1,19 @@
-use axum::{extract::{Path, Query}, http::StatusCode, Json, response::IntoResponse};
+use axum::{body::Body, extract::{Path, Query, State}, http::{HeaderMap, HeaderValue, StatusCode}, response::IntoResponse, Json};
+use db::models::{
+    assignment_submission::{self, Entity as SubmissionEntity},
+    plagiarism_case::{self, Entity as PlagiarismEntity, Status},
+    user::{self, Entity as UserEntity},
+};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Condition, QuerySelect, QueryTrait, QueryOrder, PaginatorTrait};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use crate::response::ApiResponse;
-use std::fs;
+use tokio::fs::File;
+use tokio_util::io::ReaderStream;
 use std::str::FromStr;
-use util::filters::{FilterParam, QueryParam};
-use services::service::Service;
-use services::assignment_submission::{AssignmentSubmissionService, AssignmentSubmission};
-use services::plagiarism_case::{PlagiarismCaseService, Status};
-use services::user::{UserService, User};
-
-#[derive(Serialize)]
-pub struct MossReportResponse {
-    pub report_url: String,
-    pub generated_at: String,
-}
-
-/// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss
-///
-/// Retrieves metadata for the **most recent MOSS report** generated for the given assignment.
-/// Accessible only to lecturers and assistant lecturers assigned to the module.
-///
-/// This endpoint does **not** trigger a new MOSS run—it only returns the last stored report URL
-/// and its generation timestamp. To generate a new report, use the POST endpoint:
-/// `/api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss`.
-///
-/// # Path Parameters
-///
-/// - `module_id`: The ID of the parent module
-/// - `assignment_id`: The ID of the assignment whose latest MOSS report should be fetched
-///
-/// # Request Body
-///
-/// None.
-///
-/// # Returns
-///
-/// - `200 OK` on success with the latest report metadata:
-///   - `report_url` — The external URL to the MOSS results page
-///   - `generated_at` — RFC 3339 timestamp for when the report file was written
-/// - `404 NOT FOUND` if no report has been generated yet
-/// - `500 INTERNAL SERVER ERROR` if the report file cannot be read or parsed
-///
-/// # Example Response (200 OK)
-///
-/// ```json
-/// {
-///   "success": true,
-///   "message": "MOSS report retrieved successfully",
-///   "data": {
-///     "report_url": "http://moss.stanford.edu/results/123456789",
-///     "generated_at": "2025-05-30T12:34:56Z"
-///   }
-/// }
-/// ```
-///
-/// # Example Response (404 Not Found)
-///
-/// ```json
-/// {
-///   "success": false,
-///   "message": "MOSS report not found"
-/// }
-/// ```
-///
-/// # Example Response (500 Internal Server Error)
-///
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Failed to read MOSS report: <reason>"
-/// }
-/// ```
-///
-/// # Notes
-/// - Internally, the metadata is read from `reports.txt` under the assignment’s storage directory:
-///   `.../module_{module_id}/assignment_{assignment_id}/reports.txt`.
-/// - The `report_url` is hosted by the MOSS service and may expire per MOSS retention policy.
-/// - To refresh the report, run the POST `/plagiarism/moss` endpoint and then call this GET again.
-pub async fn get_moss_report(
-    Path((module_id, assignment_id)): Path<(i64, i64)>,
-) -> impl IntoResponse {
-    let report_path = AssignmentSubmissionService::storage_root()
-        .join(format!("module_{}", module_id))
-        .join(format!("assignment_{}", assignment_id))
-        .join("reports.txt");
-
-    if !report_path.exists() {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("MOSS report not found".to_string())),
-        )
-            .into_response();
-    }
-
-    let content = match fs::read_to_string(&report_path) {
-        Ok(content) => content,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(format!("Failed to read MOSS report: {}", e))),
-            )
-                .into_response();
-        }
-    };
-
-    let mut report_url = "".to_string();
-    let mut generated_at = "".to_string();
-
-    for line in content.lines() {
-        if let Some(url) = line.strip_prefix("Report URL: ") {
-            report_url = url.to_string();
-        } else if let Some(date) = line.strip_prefix("Date: ") {
-            generated_at = date.to_string();
-        }
-    }
-
-    if report_url.is_empty() {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error("Failed to parse MOSS report".to_string())),
-        )
-            .into_response();
-    }
-
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(
-            MossReportResponse {
-                report_url,
-                generated_at,
-            },
-            "MOSS report retrieved successfully",
-        )),
-    )
-        .into_response()
-}
+use std::collections::HashMap;
+use util::{paths::moss_archive_zip_path, state::AppState};
+use crate::response::ApiResponse;
+use db::models::moss_report::{Entity as MossReportEntity};
+use serde_json;
 
 #[derive(Debug, Deserialize)]
 pub struct ListPlagiarismCaseQueryParams {
@@ -144,6 +22,7 @@ pub struct ListPlagiarismCaseQueryParams {
     status: Option<String>,
     query: Option<String>,
     sort: Option<String>,
+    report_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -168,6 +47,8 @@ pub struct PlagiarismCaseResponse {
     status: String,
     description: String,
     similarity: f32,
+    lines_matched: i64,
+    report_id: Option<i64>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
     submission_1: SubmissionResponse,
@@ -252,15 +133,74 @@ pub async fn list_plagiarism_cases(
     let per_page = params.per_page.unwrap_or(20).min(100).max(1);
     let sort = params.sort.clone();
 
-    if let Some(sort_str) = &sort {
-        let valid_fields = ["created_at", "status", "similarity"];
-        for field in sort_str.split(',') {
-            let field = field.trim().trim_start_matches('-');
-            if !valid_fields.contains(&field) {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<PlagiarismCaseListResponse>::error("Invalid sort field")),
-                );
+    // Limit cases to this assignment’s submissions
+    let submission_models = SubmissionEntity::find()
+        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
+        .all(app_state.db())
+        .await
+        .unwrap_or_default();
+
+    let submission_ids: Vec<i64> = submission_models.iter().map(|s| s.id).collect();
+
+    let mut query = PlagiarismEntity::find().filter(
+        Condition::any()
+            .add(plagiarism_case::Column::SubmissionId1.is_in(submission_ids.clone()))
+            .add(plagiarism_case::Column::SubmissionId2.is_in(submission_ids)),
+    );
+
+    // NEW: filter by report_id (cases created from a specific MOSS report)
+    if let Some(rid) = params.report_id {
+        query = query.filter(plagiarism_case::Column::ReportId.eq(rid));
+    }
+
+    // Filter: status
+    if let Some(status_str) = params.status {
+        if let Ok(status) = Status::from_str(&status_str) {
+            query = query.filter(plagiarism_case::Column::Status.eq(status));
+        } else {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<PlagiarismCaseListResponse>::error("Invalid status parameter")),
+            );
+        }
+    }
+
+    // Search: username (fuzzy)
+    if let Some(search_query) = params.query {
+        let user_ids_subquery = UserEntity::find()
+            .select_only()
+            .column(user::Column::Id)
+            .filter(user::Column::Username.like(format!("%{}%", search_query.to_lowercase())))
+            .into_query();
+
+        let submission_ids_subquery = SubmissionEntity::find()
+            .select_only()
+            .column(assignment_submission::Column::Id)
+            .filter(assignment_submission::Column::UserId.in_subquery(user_ids_subquery))
+            .into_query();
+
+        query = query.filter(
+            Condition::any()
+                .add(plagiarism_case::Column::SubmissionId1.in_subquery(submission_ids_subquery.clone()))
+                .add(plagiarism_case::Column::SubmissionId2.in_subquery(submission_ids_subquery)),
+        );
+    }
+
+    // Sort: created_at, status, similarity, lines_matched (NEW)
+    if let Some(sort) = params.sort {
+        for s in sort.split(',') {
+            let (order, column) = if s.starts_with('-') {
+                (sea_orm::Order::Desc, &s[1..])
+            } else {
+                (sea_orm::Order::Asc, s)
+            };
+            match column {
+                "created_at" => query = query.order_by(plagiarism_case::Column::CreatedAt, order),
+                "status" => query = query.order_by(plagiarism_case::Column::Status, order),
+                "similarity" => query = query.order_by(plagiarism_case::Column::Similarity, order),
+                // NEW
+                "lines_matched" => query = query.order_by(plagiarism_case::Column::LinesMatched, order),
+                _ => {}
             }
         }
     }
@@ -362,6 +302,8 @@ pub async fn list_plagiarism_cases(
                 status: case.status.to_string(),
                 description: case.description,
                 similarity: case.similarity,
+                lines_matched: case.lines_matched,
+                report_id: case.report_id,
                 created_at: case.created_at,
                 updated_at: case.updated_at,
                 submission_1: SubmissionResponse {
@@ -412,6 +354,7 @@ pub struct PlagiarismQuery {
     pub min_similarity: Option<f32>,
     pub max_similarity: Option<f32>,
     pub user: Option<String>,
+    pub report_id: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -419,9 +362,12 @@ struct GraphLink {
     source: String,
     target: String,
     case_id: i64,
+    report_id: Option<i64>,
     similarity: f32,
+    lines_matched: i64,
     status: String,
 }
+
 
 #[derive(Serialize)]
 struct LinksResponse {
@@ -527,6 +473,16 @@ pub async fn get_graph(
 ) -> impl IntoResponse {
     let mut filters = vec![FilterParam::eq("assignment_id", assignment_id)];
 
+    // 1) Base: assignment filter
+    let mut q = PlagiarismEntity::find()
+        .filter(plagiarism_case::Column::AssignmentId.eq(assignment_id));
+
+    // NEW: report filter
+    if let Some(rid) = query.report_id {
+        q = q.filter(plagiarism_case::Column::ReportId.eq(rid));
+    }
+
+    // 2) Optional status (validated)
     if let Some(status_str) = query.status.as_deref() {
         match Status::try_from(status_str) {
             Ok(_) => {
@@ -631,17 +587,22 @@ pub async fn get_graph(
             let u1_match = u1_name.to_lowercase().contains(ql);
             let u2_match = u2_name.to_lowercase().contains(ql);
             if !(u1_match || u2_match) {
-                continue; // username filter not satisfied
+                continue;
             }
         }
 
         links.push(GraphLink {
             source: u1_name.to_string(),
             target: u2_name.to_string(),
+
             case_id: case.id,
+            report_id: case.report_id,
             similarity: case.similarity,
+            lines_matched: case.lines_matched,
             status: case.status.to_string().to_lowercase(),
         });
+
+
     }
 
     (
@@ -651,4 +612,161 @@ pub async fn get_graph(
             "Plagiarism graph retrieved successfully",
         )),
     )
+}
+
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss/reports/{report_id}/download
+///
+/// Streams the archived ZIP for a **specific** MOSS report.
+/// - 404 if the report does not exist, is not for this assignment, or has no archive.
+/// - 200 streams `application/zip`.
+pub async fn download_moss_archive_by_report(
+    State(app_state): State<AppState>,
+    Path((module_id, assignment_id, report_id)): Path<(i64, i64, i64)>,
+) -> impl IntoResponse {
+    // 1) Look up the report
+    let report = match MossReportEntity::find_by_id(report_id).one(app_state.db()).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Report not found")),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!("Failed to fetch report: {e}"))),
+            )
+                .into_response()
+        }
+    };
+
+    // 2) Verify assignment ownership
+    if report.assignment_id != assignment_id {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("Report not found for this assignment")),
+        )
+            .into_response();
+    }
+
+    // 3) Verify archive exists logically
+    if !report.has_archive {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("Archive not available for this report")),
+        )
+            .into_response();
+    }
+
+    // 4) Build path and stream the file
+    // Convention: archive folder ID == report.id (string). Adjust if you store a different archive key.
+    let archive_id = report.id.to_string();
+    let zip_path = moss_archive_zip_path(module_id, assignment_id, &archive_id);
+
+    if !zip_path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("Archive file missing on disk")),
+        )
+            .into_response();
+    }
+
+    let file = match File::open(&zip_path).await {
+        Ok(f) => f,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!("Failed to open archive: {e}"))),
+            )
+                .into_response();
+        }
+    };
+
+    let filename = zip_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or_else(|| "moss_archive.zip");
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        HeaderValue::from_static("application/zip"),
+    );
+    headers.insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename))
+            .unwrap_or(HeaderValue::from_static("attachment; filename=\"archive.zip\"")),
+    );
+
+    let stream = ReaderStream::new(file);
+    let body = Body::from_stream(stream);
+
+    (headers, body).into_response()
+}
+
+#[derive(Serialize)]
+pub struct MossReportItem {
+    pub id: i64,
+    pub report_url: String,
+    pub generated_at: String,
+    pub has_archive: bool,
+    pub archive_generated_at: Option<String>,
+    pub filter_mode: String,
+    pub filter_patterns: Option<Vec<String>>,
+    pub description: String,
+}
+
+#[derive(Serialize)]
+pub struct MossReportListResponse {
+    pub reports: Vec<MossReportItem>,
+}
+
+/// GET /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss/reports
+///
+/// Lists all stored MOSS reports for an assignment (newest first).
+/// On each request, refreshes URL liveness (`url_active`) for every report.
+pub async fn list_moss_reports(
+    State(app_state): State<AppState>,
+    Path((_, assignment_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    match MossReportEntity::list_by_assignment(app_state.db(), assignment_id).await {
+        Ok(models) => {
+            let reports: Vec<MossReportItem> = models
+                .into_iter()
+                .map(|m| {
+                    let patterns: Option<Vec<String>> = m
+                        .filter_patterns
+                        .as_ref()
+                        .and_then(|v| serde_json::from_value(v.clone()).ok());
+
+                    MossReportItem {
+                        id: m.id,
+                        report_url: m.report_url,
+                        generated_at: m.generated_at.to_rfc3339(),
+                        has_archive: m.has_archive,
+                        archive_generated_at: m.archive_generated_at.map(|t| t.to_rfc3339()),
+                        filter_mode: m.filter_mode.to_string().to_lowercase(),
+                        filter_patterns: patterns,
+                        description: m.description.clone(),
+                    }
+                })
+                .collect();
+
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    MossReportListResponse { reports },
+                    "MOSS reports retrieved successfully",
+                )),
+            )
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<MossReportListResponse>::error(format!(
+                "Failed to fetch MOSS reports: {e}"
+            ))),
+        ),
+    }
 }

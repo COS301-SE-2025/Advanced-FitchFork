@@ -5,11 +5,9 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use serde::Serialize;
-use std::{env, path::PathBuf};
+use std::{path::PathBuf};
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
-use util::filters::FilterParam;
-use services::service::Service;
-use services::assignment_interpreter::AssignmentInterpreterService;
+use util::{paths::storage_root, state::AppState};
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/interpreter
 ///
@@ -53,7 +51,7 @@ pub async fn download_interpreter(
         }
     };
 
-    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/interpreters".to_string());
+    let storage_root = storage_root();
     let fs_path = PathBuf::from(storage_root).join(&interpreter.path);
 
     if tokio::fs::metadata(&fs_path).await.is_err() {

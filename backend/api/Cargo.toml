@@ -60,9 +60,21 @@ futures-util = "0.3"
 tokio-tungstenite = { version = "0.27", features = ["connect"] }
 url = "2.5"
 portpicker = "0.1"
-zip = "5.0"
-tempfile = "3.5"
-walkdir = "2.5"
+zip = "4.3"
+tempfile = "3.5.0"
+walkdir = "2.5.0"
+globset = "0.4"
+
+# For archiving MOSS reports
+anyhow = "1.0"
+percent-encoding = "2.3"
+reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "stream"] }
+scraper = "0.24.0"
+sha2 = "0.10"
+hex = "0.4"
+bytes = "1.6"
+include_dir = "0.7"
+
 
 [dev-dependencies]
 serial_test = "3.2"

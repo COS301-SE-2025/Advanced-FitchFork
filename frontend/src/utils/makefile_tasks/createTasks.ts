@@ -21,6 +21,7 @@ export async function createTasksFromMakefileTargets(
       task_number: next++,
       name,
       command,
+      code_coverage: false,
     });
 
     if (res.success) created++;

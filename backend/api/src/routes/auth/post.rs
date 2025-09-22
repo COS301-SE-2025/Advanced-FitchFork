@@ -1,5 +1,3 @@
-use std::fs;
-use std::path::PathBuf;
 use axum::{
     extract::Multipart,
     http::StatusCode,
@@ -7,6 +5,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use util::{config, paths::{ensure_parent_dir, user_profile_path}, state::AppState};
 use validator::Validate;
 use chrono::{Utc, Duration};
 use tokio::io::AsyncWriteExt;
@@ -370,10 +369,7 @@ pub async fn request_password_reset(
         &vec![],
     ).await.unwrap_or(0);
 
-    let max_requests = std::env::var("MAX_PASSWORD_RESET_REQUESTS_PER_HOUR")
-        .unwrap_or_else(|_| "3".to_string())
-        .parse::<u64>()
-        .unwrap_or(3);
+    let max_requests = config::max_password_reset_requests_per_hour() as u64;
 
     if recent_requests >= max_requests {
         return (
@@ -384,10 +380,7 @@ pub async fn request_password_reset(
         );
     }
 
-    let expiry_minutes = std::env::var("RESET_TOKEN_EXPIRY_MINUTES")
-        .unwrap_or_else(|_| "15".to_string())
-        .parse::<i64>()
-        .unwrap_or(15);
+    let expiry_minutes = config::reset_token_expiry_minutes() as i64;
 
     match PasswordResetTokenService::create(
         CreatePasswordResetToken {
@@ -649,11 +642,6 @@ pub async fn reset_password(
     }
 }
 
-#[derive(serde::Serialize)]
-struct ProfilePictureResponse {
-    profile_picture_path: String,
-}
-
 /// POST /api/auth/upload-profile-picture
 ///
 /// Upload a profile picture for the authenticated user.
@@ -672,9 +660,6 @@ struct ProfilePictureResponse {
 ///   ```json
 ///   {
 ///     "success": true,
-///     "data": {
-///       "profile_picture_path": "user_1/avatar.jpg"
-///     },
 ///     "message": "Profile picture uploaded."
 ///   }
 ///   ```
@@ -726,7 +711,7 @@ pub async fn upload_profile_picture(
                 if !ALLOWED_MIME.contains(&ct.as_str()) {
                     return (
                         StatusCode::BAD_REQUEST,
-                        Json(ApiResponse::<ProfilePictureResponse>::error("File type not supported.")),
+                        Json(ApiResponse::<()>::error("File type not supported.")),
                     );
                 }
             }
@@ -735,7 +720,7 @@ pub async fn upload_profile_picture(
             if bytes.len() as u64 > MAX_SIZE {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<ProfilePictureResponse>::error("File too large.")),
+                    Json(ApiResponse::<()>::error("File too large.")),
                 );
             }
 
@@ -746,7 +731,7 @@ pub async fn upload_profile_picture(
     let Some(file_bytes) = file_data else {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<ProfilePictureResponse>::error("No file uploaded.")),
+            Json(ApiResponse::<()>::error("No file uploaded.")),
         );
     };
 
@@ -757,49 +742,32 @@ pub async fn upload_profile_picture(
         _ => "bin",
     };
 
-    let root = std::env::var("USER_PROFILE_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/user_profile_pictures".to_string());
-
-    let user_dir = PathBuf::from(&root).join(format!("user_{}", claims.sub));
-    let _ = fs::create_dir_all(&user_dir);
-
     let filename = format!("avatar.{}", ext);
-    let path = user_dir.join(&filename);
-    let mut file = tokio::fs::File::create(&path).await.unwrap();
-    file.write_all(&file_bytes).await.unwrap();
+    let abs_path = user_profile_path(claims.sub, &filename);
 
-    let relative_path = path
-        .strip_prefix(&root)
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
-
-    match UserService::update(
-        UpdateUser {
-            id: claims.sub,
-            username: None,
-            email: None,
-            password: None,
-            admin: None,
-            profile_picture_path: Some(relative_path.clone()),
-        }
-    ).await {
-        Ok(_) => {}
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ProfilePictureResponse>::error(format!("Database error: {}", e))),
-            );
-        }
+    // Ensure parent directory exists
+    if let Err(e) = ensure_parent_dir(&abs_path) {
+        eprintln!("Failed to ensure profile dir: {}", e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error("Failed to prepare storage")),
+        );
     }
 
-    let response = ProfilePictureResponse {
-        profile_picture_path: relative_path,
-    };
+    let mut file = tokio::fs::File::create(&abs_path).await.unwrap();
+    file.write_all(&file_bytes).await.unwrap();
 
-   (
+    // Store only the file name; path is derived with user_profile_path(user_id, filename)
+    let stored_filename = filename.clone();
+
+    let current = user::Entity::find_by_id(claims.sub).one(db).await.unwrap().unwrap();
+    let mut model = current.into_active_model();
+    model.profile_picture_path = Set(Some(stored_filename.clone()));
+    model.update(db).await.unwrap();
+
+    (
         StatusCode::OK,
-        Json(ApiResponse::success(response, "Profile picture uploaded.")),
+        Json(ApiResponse::success_without_data("Profile picture uploaded.")),
     )
 }
 

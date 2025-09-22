@@ -7,9 +7,6 @@
 ///   The format is based on the [`ExecutionConfig`] struct from `util::execution_config`.
 ///
 /// - `GET /default` → Returns the system's default [`ExecutionConfig`] used to initialize new configurations.
-///
-/// Configuration files are stored under:
-/// `ASSIGNMENT_STORAGE_ROOT/module_{id}/assignment_{id}/config/config.json`
 use axum::{
     Router,
     routing::{get, post},

@@ -12,7 +12,7 @@ mod tests {
     use tower::ServiceExt;
     use serde_json::json;
     use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use sea_orm::{DatabaseConnection, EntityTrait};
     use serial_test::serial;
 
@@ -49,8 +49,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_module_success() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -83,8 +83,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_module_forbidden() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.regular_user.id, data.regular_user.admin);
         let uri = format!("/api/modules/{}", data.module.id);
@@ -115,8 +115,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_module_not_found() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
         let uri = format!("/api/modules/{}", 99999);
@@ -140,8 +140,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_module_unauthorized() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/modules/{}", data.module.id);
         let req = Request::builder()
@@ -182,8 +182,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_bulk_delete_modules_success() {
-        let app = make_test_app().await;
-        let db = db::get_connection().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
         let data = setup_test_data(db).await;
         let modules = create_multiple_modules(db, 3).await;
         let module_ids: Vec<i64> = modules.iter().map(|m| m.id).collect();
@@ -223,8 +223,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_bulk_delete_no_ids() {
-        let app = make_test_app().await;
-        let db = db::get_connection().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
         let data = setup_test_data(db).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -250,8 +250,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_bulk_delete_forbidden() {
-        let app = make_test_app().await;
-        let db = db::get_connection().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
         let data = setup_test_data(db).await;
 
         let modules = create_multiple_modules(&db, 2).await;
@@ -284,8 +284,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_bulk_delete_partial_success() {
-        let app = make_test_app().await;
-        let db = db::get_connection().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
         let data = setup_test_data(db).await;
 
         let modules = create_multiple_modules(&db, 2).await;
@@ -322,8 +322,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_bulk_delete_database_error() {
-        let app = make_test_app().await;
-        let db = db::get_connection().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
         let data = setup_test_data(db).await;
 
         // Create invalid ID (negative)

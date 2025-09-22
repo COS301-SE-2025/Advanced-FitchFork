@@ -9,6 +9,7 @@ type TipProps = {
   showIcon?: boolean;
   className?: string;
   type?: 'help' | 'info';
+  newTab?: boolean;
 };
 
 const { Paragraph } = Typography;
@@ -20,31 +21,36 @@ const Tip = ({
   showIcon = false,
   className,
   type = 'help',
+  newTab = false,
 }: TipProps) => {
   const navigate = useNavigate();
   const Icon = type === 'info' ? InfoCircleOutlined : QuestionCircleOutlined;
 
   const handleClick = (e: React.MouseEvent<HTMLElement>) => {
-    if (to) {
-      e.preventDefault();
+    if (!to) return;
+    e.preventDefault();
+    if (newTab) {
+      window.open(to, '_blank', 'noopener,noreferrer');
+    } else {
       navigate(to);
     }
   };
 
-  // Icon-only variant
+  // Icon-only variant (tight baseline alignment with text)
   if (iconOnly) {
     return (
       <Tooltip title={text}>
-        <Paragraph
+        <span
+          role={to ? 'button' : undefined}
           onClick={to ? handleClick : undefined}
           className={`
-            m-0 p-0 inline-flex items-center cursor-pointer
+            inline-block align-middle leading-none cursor-pointer
             !text-gray-500 dark:!text-gray-500
             ${className || ''}
           `}
         >
-          <Icon />
-        </Paragraph>
+          <Icon className="relative top-[1px]" />
+        </span>
       </Tooltip>
     );
   }

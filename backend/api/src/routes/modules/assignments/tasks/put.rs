@@ -9,24 +9,34 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use db::models::assignment_task;
+use sea_orm::DbErr;
 use serde::Deserialize;
 
 /// The request payload for editing a task's command.
 #[derive(Deserialize)]
 pub struct EditTaskRequest {
-    /// The new command string for the task. Must be non-empty.
-    command: String,
-    /// The new name for the task. Must be non-empty.
-    name: String,
+    /// Optional new name
+    name: Option<String>,
+    /// Optional new command
+    command: Option<String>,
+    /// Optional toggle for coverage
+    code_coverage: Option<bool>,
 }
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}
 ///
-/// Edit the command of a specific task within an assignment. Accessible to users with Lecturer or Admin roles
-/// assigned to the module.
+/// Edit one or more fields of a specific task within an assignment (supports partial updates).
+/// Accessible to users with Lecturer or Admin roles assigned to the module.
 ///
-/// This endpoint allows updating the command that will be executed during task evaluation. The command
-/// can be any shell command that can be executed in the evaluation environment.
+/// This endpoint updates task metadata used during evaluation. You can change:
+/// - `name` (label shown to users)
+/// - `command` (shell command executed by the runner)
+/// - `code_coverage` (whether this task is a **coverage-type** task)
+///
+/// > Note: `code_coverage: true` marks the task as a **code coverage task**. The evaluator
+/// > may apply coverage-specific handling (e.g., expecting coverage artifacts). It does **not**
+/// > merely “collect coverage” for arbitrary tasks; it designates the task’s type.
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): The ID of the module containing the assignment
@@ -34,23 +44,43 @@ pub struct EditTaskRequest {
 /// - `task_id` (i64): The ID of the task to edit
 ///
 /// ### Request Body
+/// Any subset of fields may be provided; at least one is required.
 /// ```json
 /// {
-///   "command": "cargo test --lib --release"
+///   "name": "Unit tests",
+///   "command": "cargo test --lib --release",
+///   "code_coverage": true
 /// }
 /// ```
 ///
 /// ### Request Body Fields
-/// - `command` (string, required): The new command to execute for this task (e.g., test commands, build scripts)
+/// - `name` (string, optional): New display name for the task; if provided, must be non-empty
+/// - `command` (string, optional): New command to execute; if provided, must be non-empty
+/// - `code_coverage` (boolean, optional): Set whether this task is a **code coverage task**
 ///
-/// ### Example Request
+/// ### Example Requests
+/// Update only the command:
 /// ```bash
 /// curl -X PUT http://localhost:3000/api/modules/1/assignments/2/tasks/3 \
 ///   -H "Authorization: Bearer <token>" \
 ///   -H "Content-Type: application/json" \
-///   -d '{
-///     "command": "cargo test --lib --release"
-///   }'
+///   -d '{"command":"cargo test --lib --release"}'
+/// ```
+///
+/// Mark the task as a coverage-type task (or unset it):
+/// ```bash
+/// curl -X PUT http://localhost:3000/api/modules/1/assignments/2/tasks/3 \
+///   -H "Authorization: Bearer <token)" \
+///   -H "Content-Type: application/json" \
+///   -d '{"code_coverage": true}'
+/// ```
+///
+/// Rename and change command:
+/// ```bash
+/// curl -X PUT http://localhost:3000/api/modules/1/assignments/2/tasks/3 \
+///   -H "Authorization: Bearer <token)" \
+///   -H "Content-Type: application/json" \
+///   -d '{"name":"Coverage run","command":"cargo llvm-cov --no-report"}'
 /// ```
 ///
 /// ### Success Response (200 OK)
@@ -61,7 +91,9 @@ pub struct EditTaskRequest {
 ///   "data": {
 ///     "id": 3,
 ///     "task_number": 1,
-///     "command": "cargo test --lib --release",
+///     "name": "Coverage run",
+///     "command": "cargo llvm-cov --no-report",
+///     "code_coverage": true,
 ///     "created_at": "2024-01-01T00:00:00Z",
 ///     "updated_at": "2024-01-01T12:30:00Z"
 ///   }
@@ -126,7 +158,14 @@ pub struct EditTaskRequest {
 /// ```json
 /// {
 ///   "success": false,
-///   "message": "'command' must be a non-empty string"
+///   "message": "At least one of 'name', 'command', or 'code_coverage' must be provided"
+/// }
+/// ```
+/// or
+/// ```json
+/// {
+///   "success": false,
+///   "message": "'name' and 'command' must be non-empty if provided"
 /// }
 /// ```
 ///
@@ -146,21 +185,46 @@ pub struct EditTaskRequest {
 /// ```
 ///
 /// ### Validation Rules
-/// - `command` must not be empty or whitespace-only
+/// - At least one of `name`, `command`, `code_coverage` must be provided
+/// - If present, `name` and `command` must not be empty or whitespace-only
 /// - Module must exist
 /// - Assignment must exist and belong to the specified module
 /// - Task must exist and belong to the specified assignment
 ///
 /// ### Notes
-/// - Only the command field can be updated; task_number and other fields remain unchanged
-/// - The updated task will be used in future assignment evaluations
-/// - Task editing is restricted to users with appropriate module permissions
+/// - This route performs a partial update although it uses `PUT`
+/// - `task_number` and other immutable fields remain unchanged
+/// - Setting `code_coverage: true` designates the task as a **code coverage task**
 /// - The `updated_at` timestamp is automatically set when the task is modified
 pub async fn edit_task(
     Path((_, _, task_id)): Path<(i64, i64, i64)>,
     Json(payload): Json<EditTaskRequest>,
 ) -> impl IntoResponse {
-    if payload.command.trim().is_empty() || payload.name.trim().is_empty() {
+    let db = app_state.db();
+
+    // Must provide something to change
+    if payload.name.is_none() && payload.command.is_none() && payload.code_coverage.is_none() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ApiResponse::<()>::error(
+                "At least one of 'name', 'command', or 'code_coverage' must be provided",
+            )),
+        )
+            .into_response();
+    }
+
+    // If present, basic validation
+    if payload
+        .name
+        .as_deref()
+        .map(|s| s.trim().is_empty())
+        .unwrap_or(false)
+        || payload
+            .command
+            .as_deref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(false)
+    {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(ApiResponse::<()>::error(
@@ -170,15 +234,23 @@ pub async fn edit_task(
             .into_response();
     }
 
-    let updated = match assignment_task::Model::edit_command_and_name(
+    let updated = match assignment_task::Model::edit(
         db,
         task_id,
-        &payload.name,
-        &payload.command,
+        payload.name.as_deref(),
+        payload.command.as_deref(),
+        payload.code_coverage,
     )
     .await
     {
         Ok(t) => t,
+        Err(DbErr::RecordNotFound(_)) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Task not found")),
+            )
+                .into_response();
+        }
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,

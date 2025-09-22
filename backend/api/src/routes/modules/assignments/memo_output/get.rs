@@ -4,11 +4,9 @@ use crate::response::ApiResponse;
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
 use tokio::fs as tokio_fs;
-use util::execution_config::ExecutionConfig;
-use util::filters::FilterParam;
-use services::service::Service;
-use services::assignment_memo_output::AssignmentMemoOutputService;
-use services::assignment_task::AssignmentTaskService;
+use util::{execution_config::ExecutionConfig, paths::storage_root, state::AppState};
+use db::models::{assignment_memo_output, assignment_task};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 
 #[derive(Serialize)]
 struct MemoSubsection {
@@ -92,10 +90,7 @@ pub async fn get_all_memo_outputs(
     let mut results = Vec::new();
 
     for memo in memo_outputs {
-        let full_path = match AssignmentMemoOutputService::full_path(memo.id).await {
-            Ok(path) => path,
-            Err(_) => continue,
-        };
+        let full_path = storage_root().join(&memo.path);
         if !full_path.is_file() {
             continue;
         }

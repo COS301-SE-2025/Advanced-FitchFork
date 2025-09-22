@@ -9,6 +9,9 @@ RUN apk add --no-cache \
     libstdc++ \
     make \
     lcov \
+    rust \
+    cargo \
+    go \
     bash \
     coreutils
 

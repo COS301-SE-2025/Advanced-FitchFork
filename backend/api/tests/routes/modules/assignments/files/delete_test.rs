@@ -23,8 +23,7 @@ mod tests {
     use api::auth::generate_jwt;
     use chrono::{Utc, TimeZone};
     use sea_orm::DatabaseConnection;
-    use crate::helpers::app::make_test_app;
-    use serial_test::serial;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -90,8 +89,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_file_success_as_lecturer() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -110,8 +109,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_file_forbidden_for_student() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -130,8 +129,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_file_assignment_not_found() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, 9999);
@@ -150,8 +149,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_file_bad_request_empty_file_ids() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -170,8 +169,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_file_unauthorized() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
         let req = Request::builder()
@@ -188,8 +187,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_file_id_not_exist() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -208,8 +207,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_delete_file_id_belongs_to_another_assignment() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);

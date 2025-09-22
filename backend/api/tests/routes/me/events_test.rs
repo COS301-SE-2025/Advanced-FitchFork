@@ -16,7 +16,7 @@ mod tests {
     use serde_json::Value;
     use tower::ServiceExt;
 
-    use crate::helpers::app::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         student1: UserModel,
@@ -101,7 +101,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_events_success_no_filters() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_events_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student1.id, false);
@@ -131,7 +131,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_events_with_date_range_filter() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_events_test_data(app_state.db()).await;
 
         let now = Utc::now();
@@ -176,7 +176,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_events_with_from_date_only() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_events_test_data(app_state.db()).await;
 
         let now = Utc::now();
@@ -209,7 +209,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_events_with_to_date_only() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_events_test_data(app_state.db()).await;
 
         let now = Utc::now();
@@ -240,7 +240,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_events_datetime_format_support() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_events_test_data(app_state.db()).await;
 
         let now = Utc::now();
@@ -271,7 +271,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_events_user_scoping() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_events_test_data(app_state.db()).await;
 
         // Test that student1 sees their events
@@ -314,7 +314,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_events_event_types_and_content() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_events_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student1.id, false);
@@ -360,7 +360,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_events_invalid_date_format() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_events_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student1.id, false);
@@ -389,7 +389,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_events_invalid_date_range() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_events_test_data(app_state.db()).await;
 
         let now = Utc::now();
@@ -422,7 +422,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_events_unauthorized() {
-        let (app, _) = make_test_app().await;
+        let (app, _app_state, _tmp) = make_test_app_with_storage().await;
         
         let req = Request::builder()
             .method("GET")

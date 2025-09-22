@@ -1,4 +1,4 @@
-use std::vec;
+use std::fs;
 
 use axum::{
     extract::Path,
@@ -6,7 +6,14 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use db::models::{
+    moss_report::{Column as MossReportColumn, Entity as MossReportEntity},
+    plagiarism_case::{Column as PlagiarismColumn, Entity as PlagiarismEntity},
+};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, TransactionTrait};
 use serde::Deserialize;
+use util::{paths::moss_archive_dir, state::AppState};
+
 use crate::response::ApiResponse;
 use util::filters::FilterParam;
 use services::service::Service;
@@ -233,4 +240,82 @@ pub async fn bulk_delete_plagiarism_cases(
         StatusCode::OK,
         Json(ApiResponse::success_without_data(&format!("{} plagiarism case{} deleted successfully", delete_result, if delete_result == 1 { "" } else { "s" }))),
     )
+}
+
+/// DELETE /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss/reports/{report_id}
+///
+/// Deletes a **single MOSS report** record. If a versioned archive exists for this report,
+/// it is also removed from disk.
+///
+/// # Path
+/// - `module_id`
+/// - `assignment_id`
+/// - `report_id`
+///
+/// # Responses
+/// - 200 OK — report (and its archive, if present) deleted
+/// - 404 Not Found — report not found or not in assignment
+/// - 500 Internal Server Error — failed to delete DB row or archive folder
+pub async fn delete_moss_report(
+    State(app_state): State<AppState>,
+    Path((module_id, assignment_id, report_id)): Path<(i64, i64, i64)>,
+) -> impl IntoResponse {
+    // 1) Ensure the report exists and belongs to this assignment
+    let report = match MossReportEntity::find_by_id(report_id)
+        .filter(MossReportColumn::AssignmentId.eq(assignment_id))
+        .one(app_state.db())
+        .await
+    {
+        Ok(Some(m)) => m,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Report not found")),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!(
+                    "Failed to query report: {e}"
+                ))),
+            )
+                .into_response();
+        }
+    };
+
+    // 2) Best-effort: remove archive folder if present (we use report_id as the archive id)
+    //    NOTE: this assumes archives are stored under <...>/moss_archives/{report_id}/archive.zip
+    let archive_dir = moss_archive_dir(module_id, assignment_id, &report_id.to_string());
+    if archive_dir.exists() {
+        if let Err(e) = fs::remove_dir_all(&archive_dir) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error(format!(
+                    "Failed to delete report archive: {e}"
+                ))),
+            )
+                .into_response();
+        }
+    }
+
+    // 3) Delete the DB row
+    match MossReportEntity::delete_by_id(report.id).exec(app_state.db()).await {
+        Ok(res) if res.rows_affected > 0 => (
+            StatusCode::OK,
+            Json(ApiResponse::<()>::success_without_data("Report deleted successfully")),
+        )
+            .into_response(),
+        Ok(_) => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("Report not found")),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<()>::error(format!("Failed to delete report: {e}"))),
+        )
+            .into_response(),
+    }
 }

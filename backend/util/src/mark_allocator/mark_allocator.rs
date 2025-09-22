@@ -1,6 +1,6 @@
 use crate::execution_config::ExecutionConfig;
+use crate::paths::{mark_allocator_dir, mark_allocator_path};
 use serde_json::{Value, from_str, json};
-use std::env;
 use std::fs::{self, File};
 use std::io::{self, ErrorKind, Write};
 use std::path::PathBuf;
@@ -72,18 +72,13 @@ pub struct TaskInfo {
 pub async fn generate_allocator(
     module: i64,
     assignment: i64,
-    tasks_info: &[(TaskInfo, PathBuf)], // each task paired with its memo file path
+    tasks_info: &[(TaskInfo, PathBuf)],
 ) -> Result<Value, SaveError> {
-    let base = env::var("ASSIGNMENT_STORAGE_ROOT").map_err(|_| SaveError::DirectoryNotFound)?;
-
     let separator = ExecutionConfig::get_execution_config(module, assignment)
         .map(|config| config.marking.deliminator)
         .unwrap_or_else(|_| "&-=-&".to_string());
 
-    let allocator_dir_path = PathBuf::from(&base)
-        .join(format!("module_{}", module))
-        .join(format!("assignment_{}", assignment))
-        .join("mark_allocator");
+    let allocator_dir_path = mark_allocator_dir(module, assignment);
     fs::create_dir_all(&allocator_dir_path).map_err(SaveError::IoError)?;
 
     let mut tasks_json = vec![];
@@ -94,7 +89,7 @@ pub async fn generate_allocator(
         let mut task_value = 0;
 
         if info.code_coverage {
-            //skip
+            // skip coverage tasks from point allocation
         } else if maybe_path.exists() {
             let content = fs::read_to_string(maybe_path)?;
 
@@ -120,6 +115,7 @@ pub async fn generate_allocator(
                 task_value += mark_counter;
             }
         }
+
         let task_key = format!("task{}", info.task_number);
         let task_body = json!({
             "name": info.name.clone(),
@@ -139,7 +135,7 @@ pub async fn generate_allocator(
         "total_value": total_value
     });
 
-    let output_path = allocator_dir_path.join("allocator.json");
+    let output_path = mark_allocator_path(module, assignment);
     let mut file = File::create(&output_path)?;
     write!(file, "{}", serde_json::to_string_pretty(&final_json)?)?;
     file.flush()?;
@@ -159,14 +155,7 @@ pub async fn generate_allocator(
 /// * `Ok(Value)` - The parsed JSON allocator data.
 /// * `Err(SaveError)` - If the file or directory does not exist or parsing JSON fails.
 pub async fn load_allocator(module: i64, assignment: i64) -> Result<Value, SaveError> {
-    let base =
-        std::env::var("ASSIGNMENT_STORAGE_ROOT").map_err(|_| SaveError::DirectoryNotFound)?;
-
-    let path = PathBuf::from(&base)
-        .join(format!("module_{}", module))
-        .join(format!("assignment_{}", assignment))
-        .join("mark_allocator")
-        .join("allocator.json");
+    let path = mark_allocator_path(module, assignment);
 
     let json_str = fs::read_to_string(&path).map_err(|err| {
         if err.kind() == ErrorKind::NotFound {
@@ -194,18 +183,10 @@ pub async fn load_allocator(module: i64, assignment: i64) -> Result<Value, SaveE
 /// * `Ok(())` - On successful write.
 /// * `Err(SaveError)` - If file creation fails or JSON serialization fails.
 pub async fn save_allocator(module: i64, assignment: i64, json: Value) -> Result<(), SaveError> {
-    let base =
-        std::env::var("ASSIGNMENT_STORAGE_ROOT").map_err(|_| SaveError::DirectoryNotFound)?;
-
-    let dir_path = PathBuf::from(&base)
-        .join(format!("module_{}", module))
-        .join(format!("assignment_{}", assignment))
-        .join("mark_allocator");
-
-    // Ensure the directory exists
+    let dir_path = mark_allocator_dir(module, assignment);
     fs::create_dir_all(&dir_path)?;
 
-    let file_path = dir_path.join("allocator.json");
+    let file_path = mark_allocator_path(module, assignment);
 
     let mut file = File::create(&file_path)?;
     let content = serde_json::to_string_pretty(&json)?;

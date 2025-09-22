@@ -19,8 +19,7 @@ mod tests {
     use chrono::{Utc, TimeZone};
     use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
     use axum::http::header::{CONTENT_TYPE, AUTHORIZATION};
-    use crate::helpers::app::make_test_app;
-    use serial_test::serial;
+    use crate::helpers::app::make_test_app_with_storage;
 
     struct TestData {
         lecturer_user: UserModel,
@@ -70,8 +69,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_file_success_as_lecturer() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -91,8 +90,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_file_forbidden_for_student() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
@@ -112,8 +111,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_file_assignment_not_found() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -133,8 +132,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_file_missing_file_type() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let boundary = "----BoundaryTest".to_string();
         let mut body = Vec::new();
@@ -158,8 +157,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_file_empty_file() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -179,8 +178,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_file_unauthorized() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("spec", "spec.txt", b"spec file content");
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);
@@ -198,8 +197,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_file_invalid_file_type() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (boundary, body) = multipart_body("not_a_type", "spec.txt", b"spec file content");
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
@@ -219,8 +218,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_upload_file_duplicate_file_type_replaces() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/files", data.module.id, data.assignment.id);

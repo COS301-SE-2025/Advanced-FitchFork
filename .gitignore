@@ -1,4 +1,4 @@
 .vscode/
-Makefile
 .env
 data/
+*.DS_Store

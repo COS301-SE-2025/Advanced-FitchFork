@@ -21,25 +21,17 @@ mod tests {
     use serde_json::Value;
     use api::auth::generate_jwt;
     use chrono::{Utc, TimeZone};
-    use std::{fs, path::PathBuf};
+    use util::paths::mark_allocator_path;
+    use std::fs;
     use serial_test::serial;
-    use crate::helpers::app::make_test_app;
-
+    use crate::helpers::app::make_test_app_with_storage;
+        
     struct TestData {
         lecturer_user: UserModel,
         student_user: UserModel,
         forbidden_user: UserModel,
         module: ModuleModel,
         assignment: AssignmentModel,
-    }
-
-    fn set_test_assignment_root() -> String {
-        let tmp_dir = "./tmp".to_string();
-        unsafe {
-            std::env::set_var("ASSIGNMENT_STORAGE_ROOT", &tmp_dir);
-        }
-
-        tmp_dir
     }
 
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
@@ -72,15 +64,10 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_mark_allocator_success_as_lecturer() {
-        set_test_assignment_root();
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         
-        let allocator_path = PathBuf::from("./tmp")
-            .join(format!("module_{}", data.module.id))
-            .join(format!("assignment_{}", data.assignment.id))
-            .join("mark_allocator")
-            .join("allocator.json");
+        let allocator_path = mark_allocator_path(data.module.id, data.assignment.id);
         fs::create_dir_all(allocator_path.parent().unwrap()).unwrap();
         fs::write(&allocator_path, r#"{"tasks":[{"task_number":1,"weight":1.0,"criteria":[{"name":"Correctness","weight":1.0}]}],"total_weight":1.0}"#).unwrap();
 
@@ -99,15 +86,13 @@ mod tests {
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["total_weight"], 1.0);
-        
-        let _ = fs::remove_dir_all("./tmp");
     }
 
     #[tokio::test]
     #[serial]
     async fn test_get_mark_allocator_not_found() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         
         let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
@@ -124,8 +109,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_mark_allocator_forbidden_for_student() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         
         let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
@@ -142,8 +127,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_mark_allocator_forbidden_for_unassigned_user() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         
         let (token, _) = generate_jwt(data.forbidden_user.id, data.forbidden_user.admin);
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
@@ -160,8 +145,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_mark_allocator_unauthorized() {
-        let app = make_test_app().await;
-        let data = setup_test_data(db::get_connection().await).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
         
         let uri = format!("/api/modules/{}/assignments/{}/mark_allocator", data.module.id, data.assignment.id);
         let req = Request::builder()

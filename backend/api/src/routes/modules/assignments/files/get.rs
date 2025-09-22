@@ -1,10 +1,16 @@
-use std::{env, path::PathBuf};
+use std::{path::PathBuf};
 use axum::{
     extract::Path,
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Json, Response},
 };
 use tokio::{fs::File as FsFile, io::AsyncReadExt};
+use sea_orm::{
+    ColumnTrait,
+    EntityTrait,
+    QueryFilter,
+};
+use util::{paths::storage_root, state::AppState};
 use crate::response::ApiResponse;
 use crate::routes::modules::assignments::common::File;
 use util::filters::FilterParam;
@@ -61,7 +67,7 @@ pub async fn download_file(
         }
     };
 
-    let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT").unwrap_or_else(|_| "data/assignment_files".to_string());
+    let storage_root = storage_root();
     let fs_path = PathBuf::from(storage_root).join(&file.path);
 
     if tokio::fs::metadata(&fs_path).await.is_err() {
