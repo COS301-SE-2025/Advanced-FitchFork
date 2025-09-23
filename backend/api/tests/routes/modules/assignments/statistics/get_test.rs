@@ -101,8 +101,8 @@ mod tests {
         user_id: i64,
         attempt: i64,
         created_at: DateTime<Utc>,
-        earned: f32,
-        total: f32,
+        earned: f64,
+        total: f64,
         is_practice: bool,
         is_late: bool,
     ) {
@@ -135,7 +135,7 @@ mod tests {
         module_id: i64,
         assignment: &AssignmentModel,
         user: &UserModel,
-        marks: &[(f32, f32)],
+        marks: &[(f64, f64)],
         offsets_min: &[i64],
     ) -> Vec<AssignmentSubmissionModel> {
         assert_eq!(marks.len(), offsets_min.len());
@@ -181,8 +181,8 @@ mod tests {
         assignment: &AssignmentModel,
         user: &UserModel,
         attempt: i64,
-        earned: f32,
-        total: f32,
+        earned: f64,
+        total: f64,
         offset_min: i64,
         is_practice: bool,
         ignored: bool,

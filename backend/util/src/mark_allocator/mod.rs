@@ -9,14 +9,14 @@ use crate::paths::{mark_allocator_dir, mark_allocator_path};
 pub struct MarkAllocator {
     pub generated_at: DateTime<Utc>,
     pub tasks: Vec<Task>,
-    pub total_value: f32,
+    pub total_value: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Task {
     pub task_number: i64,
     pub name: String,
-    pub value: f32,
+    pub value: f64,
     #[serde(default)]
     pub code_coverage: Option<bool>,
     pub subsections: Vec<Subsection>,
@@ -25,7 +25,7 @@ pub struct Task {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Subsection {
     pub name: String,
-    pub value: f32,
+    pub value: f64,
     #[serde(default)]
     pub regex: Option<Vec<String>>,
     #[serde(default)]
@@ -33,7 +33,7 @@ pub struct Subsection {
 }
 
 impl MarkAllocator {
-    pub fn recompute_total(&mut self) -> f32 {
+    pub fn recompute_total(&mut self) -> f64 {
         self.total_value = self.tasks.iter().map(|t| t.value).sum();
         self.total_value
     }
@@ -141,7 +141,7 @@ pub async fn generate_allocator(
 
                 // Normalize weight: treat >= 1.0 as percent; otherwise assume fraction.
                 // e.g. 10.0 -> 0.10; 0.10 -> 0.10
-                let mut w = cfg.code_coverage.code_coverage_weight as f32;
+                let mut w = cfg.code_coverage.code_coverage_weight as f64;
                 if w >= 1.0 {
                     w /= 100.0;
                 }
@@ -150,7 +150,7 @@ pub async fn generate_allocator(
 
                 (cfg.marking.deliminator, want_regex, w)
             }
-            Err(_) => ("&-=-&".to_string(), false, 0.10f32), // fallback: 10%
+            Err(_) => ("&-=-&".to_string(), false, 0.10f64), // fallback: 10%
         };
 
     let dir = mark_allocator_dir(module_id, assignment_id);
@@ -159,12 +159,12 @@ pub async fn generate_allocator(
 
     // -------- Pass 1: build all tasks (with parsed values for non-coverage) --------
     let mut tasks: Vec<Task> = Vec::with_capacity(tasks_info.len());
-    let mut base_total: f32 = 0.0; // sum of non-coverage tasks
+    let mut base_total: f64 = 0.0; // sum of non-coverage tasks
     let mut coverage_indices: Vec<usize> = Vec::new();
 
     for (idx, (info, maybe_path)) in tasks_info.iter().enumerate() {
         let mut subsections = Vec::new();
-        let mut task_value: f32 = 0.0;
+        let mut task_value: f64 = 0.0;
 
         if !info.code_coverage && maybe_path.exists() {
             // Parse memo output to derive marks per section
@@ -172,7 +172,7 @@ pub async fn generate_allocator(
                 .map_err(|e| format!("Failed reading {:?}: {}", maybe_path, e))?;
 
             let mut current_section = String::new();
-            let mut mark_counter: f32 = 0.0;
+            let mut mark_counter: f64 = 0.0;
 
             for line in content.lines() {
                 let split: Vec<_> = line.split(&separator).collect();
@@ -184,11 +184,7 @@ pub async fn generate_allocator(
                             name: current_section.clone(),
                             value: mark_counter,
                             regex: if want_regex {
-                                Some(
-                                    std::iter::repeat(String::new())
-                                        .take(take_count)
-                                        .collect(),
-                                )
+                                Some(std::iter::repeat(String::new()).take(take_count).collect())
                             } else {
                                 None
                             },
@@ -209,11 +205,7 @@ pub async fn generate_allocator(
                     name: current_section,
                     value: mark_counter,
                     regex: if want_regex {
-                        Some(
-                            std::iter::repeat(String::new())
-                                .take(take_count)
-                                .collect(),
-                        )
+                        Some(std::iter::repeat(String::new()).take(take_count).collect())
                     } else {
                         None
                     },
@@ -244,13 +236,13 @@ pub async fn generate_allocator(
     // -------- Pass 2: assign coverage marks based on base_total & weight --------
     if !coverage_indices.is_empty() && cover_weight_frac > 0.0 {
         // C = B * w / (1 - w)
-        let c: f32 = if cover_weight_frac >= 1.0 {
+        let c: f64 = if cover_weight_frac >= 1.0 {
             0.0 // (shouldn’t happen due to clamp) – but keep safe
         } else {
             base_total * (cover_weight_frac / (1.0 - cover_weight_frac))
         };
 
-        let n = coverage_indices.len() as f32;
+        let n = coverage_indices.len() as f64;
         let per = if n > 0.0 { c / n } else { 0.0 }; // even split as floating value
 
         for &ti in coverage_indices.iter() {

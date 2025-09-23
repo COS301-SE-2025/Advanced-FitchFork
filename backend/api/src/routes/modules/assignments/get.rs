@@ -63,8 +63,8 @@ pub struct AssignmentFileResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BestMark {
-    pub earned: f32,
-    pub total: f32,
+    pub earned: f64,
+    pub total: f64,
     pub attempt: i64,
     pub submission_id: i64,
 }

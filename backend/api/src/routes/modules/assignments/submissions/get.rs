@@ -34,9 +34,9 @@ use sea_orm::{
 };
 use serde::Serialize;
 use serde_json::Value;
+use std::cmp::Ordering;
 use std::{collections::HashMap, fs, path::PathBuf};
 use util::state::AppState;
-use std::cmp::Ordering;
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date

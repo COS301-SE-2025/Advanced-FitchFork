@@ -42,7 +42,7 @@ use crate::types::TaskResult;
 /// let score = compute_overall_score(&empty_results).unwrap();
 /// assert_eq!(score, 0);
 /// ```
-pub fn compute_overall_score(results: &[TaskResult]) -> Result<f32, MarkerError> {
+pub fn compute_overall_score(results: &[TaskResult]) -> Result<f64, MarkerError> {
     let mut total_awarded = 0.0;
     for result in results {
         total_awarded += result.awarded;

@@ -117,7 +117,7 @@ fn within_late_window(
 }
 
 /// Returns (adjusted_earned, capped_to_opt)
-fn cap_late_earned(earned: f32, total: f32, max_percent: f32) -> (f32, Option<f32>) {
+fn cap_late_earned(earned: f64, total: f64, max_percent: f64) -> (f64, Option<f64>) {
     let cap = max_percent * total / 100.0;
     if earned > cap {
         (cap, Some(cap))
@@ -128,8 +128,8 @@ fn cap_late_earned(earned: f32, total: f32, max_percent: f32) -> (f32, Option<f3
 
 #[derive(Serialize)]
 struct WsMark {
-    earned: f32,
-    total: f32,
+    earned: f64,
+    total: f64,
 }
 
 async fn emit_submission_status(
@@ -718,9 +718,14 @@ async fn grade_submission(
         total: mark_report.data.mark.total,
     };
 
+    println!(
+        "Graded submission {}: {}/{}",
+        submission.id, mark.earned, mark.total
+    );
+
     // Apply late cap if applicable
     let is_late_now = submission.created_at > assignment.due_date;
-    let mut _late_capped_to: Option<f32> = None;
+    let mut _late_capped_to: Option<f64> = None;
     if is_late_now && config.marking.late.allow_late_submissions {
         if within_late_window(
             submission.created_at,

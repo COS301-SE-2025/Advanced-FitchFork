@@ -29,7 +29,7 @@ pub struct SubsectionDetail {
     /// The name of the subsection.
     pub name: String,
     /// The value value assigned to this subsection.
-    pub value: f32,
+    pub value: f64,
     /// The memo output content for this subsection, if available.
     pub memo_output: Option<String>,
     pub feedback: Option<String>,

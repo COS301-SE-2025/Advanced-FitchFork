@@ -84,16 +84,16 @@ pub struct SubmissionResponse {
 /// Represents a summary of earned vs total marks.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MarkSummary {
-    pub earned: f32,
-    pub total: f32,
+    pub earned: f64,
+    pub total: f64,
 }
 
 /// Represents code coverage for a submission.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CodeCoverageFile {
     pub path: String,
-    pub earned: f32,
-    pub total: f32,
+    pub earned: f64,
+    pub total: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

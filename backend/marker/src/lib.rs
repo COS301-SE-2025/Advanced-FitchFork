@@ -63,7 +63,7 @@ pub struct MarkingJob<'a> {
 /// Uses the common multiply / round / divide trick. Kept local to this module
 /// so it's cheap to inline and obvious where rounding is happening.
 #[inline]
-fn round2(x: f32) -> f32 {
+fn round2(x: f64) -> f64 {
     (x * 100.0).round() / 100.0
 }
 
@@ -192,7 +192,7 @@ impl<'a> MarkingJob<'a> {
         let mut per_task_results: Vec<Vec<TaskResult>> = Vec::new();
         let mut per_task_subsections: Vec<Vec<crate::report::ReportSubsection>> = Vec::new();
         let mut per_task_names: Vec<String> = Vec::new();
-        let mut per_task_scores: Vec<(f32, f32)> = Vec::new();
+        let mut per_task_scores: Vec<(f64, f64)> = Vec::new();
 
         for task_entry in allocator.tasks.iter() {
             if task_entry.code_coverage.unwrap_or(false) {
@@ -296,13 +296,13 @@ impl<'a> MarkingJob<'a> {
         }
 
         // Coverage buckets (optional)
-        let mut coverage_total_earned: f32 = 0.0;
-        let mut coverage_total_possible: f32 = 0.0;
+        let mut coverage_total_earned: f64 = 0.0;
+        let mut coverage_total_possible: f64 = 0.0;
         if let Some(cov_raw) = coverage_raw.as_ref() {
             let coverage_report = crate::parsers::coverage_parser::JsonCoverageParser
                 .parse(cov_raw, self.config.clone())?;
 
-            let bucket_percent: f32 = match coverage_report.coverage_percent {
+            let bucket_percent: f64 = match coverage_report.coverage_percent {
                 p if p < 5.0 => 0.0,
                 p if p < 20.0 => 20.0,
                 p if p < 40.0 => 40.0,
@@ -316,7 +316,7 @@ impl<'a> MarkingJob<'a> {
                 .iter()
                 .filter(|t| t.code_coverage.unwrap_or(false))
                 .map(|t| t.value)
-                .sum::<f32>();
+                .sum::<f64>();
 
             coverage_total_earned = round2(bucket_percent * coverage_value / 100.0);
             coverage_total_possible = round2(coverage_value);
@@ -330,12 +330,13 @@ impl<'a> MarkingJob<'a> {
             total: round2(allocator.total_value),
         };
 
+        println!("Marking complete: {}/{}", mark.earned, mark.total);
+
         let now = Utc::now().to_rfc3339();
         let mut report =
             crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
 
         if coverage_total_possible > 0.0 {
-            // add coverage files if we had a report parsed above
             if let Some(cov_raw) = coverage_raw {
                 let coverage_report = crate::parsers::coverage_parser::JsonCoverageParser
                     .parse(&cov_raw, self.config.clone())?;
@@ -350,8 +351,8 @@ impl<'a> MarkingJob<'a> {
                         .iter()
                         .map(|f| crate::report::CoverageFile {
                             path: f.path.clone(),
-                            earned: round2(f.covered_lines as f32),
-                            total: round2(f.total_lines as f32),
+                            earned: round2(f.covered_lines as f64),
+                            total: round2(f.total_lines as f64),
                         })
                         .collect(),
                 });

@@ -82,7 +82,7 @@ impl Seeder for AssignmentSubmissionSeeder {
                         assignment.id,
                         user.id,
                         counter,
-                        rand::random::<f32>() % 100.0,
+                        rand::random::<f64>() % 100.0,
                         100.0,
                         false,
                         dummy_filename,

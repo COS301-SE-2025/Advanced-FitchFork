@@ -57,9 +57,9 @@ fn default_per_page() -> u64 {
 pub struct TaskBreakdown {
     pub task_number: Option<i64>,
     pub name: Option<String>,
-    pub earned: f32,
-    pub total: f32,
-    pub score: f32, // percentage 0..100
+    pub earned: f64,
+    pub total: f64,
+    pub score: f64, // percentage 0..100
 }
 
 #[derive(Debug, Serialize)]
@@ -68,7 +68,7 @@ pub struct GradeResponse {
     pub assignment_id: i64,
     pub user_id: i64,
     pub submission_id: Option<i64>, // mirrors id for compatibility
-    pub score: f32,                 // percentage 0..100 (final)
+    pub score: f64,                 // percentage 0..100 (final)
     pub username: String,
     pub created_at: String, // submission.created_at
     pub updated_at: String, // submission.updated_at
@@ -86,8 +86,8 @@ pub struct PaginatedGradeResponse {
 /// Minimal shapes we need from submission_report.json
 #[derive(Debug, Deserialize)]
 struct ReportScore {
-    earned: f32,
-    total: f32,
+    earned: f64,
+    total: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -597,7 +597,7 @@ pub async fn export_grades(
     let mut seen: HashSet<String> = HashSet::new();
 
     // Cache per row: username, final %, map<label -> pct>
-    let mut row_task_maps: Vec<(String, f32, Map<String, f32>)> = Vec::with_capacity(rows.len());
+    let mut row_task_maps: Vec<(String, f64, Map<String, f64>)> = Vec::with_capacity(rows.len());
 
     for r in &rows {
         // Read per-task from report for this chosen submission (with name resolution)
@@ -609,7 +609,7 @@ pub async fn export_grades(
             &task_name_by_num,
         );
 
-        let mut map: Map<String, f32> = Map::new();
+        let mut map: Map<String, f64> = Map::new();
         for (idx, t) in tasks.iter().enumerate() {
             let label = task_label(t, idx);
             let p = percentage(t.earned, t.total);

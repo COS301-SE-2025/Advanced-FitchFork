@@ -79,7 +79,7 @@ pub struct LatePolicy {
     /// Cap on the final score for late submissions, as a percent of total (0–100).
     /// e.g. 60 => max 60% of total marks.
     #[serde(default = "default_late_max_percent")]
-    pub late_max_percent: f32,
+    pub late_max_percent: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -488,7 +488,7 @@ fn default_late_window_minutes() -> u32 {
     0
 }
 
-fn default_late_max_percent() -> f32 {
+fn default_late_max_percent() -> f64 {
     100.0
 }
 

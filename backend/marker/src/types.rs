@@ -20,9 +20,9 @@ pub struct TaskResult {
     /// A descriptive name for the task.
     pub name: String,
     /// The number of points awarded for the task.
-    pub awarded: f32,
+    pub awarded: f64,
     /// The maximum number of points possible for the task.
-    pub possible: f32,
+    pub possible: f64,
     /// A list of patterns or items that were successfully matched in the student's output.
     pub matched_patterns: Vec<String>,
     /// A list of patterns or items that were expected but not found in the student's output.
@@ -47,9 +47,9 @@ pub struct JsonTaskResult {
     /// The name of the task.
     pub name: String,
     /// The number of marks awarded for this task.
-    pub awarded: f32,
+    pub awarded: f64,
     /// The maximum possible marks for this task.
-    pub possible: f32,
+    pub possible: f64,
     /// The percentage score for this task, computed as (awarded / possible) * 100 (or 0.0 if possible is zero).
-    pub percentage: f32,
+    pub percentage: f64,
 }

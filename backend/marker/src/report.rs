@@ -70,9 +70,9 @@ use serde::Serialize;
 #[derive(Debug, Serialize, Clone)]
 pub struct Score {
     /// Points earned by the student.
-    pub earned: f32,
+    pub earned: f64,
     /// Total possible points.
-    pub total: f32,
+    pub total: f64,
 }
 
 /// Represents a subsection of a grading task, such as a subtask or rubric item.
@@ -81,9 +81,9 @@ pub struct ReportSubsection {
     /// Label or name of the subsection (e.g., "Subtask 1").
     pub label: String,
     /// Points earned for this subsection.
-    pub earned: f32,
+    pub earned: f64,
     /// Total possible points for this subsection.
-    pub total: f32,
+    pub total: f64,
     /// Feedback or comments for this subsection.
     pub feedback: String,
 }
@@ -116,9 +116,9 @@ pub struct CoverageFile {
     /// File path (relative or absolute).
     pub path: String,
     /// Lines or items covered in this file.
-    pub earned: f32,
+    pub earned: f64,
     /// Total lines or items in this file.
-    pub total: f32,
+    pub total: f64,
 }
 
 /// The top-level grading report, aggregating all tasks, scores, and optional code analysis results.

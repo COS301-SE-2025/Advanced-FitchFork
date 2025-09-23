@@ -114,13 +114,13 @@ impl OutputComparator for RegexComparator {
                 0.0
             }
         } else {
-            let ratio = awarded_marks as f32 / total_patterns as f32;
+            let ratio = awarded_marks as f64 / total_patterns as f64;
             section.value * ratio
         };
 
         // Extra-lines penalty
         if student_lines.len() > memo_norm.len() && !student_lines.is_empty() {
-            let penalty = memo_norm.len() as f32 / student_lines.len() as f32;
+            let penalty = memo_norm.len() as f64 / student_lines.len() as f64;
             awarded = awarded * penalty;
         }
 
@@ -149,7 +149,7 @@ mod tests {
         lines.iter().map(|s| s.to_string()).collect()
     }
 
-    fn mock_subsection(value: f32) -> Subsection {
+    fn mock_subsection(value: f64) -> Subsection {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,

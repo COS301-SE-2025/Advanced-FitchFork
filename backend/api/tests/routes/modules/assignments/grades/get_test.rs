@@ -111,14 +111,14 @@ mod tests {
         filename: &str,
         hash: &str,
         created_at: chrono::DateTime<Utc>,
-        mark_earned: f32,
-        mark_total: f32,
+        mark_earned: f64,
+        mark_total: f64,
         is_practice: bool,
         tasks_payload: Vec<(
             i64, /* task_id */
             i64, /* task_number */
-            f32, /* earned */
-            f32, /* total */
+            f64, /* earned */
+            f64, /* total */
         )>,
     ) {
         let path = submission_report_path(module_id, assignment_id, user_id, attempt);
@@ -163,14 +163,14 @@ mod tests {
         assignment: &AssignmentModel,
         user: &UserModel,
         attempt: i64,
-        earned: f32,
-        total: f32,
+        earned: f64,
+        total: f64,
         created_offset_min: i64,
         task_rows: Vec<(
             i64, /* task_id */
             i64, /* task_number */
-            f32, /* earned */
-            f32, /* total */
+            f64, /* earned */
+            f64, /* total */
         )>,
     ) -> AssignmentSubmissionModel {
         let created = assignment.due_date + Duration::minutes(created_offset_min);
@@ -218,12 +218,12 @@ mod tests {
         assignment: &AssignmentModel,
         user: &UserModel,
         attempt: i64,
-        earned: f32,
-        total: f32,
+        earned: f64,
+        total: f64,
         created_offset_min: i64,
         is_practice: bool,
         ignored: bool,
-        task_rows: Vec<(i64, i64, f32, f32)>,
+        task_rows: Vec<(i64, i64, f64, f64)>,
     ) -> AssignmentSubmissionModel {
         let created = assignment.due_date + Duration::minutes(created_offset_min);
         let filename = format!("u{}_a{}.zip", user.id, attempt);

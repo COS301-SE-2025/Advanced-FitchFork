@@ -63,7 +63,6 @@ impl Feedback for AutoFeedback {
 
                 let feedback_message =
                     if memo_set.is_subset(&student_set) && memo_set.len() < student_set.len() {
-                        println!("TOO MUCH OUTPUT DETECTED");
                         "Too much output"
                     } else if !result.missed_patterns.is_empty() {
                         if student_set.is_subset(&memo_set) && student_set.len() < memo_set.len() {
@@ -98,8 +97,8 @@ mod tests {
         name: &str,
         matched: &[&str],
         missed: &[&str],
-        awarded: f32,
-        possible: f32,
+        awarded: f64,
+        possible: f64,
         student_output: &[&str],
         memo_output: &[&str],
         stderr: Option<&str>,
@@ -251,7 +250,17 @@ mod tests {
     async fn test_multiple_tasks() {
         let t1 = make_task("T1", &["a"], &[], 1.0, 1.0, &vec![], &vec![], None, None);
         let t2 = make_task("T2", &[], &["b"], 0.0, 1.0, &[], &["b"], None, None);
-        let t3 = make_task("T3", &["x"], &["y"], 1.0, 2.0, &["x"], &["x", "y"], None, None);
+        let t3 = make_task(
+            "T3",
+            &["x"],
+            &["y"],
+            1.0,
+            2.0,
+            &["x"],
+            &["x", "y"],
+            None,
+            None,
+        );
         let feedback = AutoFeedback.assemble_feedback(&[t1, t2, t3]).await.unwrap();
         assert_eq!(
             feedback,

@@ -20,7 +20,7 @@ use util::execution_config::{ExecutionConfig, GradingPolicy};
 pub struct GradeSelection {
     pub submission: SubmissionModel,
     pub user: UserModel,
-    pub score_pct: f32,
+    pub score_pct: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +61,7 @@ impl std::fmt::Display for GradeComputationError {
 impl std::error::Error for GradeComputationError {}
 
 /// Helper to compute percentage safely.
-pub fn percentage(earned: f32, total: f32) -> f32 {
+pub fn percentage(earned: f64, total: f64) -> f64 {
     if total <= 0.0 {
         0.0
     } else {

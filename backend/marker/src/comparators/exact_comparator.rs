@@ -93,7 +93,7 @@ mod tests {
         lines.iter().map(|s| s.to_string()).collect()
     }
 
-    fn mock_subsection(value: f32) -> Subsection {
+    fn mock_subsection(value: f64) -> Subsection {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,

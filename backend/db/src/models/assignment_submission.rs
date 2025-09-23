@@ -92,9 +92,9 @@ pub struct Model {
     /// Attempt number
     pub attempt: i64,
     /// The score earned by the user.
-    pub earned: f32,
+    pub earned: f64,
     /// The total possible score.
-    pub total: f32,
+    pub total: f64,
     /// The original filename uploaded by the user.
     pub filename: String,
     /// The hash of the submitted files.
@@ -163,8 +163,8 @@ impl Model {
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
-        earned: f32,
-        total: f32,
+        earned: f64,
+        total: f64,
         is_practice: bool,
         filename: &str,
         file_hash: &str,
@@ -338,7 +338,9 @@ impl Model {
                 subs.sort_by(|a, b| {
                     let score_a = a.earned / a.total;
                     let score_b = b.earned / b.total;
-                    score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+                    score_b
+                        .partial_cmp(&score_a)
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 });
                 Ok(subs.into_iter().next())
             }
