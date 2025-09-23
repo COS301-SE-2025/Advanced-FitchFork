@@ -223,6 +223,7 @@ export interface GatlamConfig {
 
 export interface CodeCoverage {
   code_coverage_weight: number;
+  whitelist: string[];
 }
 
 /**

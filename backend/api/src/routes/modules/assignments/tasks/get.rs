@@ -20,8 +20,8 @@ use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder}
 use serde::Serialize;
 use std::fs;
 use util::paths::memo_output_dir;
-use util::{execution_config::ExecutionConfig, state::AppState};
 use util::paths::storage_root;
+use util::{execution_config::ExecutionConfig, state::AppState};
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
 #[derive(Serialize)]
@@ -167,7 +167,9 @@ pub async fn get_task_details(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error retrieving assignment")),
+                Json(ApiResponse::<()>::error(
+                    "Database error retrieving assignment",
+                )),
             )
                 .into_response();
         }
@@ -175,14 +177,18 @@ pub async fn get_task_details(
     if assignment.module_id != module_id {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Assignment does not belong to this module")),
+            Json(ApiResponse::<()>::error(
+                "Assignment does not belong to this module",
+            )),
         )
             .into_response();
     }
     if task.assignment_id != assignment_id {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error("Task does not belong to this assignment")),
+            Json(ApiResponse::<()>::error(
+                "Task does not belong to this assignment",
+            )),
         )
             .into_response();
     }
@@ -236,7 +242,11 @@ pub async fn get_task_details(
         memo.split(&separator)
             .map(|s| {
                 let t = s.trim();
-                if t.is_empty() { None } else { Some(t.to_string()) }
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
             })
             .skip(1) // first chunk is preamble before the first delimiter
             .collect()
@@ -249,7 +259,11 @@ pub async fn get_task_details(
 
     // Build subsections (optional): only when allocator is present and contains this task
     let subsections: Vec<SubsectionDetail> = if let Some(alloc) = allocator {
-        if let Some(alloc_task) = alloc.tasks.iter().find(|t| t.task_number == task.task_number) {
+        if let Some(alloc_task) = alloc
+            .tasks
+            .iter()
+            .find(|t| t.task_number == task.task_number)
+        {
             if memo_chunks.len() < alloc_task.subsections.len() {
                 memo_chunks.resize(alloc_task.subsections.len(), None);
             }
@@ -302,7 +316,10 @@ pub async fn get_task_details(
 
     (
         StatusCode::OK,
-        Json(ApiResponse::success(resp, "Task details retrieved successfully")),
+        Json(ApiResponse::success(
+            resp,
+            "Task details retrieved successfully",
+        )),
     )
         .into_response()
 }

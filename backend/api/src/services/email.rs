@@ -234,8 +234,8 @@ impl EmailService {
         }
 
         let from_email = config::gmail_username();
-        let from_name  = config::email_from_name();
-        let frontend   = config::frontend_url();
+        let from_name = config::email_from_name();
+        let frontend = config::frontend_url();
 
         // Deep link to the assignment (adjust querystring/fragment if you want to land on Files tab)
         let assignment_url = format!(
@@ -330,21 +330,19 @@ impl EmailService {
             builder = builder.to(rcpt.parse().unwrap());
         }
 
-        let msg = match builder
-            .multipart(
-                MultiPart::alternative()
-                    .singlepart(
-                        SinglePart::builder()
-                            .header(header::ContentType::TEXT_PLAIN)
-                            .body(text_body),
-                    )
-                    .singlepart(
-                        SinglePart::builder()
-                            .header(header::ContentType::TEXT_HTML)
-                            .body(html_body),
-                    ),
-            )
-        {
+        let msg = match builder.multipart(
+            MultiPart::alternative()
+                .singlepart(
+                    SinglePart::builder()
+                        .header(header::ContentType::TEXT_PLAIN)
+                        .body(text_body),
+                )
+                .singlepart(
+                    SinglePart::builder()
+                        .header(header::ContentType::TEXT_HTML)
+                        .body(html_body),
+                ),
+        ) {
             Ok(m) => m,
             Err(e) => {
                 eprintln!("Failed to build spec-change email: {}", e);

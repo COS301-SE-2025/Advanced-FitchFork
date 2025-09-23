@@ -367,12 +367,17 @@ mod tests {
         assert!(json["data"].get("best_mark").is_none());
 
         let pol = json["data"]["policy"].as_object().expect("policy missing");
-        for k in ["allow_practice_submissions","submission_mode","grading_policy","limit_attempts","pass_mark"] {
+        for k in [
+            "allow_practice_submissions",
+            "submission_mode",
+            "grading_policy",
+            "limit_attempts",
+            "pass_mark",
+        ] {
             assert!(pol.contains_key(k), "policy missing field: {k}");
         }
         // non-student → attempts should be absent
         assert!(json["data"].get("attempts").is_none());
-
     }
 
     #[tokio::test]
@@ -402,7 +407,13 @@ mod tests {
         assert!(json["data"].get("best_mark").is_none());
 
         let pol = json["data"]["policy"].as_object().expect("policy missing");
-        for k in ["allow_practice_submissions","submission_mode","grading_policy","limit_attempts","pass_mark"] {
+        for k in [
+            "allow_practice_submissions",
+            "submission_mode",
+            "grading_policy",
+            "limit_attempts",
+            "pass_mark",
+        ] {
             assert!(pol.contains_key(k), "policy missing field: {k}");
         }
         assert!(json["data"].get("attempts").is_none());
@@ -435,19 +446,30 @@ mod tests {
         assert!(json["data"].get("best_mark").is_none());
 
         let pol = json["data"]["policy"].as_object().expect("policy missing");
-        for k in ["allow_practice_submissions","submission_mode","grading_policy","limit_attempts","pass_mark"] {
+        for k in [
+            "allow_practice_submissions",
+            "submission_mode",
+            "grading_policy",
+            "limit_attempts",
+            "pass_mark",
+        ] {
             assert!(pol.contains_key(k), "policy missing field: {k}");
         }
 
-        let attempts = json["data"]["attempts"].as_object().expect("attempts missing");
+        let attempts = json["data"]["attempts"]
+            .as_object()
+            .expect("attempts missing");
         // Always-present fields:
-        for k in ["used","can_submit","limit_attempts"] {
+        for k in ["used", "can_submit", "limit_attempts"] {
             assert!(attempts.contains_key(k), "attempts missing field: {k}");
         }
         // Conditionally-present fields:
         if attempts["limit_attempts"].as_bool().unwrap_or(false) {
-            for k in ["max","remaining"] {
-                assert!(attempts.contains_key(k), "attempts missing field when limit_attempts=true: {k}");
+            for k in ["max", "remaining"] {
+                assert!(
+                    attempts.contains_key(k),
+                    "attempts missing field when limit_attempts=true: {k}"
+                );
             }
         }
     }
@@ -548,7 +570,7 @@ mod tests {
 
         if let Some(bm) = json["data"]["best_mark"].as_object() {
             // Only check field presence/shape if it’s there
-            for k in ["earned","total","attempt","submission_id"] {
+            for k in ["earned", "total", "attempt", "submission_id"] {
                 assert!(bm.contains_key(k), "best_mark missing field: {k}");
             }
             // (No value assertions here — you said you test defaults/values elsewhere)
@@ -558,19 +580,30 @@ mod tests {
         }
 
         let pol = json["data"]["policy"].as_object().expect("policy missing");
-        for k in ["allow_practice_submissions","submission_mode","grading_policy","limit_attempts","pass_mark"] {
+        for k in [
+            "allow_practice_submissions",
+            "submission_mode",
+            "grading_policy",
+            "limit_attempts",
+            "pass_mark",
+        ] {
             assert!(pol.contains_key(k), "policy missing field: {k}");
         }
 
-        let attempts = json["data"]["attempts"].as_object().expect("attempts missing");
+        let attempts = json["data"]["attempts"]
+            .as_object()
+            .expect("attempts missing");
         // Always-present fields:
-        for k in ["used","can_submit","limit_attempts"] {
+        for k in ["used", "can_submit", "limit_attempts"] {
             assert!(attempts.contains_key(k), "attempts missing field: {k}");
         }
         // Conditionally-present fields:
         if attempts["limit_attempts"].as_bool().unwrap_or(false) {
-            for k in ["max","remaining"] {
-                assert!(attempts.contains_key(k), "attempts missing field when limit_attempts=true: {k}");
+            for k in ["max", "remaining"] {
+                assert!(
+                    attempts.contains_key(k),
+                    "attempts missing field when limit_attempts=true: {k}"
+                );
             }
         }
     }
@@ -651,7 +684,7 @@ mod tests {
 
         if let Some(bm) = json["data"]["best_mark"].as_object() {
             // Only check field presence/shape if it’s there
-            for k in ["earned","total","attempt","submission_id"] {
+            for k in ["earned", "total", "attempt", "submission_id"] {
                 assert!(bm.contains_key(k), "best_mark missing field: {k}");
             }
             // (No value assertions here — you said you test defaults/values elsewhere)
@@ -661,19 +694,30 @@ mod tests {
         }
 
         let pol = json["data"]["policy"].as_object().expect("policy missing");
-        for k in ["allow_practice_submissions","submission_mode","grading_policy","limit_attempts","pass_mark"] {
+        for k in [
+            "allow_practice_submissions",
+            "submission_mode",
+            "grading_policy",
+            "limit_attempts",
+            "pass_mark",
+        ] {
             assert!(pol.contains_key(k), "policy missing field: {k}");
         }
-        
-        let attempts = json["data"]["attempts"].as_object().expect("attempts missing");
+
+        let attempts = json["data"]["attempts"]
+            .as_object()
+            .expect("attempts missing");
         // Always-present fields:
-        for k in ["used","can_submit","limit_attempts"] {
+        for k in ["used", "can_submit", "limit_attempts"] {
             assert!(attempts.contains_key(k), "attempts missing field: {k}");
         }
         // Conditionally-present fields:
         if attempts["limit_attempts"].as_bool().unwrap_or(false) {
-            for k in ["max","remaining"] {
-                assert!(attempts.contains_key(k), "attempts missing field when limit_attempts=true: {k}");
+            for k in ["max", "remaining"] {
+                assert!(
+                    attempts.contains_key(k),
+                    "attempts missing field when limit_attempts=true: {k}"
+                );
             }
         }
     }

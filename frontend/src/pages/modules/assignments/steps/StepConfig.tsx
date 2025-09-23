@@ -1,6 +1,4 @@
-// StepConfig.tsx
-
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Collapse,
   type CollapseProps,
@@ -32,76 +30,6 @@ import Tip from '@/components/common/Tip';
 
 const { Title, Paragraph, Text } = Typography;
 
-// --- Defaults matching backend ExecutionConfig::default_config() ---
-const DEFAULT_CONFIG: AssignmentConfig = {
-  project: { language: 'cpp', submission_mode: 'manual' },
-  execution: {
-    timeout_secs: 10,
-    max_memory: 8_589_934_592,
-    max_cpus: 2,
-    max_uncompressed_size: 100_000_000,
-    max_processes: 256,
-  },
-  marking: {
-    marking_scheme: 'exact',
-    feedback_scheme: 'auto',
-    deliminator: '&-=-&',
-    grading_policy: 'last',
-    max_attempts: 10,
-    limit_attempts: false,
-    pass_mark: 50,
-    allow_practice_submissions: false,
-    dissalowed_code: [],
-  },
-  output: { stdout: true, stderr: false, retcode: false },
-  gatlam: {
-    population_size: 100,
-    number_of_generations: 50,
-    selection_size: 20,
-    reproduction_probability: 0.8,
-    crossover_probability: 0.9,
-    mutation_probability: 0.01,
-    genes: [
-      { min_value: -5, max_value: 5 },
-      { min_value: -4, max_value: 9 },
-    ],
-    crossover_type: 'onepoint',
-    mutation_type: 'bitflip',
-    omega1: 0.5,
-    omega2: 0.3,
-    omega3: 0.2,
-    task_spec: { valid_return_codes: [0], max_runtime_ms: undefined, forbidden_outputs: [] },
-    max_parallel_chromosomes: 4,
-    verbose: false,
-  },
-  security: {
-    password_enabled: false,
-    password_pin: null,
-    cookie_ttl_minutes: 480,
-    bind_cookie_to_user: true,
-    allowed_cidrs: [],
-  },
-  code_coverage: { code_coverage_weight: 10 },
-};
-
-// Merge “cfg” over defaults (prevents undefined access)
-function hydrateConfig(cfg?: Partial<AssignmentConfig>): AssignmentConfig {
-  const base = DEFAULT_CONFIG;
-  return {
-    project: { ...base.project, ...(cfg?.project ?? {}) },
-    execution: { ...base.execution, ...(cfg?.execution ?? {}) },
-    marking: { ...base.marking, ...(cfg?.marking ?? {}) },
-    output: { ...base.output, ...(cfg?.output ?? {}) },
-    gatlam: {
-      ...base.gatlam,
-      ...(cfg?.gatlam ?? {}),
-      task_spec: { ...base.gatlam.task_spec, ...(cfg?.gatlam?.task_spec ?? {}) },
-    },
-    security: { ...base.security, ...(cfg?.security ?? {}) },
-    code_coverage: { ...base.code_coverage, ...(cfg?.code_coverage ?? {}) },
-  };
-}
-
 const StepConfig = () => {
   const module = useModule();
   const { assignmentId, config, setConfig, refreshAssignment, setStepSaveHandler, next } =
@@ -110,7 +38,7 @@ const StepConfig = () => {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
 
-  // If config is missing, create defaults on backend once; otherwise hydrate safely.
+  // Initialize on first mount if there's no config: ask server to reset/create default.
   useEffect(() => {
     (async () => {
       if (!assignmentId) return;
@@ -120,19 +48,20 @@ const StepConfig = () => {
           setConfig(res.data);
           await refreshAssignment?.();
         } else {
-          // fallback: allow editing hydrated defaults locally
-          setConfig(DEFAULT_CONFIG);
+          // leave config as null; the UI will be empty until backend is reachable
+          // (intentionally no client-side defaults)
+          // console.error('resetAssignmentConfig failed:', res.message);
         }
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId, config]);
 
-  const safeConfig = useMemo(() => hydrateConfig(config ?? undefined), [config]);
-
-  // Populate form when config (or hydration) changes
+  // Populate form whenever server-backed config changes
   useEffect(() => {
-    const c = safeConfig;
+    if (!config) return;
+
+    const c = config;
     form.setFieldsValue({
       // Project
       language: c.project.language,
@@ -153,6 +82,10 @@ const StepConfig = () => {
       pass_mark: c.marking.pass_mark,
       allow_practice_submissions: c.marking.allow_practice_submissions,
       dissalowed_code: c.marking.dissalowed_code ?? [],
+      // NEW: Late policy
+      allow_late_submissions: c.marking.late?.allow_late_submissions ?? false,
+      late_window_minutes: c.marking.late?.late_window_minutes ?? 0,
+      late_max_percent: c.marking.late?.late_max_percent ?? 100,
       // Output
       stdout: c.output.stdout,
       stderr: c.output.stderr,
@@ -179,8 +112,9 @@ const StepConfig = () => {
       max_parallel_chromosomes: c.gatlam.max_parallel_chromosomes,
       // Coverage
       code_coverage_required: c.code_coverage.code_coverage_weight,
+      code_coverage_whitelist: c.code_coverage.whitelist ?? [],
     });
-  }, [safeConfig, form]);
+  }, [config, form]);
 
   useEffect(() => {
     setStepSaveHandler?.(1, async () => true);
@@ -191,17 +125,20 @@ const StepConfig = () => {
     setSaving(true);
     try {
       const res = await resetAssignmentConfig(module.id, assignmentId);
-      const fresh = res.success ? res.data : DEFAULT_CONFIG;
-      setConfig(fresh);
-      await refreshAssignment?.();
+      if (res.success) {
+        setConfig(res.data);
+        await refreshAssignment?.();
+        form.resetFields(); // effect above will repopulate
+      } else {
+        // console.error('resetAssignmentConfig failed:', res.message);
+      }
     } finally {
       setSaving(false);
     }
   };
 
   const onSave = async (advance = false) => {
-    if (!assignmentId) return;
-    const c = safeConfig; // base
+    if (!assignmentId || !config) return;
     try {
       setSaving(true);
       const v = await form.validateFields();
@@ -214,6 +151,12 @@ const StepConfig = () => {
       const allowed_cidrs: string[] = (v.allowed_cidrs || [])
         .map((s: any) => String(s).trim())
         .filter(Boolean);
+
+      const code_coverage_whitelist: string[] = (v.code_coverage_whitelist || [])
+        .map((s: any) => String(s).trim())
+        .filter(Boolean);
+
+      const c = config; // use current server-backed object as base
 
       const updated: AssignmentConfig = {
         ...c,
@@ -237,6 +180,11 @@ const StepConfig = () => {
           pass_mark: v.pass_mark,
           allow_practice_submissions: v.allow_practice_submissions,
           dissalowed_code,
+          late: {
+            allow_late_submissions: !!v.allow_late_submissions,
+            late_window_minutes: Number(v.late_window_minutes ?? 0),
+            late_max_percent: Number(v.late_max_percent ?? 100),
+          },
         },
         output: { ...c.output, stdout: v.stdout, stderr: v.stderr, retcode: v.retcode },
         security: {
@@ -260,11 +208,15 @@ const StepConfig = () => {
           omega1: v.omega1,
           omega2: v.omega2,
           omega3: v.omega3,
-          task_spec: { ...c.gatlam.task_spec }, // unchanged
+          task_spec: { ...c.gatlam.task_spec }, // unchanged here
           verbose: v.verbose,
           max_parallel_chromosomes: v.max_parallel_chromosomes,
         },
-        code_coverage: { ...c.code_coverage, code_coverage_weight: v.code_coverage_required },
+        code_coverage: {
+          ...c.code_coverage,
+          code_coverage_weight: v.code_coverage_required,
+          whitelist: code_coverage_whitelist,
+        },
       };
 
       const res = await setAssignmentConfig(module.id, assignmentId, updated);
@@ -430,6 +382,22 @@ const StepConfig = () => {
                 style={{ width: '100%' }}
               />
             </Form.Item>
+
+            <Divider />
+            <Typography.Paragraph strong className="!mb-2">
+              Late Submission Policy
+            </Typography.Paragraph>
+            <Space wrap size="large" align="center">
+              <Form.Item name="allow_late_submissions" label="Allow Late" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="late_window_minutes" label="Late Window (min)">
+                <InputNumber min={0} />
+              </Form.Item>
+              <Form.Item name="late_max_percent" label="Late Max (%)">
+                <InputNumber min={0} max={100} />
+              </Form.Item>
+            </Space>
           </Space>
         </>
       ),
@@ -597,15 +565,29 @@ const StepConfig = () => {
       children: (
         <Space direction="vertical" size="large" className="w-full">
           <Typography.Paragraph type="secondary" className="!mb-0">
-            Set your coverage target for assignments that measure code coverage.
+            Set your coverage target and optional whitelist for files/packages included in coverage.
           </Typography.Paragraph>
-          <Form.Item
-            name="code_coverage_required"
-            label="Required Coverage (%)"
-            rules={[{ required: true }]}
-          >
-            <InputNumber min={0} max={100} />
-          </Form.Item>
+          <Space wrap size="large">
+            <Form.Item
+              name="code_coverage_required"
+              label="Required Coverage (%)"
+              rules={[{ required: true }]}
+            >
+              <InputNumber min={0} max={100} />
+            </Form.Item>
+            <Form.Item
+              name="code_coverage_whitelist"
+              label="Coverage Whitelist"
+              tooltip="Optional list of file names that should be counted when calculating coverage. Leave empty to include all files."
+            >
+              <Select
+                mode="tags"
+                tokenSeparators={[',', ' ']}
+                placeholder="e.g., main.cpp, utils.c, MyClass.java"
+                style={{ minWidth: 360 }}
+              />
+            </Form.Item>
+          </Space>
         </Space>
       ),
     },
@@ -620,7 +602,7 @@ const StepConfig = () => {
         <Tip iconOnly newTab to="/help/assignments/config/overview" text="Config help" />
       </div>
       <Paragraph type="secondary" className="!mb-2">
-        Defaults are applied automatically. Tweak any section below. Save in place or{' '}
+        Defaults are applied on the server. Tweak any section below. Save in place or{' '}
         <b>Save &amp; Continue</b> to move on.
       </Paragraph>
 

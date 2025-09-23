@@ -6,10 +6,10 @@ use axum::{
     response::IntoResponse,
 };
 use db::models::{
-    assignment_file::{FileType, Model as FileModel},
-    user::Model as UserModel,
     assignment::Entity as AssignmentEntity,
+    assignment_file::{FileType, Model as FileModel},
     module::Entity as ModuleEntity,
+    user::Model as UserModel,
 };
 use sea_orm::EntityTrait;
 use serde::Serialize;
@@ -108,7 +108,9 @@ pub async fn upload_files(
             eprintln!("multipart read error: {e}");
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<UploadedFileMetadata>::error("Malformed multipart payload")),
+                Json(ApiResponse::<UploadedFileMetadata>::error(
+                    "Malformed multipart payload",
+                )),
             )
                 .into_response();
         }
@@ -116,30 +118,30 @@ pub async fn upload_files(
         let name = field.name().unwrap_or("");
 
         match name {
-            "file_type" => {
-                match field.text().await {
-                    Ok(ftype_str) => match ftype_str.parse::<FileType>() {
-                        Ok(ftype) => file_type = Some(ftype),
-                        Err(_) => {
-                            return (
-                                StatusCode::BAD_REQUEST,
-                                Json(ApiResponse::<UploadedFileMetadata>::error("Invalid file_type")),
-                            )
-                                .into_response();
-                        }
-                    },
-                    Err(e) => {
-                        eprintln!("file_type read error: {e}");
+            "file_type" => match field.text().await {
+                Ok(ftype_str) => match ftype_str.parse::<FileType>() {
+                    Ok(ftype) => file_type = Some(ftype),
+                    Err(_) => {
                         return (
                             StatusCode::BAD_REQUEST,
                             Json(ApiResponse::<UploadedFileMetadata>::error(
-                                "Missing or unreadable file_type",
+                                "Invalid file_type",
                             )),
                         )
                             .into_response();
                     }
+                },
+                Err(e) => {
+                    eprintln!("file_type read error: {e}");
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiResponse::<UploadedFileMetadata>::error(
+                            "Missing or unreadable file_type",
+                        )),
+                    )
+                        .into_response();
                 }
-            }
+            },
             "file" => {
                 if file_count > 0 {
                     return (
@@ -188,7 +190,9 @@ pub async fn upload_files(
         None => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<UploadedFileMetadata>::error("Missing file upload")),
+                Json(ApiResponse::<UploadedFileMetadata>::error(
+                    "Missing file upload",
+                )),
             )
                 .into_response();
         }
@@ -199,7 +203,9 @@ pub async fn upload_files(
         _ => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<UploadedFileMetadata>::error("Empty file provided")),
+                Json(ApiResponse::<UploadedFileMetadata>::error(
+                    "Empty file provided",
+                )),
             )
                 .into_response();
         }
@@ -221,9 +227,16 @@ pub async fn upload_files(
                 let email_list = UserModel::get_emails_by_module_id(db, module_id).await;
 
                 // context (best-effort)
-                let module_opt = ModuleEntity::find_by_id(module_id).one(db).await.ok().flatten();
-                let assignment_opt =
-                    AssignmentEntity::find_by_id(assignment_id).one(db).await.ok().flatten();
+                let module_opt = ModuleEntity::find_by_id(module_id)
+                    .one(db)
+                    .await
+                    .ok()
+                    .flatten();
+                let assignment_opt = AssignmentEntity::find_by_id(assignment_id)
+                    .one(db)
+                    .await
+                    .ok()
+                    .flatten();
 
                 // use references so we don't move the Options
                 if let (Some(module), Some(assignment)) =
@@ -268,7 +281,9 @@ pub async fn upload_files(
             eprintln!("File save error: {:?}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UploadedFileMetadata>::error("Failed to save file")),
+                Json(ApiResponse::<UploadedFileMetadata>::error(
+                    "Failed to save file",
+                )),
             )
                 .into_response()
         }

@@ -424,7 +424,6 @@ impl Model {
         }
     }
 
-
     /// Check if the current status represents a failure state
     pub fn is_failed(&self) -> bool {
         matches!(

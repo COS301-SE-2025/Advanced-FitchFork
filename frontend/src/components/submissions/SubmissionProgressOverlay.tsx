@@ -41,6 +41,7 @@ const STATUS_PROGRESS: Record<SubmissionStatus, number> = {
   failed_execution: 100,
   failed_grading: 100,
   failed_internal: 100,
+  failed_disallowed_code: 100,
 };
 
 function statusTitle(status: SubmissionStatus | 'queued' | 'connecting') {
@@ -84,8 +85,6 @@ function statusSubtitle(status: SubmissionStatus | 'queued' | 'connecting') {
       return 'This view updates live.';
   }
 }
-
-const rand = (min: number, max: number) => Math.random() * (max - min) + min;
 
 export default function SubmissionProgressOverlay({
   moduleId,
