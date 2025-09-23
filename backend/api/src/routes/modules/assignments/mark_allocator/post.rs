@@ -90,6 +90,7 @@ pub async fn generate(
             id: t.id,
             task_number: t.task_number,
             code_coverage: t.code_coverage,
+            valgrind: t.valgrind,
             name: if t.name.trim().is_empty() {
                 format!("Task {}", t.task_number)
             } else {

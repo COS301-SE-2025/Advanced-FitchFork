@@ -426,6 +426,7 @@ std::string HelperThree::subtaskY() {
 std::string HelperThree::subtaskAlpha() {
     return "HelperThree: Subtask for Task3\nThis as well\nAnd this";
 }
+
 "#;
 
                 let helper_one_h = r#"
@@ -513,10 +514,10 @@ task1: main
 	./main task1
 
 task2: main
-	./main task2
+	valgrind --leak-check=full ./main task2
 
 task3: main
-	./main task3
+	valgrind --leak-check=full ./main task3
 
 task4: main
 	./main task1

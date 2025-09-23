@@ -48,6 +48,7 @@ struct TaskSeed {
     command: String,
     #[serde(default)]
     code_coverage: bool,
+    valgrind: bool,
 }
 
 // TODO
@@ -375,6 +376,7 @@ async fn create_tasks_from_assets_root(
             &t.name,
             &t.command,
             t.code_coverage,
+            t.valgrind,
         )
         .await
         .map_err(|e| format!("Failed to create task {}: {}", t.task_number, e))?;
@@ -408,6 +410,7 @@ async fn try_generate_allocator(
             id: t.id,
             task_number: t.task_number,
             code_coverage: t.code_coverage,
+            valgrind: t.valgrind,
             name: if t.name.trim().is_empty() {
                 format!("Task {}", t.task_number)
             } else {

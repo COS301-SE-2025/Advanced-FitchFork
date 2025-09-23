@@ -19,6 +19,7 @@ pub struct Task {
     pub value: i64,
     #[serde(default)]
     pub code_coverage: Option<bool>,
+    pub valgrind: Option<bool>,
     pub subsections: Vec<Subsection>,
 }
 
@@ -124,6 +125,7 @@ pub struct TaskInfo {
     pub id: i64,
     pub task_number: i64,
     pub code_coverage: bool,
+    pub valgrind: bool,
     pub name: String,
 }
 
@@ -160,6 +162,7 @@ pub async fn generate_allocator(
     // -------- Pass 1: build all tasks (with parsed values for non-coverage) --------
     let mut tasks: Vec<Task> = Vec::with_capacity(tasks_info.len());
     let mut base_total: i64 = 0; // sum of non-coverage tasks
+
     let mut coverage_indices: Vec<usize> = Vec::new();
 
     for (idx, (info, maybe_path)) in tasks_info.iter().enumerate() {
@@ -167,7 +170,7 @@ pub async fn generate_allocator(
         let mut task_value: i64 = 0;
 
         if !info.code_coverage && maybe_path.exists() {
-            // Parse memo output to derive marks per section
+            // Normal subsection parsing
             let content = fs::read_to_string(maybe_path)
                 .map_err(|e| format!("Failed reading {:?}: {}", maybe_path, e))?;
 
@@ -177,7 +180,6 @@ pub async fn generate_allocator(
             for line in content.lines() {
                 let split: Vec<_> = line.split(&separator).collect();
                 if split.len() > 1 {
-                    // end prior section
                     if !current_section.is_empty() {
                         subsections.push(Subsection {
                             name: current_section.clone(),
@@ -222,8 +224,17 @@ pub async fn generate_allocator(
 
             base_total += task_value;
         } else if info.code_coverage {
-            // For coverage tasks we set a placeholder now; we'll fill value in Pass 2.
             coverage_indices.push(idx);
+        }
+
+        // --- Append valgrind-specific subsection if this is a valgrind task ---
+        if info.valgrind {
+            subsections.push(Subsection {
+                name: "Memory Leaks".to_string(),
+                value: 5,
+                regex: None,
+                feedback: Some("Check for memory leaks with Valgrind".to_string()),
+            });
         }
 
         tasks.push(Task {
@@ -235,7 +246,8 @@ pub async fn generate_allocator(
             },
             value: task_value,
             code_coverage: Some(info.code_coverage),
-            subsections, // coverage tasks will keep empty subsections
+            valgrind: Some(info.valgrind),
+            subsections,
         });
     }
 
