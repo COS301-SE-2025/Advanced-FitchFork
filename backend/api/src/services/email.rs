@@ -198,72 +198,162 @@ impl EmailService {
         }
     }
 
-    pub async fn send_email_when_spec_changes(
-        to_email: Vec<String>,
-        spec_name: String,
-        change_details: String,
+    /// Notify users when an assignment specification file changes.
+    ///
+    /// `module_code` (e.g. "COS301"), `module_year` (e.g. 2025), `assignment_name` (e.g. "A1: Linked Lists")
+    /// `module_id` and `assignment_id` are used to build a deep link back to the UI.
+    pub async fn send_spec_change_email(
+        to_emails: Vec<String>,
+        module_code: &str,
+        module_year: i32,
+        module_id: i64,
+        assignment_id: i64,
+        assignment_name: &str,
+        spec_filename: &str,
+        change_summary: Option<&str>,
     ) {
-        let from_email = config::gmail_username();
-        let from_name = config::email_from_name();
-
-        let mut builder =
-            Message::builder().from(format!("{} <{}>", from_name, from_email).parse().unwrap());
-
-        for recipient in to_email {
-            builder = builder.to(recipient.parse().unwrap());
+        // Tiny local helper to avoid extra crates
+        fn escape_html(input: &str) -> String {
+            let mut out = String::with_capacity(input.len());
+            for ch in input.chars() {
+                match ch {
+                    '&' => out.push_str("&amp;"),
+                    '<' => out.push_str("&lt;"),
+                    '>' => out.push_str("&gt;"),
+                    '"' => out.push_str("&quot;"),
+                    '\'' => out.push_str("&#39;"),
+                    _ => out.push(ch),
+                }
+            }
+            out
         }
 
-        let email_result = builder
-            .subject(format!("Specification '{}' Has Changed", spec_name))
+        if to_emails.is_empty() {
+            eprintln!("send_spec_change_email: empty recipient list; skipping send");
+            return;
+        }
+
+        let from_email = config::gmail_username();
+        let from_name  = config::email_from_name();
+        let frontend   = config::frontend_url();
+
+        // Deep link to the assignment (adjust querystring/fragment if you want to land on Files tab)
+        let assignment_url = format!(
+            "{}/modules/{}/assignments/{}",
+            frontend, module_id, assignment_id
+        );
+
+        // Subject: "Spec updated: COS301 (2025) — A1: Linked Lists"
+        let subject = format!(
+            "Spec updated: {} ({}) — {}",
+            module_code, module_year, assignment_name
+        );
+
+        let summary_text = change_summary.unwrap_or("—");
+
+        // Plain-text part
+        let text_body = format!(
+            "Specification updated\n\n\
+             Module: {} ({})\n\
+             Assignment: {}\n\
+             File: {}\n\
+             Link: {}\n\n\
+             Change summary:\n{}\n\n\
+             Best regards,\n{}",
+            module_code,
+            module_year,
+            assignment_name,
+            spec_filename,
+            assignment_url,
+            summary_text,
+            from_name
+        );
+
+        // HTML part
+        let html_body = format!(
+            r#"<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {{ font-family: Arial, sans-serif; color:#333; line-height:1.55; }}
+    .container {{ max-width: 640px; margin: 0 auto; padding: 20px; }}
+    .h {{ margin: 0 0 12px; }}
+    .meta {{ margin: 14px 0; padding:12px; background:#f7f7f9; border:1px solid #eee; border-radius:6px; }}
+    .meta dt {{ font-weight:bold; }}
+    .btn {{
+      display:inline-block; padding:10px 16px; border-radius:6px;
+      background:#1677ff; color:#fff !important; text-decoration:none; font-weight:600;
+      margin: 10px 0;
+    }}
+    pre {{ background:#0b1022; color:#f3f7ff; padding:12px; border-radius:6px; overflow:auto; }}
+    code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2 class="h">Specification updated</h2>
+
+    <div class="meta">
+      <dl>
+        <dt>Module</dt><dd>{module_code} ({module_year})</dd>
+        <dt>Assignment</dt><dd>{assignment_name}</dd>
+        <dt>File</dt><dd><code>{spec_filename}</code></dd>
+      </dl>
+    </div>
+
+    <p><a class="btn" href="{assignment_url}">Open assignment</a></p>
+
+    <h3 class="h">Change summary</h3>
+    <pre>{escaped_summary}</pre>
+
+    <p style="margin-top:16px;">Best regards,<br/>{from_name}</p>
+  </div>
+</body>
+</html>
+"#,
+            module_code = module_code,
+            module_year = module_year,
+            assignment_name = assignment_name,
+            spec_filename = spec_filename,
+            assignment_url = assignment_url,
+            escaped_summary = escape_html(summary_text),
+            from_name = from_name
+        );
+
+        // Build message with multiple recipients
+        let mut builder = Message::builder()
+            .from(format!("{} <{}>", from_name, from_email).parse().unwrap())
+            .subject(subject);
+
+        for rcpt in to_emails {
+            builder = builder.to(rcpt.parse().unwrap());
+        }
+
+        let msg = match builder
             .multipart(
                 MultiPart::alternative()
                     .singlepart(
                         SinglePart::builder()
                             .header(header::ContentType::TEXT_PLAIN)
-                            .body(format!(
-                                "Hello,\n\n\
-                                The specification '{}' has been updated. Here are the details of the changes:\n\n\
-                                {}\n\n\
-                                Please review the changes at your earliest convenience.\n\n\
-                                Best regards,\n\
-                                {}",
-                                spec_name,
-                                change_details,
-                                from_name
-                            )),
+                            .body(text_body),
                     )
                     .singlepart(
                         SinglePart::builder()
                             .header(header::ContentType::TEXT_HTML)
-                            .body(format!(
-                                "<html>\
-                                <body>\
-                                <p>Hello,</p>\
-                                <p>The specification '<strong>{}</strong>' has been updated. Here are the details of the changes:</p>\
-                                <pre>{}</pre>\
-                                <p>Please review the changes at your earliest convenience.</p>\
-                                <p>Best regards,<br>\
-                                {}</p>\
-                                </body>\
-                                </html>",
-                                spec_name,
-                                change_details,
-                                from_name
-                            )),
+                            .body(html_body),
                     ),
-            );
-
-        let email = match email_result {
-            Ok(msg) => msg,
+            )
+        {
+            Ok(m) => m,
             Err(e) => {
-                eprintln!("Failed to build email: {}", e);
+                eprintln!("Failed to build spec-change email: {}", e);
                 return;
             }
         };
 
-        match SMTP_CLIENT.send(email).await {
-            Ok(_) => (),
-            Err(e) => eprintln!("Failed to send email: {}", e),
-        };
+        if let Err(e) = SMTP_CLIENT.send(msg).await {
+            eprintln!("Failed to send spec-change email: {}", e);
+        }
     }
 }
