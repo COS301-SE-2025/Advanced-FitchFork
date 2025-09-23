@@ -222,7 +222,6 @@ pub async fn require_lecturer_or_assistant_lecturer(
 }
 
 /// Guard for requiring lecturer or tutor access.
-/// TODO: Add ALs to this?
 pub async fn require_lecturer_or_tutor(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
@@ -842,7 +841,7 @@ pub async fn validate_known_ids(
     Ok(next.run(req).await)
 }
 
-// TODO Write tests for this gaurd
+// TODO Write tests for this guard
 pub async fn require_ticket_ws_access(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
