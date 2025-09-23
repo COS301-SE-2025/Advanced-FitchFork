@@ -1031,7 +1031,7 @@ fn parse_bool_flag(v: Option<&str>) -> bool {
 /// ```
 /// or
 /// ```json
-/// { "success": false, "message": "Failed to mark submission" }
+/// { "success": false, "message": "Failed to run code for submission" }
 /// ```
 ///
 /// ### Side Effects
@@ -1551,7 +1551,7 @@ async fn run_submission_pipeline(
             )
             .await;
 
-            Err("Failed to mark submission".to_string())
+            Err("Failed to run code for submission".to_string())
         }
     }
 }

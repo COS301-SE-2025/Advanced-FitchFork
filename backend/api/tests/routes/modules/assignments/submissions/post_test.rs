@@ -2667,7 +2667,7 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Failed to mark submission");
+        assert_eq!(json["message"], "Failed to run code for submission");
 
         // Check if a submission was created and has failed status
         use db::models::assignment_submission::{Column as SubCol, Entity as SubmissionEntity};
