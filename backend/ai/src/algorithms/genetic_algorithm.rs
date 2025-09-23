@@ -32,15 +32,13 @@ impl GeneConfig {
 
 /// GA-wide configuration
 pub struct GAConfig {
-    pub population_size: usize,       // Number of chromosomes per generation
-    pub number_of_generations: usize, // Total number of generations to run
-    //todo: use this in run
-    pub selection_size: usize, // Number of individuals selected during selection
+    pub population_size: usize,        // Number of chromosomes per generation
+    pub number_of_generations: usize,  // Total number of generations to run
+    pub selection_size: usize,         // Number of individuals selected during selection
     pub reproduction_probability: f64, // Probability of applying crossover during reproduction
-    //todo: use this probability
-    pub crossover_probability: f64, // Used in some variants, may control forced crossover
-    pub mutation_probability: f64,  // Probability of mutating a child
-    pub genes: Vec<GeneConfig>,     // Configuration for each gene in the chromosome
+    pub crossover_probability: f64,    // Used in some variants, may control forced crossover
+    pub mutation_probability: f64,     // Probability of mutating a child
+    pub genes: Vec<GeneConfig>,        // Configuration for each gene in the chromosome
     pub crossover_type: CrossoverType, // Which crossover operator to use (one-point, two-point, uniform)
     pub mutation_type: MutationType,   // Which mutation operator to use (bit-flip, swap, scramble)
 }
@@ -339,7 +337,7 @@ impl GeneticAlgorithm {
                     let i = rng.gen_range(0..len); // pick first index
                     let mut j = rng.gen_range(0..len); // pick second index
                     while j == i {
-                        j = rng.gen_range(0..len); // ensure j ≠ i
+                        j = rng.gen_range(0..len); // ensure j =/ i
                     }
                     genes.swap(i, j); // swap
                 }
@@ -412,7 +410,7 @@ mod tests {
         if sign { -mag } else { mag }
     }
 
-    // --- GeneConfig & GAConfig ----------------------------------------------
+    // --- GeneConfig & GAConfig
 
     #[test]
     fn gene_bits_respects_range() {
@@ -502,7 +500,6 @@ mod tests {
         assert_eq!(child.genes().len(), 5);
 
         for (i, &b) in child.genes().iter().enumerate() {
-            // must equal either parent's bit at that position
             assert!(b == p1.genes()[i] || b == p2.genes()[i]);
         }
     }

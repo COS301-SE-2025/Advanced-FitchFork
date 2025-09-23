@@ -354,4 +354,57 @@ impl EmailService {
             eprintln!("Failed to send spec-change email: {}", e);
         }
     }
+
+    pub async fn send_marking_done_email(
+        to_email: &str,
+        display_name: &str,
+        submission_id: i64,
+        module_id: i64,
+        assignment_id: i64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let from_email = config::gmail_username();
+        let from_name = config::email_from_name();
+
+        let email = Message::builder()
+        .from(format!("{} <{}>", from_name, from_email).parse().unwrap())
+        .to(to_email.parse().unwrap())
+        .subject(format!("Submission #{} – Marking complete", submission_id))
+        .multipart(
+            MultiPart::alternative()
+                .singlepart(
+                    SinglePart::builder()
+                        .header(header::ContentType::TEXT_PLAIN)
+                        .body(format!(
+                            "Hello {},\n\n\
+                             Your submission #{} for module #{}, assignment #{} has finished marking.\n\n\
+                             You can now view your results on FitchFork.\n\n\
+                             Best regards,\n\
+                             {}",
+                            display_name, submission_id, module_id, assignment_id, from_name
+                        )),
+                )
+                .singlepart(
+                    SinglePart::builder()
+                        .header(header::ContentType::TEXT_HTML)
+                        .body(format!(
+                            "<html>\
+                             <body>\
+                             <p>Hello {},</p>\
+                             <p>Your submission <b>#{}</b> for module <b>#{}</b>, assignment <b>#{}</b> has finished marking.</p>\
+                             <p>You can now view your results on FitchFork.</p>\
+                             <p>Best regards,<br>\
+                             {}</p>\
+                             </body>\
+                             </html>",
+                            display_name, submission_id, module_id, assignment_id, from_name
+                        )),
+                ),
+        )?;
+
+        SMTP_CLIENT
+            .send(email)
+            .await
+            .map(|_| ())
+            .map_err(|e| Box::new(e) as _)
+    }
 }
