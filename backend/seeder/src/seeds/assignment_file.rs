@@ -217,8 +217,7 @@ task3:
   },
   "output": {
     "stdout": true,
-    "stderr": true,
-    "retcode": true
+    "stderr": true
   }
 }
 "#;
@@ -469,8 +468,7 @@ task4: main
   },
   "output": {
     "stdout": true,
-    "stderr": true,
-    "retcode": true
+    "stderr": true
   }
 }
 "#;
@@ -502,107 +500,107 @@ task4: main
             .await;
         }
 
-        //Plagerism Assignment
+        // Plagiarism Assignment (C++)
+        // Plagerism Assignment
         let plag_module: i64 = 10003;
         let plag_assignment: i64 = 10003;
 
-        fn create_plag_main_zip() -> Vec<u8> {
+        fn create_plag_main_zip_cpp() -> Vec<u8> {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                let main_java = r#"
-public class Main {
-    public static void main(String[] args) {
-        String task = args.length > 0 ? args[0] : "task1";
+                // Minimal C++ main that calls into StudentSolution (in memo zip)
+                let main_cpp = r#"
+        #include <iostream>
+        #include <string>
+        #include "StudentSolution.h"
 
-        switch (task) {
-            case "task1":
-                System.out.println("Hello World!");
-                break;
-            default:
-                System.out.println("" + task + " is not a valid task");
+        int main(int argc, char* argv[]) {
+            std::string task = argc > 1 ? argv[1] : "task1";
+
+            if (task == "task1") {
+                std::cout << "&-=-&Task1Subtask1\n" << student::StudentSolution::hello() << std::endl;
+            } else {
+                std::cout << task << " is not a valid task" << std::endl;
+            }
+
+            return 0;
         }
-    }
-}
-"#;
+        "#;
 
-                zip.start_file("Main.java", options).unwrap();
-                zip.write_all(main_java.as_bytes()).unwrap();
+                zip.start_file("Main.cpp", options).unwrap();
+                zip.write_all(main_cpp.as_bytes()).unwrap();
                 zip.finish().unwrap();
             }
             buf.into_inner()
         }
 
-        fn create_plag_memo_zip() -> Vec<u8> {
+        fn create_plag_memo_zip_cpp() -> Vec<u8> {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                let helper_one = r#"
-public class StudentSolution {
-private int helperMultiply1(int a,int b){return a*b + 9;}
+                // Header + implementation (2 files) kept tiny for plagiarism/task wiring
+                let student_solution_h = r#"
+        #pragma once
+        #include <string>
 
-public int fibonacci_U1(int n) {
-int a=0,b=1;
-// U1 tweak
-for(int i=2;i<=n;i++){int tmp=b;b=a+b;a=tmp;}
-return b;
-}
+        namespace student {
+        struct StudentSolution {
+            static std::string hello();
+        };
+        } // namespace student
+        "#;
 
-public int factorial_U1(int n) {
-int f = 1;
-for(int i=1;i<=n;i++) f*=i;
-return f;
-}
+                let student_solution_cpp = r#"
+        #include "StudentSolution.h"
 
-private String helperComment1(){return "Extra comment TXgZpkUF";}
+        namespace student {
+        std::string StudentSolution::hello() {
+            return "Hello World!";
+        }
+        } // namespace student
+        "#;
 
-public int sumArray_U1(int[] arr) {
-int sum = 0;
-for(int n: arr) sum += n;
-// U1 tweak
-return sum;
-}
+                zip.start_file("StudentSolution.h", options).unwrap();
+                zip.write_all(student_solution_h.as_bytes()).unwrap();
 
-
-public String gradeStudent(int score){
-    switch(score/10){
-        case 10: case 9: return "A";
-        case 8: return "B";
-        case 7: return "C";
-        default: return "F";
-    }
-}
-
-public int reverseString_U1(String s) {
-String rev="";
-for(int i=s.length()-1;i>=0;i--)
-rev+=s.charAt(i);
-return rev;
-}
-}
-"#;
-                zip.start_file("StudentSolution.java", options).unwrap();
-                zip.write_all(helper_one.as_bytes()).unwrap();
+                zip.start_file("StudentSolution.cpp", options).unwrap();
+                zip.write_all(student_solution_cpp.as_bytes()).unwrap();
 
                 zip.finish().unwrap();
             }
             buf.into_inner()
         }
 
-        fn create_plag_makefile_zip() -> Vec<u8> {
+        fn create_plag_makefile_zip_cpp() -> Vec<u8> {
             let mut buf = Cursor::new(Vec::new());
             {
                 let mut zip = zip::ZipWriter::new(&mut buf);
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 let makefile_content = r#"
-task1:
-	javac -d /output Main.java StudentSolution.java && java -cp /output Main task1
-"#;
+        CXX = g++
+        CXXFLAGS = -O0 -std=c++17
+        TARGET = main
+
+        SRC = Main.cpp StudentSolution.cpp
+        OBJ = $(SRC:.cpp=.o)
+
+        all: $(TARGET)
+
+        $(TARGET): $(OBJ)
+            $(CXX) $(CXXFLAGS) $^ -o $@
+
+        %.o: %.cpp
+            $(CXX) $(CXXFLAGS) -c $< -o $@
+
+        task1: $(TARGET)
+            ./$(TARGET) task1
+        "#;
 
                 zip.start_file("Makefile", options).unwrap();
                 zip.write_all(makefile_content.as_bytes()).unwrap();
@@ -611,44 +609,43 @@ task1:
             buf.into_inner()
         }
 
-        // New config file content
-        let config_json = r#"
-{
-  "execution": {
-    "timeout_secs": 10,
-    "max_memory": 8589934592,
-    "max_cpus": 2,
-    "max_uncompressed_size": 100000000,
-    "max_processes": 256
-  },
-  "marking": {
-    "marking_scheme": "exact",
-    "feedback_scheme": "auto",
-    "deliminator": "&-=-&"
-  },
-  "project": {
-    "language": "java"
-  },
-  "output": {
-    "stdout": true,
-    "stderr": false,
-    "retcode": false
-  }
-}
-"#;
+        // Config now explicitly cpp
+        let config_json_cpp_plag = r#"
+        {
+        "execution": {
+            "timeout_secs": 10,
+            "max_memory": 8589934592,
+            "max_cpus": 2,
+            "max_uncompressed_size": 100000000,
+            "max_processes": 256
+        },
+        "marking": {
+            "marking_scheme": "exact",
+            "feedback_scheme": "auto",
+            "deliminator": "&-=-&"
+        },
+        "project": {
+            "language": "cpp"
+        },
+        "output": {
+            "stdout": true,
+            "stderr": true
+        }
+        }
+        "#;
 
         let zipped_files = vec![
-            (FileType::Main, "main.zip", create_plag_main_zip()),
-            (FileType::Memo, "memo.zip", create_plag_memo_zip()),
+            (FileType::Main, "main.zip", create_plag_main_zip_cpp()),
+            (FileType::Memo, "memo.zip", create_plag_memo_zip_cpp()),
             (
                 FileType::Makefile,
                 "makefile.zip",
-                create_plag_makefile_zip(),
+                create_plag_makefile_zip_cpp(),
             ),
             (
                 FileType::Config,
                 "config.json",
-                config_json.as_bytes().to_vec(),
+                config_json_cpp_plag.as_bytes().to_vec(),
             ),
         ];
 
@@ -810,7 +807,6 @@ task1:
     "marking_scheme": "exact"
   },
   "output": {
-    "retcode": true,
     "stderr": true,
     "stdout": true
   },

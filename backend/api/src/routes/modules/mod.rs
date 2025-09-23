@@ -12,23 +12,35 @@
 //! ## Usage
 //! Call `modules_routes()` to get a configured `Router` for `/modules` to be mounted in the main app.
 
-use axum::{middleware::{from_fn, from_fn_with_state}, routing::{delete, get, post, put}, Router};
-use delete::{delete_module, bulk_delete_modules};
+use crate::auth::guards::{allow_admin, allow_lecturer};
+use crate::{
+    auth::guards::allow_student,
+    routes::modules::{
+        announcements::announcement_routes, attendance::attendance_routes,
+        personnel::personnel_routes,
+    },
+};
+use assignments::assignment_routes;
+use axum::{
+    Router,
+    middleware::{from_fn, from_fn_with_state},
+    routing::{delete, get, post, put},
+};
+use delete::{bulk_delete_modules, delete_module};
 use get::{get_module, get_modules, get_my_details};
 use post::create;
-use put::{edit_module, bulk_edit_modules};
-use assignments::assignment_routes;
+use put::{bulk_edit_modules, edit_module};
 use util::state::AppState;
-use crate::{auth::guards::{require_admin, require_assigned_to_module, require_lecturer}, routes::modules::{announcements::announcement_routes, personnel::personnel_routes}};
 
+pub mod announcements;
 pub mod assignments;
-pub mod personnel;
+pub mod attendance;
+pub mod common;
 pub mod delete;
 pub mod get;
+pub mod personnel;
 pub mod post;
 pub mod put;
-pub mod common;
-pub mod announcements;
 
 /// Builds and returns the `/modules` route group.
 ///
@@ -47,13 +59,43 @@ pub fn modules_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(get_modules))
         .route("/me", get(get_my_details))
-        .route("/{module_id}", get(get_module).route_layer(from_fn_with_state(app_state.clone(),require_assigned_to_module)))
-        .route("/", post(create).route_layer(from_fn(require_admin)))
-        .route("/{module_id}", put(edit_module).route_layer(from_fn(require_admin)))
-        .route("/{module_id}", delete(delete_module).route_layer(from_fn(require_admin)))
-        .route("/bulk", delete(bulk_delete_modules).route_layer(from_fn(require_admin)))
-        .route("/bulk", put(bulk_edit_modules).route_layer(from_fn(require_admin)))
-        .nest("/{module_id}/assignments", assignment_routes(app_state.clone()))
-        .nest("/{module_id}/personnel", personnel_routes().route_layer(from_fn_with_state(app_state.clone(),require_lecturer)))
-        .nest("/{module_id}/announcements", announcement_routes(app_state.clone()).route_layer(from_fn_with_state(app_state.clone(), require_assigned_to_module)))
+        .route(
+            "/{module_id}",
+            get(get_module).route_layer(from_fn_with_state(app_state.clone(), allow_student)),
+        )
+        .route("/", post(create).route_layer(from_fn(allow_admin)))
+        .route(
+            "/{module_id}",
+            put(edit_module).route_layer(from_fn(allow_admin)),
+        )
+        .route(
+            "/{module_id}",
+            delete(delete_module).route_layer(from_fn(allow_admin)),
+        )
+        .route(
+            "/bulk",
+            delete(bulk_delete_modules).route_layer(from_fn(allow_admin)),
+        )
+        .route(
+            "/bulk",
+            put(bulk_edit_modules).route_layer(from_fn(allow_admin)),
+        )
+        .nest(
+            "/{module_id}/assignments",
+            assignment_routes(app_state.clone()),
+        )
+        .nest(
+            "/{module_id}/personnel",
+            personnel_routes().route_layer(from_fn_with_state(app_state.clone(), allow_lecturer)),
+        )
+        .nest(
+            "/{module_id}/announcements",
+            announcement_routes(app_state.clone())
+                .route_layer(from_fn_with_state(app_state.clone(), allow_student)),
+        )
+        .nest(
+            "/{module_id}/attendance",
+            attendance_routes(app_state.clone())
+                .route_layer(from_fn_with_state(app_state.clone(), allow_student)),
+        )
 }

@@ -1,50 +1,50 @@
-import { useMemo, useRef, useState } from 'react';
-import { Calendar, Badge, Modal, Typography, Empty, Button, Space, Select, Segmented } from 'antd';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Calendar, Badge, Modal, Typography, Empty, Button, Space, Select, Segmented, Spin } from 'antd';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import type { CalendarProps, BadgeProps, SelectProps } from 'antd';
 import dayjs from 'dayjs';
+import { getMyEvents, type CalendarEvent } from '@/services/me/events/get';
+import { Link } from 'react-router-dom';
 
-type EventItem = { type: BadgeProps['status']; content: string };
-
-const getListData = (value: Dayjs): EventItem[] => {
-  switch (value.date()) {
-    case 8:
-      return [
-        { type: 'warning', content: 'This is warning event.' },
-        { type: 'success', content: 'This is usual event.' },
-      ];
-    case 10:
-      return [
-        { type: 'warning', content: 'This is warning event.' },
-        { type: 'success', content: 'This is usual event.' },
-        { type: 'error', content: 'This is error event.' },
-      ];
-    case 15:
-      return [
-        { type: 'warning', content: 'This is warning event' },
-        { type: 'success', content: 'This is very long usual event......' },
-        { type: 'error', content: 'This is error event 1.' },
-        { type: 'error', content: 'This is error event 2.' },
-        { type: 'error', content: 'This is error event 3.' },
-        { type: 'error', content: 'This is error event 4.' },
-      ];
-    default:
-      return [];
-  }
+type EventItem = {
+  type: BadgeProps['status'];
+  content: string;
+  moduleId: number;
+  assignmentId: number;
+  href: string;
 };
 
-const getMonthData = (value: Dayjs) => (value.month() === 8 ? 1394 : undefined);
+const normalizeBadgeStatus = (value: string): BadgeProps['status'] => {
+  const allowed: BadgeProps['status'][] = ['success', 'processing', 'default', 'error', 'warning'];
+  return (allowed.includes(value as BadgeProps['status']) ? value : 'default') as BadgeProps['status'];
+};
 
 export default function CalendarPage() {
   const [value, setValue] = useState<Dayjs>(dayjs());
+  const [panelDate, setPanelDate] = useState<Dayjs>(dayjs());
   const [mode, setMode] = useState<'month' | 'year'>('month');
 
   const [open, setOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<EventItem[]>([]);
+  const [eventsByDay, setEventsByDay] = useState<Record<string, EventItem[]>>({});
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const eventsKey = useMemo(() => (d: Dayjs) => d.format('YYYY-MM-DD'), []);
+  const eventsKey = useCallback((d: Dayjs) => d.format('YYYY-MM-DD'), []);
+  const listDataForDate = useCallback(
+    (d: Dayjs) => eventsByDay[eventsKey(d)] ?? [],
+    [eventsByDay, eventsKey]
+  );
+  const monthCounts = useMemo(() => {
+    const totals: Record<string, number> = {};
+    Object.entries(eventsByDay).forEach(([dateKey, events]) => {
+      const key = dayjs(dateKey).format('YYYY-MM');
+      totals[key] = (totals[key] ?? 0) + events.length;
+    });
+    return totals;
+  }, [eventsByDay]);
 
   // Prevent modal when navigating via header controls
   const suppressNextSelect = useRef(false);
@@ -55,8 +55,68 @@ export default function CalendarPage() {
       fn(...args);
     };
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchEvents = async () => {
+      setLoadingEvents(true);
+      setLoadError(null);
+
+      try {
+        const rangeUnit = mode === 'year' ? 'year' : 'month';
+        const from = panelDate.startOf(rangeUnit).format('YYYY-MM-DD');
+        const to = panelDate.endOf(rangeUnit).format('YYYY-MM-DD');
+
+        const response = await getMyEvents({ from, to });
+        if (cancelled) return;
+
+        const nextEvents: Record<string, EventItem[]> = {};
+        const sortedEntries = Object.entries(response.data.events) as [
+          string,
+          CalendarEvent[],
+        ][];
+
+        sortedEntries.sort((a, b) => dayjs(a[0]).valueOf() - dayjs(b[0]).valueOf());
+
+        sortedEntries.forEach(([timestamp, items]) => {
+          const dayKey = dayjs(timestamp).format('YYYY-MM-DD');
+          const mapped = items.map((item) => ({
+            type: normalizeBadgeStatus(item.type),
+            content: item.content,
+            moduleId: item.module_id,
+            assignmentId: item.assignment_id,
+            href: `/modules/${item.module_id}/assignments/${item.assignment_id}`,
+          }));
+          nextEvents[dayKey] = [...(nextEvents[dayKey] ?? []), ...mapped];
+        });
+
+        setEventsByDay(nextEvents);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Failed to load events', error);
+        setEventsByDay({});
+        setLoadError('Unable to load events right now.');
+      } finally {
+        if (!cancelled) {
+          setLoadingEvents(false);
+        }
+      }
+    };
+
+    fetchEvents();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, panelDate]);
+
+  useEffect(() => {
+    if (!selectedDate) return;
+    setSelectedEvents(listDataForDate(selectedDate));
+  }, [listDataForDate, selectedDate]);
+
   const dateCellRender = (current: Dayjs) => {
-    const listData = getListData(current);
+    const listData = listDataForDate(current);
     if (listData.length === 0) return null;
 
     return (
@@ -64,7 +124,7 @@ export default function CalendarPage() {
         {/* Mobile: dots only (max 3) + "+N" */}
         <ul className="flex flex-wrap gap-1 sm:hidden">
           {listData.slice(0, 3).map((item, idx) => (
-            <li key={`${eventsKey(current)}-m-${idx}`}>
+            <li key={`${eventsKey(current)}-m-${idx}`} title={item.content}>
               <Badge status={item.type} />
             </li>
           ))}
@@ -75,7 +135,14 @@ export default function CalendarPage() {
         <ul className="hidden sm:flex sm:flex-wrap sm:gap-1">
           {listData.map((item, idx) => (
             <li key={`${eventsKey(current)}-d-${idx}`}>
-              <Badge status={item.type} text={item.content} />
+              <Badge
+                status={item.type}
+                text={
+                  <Link to={item.href} className="text-inherit hover:underline">
+                    {item.content}
+                  </Link>
+                }
+              />
             </li>
           ))}
         </ul>
@@ -84,11 +151,11 @@ export default function CalendarPage() {
   };
 
   const monthCellRender = (current: Dayjs) => {
-    const num = getMonthData(current);
+    const num = monthCounts[current.format('YYYY-MM')];
     return num ? (
       <div className="notes-month text-center">
         <section className="text-xl font-semibold">{num}</section>
-        <span className="text-xs text-gray-500">Backlog number</span>
+        <span className="text-xs text-gray-500">Events</span>
       </div>
     ) : null;
   };
@@ -105,7 +172,7 @@ export default function CalendarPage() {
       suppressNextSelect.current = false;
       return;
     }
-    const events = getListData(d);
+    const events = listDataForDate(d);
     if (events.length === 0) return; // block empty days
 
     setSelectedDate(d);
@@ -129,22 +196,33 @@ export default function CalendarPage() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
-        <Calendar
-          value={value}
-          mode={mode}
-          onPanelChange={(d, m) => {
-            setValue(d);
-            setMode(m);
-          }}
-          className="!p-4 sm:!p-6 !h-full"
-          onChange={(d) => setValue(d)}
-          onSelect={handleSelect}
-          cellRender={cellRender}
-          headerRender={({ value: v, type, onChange, onTypeChange }) => {
-            const sync = (d: Dayjs) => {
-              onChange(d);
+        {loadError && (
+          <div className="px-4 pb-2">
+            <Typography.Text type="danger">{loadError}</Typography.Text>
+          </div>
+        )}
+        <Spin spinning={loadingEvents} tip="Loading events..." className="block">
+          <Calendar
+            value={value}
+            mode={mode}
+            onPanelChange={(d, m) => {
+              setPanelDate(d);
               setValue(d);
-            };
+              setMode(m);
+            }}
+            className="!p-4 sm:!p-6 !h-full"
+            onChange={(d) => {
+              setValue(d);
+              setPanelDate(d);
+            }}
+            onSelect={handleSelect}
+            cellRender={cellRender}
+            headerRender={({ value: v, type, onChange, onTypeChange }) => {
+              const sync = (d: Dayjs) => {
+                onChange(d);
+                setValue(d);
+                setPanelDate(d);
+              };
 
             const prev = guard(() => {
               const d = type === 'year' ? v.add(-1, 'year') : v.add(-1, 'month');
@@ -248,6 +326,7 @@ export default function CalendarPage() {
             );
           }}
         />
+        </Spin>
 
         <Modal
           open={open}
@@ -265,7 +344,9 @@ export default function CalendarPage() {
               {selectedEvents.map((ev, i) => (
                 <li key={`modal-${i}`} className="flex items-center gap-2">
                   <Badge status={ev.type} />
-                  <Typography.Text>{ev.content}</Typography.Text>
+                  <Link to={ev.href} className="text-inherit hover:underline">
+                    {ev.content}
+                  </Link>
                 </li>
               ))}
             </ul>

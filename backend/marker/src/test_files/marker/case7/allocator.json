@@ -6,10 +6,16 @@
         "name": "Broken",
         "value": 10,
         "subsections": [
-          { "name": "First", "value": 5 },
-          { "name": "Second", "value": 5 }
+          {
+            "name": "First",
+            "value": 5
+          },
+          {
+            "name": "Second",
+            "value": 5
+          }
         ]
       }
     }
   }
-} 
+}

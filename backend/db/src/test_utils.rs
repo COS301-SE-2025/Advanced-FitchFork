@@ -1,5 +1,5 @@
-use sea_orm::{Database, DatabaseConnection};
 use migration::Migrator;
+use sea_orm::{Database, DatabaseConnection};
 use sea_orm_migration::MigratorTrait;
 
 pub async fn setup_test_db() -> DatabaseConnection {

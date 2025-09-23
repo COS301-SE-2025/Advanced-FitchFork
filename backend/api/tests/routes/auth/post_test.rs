@@ -1,25 +1,24 @@
 #[cfg(test)]
 mod tests {
-    use db::{
-        models::{
-            user::Model as UserModel,
-            password_reset_token::Model as PasswordResetTokenModel,
-        },
-    };
+    use crate::helpers::app::{make_test_app, make_test_app_with_storage};
+    use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode, header::CONTENT_TYPE},
         response::Response,
     };
-    use tower::ServiceExt;
+    use db::models::{
+        password_reset_token::Model as PasswordResetTokenModel, user::Model as UserModel,
+    };
     use serde_json::{Value, json};
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
-    use tempfile::tempdir;
     use serial_test::serial;
+    use tempfile::tempdir;
+    use tower::ServiceExt;
 
     async fn get_json_body(response: Response) -> Value {
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         serde_json::from_slice(&body).unwrap()
     }
 
@@ -58,7 +57,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_invalid_email() {
         let (app, _) = make_test_app().await;
-        
+
         let payload = json!({"username": "testuser456", "email": "not-an-email", "password": "securepassword456"});
         let uri = "/api/auth/register";
         let req = Request::builder()
@@ -80,7 +79,7 @@ mod tests {
     #[tokio::test]
     async fn test_register_short_password() {
         let (app, _) = make_test_app().await;
-        
+
         let payload = json!({"username": "testuser789", "email": "testuser789@example.com", "password": "short"});
         let uri = "/api/auth/register";
         let req = Request::builder()
@@ -95,7 +94,12 @@ mod tests {
 
         let json = get_json_body(response).await;
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Password must be at least 8 characters"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Password must be at least 8 characters")
+        );
     }
 
     /// Test Case: User Registration with Duplicate Email
@@ -103,9 +107,15 @@ mod tests {
     async fn test_register_duplicate_email() {
         let (app, app_state) = make_test_app().await;
 
-        let _existing_user = UserModel::create(app_state.db(), "existinguser", "duplicate@test.com", "existingpass", false)
-            .await
-            .expect("Failed to create existing user");
+        let _existing_user = UserModel::create(
+            app_state.db(),
+            "existinguser",
+            "duplicate@test.com",
+            "existingpass",
+            false,
+        )
+        .await
+        .expect("Failed to create existing user");
 
         let payload = json!({"username": "newuser", "email": "duplicate@test.com", "password": "newuserpassword"});
         let uri = "/api/auth/register";
@@ -129,9 +139,15 @@ mod tests {
     async fn test_register_duplicate_username() {
         let (app, app_state) = make_test_app().await;
 
-        let _existing_user = UserModel::create(app_state.db(), "duplicateuser", "original@test.com", "existingpass", false)
-            .await
-            .expect("Failed to create existing user");
+        let _existing_user = UserModel::create(
+            app_state.db(),
+            "duplicateuser",
+            "original@test.com",
+            "existingpass",
+            false,
+        )
+        .await
+        .expect("Failed to create existing user");
 
         let payload = json!({"username": "duplicateuser", "email": "newuser@test.com", "password": "newuserpassword"});
         let uri = "/api/auth/register";
@@ -147,7 +163,10 @@ mod tests {
 
         let json = get_json_body(response).await;
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "A user with this student number already exists");
+        assert_eq!(
+            json["message"],
+            "A user with this student number already exists"
+        );
     }
 
     /// Test Case: Successful User Login
@@ -156,9 +175,15 @@ mod tests {
         let (app, app_state) = make_test_app().await;
 
         let user_password = "correctpassword";
-        let user = UserModel::create(app_state.db(), "logintestuser", "login@test.com", user_password, false)
-            .await
-            .expect("Failed to create user for login");
+        let user = UserModel::create(
+            app_state.db(),
+            "logintestuser",
+            "login@test.com",
+            user_password,
+            false,
+        )
+        .await
+        .expect("Failed to create user for login");
 
         let payload = json!({"username": "logintestuser", "password": user_password});
         let uri = "/api/auth/login";
@@ -191,9 +216,15 @@ mod tests {
     async fn test_login_invalid_password() {
         let (app, app_state) = make_test_app().await;
 
-        let _user = UserModel::create(app_state.db(), "wrongpasstest", "wrongpass@test.com", "realpassword", false)
-            .await
-            .expect("Failed to create user for login");
+        let _user = UserModel::create(
+            app_state.db(),
+            "wrongpasstest",
+            "wrongpass@test.com",
+            "realpassword",
+            false,
+        )
+        .await
+        .expect("Failed to create user for login");
 
         let payload = json!({"username": "wrongpasstest", "password": "wrongpassword"});
         let uri = "/api/auth/login";
@@ -216,7 +247,7 @@ mod tests {
     #[tokio::test]
     async fn test_login_nonexistent_user() {
         let (app, _) = make_test_app().await;
-        
+
         let payload = json!({"username": "nonexistentuser", "password": "anypassword"});
         let uri = "/api/auth/login";
         let req = Request::builder()
@@ -239,9 +270,15 @@ mod tests {
     async fn test_request_password_reset_success() {
         let (app, app_state) = make_test_app().await;
 
-        let _user = UserModel::create(app_state.db(), "resetrequser", "resetreq@test.com", "oldpassword", false)
-            .await
-            .expect("Failed to create user for reset request");
+        let _user = UserModel::create(
+            app_state.db(),
+            "resetrequser",
+            "resetreq@test.com",
+            "oldpassword",
+            false,
+        )
+        .await
+        .expect("Failed to create user for reset request");
 
         let payload = json!({"email": "resetreq@test.com"});
         let uri = "/api/auth/request-password-reset";
@@ -257,7 +294,10 @@ mod tests {
 
         let json = get_json_body(response).await;
         assert_eq!(json["success"], true);
-        assert_eq!(json["message"], "If the account exists, a reset link has been sent.");
+        assert_eq!(
+            json["message"],
+            "If the account exists, a reset link has been sent."
+        );
         assert_eq!(json["data"], serde_json::Value::Null);
     }
 
@@ -265,7 +305,7 @@ mod tests {
     #[tokio::test]
     async fn test_request_password_reset_invalid_email() {
         let (app, _) = make_test_app().await;
-        
+
         let payload = json!({"email": "invalid-email-format"});
         let uri = "/api/auth/request-password-reset";
         let req = Request::builder()
@@ -280,17 +320,28 @@ mod tests {
 
         let json = get_json_body(response).await;
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Invalid email format"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Invalid email format")
+        );
     }
 
-     /// Test Case: Successful Password Reset Token Verification
+    /// Test Case: Successful Password Reset Token Verification
     #[tokio::test]
     async fn test_verify_reset_token_success() {
         let (app, app_state) = make_test_app().await;
 
-        let user = UserModel::create(app_state.db(), "verifytokenuser", "verifytoken@test.com", "oldpassword", false)
-            .await
-            .expect("Failed to create user for token verification");
+        let user = UserModel::create(
+            app_state.db(),
+            "verifytokenuser",
+            "verifytoken@test.com",
+            "oldpassword",
+            false,
+        )
+        .await
+        .expect("Failed to create user for token verification");
 
         let token_model = PasswordResetTokenModel::create(app_state.db(), user.id, 15)
             .await
@@ -310,7 +361,10 @@ mod tests {
 
         let json = get_json_body(response).await;
         assert_eq!(json["success"], true);
-        assert_eq!(json["message"], "Token verified. You may now reset your password.");
+        assert_eq!(
+            json["message"],
+            "Token verified. You may now reset your password."
+        );
         let data = &json["data"];
         assert_eq!(data["email_hint"], "v***@test.com");
     }
@@ -319,7 +373,7 @@ mod tests {
     #[tokio::test]
     async fn test_verify_reset_token_invalid() {
         let (app, _) = make_test_app().await;
-        
+
         let payload = json!({"token": "definitelynotavalidtoken123456"});
         let uri = "/api/auth/verify-reset-token";
         let req = Request::builder()
@@ -343,16 +397,22 @@ mod tests {
         let (app, app_state) = make_test_app().await;
 
         let original_password = "originalpassword";
-        let user = UserModel::create(app_state.db(), "resetpassuser", "resetpass@test.com", original_password, false)
-            .await
-            .expect("Failed to create user for password reset");
+        let user = UserModel::create(
+            app_state.db(),
+            "resetpassuser",
+            "resetpass@test.com",
+            original_password,
+            false,
+        )
+        .await
+        .expect("Failed to create user for password reset");
 
         let token_model = PasswordResetTokenModel::create(app_state.db(), user.id, 15)
             .await
             .expect("Failed to create reset token for password reset");
 
         let new_password = "brandnewsecurepassword";
-        
+
         let payload = json!({"token": token_model.token, "new_password": new_password});
         let uri = "/api/auth/reset-password";
         let req = Request::builder()
@@ -375,7 +435,9 @@ mod tests {
             .method("POST")
             .uri("/api/auth/login")
             .header(CONTENT_TYPE, "application/json")
-            .body(AxumBody::from(serde_json::to_vec(&login_payload_old).unwrap()))
+            .body(AxumBody::from(
+                serde_json::to_vec(&login_payload_old).unwrap(),
+            ))
             .unwrap();
 
         let login_response_old = app.clone().oneshot(login_req_old).await.unwrap();
@@ -386,7 +448,9 @@ mod tests {
             .method("POST")
             .uri("/api/auth/login")
             .header(CONTENT_TYPE, "application/json")
-            .body(AxumBody::from(serde_json::to_vec(&login_payload_new).unwrap()))
+            .body(AxumBody::from(
+                serde_json::to_vec(&login_payload_new).unwrap(),
+            ))
             .unwrap();
 
         let login_response_new = app.oneshot(login_req_new).await.unwrap();
@@ -412,7 +476,10 @@ mod tests {
 
         let json = get_json_body(response).await;
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Reset failed. The token may be invalid or expired.");
+        assert_eq!(
+            json["message"],
+            "Reset failed. The token may be invalid or expired."
+        );
     }
 
     /// Test Case: Password Reset with Short New Password
@@ -420,9 +487,15 @@ mod tests {
     async fn test_reset_password_short_new_password() {
         let (app, app_state) = make_test_app().await;
 
-        let user = UserModel::create(app_state.db(), "shortpassuser", "shortpass@test.com", "oldpass", false)
-            .await
-            .expect("Failed to create user");
+        let user = UserModel::create(
+            app_state.db(),
+            "shortpassuser",
+            "shortpass@test.com",
+            "oldpass",
+            false,
+        )
+        .await
+        .expect("Failed to create user");
         let token_model = PasswordResetTokenModel::create(app_state.db(), user.id, 15)
             .await
             .expect("Failed to create token");
@@ -441,23 +514,35 @@ mod tests {
 
         let json = get_json_body(response).await;
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Password must be at least 8 characters"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Password must be at least 8 characters")
+        );
     }
 
     /// Test Case: Successful Profile Picture Upload
     #[tokio::test]
     #[serial]
     async fn test_upload_profile_picture_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, temp_dir) = make_test_app_with_storage().await;
 
-        let user = UserModel::create(app_state.db(), "avataruser", "avatar@test.com", "avatarpass", false)
-            .await
-            .expect("Failed to create user for avatar upload");
+        // Create a test user
+        let user = UserModel::create(
+            app_state.db(),
+            "avataruser",
+            "avatar@test.com",
+            "avatarpass",
+            false,
+        )
+        .await
+        .expect("Failed to create user for avatar upload");
 
-        let temp_dir = tempdir().expect("Failed to create temporary directory for avatars");
-        unsafe { std::env::set_var("USER_PROFILE_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
-
+        // Generate an auth token
         let (token, _) = generate_jwt(user.id, user.admin);
+
+        // Build multipart body with fake file content
         let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
         let file_content = b"fake_jpeg_data_content";
         let multipart_body = format!(
@@ -466,29 +551,40 @@ mod tests {
             std::str::from_utf8(file_content).unwrap(),
             boundary
         );
-        let uri = "/api/auth/upload-profile-picture";
+
+        // Send request
         let req = Request::builder()
             .method("POST")
-            .uri(uri)
+            .uri("/api/auth/upload-profile-picture")
             .header("Authorization", format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(AxumBody::from(multipart_body))
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
+        // Parse JSON response
         let json = get_json_body(response).await;
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Profile picture uploaded.");
-        let data = &json["data"];
-        let path = data["profile_picture_path"].as_str().expect("Path should be a string");
+        assert!(json.get("data").is_none() || json["data"].is_null());
 
-        assert!(path.starts_with(&format!("user_{}", user.id)), "Path '{}' does not start with expected prefix 'user_{}'", path, user.id);
-        assert!(path.ends_with(".jpg"));
-
-        let full_path = temp_dir.path().join(path);
-        assert!(std::fs::metadata(&full_path).is_ok());
+        // Verify file was written to STORAGE_ROOT/users/user_{id}/profile/avatar.jpg
+        let full_path = temp_dir
+            .path()
+            .join("users")
+            .join(format!("user_{}", user.id))
+            .join("profile")
+            .join("avatar.jpg");
+        assert!(
+            std::fs::metadata(&full_path).is_ok(),
+            "Expected avatar file at {:?}",
+            full_path
+        );
         let saved_content = std::fs::read(&full_path).expect("Failed to read saved avatar file");
         assert_eq!(saved_content, file_content);
     }
@@ -499,12 +595,23 @@ mod tests {
     async fn test_upload_profile_picture_invalid_type() {
         let (app, app_state) = make_test_app().await;
 
-        let user = UserModel::create(app_state.db(), "invalidtypeuser", "invalidtype@test.com", "pass", false)
-            .await
-            .expect("Failed to create user");
+        let user = UserModel::create(
+            app_state.db(),
+            "invalidtypeuser",
+            "invalidtype@test.com",
+            "pass",
+            false,
+        )
+        .await
+        .expect("Failed to create user");
 
         let temp_dir = tempdir().expect("Failed to create temp dir");
-        unsafe { std::env::set_var("USER_PROFILE_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
+        unsafe {
+            std::env::set_var(
+                "USER_PROFILE_STORAGE_ROOT",
+                temp_dir.path().to_str().unwrap(),
+            );
+        }
 
         let (token, _) = generate_jwt(user.id, user.admin);
         let boundary = "----InvalidTypeBoundary";
@@ -520,7 +627,10 @@ mod tests {
             .method("POST")
             .uri(uri)
             .header("Authorization", format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(AxumBody::from(multipart_body))
             .unwrap();
 
@@ -539,7 +649,12 @@ mod tests {
         let (app, _) = make_test_app().await;
 
         let temp_dir = tempdir().expect("Failed to create temp dir");
-        unsafe { std::env::set_var("USER_PROFILE_STORAGE_ROOT", temp_dir.path().to_str().unwrap()); }
+        unsafe {
+            std::env::set_var(
+                "USER_PROFILE_STORAGE_ROOT",
+                temp_dir.path().to_str().unwrap(),
+            );
+        }
 
         let boundary = "----NoAuthBoundary";
         let file_content = b"some_data";
@@ -553,7 +668,10 @@ mod tests {
         let req = Request::builder()
             .method("POST")
             .uri(uri)
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(AxumBody::from(multipart_body))
             .unwrap();
 
@@ -567,9 +685,15 @@ mod tests {
         let (app, app_state) = make_test_app().await;
 
         let original_password = "originalPassword123";
-        let user = UserModel::create(app_state.db(), "changepassuser", "changepass@test.com", original_password, false)
-            .await
-            .expect("Failed to create user for password change");
+        let user = UserModel::create(
+            app_state.db(),
+            "changepassuser",
+            "changepass@test.com",
+            original_password,
+            false,
+        )
+        .await
+        .expect("Failed to create user for password change");
 
         let (token, _) = generate_jwt(user.id, user.admin);
         let payload = json!({
@@ -592,7 +716,8 @@ mod tests {
         assert_eq!(json["success"], true);
         assert_eq!(json["message"], "Password changed successfully.");
 
-        let login_payload = json!({"username": "changepassuser", "password": "NewSecurePassword456"});
+        let login_payload =
+            json!({"username": "changepassuser", "password": "NewSecurePassword456"});
         let login_req = Request::builder()
             .method("POST")
             .uri("/api/auth/login")
@@ -603,12 +728,15 @@ mod tests {
         let login_response = app.clone().oneshot(login_req).await.unwrap();
         assert_eq!(login_response.status(), StatusCode::OK);
 
-        let old_login_payload = json!({"username": "changepassuser", "password": original_password});
+        let old_login_payload =
+            json!({"username": "changepassuser", "password": original_password});
         let old_login_req = Request::builder()
             .method("POST")
             .uri("/api/auth/login")
             .header(CONTENT_TYPE, "application/json")
-            .body(AxumBody::from(serde_json::to_vec(&old_login_payload).unwrap()))
+            .body(AxumBody::from(
+                serde_json::to_vec(&old_login_payload).unwrap(),
+            ))
             .unwrap();
 
         let old_login_response = app.oneshot(old_login_req).await.unwrap();
@@ -620,9 +748,15 @@ mod tests {
     async fn test_change_password_incorrect_current() {
         let (app, app_state) = make_test_app().await;
 
-        let user = UserModel::create(app_state.db(), "wrongpassuser", "wrongpass@test.com", "correctPassword", false)
-            .await
-            .expect("Failed to create user");
+        let user = UserModel::create(
+            app_state.db(),
+            "wrongpassuser",
+            "wrongpass@test.com",
+            "correctPassword",
+            false,
+        )
+        .await
+        .expect("Failed to create user");
 
         let (token, _) = generate_jwt(user.id, user.admin);
         let payload = json!({
@@ -651,9 +785,15 @@ mod tests {
     async fn test_change_password_short_new() {
         let (app, app_state) = make_test_app().await;
 
-        let user = UserModel::create(app_state.db(), "shortpassuser", "shortpass@test.com", "currentPassword", false)
-            .await
-            .expect("Failed to create user");
+        let user = UserModel::create(
+            app_state.db(),
+            "shortpassuser",
+            "shortpass@test.com",
+            "currentPassword",
+            false,
+        )
+        .await
+        .expect("Failed to create user");
 
         let (token, _) = generate_jwt(user.id, user.admin);
         let payload = json!({
@@ -674,7 +814,12 @@ mod tests {
 
         let json = get_json_body(response).await;
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap().contains("Password must be at least 8 characters"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("Password must be at least 8 characters")
+        );
     }
 
     /// Test Case: Missing Authentication Token
@@ -707,10 +852,16 @@ mod tests {
     async fn test_change_password_invalid_token() {
         let (app, app_state) = make_test_app().await;
 
-        let user = UserModel::create(app_state.db(), "invalidtokenuser", "invalidtoken@test.com", "password", false)
-            .await
-            .expect("Failed to create user");
-   
+        let user = UserModel::create(
+            app_state.db(),
+            "invalidtokenuser",
+            "invalidtoken@test.com",
+            "password",
+            false,
+        )
+        .await
+        .expect("Failed to create user");
+
         let (mut token, _) = generate_jwt(user.id, user.admin);
         token.push_str("invalid");
         let payload = json!({

@@ -9,6 +9,7 @@ type MyAnnouncementsOptions = {
   role?: ModuleRole;
   year?: number;
   pinned?: boolean;
+  module_id?: number;
 } & PaginationRequest;
 
 type MyAnnouncementItem = {

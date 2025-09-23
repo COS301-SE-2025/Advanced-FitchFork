@@ -1,20 +1,16 @@
+use crate::response::ApiResponse;
 use axum::{
-    extract::{State, Multipart, Path},
+    Json,
+    extract::{Multipart, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use db::models::{
     assignment_file::{FileType, Model as FileModel},
     user::Model as UserModel,
 };
 use serde::Serialize;
-use db::models::assignment_file::{
-    FileType,
-    Model as FileModel,
-};
 use util::state::AppState;
-use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
 pub struct UploadedFileMetadata {

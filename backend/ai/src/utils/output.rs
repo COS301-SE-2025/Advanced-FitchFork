@@ -1,11 +1,10 @@
-use db::models::assignment_memo_output::Model as MemoOutputModel;
 use db::models::assignment_submission_output::Entity as SubmissionOutputEntity;
-use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 use db::models::assignment_task::Entity as AssignmentTaskEntity;
 
 use sea_orm::EntityTrait;
 use std::fs;
 use std::io::{self, ErrorKind};
+use util::paths::{memo_output_dir, submission_output_dir};
 
 #[allow(dead_code)]
 pub struct Output;
@@ -15,10 +14,7 @@ impl Output {
     /// returning Vec<(task_number, file_contents_as_string)>
     #[allow(dead_code)]
     pub fn get_memo_output(module_id: i64, assignment_id: i64) -> io::Result<Vec<(i64, String)>> {
-        let dir_path = MemoOutputModel::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join("memo_output");
+        let dir_path = memo_output_dir(module_id, assignment_id);
 
         if !dir_path.exists() {
             return Err(io::Error::new(
@@ -47,7 +43,7 @@ impl Output {
     }
 
     /// Get all submission output files for the given parameters,
-    /// returning Vec<(task_number, file_contents_as_string)>
+    /// returning Vec<(task_id, file_contents_as_string)>
     #[allow(dead_code)]
     pub async fn get_submission_output_no_coverage(
         db: &sea_orm::DatabaseConnection,
@@ -94,13 +90,7 @@ impl Output {
         attempt_number: i64,
         code_coverage: bool,
     ) -> io::Result<Vec<(i64, String)>> {
-        let dir_path = SubmissionOutputModel::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join("assignment_submissions")
-            .join(format!("user_{user_id}"))
-            .join(format!("attempt_{attempt_number}"))
-            .join("submission_output");
+        let dir_path = submission_output_dir(module_id, assignment_id, user_id, attempt_number);
 
         if !dir_path.exists() {
             return Err(io::Error::new(

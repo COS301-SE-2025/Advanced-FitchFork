@@ -1,6 +1,31 @@
 import type { Timestamp } from "@/types/common";
 
 // ─────────────────────────────────────────────────────────────
+// Live submission status/phase (shared)
+// ─────────────────────────────────────────────────────────────
+export const SUBMISSION_STATUSES = [
+  'queued',
+  'running',
+  'grading',
+  'graded',
+  'failed_upload',
+  'failed_compile',
+  'failed_execution',
+  'failed_grading',
+  'failed_internal',
+] as const;
+export type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
+
+export const SUBMISSION_PHASES = [
+  'queued',
+  'executing',
+  'grading',
+  'finalizing',
+  'done',
+] as const;
+export type SubmissionPhase = (typeof SUBMISSION_PHASES)[number];
+
+// ─────────────────────────────────────────────────────────────
 // Shared Types
 // ─────────────────────────────────────────────────────────────
 
@@ -13,9 +38,10 @@ export interface Submission extends Timestamp {
   is_practice: boolean;
   is_late: boolean;
   ignored: boolean;
+  status: SubmissionStatus;
   score?: number;
   tasks?: TaskBreakdown[];
-  code_coverage?: CodeCoverageEntry[];
+  code_coverage?: CodeCoverage;
   user?: SubmissionUserInfo;
 }
 
@@ -39,10 +65,8 @@ export interface TaskBreakdown {
   subsections: SubsectionBreakdown[];
 }
 
-export interface CodeCoverageEntry {
-  class: string;
-  percentage: number;
-}
+export interface CodeCoverageFile { path: string; earned: number; total: number }
+export interface CodeCoverage { summary?: SubmissionMark; files: CodeCoverageFile[] }
 
 export interface SubmissionUserInfo {
   id: number;

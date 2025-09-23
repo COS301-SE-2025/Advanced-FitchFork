@@ -11,6 +11,7 @@ use db::models::user::{ActiveModel as UserActiveModel, Entity as UserEntity};
 use db::test_utils::setup_test_db;
 use sea_orm::DatabaseConnection;
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+use util::paths::{attempt_dir, storage_root};
 
 async fn seed_user(db: &DatabaseConnection) -> i64 {
     let user_id = 1;
@@ -48,12 +49,13 @@ async fn seed_submission(db: &DatabaseConnection, assignment_id: i64) -> Submiss
 
     let module_id = assignment.module_id;
 
-    let submission_dir =
-        SubmissionModel::full_directory_path(module_id, assignment_id, user_id, attempt);
+    let submission_dir = attempt_dir(module_id, assignment_id, user_id, attempt);
+    std::fs::create_dir_all(&submission_dir).expect("Failed to create attempt dir");
+
     let file_path = submission_dir.join("481.zip");
 
     let relative_path = file_path
-        .strip_prefix(SubmissionModel::storage_root())
+        .strip_prefix(storage_root())
         .unwrap()
         .to_string_lossy()
         .to_string();

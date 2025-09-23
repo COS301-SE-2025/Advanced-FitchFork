@@ -41,7 +41,7 @@
 //! This module includes comprehensive tests for valid and invalid report files, covering edge cases and error reporting.
 
 /// The top-level schema for a coverage report, containing summary and per-file coverage.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CoverageReport {
     /// Total number of files in the report.
     pub total_files: u64,
@@ -56,7 +56,7 @@ pub struct CoverageReport {
 }
 
 /// Represents coverage information for a single file.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileCoverage {
     /// The file path.
     pub path: String,

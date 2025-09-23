@@ -1,6 +1,6 @@
-use sea_orm::{entity::prelude::*, ActiveValue::Set};
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use sea_orm::{ActiveValue::Set, entity::prelude::*};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Deserialize, Serialize)]
 #[sea_orm(table_name = "ticket_messages")]
@@ -69,11 +69,7 @@ impl Model {
         active.insert(db).await
     }
 
-    pub async fn update(
-        db: &DbConn,
-        message_id: i64,
-        content: &str,
-    ) -> Result<Model, DbErr> {
+    pub async fn update(db: &DbConn, message_id: i64, content: &str) -> Result<Model, DbErr> {
         let now = Utc::now();
 
         let active = ActiveModel {
@@ -86,10 +82,7 @@ impl Model {
         active.update(db).await
     }
 
-    pub async fn delete(
-        db: &DbConn,
-        message_id: i64,
-    ) -> Result<(), DbErr> {
+    pub async fn delete(db: &DbConn, message_id: i64) -> Result<(), DbErr> {
         Entity::delete_by_id(message_id).exec(db).await?;
         Ok(())
     }

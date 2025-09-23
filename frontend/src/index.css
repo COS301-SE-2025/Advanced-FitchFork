@@ -142,3 +142,45 @@ body,
 *::-webkit-scrollbar-thumb:hover {
   background: var(--sb-thumb-hover);
 }
+
+/* Hide scrollbars but keep scrolling */
+.no-scrollbar {
+  /* Firefox */
+  scrollbar-width: none;
+  /* IE/Edge */
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  /* Chrome/Safari/Edge (Chromium) */
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+@layer components {
+  /* Modal box itself */
+  .assignment-setup-modal .ant-modal {
+    @apply !p-0 !rounded-2xl;
+  }
+
+  /* The white panel you’re seeing */
+  .assignment-setup-modal .ant-modal-content {
+    @apply dark:!bg-gray-900 text-gray-100 !p-0 !rounded-2xl;
+  }
+
+  /* The inner body padding + background */
+  .assignment-setup-modal .ant-modal-body {
+    @apply dark:!bg-gray-900 !p-0 !rounded-2xl;
+  }
+
+  /* Optional header/footer if you ever enable them */
+  .assignment-setup-modal .ant-modal-header,
+  .assignment-setup-modal .ant-modal-footer {
+    @apply dark:!bg-gray-900 dark:!border-gray-800;
+  }
+
+  /* Optional: darker mask */
+  .assignment-setup-modal .ant-modal-mask {
+    @apply dark:!bg-black/60 backdrop-blur-sm;
+  }
+}

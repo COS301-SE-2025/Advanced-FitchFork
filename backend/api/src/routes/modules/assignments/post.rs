@@ -11,25 +11,20 @@
 //!
 //! Responses include standard `200 OK`, `400 Bad Request` for validation errors, and `500 Internal Server Error` for database issues.
 
+use crate::response::ApiResponse;
+use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
 use axum::{
-    extract::{State, Path},
+    Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use chrono::{DateTime, Utc};
-use sea_orm::{DbErr};
+use db::models::assignment::{AssignmentType, Model as AssignmentModel};
+use db::models::assignment::{Column as AssignmentCol, Entity as AssignmentEntity};
+use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
+use serde::Deserialize;
 use util::state::AppState;
-use crate::response::ApiResponse;
-use db::{
-    models::{
-        assignment::{
-            AssignmentType,
-            Model as AssignmentModel,
-        }
-    },
-};
-use crate::routes::modules::assignments::common::{AssignmentRequest, AssignmentResponse};
 
 /// POST /api/modules/{module_id}/assignments
 ///
@@ -90,31 +85,31 @@ pub async fn create_assignment(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
-        .map(|dt| dt.with_timezone(&Utc)) {
-        Ok(date) => date,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error(
-                    "Invalid available_from datetime",
-                )),
-            );
-        }
-    };
+    let available_from =
+        match DateTime::parse_from_rfc3339(&req.available_from).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(date) => date,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid available_from datetime",
+                    )),
+                );
+            }
+        };
 
-    let due_date = match DateTime::parse_from_rfc3339(&req.due_date)
-        .map(|dt| dt.with_timezone(&Utc)) {
-        Ok(date) => date,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error(
-                    "Invalid due_date datetime",
-                )),
-            );
-        }
-    };
+    let due_date =
+        match DateTime::parse_from_rfc3339(&req.due_date).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(date) => date,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid due_date datetime",
+                    )),
+                );
+            }
+        };
 
     let assignment_type = match req.assignment_type.parse::<AssignmentType>() {
         Ok(t) => t,
@@ -167,4 +162,66 @@ pub async fn create_assignment(
             )
         }
     }
+}
+
+#[derive(Deserialize)]
+pub struct VerifyBody {
+    pin: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct VerifyResponse {
+    password_tag: Option<String>,
+}
+
+/// POST /modules/:module_id/assignments/:assignment_id/verify
+/// Body: { "pin": "1234" }
+pub async fn verify_assignment_pin(
+    State(app_state): State<AppState>,
+    Path((module_id, assignment_id)): Path<(i64, i64)>,
+    Json(body): Json<VerifyBody>,
+) -> impl IntoResponse {
+    let db = app_state.db();
+
+    let assignment_res = AssignmentEntity::find()
+        .filter(AssignmentCol::Id.eq(assignment_id as i32))
+        .filter(AssignmentCol::ModuleId.eq(module_id as i32))
+        .one(db)
+        .await;
+
+    let assignment = match assignment_res {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<VerifyResponse>::error("Assignment not found")),
+            );
+        }
+        Err(e) => {
+            eprintln!("DB error in verify_assignment_pin: {e:?}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<VerifyResponse>::error("Database error")),
+            );
+        }
+    };
+
+    if assignment.password_required_for_students()
+        && !assignment.verify_password_from_config(&body.pin)
+    {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ApiResponse::<VerifyResponse>::error("Invalid PIN")),
+        );
+    }
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(
+            VerifyResponse {
+                password_tag: assignment.password_tag(),
+            },
+            "PIN verified successfully",
+        )),
+    )
 }

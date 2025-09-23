@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::helpers::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use axum::{
         body::Body,
@@ -55,43 +55,24 @@ mod tests {
 
         // Seed a few announcements (two pinned, one unpinned)
         let mut ids = Vec::new();
-        let id1 = AnnouncementModel::create(
-            db,
-            module.id,
-            lecturer.id,
-            "Pinned A",
-            "Body A",
-            true,
-        )
-        .await
-        .unwrap()
-        .id;
+        let id1 = AnnouncementModel::create(db, module.id, lecturer.id, "Pinned A", "Body A", true)
+            .await
+            .unwrap()
+            .id;
         ids.push(id1);
 
-        let id2 = AnnouncementModel::create(
-            db,
-            module.id,
-            lecturer.id,
-            "Normal B",
-            "Body B",
-            false,
-        )
-        .await
-        .unwrap()
-        .id;
+        let id2 =
+            AnnouncementModel::create(db, module.id, lecturer.id, "Normal B", "Body B", false)
+                .await
+                .unwrap()
+                .id;
         ids.push(id2);
 
-        let id3 = AnnouncementModel::create(
-            db,
-            module.id,
-            lecturer.id,
-            "Pinned Newest",
-            "Body C",
-            true,
-        )
-        .await
-        .unwrap()
-        .id;
+        let id3 =
+            AnnouncementModel::create(db, module.id, lecturer.id, "Pinned Newest", "Body C", true)
+                .await
+                .unwrap()
+                .id;
         ids.push(id3);
 
         TestData {
@@ -120,7 +101,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_announcements_success_assigned_user() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.student.id, data.student.admin);
 
@@ -163,7 +144,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_announcements_filter_pinned_true() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.student.id, data.student.admin);
 
@@ -188,7 +169,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_announcements_invalid_pinned_param() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.student.id, data.student.admin);
 
@@ -208,7 +189,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_announcements_invalid_sort_field() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.student.id, data.student.admin);
 
@@ -224,12 +205,18 @@ mod tests {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let json = read_json_body(response).await;
         assert_eq!(json["success"], false);
-        assert!(json["message"].as_str().unwrap_or_default().to_lowercase().contains("invalid"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap_or_default()
+                .to_lowercase()
+                .contains("invalid")
+        );
     }
 
     #[tokio::test]
     async fn list_announcements_unauthorized_no_token() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let uri = format!("/api/modules/{}/announcements", data.module.id);
@@ -245,7 +232,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_announcements_forbidden_not_in_module() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.invalid_user.id, data.invalid_user.admin);
 
@@ -267,15 +254,12 @@ mod tests {
 
     #[tokio::test]
     async fn get_announcement_success_with_minimal_user() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.student.id, data.student.admin);
 
         let ann_id = data.announcement_ids[0];
-        let uri = format!(
-            "/api/modules/{}/announcements/{}",
-            data.module.id, ann_id
-        );
+        let uri = format!("/api/modules/{}/announcements/{}", data.module.id, ann_id);
 
         let req = Request::builder()
             .method("GET")
@@ -292,7 +276,10 @@ mod tests {
 
         // Check announcement payload
         assert_eq!(json["data"]["announcement"]["id"], Value::from(ann_id));
-        assert_eq!(json["data"]["announcement"]["module_id"], Value::from(data.module.id));
+        assert_eq!(
+            json["data"]["announcement"]["module_id"],
+            Value::from(data.module.id)
+        );
 
         // Check minimal user (only id & username)
         let user = &json["data"]["user"];
@@ -305,12 +292,15 @@ mod tests {
 
     #[tokio::test]
     async fn get_announcement_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.student.id, data.student.admin);
 
         // Non-existent announcement id
-        let uri = format!("/api/modules/{}/announcements/{}", data.module.id, 9_999_999);
+        let uri = format!(
+            "/api/modules/{}/announcements/{}",
+            data.module.id, 9_999_999
+        );
 
         let req = Request::builder()
             .method("GET")
@@ -327,14 +317,11 @@ mod tests {
 
     #[tokio::test]
     async fn get_announcement_unauthorized_no_token() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let ann_id = data.announcement_ids[0];
-        let uri = format!(
-            "/api/modules/{}/announcements/{}",
-            data.module.id, ann_id
-        );
+        let uri = format!("/api/modules/{}/announcements/{}", data.module.id, ann_id);
 
         let req = Request::builder()
             .method("GET")
@@ -348,15 +335,12 @@ mod tests {
 
     #[tokio::test]
     async fn get_announcement_forbidden_not_in_module() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.invalid_user.id, data.invalid_user.admin);
 
         let ann_id = data.announcement_ids[0];
-        let uri = format!(
-            "/api/modules/{}/announcements/{}",
-            data.module.id, ann_id
-        );
+        let uri = format!("/api/modules/{}/announcements/{}", data.module.id, ann_id);
 
         let req = Request::builder()
             .method("GET")

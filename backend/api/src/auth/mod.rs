@@ -2,24 +2,21 @@
 //!
 //! Provides claims, guards, extractors, middleware, and a function to generate JWTs.
 
-pub mod middleware;
 pub mod claims;
 pub mod extractors;
 pub mod guards;
+pub mod middleware;
 
-pub use claims::{Claims, AuthUser};
+pub use claims::{AuthUser, Claims};
 
-use jsonwebtoken::{encode, Header, EncodingKey};
-use chrono::{Utc, Duration};
-use std::env;
+use chrono::{Duration, Utc};
+use jsonwebtoken::{EncodingKey, Header, encode};
+use util::config;
 
 /// Generates a JWT and its expiry timestamp for a given user.
 pub fn generate_jwt(user_id: i64, admin: bool) -> (String, String) {
-    let jwt_secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
-    let jwt_duration_minutes: i64 = env::var("JWT_DURATION_MINUTES")
-        .expect("JWT_DURATION_MINUTES must be set")
-        .parse()
-        .expect("JWT_DURATION_MINUTES must be a valid integer");
+    let jwt_secret = config::jwt_secret();
+    let jwt_duration_minutes: i64 = config::jwt_duration_minutes() as i64;
 
     let expiry = Utc::now() + Duration::minutes(jwt_duration_minutes);
     let exp_timestamp = expiry.timestamp() as usize;

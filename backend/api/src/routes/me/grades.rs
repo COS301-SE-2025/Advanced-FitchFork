@@ -1,24 +1,26 @@
+use crate::{auth::claims::AuthUser, response::ApiResponse};
 use axum::{
+    Extension, Json,
     extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Extension, Json,
 };
+use chrono::{DateTime, Utc};
 use common::format_validation_errors;
-use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, RelationTrait, QuerySelect, FromQueryResult,
-};
-use serde::{Deserialize, Serialize};
-use validator::Validate;
-use crate::{auth::claims::AuthUser, response::ApiResponse};
+use db::grade::{GradeComputationError, compute_assignment_grade_for_student};
 use db::models::{
     assignment,
     assignment_submission::{self, Column as GradeColumn, Entity as GradeEntity},
-    module,
-    user,
+    module, user,
     user_module_role::{self, Column as RoleColumn, Role},
 };
+use sea_orm::{
+    ColumnTrait, Condition, EntityTrait, FromQueryResult, QueryFilter, QuerySelect, RelationTrait,
+};
+use serde::{Deserialize, Serialize};
+use std::{cmp::Ordering, collections::HashSet};
 use util::state::AppState;
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct GetGradesQuery {
@@ -30,6 +32,7 @@ pub struct GetGradesQuery {
     pub role: Option<Role>,
     pub year: Option<i32>,
     pub sort: Option<String>,
+    pub module_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -76,19 +79,13 @@ pub struct GetGradesResponse {
     pub total: u64,
 }
 
-#[derive(Debug, FromQueryResult)]
-pub struct GradeWithRelations {
-    pub id: i64,
-    pub earned: i64,
-    pub total: i64,
-    pub created_at: chrono::NaiveDateTime,
-    pub updated_at: chrono::NaiveDateTime,
-    pub user_id: i64,
+#[derive(Debug, FromQueryResult, Clone)]
+struct GradeScopeRow {
     pub assignment_id: i64,
     pub assignment_name: String,
     pub module_id: i64,
     pub module_code: String,
-    pub username: String,
+    pub user_id: i64,
 }
 
 /// GET /api/me/grades
@@ -172,18 +169,15 @@ pub async fn get_my_grades(
     let page = query.page.unwrap_or(1);
     let per_page = query.per_page.unwrap_or(20);
 
+    let role_to_check = query.role.unwrap_or(Role::Student);
+
     let mut query_builder = GradeEntity::find()
-        .column_as(assignment_submission::Column::Id, "id")
-        .column_as(assignment_submission::Column::Earned, "earned")
-        .column_as(assignment_submission::Column::Total, "total")
-        .column_as(assignment_submission::Column::CreatedAt, "created_at")
-        .column_as(assignment_submission::Column::UpdatedAt, "updated_at")
-        .column_as(assignment_submission::Column::UserId, "user_id")
-        .column_as(assignment_submission::Column::AssignmentId, "assignment_id")
+        .select_only()
+        .column(GradeColumn::AssignmentId)
         .column_as(assignment::Column::Name, "assignment_name")
         .column_as(module::Column::Id, "module_id")
         .column_as(module::Column::Code, "module_code")
-        .column_as(user::Column::Username, "username")
+        .column_as(GradeColumn::UserId, "user_id")
         .join(
             sea_orm::JoinType::InnerJoin,
             assignment_submission::Relation::Assignment.def(),
@@ -200,21 +194,22 @@ pub async fn get_my_grades(
             sea_orm::JoinType::InnerJoin,
             module::Relation::UserModuleRole.def(),
         )
-        .filter(user_module_role::Column::UserId.eq(caller_id));
-
-    let role_to_check = query.role.unwrap_or(Role::Student);
+        .filter(user_module_role::Column::UserId.eq(caller_id))
+        .filter(assignment_submission::Column::IsPractice.eq(false))
+        .filter(assignment_submission::Column::Ignored.eq(false))
+        .distinct();
 
     match role_to_check {
         Role::Student => {
             query_builder = query_builder.filter(GradeColumn::UserId.eq(caller_id));
         }
-        Role::Lecturer | Role::AssistantLecturer | Role::Tutor => {
-            query_builder = query_builder.filter(RoleColumn::Role.eq(role_to_check));
+        role => {
+            query_builder = query_builder.filter(RoleColumn::Role.eq(role));
         }
     }
 
     let mut condition = Condition::all();
-    
+
     if let Some(q) = &query.query {
         let pattern = format!("%{}%", q.to_lowercase());
         condition = condition.add(
@@ -229,82 +224,105 @@ pub async fn get_my_grades(
         condition = condition.add(module::Column::Year.eq(year));
     }
 
+    if let Some(module_filter) = query.module_id {
+        condition = condition.add(module::Column::Id.eq(module_filter));
+    }
+
     query_builder = query_builder.filter(condition);
 
-    if let Some(sort) = &query.sort {
-        for s in sort.split(',') {
-            let (field, order) = if s.starts_with('-') {
-                (&s[1..], sea_orm::Order::Desc)
-            } else {
-                (s, sea_orm::Order::Asc)
-            };
+    let rows: Vec<GradeScopeRow> = match query_builder.into_model::<GradeScopeRow>().all(db).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            eprintln!("get_my_grades: query error: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to fetch grades")),
+            )
+                .into_response();
+        }
+    };
 
-            match field {
-                "score" => {
-                    query_builder = query_builder.order_by(
-                        sea_orm::prelude::Expr::cust(
-                            "COALESCE((earned * 1.0) / NULLIF(total, 0), 0)",
-                        ),
-                        order,
-                    );
-                }
-                "created_at" => {
-                    query_builder = query_builder.order_by(GradeColumn::CreatedAt, order);
-                }
-                _ => {}
+    let mut seen: HashSet<(i64, i64)> = HashSet::new();
+    let mut scoped: Vec<GradeScopeRow> = Vec::new();
+    for row in rows {
+        if seen.insert((row.assignment_id, row.user_id)) {
+            scoped.push(row);
+        }
+    }
+
+    struct GradeWithMeta {
+        item: GradeItem,
+        percentage: f64,
+        created_at: DateTime<Utc>,
+    }
+
+    let mut grade_rows: Vec<GradeWithMeta> = Vec::with_capacity(scoped.len());
+
+    for row in scoped {
+        match compute_assignment_grade_for_student(
+            db,
+            row.module_id,
+            row.assignment_id,
+            row.user_id,
+        )
+        .await
+        {
+            Ok(Some(selection)) => {
+                let created_at_dt = selection.submission.created_at;
+                let updated_at_dt = selection.submission.updated_at;
+                let percentage = selection.score_pct as f64;
+
+                let item = GradeItem {
+                    id: selection.submission.id,
+                    score: Score {
+                        earned: selection.submission.earned,
+                        total: selection.submission.total,
+                    },
+                    percentage,
+                    created_at: created_at_dt.naive_utc().to_string(),
+                    updated_at: updated_at_dt.naive_utc().to_string(),
+                    module: ModuleInfo {
+                        id: row.module_id,
+                        code: row.module_code.clone(),
+                    },
+                    assignment: AssignmentInfo {
+                        id: row.assignment_id,
+                        title: row.assignment_name.clone(),
+                    },
+                    user: UserInfo {
+                        id: selection.user.id,
+                        username: selection.user.username.clone(),
+                    },
+                };
+
+                grade_rows.push(GradeWithMeta {
+                    percentage,
+                    created_at: created_at_dt,
+                    item,
+                });
+            }
+            Ok(None) => continue,
+            Err(GradeComputationError::AssignmentNotFound) => continue,
+            Err(GradeComputationError::ExecutionConfig(e)) => {
+                eprintln!("get_my_grades: execution config error: {e}");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Failed to compute grades")),
+                )
+                    .into_response();
+            }
+            Err(GradeComputationError::Database(e)) => {
+                eprintln!("get_my_grades: compute error: {e}");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<()>::error("Failed to compute grades")),
+                )
+                    .into_response();
             }
         }
-    } else {
-        query_builder = query_builder.order_by(GradeColumn::CreatedAt, sea_orm::Order::Desc);
     }
-    
-    query_builder = query_builder.order_by(GradeColumn::Id, sea_orm::Order::Asc);
 
-    let paginator = query_builder
-        .into_model::<GradeWithRelations>()
-        .paginate(db, per_page);
-    
-    let total = paginator.num_items().await.unwrap_or(0);
-    let grades: Vec<GradeWithRelations> = paginator
-        .fetch_page(page - 1)
-        .await
-        .unwrap_or_default();
-
-    let grades: Vec<GradeItem> = grades
-        .into_iter()
-        .map(|grade| {
-            let percentage = if grade.total > 0 {
-                (grade.earned as f64 / grade.total as f64) * 100.0
-            } else {
-                0.0
-            };
-
-            GradeItem {
-                id: grade.id,
-                score: Score {
-                    earned: grade.earned,
-                    total: grade.total,
-                },
-                percentage,
-                created_at: grade.created_at.to_string(),
-                updated_at: grade.updated_at.to_string(),
-                module: ModuleInfo {
-                    id: grade.module_id,
-                    code: grade.module_code,
-                },
-                assignment: AssignmentInfo {
-                    id: grade.assignment_id,
-                    title: grade.assignment_name,
-                },
-                user: UserInfo {
-                    id: grade.user_id,
-                    username: grade.username,
-                },
-            }
-        })
-        .collect();
-
-    if grades.is_empty() {
+    if grade_rows.is_empty() {
         return (
             StatusCode::OK,
             Json(ApiResponse::success(
@@ -316,8 +334,68 @@ pub async fn get_my_grades(
                 },
                 "No grades found",
             )),
-        ).into_response();
+        )
+            .into_response();
     }
+
+    let mut sort_fields: Vec<(String, bool)> = Vec::new();
+    if let Some(sort) = &query.sort {
+        for raw in sort.split(',') {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let (field, desc) = if let Some(rest) = trimmed.strip_prefix('-') {
+                (rest.to_string(), true)
+            } else {
+                (trimmed.to_string(), false)
+            };
+
+            match field.as_str() {
+                "score" | "created_at" => sort_fields.push((field, desc)),
+                _ => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiResponse::<()>::error("Invalid sort field")),
+                    )
+                        .into_response();
+                }
+            }
+        }
+    } else {
+        sort_fields.push(("created_at".to_string(), true));
+    }
+
+    for (field, desc) in sort_fields.iter().rev() {
+        match field.as_str() {
+            "score" => grade_rows.sort_by(|a, b| {
+                let cmp = a
+                    .percentage
+                    .partial_cmp(&b.percentage)
+                    .unwrap_or(Ordering::Equal);
+                if *desc { cmp.reverse() } else { cmp }
+            }),
+            "created_at" => grade_rows.sort_by(|a, b| {
+                let cmp = a.created_at.cmp(&b.created_at);
+                if *desc { cmp.reverse() } else { cmp }
+            }),
+            _ => {}
+        }
+    }
+
+    let total = grade_rows.len() as u64;
+    let start = (page.saturating_sub(1) * per_page) as usize;
+
+    let grades: Vec<GradeItem> = if start >= grade_rows.len() {
+        Vec::new()
+    } else {
+        grade_rows
+            .into_iter()
+            .skip(start)
+            .take(per_page as usize)
+            .map(|meta| meta.item)
+            .collect()
+    };
 
     (
         StatusCode::OK,

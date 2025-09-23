@@ -5,8 +5,9 @@
 //! and awards marks based on this percentage. **Lines are compared in order; only lines at the same position are considered a match.**
 
 use crate::traits::comparator::OutputComparator;
-use crate::types::{TaskResult, Subsection};
+use crate::types::TaskResult;
 use regex::Regex;
+use util::mark_allocator::Subsection;
 
 /// A comparator that uses a regular expression to match patterns and awards marks proportionally.
 ///
@@ -35,13 +36,42 @@ impl OutputComparator for RegexComparator {
         memo_lines: &[String],
         student_lines: &[String],
     ) -> TaskResult {
+        // If no patterns provided at all, keep existing behaviour
         if memo_lines.is_empty() {
             return TaskResult {
                 name: section.name.clone(),
-                awarded: if student_lines.is_empty() { section.value } else { 0 },
+                awarded: if student_lines.is_empty() {
+                    section.value
+                } else {
+                    0
+                },
                 possible: section.value,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: student_lines.to_vec(),
+                memo_output: memo_lines.to_vec(),
+                stderr: None,
+                return_code: None,
+                manual_feedback: section.feedback.clone(),
+            };
+        }
+
+        // Normalize (trim) patterns once
+        let memo_norm: Vec<String> = memo_lines.iter().map(|s| s.trim().to_string()).collect();
+
+        // RULE (1): if *all* patterns are empty, give full marks outright
+        if memo_norm.iter().all(|p| p.is_empty()) {
+            return TaskResult {
+                name: section.name.clone(),
+                awarded: section.value,
+                possible: section.value,
+                matched_patterns: memo_norm.clone(),
+                missed_patterns: vec![],
+                student_output: student_lines.to_vec(),
+                memo_output: memo_lines.to_vec(),
+                stderr: None,
+                return_code: None,
+                manual_feedback: section.feedback.clone(),
             };
         }
 
@@ -49,12 +79,19 @@ impl OutputComparator for RegexComparator {
         let mut matched_patterns = vec![];
         let mut missed_patterns = vec![];
 
-        for (i, pattern) in memo_lines.iter().enumerate() {
+        for (i, pattern) in memo_norm.iter().enumerate() {
+            // RULE (2): empty pattern => auto-match for that line index
+            if pattern.is_empty() {
+                awarded_marks += 1;
+                matched_patterns.push("".to_string());
+                continue;
+            }
+
             let regex = match Regex::new(pattern) {
                 Ok(re) => re,
                 Err(_) => {
                     missed_patterns.push(format!("Invalid regex pattern: {}", pattern));
-                    continue; // Skip invalid regex patterns
+                    continue;
                 }
             };
 
@@ -69,7 +106,7 @@ impl OutputComparator for RegexComparator {
             }
         }
 
-        let total_patterns = memo_lines.len();
+        let total_patterns = memo_norm.len();
         let mut awarded = if total_patterns == 0 {
             if student_lines.is_empty() {
                 section.value
@@ -81,8 +118,9 @@ impl OutputComparator for RegexComparator {
             (section.value as f32 * ratio).round() as i64
         };
 
-        if student_lines.len() > memo_lines.len() && student_lines.len() > 0 {
-            let penalty = memo_lines.len() as f32 / student_lines.len() as f32;
+        // Extra-lines penalty
+        if student_lines.len() > memo_norm.len() && !student_lines.is_empty() {
+            let penalty = memo_norm.len() as f32 / student_lines.len() as f32;
             awarded = (awarded as f32 * penalty).round() as i64;
         }
 
@@ -92,6 +130,11 @@ impl OutputComparator for RegexComparator {
             possible: section.value,
             matched_patterns,
             missed_patterns,
+            student_output: student_lines.to_vec(),
+            memo_output: memo_lines.to_vec(),
+            stderr: None,
+            return_code: None,
+            manual_feedback: section.feedback.clone(),
         }
     }
 }
@@ -99,7 +142,7 @@ impl OutputComparator for RegexComparator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Subsection;
+    use util::mark_allocator::Subsection;
 
     /// Helper function to create a vector of strings from a slice of string literals.
     fn to_string_vec(lines: &[&str]) -> Vec<String> {
@@ -110,6 +153,8 @@ mod tests {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,
+            regex: None,
+            feedback: None,
         }
     }
 
@@ -119,7 +164,7 @@ mod tests {
         let memo_lines = to_string_vec(&[r"number: \d+", r"item: \w+"]);
         let student_lines = to_string_vec(&["number: 123", "item: abc"]);
         let section = mock_subsection(10);
-        
+
         let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 10);
     }
@@ -183,7 +228,12 @@ mod tests {
         let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 5);
         assert!(!result.missed_patterns.is_empty());
-        assert!(result.missed_patterns.iter().any(|p| p.starts_with("Invalid regex pattern")));
+        assert!(
+            result
+                .missed_patterns
+                .iter()
+                .any(|p| p.starts_with("Invalid regex pattern"))
+        );
     }
 
     #[test]
@@ -207,4 +257,4 @@ mod tests {
         assert!(result.awarded < 10);
         assert!(result.awarded > 0);
     }
-} 
+}

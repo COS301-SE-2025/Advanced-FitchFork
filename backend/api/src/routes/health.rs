@@ -3,9 +3,9 @@
 //! Provides a single `GET /health` endpoint that returns a simple success
 //! message, useful for uptime monitoring, load balancers, or deployment checks.
 
-use axum::{Router, routing::get, Json, response::IntoResponse};
-use util::state::AppState;
 use crate::response::ApiResponse;
+use axum::{Json, Router, response::IntoResponse, routing::get};
+use util::state::AppState;
 
 /// Builds the `/health` route group.
 ///

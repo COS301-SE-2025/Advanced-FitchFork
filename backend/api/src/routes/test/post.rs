@@ -1,6 +1,6 @@
 //! POST handlers for `/api/test`.
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use util::state::AppState;
 use validator::Validate;
@@ -152,11 +152,7 @@ pub async fn upsert_user(
                     } else {
                         format!("Database error: {e}")
                     };
-                    (
-                        StatusCode::CONFLICT,
-                        Json(ApiResponse::<()>::error(msg)),
-                    )
-                        .into_response()
+                    (StatusCode::CONFLICT, Json(ApiResponse::<()>::error(msg))).into_response()
                 }
             }
         }

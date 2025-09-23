@@ -6,6 +6,7 @@
 //! The results include assignment, module, and user details.  
 //! Students only see their own tickets, while lecturers and assistants can view other users' tickets.
 
+use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
     Extension, Json,
     extract::{Query, State},
@@ -18,11 +19,11 @@ use db::models::{
 };
 use migration::Expr;
 use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, RelationTrait
+    ColumnTrait, Condition, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect, RelationTrait,
 };
 use serde::{Deserialize, Serialize};
 use util::state::AppState;
-use crate::{auth::AuthUser, response::ApiResponse};
 
 /// Query parameters for filtering, sorting, and pagination of tickets
 #[derive(Debug, Deserialize)]
@@ -41,6 +42,8 @@ pub struct FilterReq {
     pub status: Option<String>,
     /// Sort fields (comma-separated, prefix with `-` for descending)
     pub sort: Option<String>,
+    /// Filter tickets for a specific module
+    pub module_id: Option<i64>,
 }
 
 /// Response for a single ticket
@@ -88,7 +91,12 @@ pub struct FilterResponse {
 
 impl FilterResponse {
     fn new(tickets: Vec<TicketsResponse>, page: i32, per_page: i32, total: i32) -> Self {
-        Self { tickets, page, per_page, total }
+        Self {
+            tickets,
+            page,
+            per_page,
+            total,
+        }
     }
 }
 
@@ -162,12 +170,26 @@ pub async fn get_my_tickets(
         let response = FilterResponse::new(vec![], page, per_page, 0);
         return (
             StatusCode::OK,
-            Json(ApiResponse::success(response, "Tickets retrieved successfully")),
+            Json(ApiResponse::success(
+                response,
+                "Tickets retrieved successfully",
+            )),
         )
             .into_response();
     }
 
-    let module_ids: Vec<i64> = memberships.iter().map(|m| m.module_id).collect();
+    let module_ids: Vec<i64> = memberships
+        .iter()
+        .filter(|m| {
+            if let Some(module_filter) = params.module_id {
+                if m.module_id != module_filter {
+                    return false;
+                }
+            }
+            true
+        })
+        .map(|m| m.module_id)
+        .collect();
 
     let assignments = assignment::Entity::find()
         .filter(assignment::Column::ModuleId.is_in(module_ids.clone()))
@@ -179,15 +201,18 @@ pub async fn get_my_tickets(
         let response = FilterResponse::new(vec![], page, per_page, 0);
         return (
             StatusCode::OK,
-            Json(ApiResponse::success(response, "Tickets retrieved successfully")),
+            Json(ApiResponse::success(
+                response,
+                "Tickets retrieved successfully",
+            )),
         )
             .into_response();
     }
 
     let assignment_ids: Vec<i64> = assignments.iter().map(|a| a.id).collect();
 
-    let mut condition = Condition::all()
-        .add(tickets::Column::AssignmentId.is_in(assignment_ids.clone()));
+    let mut condition =
+        Condition::all().add(tickets::Column::AssignmentId.is_in(assignment_ids.clone()));
 
     if requested_role == "student" {
         condition = condition.add(tickets::Column::UserId.eq(user_id));
@@ -236,9 +261,19 @@ pub async fn get_my_tickets(
 
     if let Some(sort_param) = &params.sort {
         for sort in sort_param.split(',') {
-            let (field, asc) = if sort.starts_with('-') { (&sort[1..], false) } else { (sort, true) };
+            let (field, asc) = if sort.starts_with('-') {
+                (&sort[1..], false)
+            } else {
+                (sort, true)
+            };
             query = match field {
-                "created_at" => if asc { query.order_by_asc(tickets::Column::CreatedAt) } else { query.order_by_desc(tickets::Column::CreatedAt) },
+                "created_at" => {
+                    if asc {
+                        query.order_by_asc(tickets::Column::CreatedAt)
+                    } else {
+                        query.order_by_desc(tickets::Column::CreatedAt)
+                    }
+                }
                 _ => query,
             };
         }
@@ -254,7 +289,9 @@ pub async fn get_my_tickets(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<FilterResponse>::error("Error counting tickets")),
+                Json(ApiResponse::<FilterResponse>::error(
+                    "Error counting tickets",
+                )),
             )
                 .into_response();
         }
@@ -268,14 +305,18 @@ pub async fn get_my_tickets(
                     .one(db)
                     .await
                     .unwrap_or(None);
-                if a.is_none() { continue; }
+                if a.is_none() {
+                    continue;
+                }
                 let a = a.unwrap();
 
                 let m = module::Entity::find_by_id(a.module_id)
                     .one(db)
                     .await
                     .unwrap_or(None);
-                if m.is_none() { continue; }
+                if m.is_none() {
+                    continue;
+                }
                 let m = m.unwrap();
 
                 let u = user::Entity::find_by_id(t.user_id)
@@ -289,8 +330,14 @@ pub async fn get_my_tickets(
                     status: t.status.to_string(),
                     created_at: t.created_at.to_string(),
                     updated_at: t.updated_at.to_string(),
-                    module: ModuleResponse { id: m.id, code: m.code },
-                    assignment: AssignmentResponse { id: a.id, name: a.name },
+                    module: ModuleResponse {
+                        id: m.id,
+                        code: m.code,
+                    },
+                    assignment: AssignmentResponse {
+                        id: a.id,
+                        name: a.name,
+                    },
                     user: UserResponse {
                         id: t.user_id,
                         username: u.map(|uu| uu.username).unwrap_or_default(),
@@ -301,13 +348,18 @@ pub async fn get_my_tickets(
             let response = FilterResponse::new(tickets_vec, page, per_page, total);
             (
                 StatusCode::OK,
-                Json(ApiResponse::success(response, "Tickets retrieved successfully")),
+                Json(ApiResponse::success(
+                    response,
+                    "Tickets retrieved successfully",
+                )),
             )
                 .into_response()
         }
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<FilterResponse>::error("Failed to retrieve tickets")),
+            Json(ApiResponse::<FilterResponse>::error(
+                "Failed to retrieve tickets",
+            )),
         )
             .into_response(),
     }

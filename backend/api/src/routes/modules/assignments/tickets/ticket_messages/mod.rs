@@ -5,19 +5,22 @@
 //! Endpoints include creating, editing, deleting, and retrieving messages.  
 //! Access control is enforced using `is_valid` and author checks for editing/deleting messages.
 
-use axum::{Router, routing::{post, put, delete, get}};
+use axum::{
+    Router,
+    routing::{delete, get, post, put},
+};
 use util::state::AppState;
 
+pub mod common;
+pub mod delete;
+pub mod get;
 pub mod post;
 pub mod put;
-pub mod delete;
-pub mod common;
-pub mod get;
 
-use post::create_message;
-use put::edit_ticket_message;
 use delete::delete_ticket_message;
 use get::get_ticket_messages;
+use post::create_message;
+use put::edit_ticket_message;
 
 /// Returns a `Router` configured with ticket message endpoints.
 ///

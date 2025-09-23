@@ -1,15 +1,7 @@
 // ai/src/utils/evaluator.rs
 
-
-use util::execution_config::ExecutionConfig;
 use crate::HashMap;
-
-// IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
-#[derive(Debug, Clone, Copy)]
-pub enum Language {
-    Cpp,
-    Java,
-}
+use util::execution_config::ExecutionConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Property {
@@ -19,7 +11,7 @@ pub enum Property {
     Exceptions,        // G(¬exception)
     ExecutionTime,     // G(ter => (r ≤ e))
     IllegalOutput,     // G(ter => ∀o∈Out ∀x∈X (x ≠ o))
-    ExpectedExact,     // ExpectedExact,  
+    ExpectedExact,     // ExpectedExact,
     ExpectedContains,  // ExpectedContains,
 }
 
@@ -44,15 +36,12 @@ impl Default for TaskSpec {
         }
     }
 }
-use util::execution_config::execution_config::Language as ExecLanguage;
+use util::languages::Language;
 
 impl TaskSpec {
     pub fn from_execution_config(config: &ExecutionConfig) -> Self {
         Self {
-            language: match config.project.language {
-                ExecLanguage::Cpp => Language::Cpp,
-                ExecLanguage::Java => Language::Java,
-            },
+            language: config.project.language,
             valid_return_codes: Some(config.gatlam.task_spec.valid_return_codes.clone()),
             max_runtime_ms: config.gatlam.task_spec.max_runtime_ms,
             forbidden_outputs: config.gatlam.task_spec.forbidden_outputs.clone(),
@@ -165,115 +154,137 @@ impl Evaluator {
     ///   (ltl_milli, fail_milli)
     /// - ltl_milli: fraction of violated LTL-ish properties across all tasks checked
     /// - fail_milli: fraction of tasks considered failed
-pub fn derive_props(
-    &self,
-    specs: &[TaskSpec],
-    outs: &[(i64, String)],
-    memo: &[(i64, String)],
-    delimiter: &str,
-) -> (usize, usize) {
-    let total_tasks = outs.len().max(1);
+    pub fn derive_props(
+        &self,
+        specs: &[TaskSpec],
+        outs: &[(i64, String)],
+        memo: &[(i64, String)],
+        delimiter: &str,
+    ) -> (usize, usize) {
+        let total_tasks = outs.len().max(1);
 
-    let mut ltl_checks     = 0usize;
-    let mut ltl_violations = 0usize;
-    let mut failed_tasks   = 0usize;
+        let mut ltl_checks = 0usize;
+        let mut ltl_violations = 0usize;
+        let mut failed_tasks = 0usize;
 
-    // Build a single label→expected-lines map from ALL memo entries (ignores task_id).
-    let mut memo_sections: HashMap<String, Vec<String>> = HashMap::new();
-    for (_tid, memotxt) in memo {
-        let secs = parse_labeled_sections_with_delim(memotxt, delimiter);
-        for (k, v) in secs {
-            memo_sections.insert(k, v);
-        }
-    }
-
-    for (i, (task_id, blob)) in outs.iter().enumerate() {
-        eprintln!("--- Evaluating blob ---");
-        eprintln!("task_id={task_id}, index={i}");
-        eprintln!("{blob}");
-        eprintln!("------------------------");
-
-        let spec = specs.get(i).unwrap_or_else(|| &specs[0]);
-        let view = self.parse(*task_id, blob);
-        let eval = self.evaluate_task(spec, &view);
-
-        let mut checks = 0usize;
-        let mut viols  = 0usize;
-
-        // Core LTL-ish checks
-        checks += 1; if eval.violated.contains(&Property::Safety)            { viols += 1; }
-        checks += 1; if eval.violated.contains(&Property::ProperTermination) { viols += 1; }
-        checks += 1; if eval.violated.contains(&Property::SegmentationFault) { viols += 1; }
-        checks += 1; if eval.violated.contains(&Property::Exceptions)        { viols += 1; }
-
-        if spec.max_runtime_ms.is_some() && view.terminated && view.runtime_ms.is_some() {
-            checks += 1;
-            if eval.violated.contains(&Property::ExecutionTime) { viols += 1; }
+        // Build a single label→expected-lines map from ALL memo entries (ignores task_id).
+        let mut memo_sections: HashMap<String, Vec<String>> = HashMap::new();
+        for (_tid, memotxt) in memo {
+            let secs = parse_labeled_sections_with_delim(memotxt, delimiter);
+            for (k, v) in secs {
+                memo_sections.insert(k, v);
+            }
         }
 
-        // ---------- Labeled memo comparison (by subtask label via delimiter) ----------
-        let out_sections = parse_labeled_sections_with_delim(&view.stdout, delimiter);
+        for (i, (task_id, blob)) in outs.iter().enumerate() {
+            eprintln!("--- Evaluating blob ---");
+            eprintln!("task_id={task_id}, index={i}");
+            eprintln!("{blob}");
+            eprintln!("------------------------");
 
-        for (label, memo_lines) in &memo_sections {
-            // Exact match within this label
+            let spec = specs.get(i).unwrap_or_else(|| &specs[0]);
+            let view = self.parse(*task_id, blob);
+            let eval = self.evaluate_task(spec, &view);
+
+            let mut checks = 0usize;
+            let mut viols = 0usize;
+
+            // Core LTL-ish checks
             checks += 1;
-            match out_sections.get(label) {
-                Some(out_lines) => {
-                    if out_lines != memo_lines {
-                        viols += 1;
-                        // If you want to tag the property, push Property::ExpectedExact into a separate vector you track here
-                    }
-                }
-                None => {
-                    // Section missing -> violation
+            if eval.violated.contains(&Property::Safety) {
+                viols += 1;
+            }
+            checks += 1;
+            if eval.violated.contains(&Property::ProperTermination) {
+                viols += 1;
+            }
+            checks += 1;
+            if eval.violated.contains(&Property::SegmentationFault) {
+                viols += 1;
+            }
+            checks += 1;
+            if eval.violated.contains(&Property::Exceptions) {
+                viols += 1;
+            }
+
+            if spec.max_runtime_ms.is_some() && view.terminated && view.runtime_ms.is_some() {
+                checks += 1;
+                if eval.violated.contains(&Property::ExecutionTime) {
                     viols += 1;
                 }
             }
 
-            // "Contains" check within the same label
-            checks += 1;
-            match out_sections.get(label) {
-                Some(out_lines) => {
-                    let contains_ok = memo_lines.iter().all(|needle|
-                        out_lines.iter().any(|hay| hay.contains(needle))
-                    );
-                    if !contains_ok {
+            // ---------- Labeled memo comparison (by subtask label via delimiter) ----------
+            let out_sections = parse_labeled_sections_with_delim(&view.stdout, delimiter);
+
+            for (label, memo_lines) in &memo_sections {
+                // Exact match within this label
+                checks += 1;
+                match out_sections.get(label) {
+                    Some(out_lines) => {
+                        if out_lines != memo_lines {
+                            viols += 1;
+                            // If you want to tag the property, push Property::ExpectedExact into a separate vector you track here
+                        }
+                    }
+                    None => {
+                        // Section missing -> violation
                         viols += 1;
-                        // Likewise, this corresponds to ExpectedContains
                     }
                 }
-                None => {
+
+                // "Contains" check within the same label
+                checks += 1;
+                match out_sections.get(label) {
+                    Some(out_lines) => {
+                        let contains_ok = memo_lines
+                            .iter()
+                            .all(|needle| out_lines.iter().any(|hay| hay.contains(needle)));
+                        if !contains_ok {
+                            viols += 1;
+                            // Likewise, this corresponds to ExpectedContains
+                        }
+                    }
+                    None => {
+                        viols += 1;
+                    }
+                }
+            }
+            // ------------------------------------------------------------------------------
+
+            if !spec.forbidden_outputs.is_empty() && view.terminated {
+                checks += 1;
+                if eval.violated.contains(&Property::IllegalOutput) {
                     viols += 1;
                 }
             }
+
+            ltl_checks += checks;
+            ltl_violations += viols;
+
+            // Failure metric (separate from LTL)
+            let ret_ok = is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref());
+            let failed = !ret_ok
+                || (view.terminated && has_segfault(spec.language, &view.stderr))
+                || (view.terminated && has_exception(spec.language, &view.stderr))
+                || self.contains_forbidden_output(&view.stdout, &spec.forbidden_outputs);
+
+            if failed {
+                failed_tasks += 1;
+            }
         }
-        // ------------------------------------------------------------------------------
 
-        if !spec.forbidden_outputs.is_empty() && view.terminated {
-            checks += 1;
-            if eval.violated.contains(&Property::IllegalOutput) { viols += 1; }
-        }
+        let ltl_milli = if ltl_checks == 0 {
+            0
+        } else {
+            ((ltl_violations * 1000) / ltl_checks).min(1000)
+        };
+        let fail_milli = ((failed_tasks * 1000) / total_tasks).min(1000);
 
-        ltl_checks     += checks;
-        ltl_violations += viols;
-
-        // Failure metric (separate from LTL)
-        let ret_ok = is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref());
-        let failed = !ret_ok
-            || (view.terminated && has_segfault(spec.language, &view.stderr))
-            || (view.terminated && has_exception(spec.language, &view.stderr))
-            || self.contains_forbidden_output(&view.stdout, &spec.forbidden_outputs);
-
-        if failed { failed_tasks += 1; }
+        (ltl_milli, fail_milli)
     }
 
-    let ltl_milli  = if ltl_checks == 0 { 0 } else { ((ltl_violations * 1000) / ltl_checks).min(1000) };
-    let fail_milli = ((failed_tasks   * 1000) / total_tasks).min(1000);
-
-    (ltl_milli, fail_milli)
-}
-
-fn contains_forbidden_output(&self, stdout: &str, forbidden: &[String]) -> bool {
+    fn contains_forbidden_output(&self, stdout: &str, forbidden: &[String]) -> bool {
         if forbidden.is_empty() {
             return false;
         }
@@ -284,7 +295,10 @@ fn contains_forbidden_output(&self, stdout: &str, forbidden: &[String]) -> bool 
     }
 }
 
-fn parse_labeled_sections_with_delim(s: &str, delim: &str) -> std::collections::HashMap<String, Vec<String>> {
+fn parse_labeled_sections_with_delim(
+    s: &str,
+    delim: &str,
+) -> std::collections::HashMap<String, Vec<String>> {
     let mut map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     let mut current: Option<String> = None;
 
@@ -295,14 +309,15 @@ fn parse_labeled_sections_with_delim(s: &str, delim: &str) -> std::collections::
             current = Some(label);
             continue;
         }
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         if let Some(lbl) = &current {
             map.entry(lbl.clone()).or_default().push(line.to_string());
         }
     }
     map
 }
-
 
 fn split_exit_stdout_stderr(blob: &str) -> (Option<i32>, String, String) {
     let mut exit_code: Option<i32> = None;
@@ -416,7 +431,6 @@ fn normalized_lines(s: &str) -> Vec<String> {
 // IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
 fn violates_safety(lang: Language, stderr: &str) -> bool {
     let s = stderr.to_ascii_lowercase();
-
     match lang {
         Language::Cpp => {
             s.contains("double free")
@@ -430,14 +444,15 @@ fn violates_safety(lang: Language, stderr: &str) -> bool {
                 || s.contains("asan:")
         }
         Language::Java => {
-            s.contains("hs_err_pid")                      // JVM fatal log header
+            s.contains("hs_err_pid")
                 || s.contains("a fatal error has been detected by the java runtime environment")
-                || s.contains("sigsegv")                  // native segv bubbled up by JVM
+                || s.contains("sigsegv")
                 || s.contains("exception_access_violation")
                 || s.contains("problematic frame:")
-                || s.contains("outofmemoryerror: direct buffer memory") // catastrophic OOM kind
-                || s.contains("internal error (") // hotspot internal error
+                || s.contains("outofmemoryerror: direct buffer memory")
+                || s.contains("internal error (")
         }
+        _ => false, // safe default for other languages
     }
 }
 
@@ -451,6 +466,7 @@ fn has_segfault(lang: Language, stderr: &str) -> bool {
                 || s.contains("hs_err_pid")
                 || s.contains("problematic frame:")
         }
+        _ => false,
     }
 }
 
@@ -476,6 +492,7 @@ fn has_exception(lang: Language, stderr: &str) -> bool {
                 || s.contains("exception:")
                 || s.contains("error:")
         }
+        _ => false,
     }
 }
 
@@ -487,7 +504,6 @@ fn is_valid_return_code(exit: Option<i32>, valid: Option<&[i32]>) -> bool {
         (None, _) => false,
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -505,7 +521,10 @@ mod tests {
     }
 
     fn spec_cpp_time(bound: u64) -> TaskSpec {
-        TaskSpec { max_runtime_ms: Some(bound), ..spec_cpp() }
+        TaskSpec {
+            max_runtime_ms: Some(bound),
+            ..spec_cpp()
+        }
     }
 
     fn spec_cpp_forbidden(xs: &[&str]) -> TaskSpec {
@@ -525,8 +544,12 @@ mod tests {
     }
 
     // Simple out/memo tuple makers
-    fn out(task_id: i64, blob: &str) -> (i64, String) { (task_id, blob.to_string()) }
-    fn memo(task_id: i64, text: &str) -> (i64, String) { (task_id, text.to_string()) }
+    fn out(task_id: i64, blob: &str) -> (i64, String) {
+        (task_id, blob.to_string())
+    }
+    fn memo(task_id: i64, text: &str) -> (i64, String) {
+        (task_id, text.to_string())
+    }
 
     // Build a stdout with labeled sections + optional Retcode
     fn build_labeled_stdout(
@@ -598,8 +621,14 @@ mod tests {
         let delim = "&-=-&";
         let txt = "&-=-&task1\n12\n34\n\n&-=-&task2\nx\ny\n";
         let map = super::parse_labeled_sections_with_delim(txt, delim);
-        assert_eq!(map.get("task1").unwrap(), &vec!["12".to_string(), "34".to_string()]);
-        assert_eq!(map.get("task2").unwrap(), &vec!["x".to_string(), "y".to_string()]);
+        assert_eq!(
+            map.get("task1").unwrap(),
+            &vec!["12".to_string(), "34".to_string()]
+        );
+        assert_eq!(
+            map.get("task2").unwrap(),
+            &vec!["x".to_string(), "y".to_string()]
+        );
     }
 
     // ---------------- language/safety/exception tests ----------------
@@ -628,7 +657,8 @@ mod tests {
     fn cpp_exception_detected() {
         let ev = Evaluator::new();
         let spec = spec_cpp();
-        let blob = "STDERR: terminate called after throwing an instance of 'std::exception'\nRetcode: 1\n";
+        let blob =
+            "STDERR: terminate called after throwing an instance of 'std::exception'\nRetcode: 1\n";
         let view = ev.parse(1, blob);
         let eval = ev.evaluate_task(&spec, &view);
         assert!(eval.violated.contains(&Property::Exceptions));
@@ -638,7 +668,8 @@ mod tests {
     fn java_exception_detected() {
         let ev = Evaluator::new();
         let spec = spec_java();
-        let blob = "STDERR: Exception in thread \"main\" java.lang.NullPointerException\nRetcode: 1\n";
+        let blob =
+            "STDERR: Exception in thread \"main\" java.lang.NullPointerException\nRetcode: 1\n";
         let view = ev.parse(1, blob);
         let eval = ev.evaluate_task(&spec, &view);
         assert!(eval.violated.contains(&Property::Exceptions));
@@ -651,7 +682,10 @@ mod tests {
         let blob = "STDERR: A fatal error has been detected by the Java Runtime Environment\nSIGSEGV (0xb)\nRetcode: 134\n";
         let view = ev.parse(1, blob);
         let eval = ev.evaluate_task(&spec, &view);
-        assert!(eval.violated.contains(&Property::SegmentationFault) || eval.violated.contains(&Property::Safety));
+        assert!(
+            eval.violated.contains(&Property::SegmentationFault)
+                || eval.violated.contains(&Property::Safety)
+        );
     }
 
     // ---------------- termination/forbidden/runtime tests ----------------
@@ -719,10 +753,7 @@ mod tests {
         // Memo has two labels with exact lines
         let memo_txt = build_labeled_stdout(
             delim,
-            &[
-                ("task1Subtask1", &["24"]),
-                ("task1Subtask2", &["24"]),
-            ],
+            &[("task1Subtask1", &["24"]), ("task1Subtask2", &["24"])],
             0,
             None,
         );
@@ -730,17 +761,14 @@ mod tests {
         // Output matches memo exactly
         let out_txt = build_labeled_stdout(
             delim,
-            &[
-                ("task1Subtask1", &["24"]),
-                ("task1Subtask2", &["24"]),
-            ],
+            &[("task1Subtask1", &["24"]), ("task1Subtask2", &["24"])],
             0,
             None,
         );
 
         let specs = vec![spec_cpp()];
-        let outs  = vec![out(48, &out_txt)];
-        let memo  = vec![memo(1, &memo_txt)];
+        let outs = vec![out(48, &out_txt)];
+        let memo = vec![memo(1, &memo_txt)];
 
         let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs, &memo, delim);
         assert_eq!(fail_milli, 0);
@@ -759,8 +787,8 @@ mod tests {
         let out_txt = build_labeled_stdout(delim, &[("L", &["--abc--"])], 0, None);
 
         let specs = vec![spec_cpp()];
-        let outs  = vec![out(10, &out_txt)];
-        let memo  = vec![memo(1, &memo_txt)];
+        let outs = vec![out(10, &out_txt)];
+        let memo = vec![memo(1, &memo_txt)];
 
         // checks: 4 core + 2 memo = 6; viols: 1 (exact) -> 1/6 = 166
         let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs, &memo, delim);
@@ -776,11 +804,11 @@ mod tests {
         // Memo expects two lines
         let memo_txt = build_labeled_stdout(delim, &[("L", &["a", "b"])], 0, None);
         // Output only has "a"
-        let out_txt  = build_labeled_stdout(delim, &[("L", &["a"])], 0, None);
+        let out_txt = build_labeled_stdout(delim, &[("L", &["a"])], 0, None);
 
         let specs = vec![spec_cpp()];
-        let outs  = vec![out(11, &out_txt)];
-        let memo  = vec![memo(1, &memo_txt)];
+        let outs = vec![out(11, &out_txt)];
+        let memo = vec![memo(1, &memo_txt)];
 
         // exact fails (lines differ), contains fails (b missing): viols=2
         // checks: 4 core + 2 memo = 6; 2/6 -> 333
@@ -797,11 +825,11 @@ mod tests {
         // Memo has label L with one line
         let memo_txt = build_labeled_stdout(delim, &[("L", &["xyz"])], 0, None);
         // Output has no labels at all
-        let out_txt  = "Retcode: 0\n".to_string();
+        let out_txt = "Retcode: 0\n".to_string();
 
         let specs = vec![spec_cpp()];
-        let outs  = vec![out(12, &out_txt)];
-        let memo  = vec![memo(1, &memo_txt)];
+        let outs = vec![out(12, &out_txt)];
+        let memo = vec![memo(1, &memo_txt)];
 
         // For that one label: exact missing -> viol, contains missing -> viol => +2
         // checks: 4 core + 2 memo = 6; 2/6 -> 333
@@ -815,30 +843,14 @@ mod tests {
         let delim = "&-=-&";
 
         // Memo has 2 labels
-        let memo_txt = build_labeled_stdout(
-            delim,
-            &[
-                ("A", &["1", "2"]),
-                ("B", &["x"]),
-            ],
-            0,
-            None,
-        );
+        let memo_txt = build_labeled_stdout(delim, &[("A", &["1", "2"]), ("B", &["x"])], 0, None);
 
         // Output: A matches exactly; B has "xx" -> exact fails, contains ok
-        let out_txt = build_labeled_stdout(
-            delim,
-            &[
-                ("A", &["1", "2"]),
-                ("B", &["xx"]),
-            ],
-            0,
-            None,
-        );
+        let out_txt = build_labeled_stdout(delim, &[("A", &["1", "2"]), ("B", &["xx"])], 0, None);
 
         let specs = vec![spec_cpp()];
-        let outs  = vec![out(13, &out_txt)];
-        let memo  = vec![memo(1, &memo_txt)];
+        let outs = vec![out(13, &out_txt)];
+        let memo = vec![memo(1, &memo_txt)];
 
         // For A: exact ok, contains ok (0)
         // For B: exact fail (1), contains ok (0)
@@ -882,7 +894,7 @@ mod tests {
     //     let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs, &memo, delim);
     //     assert_eq!(fail_milli, 0);
     //     assert_eq!(ltl_milli, 142);
-    // } 
+    // }
 
     #[test]
     fn memo_and_core_both_violate_accumulate() {
@@ -895,11 +907,11 @@ mod tests {
         // Output has different line "bad" -> memo exact & contains fail (2)
         // and Retcode: 2 -> failure & ProperTermination violation (but ProperTermination
         // only contributes to ltl if counted as violation among checks)
-        let out_txt  = build_labeled_stdout(delim, &[("L", &["bad"])], 2, None);
+        let out_txt = build_labeled_stdout(delim, &[("L", &["bad"])], 2, None);
 
         let specs = vec![spec_cpp()];
-        let outs  = vec![out(17, &out_txt)];
-        let memo  = vec![memo(1, &memo_txt)];
+        let outs = vec![out(17, &out_txt)];
+        let memo = vec![memo(1, &memo_txt)];
 
         // LTL checks per task:
         //   4 core (Safety/PT/Segfault/Exceptions) -> PT will violate (non-zero ret) => +1
@@ -926,8 +938,7 @@ mod tests {
     //     let memo  = vec![memo(1, &memo_txt)];
 
     //     let (ltl_milli, fail_milli) = ev.derive_props(&specs, &outs, &memo, delim);
-    //     assert_eq!(ltl_milli, 0);           
-    //     assert_eq!(fail_milli, 500);        
+    //     assert_eq!(ltl_milli, 0);
+    //     assert_eq!(fail_milli, 500);
     // }
 }
-

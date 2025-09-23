@@ -13,7 +13,7 @@ const { Title, Text } = Typography;
 
 interface Props {
   // modules: Module;
-  scope?: ModuleRole;
+  role?: ModuleRole;
 }
 
 const truncateTooltip = (text: string, maxLength = 200) =>
@@ -30,7 +30,7 @@ const ROLE_TITLE_LABEL: Record<ModuleRole, string> = {
 const roleToTitleLabel = (role?: ModuleRole) =>
   role ? (ROLE_TITLE_LABEL[role] ?? role) : 'Current';
 
-const MyModules: React.FC<Props> = ({ scope }) => {
+const MyModules: React.FC<Props> = ({ role }) => {
   const { modules } = useAuth();
   const { isSm } = useUI();
   const navigate = useNavigate();
@@ -38,7 +38,7 @@ const MyModules: React.FC<Props> = ({ scope }) => {
   const yearNow = dayjs().year();
   const filtered = modules
     .filter((m) => m.year === yearNow)
-    .filter((m) => (scope ? m.role === scope : Boolean(m.role)));
+    .filter((m) => (role ? m.role === role : Boolean(m.role)));
 
   return (
     <div className="h-full min-h-0 flex flex-col w-full bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800">
@@ -48,7 +48,7 @@ const MyModules: React.FC<Props> = ({ scope }) => {
           <div className="flex items-center gap-2">
             <AppstoreOutlined className="text-gray-500" />
             <Title level={isSm ? 5 : 5} className="!mb-0">
-              {`My ${roleToTitleLabel(scope)} Modules`}
+              {`My ${roleToTitleLabel(role)} Modules`}
             </Title>
           </div>
           <Text type="secondary" className="!text-xs">
@@ -64,9 +64,7 @@ const MyModules: React.FC<Props> = ({ scope }) => {
           emptyText: (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                scope ? `No ${ROLE_TITLE_LABEL[scope]} modules found` : 'No modules found'
-              }
+              description={role ? `No ${ROLE_TITLE_LABEL[role]} modules found` : 'No modules found'}
             />
           ),
         }}

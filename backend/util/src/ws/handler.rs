@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use crate::state::AppState;
+use crate::ws::axum_adapter::ws_route;
+use crate::ws::serve::WsServerOptions;
 use axum::{
     extract::{State, WebSocketUpgrade},
     response::IntoResponse,
 };
-use crate::state::AppState;
-use crate::ws::axum_adapter::ws_route;
-use crate::ws::serve::WsServerOptions;
+use std::sync::Arc;
 
 use crate::ws::default::ws_handler::DefaultWsHandler;
 
@@ -20,5 +20,13 @@ pub async fn default_websocket_handler(
     let opts = WsServerOptions::default(); // 30s WS pings; app-level {"type":"ping"} auto-pong
 
     // Unauthenticated default channel → no presence tracking
-    ws_route(ws, State(state), axum::Extension(None::<i64>), topic, handler, opts).await
+    ws_route(
+        ws,
+        State(state),
+        axum::Extension(None::<i64>),
+        topic,
+        handler,
+        opts,
+    )
+    .await
 }

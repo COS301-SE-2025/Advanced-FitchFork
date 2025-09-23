@@ -26,8 +26,8 @@ use crate::traits::feedback::{Feedback, FeedbackEntry};
 use crate::types::TaskResult;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::env;
 use serde_json;
+use util::config;
 
 /// AI feedback strategy: generates feedback using a Large Language Model (LLM).
 ///
@@ -115,11 +115,13 @@ impl Feedback for AiFeedback {
     /// # Returns
     ///
     /// A `Result` containing a vector of [`FeedbackEntry`]s or a [`MarkerError`].
-    async fn assemble_feedback(&self, results: &[TaskResult]) -> Result<Vec<FeedbackEntry>, MarkerError> {
+    async fn assemble_feedback(
+        &self,
+        results: &[TaskResult],
+    ) -> Result<Vec<FeedbackEntry>, MarkerError> {
         dotenvy::dotenv().ok();
 
-        let api_key = env::var("GEMINI_API_KEY")
-            .map_err(|_| MarkerError::InputMismatch("GEMINI_API_KEY environment variable not set".into()))?;
+        let api_key = config::gemini_api_key();
 
         let client = reqwest::Client::new();
         let mut feedback_entries = Vec::new();
@@ -129,9 +131,10 @@ impl Feedback for AiFeedback {
                 "All patterns matched".to_string()
             } else {
                 let prompt = format!(
-                    "For a task named '{}', the student missed the following patterns:\n{}\nPlease provide a short and concise hint to the student without giving away the answer.",
+                    "For a task named '{}', the student missed the following patterns:\n{}\nThis was their output:\n{}\nPlease provide a short and concise hint to the student without giving away the answer.",
                     result.name,
-                    result.missed_patterns.join("\n")
+                    result.missed_patterns.join("\n"),
+                    result.student_output.join("\n"),
                 );
 
                 let request_body = GeminiRequest {
@@ -139,9 +142,7 @@ impl Feedback for AiFeedback {
                         parts: vec![Part { text: prompt }],
                     }],
                     generation_config: Some(GenerationConfig {
-                        thinking_config: ThinkingConfig {
-                            thinking_budget: 0,
-                        },
+                        thinking_config: ThinkingConfig { thinking_budget: 0 },
                     }),
                 };
 
@@ -154,10 +155,18 @@ impl Feedback for AiFeedback {
                     .send()
                     .await
                     .map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
-                
-                let response_text = response.text().await.map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
-                let response = serde_json::from_str::<GeminiResponse>(&response_text)
-                    .map_err(|e| MarkerError::InputMismatch(format!("error decoding response body: {}. Full response: {}", e, response_text)))?;
+
+                let response_text = response
+                    .text()
+                    .await
+                    .map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
+                let response =
+                    serde_json::from_str::<GeminiResponse>(&response_text).map_err(|e| {
+                        MarkerError::InputMismatch(format!(
+                            "error decoding response body: {}. Full response: {}",
+                            e, response_text
+                        ))
+                    })?;
 
                 if let Some(candidate) = response.candidates.get(0) {
                     if let Some(part) = candidate.content.parts.get(0) {
@@ -199,6 +208,14 @@ mod tests {
                 ],
                 awarded: 0,
                 possible: 10,
+                student_output: vec!["factorial(5) = 120".to_string()],
+                memo_output: vec![
+                    "factorial(0) = 1".to_string(),
+                    "factorial(5) = 120".to_string(),
+                ],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
             TaskResult {
                 name: "Check for palindrome".to_string(),
@@ -206,6 +223,11 @@ mod tests {
                 missed_patterns: vec![],
                 awarded: 5,
                 possible: 5,
+                student_output: vec!["palindrome('racecar') = true".to_string()],
+                memo_output: vec!["palindrome('racecar') = true".to_string()],
+                stderr: None,
+                return_code: None,
+                manual_feedback: None,
             },
         ];
 
@@ -220,7 +242,12 @@ mod tests {
         assert_eq!(factorial_feedback.task, "Calculate factorial");
         assert!(!factorial_feedback.message.to_lowercase().contains("answer"));
         assert!(!factorial_feedback.message.contains("All patterns matched"));
-        assert!(!factorial_feedback.message.contains("Could not generate AI feedback."));
+        assert!(
+            !factorial_feedback
+                .message
+                .contains("Could not generate AI feedback.")
+        );
+        println!("Factorial AI Feedback: {}", factorial_feedback.message);
 
         let palindrome_feedback = &feedback[1];
         assert_eq!(palindrome_feedback.task, "Check for palindrome");

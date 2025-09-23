@@ -33,11 +33,7 @@ impl MigrationTrait for Migration {
                             .big_integer()
                             .not_null(),
                     )
-                    .col(
-                        ColumnDef::new(Alias::new("content"))
-                            .text()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(Alias::new("content")).text().not_null())
                     .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()

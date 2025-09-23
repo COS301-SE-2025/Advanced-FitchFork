@@ -4,7 +4,8 @@
 //! output compared to the memo's output and awards marks proportionally. **Lines are compared in order; only lines at the same position are considered a match.**
 
 use crate::traits::comparator::OutputComparator;
-use crate::types::{TaskResult, Subsection};
+use crate::types::TaskResult;
+use util::mark_allocator::Subsection;
 
 /// A comparator that awards marks based on the percentage of matching lines between student and memo output.
 ///
@@ -39,10 +40,19 @@ impl OutputComparator for PercentageComparator {
         if memo_lines.is_empty() {
             return TaskResult {
                 name: section.name.clone(),
-                awarded: if student_lines.is_empty() { section.value } else { 0 },
+                awarded: if student_lines.is_empty() {
+                    section.value
+                } else {
+                    0
+                },
                 possible: section.value,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
+                student_output: student_lines.to_vec(),
+                memo_output: memo_lines.to_vec(),
+                stderr: None,
+                return_code: None,
+                manual_feedback: section.feedback.clone(),
             };
         }
 
@@ -59,7 +69,7 @@ impl OutputComparator for PercentageComparator {
                 missed_patterns.push(memo_lines[i].clone());
             }
         }
-  
+
         for i in min_len..memo_lines.len() {
             missed_patterns.push(memo_lines[i].clone());
         }
@@ -67,17 +77,22 @@ impl OutputComparator for PercentageComparator {
         let percentage = matched_count as f32 / memo_lines.len() as f32;
         let mut awarded = (section.value as f32 * percentage).round() as i64;
 
-        if student_lines.len() > memo_lines.len() && student_lines.len() > 0 {
+        if student_lines.len() > memo_lines.len() && !student_lines.is_empty() {
             let penalty = memo_lines.len() as f32 / student_lines.len() as f32;
             awarded = (awarded as f32 * penalty).round() as i64;
         }
 
         TaskResult {
             name: section.name.clone(),
-            awarded: awarded as i64,
+            awarded,
             possible: section.value,
             matched_patterns,
             missed_patterns,
+            student_output: student_lines.to_vec(),
+            memo_output: memo_lines.to_vec(),
+            stderr: None,
+            return_code: None,
+            manual_feedback: section.feedback.clone(),
         }
     }
 }
@@ -85,7 +100,7 @@ impl OutputComparator for PercentageComparator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Subsection;
+    use util::mark_allocator::Subsection;
 
     /// Helper function to create a vector of strings from a slice of string literals.
     fn to_string_vec(lines: &[&str]) -> Vec<String> {
@@ -96,6 +111,8 @@ mod tests {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,
+            regex: None,
+            feedback: None,
         }
     }
 
@@ -186,7 +203,7 @@ mod tests {
         let memo_lines = to_string_vec(&["a", "b"]);
         let student_lines = to_string_vec(&["a", "b", "a", "b"]);
         let section = mock_subsection(10);
-        // All memo lines are found, but extra lines are penalised, so 50% match.
+        // All memo lines are found, but extra lines are penalised, so ~50% match.
         let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 5);
     }
@@ -202,4 +219,4 @@ mod tests {
         assert!(result.awarded < 10);
         assert!(result.awarded > 0);
     }
-} 
+}

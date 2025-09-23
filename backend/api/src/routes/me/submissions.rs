@@ -1,12 +1,13 @@
 use axum::{
+    Extension, Json,
     extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Extension, Json,
 };
 use common::format_validation_errors;
 use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, RelationTrait, QuerySelect, FromQueryResult, prelude::Expr,
+    ColumnTrait, Condition, EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect, RelationTrait, prelude::Expr,
 };
 use sea_orm_migration::prelude::Alias;
 use serde::{Deserialize, Serialize};
@@ -15,9 +16,10 @@ use validator::Validate;
 use crate::{auth::claims::AuthUser, response::ApiResponse};
 use db::models::{
     assignment,
-    assignment_submission::{self, Column as SubmissionColumn, Entity as SubmissionEntity},
-    module,
-    user,
+    assignment_submission::{
+        self, Column as SubmissionColumn, Entity as SubmissionEntity, SubmissionStatus,
+    },
+    module, user,
     user_module_role::{self, Column as RoleColumn, Role},
 };
 use util::state::AppState;
@@ -33,6 +35,7 @@ pub struct GetSubmissionsQuery {
     pub year: Option<i32>,
     pub is_late: Option<bool>,
     pub sort: Option<String>,
+    pub module_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -96,6 +99,7 @@ pub struct SubmissionWithRelations {
     pub module_id: i64,
     pub module_code: String,
     pub username: String,
+    pub status: SubmissionStatus,
 }
 
 /// GET /api/me/submissions
@@ -176,6 +180,7 @@ pub async fn get_my_submissions(
         .column_as(SubmissionColumn::UpdatedAt, "updated_at")
         .column_as(SubmissionColumn::UserId, "user_id")
         .column_as(SubmissionColumn::AssignmentId, "assignment_id")
+        .column_as(SubmissionColumn::Status, "status")
         .column_as(assignment::Column::Name, "assignment_name")
         .column_as(assignment::Column::Description, "assignment_description")
         .column_as(assignment::Column::DueDate, "assignment_due_date")
@@ -212,7 +217,7 @@ pub async fn get_my_submissions(
     }
 
     let mut condition = Condition::all();
-    
+
     if let Some(q) = &query.query {
         let pattern = format!("%{}%", q.to_lowercase());
         condition = condition.add(
@@ -227,10 +232,14 @@ pub async fn get_my_submissions(
         condition = condition.add(module::Column::Year.eq(year));
     }
 
+    if let Some(module_filter) = query.module_id {
+        condition = condition.add(module::Column::Id.eq(module_filter));
+    }
+
     if let Some(is_late) = query.is_late {
         let submission_alias = Alias::new("assignment_submissions");
         let assignment_alias = Alias::new("assignments");
-        
+
         let created_at = Expr::col((submission_alias.clone(), SubmissionColumn::CreatedAt));
         let due_date = Expr::col((assignment_alias.clone(), assignment::Column::DueDate));
 
@@ -269,18 +278,16 @@ pub async fn get_my_submissions(
     } else {
         query_builder = query_builder.order_by(SubmissionColumn::CreatedAt, sea_orm::Order::Desc);
     }
-    
+
     query_builder = query_builder.order_by(SubmissionColumn::Id, sea_orm::Order::Asc);
 
     let paginator = query_builder
         .into_model::<SubmissionWithRelations>()
         .paginate(db, per_page);
-    
+
     let total = paginator.num_items().await.unwrap_or(0);
-    let submissions_db: Vec<SubmissionWithRelations> = paginator
-        .fetch_page(page - 1)
-        .await
-        .unwrap_or_default();
+    let submissions_db: Vec<SubmissionWithRelations> =
+        paginator.fetch_page(page - 1).await.unwrap_or_default();
 
     let submissions: Vec<SubmissionItem> = submissions_db
         .into_iter()
@@ -289,7 +296,7 @@ pub async fn get_my_submissions(
 
             SubmissionItem {
                 id: s.id,
-                status: "submitted".to_string(),
+                status: s.status.to_string(),
                 score: Score {
                     earned: s.earned,
                     total: s.total,
@@ -326,7 +333,8 @@ pub async fn get_my_submissions(
                 },
                 "No submissions found",
             )),
-        ).into_response();
+        )
+            .into_response();
     }
 
     (

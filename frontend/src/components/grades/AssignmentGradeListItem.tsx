@@ -24,7 +24,7 @@ const AssignmentGradeListItem = ({ grade, onClick }: Props) => {
             <span className="font-semibold text-black dark:text-white">
               {grade.username ?? 'Unknown User'}
             </span>
-            <PercentageTag value={grade.score} decimals={1} palette="redGreen" />
+            <PercentageTag value={grade.score} decimals={1} scheme="red-green" />
           </div>
         }
         description={

@@ -1,10 +1,9 @@
-use sea_orm::entity::prelude::*;
-use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, Set};
 use chrono::{DateTime, Utc};
 use log::{info, warn};
-use std::path::PathBuf;
+use sea_orm::entity::prelude::*;
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
 use std::fs;
-use std::env;
+use util::paths::module_dir;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "modules")]
@@ -54,14 +53,14 @@ impl Model {
     /// # Returns
     /// A fully populated `Model` after insertion.
     pub async fn create<C>(
-      db: &C,
+        db: &C,
         code: &str,
         year: i32,
         description: Option<&str>,
         credits: i32,
     ) -> Result<Self, DbErr>
-        where
-        C: ConnectionTrait, 
+    where
+        C: ConnectionTrait,
     {
         let active = ActiveModel {
             code: Set(code.to_owned()),
@@ -80,18 +79,15 @@ impl Model {
         info!("Deleting module {} and cascading assignments", self.id);
 
         // Step 2: Remove module-level folder
-        let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-            .unwrap_or_else(|_| "data/assignment_files".to_string());
+        let dir = module_dir(self.id);
 
-        let module_dir = PathBuf::from(storage_root).join(format!("module_{}", self.id));
-
-        if module_dir.exists() {
-            match fs::remove_dir_all(&module_dir) {
-                Ok(_) => info!("Deleted module directory {}", module_dir.display()),
-                Err(e) => warn!("Failed to delete module directory {}: {}", module_dir.display(), e),
+        if dir.exists() {
+            match fs::remove_dir_all(&dir) {
+                Ok(_) => info!("Deleted module directory {}", dir.display()),
+                Err(e) => warn!("Failed to delete module directory {}: {}", dir.display(), e),
             }
         } else {
-            warn!("Expected module directory {} does not exist", module_dir.display());
+            warn!("Expected module directory {} does not exist", dir.display());
         }
 
         // Step 3: Delete the module
@@ -113,7 +109,7 @@ impl Model {
         credits: i32,
     ) -> Result<Self, DbErr> {
         let Some(module) = Entity::find_by_id(id).one(db).await? else {
-            return Err(DbErr::RecordNotFound(format!("Module ID {} not found", id)));
+            return Err(DbErr::RecordNotFound(format!("Module ID {id} not found")));
         };
 
         let mut active: ActiveModel = module.into();
@@ -125,7 +121,6 @@ impl Model {
         active.update(db).await
     }
 }
-
 
 #[cfg(test)]
 mod tests {

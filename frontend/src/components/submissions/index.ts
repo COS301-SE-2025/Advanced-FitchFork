@@ -4,4 +4,5 @@ export {default as SubmissionTasks} from "./SubmissionTasks";
 export {default as SubmissionListItem} from "./SubmissionListItem";
 export {default as SubmissionsEmptyState} from "./SubmissionsEmptyState";
 export {default as SubmitAssignmentModal} from "./SubmitAssignmentModal";
-export {default as IgnoredTag} from "./IgnoredTag";
+export {default as SubmissionProgressOverlay} from "./SubmissionProgressOverlay";
+export {default as SubmissionStatusTag} from "./SubmissionStatusTag";

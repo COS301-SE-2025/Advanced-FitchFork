@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { EntityListHandle, EntityListProps } from '@/components/EntityList';
 import { EntityList } from '@/components/EntityList';
@@ -17,6 +17,12 @@ import { IdTag, DateTime, PercentageTag } from '@/components/common';
 import AssignmentGradesEmptyState from '@/components/grades/AssignmentGradesEmptyState';
 import { AssignmentGradeListItem } from '@/components/grades';
 import { useUI } from '@/context/UIContext';
+import type { SortOption } from '@/types/common';
+
+// Helpers
+const uniq = <T,>(xs: T[]) => Array.from(new Set(xs));
+const taskIdFrom = (t: NonNullable<GradeResponse['tasks']>[number]) =>
+  t.name?.trim() || (t.task_number != null ? `Task ${t.task_number}` : undefined) || 'Task';
 
 const AssignmentGrades = () => {
   const { setValue } = useViewSlot();
@@ -28,6 +34,9 @@ const AssignmentGrades = () => {
 
   const moduleId = moduleDetails.id;
   const assignmentId = assignment.id;
+
+  // Discovered task columns (union of task labels from the latest fetch)
+  const [taskKeys, setTaskKeys] = useState<string[]>([]);
 
   // Set page title in slot
   useEffect(() => {
@@ -49,7 +58,7 @@ const AssignmentGrades = () => {
     per_page: number;
     query?: string;
     filters: Record<string, string[]>;
-    sort: { field: string; order: 'ascend' | 'descend' }[];
+    sort: SortOption[];
   }): Promise<{ items: GradeResponse[]; total: number }> => {
     const res = await listGrades(moduleId, assignmentId, {
       page,
@@ -59,7 +68,12 @@ const AssignmentGrades = () => {
     });
 
     if (res.success) {
-      return { items: res.data.grades, total: res.data.total };
+      const items = res.data.grades ?? [];
+      const discovered = items.flatMap((g) =>
+        (g.tasks ?? []).map(taskIdFrom).filter((x): x is string => !!x),
+      );
+      if (discovered.length) setTaskKeys((prev) => uniq([...prev, ...discovered]));
+      return { items, total: res.data.total };
     } else {
       message.error(`Failed to fetch grades: ${res.message}`);
       return { items: [], total: 0 };
@@ -72,7 +86,7 @@ const AssignmentGrades = () => {
       await exportGrades(moduleId, assignmentId);
       message.success('Export started – check your downloads');
     } catch (e: any) {
-      message.error(e.message || 'Failed to export grades');
+      message.error(e?.message || 'Failed to export grades');
     }
   };
 
@@ -88,9 +102,86 @@ const AssignmentGrades = () => {
     ],
   };
 
+  // Base columns (without Grade)
+  const baseColumnsWithoutGrade: EntityListProps<GradeResponse>['columns'] = useMemo(
+    () => [
+      {
+        title: 'ID',
+        dataIndex: 'id',
+        key: 'id',
+        defaultHidden: true,
+        render: (id: number) => <IdTag id={id} />,
+      },
+      {
+        title: 'Username',
+        dataIndex: 'username',
+        key: 'username',
+        sorter: { multiple: 1 },
+      },
+      {
+        // renamed
+        title: 'Submitted At',
+        dataIndex: 'created_at',
+        key: 'created_at',
+        sorter: { multiple: 2 },
+        render: (_: unknown, g: GradeResponse) => (
+          <DateTime value={g.created_at} variant="datetime" />
+        ),
+      },
+      {
+        title: 'Updated At',
+        dataIndex: 'updated_at',
+        defaultHidden: true,
+        key: 'updated_at',
+        render: (_: unknown, g: GradeResponse) => (
+          <DateTime value={g.updated_at} variant="datetime" />
+        ),
+      },
+    ],
+    [],
+  );
+
+  // Dynamic task columns (hidden by default)
+  const dynamicTaskColumns: EntityListProps<GradeResponse>['columns'] = useMemo(
+    () =>
+      taskKeys.map((taskKey) => ({
+        title: taskKey,
+        key: `task:${taskKey}`,
+        dataIndex: `task:${taskKey}`,
+        align: 'right' as const,
+        render: (_: unknown, g: GradeResponse) => {
+          const t = (g.tasks || []).find((x) => taskIdFrom(x) === taskKey);
+          return t ? <PercentageTag value={t.score} decimals={1} /> : '—';
+        },
+      })),
+    [taskKeys],
+  );
+
+  // Grade column (moved to very end)
+  const gradeColumn: EntityListProps<GradeResponse>['columns'][number] = useMemo(
+    () => ({
+      title: 'Grade',
+      dataIndex: 'score',
+      key: 'score',
+      align: 'right',
+      sorter: { multiple: 3 }, // any priority is fine; it’s last visually
+      render: (_: unknown, g: GradeResponse) => (
+        <PercentageTag value={g.score} decimals={1} scheme="red-green" />
+      ),
+    }),
+    [],
+  );
+
+  // Final columns: base + tasks + grade LAST
+  const allColumns = useMemo(
+    () => [...baseColumnsWithoutGrade, ...dynamicTaskColumns, gradeColumn],
+    [baseColumnsWithoutGrade, dynamicTaskColumns, gradeColumn],
+  );
+
   return (
     <div className="flex h-full flex-col gap-4">
       <EntityList<GradeResponse>
+        key={`grades:${taskKeys.join('|')}`} // remount when new task columns appear
         ref={listRef}
         name="Grades"
         fetchItems={fetchGrades}
@@ -109,43 +200,7 @@ const AssignmentGrades = () => {
         )}
         columnToggleEnabled
         actions={actions}
-        columns={[
-          {
-            title: 'ID',
-            dataIndex: 'id',
-            key: 'id',
-            defaultHidden: true,
-            render: (id: number) => <IdTag id={id} />,
-          },
-          {
-            title: 'Username',
-            dataIndex: 'username',
-            key: 'username',
-            sorter: { multiple: 1 },
-          },
-          {
-            title: 'Grade',
-            dataIndex: 'score',
-            key: 'score',
-            align: 'right',
-            sorter: { multiple: 2 },
-            render: (_, g) => <PercentageTag value={g.score} decimals={1} palette="redGreen" />,
-          },
-          {
-            title: 'Created At',
-            dataIndex: 'created_at',
-            key: 'created_at',
-            defaultHidden: true,
-            sorter: { multiple: 3 },
-            render: (_, g) => <DateTime value={g.created_at} variant="datetime" />,
-          },
-          {
-            title: 'Updated At',
-            dataIndex: 'updated_at',
-            key: 'updated_at',
-            render: (_, g) => <DateTime value={g.updated_at} variant="datetime" />,
-          },
-        ]}
+        columns={allColumns}
         emptyNoEntities={
           <AssignmentGradesEmptyState onRefresh={() => listRef.current?.refresh()} />
         }

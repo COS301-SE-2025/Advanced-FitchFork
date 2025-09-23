@@ -5,6 +5,12 @@
 
 use serde::Serialize;
 
+// Re-export allocator schema from util so callers can `use crate::types::*;`
+use util::mark_allocator as util_alloc;
+pub type Allocator = util_alloc::MarkAllocator;
+pub type Task = util_alloc::Task;
+pub type Subsection = util_alloc::Subsection;
+
 /// Represents the result of a single marking task.
 ///
 /// This struct holds the information about a task's outcome, including the score awarded,
@@ -21,6 +27,16 @@ pub struct TaskResult {
     pub matched_patterns: Vec<String>,
     /// A list of patterns or items that were expected but not found in the student's output.
     pub missed_patterns: Vec<String>,
+    /// The student's actual output lines for comparison purposes.
+    pub student_output: Vec<String>,
+    /// The memo's expected output lines for comparison purposes.
+    pub memo_output: Vec<String>,
+    /// The stderr output (stack trace) if the student's code crashed.
+    pub stderr: Option<String>,
+    /// The return code from running the student's code.
+    pub return_code: Option<i32>,
+    /// Optional manual feedback message for manual feedback strategy.
+    pub manual_feedback: Option<String>,
 }
 
 /// Represents a serializable per-task result for API output.
@@ -36,30 +52,4 @@ pub struct JsonTaskResult {
     pub possible: i64,
     /// The percentage score for this task, computed as (awarded / possible) * 100 (or 0.0 if possible is zero).
     pub percentage: f32,
-}
-
-/// The top-level schema for an allocator report, containing a list of tasks.
-#[derive(Debug)]
-pub struct AllocatorSchema(pub Vec<TaskEntry>);
-
-/// Represents a single task in the allocator report.
-#[derive(Debug)]
-pub struct TaskEntry {
-    /// The task identifier (e.g., "task1").
-    pub id: String,
-    /// The name of the task.
-    pub name: String,
-    /// The value (score/points) assigned to the task.
-    pub value: i64,
-    /// The subsections of the task. Every task must have atleast one subsection.
-    pub subsections: Vec<Subsection>,
-}
-
-/// Represents a subsection within a task.
-#[derive(Debug)]
-pub struct Subsection {
-    /// The name of the subsection.
-    pub name: String,
-    /// The value (score/points) assigned to the subsection.
-    pub value: i64,
 }

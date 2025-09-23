@@ -11,12 +11,15 @@
 //! Called via `modules_routes()` as a nested router mounted under `/modules/{module_id}/personnel`.
 //! This route group is protected by `require_lecturer` middleware in the parent router.
 
-use axum::{Router, routing::{get, post, delete}};
+use axum::{
+    Router,
+    routing::{delete, get, post},
+};
 use util::state::AppState;
 
+mod delete;
 mod get;
 mod post;
-mod delete;
 
 /// Builds and returns the `/modules/{module_id}/personnel` route group.
 ///

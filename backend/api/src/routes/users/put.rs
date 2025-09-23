@@ -1,21 +1,24 @@
-use std::path::PathBuf;
+use crate::response::ApiResponse;
+use crate::routes::common::UserResponse;
+use axum::extract::Multipart;
 use axum::{
-    extract::{State, Path},
+    Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
-use axum::extract::Multipart;
-use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, IntoActiveModel, QueryFilter, Set};
-use serde::Deserialize;
-use tokio::fs;
-use tokio::io::AsyncWriteExt;
-use util::state::AppState;
-use validator::Validate;
-use crate::{response::ApiResponse};
 use common::format_validation_errors;
 use db::models::user;
-use crate::routes::common::UserResponse;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, EntityTrait, IntoActiveModel, QueryFilter, Set,
+};
+use serde::Deserialize;
+use tokio::io::AsyncWriteExt;
+use util::{
+    paths::{ensure_dir, user_profile_dir, user_profile_path},
+    state::AppState,
+};
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdateUserRequest {
@@ -106,26 +109,35 @@ pub async fn update_user(
     if let Err(e) = req.validate() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<UserResponse>::error(format_validation_errors(&e))),
+            Json(ApiResponse::<UserResponse>::error(
+                format_validation_errors(&e),
+            )),
         );
     }
 
     if req.username.is_none() && req.email.is_none() && req.admin.is_none() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<UserResponse>::error("At least one field must be provided")),
+            Json(ApiResponse::<UserResponse>::error(
+                "At least one field must be provided",
+            )),
         );
     }
 
     let current_user = user::Entity::find_by_id(user_id)
-        .one(db).await.unwrap().unwrap();
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap();
 
     // TODO: Should probably make a more robust system with a super admin
     // Prevent changing your own admin status or changing others' admin status
     if let Some(_) = req.admin {
         return (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<UserResponse>::error("Changing admin status is not allowed")),
+            Json(ApiResponse::<UserResponse>::error(
+                "Changing admin status is not allowed",
+            )),
         );
     }
 
@@ -144,14 +156,19 @@ pub async fn update_user(
                 Ok(Some(_)) => {
                     return (
                         StatusCode::CONFLICT,
-                        Json(ApiResponse::<UserResponse>::error("A user with this email already exists")),
+                        Json(ApiResponse::<UserResponse>::error(
+                            "A user with this email already exists",
+                        )),
                     );
                 }
                 Ok(None) => {}
                 Err(e) => {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
+                        Json(ApiResponse::<UserResponse>::error(format!(
+                            "Database error: {}",
+                            e
+                        ))),
                     );
                 }
             }
@@ -182,7 +199,10 @@ pub async fn update_user(
                 Err(e) => {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
+                        Json(ApiResponse::<UserResponse>::error(format!(
+                            "Database error: {}",
+                            e
+                        ))),
                     );
                 }
             }
@@ -210,7 +230,10 @@ pub async fn update_user(
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<UserResponse>::error(format!("Database error: {}", e))),
+            Json(ApiResponse::<UserResponse>::error(format!(
+                "Database error: {}",
+                e
+            ))),
         ),
     }
 }
@@ -295,8 +318,10 @@ pub async fn upload_avatar(
                 if !ALLOWED_MIME.contains(&ct.as_str()) {
                     return (
                         StatusCode::BAD_REQUEST,
-                        Json(ApiResponse::<ProfilePictureResponse>::error("File type not supported.")),
-                    )
+                        Json(ApiResponse::<ProfilePictureResponse>::error(
+                            "File type not supported.",
+                        )),
+                    );
                 }
             }
 
@@ -304,8 +329,10 @@ pub async fn upload_avatar(
             if bytes.len() as u64 > MAX_SIZE {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse::<ProfilePictureResponse>::error("File too large.")),
-                )
+                    Json(ApiResponse::<ProfilePictureResponse>::error(
+                        "File too large.",
+                    )),
+                );
             }
 
             file_data = Some(bytes);
@@ -315,8 +342,10 @@ pub async fn upload_avatar(
     let Some(file_bytes) = file_data else {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<ProfilePictureResponse>::error("No file uploaded.")),
-        )
+            Json(ApiResponse::<ProfilePictureResponse>::error(
+                "No file uploaded.",
+            )),
+        );
     };
 
     let ext = match content_type.as_deref() {
@@ -326,25 +355,48 @@ pub async fn upload_avatar(
         _ => "bin",
     };
 
-    let root = std::env::var("USER_PROFILE_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/user_profile_pictures".to_string());
+    // Ensure the user's profile directory exists under USERS_STORAGE_ROOT
+    if let Err(_) = ensure_dir(user_profile_dir(user_id)) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<ProfilePictureResponse>::error(
+                "Failed to prepare user directory",
+            )),
+        );
+    }
 
-    let user_dir = PathBuf::from(&root).join(format!("user_{}", user_id));
-    let _ = fs::create_dir_all(&user_dir);
-
+    // Save as avatar.{ext} inside .../user_{id}/profile/
     let filename = format!("avatar.{}", ext);
-    let path = user_dir.join(&filename);
-    let mut file = tokio::fs::File::create(&path).await.unwrap();
-    file.write_all(&file_bytes).await.unwrap();
+    let path = user_profile_path(user_id, &filename);
 
-    let relative_path = path
-        .strip_prefix(&root)
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
+    let mut file = match tokio::fs::File::create(&path).await {
+        Ok(f) => f,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<ProfilePictureResponse>::error(
+                    "Failed to create avatar file",
+                )),
+            );
+        }
+    };
+    if let Err(_) = file.write_all(&file_bytes).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::<ProfilePictureResponse>::error(
+                "Failed to write avatar file",
+            )),
+        );
+    }
+
+    // We store the path relative to the user's profile dir (so get_avatar can use user_profile_path(user_id, &path))
+    let relative_path = filename.clone();
 
     let current = user::Entity::find_by_id(user_id)
-        .one(db).await.unwrap().unwrap();
+        .one(db)
+        .await
+        .unwrap()
+        .unwrap();
 
     let mut model = current.into_active_model();
     model.profile_picture_path = Set(Some(relative_path.clone()));

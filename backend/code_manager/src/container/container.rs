@@ -75,30 +75,19 @@ pub async fn run_container(
 
         let mut combined_output = String::new();
 
-        if config.output.stdout {
-            combined_output.push_str(&stdout);
-        }
+        combined_output.push_str(&stdout);
 
-        if config.output.stderr {
-            if !combined_output.is_empty() {
-                combined_output.push('\n');
-            }
-            combined_output.push_str(&stderr);
+        combined_output.push_str("&FITCHFORK&StandardError\n");
+        if !combined_output.is_empty() {
+            combined_output.push('\n');
         }
+        combined_output.push_str(&stderr);
 
-        if config.output.retcode {
-            if !combined_output.is_empty() {
-                combined_output.push('\n');
-            }
-            combined_output.push_str(&format!("Retcode: {}", retcode));
+        combined_output.push_str("&FITCHFORK&ReturnCode\n");
+        if !combined_output.is_empty() {
+            combined_output.push('\n');
         }
-
-        if !output.status.success() {
-            if !combined_output.is_empty() {
-                combined_output.push('\n');
-            }
-            combined_output.push_str(&format!("[ERROR]\n{}", &stderr));
-        }
+        combined_output.push_str(&format!("Retcode: {}", retcode));
 
         outputs.push(combined_output);
     }

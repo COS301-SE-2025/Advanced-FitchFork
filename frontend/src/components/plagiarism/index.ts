@@ -2,3 +2,8 @@ export { default as PlagiarismCaseCard } from "./PlagiarismCaseCard";
 export { default as PlagiarismCaseListItem } from "./PlagiarismCaseListItem";
 export { default as PlagiarismEmptyState } from "./PlagiarismEmptyState";
 export { default as PlagiarismStatusTag } from "./PlagiarismStatusTag";
+export { default as PlagiarismGraph } from "./PlagiarismGraph";
+export { default as MossRunModal } from "./MossRunModal";
+export { default as MossReportsCard } from "./MossReportsCard";
+export { default as PlagiarismCasesPanel } from './PlagiarismCasesPanel';
+export { default as HashScanModal } from "./HashScanModal";

@@ -7,7 +7,15 @@ export const MARKING_SCHEMES = ['exact', 'percentage', 'regex'] as const;
 /** Feedback schemes */
 export const FEEDBACK_SCHEMES = ['auto', 'manual', 'ai'] as const;
 /** Languages (Rust currently supports only C++ and Java) */
-export const LANGUAGES = ['cpp', 'java'] as const;
+export const LANGUAGES = [
+  'c',
+  'cpp',
+  'java',
+  'python',
+  'go',
+  'rust'
+] as const;
+
 /** Submission modes */
 export const SUBMISSION_MODES = ['manual', 'gatlam', 'rng', 'codecoverage'] as const;
 /** Grading policies (mirrors Rust enum) */
@@ -28,8 +36,17 @@ export const FEEDBACK_SCHEME_OPTIONS = FEEDBACK_SCHEMES.map((val) => ({
   value: val,
 }));
 
+export const LANGUAGE_LABELS: Record<(typeof LANGUAGES)[number], string> = {
+  c: `C`,
+  cpp: 'C++',
+  java: 'Java',
+  python: `Python`,
+  go: 'GoLang',
+  rust: 'Rust',
+};
+
 export const LANGUAGE_OPTIONS = LANGUAGES.map((val) => ({
-  label: val.charAt(0).toUpperCase() + val.slice(1),
+  label: LANGUAGE_LABELS[val],
   value: val,
 }));
 
@@ -94,15 +111,37 @@ export interface AssignmentExecutionConfig {
 export interface AssignmentMarkingConfig {
   /** Strategy used to mark student submissions. */
   marking_scheme: MarkingScheme;
+
   /** Method used to generate feedback for the submission. */
   feedback_scheme: FeedbackScheme;
+
   /** Policy for selecting final grade across submissions. */
   grading_policy: GradingPolicy;
+
   /**
    * String delimiter used for splitting output sections.
    * NOTE: spelling matches backend field (`deliminator`) for compatibility.
    */
   deliminator: string;
+
+  /** Maximum number of attempts (only enforced if `limit_attempts` is true). */
+  max_attempts: number;
+
+  /** If false, attempt limits are not enforced. */
+  limit_attempts: boolean;
+
+  /** Minimum percentage required to pass (0–100). */
+  pass_mark: number;
+
+  /**
+   * If true, **students** may make practice submissions.
+   * If false (default), practice uploads are rejected for students.
+   * Staff (lecturer/assistant/admin) are unaffected (always allowed).
+   */
+  allow_practice_submissions: boolean;
+
+  /** Substrings to flag as disallowed in source files (serialized as `dissalowed_code`). */
+  dissalowed_code: string[];
 }
 
 /** Options for execution output capture (ExecutionOutputOptions). */
@@ -118,7 +157,6 @@ export interface AssignmentOutputConfig {
 /**
  * ---- GATLAM-related config (mirrors Rust GATLAM & TaskSpecConfig) ----
  */
-
 export interface GeneConfig {
   min_value: number;
   max_value: number;
@@ -131,6 +169,20 @@ export interface TaskSpecConfig {
   max_runtime_ms?: number;
   /** Disallowed substrings in outputs. */
   forbidden_outputs: string[];
+}
+
+/** Security options (SecurityOptions in Rust). */
+export interface AssignmentSecurityConfig {
+  /** If true, students must unlock the assignment. */
+  password_enabled: boolean;
+  /** Optional PIN in plain text; null/undefined means no PIN set. */
+  password_pin?: string | null;
+  /** Minutes the unlock cookie stays valid. */
+  cookie_ttl_minutes: number;
+  /** If true, bind cookie to user id (harder to share). */
+  bind_cookie_to_user: boolean;
+  /** Optional CIDR allowlist; empty => allow all. */
+  allowed_cidrs: string[];
 }
 
 export interface GatlamConfig {
@@ -158,6 +210,9 @@ export interface GatlamConfig {
   verbose: boolean;
 }
 
+export interface CodeCoverage {
+  code_coverage_weight: number;
+}
 /**
  * Top-level assignment configuration (ExecutionConfig in Rust).
  * Combines execution limits, marking rules, project setup, output options, and GA/TLAM config.
@@ -168,4 +223,6 @@ export interface AssignmentConfig {
   project: AssignmentProjectConfig;
   output: AssignmentOutputConfig;
   gatlam: GatlamConfig;
+  security: AssignmentSecurityConfig;
+  code_coverage: CodeCoverage;
 }

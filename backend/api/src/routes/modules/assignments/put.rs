@@ -13,13 +13,21 @@
 //! - Direct modification of `status` is not allowed through edit/bulk endpoints; status updates are automatic.
 //! - All date fields must be in ISO 8601 format (RFC 3339).
 
-use axum::{extract::{State, Path}, http::StatusCode, response::IntoResponse, Json};
-use chrono::{DateTime, Utc};
-use util::state::AppState;
-use crate::response::ApiResponse;
-use db::models::assignment::{self, AssignmentType, Status};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, IntoActiveModel, DbErr};
 use super::common::{AssignmentRequest, AssignmentResponse, BulkUpdateRequest, BulkUpdateResult};
+use crate::response::ApiResponse;
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use chrono::{DateTime, Utc};
+use db::models::assignment::{self, AssignmentType, Status};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DbErr, EntityTrait, IntoActiveModel,
+    QueryFilter,
+};
+use util::state::AppState;
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}
 ///
@@ -83,33 +91,31 @@ pub async fn edit_assignment(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    let available_from = match DateTime::parse_from_rfc3339(&req.available_from)
-        .map(|dt| dt.with_timezone(&Utc))
-    {
-        Ok(dt) => dt,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error(
-                    "Invalid available_from datetime format",
-                )),
-            );
-        }
-    };
+    let available_from =
+        match DateTime::parse_from_rfc3339(&req.available_from).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(dt) => dt,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid available_from datetime format",
+                    )),
+                );
+            }
+        };
 
-    let due_date = match DateTime::parse_from_rfc3339(&req.due_date)
-        .map(|dt| dt.with_timezone(&Utc))
-    {
-        Ok(dt) => dt,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<AssignmentResponse>::error(
-                    "Invalid due_date datetime format",
-                )),
-            );
-        }
-    };
+    let due_date =
+        match DateTime::parse_from_rfc3339(&req.due_date).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(dt) => dt,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<AssignmentResponse>::error(
+                        "Invalid due_date datetime format",
+                    )),
+                );
+            }
+        };
 
     let assignment_type = match req.assignment_type.parse::<AssignmentType>() {
         Ok(t) => t,
@@ -147,7 +153,9 @@ pub async fn edit_assignment(
         }
         Err(DbErr::RecordNotFound(_)) => (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<AssignmentResponse>::error("Assignment not found")),
+            Json(ApiResponse::<AssignmentResponse>::error(
+                "Assignment not found",
+            )),
         ),
         Err(DbErr::Custom(msg)) => (
             StatusCode::BAD_REQUEST,
@@ -285,12 +293,13 @@ pub async fn bulk_update_assignments(
 
     let result = BulkUpdateResult { updated, failed };
 
-    let message = format!("Updated {}/{} assignments", updated, req.assignment_ids.len());
+    let message = format!(
+        "Updated {}/{} assignments",
+        updated,
+        req.assignment_ids.len()
+    );
 
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(result, message)),
-    )
+    (StatusCode::OK, Json(ApiResponse::success(result, message)))
 }
 
 /// PUT /api/modules/:module_id/assignments/:assignment_id/open
@@ -349,10 +358,7 @@ pub async fn open_assignment(
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(&format!(
-                "Database error: {}",
-                e
-            ))),
+            Json(ApiResponse::<()>::error(&format!("Database error: {}", e))),
         ),
     }
 }
@@ -409,10 +415,7 @@ pub async fn close_assignment(
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<()>::error(&format!(
-                "Database error: {}",
-                e
-            ))),
+            Json(ApiResponse::<()>::error(&format!("Database error: {}", e))),
         ),
     }
 }

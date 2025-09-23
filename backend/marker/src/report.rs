@@ -1,7 +1,7 @@
 //! # Report Module
 //!
 //! This module defines the data structures and utilities for representing grading reports in the FitchFork system.
-//! It provides a comprehensive model for scores, tasks, subtasks, code coverage, and code complexity, as well as
+//! It provides a comprehensive model for scores, tasks, subtasks, code coverage, as well as
 //! serialization for API responses. The main entry point is the `MarkReport` struct, which aggregates all relevant
 //! grading information for a submission.
 //!
@@ -10,14 +10,13 @@
 //! - [`ReportSubsection`]: Represents a subtask or subcomponent of a grading task, with feedback.
 //! - [`ReportTask`]: Represents a grading task, which may have multiple subsections.
 //! - [`CodeCoverageReport`]: Represents code coverage results, including per-file details.
-//! - [`CodeComplexityReport`]: Represents code complexity metrics.
 //! - [`MarkReport`]: The top-level report, aggregating all grading information.
 //! - [`MarkReportResponse`]: API response wrapper for a grading report.
 //! - [`generate_new_mark_report`]: Utility function to create a new `MarkReport` with default optional fields.
 //!
 //! ## Usage
 //! These types are used throughout the marker service to construct, serialize, and return grading results for assignments.
-//! They are designed to be extensible and to support optional code coverage and complexity reporting.
+//! They are designed to be extensible and to support optional code coverage reporting.
 //!
 //! ## Example JSON Output
 //!
@@ -61,12 +60,6 @@
 //!       { "path": "src/main.rs", "earned": 4, "total": 5 }
 //!     ]
 //!   },
-//!   "code_complexity": {
-//!     "summary": { "earned": 2, "total": 4 },
-//!     "metrics": [
-//!       { "name": "Cyclomatic", "earned": 2, "total": 4, "unit": "count" }
-//!     ]
-//!   }
 //! }
 //! ```
 //!
@@ -88,7 +81,7 @@ pub struct ReportSubsection {
     /// Label or name of the subsection (e.g., "Subtask 1").
     pub label: String,
     /// Points earned for this subsection.
-    pub earned:i64,
+    pub earned: i64,
     /// Total possible points for this subsection.
     pub total: i64,
     /// Feedback or comments for this subsection.
@@ -128,28 +121,6 @@ pub struct CoverageFile {
     pub total: i64,
 }
 
-/// Represents a code complexity report, including a summary and per-metric details.
-#[derive(Debug, Serialize, Clone)]
-pub struct CodeComplexityReport {
-    /// Optional summary score for code complexity.
-    pub summary: Option<Score>,
-    /// List of complexity metrics (e.g., cyclomatic complexity).
-    pub metrics: Vec<ComplexityMetric>,
-}
-
-/// Represents a single code complexity metric.
-#[derive(Debug, Serialize, Clone)]
-pub struct ComplexityMetric {
-    /// Name of the metric (e.g., "Cyclomatic").
-    pub name: String,
-    /// Value earned (e.g., number of allowed complexity points used).
-    pub earned: i64,
-    /// Maximum allowed or total value for this metric.
-    pub total: i64,
-    /// Unit of measurement (e.g., "count").
-    pub unit: String,
-}
-
 /// The top-level grading report, aggregating all tasks, scores, and optional code analysis results.
 #[derive(Debug, Serialize, Clone)]
 pub struct MarkReport {
@@ -164,9 +135,6 @@ pub struct MarkReport {
     /// Optional code coverage report.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code_coverage: Option<CodeCoverageReport>,
-    /// Optional code complexity report.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_complexity: Option<CodeComplexityReport>,
 }
 
 /// API response wrapper for a grading report, used for serialization.
@@ -200,7 +168,7 @@ impl From<MarkReport> for MarkReportResponse {
 /// * `mark` - Overall score.
 ///
 /// # Returns
-/// A new `MarkReport` instance with `code_coverage` and `code_complexity` set to `None`.
+/// A new `MarkReport` instance with `code_coverage` set to `None`.
 pub fn generate_new_mark_report(
     created_at: String,
     updated_at: String,
@@ -213,7 +181,6 @@ pub fn generate_new_mark_report(
         mark,
         tasks,
         code_coverage: None,
-        code_complexity: None,
     }
 }
 
@@ -223,7 +190,10 @@ mod tests {
     use serde_json;
 
     fn sample_score() -> Score {
-        Score { earned: 8, total: 10 }
+        Score {
+            earned: 8,
+            total: 10,
+        }
     }
 
     fn sample_subsection() -> ReportSubsection {
@@ -246,7 +216,10 @@ mod tests {
 
     #[test]
     fn test_score_struct_fields() {
-        let score = Score { earned: 5, total: 10 };
+        let score = Score {
+            earned: 5,
+            total: 10,
+        };
         assert_eq!(score.earned, 5);
         assert_eq!(score.total, 10);
     }
@@ -257,7 +230,10 @@ mod tests {
         let task = ReportTask {
             task_number: 2,
             name: "Task 2".to_string(),
-            score: Score { earned: 7, total: 10 },
+            score: Score {
+                earned: 7,
+                total: 10,
+            },
             subsections: vec![subsection.clone()],
         };
         assert_eq!(task.task_number, 2);
@@ -274,7 +250,6 @@ mod tests {
             mark: sample_score(),
             tasks: vec![sample_task()],
             code_coverage: None,
-            code_complexity: None,
         };
         let json = serde_json::to_string(&report).unwrap();
         assert!(json.contains("\"created_at\":\"2024-06-01T12:00:00Z\""));
@@ -291,7 +266,6 @@ mod tests {
             mark: sample_score(),
             tasks: vec![],
             code_coverage: None,
-            code_complexity: None,
         };
         let response: MarkReportResponse = report.into();
         assert!(response.success);
@@ -301,9 +275,13 @@ mod tests {
     #[test]
     fn test_generate_new_mark_report_function() {
         let now = "2024-06-01T12:00:00Z".to_string();
-        let mark = Score { earned: 10, total: 20 };
+        let mark = Score {
+            earned: 10,
+            total: 20,
+        };
         let tasks = vec![sample_task()];
-        let report = generate_new_mark_report(now.clone(), now.clone(), tasks.clone(), mark.clone());
+        let report =
+            generate_new_mark_report(now.clone(), now.clone(), tasks.clone(), mark.clone());
         assert_eq!(report.created_at, now);
         assert_eq!(report.updated_at, now);
         assert_eq!(report.mark.earned, 10);
@@ -311,14 +289,17 @@ mod tests {
     }
 
     #[test]
-    fn test_code_coverage_and_complexity_optional_fields() {
+    fn test_code_coverage_optional_fields() {
         let coverage = CodeCoverageReport {
-            summary: Some(Score { earned: 5, total: 10 }),
-            files: vec![CoverageFile { path: "src/lib.rs".to_string(), earned: 5, total: 10 }],
-        };
-        let complexity = CodeComplexityReport {
-            summary: Some(Score { earned: 2, total: 4 }),
-            metrics: vec![ComplexityMetric { name: "Cyclomatic".to_string(), earned: 2, total: 4, unit: "count".to_string() }],
+            summary: Some(Score {
+                earned: 5,
+                total: 10,
+            }),
+            files: vec![CoverageFile {
+                path: "src/lib.rs".to_string(),
+                earned: 5,
+                total: 10,
+            }],
         };
         let report = MarkReport {
             created_at: "2024-06-01T12:00:00Z".to_string(),
@@ -326,10 +307,8 @@ mod tests {
             mark: sample_score(),
             tasks: vec![],
             code_coverage: Some(coverage),
-            code_complexity: Some(complexity),
         };
         let json = serde_json::to_string(&report).unwrap();
         assert!(json.contains("code_coverage"));
-        assert!(json.contains("code_complexity"));
     }
 }

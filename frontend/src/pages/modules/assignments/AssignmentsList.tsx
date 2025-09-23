@@ -203,7 +203,7 @@ const AssignmentsList = () => {
             defaultViewMode={isStudent ? 'grid' : 'table'}
             fetchItems={fetchAssignments}
             getRowKey={(a) => a.id}
-            onRowClick={(a) => navigate(`/modules/${module.id}/assignments/${a.id}/submissions`)}
+            onRowClick={(a) => navigate(`/modules/${module.id}/assignments/${a.id}`)}
             renderGridItem={(assignment, actions) => (
               <AssignmentCard key={assignment.id} assignment={assignment} actions={actions} />
             )}

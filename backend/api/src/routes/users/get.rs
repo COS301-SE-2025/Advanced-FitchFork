@@ -1,21 +1,20 @@
-use axum::{
-    extract::{State, Path, Query},
-    http::{StatusCode, Response},
-    response::IntoResponse,
-    Json,
-};
-use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
-use serde::{Deserialize, Serialize};
-use util::state::AppState;
-use validator::Validate;
 use crate::response::ApiResponse;
 use crate::routes::common::UserModule;
-use db::models::user::{Entity as UserEntity, Model as UserModel, Column as UserColumn};
-use std::{path::PathBuf};
+use axum::body::Body;
+use axum::{
+    Json,
+    extract::{Path, Query, State},
+    http::{Response, StatusCode},
+    response::IntoResponse,
+};
+use db::models::user::{Column as UserColumn, Entity as UserEntity, Model as UserModel};
+use mime_guess::from_path;
+use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
+use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
-use axum::body::Body;
-use mime_guess::from_path;
+use util::{paths::user_profile_path, state::AppState};
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct ListUsersQuery {
@@ -117,10 +116,10 @@ impl From<UserModel> for UserListItem {
 /// - `500 Internal Server Error` - Database error
 pub async fn list_users(
     State(app_state): State<AppState>,
-    Query(query): Query<ListUsersQuery>
+    Query(query): Query<ListUsersQuery>,
 ) -> impl IntoResponse {
     let db = app_state.db();
-    
+
     if let Err(e) = query.validate() {
         return (
             StatusCode::BAD_REQUEST,
@@ -235,7 +234,7 @@ pub async fn list_users(
 /// - `500 Internal Server Error`: DB error
 pub async fn get_user(
     State(app_state): State<AppState>,
-    Path(user_id): Path<i64>
+    Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
@@ -244,7 +243,10 @@ pub async fn get_user(
             let user_item = UserListItem::from(user);
             (
                 StatusCode::OK,
-                Json(ApiResponse::success(user_item, "User retrieved successfully")),
+                Json(ApiResponse::success(
+                    user_item,
+                    "User retrieved successfully",
+                )),
             )
         }
         Ok(None) => (
@@ -253,7 +255,10 @@ pub async fn get_user(
         ),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<UserListItem>::error(format!("Database error: {}", err))),
+            Json(ApiResponse::<UserListItem>::error(format!(
+                "Database error: {}",
+                err
+            ))),
         ),
     }
 }
@@ -314,7 +319,7 @@ pub async fn get_user(
 /// ```
 pub async fn get_user_modules(
     State(app_state): State<AppState>,
-    Path(user_id): Path<i64>
+    Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
     let db = app_state.db();
 
@@ -323,7 +328,10 @@ pub async fn get_user_modules(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<Vec<UserModule>>::error(format!("Database error: {}", e))),
+                Json(ApiResponse::<Vec<UserModule>>::error(format!(
+                    "Database error: {}",
+                    e
+                ))),
             );
         }
     };
@@ -358,15 +366,10 @@ pub async fn get_avatar(
     State(_state): State<AppState>,
     Path(user_id): Path<i64>,
 ) -> impl IntoResponse {
-    let root = std::env::var("USER_PROFILE_STORAGE_ROOT")
-        .unwrap_or_else(|_| "data/user_profile_pictures".to_string());
-
-    let avatar_path = PathBuf::from(&root).join(format!("user_{}/avatar", user_id));
-
-    // Try common extensions
+    // Try common extensions under the user's profile dir: .../user_{id}/profile/avatar.{ext}
     for ext in ["jpg", "png", "gif"] {
-        let try_path = avatar_path.with_extension(ext);
-        if try_path.exists() {
+        let try_path = user_profile_path(user_id, &format!("avatar.{ext}"));
+        if tokio::fs::metadata(&try_path).await.is_ok() {
             let file = match File::open(&try_path).await {
                 Ok(f) => f,
                 Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),

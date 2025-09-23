@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Typography, Button, Steps } from 'antd';
-
+import { Typography, Steps, Button } from 'antd';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
 import { generateMemoOutput } from '@/services/modules/assignments/memo-output';
 import { generateMarkAllocator } from '@/services/modules/assignments/mark-allocator';
-import { message } from '@/utils/message';
+import Tip from '@/components/common/Tip';
 
-const { Title, Paragraph } = Typography;
+const { Title, Paragraph, Text } = Typography;
 const { Step } = Steps;
 
 const StepMemoAndAllocator = () => {
@@ -15,14 +14,16 @@ const StepMemoAndAllocator = () => {
   const { assignmentId, readiness, refreshAssignment, setStepSaveHandler } = useAssignmentSetup();
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
+  const [errMemo, setErrMemo] = useState<string | null>(null);
+  const [errAlloc, setErrAlloc] = useState<string | null>(null);
 
-  // Register a no-op save handler for step 4 (Memo & Allocator)
   useEffect(() => {
     setStepSaveHandler?.(4, async () => true);
   }, [setStepSaveHandler]);
 
-  // 0 = nothing done, 1 = memo done, 2 = both done
+  const isGatlam = readiness?.submission_mode === 'gatlam';
+  const gated = isGatlam && !readiness?.interpreter_present;
+
   const currentStep =
     readiness?.memo_output_present && readiness?.mark_allocator_present
       ? 2
@@ -33,55 +34,85 @@ const StepMemoAndAllocator = () => {
   const handleGenerate = async () => {
     if (!assignmentId) return;
     setLoading(true);
-    setError(false);
-
+    setErrMemo(null);
+    setErrAlloc(null);
     try {
-      const resMemo = await generateMemoOutput(module.id, assignmentId);
-      if (!resMemo.success) throw new Error(resMemo.message);
-      message.success(resMemo.message || 'Memo output generated');
-      await refreshAssignment?.(); // reflect memo present
-    } catch (err: any) {
-      // eslint-disable-next-line no-console
-      console.error(err);
-      message.error(err?.message || 'Memo output generation failed');
-      setError(true);
+      const m = await generateMemoOutput(module.id, assignmentId);
+      if (!m.success) setErrMemo(m.message || 'Memo generation failed');
+      await refreshAssignment?.();
+    } catch (e: any) {
+      setErrMemo(e?.message || 'Memo generation failed');
       setLoading(false);
       return;
     }
 
     try {
-      const resAllocator = await generateMarkAllocator(module.id, assignmentId);
-      if (!resAllocator.success) throw new Error(resAllocator.message);
-      message.success(resAllocator.message || 'Mark allocator generated');
-      await refreshAssignment?.(); // reflect allocator present
-    } catch (err: any) {
-      // eslint-disable-next-line no-console
-      console.error(err);
-      message.error(err?.message || 'Mark allocator generation failed');
-      setError(true);
+      const a = await generateMarkAllocator(module.id, assignmentId);
+      if (!a.success) setErrAlloc(a.message || 'Mark allocator failed');
+      await refreshAssignment?.();
+    } catch (e: any) {
+      setErrAlloc(e?.message || 'Mark allocator failed');
       setLoading(false);
       return;
     }
-
     setLoading(false);
   };
 
   return (
     <div className="max-w-3xl space-y-6 px-6 py-8 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-black/10">
-      <Title level={3}>Generate Memo Output & Mark Allocator</Title>
-      <Paragraph type="secondary">
-        This step runs both stages sequentially: first generating the memo output, then generating
-        the mark allocator.
-      </Paragraph>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Title level={3} className="!mb-0">
+          Memo Output &amp; Mark Allocator
+        </Title>
+      </div>
+      <Paragraph type="secondary">Run both stages sequentially. Status is shown below.</Paragraph>
 
-      <Steps direction="vertical" current={currentStep} status={error ? 'error' : undefined}>
+      <Steps
+        direction="vertical"
+        current={currentStep}
+        status={errMemo || errAlloc ? 'error' : undefined}
+      >
         <Step
-          title="Memo Output"
-          description="Process uploaded memo and config files into reference outputs."
+          title={
+            <div className="flex items-center gap-2">
+              <Typography.Text strong className="!text-lg">
+                Memo Output
+              </Typography.Text>
+
+              <Tip
+                iconOnly
+                newTab
+                to="/help/assignments/memo-output#overview"
+                text="Memo output help"
+              />
+            </div>
+          }
+          description={
+            <Text type={errMemo ? 'danger' : 'secondary'}>
+              {errMemo ? errMemo : readiness?.memo_output_present ? 'Generated' : 'Pending'}
+            </Text>
+          }
         />
         <Step
-          title="Mark Allocator"
-          description="Generate mark allocation template based on memo output."
+          title={
+            <div className="flex items-center gap-2">
+              <Typography.Text strong className="!text-lg">
+                Mark Allocator
+              </Typography.Text>
+
+              <Tip
+                iconOnly
+                newTab
+                to="/help/assignments/mark-allocator#what"
+                text="Mark allocation help"
+              />
+            </div>
+          }
+          description={
+            <Text type={errAlloc ? 'danger' : 'secondary'}>
+              {errAlloc ? errAlloc : readiness?.mark_allocator_present ? 'Generated' : 'Pending'}
+            </Text>
+          }
         />
       </Steps>
 
@@ -90,10 +121,9 @@ const StepMemoAndAllocator = () => {
           type="primary"
           onClick={handleGenerate}
           loading={loading}
-          disabled={currentStep === 2}
-          data-cy="generate-memo-mark"
+          disabled={currentStep === 2 || gated}
         >
-          {currentStep === 2 ? 'Completed' : 'Generate'}
+          {currentStep === 2 ? 'Completed' : 'Run'}
         </Button>
       </div>
     </div>
