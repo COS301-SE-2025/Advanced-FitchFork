@@ -6,7 +6,9 @@ use super::EvaluationStrategy;
 pub struct GoStrategy;
 
 impl EvaluationStrategy for GoStrategy {
-    fn name(&self) -> &'static str { "go" }
+    fn name(&self) -> &'static str {
+        "go"
+    }
 
     fn violates_safety(&self, stderr: &str) -> bool {
         let s = stderr.to_ascii_lowercase();
@@ -37,13 +39,15 @@ impl EvaluationStrategy for GoStrategy {
 
 #[cfg(test)]
 mod tests {
-    use super::{GoStrategy, EvaluationStrategy};
+    use super::{EvaluationStrategy, GoStrategy};
 
     #[test]
     fn go_sees_panics_as_exceptions() {
         let g = GoStrategy;
         assert!(g.has_exception("panic: runtime error: index out of range [3] with length 3"));
-        assert!(g.has_exception("panic: runtime error: invalid memory address or nil pointer dereference"));
+        assert!(g.has_exception(
+            "panic: runtime error: invalid memory address or nil pointer dereference"
+        ));
     }
 
     #[test]

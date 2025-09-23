@@ -7,7 +7,9 @@ pub struct CppStrategy;
 ///   errors are treated as "safety" violations.
 /// - Segmentation faults are "segfaults"
 impl EvaluationStrategy for CppStrategy {
-    fn name(&self) -> &'static str { "cpp" }
+    fn name(&self) -> &'static str {
+        "cpp"
+    }
 
     fn violates_safety(&self, stderr: &str) -> bool {
         let s = stderr.to_ascii_lowercase();

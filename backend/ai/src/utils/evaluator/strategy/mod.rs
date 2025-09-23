@@ -7,18 +7,23 @@ use util::languages::Language;
 /// The default implementation returns false for all heuristics. As a language cannot be found
 pub trait EvaluationStrategy: Send + Sync {
     fn name(&self) -> &'static str;
-    fn violates_safety(&self, _stderr: &str) -> bool { false }
-    fn has_segfault(&self, _stderr: &str) -> bool { false }
-    fn has_exception(&self, _stderr: &str) -> bool { false }
+    fn violates_safety(&self, _stderr: &str) -> bool {
+        false
+    }
+    fn has_segfault(&self, _stderr: &str) -> bool {
+        false
+    }
+    fn has_exception(&self, _stderr: &str) -> bool {
+        false
+    }
 }
 
+pub use cpp::CppStrategy;
+pub use default::DefaultStrategy;
 /// Module exports and strategy selection
 pub use go::GoStrategy;
-pub use rust_lang::RustStrategy;
-pub use cpp::CppStrategy;
 pub use java::JavaStrategy;
-pub use default::DefaultStrategy;
-
+pub use rust_lang::RustStrategy;
 
 // Static instances of each strategy to avoid repeated allocations
 static CPP: CppStrategy = CppStrategy;
@@ -41,7 +46,7 @@ pub fn strategy_for(lang: Language) -> &'static dyn EvaluationStrategy {
 
 // Submodules for each language strategy
 mod cpp;
-mod java;
-mod go;
-mod rust_lang;
 mod default;
+mod go;
+mod java;
+mod rust_lang;
