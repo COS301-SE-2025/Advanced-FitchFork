@@ -205,4 +205,73 @@ impl EmailService {
             }
         }
     }
+
+    pub async fn send_email_when_spec_changes(
+        to_email: Vec<String>,
+        spec_name: String,
+        change_details: String,
+    ) {
+        let from_email = config::gmail_username();
+        let from_name = config::email_from_name();
+
+        let mut builder =
+            Message::builder().from(format!("{} <{}>", from_name, from_email).parse().unwrap());
+
+        for recipient in to_email {
+            builder = builder.to(recipient.parse().unwrap());
+        }
+
+        let email_result = builder
+            .subject(format!("Specification '{}' Has Changed", spec_name))
+            .multipart(
+                MultiPart::alternative()
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(header::ContentType::TEXT_PLAIN)
+                            .body(format!(
+                                "Hello,\n\n\
+                                The specification '{}' has been updated. Here are the details of the changes:\n\n\
+                                {}\n\n\
+                                Please review the changes at your earliest convenience.\n\n\
+                                Best regards,\n\
+                                {}",
+                                spec_name,
+                                change_details,
+                                from_name
+                            )),
+                    )
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(header::ContentType::TEXT_HTML)
+                            .body(format!(
+                                "<html>\
+                                <body>\
+                                <p>Hello,</p>\
+                                <p>The specification '<strong>{}</strong>' has been updated. Here are the details of the changes:</p>\
+                                <pre>{}</pre>\
+                                <p>Please review the changes at your earliest convenience.</p>\
+                                <p>Best regards,<br>\
+                                {}</p>\
+                                </body>\
+                                </html>",
+                                spec_name,
+                                change_details,
+                                from_name
+                            )),
+                    ),
+            );
+
+        let email = match email_result {
+            Ok(msg) => msg,
+            Err(e) => {
+                eprintln!("Failed to build email: {}", e);
+                return;
+            }
+        };
+
+        match SMTP_CLIENT.send(email).await {
+            Ok(_) => (),
+            Err(e) => eprintln!("Failed to send email: {}", e),
+        };
+    }
 }

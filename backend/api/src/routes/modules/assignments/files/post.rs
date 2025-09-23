@@ -4,6 +4,10 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use db::models::{
+    assignment_file::{FileType, Model as FileModel},
+    user::Model as UserModel,
+};
 use serde::Serialize;
 use db::models::assignment_file::{
     FileType,
@@ -187,6 +191,19 @@ pub async fn upload_files(
     .await
     {
         Ok(saved) => {
+            if file_type == FileType::Spec {
+                // fetch emails of all users assigned to module_id
+                let email_list = UserModel::get_emails_by_module_id(db, module_id).await;
+
+                // send email notification to all users
+                crate::services::email::EmailService::send_email_when_spec_changes(
+                        email_list,
+                        file_name.clone(),
+                        format!("The assignment specification has been updated. Please check the latest version: {}", file_name),
+                    )
+                    .await;
+            }
+
             let metadata = UploadedFileMetadata {
                 id: saved.id,
                 assignment_id: saved.assignment_id,

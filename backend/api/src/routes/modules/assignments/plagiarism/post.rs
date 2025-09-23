@@ -210,10 +210,26 @@ pub async fn create_plagiarism_case(
     }
 }
 
-// somewhere in your types for this route
-#[derive(serde::Deserialize)]
-pub struct MossRequest {
-    pub language: String,
+#[allow(dead_code)]
+#[derive(Debug, Serialize, Deserialize)]
+struct ArchiveManifest {
+    id: String,
+    created_at: DateTime<Utc>,
+    report_url: String,
+    root_rel: String,
+    zip_rel: String,
+    bytes: Option<u64>,
+    files: Option<usize>,
+}
+
+#[derive(Deserialize)]
+pub struct RunMossPayload {
+    pub experimental: Option<bool>,
+    pub max_matches: Option<u32>,
+    pub show_limit: Option<u32>,
+    pub filter_mode: Option<MossFilterMode>,
+    pub filter_patterns: Option<Vec<String>>,
+    pub description: String,
 }
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/plagiarism/moss
