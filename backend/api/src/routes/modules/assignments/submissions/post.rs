@@ -1,4 +1,5 @@
 use super::common::{MarkSummary, SubmissionDetailResponse};
+use crate::services::email::EmailService;
 use crate::{
     auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late,
     ws::modules::assignments::submissions::topics::submission_topic,
@@ -12,14 +13,13 @@ use axum::{
 use chrono::Utc;
 use code_runner;
 use db::models::assignment_submission_output;
-use crate::{services::email::EmailService};
 use db::models::assignment_task;
+use db::models::user::Entity as UserEntity;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
     assignment_submission::{self, Model as AssignmentSubmissionModel},
 };
 use db::models::{assignment_memo_output, assignment_submission::SubmissionStatus};
-use db::models::user::Entity as UserEntity;
 use marker::MarkingJob;
 use marker::comparators::{
     exact_comparator::ExactComparator, percentage_comparator::PercentageComparator,
@@ -823,11 +823,9 @@ async fn process_submission_code(
                 .map_err(|e| format!("Coverage GA failed: {}", e))
         }
 
-        SubmissionMode::RNG => {
-            ai::run_rng_job(db, submission_id, &config)
-                .await
-                .map_err(|e| format!("RNG run failed: {}", e))
-        }
+        SubmissionMode::RNG => ai::run_rng_job(db, submission_id, &config)
+            .await
+            .map_err(|e| format!("RNG run failed: {}", e)),
     }
 }
 

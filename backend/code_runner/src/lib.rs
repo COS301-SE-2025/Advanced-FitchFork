@@ -66,7 +66,7 @@ pub async fn create_memo_outputs_for_all_tasks(
     // Validate required input files
     validate_memo_files(module_id, assignment_id)?;
 
-    // Load config 
+    // Load config
     let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
@@ -288,7 +288,6 @@ pub async fn create_memo_outputs_for_all_tasks(
     Ok(())
 }
 
-
 pub async fn create_memo_outputs_for_all_tasks_with_submission_id(
     db: &DatabaseConnection,
     assignment_id: i64,
@@ -313,15 +312,14 @@ pub async fn create_memo_outputs_for_all_tasks_with_submission_id(
     // Base and subdirs via helpers
     let memo_out_dir = memo_output_dir(module_id, assignment_id);
 
-
     if submission_id.is_some() {
-    // Delete old files on disk
+        // Delete old files on disk
         if memo_out_dir.exists() {
             fs::remove_dir_all(&memo_out_dir)
                 .map_err(|e| format!("Failed to delete old memo_output dir: {}", e))?;
         }
 
-    // Delete old entries from DB
+        // Delete old entries from DB
         MemoOutputEntity::delete_many()
             .filter(MemoOutputColumn::AssignmentId.eq(assignment_id))
             .exec(db)
@@ -530,7 +528,6 @@ pub async fn create_memo_outputs_for_all_tasks_with_submission_id(
 
     Ok(())
 }
-
 
 use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 
@@ -1368,7 +1365,8 @@ pub async fn run_interpreter(
     create_main_from_interpreter(db, submission_id, generated_string).await?;
 
     // Step 2
-    create_memo_outputs_for_all_tasks_with_submission_id(db, assignment_id, Some(submission_id)).await?;
+    create_memo_outputs_for_all_tasks_with_submission_id(db, assignment_id, Some(submission_id))
+        .await?;
 
     // Step 3
     create_submission_outputs_for_all_tasks(db, submission_id).await?;

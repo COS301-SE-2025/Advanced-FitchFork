@@ -266,18 +266,18 @@ impl EmailService {
             Err(e) => eprintln!("Failed to send email: {}", e),
         };
     }
-    
-pub async fn send_marking_done_email(
-    to_email: &str,
-    display_name: &str,
-    submission_id: i64,
-    module_id: i64,
-    assignment_id: i64,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let from_email = config::gmail_username();
-    let from_name = config::email_from_name();
 
-    let email = Message::builder()
+    pub async fn send_marking_done_email(
+        to_email: &str,
+        display_name: &str,
+        submission_id: i64,
+        module_id: i64,
+        assignment_id: i64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let from_email = config::gmail_username();
+        let from_name = config::email_from_name();
+
+        let email = Message::builder()
         .from(format!("{} <{}>", from_name, from_email).parse().unwrap())
         .to(to_email.parse().unwrap())
         .subject(format!("Submission #{} – Marking complete", submission_id))
@@ -313,10 +313,10 @@ pub async fn send_marking_done_email(
                 ),
         )?;
 
-    SMTP_CLIENT
-        .send(email)
-        .await
-        .map(|_| ())
-        .map_err(|e| Box::new(e) as _)
-}
+        SMTP_CLIENT
+            .send(email)
+            .await
+            .map(|_| ())
+            .map_err(|e| Box::new(e) as _)
+    }
 }

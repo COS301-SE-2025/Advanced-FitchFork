@@ -131,7 +131,7 @@ pub async fn generate_memo_output(
         );
     }
 
-    match create_memo_outputs_for_all_tasks(db, assignment_id,).await {
+    match create_memo_outputs_for_all_tasks(db, assignment_id).await {
         Ok(_) => {
             info!(
                 "Memo output generation complete for assignment {}",
