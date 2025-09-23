@@ -225,6 +225,7 @@ std::string HelperThree::subtaskY() {
     return "HelperThree: Subtask for Task2\nThis as well\nAnd this\nAdditional wrong line";
 }
 std::string HelperThree::subtaskAlpha() {
+    char* leak = new char[100]; // memory leak
     return "HelperThree: Subtask for Task3\nThis as well";
 }
 "#;

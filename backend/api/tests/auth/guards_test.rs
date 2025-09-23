@@ -934,9 +934,17 @@ mod tests {
             )
             .await
             .unwrap();
-            let task = TaskModel::create(ctx.app_state.db(), assignment.id, 1, "T1", "echo", false)
-                .await
-                .unwrap();
+            let task = TaskModel::create(
+                ctx.app_state.db(),
+                assignment.id,
+                1,
+                "T1",
+                "echo",
+                false,
+                false,
+            )
+            .await
+            .unwrap();
             let path = "/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}";
             let app = create_router(ctx.app_state.clone(), path);
             let uri = format!(
@@ -975,10 +983,17 @@ mod tests {
             )
             .await
             .unwrap();
-            let task =
-                TaskModel::create(ctx.app_state.db(), assignment2.id, 1, "T2", "echo", false)
-                    .await
-                    .unwrap();
+            let task = TaskModel::create(
+                ctx.app_state.db(),
+                assignment2.id,
+                1,
+                "T2",
+                "echo",
+                false,
+                false,
+            )
+            .await
+            .unwrap();
             let path = "/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}";
             let app = create_router(ctx.app_state.clone(), path);
             let uri = format!(

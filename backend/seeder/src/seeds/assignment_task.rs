@@ -52,6 +52,7 @@ impl Seeder for AssignmentTaskSeeder {
                     "Untitled Task",
                     &command,
                     false,
+                    false,
                 )
                 .await
                 {
@@ -84,6 +85,7 @@ impl Seeder for AssignmentTaskSeeder {
                 "Untitled Task",
                 command,
                 code_coverage,
+                false,
             )
             .await
             {
@@ -98,13 +100,13 @@ impl Seeder for AssignmentTaskSeeder {
         let special_assignment_id2: i64 = 9998;
 
         let special_tasks2 = vec![
-            (1, "make task1", false),
-            (2, "make task2", false),
-            (3, "make task3", false),
-            (4, "make task4", true),
+            (1, "make task1", false, false),
+            (2, "make task2", false, true),
+            (3, "make task3", false, true),
+            (4, "make task4", true, false),
         ];
 
-        for (task_number, command, code_coverage) in special_tasks2 {
+        for (task_number, command, code_coverage, valgrind) in special_tasks2 {
             match db::models::assignment_task::Model::create(
                 db,
                 special_assignment_id2,
@@ -112,6 +114,7 @@ impl Seeder for AssignmentTaskSeeder {
                 "Untitled Task",
                 command,
                 code_coverage,
+                valgrind,
             )
             .await
             {
@@ -135,6 +138,7 @@ impl Seeder for AssignmentTaskSeeder {
                 "Task to run code",
                 command,
                 false,
+                false,
             )
             .await
             {
@@ -154,6 +158,7 @@ impl Seeder for AssignmentTaskSeeder {
                     task_number,
                     "Task to run code",
                     command,
+                    false,
                     false,
                 )
                 .await

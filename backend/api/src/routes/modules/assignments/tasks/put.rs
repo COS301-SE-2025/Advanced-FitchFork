@@ -23,6 +23,8 @@ pub struct EditTaskRequest {
     command: Option<String>,
     /// Optional toggle for coverage
     code_coverage: Option<bool>,
+    /// Optional toggle for valgrind
+    valgrind: Option<bool>,
 }
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}
@@ -242,6 +244,7 @@ pub async fn edit_task(
         payload.name.as_deref(),
         payload.command.as_deref(),
         payload.code_coverage,
+        payload.valgrind,
     )
     .await
     {

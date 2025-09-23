@@ -47,6 +47,12 @@ impl MigrationTrait for Migration {
                             .default(false),
                     )
                     .col(
+                        ColumnDef::new(Alias::new("valgrind"))
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
+                    .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()
                             .not_null()

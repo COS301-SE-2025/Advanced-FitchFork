@@ -16,7 +16,8 @@ RUN apk add --no-cache \
     bash \
     coreutils \
     unzip \
-    wget
+    wget \
+    valgrind
 
 # Install JaCoCo CLI
 ENV JACOCO_VERSION=0.8.11
