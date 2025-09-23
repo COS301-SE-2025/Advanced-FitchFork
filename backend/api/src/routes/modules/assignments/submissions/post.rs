@@ -718,11 +718,6 @@ async fn grade_submission(
         total: mark_report.data.mark.total,
     };
 
-    println!(
-        "Graded submission {}: {}/{}",
-        submission.id, mark.earned, mark.total
-    );
-
     // Apply late cap if applicable
     let is_late_now = submission.created_at > assignment.due_date;
     let mut _late_capped_to: Option<f64> = None;

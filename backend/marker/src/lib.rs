@@ -222,7 +222,15 @@ impl<'a> MarkingJob<'a> {
 
                     let memo_or_regex_lines: Vec<String> = match self.config.marking.marking_scheme
                     {
-                        MarkingScheme::Regex => subsection.regex.clone().unwrap_or_default(),
+                        MarkingScheme::Regex => {
+                            match subsection.regex.clone() {
+                                Some(patterns) => patterns,
+                                None => {
+                                    let pattern_count = subsection.value.max(0.0).round() as usize;
+                                    std::iter::repeat(String::new()).take(pattern_count).collect()
+                                }
+                            }
+                        },
                         _ => task_output
                             .memo_output
                             .subtasks
@@ -329,8 +337,6 @@ impl<'a> MarkingJob<'a> {
             earned: round2(total_earned),
             total: round2(allocator.total_value),
         };
-
-        println!("Marking complete: {}/{}", mark.earned, mark.total);
 
         let now = Utc::now().to_rfc3339();
         let mut report =
