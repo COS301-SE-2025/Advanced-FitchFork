@@ -86,11 +86,13 @@ pub struct FailedOperation {
     error: String,
 }
 
+const ERR_LATE_NOT_ALLOWED: &str = "Late submissions are not allowed";
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
-fn is_failed(status: &SubmissionStatus) -> bool {
+fn status_is_failed(status: &SubmissionStatus) -> bool {
     matches!(
         status,
         SubmissionStatus::FailedUpload
@@ -98,7 +100,30 @@ fn is_failed(status: &SubmissionStatus) -> bool {
             | SubmissionStatus::FailedExecution
             | SubmissionStatus::FailedGrading
             | SubmissionStatus::FailedInternal
+            | SubmissionStatus::FailedDisallowedCode
     )
+}
+
+fn within_late_window(
+    submitted_at: chrono::DateTime<chrono::Utc>,
+    due: chrono::DateTime<chrono::Utc>,
+    window_minutes: u32,
+) -> bool {
+    if submitted_at <= due {
+        return true;
+    }
+    let latest_ok = due + chrono::Duration::minutes(window_minutes as i64);
+    submitted_at <= latest_ok
+}
+
+/// Returns (adjusted_earned, capped_to_opt)
+fn cap_late_earned(earned: i64, total: i64, max_percent: u32) -> (i64, Option<i64>) {
+    let cap = ((max_percent as i128) * (total as i128) / 100) as i64;
+    if earned > cap {
+        (cap, Some(cap))
+    } else {
+        (earned, None)
+    }
 }
 
 #[derive(Serialize)]
@@ -126,7 +151,7 @@ async fn emit_submission_status(
         "ts": chrono::Utc::now().to_rfc3339(),
     });
 
-    if is_failed(&status) {
+    if status_is_failed(&status) {
         if let Some(msg) = message {
             if let Some(obj) = payload.as_object_mut() {
                 obj.insert("message".into(), serde_json::Value::String(msg));
@@ -237,7 +262,8 @@ pub async fn check_disallowed_code(
                     }
                 };
 
-            let submission = match AssignmentSubmissionModel::save_file(
+            // Save the submission with zero mark total preset from allocator
+            let saved = match AssignmentSubmissionModel::save_file(
                 db,
                 assignment_id,
                 user_id,
@@ -251,21 +277,7 @@ pub async fn check_disallowed_code(
             )
             .await
             {
-                Ok(model) => {
-                    if let Err(e) = AssignmentSubmissionModel::set_failed(
-                        db,
-                        model.id,
-                        assignment_submission::SubmissionStatus::FailedUpload,
-                    )
-                    .await
-                    {
-                        eprintln!(
-                            "Failed to update submission status to failed_upload: {:?}",
-                            e
-                        );
-                    }
-                    model
-                }
+                Ok(m) => m,
                 Err(e) => {
                     eprintln!("Error saving disallowed submission: {:?}", e);
                     return DisallowedCodeCheckResult::CheckFailed(format!(
@@ -275,32 +287,47 @@ pub async fn check_disallowed_code(
                 }
             };
 
+            // Immediately mark as failed_disallowed_code and use the UPDATED model for accurate status
+            let updated = match AssignmentSubmissionModel::set_failed(
+                db,
+                saved.id,
+                assignment_submission::SubmissionStatus::FailedDisallowedCode,
+            )
+            .await
+            {
+                Ok(u) => u,
+                Err(e) => {
+                    eprintln!("Failed to set failed_disallowed_code: {:?}", e);
+                    saved
+                }
+            };
+
             let now = Utc::now();
             let response = SubmissionDetailResponse {
-                id: submission.id,
-                attempt: submission.attempt,
-                filename: submission.filename.clone(),
-                hash: submission.file_hash.clone(),
+                id: updated.id,
+                attempt: updated.attempt,
+                filename: updated.filename.clone(),
+                hash: updated.file_hash.clone(),
                 created_at: now.to_rfc3339(),
                 updated_at: now.to_rfc3339(),
                 mark: MarkSummary {
                     earned: 0,
                     total: allocator.total_value,
                 },
-                is_practice: submission.is_practice,
-                is_late: is_late(submission.created_at, assignment.due_date),
-                ignored: submission.ignored,
-                status: submission.status.to_string(),
+                is_practice: updated.is_practice,
+                is_late: is_late(updated.created_at, assignment.due_date),
+                ignored: updated.ignored,
+                status: SubmissionStatus::FailedDisallowedCode.to_string(),
                 tasks: vec![],
                 code_coverage: None,
-                user: None, // just ignore this lol
+                user: None,
             };
 
             let report_path = submission_report_path(
                 assignment.module_id,
                 assignment.id,
-                submission.user_id,
-                submission.attempt,
+                updated.user_id,
+                updated.attempt,
             );
             if let Some(parent) = report_path.parent() {
                 let _ = fs::create_dir_all(parent);
@@ -311,6 +338,7 @@ pub async fn check_disallowed_code(
 
             DisallowedCodeCheckResult::DisallowedFound(response)
         }
+
         Ok(false) => DisallowedCodeCheckResult::Clean,
         Err(e) => {
             eprintln!("Disallowed scan error: {}", e);
@@ -685,10 +713,30 @@ async fn grade_submission(
         }
     };
 
-    let mark = MarkSummary {
+    let mut mark = MarkSummary {
         earned: mark_report.data.mark.earned,
         total: mark_report.data.mark.total,
     };
+
+    // Apply late cap if applicable
+    let is_late_now = submission.created_at > assignment.due_date;
+    let mut _late_capped_to: Option<i64> = None;
+    if is_late_now && config.marking.late.allow_late_submissions {
+        if within_late_window(
+            submission.created_at,
+            assignment.due_date,
+            config.marking.late.late_window_minutes,
+        ) {
+            let (adj, capped) = cap_late_earned(
+                mark.earned,
+                mark.total,
+                config.marking.late.late_max_percent,
+            );
+            mark.earned = adj;
+            _late_capped_to = capped;
+        }
+    }
+
     let tasks = serde_json::to_value(&mark_report.data.tasks)
         .unwrap_or_default()
         .as_array()
@@ -765,7 +813,6 @@ async fn grade_submission(
     Ok(resp)
 }
 
-/// Processes code execution for a submission
 async fn process_submission_code(
     db: &sea_orm::DatabaseConnection,
     submission_id: i64,
@@ -773,17 +820,32 @@ async fn process_submission_code(
     module_id: i64,
     assignment_id: i64,
 ) -> Result<(), String> {
-    if config.project.submission_mode == SubmissionMode::Manual.clone() {
-        code_runner::create_submission_outputs_for_all_tasks(db, submission_id)
-            .await
-            .map_err(|e| format!("Code runner failed: {}", e))
-    } else {
-        ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
-            .await
-            .map_err(|e| format!("GATLAM failed: {}", e))
+    match config.project.submission_mode {
+        SubmissionMode::Manual => {
+            code_runner::create_submission_outputs_for_all_tasks(db, submission_id)
+                .await
+                .map_err(|e| format!("Code runner failed: {}", e))
+        }
+
+        SubmissionMode::GATLAM => {
+            ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
+                .await
+                .map_err(|e| format!("GATLAM failed: {}", e))
+        }
+
+        SubmissionMode::CodeCoverage => {
+            ai::run_coverage_ga_job(db, submission_id, &config, module_id, assignment_id)
+                .await
+                .map_err(|e| format!("Coverage GA failed: {}", e))
+        }
+
+        SubmissionMode::RNG => {
+            ai::run_rng_job(db, submission_id, &config, module_id, assignment_id)
+                .await
+                .map_err(|e| format!("RNG run failed: {}", e))
+        }
     }
 }
-
 /// Clears the submission output directory
 fn clear_submission_output(
     submission: &AssignmentSubmissionModel,
@@ -1295,10 +1357,17 @@ pub async fn submit_assignment(
                 Json(ApiResponse::success(body, "Submission received and graded")),
             )
         }
-        Err(err_msg) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<serde_json::Value>::error(&err_msg)),
-        ),
+        Err(err_msg) => {
+            let status = if err_msg == ERR_LATE_NOT_ALLOWED {
+                StatusCode::UNPROCESSABLE_ENTITY
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (
+                status,
+                Json(ApiResponse::<serde_json::Value>::error(&err_msg)),
+            )
+        }
     }
 }
 
@@ -1315,6 +1384,39 @@ async fn run_submission_pipeline(
     assignment_id: i64,
     user_id: i64,
 ) -> Result<SubmissionDetailResponse, String> {
+    // --- Late acceptance gate ---
+    let submitted_at = submission.created_at;
+    let due = assignment.due_date;
+    let is_late_now = submitted_at > due;
+    if is_late_now {
+        let late = &config.marking.late;
+        if !late.allow_late_submissions
+            || !within_late_window(submitted_at, due, late.late_window_minutes)
+        {
+            let _ = AssignmentSubmissionModel::set_failed(
+                db,
+                submission.id,
+                assignment_submission::SubmissionStatus::FailedUpload,
+            )
+            .await;
+
+            emit_submission_status(
+                app,
+                module_id,
+                assignment_id,
+                user_id,
+                submission.id,
+                SubmissionStatus::FailedUpload,
+                Some("Late submissions are not allowed for this assignment".into()),
+                None,
+            )
+            .await;
+
+            // use the constant here:
+            return Err(ERR_LATE_NOT_ALLOWED.to_string());
+        }
+    }
+
     // running
     if AssignmentSubmissionModel::set_running(db, submission.id)
         .await

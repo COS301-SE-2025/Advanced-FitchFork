@@ -177,11 +177,11 @@ impl Model {
         fs::write(&file_path, bytes)
             .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
 
-        let relative_path = file_path
-            .strip_prefix(storage_root())
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
+        // In some test envs the temp storage root may differ; fall back to absolute.
+        let relative_path = match file_path.strip_prefix(storage_root()) {
+            Ok(p) => p.to_string_lossy().to_string(),
+            Err(_) => file_path.to_string_lossy().to_string(),
+        };
 
         let partial = ActiveModel {
             assignment_id: Set(assignment_id),

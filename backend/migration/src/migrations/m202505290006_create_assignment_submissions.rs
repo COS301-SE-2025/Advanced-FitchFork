@@ -60,6 +60,7 @@ impl MigrationTrait for Migration {
                                     Alias::new("failed_execution"),
                                     Alias::new("failed_grading"),
                                     Alias::new("failed_internal"),
+                                    Alias::new("failed_disallowed_code"),
                                 ],
                             )
                             .not_null()

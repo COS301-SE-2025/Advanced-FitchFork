@@ -240,6 +240,7 @@ pub async fn create_plagiarism_case(
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 struct ArchiveManifest {
     id: String,
