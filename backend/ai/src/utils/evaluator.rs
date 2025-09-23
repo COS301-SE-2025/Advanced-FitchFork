@@ -9,14 +9,14 @@ use strategy::strategy_for;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Property {
-    Safety, // G(~unsafe)
+    Safety,            // G(~unsafe)
     ProperTermination, // G(ter => VRC)
     SegmentationFault, // G(~segfault)
-    Exceptions, // G(~exception)
-    ExecutionTime, // G(ter => (r <= e))
-    IllegalOutput, // G(ter => ∀o∈Out ∀x∈X (x =/ o))
-    ExpectedExact, // ExpectedExact
-    ExpectedContains, // ExpectedContains
+    Exceptions,        // G(~exception)
+    ExecutionTime,     // G(ter => (r <= e))
+    IllegalOutput,     // G(ter => ∀o∈Out ∀x∈X (x =/ o))
+    ExpectedExact,     // ExpectedExact
+    ExpectedContains,  // ExpectedContains
 }
 
 #[derive(Debug, Clone)]
@@ -167,9 +167,9 @@ impl Evaluator {
     ) -> (usize, usize) {
         let total_tasks = outs.len().max(1);
 
-        let mut ltl_checks     = 0usize;
+        let mut ltl_checks = 0usize;
         let mut ltl_violations = 0usize;
-        let mut failed_tasks   = 0usize;
+        let mut failed_tasks = 0usize;
 
         let mut memo_sections: HashMap<String, Vec<String>> = HashMap::new();
         for (_tid, memotxt) in memo {
@@ -185,17 +185,31 @@ impl Evaluator {
             let eval = self.evaluate_task(spec, &view);
 
             let mut checks = 0usize;
-            let mut viols  = 0usize;
+            let mut viols = 0usize;
 
             // Core LTL checks
-            checks += 1; if eval.violated.contains(&Property::Safety) { viols += 1; }
-            checks += 1; if eval.violated.contains(&Property::ProperTermination) { viols += 1; }
-            checks += 1; if eval.violated.contains(&Property::SegmentationFault) { viols += 1; }
-            checks += 1; if eval.violated.contains(&Property::Exceptions) { viols += 1; }
+            checks += 1;
+            if eval.violated.contains(&Property::Safety) {
+                viols += 1;
+            }
+            checks += 1;
+            if eval.violated.contains(&Property::ProperTermination) {
+                viols += 1;
+            }
+            checks += 1;
+            if eval.violated.contains(&Property::SegmentationFault) {
+                viols += 1;
+            }
+            checks += 1;
+            if eval.violated.contains(&Property::Exceptions) {
+                viols += 1;
+            }
 
             if spec.max_runtime_ms.is_some() && view.terminated && view.runtime_ms.is_some() {
                 checks += 1;
-                if eval.violated.contains(&Property::ExecutionTime) { viols += 1; }
+                if eval.violated.contains(&Property::ExecutionTime) {
+                    viols += 1;
+                }
             }
 
             let out_sections = parse_labeled_sections_with_delim(&view.stdout, delimiter);
@@ -209,7 +223,7 @@ impl Evaluator {
                         }
                     }
                     None => {
-                        viols += 1; 
+                        viols += 1;
                     }
                 }
 
@@ -224,19 +238,21 @@ impl Evaluator {
                         }
                     }
                     None => {
-                        viols += 1; 
+                        viols += 1;
                     }
                 }
             }
 
             if !spec.forbidden_outputs.is_empty() && view.terminated {
                 checks += 1;
-                if eval.violated.contains(&Property::IllegalOutput) { viols += 1; }
+                if eval.violated.contains(&Property::IllegalOutput) {
+                    viols += 1;
+                }
             }
 
-            ltl_checks     += checks;
+            ltl_checks += checks;
             ltl_violations += viols;
- 
+
             // Failure metric
             let ret_ok = is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref());
             let strat = strategy_for(spec.language);
@@ -245,11 +261,17 @@ impl Evaluator {
                 || (view.terminated && strat.has_exception(&view.stderr))
                 || self.contains_forbidden_output(&view.stdout, &spec.forbidden_outputs);
 
-            if failed { failed_tasks += 1; }
+            if failed {
+                failed_tasks += 1;
+            }
         }
 
-        let ltl_milli  = if ltl_checks == 0 { 0 } else { ((ltl_violations * 1000) / ltl_checks).min(1000) };
-        let fail_milli = ((failed_tasks   * 1000) / total_tasks).min(1000);
+        let ltl_milli = if ltl_checks == 0 {
+            0
+        } else {
+            ((ltl_violations * 1000) / ltl_checks).min(1000)
+        };
+        let fail_milli = ((failed_tasks * 1000) / total_tasks).min(1000);
 
         (ltl_milli, fail_milli)
     }
@@ -279,7 +301,9 @@ fn parse_labeled_sections_with_delim(
             current = Some(label);
             continue;
         }
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         if let Some(lbl) = &current {
             map.entry(lbl.clone()).or_default().push(line.to_string());
         }
@@ -400,7 +424,6 @@ fn is_valid_return_code(exit: Option<i32>, valid: Option<&[i32]>) -> bool {
         (None, _) => false,
     }
 }
-
 
 #[cfg(test)]
 mod tests {

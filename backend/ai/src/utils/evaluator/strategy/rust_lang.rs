@@ -6,7 +6,9 @@ use super::EvaluationStrategy;
 pub struct RustStrategy;
 
 impl EvaluationStrategy for RustStrategy {
-    fn name(&self) -> &'static str { "rust" }
+    fn name(&self) -> &'static str {
+        "rust"
+    }
 
     fn violates_safety(&self, stderr: &str) -> bool {
         let s = stderr.to_ascii_lowercase();
@@ -27,8 +29,7 @@ impl EvaluationStrategy for RustStrategy {
 
     fn has_exception(&self, stderr: &str) -> bool {
         let s = stderr.to_ascii_lowercase();
-        s.contains("thread '")
-            && s.contains(" panicked at '")
+        s.contains("thread '") && s.contains(" panicked at '")
             || s.contains("panicked at '")
             || s.contains("panic:")
             || s.contains("called `option::unwrap()` on a `none` value")
@@ -38,7 +39,7 @@ impl EvaluationStrategy for RustStrategy {
 
 #[cfg(test)]
 mod tests {
-    use super::{RustStrategy, EvaluationStrategy};
+    use super::{EvaluationStrategy, RustStrategy};
 
     #[test]
     fn rust_detects_panics() {

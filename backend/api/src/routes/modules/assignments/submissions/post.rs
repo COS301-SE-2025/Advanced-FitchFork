@@ -791,7 +791,7 @@ async fn process_submission_code(
                 .map_err(|e| format!("Coverage GA failed: {}", e))
         }
 
-        SubmissionMode::RNG=> {
+        SubmissionMode::RNG => {
             ai::run_rng_job(db, submission_id, &config, module_id, assignment_id)
                 .await
                 .map_err(|e| format!("RNG run failed: {}", e))

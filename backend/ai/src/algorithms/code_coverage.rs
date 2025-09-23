@@ -1,17 +1,23 @@
+use crate::utils::output::Output;
 use sea_orm::DatabaseConnection;
 use serde_json::Value;
-use crate::utils::output::Output;
 
 pub async fn coverage_percent_for_attempt(
     db: &DatabaseConnection,
     module_id: i64,
     assignment_id: i64,
     user_id: i64,
-    attempt_number: i64, 
+    attempt_number: i64,
 ) -> Result<f64, String> {
     let cov: Vec<(i64, String)> = Output::get_submission_output_code_coverage(
-        db, module_id, assignment_id, user_id, attempt_number
-    ).await.map_err(|e| e.to_string())?;
+        db,
+        module_id,
+        assignment_id,
+        user_id,
+        attempt_number,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     if let Some((_task_id, json)) = cov.first() {
         let pct = coverage_percent_from_json(json)?;
@@ -27,8 +33,8 @@ pub fn coverage_fitness(percent: f64) -> f64 {
 }
 
 pub fn coverage_percent_from_json(json: &str) -> Result<f64, String> {
-    let v: Value = serde_json::from_str(json)
-        .map_err(|e| format!("Failed to parse coverage JSON: {}", e))?;
+    let v: Value =
+        serde_json::from_str(json).map_err(|e| format!("Failed to parse coverage JSON: {}", e))?;
     if let Some(n) = v.get("summary").and_then(|s| s.get("coverage_percent")) {
         if let Some(x) = n.as_f64() {
             return Ok(x);
@@ -80,4 +86,3 @@ mod tests {
         assert!(err.contains("Failed to parse coverage JSON"));
     }
 }
-
