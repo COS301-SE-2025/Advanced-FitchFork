@@ -765,7 +765,6 @@ async fn grade_submission(
     Ok(resp)
 }
 
-/// Processes code execution for a submission
 async fn process_submission_code(
     db: &sea_orm::DatabaseConnection,
     submission_id: i64,
@@ -773,17 +772,32 @@ async fn process_submission_code(
     module_id: i64,
     assignment_id: i64,
 ) -> Result<(), String> {
-    if config.project.submission_mode == SubmissionMode::Manual.clone() {
-        code_runner::create_submission_outputs_for_all_tasks(db, submission_id)
-            .await
-            .map_err(|e| format!("Code runner failed: {}", e))
-    } else {
-        ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
-            .await
-            .map_err(|e| format!("GATLAM failed: {}", e))
+    match config.project.submission_mode {
+        SubmissionMode::Manual => {
+            code_runner::create_submission_outputs_for_all_tasks(db, submission_id)
+                .await
+                .map_err(|e| format!("Code runner failed: {}", e))
+        }
+
+        SubmissionMode::GATLAM => {
+            ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
+                .await
+                .map_err(|e| format!("GATLAM failed: {}", e))
+        }
+
+        SubmissionMode::CodeCoverage => {
+            ai::run_coverage_ga_job(db, submission_id, &config, module_id, assignment_id)
+                .await
+                .map_err(|e| format!("Coverage GA failed: {}", e))
+        }
+
+        SubmissionMode::RNG => {
+            ai::run_rng_job(db, submission_id, &config, module_id, assignment_id)
+                .await
+                .map_err(|e| format!("RNG run failed: {}", e))
+        }
     }
 }
-
 /// Clears the submission output directory
 fn clear_submission_output(
     submission: &AssignmentSubmissionModel,
